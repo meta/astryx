@@ -363,9 +363,9 @@ they are separately named.
   pull-request runs wait at once: one more that finds no room stops at once with
   "CI is full: re-run all jobs or push later", and its required checks report
   the stopped run. A pull-request run still without room at its longest wait
-  starts only if no other pull-request run started at its longest wait in the
-  last ten minutes and no run that waited longer still waits; otherwise it
-  stops the same way. A pull request that may not run CI admits nothing, and
+  looks once more and starts only if no other pull-request run started at its
+  longest wait in the last ten minutes and no run that waited longer still
+  waits; otherwise it stops the same way. A pull request that may not run CI admits nothing, and
   waiting never fails a job, so every required context reports as before.
 - **FR17 — A pull request runs CI when it is ready and a maintainer can vouch
   for it.** A draft pull request runs no CI, and marking it ready for review
@@ -893,10 +893,12 @@ budget, so `main` fits within fifteen minutes. Nothing is reserved for `main`
 outside those minutes. At most ten pull-request runs wait at once, counting
 pull-request runs only; one more that finds no room stops at once, "CI is full:
 re-run all jobs or push later", rather than add a waiting job to a full CI. A
-pull-request run still without room at its longest wait starts only if no
+pull-request run still without room at its longest wait looks once more, at a
+cost of one more look plus one call for its own jobs, and starts only if no
 other pull-request run started at its longest wait in the last ten minutes,
 about the time one run takes, and no run that waited longer still waits;
-otherwise it stops the same way. Runs that wait out the same burst then start
+otherwise it stops the same way. A run counts as started there once its
+admission job succeeded; until then it ranks as a waiter. Runs that wait out the same burst then start
 one at a time instead of together. A `main` run is never stopped.
 
 CI can still pass ninety in five bounded ways, the first three rare:

@@ -142,9 +142,11 @@ describe('where runs wait', () => {
     );
     // The jobs that would still run behind a failed admission build nothing.
     for (const id of ['typecheck', 'pr-interaction', 'pr-interaction-webkit']) {
-      expect(needsOf(ci.jobs[id]), id).toContain('room');
+      expect(needsOf(ci.jobs[id]), id).toEqual(
+        expect.arrayContaining(['room', 'admission']),
+      );
       expect(String(ci.jobs[id].if), id).toContain(
-        "needs.room.outputs.full != 'true'",
+        "needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true'",
       );
     }
   });
@@ -221,7 +223,11 @@ describe('where runs wait', () => {
     ]) {
       const condition = String(ci.jobs[id].if);
       expect(condition, id).toMatch(/\b(always|cancelled)\(\)/);
-      expect(condition, id).not.toContain('needs.admission');
+      // Only whether CI was full for the run, never admission's result.
+      expect(
+        condition.replaceAll("needs.admission.outputs.full != 'true'", ''),
+        id,
+      ).not.toContain('needs.admission');
     }
     // lint and review-required are written by workflows admission does not touch.
     for (const file of ['lint.yml', 'review-signal.yml', 'review-clear.yml']) {
@@ -477,7 +483,7 @@ describe('ci admission', () => {
             expect(per_page).toBe(100);
             calls += 1;
             return {
-              data: {jobs: runs().find(run => run.id === run_id).jobs ?? []},
+              data: {jobs: runs().find(run => run.id === run_id)?.jobs ?? []},
             };
           },
         },
@@ -961,7 +967,7 @@ describe('ci admission', () => {
       id,
       endedAt,
       waited,
-      {jobs = 12, failedAdmission = false} = {},
+      {jobs = 12, admission = 'success'} = {},
     ) => ({
       id,
       status: 'in_progress',
@@ -980,16 +986,14 @@ describe('ci admission', () => {
             },
           ],
         },
-        ...(failedAdmission
-          ? [
-              {
-                name: 'admission',
-                status: 'completed',
-                conclusion: 'failure',
-                steps: [],
-              },
-            ]
-          : []),
+        admission == null
+          ? {name: 'admission', status: 'queued', steps: []}
+          : {
+              name: 'admission',
+              status: 'completed',
+              conclusion: admission,
+              steps: [],
+            },
         ...busy(jobs),
       ],
     });
@@ -1069,13 +1073,60 @@ describe('ci admission', () => {
         ...full,
         // Found room after six minutes.
         startedRun(83, 9, 6),
-        // A fork's run CI was full for: its admission failed, so it never started.
-        startedRun(84, 9, 12, {failedAdmission: true}),
+        // A run CI was full for: its admission failed, so it never started.
+        startedRun(84, 9, 12, {admission: 'failure'}),
         // A main check that waited its longest.
         {...startedRun(85, 9, 15), event: 'workflow_dispatch'},
       ]);
       expect(result.outputs.full).toBeUndefined();
       expect(result.outputs.fits).toBe('true');
+    });
+
+    it('ranks a run out of time whose admission has not decided as a waiter, never as a start', async () => {
+      // Run 86 began waiting first and ran out of time just before this one;
+      // its admission has not decided yet. It goes first; this run is stopped,
+      // and the reason names no run that did not start.
+      const older = await atLimit([
+        ...full,
+        startedRun(86, 11.9, 12.1, {admission: null}),
+      ]);
+      expect(older.outputs.full).toBe('true');
+      expect(older.warning[0]).toContain(
+        '1 pull-request run that waited longer still waits',
+      );
+      expect(older.warning[0]).not.toContain('run 86 started');
+      // One that began after this run does not hold it back.
+      const younger = await atLimit([
+        ...full,
+        startedRun(87, 12, 11.5, {admission: null}),
+      ]);
+      expect(younger.outputs.fits).toBe('true');
+    });
+
+    it("compares wait starts on GitHub's clock, ties going to the lower run id", async () => {
+      // This run's own wait step began 3 s before its script read the clock.
+      // A run that began 1 s before the script, after this run's step, is
+      // younger, not older.
+      const own = {
+        id: OWN,
+        status: 'completed',
+        event: 'pull_request',
+        path: '.github/workflows/ci.yml',
+        jobs: [
+          {
+            name: 'room',
+            status: 'in_progress',
+            steps: [{name: STEP, status: 'in_progress', started_at: at(-0.05)}],
+          },
+        ],
+      };
+      const younger = await atLimit([...full, own, waiter(88, -1 / 60)]);
+      expect(younger.outputs.fits).toBe('true');
+      // The same second: the lower run id waited longer.
+      const tieLower = await atLimit([...full, own, {...waiter(0, -0.05)}]);
+      expect(tieLower.outputs.full).toBe('true');
+      const tieHigher = await atLimit([...full, own, waiter(89, -0.05)]);
+      expect(tieHigher.outputs.fits).toBe('true');
     });
 
     it('never turns away a main run or a merge-queue entry at its longest wait', async () => {

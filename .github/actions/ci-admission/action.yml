@@ -262,7 +262,9 @@ runs:
               // Pull-request runs that started at their longest wait lately,
               // and those still waiting that began waiting before this one.
               const startedAtLimit = [];
-              let waitedLonger = 0;
+              // Pull-request runs still waiting, or out of time and not yet
+              // decided, by when their wait began.
+              const pullWaiters = [];
               // What each run counted, logged on every look.
               const counted = [];
               const smallBy = {};
@@ -299,7 +301,7 @@ runs:
                     .filter(step => step.name === STEP);
                   const span = waitSpan(waits);
                   if (waits.some(step => step.status === 'in_progress')) {
-                    if (isPullRun(run) && (span.began < started || (span.began === started && run.id < context.runId))) waitedLonger += 1;
+                    if (isPullRun(run)) pullWaiters.push({id: run.id, began: span.began});
                     // Still waiting for room. A `main` run holds its whole
                     // peak, ahead of this one. A pull-request run holds what
                     // it runs: the job that waits and its Storybook build,
@@ -311,14 +313,15 @@ runs:
                     counted.push(`${short(run)} ${run.id} ${run.event}: ${holds} waiting`);
                     continue;
                   }
-                  if (
-                    isPullRun(run) &&
-                    // A fork's run CI was full for cannot cancel itself; it did not start.
-                    !jobs.some(job => job.name === 'admission' && job.conclusion === 'failure') &&
-                    span.ended - span.began >= MAX_WAIT_MS - AT_LIMIT_SLACK_MS &&
-                    Date.now() - span.ended < AT_LIMIT_SPACING_MS
-                  ) {
-                    startedAtLimit.push({id: run.id, ago: Date.now() - span.ended});
+                  if (isPullRun(run) && span.ended - span.began >= MAX_WAIT_MS - AT_LIMIT_SLACK_MS) {
+                    // Out of time: it started only once its admission job
+                    // succeeded. Until admission decides, it ranks as a waiter;
+                    // a run CI was full for never started.
+                    const decided = jobs.find(job => job.name === 'admission' && job.status === 'completed');
+                    if (decided == null) pullWaiters.push({id: run.id, began: span.began});
+                    else if (decided.conclusion === 'success' && Date.now() - span.ended < AT_LIMIT_SPACING_MS) {
+                      startedAtLimit.push({id: run.id, ago: Date.now() - span.ended});
+                    }
                   }
                   const live = jobs.filter(job => LIVE.includes(job.status)).length;
                   const ended = waits.map(step => Date.parse(step.completed_at ?? '')).filter(Number.isFinite);
@@ -368,6 +371,23 @@ runs:
                   core.warning(`${why}; starting.`);
                   return;
                 }
+                // Wait starts compared on one clock: this run's own first wait
+                // step as GitHub recorded it (whole seconds), else its clock
+                // floored to the second; a tie goes to the lower run id.
+                let mine = Math.floor(started / 1000) * 1000;
+                try {
+                  calls += 1;
+                  const {data: {jobs: own}} = await github.rest.actions.listJobsForWorkflowRun({
+                    ...context.repo, run_id: context.runId, filter: 'latest', per_page: 100,
+                  });
+                  const began = waitSpan(own.flatMap(job => job.steps ?? []).filter(step => step.name === STEP)).began;
+                  if (Number.isFinite(began)) mine = began;
+                } catch {
+                  // The floored clock stands.
+                }
+                const waitedLonger = pullWaiters.filter(
+                  other => other.began < mine || (other.began === mine && other.id < context.runId),
+                ).length;
                 if (startedAtLimit.length === 0 && waitedLonger === 0) {
                   core.warning(`${why}; starting, the one pull-request run to start at its longest wait for ${AT_LIMIT_SPACING_MS / 60_000} minutes.`);
                   // The whole run starts now, not only its Storybook build.
