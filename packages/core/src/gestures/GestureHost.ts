@@ -2740,12 +2740,20 @@ export class GestureHost {
   }
 
   /**
-   * Undo a contact's selection lock, at once for a cancel, and forget its
-   * press's selection; idempotent. A drag's hold keeps its last task after a
-   * lift (lockDragSelection).
+   * Undo a contact's selection locks, its press lock and its drag hold, at
+   * once for a cancel, and forget its press's selection; idempotent. A
+   * drag's hold keeps its last task after a lift (lockDragSelection).
    */
   private unlockSelection(id: number, isCancel = false): void {
-    this.lockedBy.get(id)?.({isCancel});
+    const lock = this.lockedBy.get(id);
+    lock?.({isCancel});
+    // A drag hold that a press lock replaced (a pen press a group claims at
+    // its own pointerdown, inside a row whose hold locks too) ends here as
+    // well.
+    const hold = this.claimHolds.get(id);
+    if (hold != null && hold !== lock) {
+      hold({isCancel});
+    }
     this.lockedBy.delete(id);
     this.claimHolds.delete(id);
     this.pressSelections.delete(id);

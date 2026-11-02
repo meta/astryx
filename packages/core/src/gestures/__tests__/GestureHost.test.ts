@@ -5679,13 +5679,18 @@ describe('a mouse or pen drag and the page selection (spec:AST-094 FR41)', () =>
     }
   });
 
-  it("still claims a press a group claims at its own pointerdown on selectable text: it has not moved, so it is no drag, and the page's selection stays", async () => {
-    const {text, group, copy} = mount(
-      '<p id="text">Text the page selected</p><div id="group"><button id="copy">Copy</button></div>',
+  it("still claims a press a group claims at its own pointerdown on selectable text: it has not moved, so it is no drag, and the page's selection stays; a pen's hold ends a task after its lift, though the row's long press locks too", async () => {
+    const {text, row, group, copy} = mount(
+      '<p id="text">Text the page selected</p><div id="row"><div id="group"><button id="copy">Copy</button></div></div>',
     );
     const undo = textUnderEveryPoint(copy.firstChild as Text);
     try {
       const fine = fineHost();
+      // The row's context-menu long press brings a selection lock (its hold
+      // opens a menu), which a pen's press takes as well.
+      detachers.push(
+        fine.attach(row, new LongPressGestureRecognizer({name: 'menu'})),
+      );
       // The action-group adapter's recognizer: a long press with no minimum
       // duration and no movement limit, which claims at the pointerdown.
       const press = new LongPressGestureRecognizer({
@@ -5714,6 +5719,15 @@ describe('a mouse or pen drag and the page selection (spec:AST-094 FR41)', () =>
         });
         await new Promise(resolve => setTimeout(resolve, 0));
         expect(selection.toString()).toBe('Text the page selected');
+        // The hold kept the press's own task, then ended: the page selects
+        // again.
+        const later = new Event('selectstart', {
+          bubbles: true,
+          cancelable: true,
+        });
+        text.dispatchEvent(later);
+        expect(later.defaultPrevented).toBe(false);
+        expect(group.style.getPropertyValue('user-select')).toBe('');
       }
     } finally {
       undo();

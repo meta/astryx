@@ -2102,6 +2102,73 @@ test.describe('where the primary pointer is fine', () => {
     expect(states).not.toContain('began');
   });
 
+  test("after a pen press a group claims at its own pointerdown, in a row whose long press opens a menu, a mouse drag selects the page's text again (spec:AST-094 FR41)", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName === 'webkit', 'no pen input in WebKit’s driver');
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, LongPressGestureRecognizer} = window.__api;
+      document.body.style.font = '16px sans-serif';
+      document.body.innerHTML =
+        '<p id="para">A paragraph a later mouse drag selects.</p><div id="row" style="width: 320px; padding: 12px; background: #ccd"><div id="group"><button id="copy" style="width: 120px; height: 40px">Copy</button></div></div>';
+      // The row's context-menu long press brings a selection lock; the
+      // action group's press claims at its own pointerdown.
+      host.attach(
+        document.getElementById('row') as HTMLElement,
+        new LongPressGestureRecognizer({name: 'menu'}),
+      );
+      host.attach(
+        document.getElementById('group') as HTMLElement,
+        new LongPressGestureRecognizer({
+          minimumPressDuration: 0,
+          allowableMovement: Number.POSITIVE_INFINITY,
+        }),
+        {actionGroup: true},
+      );
+    });
+    const copy = await page.locator('#copy').boundingBox();
+    const para = await page.locator('#para').boundingBox();
+    if (copy == null || para == null) {
+      throw new Error('no box for #copy or #para');
+    }
+    const cdp = await page.context().newCDPSession(page);
+    for (const type of ['mousePressed', 'mouseReleased'] as const) {
+      await cdp.send('Input.dispatchMouseEvent', {
+        type,
+        x: copy.x + 20,
+        y: copy.y + 20,
+        button: 'left',
+        buttons: type === 'mousePressed' ? 1 : 0,
+        clickCount: 1,
+        pointerType: 'pen',
+      });
+    }
+    // A task after the lift, the hold has ended: a real mouse drag over the
+    // paragraph selects it.
+    await page.evaluate(
+      async () =>
+        new Promise<void>(resolve => {
+          setTimeout(resolve, 0);
+        }),
+    );
+    const y = para.y + para.height / 2;
+    await page.mouse.move(para.x + 2, y);
+    await page.mouse.down();
+    await page.mouse.move(para.x + para.width * 0.6, y, {steps: 10});
+    await page.mouse.up();
+    const selected = await paintedSelection(page);
+    expect(selected.length).toBeGreaterThan(3);
+    expect('A paragraph a later mouse drag selects.'.includes(selected)).toBe(
+      true,
+    );
+  });
+
   test("the host registers no page touch listener while idle and warns for nothing, though the page attaches recognizers: an element keeps only a claiming recognizer's blocking touchmove; a mouse drag pans (spec:AST-094 FR43, FR24, FR19)", async ({
     page,
   }) => {
