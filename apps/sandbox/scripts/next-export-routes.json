@@ -782,6 +782,7 @@
     "/templates/theme-showcase/",
     "/templates/useContainerRevealHookUsage/",
     "/templates/useKeyboardHintHookUsage/",
+    "/templates/useListFocusHookUsage/",
     "/templates/useStreamingTextHookUsage/",
     "/templates/useThemeHookUsage/",
     "/templates/work-item-detail/",
