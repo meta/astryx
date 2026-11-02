@@ -637,7 +637,6 @@ function KanbanCard({
     return attachPan(element, {
       onPress: () => {
         active = handlersRef.current();
-        element.focus({preventScroll: true});
       },
       onDragStart: state => active.onDragStart?.(state),
       onDragMove: state => active.onDragMove?.(state),

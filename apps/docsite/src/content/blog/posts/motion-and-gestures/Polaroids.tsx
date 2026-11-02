@@ -437,7 +437,6 @@ class PhotoDeck {
           return;
         }
         this.selected = id;
-        element.focus({preventScroll: true});
         const rect = element.getBoundingClientRect();
         grabOffset = {
           x: state.startX - (rect.left + rect.width / 2),
