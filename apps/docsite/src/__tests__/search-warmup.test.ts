@@ -8,7 +8,7 @@
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {createCliSearchSource} from '../lib/cliSearchSource';
+import {WARMUP_WAIT_MS, createCliSearchSource} from '../lib/cliSearchSource';
 import {
   SEARCH_WARMUP_INTERVAL_MS,
   SEARCH_WARMUP_URL,
@@ -198,16 +198,19 @@ describe('a slow query', () => {
 describe('a query typed during a warm-up', () => {
   beforeEach(() => resetSearchWarmup());
 
-  it('is sent at once, so an answer the cache holds is not held back', async () => {
-    warmSearch(heldWarmup().fetchWarmup, 1_000);
+  it('is sent when the warm-up answers, not while its server is starting', async () => {
+    const warmup = heldWarmup();
+    warmSearch(warmup.fetchWarmup, 1_000);
     const search = heldSearch();
     const source = createCliSearchSource(search.fetchSearch);
     const results = source.search('app shell');
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise(resolve => setTimeout(resolve, 300));
+    expect(search.pending).toHaveLength(0);
+
+    warmup.answer();
+    await flush();
     expect(search.pending).toHaveLength(1);
     expect(search.pending[0].url).toBe('/api/search?q=app%20shell');
-
-    // The warm-up is still running; the answer arrives anyway.
     search.pending[0].answer([
       {href: '/components/app-shell', name: 'AppShell'},
     ]);
@@ -215,30 +218,40 @@ describe('a query typed during a warm-up', () => {
     expect(search.pending).toHaveLength(1);
   });
 
-  it('is sent again when the warm-up answers first, and takes the new answer', async () => {
+  it('is still sent once more if it is slow after the warm-up answers', async () => {
     const warmup = heldWarmup();
     warmSearch(warmup.fetchWarmup, 1_000);
     const search = heldSearch();
-    const source = createCliSearchSource(search.fetchSearch);
+    const source = createCliSearchSource(search.fetchSearch, undefined, 50);
     const results = source.search('app shell');
     await new Promise(resolve => setTimeout(resolve, 200));
-    expect(search.pending).toHaveLength(1);
-
     warmup.answer();
-    await flush();
+    await new Promise(resolve => setTimeout(resolve, 150));
     expect(search.pending).toHaveLength(2);
-    expect(search.pending[1].url).toBe('/api/search?q=app%20shell');
-
     search.pending[1].answer([
       {href: '/components/app-shell', name: 'AppShell'},
     ]);
     expect((await results).map(item => item.label)).toEqual(['AppShell']);
-    // The request still waiting on the cold server is stopped.
     expect(search.pending[0].signal.aborted).toBe(true);
-    expect(search.pending[1].signal.aborted).toBe(false);
   });
 
-  it('sends one request when no warm-up is running', async () => {
+  it('is sent anyway when the warm-up never answers', async () => {
+    vi.useFakeTimers();
+    try {
+      warmSearch(heldWarmup().fetchWarmup, 1_000);
+      const search = heldSearch();
+      const source = createCliSearchSource(search.fetchSearch);
+      void source.search('app shell');
+      await vi.advanceTimersByTimeAsync(120 + WARMUP_WAIT_MS - 10);
+      expect(search.pending).toHaveLength(0);
+      await vi.advanceTimersByTimeAsync(20);
+      expect(search.pending).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('sends one request when nothing is warming and the answer is quick', async () => {
     const search = heldSearch();
     const source = createCliSearchSource(search.fetchSearch);
     const results = source.search('button');
@@ -248,36 +261,25 @@ describe('a query typed during a warm-up', () => {
     expect(search.pending).toHaveLength(1);
   });
 
-  it('waits for a warm-up that outlasts the hedge delay, then sends once more', async () => {
-    const warmup = heldWarmup();
-    warmSearch(warmup.fetchWarmup, 1_000);
-    const search = heldSearch();
-    const source = createCliSearchSource(search.fetchSearch, undefined, 50);
-    const results = source.search('app shell');
-    // Well past the hedge delay, the warm-up still runs: no second request to
-    // a server that is still starting.
-    await new Promise(resolve => setTimeout(resolve, 400));
-    expect(search.pending).toHaveLength(1);
-
-    warmup.answer();
-    await flush();
-    expect(search.pending).toHaveLength(2);
-    search.pending[1].answer([
-      {href: '/components/app-shell', name: 'AppShell'},
-    ]);
-    expect((await results).map(item => item.label)).toEqual(['AppShell']);
-    expect(search.pending[0].signal.aborted).toBe(true);
-  });
-
-  it('stops both requests when a newer query replaces it', async () => {
+  it('sends nothing when a newer query replaces it during the warm-up', async () => {
     const warmup = heldWarmup();
     warmSearch(warmup.fetchWarmup, 1_000);
     const search = heldSearch();
     const source = createCliSearchSource(search.fetchSearch);
     const stale = source.search('app');
     await new Promise(resolve => setTimeout(resolve, 200));
+    source.cancel?.();
+    expect(await stale).toEqual([]);
     warmup.answer();
     await flush();
+    expect(search.pending).toHaveLength(0);
+  });
+
+  it('stops both requests when a newer query replaces a hedged one', async () => {
+    const search = heldSearch();
+    const source = createCliSearchSource(search.fetchSearch, () => null, 50);
+    const stale = source.search('app');
+    await new Promise(resolve => setTimeout(resolve, 260));
     expect(search.pending).toHaveLength(2);
     source.cancel?.();
     expect(await stale).toEqual([]);

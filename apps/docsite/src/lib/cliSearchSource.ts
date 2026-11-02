@@ -3,9 +3,9 @@
 /**
  * @file The search panel's source: each query goes to the site's search API
  * (app/api/search/route.ts), which runs `astryx search`, and its results come
- * back in the CLI's order. A query still unanswered when the page's warm-up
- * answers, or after HEDGE_MS when none runs, is sent once more, so it can
- * reach a warm server instead of waiting out a cold one.
+ * back in the CLI's order. A query typed while the page's warm-up runs is sent
+ * when the warm-up answers, to the server it started; a query still
+ * unanswered after HEDGE_MS is sent once more.
  * @position Consumed by SearchPalette.tsx.
  *
  * Items carry no `group`, since CommandPalette orders grouped items by group
@@ -89,6 +89,9 @@ const DEBOUNCE_MS = 120;
  */
 export const HEDGE_MS = 1500;
 
+/** The longest a query waits for a running warm-up: longer than a cold start. */
+export const WARMUP_WAIT_MS = 10_000;
+
 /**
  * A SearchSource that answers with `astryx search`, through the site's API.
  * @param fetchSearch - Fetches one query's response; the site passes `fetch`.
@@ -112,13 +115,32 @@ export function createCliSearchSource(
   let inFlight: AbortController | null = null;
 
   /**
-   * Fetch one query at once, so an answer the edge cache holds is never held
-   * back. If it is still unanswered when the page's running warm-up answers,
-   * or after HEDGE_MS when no warm-up runs, send it once more and take
-   * whichever answer comes first: the first request may be waiting on a cold
-   * server while another is warm.
+   * Fetch one query. While the page's warm-up runs, its server is still
+   * starting and cannot take requests, so the host would start another cold
+   * server for this one: wait for the warm-up's answer first, then send to
+   * the server it started. If the query is still unanswered after HEDGE_MS,
+   * send it once more and take whichever answer comes first: the first
+   * request may be waiting on a cold server while another is warm.
    */
   async function sendQuery(url: string, signal: AbortSignal) {
+    const warmup = runningWarmup();
+    if (warmup != null) {
+      await new Promise<void>((resolve, reject) => {
+        const done = () => {
+          clearTimeout(timer);
+          signal.removeEventListener('abort', onAbort);
+          resolve();
+        };
+        const onAbort = () => {
+          clearTimeout(timer);
+          reject(signal.reason);
+        };
+        // A warm-up that never answers must not hold the query for good.
+        const timer = setTimeout(done, WARMUP_WAIT_MS);
+        signal.addEventListener('abort', onAbort, {once: true});
+        warmup.then(done);
+      });
+    }
     // Each attempt has its own controller, which the query's signal aborts
     // (also while the winner's body is read, as a single request's would be).
     const attempts: AbortController[] = [];
@@ -131,16 +153,9 @@ export function createCliSearchSource(
         response => ({response, index}),
       );
     };
-    // While the page's warm-up runs, the server it is starting is the one to
-    // resend to, so wait for its answer; otherwise resend after HEDGE_MS.
     let hedgeTimer: ReturnType<typeof setTimeout> | undefined;
-    const warmup = runningWarmup();
     const hedge = new Promise<'again'>(resolve => {
-      if (warmup != null) {
-        warmup.then(() => resolve('again'));
-      } else {
-        hedgeTimer = setTimeout(() => resolve('again'), hedgeMs);
-      }
+      hedgeTimer = setTimeout(() => resolve('again'), hedgeMs);
     });
     let winner = -1;
     try {
