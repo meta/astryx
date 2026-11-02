@@ -814,3 +814,20 @@ describe('Token — owned handlers on the link+remove container', () => {
     openSpy.mockRestore();
   });
 });
+
+describe('popup state on a clickable token (FR10)', () => {
+  it('passes aria-haspopup and aria-expanded to the inner button', () => {
+    render(
+      <Token
+        label="Status"
+        onClick={() => {}}
+        aria-haspopup="dialog"
+        aria-expanded={false}
+      />,
+    );
+    const button = screen.getByRole('button', {name: 'Status'});
+    expect(button).toHaveAttribute('aria-haspopup', 'dialog');
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    expect(button.parentElement).not.toHaveAttribute('aria-haspopup');
+  });
+});

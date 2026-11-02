@@ -17,6 +17,7 @@
 import React, {
   useCallback,
   useEffect,
+  useId,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -33,7 +34,9 @@ import {
 import {TokenizerClearAllMessageContext} from '../Tokenizer/TokenizerClearAllMessageContext';
 import {TypeaheadItem} from '../Typeahead/TypeaheadItem';
 import {Token} from '../Token';
+import {TokenNamingContext} from '../Token/TokenNamingContext';
 import {Avatar} from '../Avatar';
+import {isRenderable} from '../utils/isRenderable';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {Icon} from '../Icon';
 import type {IconType} from '../Icon';
@@ -118,6 +121,10 @@ const OPERATOR_VALUE_TYPE_TO_ICON: Record<string, IconName> = {
 // =============================================================================
 
 const tokenValueStyles = stylex.create({
+  // Gives the rendered value an id for the token's name without adding a box.
+  nameSource: {
+    display: 'contents',
+  },
   value: {
     fontWeight: fontWeightVars['--font-weight-bold'],
   },
@@ -156,52 +163,35 @@ function getEnumLabel(values: ReadonlyArray<EnumItem>, value: string): string {
   return values.find(v => v.value === value)?.label ?? value;
 }
 
-function PowerSearchTokenValue({
-  operatorValue,
-  filterValue,
-  maxLength,
-  locale,
-}: {
-  operatorValue: OperatorValue;
-  filterValue: FilterValue;
-  maxLength: number;
-  locale: Locale;
-}) {
+/**
+ * The visible text of a filter token's value. The token renders it, and the
+ * token's remove button and editor dialog are named by the same text.
+ */
+function tokenValueText(
+  operatorValue: OperatorValue,
+  filterValue: FilterValue,
+  maxLength: number,
+  locale: Locale,
+): string | null {
   switch (filterValue.type) {
     case 'empty':
       return null;
 
     case 'string':
-      return (
-        <span {...stylex.props(tokenValueStyles.value)}>
-          {truncateString(filterValue.value, maxLength)}
-        </span>
-      );
+      return truncateString(filterValue.value, maxLength);
 
     case 'integer':
     case 'float':
-      return (
-        <span {...stylex.props(tokenValueStyles.value)}>
-          {filterValue.value}
-        </span>
-      );
+      return String(filterValue.value);
 
     case 'enum':
       if (operatorValue.type === 'enum') {
-        return (
-          <span {...stylex.props(tokenValueStyles.value)}>
-            {truncateString(
-              getEnumLabel(operatorValue.values, filterValue.value),
-              maxLength,
-            )}
-          </span>
+        return truncateString(
+          getEnumLabel(operatorValue.values, filterValue.value),
+          maxLength,
         );
       }
-      return (
-        <span {...stylex.props(tokenValueStyles.value)}>
-          {truncateString(filterValue.value, maxLength)}
-        </span>
-      );
+      return truncateString(filterValue.value, maxLength);
 
     case 'string_list': {
       const items = filterValue.value;
@@ -209,25 +199,13 @@ function PowerSearchTokenValue({
         return null;
       }
       if (items.length === 1) {
-        return (
-          <span {...stylex.props(tokenValueStyles.value)}>
-            {truncateString(items[0], maxLength)}
-          </span>
-        );
+        return truncateString(items[0], maxLength);
       }
       const totalLength = items.reduce((sum, s) => sum + s.length, 0);
       if (totalLength > maxLength) {
-        return (
-          <span {...stylex.props(tokenValueStyles.value)}>
-            {items.length} items
-          </span>
-        );
+        return `${items.length} items`;
       }
-      return (
-        <span {...stylex.props(tokenValueStyles.value)}>
-          {items.join(', ')}
-        </span>
-      );
+      return items.join(', ');
     }
 
     case 'enum_list': {
@@ -238,38 +216,18 @@ function PowerSearchTokenValue({
       if (operatorValue.type === 'enum_list') {
         const labels = items.map(v => getEnumLabel(operatorValue.values, v));
         if (labels.length === 1) {
-          return (
-            <span {...stylex.props(tokenValueStyles.value)}>
-              {truncateString(labels[0], maxLength)}
-            </span>
-          );
+          return truncateString(labels[0], maxLength);
         }
         const totalLength = labels.reduce((sum, s) => sum + s.length, 0);
         if (totalLength > maxLength) {
-          return (
-            <span {...stylex.props(tokenValueStyles.value)}>
-              {labels.length} items
-            </span>
-          );
+          return `${labels.length} items`;
         }
-        return (
-          <span {...stylex.props(tokenValueStyles.value)}>
-            {labels.join(', ')}
-          </span>
-        );
+        return labels.join(', ');
       }
       if (items.length === 1) {
-        return (
-          <span {...stylex.props(tokenValueStyles.value)}>
-            {truncateString(items[0], maxLength)}
-          </span>
-        );
+        return truncateString(items[0], maxLength);
       }
-      return (
-        <span {...stylex.props(tokenValueStyles.value)}>
-          {items.length} items
-        </span>
-      );
+      return `${items.length} items`;
     }
 
     case 'entity_list': {
@@ -278,85 +236,51 @@ function PowerSearchTokenValue({
         return null;
       }
       if (entities.length === 1) {
-        return (
-          <span {...stylex.props(tokenValueStyles.value)}>
-            {truncateString(entities[0].label, maxLength)}
-          </span>
-        );
+        return truncateString(entities[0].label, maxLength);
       }
       const totalLength = entities.reduce((sum, e) => sum + e.label.length, 0);
       if (totalLength > maxLength) {
-        return (
-          <span {...stylex.props(tokenValueStyles.value)}>
-            {entities.length} items
-          </span>
-        );
+        return `${entities.length} items`;
       }
-      return (
-        <span {...stylex.props(tokenValueStyles.value)}>
-          {entities.map(e => e.label).join(', ')}
-        </span>
-      );
+      return entities.map(e => e.label).join(', ');
     }
 
     case 'time':
-      return (
-        <span {...stylex.props(tokenValueStyles.value)}>
-          {filterValue.value}
-        </span>
-      );
+      return filterValue.value;
 
-    case 'date_absolute': {
-      const formatted = formatDateAbsoluteCompact(
-        filterValue.unixSeconds,
-        locale,
+    case 'date_absolute':
+      return truncateString(
+        formatDateAbsoluteCompact(filterValue.unixSeconds, locale),
+        maxLength,
       );
-      return (
-        <span {...stylex.props(tokenValueStyles.value)}>
-          {truncateString(formatted, maxLength)}
-        </span>
-      );
-    }
 
     case 'date_relative':
-      return (
-        <span {...stylex.props(tokenValueStyles.value)}>
-          {truncateString(filterValue.value, maxLength)}
-        </span>
-      );
+      return truncateString(filterValue.value, maxLength);
 
     case 'date_range':
-      return <span {...stylex.props(tokenValueStyles.value)}>date range</span>;
+      return 'date range';
 
     case 'custom':
       if (operatorValue.type === 'custom') {
-        return (
-          <span {...stylex.props(tokenValueStyles.value)}>
-            {truncateString(
-              operatorValue.getString(filterValue.value),
-              maxLength,
-            )}
-          </span>
+        return truncateString(
+          operatorValue.getString(filterValue.value),
+          maxLength,
         );
       }
-      return (
-        <span {...stylex.props(tokenValueStyles.value)}>
-          {filterValue.value}
-        </span>
-      );
+      return filterValue.value;
 
     case 'nested': {
       const count = filterValue.value.length;
-      return (
-        <span {...stylex.props(tokenValueStyles.value)}>
-          {count === 1 ? '1 filter' : `${count} filters`}
-        </span>
-      );
+      return count === 1 ? '1 filter' : `${count} filters`;
     }
 
     default:
       return null;
   }
+}
+
+function PowerSearchTokenValue({text}: {text: string}) {
+  return <span {...stylex.props(tokenValueStyles.value)}>{text}</span>;
 }
 
 // =============================================================================
@@ -606,6 +530,37 @@ export function PowerSearch({
     type: 'idle',
   });
 
+  // A default filter token's visible text: its label (field and operator)
+  // and its value. The token's remove button and editor dialog are named by
+  // the same text.
+  const tokenText = useCallback(
+    (filter: PowerSearchFilter) => {
+      const field = config.getField(filter.field);
+      const operator = config.getOperator(filter.field, filter.operator);
+      const fieldLabel = field?.label ?? '';
+      const operatorLabel = operator ? resolveOperatorLabel(operator, t) : '';
+      const label = `${fieldLabel}: ${operatorLabel}`.trim();
+      const value = operator
+        ? tokenValueText(
+            operator.value,
+            filter.value,
+            Math.max(
+              maxTokenLength - fieldLabel.length - operatorLabel.length,
+              10,
+            ),
+            locale,
+          )
+        : null;
+      return {label, value, full: value != null ? `${label} ${value}` : label};
+    },
+    [config, maxTokenLength, t, locale],
+  );
+  const tokenIdBase = useId();
+  const editedFilter =
+    popoverState.type === 'editing'
+      ? filters[popoverState.filterIndex]
+      : undefined;
+
   // Layer for positioning the edit popover anchored to the tokenizer
   const handleLayerHide = useCallback(() => {
     setPopoverStateRaw({type: 'idle'});
@@ -616,9 +571,14 @@ export function PowerSearch({
     hasLightDismiss: true,
     hasCloseButton: false,
     hasAutoFocus: false,
-    // The popup's own listbox/menu content is the exposed semantics; focus
-    // stays on the tokenizer input, so a modal dialog wrapper is incorrect.
-    role: 'none',
+    // Adding: the popup's own listbox/menu content is the exposed semantics,
+    // and focus stays on the tokenizer input, so a dialog wrapper is
+    // incorrect. Editing a token: focus moves into the editor's controls, so
+    // the editor is a non-modal dialog named by the token's visible text.
+    role: editedFilter != null ? 'dialog' : 'none',
+    isModal: false,
+    dialogLabel:
+      editedFilter != null ? tokenText(editedFilter).full : undefined,
   });
 
   // Wrapper that manages layer visibility and tokenizer focus alongside state
@@ -875,20 +835,14 @@ export function PowerSearch({
       // Default token rendering
       const fieldLabel = field?.label ?? '';
       const operatorLabel = operator ? resolveOperatorLabel(operator, t) : '';
-      const tokenLabel = `${fieldLabel}: ${operatorLabel}`.trim();
-      const adjustedMaxLength = Math.max(
-        maxTokenLength - fieldLabel.length - operatorLabel.length,
-        10,
-      );
-
+      const text =
+        filter != null
+          ? tokenText(filter)
+          : {label: `${fieldLabel}: ${operatorLabel}`.trim(), value: null};
+      const tokenLabel = text.label;
       const valueContent =
-        operator && filter ? (
-          <PowerSearchTokenValue
-            operatorValue={operator.value}
-            filterValue={filter.value}
-            maxLength={adjustedMaxLength}
-            locale={locale}
-          />
+        text.value != null ? (
+          <PowerSearchTokenValue text={text.value} />
         ) : undefined;
 
       // Show entity photo as token icon for single-entity filters
@@ -902,32 +856,65 @@ export function PowerSearch({
         tokenIcon = <Avatar src={entity.photo} name={entity.label} size={16} />;
       }
 
+      // A token that opens its editor is named by all its visible text
+      // (field, operator and value) and says that it opens a dialog.
+      const labelId = `${tokenIdBase}-${filterIndex}-label`;
+      const valueId = `${tokenIdBase}-${filterIndex}-value`;
+      const editorProps =
+        handleClick != null
+          ? {
+              'aria-labelledby': isRenderable(valueContent)
+                ? `${labelId} ${valueId}`
+                : labelId,
+              'aria-haspopup': 'dialog' as const,
+              'aria-expanded':
+                popoverState.type === 'editing' &&
+                popoverState.filterIndex === filterIndex,
+            }
+          : null;
+
       return (
-        <Token
-          label={tokenLabel}
-          size={size}
-          icon={tokenIcon}
-          endContent={valueContent}
-          onMouseDown={
-            handleClick
-              ? e => {
-                  // Keep a token press from entering Tokenizer's input-focus
-                  // redirect. Click still edits/removes; Tab entry is unchanged.
-                  e.preventDefault();
-                }
-              : undefined
-          }
-          onClick={
-            handleClick
-              ? (e: React.MouseEvent) => {
-                  e.stopPropagation();
-                  handleClick();
-                }
-              : undefined
-          }
-          onRemove={handleRemove}
-          isDisabled={isDisabled}
-        />
+        <TokenNamingContext
+          value={{
+            labelId,
+            removeName:
+              text.value != null ? `${text.label} ${text.value}` : text.label,
+          }}>
+          <Token
+            label={tokenLabel}
+            size={size}
+            icon={tokenIcon}
+            {...editorProps}
+            endContent={
+              isRenderable(valueContent) ? (
+                <span
+                  id={valueId}
+                  {...stylex.props(tokenValueStyles.nameSource)}>
+                  {valueContent}
+                </span>
+              ) : undefined
+            }
+            onMouseDown={
+              handleClick
+                ? e => {
+                    // Keep a token press from entering Tokenizer's input-focus
+                    // redirect. Click still edits/removes; Tab entry is unchanged.
+                    e.preventDefault();
+                  }
+                : undefined
+            }
+            onClick={
+              handleClick
+                ? (e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    handleClick();
+                  }
+                : undefined
+            }
+            onRemove={handleRemove}
+            isDisabled={isDisabled}
+          />
+        </TokenNamingContext>
       );
     },
     [
@@ -935,13 +922,15 @@ export function PowerSearch({
       config,
       configProp,
       maxTokenLength,
-      locale,
       size,
       isReadOnly,
       isDisabled,
       handleTokenClick,
       componentOverrides,
       t,
+      tokenIdBase,
+      popoverState,
+      tokenText,
     ],
   );
 
