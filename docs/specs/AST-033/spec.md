@@ -268,7 +268,10 @@ for each bug.
   are not exported from any package, enter no catalog, and resolve only for
   their own post. The plain-text post route and the RSS feed show a static
   fallback in place of the running example: the block's source as an ordinary
-  code block. Implementation gap: not built (Current-state impact).
+  code block. A post's example assets live in a folder named after the post,
+  beside its Markdown file, and load only in the frames of that post's live
+  examples. Test fixture posts under `src/content/blog/fixtures/` are served
+  on the canary only and never listed in the blog index, feed, or sitemap.
 
 ### Authority routing
 
@@ -320,10 +323,7 @@ Known conformance gaps remain implementation work:
   source, type, tab, view, and toggle-value fields, and nested template-preview
   activation can reach the same semantic action twice;
 - existing interaction tests do not yet cover the complete primary-selection,
-  Back/Forward, close, cancellation, and supersession matrix; and
-- blog posts render every fenced code block as static code: no `tsx live`
-  block runs an example, the preview scope holds no post-local assets, and the
-  plain-text route and RSS feed have no live-block fallback (FR22).
+  Back/Forward, close, cancellation, and supersession matrix.
 
 Stable Storybook and Sandbox currently use a split deployment: pull-request
 previews are staged inside the Vercel Docsite, while stable main is rebuilt and
