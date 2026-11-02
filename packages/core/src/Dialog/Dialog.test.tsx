@@ -190,6 +190,51 @@ describe('Dialog', () => {
       expect(document.activeElement).toBe(edit);
     });
 
+    it('returns focus to a page opener when a dialog in an iframe unmounts', async () => {
+      const frame = document.createElement('iframe');
+      document.body.append(frame);
+      const frameDocument = frame.contentDocument!;
+      // jsdom gives each document its own HTMLDialogElement prototype.
+      const {prototype} = frameDocument.defaultView!.HTMLDialogElement;
+      prototype.showModal = HTMLDialogElement.prototype.showModal;
+      prototype.close = HTMLDialogElement.prototype.close;
+      function FramedEditor() {
+        const [isOpen, setIsOpen] = useState(false);
+        return (
+          <>
+            <button type="button" onClick={() => setIsOpen(true)}>
+              Edit framed
+            </button>
+            {isOpen
+              ? createPortal(
+                  <Dialog isOpen onOpenChange={setIsOpen} aria-label="Framed">
+                    <button type="button" onClick={() => setIsOpen(false)}>
+                      Save framed
+                    </button>
+                  </Dialog>,
+                  frameDocument.body,
+                )
+              : null}
+          </>
+        );
+      }
+      try {
+        render(<FramedEditor />);
+        const edit = screen.getByRole('button', {name: 'Edit framed'});
+        edit.focus();
+        fireEvent.click(edit);
+        const save = frameDocument.querySelector('button')!;
+        save.focus();
+        fireEvent.click(save);
+        await Promise.resolve();
+
+        expect(frameDocument.querySelector('dialog')).toBeNull();
+        expect(document.activeElement).toBe(edit);
+      } finally {
+        frame.remove();
+      }
+    });
+
     it('leaves focus that moved elsewhere when the dialog unmounts', async () => {
       function Page() {
         const [isOpen, setIsOpen] = useState(true);
