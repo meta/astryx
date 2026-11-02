@@ -14,7 +14,7 @@
  */
 
 import {act, fireEvent, render, screen} from '@testing-library/react';
-import {Profiler} from 'react';
+import {Profiler, useState} from 'react';
 import {
   afterAll,
   afterEach,
@@ -87,6 +87,38 @@ afterEach(() => {
 afterAll(() => {
   vi.useRealTimers();
 });
+
+/** A wheel whose owner commits each change, as a field does. */
+function OwnedWheel({
+  options,
+  initial,
+  onChange,
+}: {
+  options: WheelOption[];
+  initial: number;
+  onChange: (value: number) => void;
+}) {
+  const [value, setValue] = useState(initial);
+  return (
+    <PickerWheel
+      label="Hour"
+      options={options}
+      value={value}
+      onChange={next => {
+        onChange(next);
+        setValue(next);
+      }}
+    />
+  );
+}
+
+function renderOwnedWheel(options: WheelOption[], initial: number) {
+  const onChange = vi.fn();
+  render(
+    <OwnedWheel options={options} initial={initial} onChange={onChange} />,
+  );
+  return {column: screen.getByRole('listbox', {name: 'Hour'}), onChange};
+}
 
 function renderWheel(props: Partial<WheelProps> = {}) {
   const onChange = vi.fn();
@@ -424,6 +456,25 @@ describe('PickerWheel — a finger', () => {
     expect(marked()).toEqual([rested]);
   });
 
+  it('marks no row while the wheel snaps or turns, then the row it rests on', () => {
+    const {column} = renderWheel();
+    const marked = () =>
+      screen
+        .getAllByRole('option')
+        .filter(isMarked)
+        .map(row => row.textContent);
+    // A slow release snaps onto 11.
+    drag(column, 150, 100, {steps: 25, interval: 40, hold: 300});
+    expect(marked()).toEqual([]);
+    advance(1000);
+    expect(marked()).toEqual(['11']);
+    // A key turns the wheel on to 12.
+    fireEvent.keyDown(column, {key: 'ArrowDown'});
+    expect(marked()).toEqual([]);
+    advance(1000);
+    expect(marked()).toEqual(['12']);
+  });
+
   it('drags the rows with it, without committing until the wheel rests', () => {
     const {column, option, onChange} = renderWheel();
     touch('touchstart', column, 150);
@@ -661,6 +712,39 @@ describe('PickerWheel — keyboard and clicks', () => {
     expect(onChange).not.toHaveBeenCalled();
     fireEvent.keyDown(column, {key: 'End'});
     expect(onChange).toHaveBeenLastCalledWith(17);
+  });
+
+  it('at a 12:00–17:00 bound, moves a key to the next enabled row and stops at the last one', () => {
+    const bound = HOURS.map(option => ({
+      ...option,
+      isDisabled: option.value < 12 || option.value > 17,
+    }));
+    const {column, onChange} = renderOwnedWheel(bound, 17);
+    // No enabled row lies below 17: these keys commit nothing.
+    for (const key of ['ArrowDown', 'PageDown', 'End']) {
+      fireEvent.keyDown(column, {key});
+    }
+    expect(onChange).not.toHaveBeenCalled();
+    // PageUp's target, 7, is past the bound: the key stops at 12.
+    fireEvent.keyDown(column, {key: 'PageUp'});
+    expect(onChange).toHaveBeenLastCalledWith(12);
+    fireEvent.keyDown(column, {key: 'ArrowUp'});
+    fireEvent.keyDown(column, {key: 'Home'});
+    expect(onChange).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(column, {key: 'End'});
+    expect(onChange).toHaveBeenLastCalledWith(17);
+  });
+
+  it('moves a key past a disabled row to the next enabled one', () => {
+    const gap = HOURS.map(option => ({
+      ...option,
+      isDisabled: option.isDisabled === true || option.value === 14,
+    }));
+    const {column, onChange} = renderOwnedWheel(gap, 13);
+    fireEvent.keyDown(column, {key: 'ArrowDown'});
+    expect(onChange).toHaveBeenLastCalledWith(15);
+    fireEvent.keyDown(column, {key: 'ArrowUp'});
+    expect(onChange).toHaveBeenLastCalledWith(13);
   });
 
   it('keeps the band’s mark on the last row when a key has nowhere further to go', () => {

@@ -12,6 +12,7 @@
  *   touch suites
  */
 
+import {useState} from 'react';
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
 import {
@@ -487,6 +488,73 @@ describe('Wheel — where it comes to rest', () => {
       behavior: 'smooth',
     });
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe('Wheel — keys under a mouse', () => {
+  /** The scrolling column over `options`, whose owner commits each change. */
+  function OwnedColumn({
+    options,
+    initial,
+    onChange,
+  }: {
+    options: WheelOption[];
+    initial: number;
+    onChange: (value: number) => void;
+  }) {
+    const [value, setValue] = useState(initial);
+    return (
+      <ScrollWheel
+        label="Hour"
+        options={options}
+        value={value}
+        onChange={next => {
+          onChange(next);
+          setValue(next);
+        }}
+      />
+    );
+  }
+
+  function renderColumn(options: WheelOption[], initial: number) {
+    const onChange = vi.fn();
+    render(
+      <OwnedColumn options={options} initial={initial} onChange={onChange} />,
+    );
+    return {listbox: screen.getByRole('listbox', {name: 'Hour'}), onChange};
+  }
+
+  it('at a 12:00–17:00 bound, moves a key to the next enabled row and stops at the last one', () => {
+    const bound = HOURS.map(option => ({
+      ...option,
+      isDisabled: option.value < 12 || option.value > 17,
+    }));
+    const {listbox, onChange} = renderColumn(bound, 17);
+    // No enabled row lies below 17: these keys commit nothing.
+    for (const key of ['ArrowDown', 'PageDown', 'End']) {
+      fireEvent.keyDown(listbox, {key});
+    }
+    expect(onChange).not.toHaveBeenCalled();
+    // PageUp's target, 7, is past the bound: the key stops at 12.
+    fireEvent.keyDown(listbox, {key: 'PageUp'});
+    expect(onChange).toHaveBeenLastCalledWith(12);
+    fireEvent.keyDown(listbox, {key: 'ArrowUp'});
+    fireEvent.keyDown(listbox, {key: 'Home'});
+    expect(onChange).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(listbox, {key: 'End'});
+    expect(onChange).toHaveBeenLastCalledWith(17);
+  });
+
+  it('moves a key past a disabled row to the next enabled one', () => {
+    const gap = HOURS.map(option => ({
+      ...option,
+      isDisabled: option.isDisabled === true || option.value === 14,
+    }));
+    const {listbox, onChange} = renderColumn(gap, 13);
+    fireEvent.keyDown(listbox, {key: 'ArrowDown'});
+    expect(onChange).toHaveBeenLastCalledWith(15);
+    fireEvent.keyDown(listbox, {key: 'ArrowUp'});
+    expect(onChange).toHaveBeenLastCalledWith(13);
   });
 });
 

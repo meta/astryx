@@ -50,7 +50,9 @@ import {
   type WheelLayout,
 } from './wheelPhysics';
 import {
+  endIndex,
   nearestEnabledIndex,
+  steppedIndex,
   WHEEL_ROW_HEIGHT,
   type WheelProps,
 } from './wheelOptions';
@@ -595,40 +597,22 @@ export function PickerWheel({
   const moveBy = useCallback(
     (delta: number) => {
       const current = latestRef.current;
-      const count = current.options.length;
-      if (count === 0 || delta === 0) {
+      if (current.options.length === 0 || delta === 0) {
         return;
       }
       // Keys step from the row the wheel is heading to, not the one it is
       // passing: two quick presses move two rows.
       const heading = motion.target();
       const offset = motion.isMoving() ? motion.stop() : motion.offset();
-      const from = nearestIndex(heading, current.layout);
-      const isEnabled = (index: number) => {
-        const option = current.options[index];
-        return option != null && !option.isDisabled;
-      };
-      const step = Math.sign(delta);
-      const next = Math.min(count - 1, Math.max(0, from + delta));
-      // The first enabled row from the target onwards. Past the bounds, it is
-      // the enabled row nearest the target on the way back, short of the row it
-      // started from.
-      let found: number | null = null;
-      for (let index = next; index >= 0 && index < count; index += step) {
-        if (isEnabled(index)) {
-          found = index;
-          break;
-        }
-      }
-      for (let index = next; found == null && index !== from; index -= step) {
-        if (isEnabled(index)) {
-          found = index;
-        }
-      }
-      if (found == null || found === from) {
+      const row = steppedIndex(
+        current.options,
+        nearestIndex(heading, current.layout),
+        delta,
+      );
+      if (row == null) {
         return;
       }
-      turnToPosition(found, offset);
+      turnToPosition(row, offset);
     },
     [motion, turnToPosition],
   );
@@ -664,11 +648,7 @@ export function PickerWheel({
   // Home and End: the first and the last enabled row.
   const moveToEnd = useCallback(
     (end: 'first' | 'last') => {
-      const {options: rows} = latestRef.current;
-      const enabled = rows.flatMap((option, index) =>
-        option.isDisabled ? [] : [index],
-      );
-      const row = end === 'first' ? enabled[0] : enabled[enabled.length - 1];
+      const row = endIndex(latestRef.current.options, end);
       if (row == null) {
         return;
       }

@@ -50,7 +50,12 @@ import {useOwnScrollGesture} from './useOwnScrollGesture';
 import {usePointerDragScroll} from './usePointerDragScroll';
 import {useScrollSettle} from './useScrollSettle';
 import {useWheelListbox} from './useWheelListbox';
-import {nearestEnabledIndex, type WheelProps} from './wheelOptions';
+import {
+  endIndex,
+  nearestEnabledIndex,
+  steppedIndex,
+  type WheelProps,
+} from './wheelOptions';
 
 export {
   nearestEnabledIndex,
@@ -484,32 +489,31 @@ export function ScrollWheel({
   // there is no way to share — it takes every touch that lands on it.
   useOwnScrollGesture(scrollerRef, 'all', {isEnabled: isActive});
 
-  const moveBy = useCallback(
-    (delta: number) => {
-      const next = Math.min(
-        options.length - 1,
-        Math.max(0, activeIndex + delta),
-      );
-      const option = options[next];
-      if (option == null || option.isDisabled) {
+  // A key commits the row it moves to and scrolls the column there.
+  const moveTo = useCallback(
+    (row: number | null) => {
+      const option = row == null ? undefined : options[row];
+      if (row == null || option == null || option.isDisabled) {
         return;
       }
-      setActiveIndex(next);
-      scrollToIndex(next, 'smooth');
+      setActiveIndex(row);
+      scrollToIndex(row, 'smooth');
       if (option.value !== value) {
         onChange(option.value);
       }
     },
-    [activeIndex, options, scrollToIndex, value, onChange],
+    [options, scrollToIndex, value, onChange],
   );
 
-  // Home and End step to the first and the last row, as any key does: a
-  // disabled one stops them.
+  const moveBy = useCallback(
+    (delta: number) => moveTo(steppedIndex(options, activeIndex, delta)),
+    [moveTo, options, activeIndex],
+  );
+
+  // Home and End: the first and the last enabled row.
   const toEnd = useCallback(
-    (end: 'first' | 'last') => {
-      moveBy(end === 'first' ? -activeIndex : options.length - 1 - activeIndex);
-    },
-    [moveBy, activeIndex, options.length],
+    (end: 'first' | 'last') => moveTo(endIndex(options, end)),
+    [moveTo, options],
   );
 
   const activate = useCallback(

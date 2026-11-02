@@ -3,8 +3,8 @@
 /**
  * @file wheelOptions.ts
  * @input Nothing; types, the row height and pure functions
- * @output WheelOption, WheelProps, WHEEL_ROW_HEIGHT and nearestEnabledIndex:
- *   what both wheels share
+ * @output WheelOption, WheelProps, WHEEL_ROW_HEIGHT, nearestEnabledIndex,
+ *   steppedIndex and endIndex: what both wheels share
  * @position Internal; read by Wheel.tsx (which re-exports all of it) and
  *   PickerWheel.tsx
  *
@@ -87,4 +87,53 @@ export function nearestEnabledIndex(
     }
   }
   return towardIndex;
+}
+
+/**
+ * The row a key moves a wheel to from `from` by `delta` rows. It is the next
+ * enabled row from the target in the key's direction. Past the last enabled
+ * row, it is the last enabled row before the target. Null when no enabled row
+ * lies in that direction, so the key commits nothing.
+ */
+export function steppedIndex(
+  options: ReadonlyArray<WheelOption>,
+  from: number,
+  delta: number,
+): number | null {
+  const count = options.length;
+  if (count === 0 || delta === 0) {
+    return null;
+  }
+  const isEnabled = (index: number) => {
+    const option = options[index];
+    return option != null && !option.isDisabled;
+  };
+  const step = Math.sign(delta);
+  const target = Math.min(count - 1, Math.max(0, from + delta));
+  for (let index = target; index >= 0 && index < count; index += step) {
+    if (isEnabled(index)) {
+      return index === from ? null : index;
+    }
+  }
+  for (let index = target; index !== from; index -= step) {
+    if (isEnabled(index)) {
+      return index;
+    }
+  }
+  return null;
+}
+
+/** The first or the last enabled row: where Home or End moves a wheel. */
+export function endIndex(
+  options: ReadonlyArray<WheelOption>,
+  end: 'first' | 'last',
+): number | null {
+  const step = end === 'first' ? 1 : -1;
+  const start = end === 'first' ? 0 : options.length - 1;
+  for (let index = start; index >= 0 && index < options.length; index += step) {
+    if (!options[index].isDisabled) {
+      return index;
+    }
+  }
+  return null;
 }
