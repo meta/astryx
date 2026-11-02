@@ -736,7 +736,7 @@ jobs:
       - name: 'Lab-only: Lab tests + Storybook build'
         if: steps.scope.outputs.lab_only == 'true'
         run: |
-          echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. This job runs only the Lab package's tests and the repository guards (spec:AST-030 FR26)."
+          echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. This job runs the Lab package's tests, the source-reading guard tests and the repository guards (spec:AST-030 FR26)."
 
       - name: Skip heavy work for a specialized lane
         if: steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.tooling_only == 'true'
@@ -795,9 +795,15 @@ jobs:
           LAB_ONLY: ${{ steps.scope.outputs.lab_only }}
         run: |
           if [ "$LAB_ONLY" = true ]; then
-            # A change only to the Lab package runs every Lab test, and only
-            # those, across the same legs (spec:AST-030 FR26).
+            # A change only to the Lab package runs every Lab test across the
+            # same legs, and the guards below as any scoped run does
+            # (spec:AST-030 FR26).
             pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} packages/lab/
+            node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 > "$RUNNER_TEMP/fs-guards.txt"
+            mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"
+            if [ "${#GUARDS[@]}" -gt 0 ]; then
+              pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"
+            fi
           elif [ "$SCOPED" = true ]; then
             pnpm test:ui --changed=HEAD^1 --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }}
             # Tests no module graph relates to the change run too: guards
@@ -857,22 +863,17 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
 
-      - name: 'Lab-only: Lab tests + Storybook build'
-        if: steps.scope.outputs.lab_only == 'true'
-        run: |
-          echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. This job's work is not required for a change only to the Lab package (spec:AST-030 FR26)."
-
       - name: Skip heavy work for a specialized lane
         if: steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.spec_only == 'true'
         run: echo "Specialized PR lane — skipping unrelated test suite"
 
       - uses: actions/checkout@v7
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         with:
           fetch-depth: 2
 
       - uses: ./.github/actions/setup
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
 
       # Before Vitest starts. A scoped run's `--changed` walks the tests'
       # import graphs before the global setup builds Core, and Vite answers an
@@ -881,7 +882,7 @@ jobs:
       # "@astryxdesign/core/theme" imported by "@astryxdesign/cli"". The global
       # setup then finds Core built and skips its own build.
       - name: Build core package
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
         run: pnpm -F @astryxdesign/core build
 
       # Scoped like test-ui's run.
@@ -903,18 +904,18 @@ jobs:
           else
             pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }}
           fi
-        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
 
       # Theme-family compilation is owned by `theme-build`, not Build. Until
       # that surface has an admitted dedicated lane, broad CI keeps its browser
       # contract inside the existing Node test owner rather than `test-build`.
       # One leg runs it.
       - name: Install Playwright for theme-family contract
-        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         run: npx playwright install chromium
 
       - name: Run the theme-family contract
-        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'
+        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         run: pnpm test:theme-family
 
   # The one pre-job left: a runner must be picked before its job starts, so

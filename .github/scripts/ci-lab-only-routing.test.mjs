@@ -80,12 +80,7 @@ describe('Lab-only lane (spec:AST-030 FR26)', () => {
   });
 
   it('keeps every owner the required joins wait on green while skipping its work', () => {
-    for (const name of [
-      'docsite-test',
-      'test-node',
-      'test-build',
-      'typecheck',
-    ]) {
+    for (const name of ['docsite-test', 'test-build', 'typecheck']) {
       expect(step(name, NOTICE)?.if, name).toBe(LAB_TRUE);
       expect(String(ci.jobs[name].if), name).not.toContain('lab_only');
       for (const work of workAfterScope(name)) {
@@ -111,7 +106,17 @@ describe('Lab-only lane (spec:AST-030 FR26)', () => {
     );
   });
 
-  it('runs every Lab test, and only those, on the UI legs, with the repository guards', () => {
+  it('runs the Node lane as any scoped pull request does, source-reading guards included', () => {
+    // A Lab file that broke a guard would turn every later pull request red.
+    for (const s of steps('test-node')) {
+      expect(String(s.if ?? ''), s.name ?? s.uses ?? s.run).not.toContain(
+        'lab_only',
+      );
+      expect(s.run ?? '', s.name).not.toContain('LAB_ONLY');
+    }
+  });
+
+  it('runs every Lab test and the source-reading guards on the UI legs, with the repository guards', () => {
     const suite = step('test-ui', 'Run this shard of the UI tests');
     expect(suite.env.LAB_ONLY).toBe('${{ steps.scope.outputs.lab_only }}');
     expect(suite.if).not.toContain('lab_only');
@@ -120,7 +125,17 @@ describe('Lab-only lane (spec:AST-030 FR26)', () => {
     expect(labBranch).toContain(
       'pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} packages/lab/\n',
     );
-    expect(labBranch).not.toContain('--changed');
+    // The Lab tests, not the module graph's --changed set, then the guards.
+    expect(labBranch).not.toContain('pnpm test:ui --changed');
+    expect(labBranch).toContain(
+      'node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 > "$RUNNER_TEMP/fs-guards.txt"',
+    );
+    expect(labBranch).toContain(
+      'pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"',
+    );
+    expect(labBranch.indexOf('packages/lab/')).toBeLessThan(
+      labBranch.indexOf('fs-guard-tests'),
+    );
     // Checkout, setup and the repository-wide guards still run: a guard break
     // that landed would turn every later pull request red.
     for (const name of [

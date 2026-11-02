@@ -31,8 +31,8 @@ const TOOLING_FALSE = "steps.scope.outputs.tooling_only != 'true'";
 const TOOLING_TRUE = "steps.scope.outputs.tooling_only == 'true'";
 const BROAD_ONLY =
   "steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'";
-// The Build package's contracts and the Node lane skip a Lab-only change too
-// (spec:AST-030 FR26).
+// The Build package's contracts skip a Lab-only change too (spec:AST-030
+// FR26); the Node lane runs its scoped share and guards.
 const BROAD_NOT_LAB = `${BROAD_ONLY} && steps.scope.outputs.lab_only != 'true'`;
 
 function step(job, name) {
@@ -153,7 +153,7 @@ describe('Node-tooling CI routing', () => {
     for (const [name, command] of familyCommands) {
       const ownerStep = step(ci.jobs['test-node'], name);
       // One leg of the sharded Node lane owns the theme-family contract.
-      expect(ownerStep.if).toBe(`matrix.shard == 1 && ${BROAD_NOT_LAB}`);
+      expect(ownerStep.if).toBe(`matrix.shard == 1 && ${BROAD_ONLY}`);
       expect(ownerStep.run).toBe(command);
       expect(step(ci.jobs['test-build'], name)).toBeUndefined();
     }

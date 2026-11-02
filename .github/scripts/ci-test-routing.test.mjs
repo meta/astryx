@@ -173,9 +173,15 @@ describe.each(Object.entries(WORKFLOWS))(
         expect(share.run.trim()).toBe(
           [
             'if [ "$LAB_ONLY" = true ]; then',
-            '  # A change only to the Lab package runs every Lab test, and only',
-            '  # those, across the same legs (spec:AST-030 FR26).',
+            '  # A change only to the Lab package runs every Lab test across the',
+            '  # same legs, and the guards below as any scoped run does',
+            '  # (spec:AST-030 FR26).',
             `  pnpm test:ui --passWithNoTests ${SHARD_ARG} packages/lab/`,
+            '  node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 > "$RUNNER_TEMP/fs-guards.txt"',
+            '  mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"',
+            '  if [ "${#GUARDS[@]}" -gt 0 ]; then',
+            `    pnpm test:ui --passWithNoTests ${SHARD_ARG} "\${GUARDS[@]}"`,
+            '  fi',
             'elif [ "$SCOPED" = true ]; then',
             `  pnpm test:ui --changed=HEAD^1 --passWithNoTests ${SHARD_ARG}`,
             '  # Tests no module graph relates to the change run too: guards',
