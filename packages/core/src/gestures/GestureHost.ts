@@ -580,35 +580,24 @@ function scrollTypeOf(wheel: WheelEvent): ScrollType {
     : 'continuous';
 }
 
-/** Whether a recognizer is a scroll-edge pan. */
+/** Read without the pan class, which a page with no pan never ships. */
 function isScrollEdgePan(recognizer: GestureRecognizer): boolean {
   return (recognizer as {scrollEdge?: boolean}).scrollEdge === true;
 }
 
-/** Whether a pan's `direction` takes a contact moving by (cx, cy). */
+/**
+ * Whether a pan takes a contact moving by (cx, cy), by its own direction
+ * rule, `axisRatio` included. A move its rule leaves undecided stays the
+ * page's.
+ */
 function panTakesMove(
   recognizer: GestureRecognizer,
   cx: number,
   cy: number,
 ): boolean {
-  const direction = (recognizer as {direction?: string}).direction ?? 'any';
-  const isHorizontal = Math.abs(cx) > Math.abs(cy);
-  switch (direction) {
-    case 'horizontal':
-      return isHorizontal;
-    case 'vertical':
-      return !isHorizontal;
-    case 'left':
-      return isHorizontal && cx < 0;
-    case 'right':
-      return isHorizontal && cx > 0;
-    case 'up':
-      return !isHorizontal && cy < 0;
-    case 'down':
-      return !isHorizontal && cy > 0;
-    default:
-      return true;
-  }
+  return (
+    (internals(recognizer).classify?.({x: cx, y: cy}) ?? 'begin') === 'begin'
+  );
 }
 
 /**

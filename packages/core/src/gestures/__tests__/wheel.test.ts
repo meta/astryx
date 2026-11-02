@@ -127,6 +127,42 @@ afterEach(() => {
 
 describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
   it.each([
+    [
+      'a 50° swipe is the pan’s when its axisRatio is 0.5, as a finger’s is',
+      0.5,
+      6.4,
+      7.7,
+      true,
+    ],
+    [
+      'a 35° swipe is the page’s when its axisRatio of 2 leaves it undecided',
+      2,
+      8.2,
+      5.7,
+      false,
+    ],
+  ] as const)(
+    'reads a trackpad’s direction by the pan’s own rule: %s',
+    (_name, axisRatio, dx, dy, takes) => {
+      const {box} = mount('<div id="box"></div>');
+      const pan = new PanGestureRecognizer({
+        direction: 'horizontal',
+        axisRatio,
+        allowedScrollTypes: ['continuous'],
+      });
+      const states = statesOf(pan);
+      detachers.push(host.attach(box, pan));
+      expect(
+        wheel(box, {trackpad: true, dx, dy, time: 0}).defaultPrevented,
+      ).toBe(takes);
+      for (const time of [16, 32, 48]) {
+        wheel(box, {trackpad: true, dx, dy, time});
+      }
+      expect(states.includes('began')).toBe(takes);
+    },
+  );
+
+  it.each([
     ['a blur', 'blur', false],
     ['a hidden page', 'hidden', false],
     ['a blur, under a coarse primary pointer', 'blur', true],

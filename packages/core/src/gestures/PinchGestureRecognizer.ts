@@ -61,7 +61,7 @@ export class PinchGestureRecognizer extends GestureRecognizer {
     return 'pinch';
   }
 
-  /** A pinch takes a trackpad's pinch and ctrl and a mouse wheel. */
+  /** A ctrl-wheel drives a pinch, from a trackpad or a mouse. */
   protected override get defaultScrollTypes(): ReadonlyArray<ScrollType> {
     return ['continuous', 'discrete'];
   }

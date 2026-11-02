@@ -20,7 +20,12 @@
 
 import type {GestureArena} from './GestureArena';
 import type {GestureRecognizer} from './GestureRecognizer';
-import type {GestureEventContext, GestureState, GestureTouch} from './types';
+import type {
+  GestureEventContext,
+  GestureState,
+  GestureTouch,
+  Point,
+} from './types';
 
 /**
  * The kinds of recognizer the host and touch-action treat specially. Each of
@@ -34,6 +39,8 @@ export type RecognizerFamily = 'tap' | 'longPress' | 'pan' | 'pinch';
 export interface RecognizerInternals {
   /** The recognizer's family, when the host treats it specially. */
   readonly family?: RecognizerFamily;
+  /** A pan's direction rule for a translation, `axisRatio` included. */
+  classify?(translation: Point): 'begin' | 'fail' | 'wait';
   arena: GestureArena | null;
   pending: 'began' | 'ended' | null;
   readonly seenTouchIds: Set<number>;
