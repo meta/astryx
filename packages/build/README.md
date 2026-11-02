@@ -93,6 +93,8 @@ module.exports = {
 };
 ```
 
+A custom Babel config turns off Next.js's SWC compiler, and `next/font` needs SWC. Remove `next/font` from your layout (a fresh `create-next-app` layout imports `next/font/google`), or the build fails with `"next/font" requires SWC although Babel is being used`.
+
 ### 2. postcss.config.js
 
 ```js
