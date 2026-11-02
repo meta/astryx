@@ -33,7 +33,6 @@ import {
 } from '../../packages/cli/authoring/shadcn/source-variants.mjs';
 import {
   parseRegistryReceipt,
-  REGISTRY_RECEIPT_SCHEMA_VERSION,
   registryContentHash,
 } from '../../packages/cli/authoring/shadcn/receipt.mjs';
 import {DEMO_CONTENT_MODULE} from '../../packages/cli/foundation/discovery/template-adapter.mjs';
@@ -204,10 +203,8 @@ function verifyItemFileShape(item) {
         );
       }
     }
-    if (receipt.schemaVersion !== REGISTRY_RECEIPT_SCHEMA_VERSION) {
-      fail(
-        `${item.name} receipt is not schema version ${REGISTRY_RECEIPT_SCHEMA_VERSION}`,
-      );
+    if (receipt.schemaVersion !== 2) {
+      fail(`${item.name} receipt is not schema version 2`);
     }
     if (
       source.content.includes('/template-assets/') ||

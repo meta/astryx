@@ -33,10 +33,12 @@ import {
 } from '../../packages/cli/authoring/shadcn/source-variants.mjs';
 import {
   parseRegistryReceipt,
-  REGISTRY_RECEIPT_SCHEMA_VERSION,
   registryContentHash,
 } from '../../packages/cli/authoring/shadcn/receipt.mjs';
-import {DEMO_CONTENT_MODULE} from '../../packages/cli/foundation/discovery/template-adapter.mjs';
+import {
+  DEMO_CONTENT_MODULE,
+  MARKED_VIDEO_PLACEHOLDER,
+} from '../../packages/cli/foundation/discovery/template-adapter.mjs';
 import {
   buildShadcnRegistry,
   generateShadcnRegistry,
@@ -577,9 +579,7 @@ describe('buildShadcnRegistry', () => {
       });
       const receipt = parseRegistryReceipt(JSON.parse(receiptFile.content));
       expect(receipt).toMatchObject({
-        schemaVersion: REGISTRY_RECEIPT_SCHEMA_VERSION,
-        demoMediaReplaced: 0,
-        demoContentReplaced: 0,
+        schemaVersion: 2,
         item: {
           name: item.name,
           path: item.astryx.path,
@@ -700,7 +700,7 @@ describe('buildShadcnRegistry', () => {
     }
   });
 
-  it('installs a block and a page as a copy writes them, and the receipt counts each replacement', async () => {
+  it('installs a block and a page as a copy writes them, with marked placeholders and a disclosing description', async () => {
     const project = mkdtempSync(path.join(tmpdir(), 'astryx-shadcn-demo-'));
     try {
       writeConsumerProject(project);
@@ -731,6 +731,7 @@ describe('buildShadcnRegistry', () => {
                 '    <Card padding={4}>\n' +
                 '      <PlayingCardContents rank="Q" suit="hearts" />\n' +
                 '      <img src="/template-assets/hero.jpg" alt="" />\n' +
+                '      <video src="/template-assets/clip.mp4" />\n' +
                 '    </Card>\n' +
                 '  );\n' +
                 '}\n',
@@ -752,20 +753,24 @@ describe('buildShadcnRegistry', () => {
         item => item.name === 'showcase-button-variants',
       );
       const page = items.find(item => item.name === 'template-dashboard');
-      for (const [item, demoContentReplaced] of [
-        [block, 1],
-        [page, 0],
-      ]) {
+      for (const item of [block, page]) {
         const copied = item.files[0].content;
         expect(copied).not.toContain(DEMO_CONTENT_MODULE);
         expect(copied).not.toContain('PlayingCardContents');
         expect(copied).not.toContain('/template-assets/');
-        expect(
-          parseRegistryReceipt(JSON.parse(item.files.at(-1).content)),
-        ).toMatchObject({demoMediaReplaced: 1, demoContentReplaced});
+        expect(copied).toContain('<img src="data:image/svg+xml,');
       }
       expect(block.files[0].content).toContain(
         '<Card padding={4}>\n      <Text>Card content</Text>',
+      );
+      expect(block.files[0].content).toContain(
+        `<video src="${MARKED_VIDEO_PLACEHOLDER}" />`,
+      );
+      expect(block.description).toBe(
+        'Shows a primary button. Astryx replaced 2 demo media references and 1 demo content element with marked placeholders; put your own content there.',
+      );
+      expect(page.description).toBe(
+        'A metrics dashboard. Astryx replaced 1 demo media reference with marked placeholders; put your own content there.',
       );
       expect(block.dependencies).not.toContainEqual(
         expect.stringContaining('demo-content'),
@@ -790,19 +795,36 @@ describe('buildShadcnRegistry', () => {
         'utf8',
       );
       expect(installedSource).toBe(block.files[0].content);
-      expect(
-        parseRegistryReceipt(
-          JSON.parse(
-            readFileSync(
-              path.join(showcases, '.astryx', 'showcase-button-variants.json'),
-              'utf8',
-            ),
-          ),
+      // The released reader validates a version 2 receipt strictly, so an
+      // extra field would break `astryx upgrade` on an older CLI.
+      const installedReceipt = JSON.parse(
+        readFileSync(
+          path.join(showcases, '.astryx', 'showcase-button-variants.json'),
+          'utf8',
         ),
-      ).toMatchObject({demoMediaReplaced: 1, demoContentReplaced: 1});
+      );
+      expect(Object.keys(installedReceipt).sort()).toEqual([
+        'files',
+        'item',
+        'schemaVersion',
+        'source',
+      ]);
+      expect(parseRegistryReceipt(installedReceipt)).toMatchObject({
+        schemaVersion: 2,
+      });
     } finally {
       rmSync(project, {recursive: true, force: true});
     }
+  });
+
+  it('leaves the description of an item with no demo content as written', () => {
+    const {items} = buildShadcnRegistry(fixture());
+    expect(
+      items.find(item => item.name === 'showcase-button-variants').description,
+    ).toBe('Shows a primary button.');
+    expect(
+      items.find(item => item.name === 'template-dashboard').description,
+    ).toBe('A metrics dashboard.');
   });
 
   it('records the exact JavaScript bytes written by stock ShadCN', async () => {

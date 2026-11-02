@@ -233,6 +233,14 @@ const PLACEHOLDER_IMAGE =
  */
 const VIDEO_EXTENSIONS = new Set(['mp4', 'webm', 'mov', 'ogv', 'm4v']);
 
+/**
+ * A video placeholder that names itself in the source, for a copy that has no
+ * response to disclose the replacement in, such as the shadcn install. It is a
+ * text data URL: it makes no request, it does not play, and it is not image
+ * data, so a video element never receives image bytes.
+ */
+export const MARKED_VIDEO_PLACEHOLDER = 'data:,placeholder-video-add-your-own';
+
 const IMAGE_EXTENSIONS = new Set([
   'svg',
   'png',
@@ -334,9 +342,11 @@ export function stripTemplateAssetRefs(source) {
  * third-party URL left as written. That count is what a receipt discloses.
  *
  * @param {string} source - Template source code.
+ * @param {{videoPlaceholder?: string}} [options] - `videoPlaceholder` replaces
+ *   each video reference; the default is an empty source.
  * @returns {{source: string, demoMediaReplaced: number}}
  */
-export function replaceDemoMedia(source) {
+export function replaceDemoMedia(source, {videoPlaceholder = ''} = {}) {
   const needle = `/${FIXTURE_SEGMENT}`;
   let output = '';
   let copied = 0;
@@ -352,7 +362,7 @@ export function replaceDemoMedia(source) {
     /** @type {{text: string, end: number} | null} */
     let edit;
     try {
-      edit = fixtureEdit(source, start, at, end);
+      edit = fixtureEdit(source, start, at, end, videoPlaceholder);
     } catch (err) {
       comments ??= commentRanges(source);
       if (!comments.some(([from, to]) => from <= at && at < to)) throw err;
@@ -780,11 +790,15 @@ function unsafeDemoContent(reason) {
  * Both counts are what a receipt discloses.
  *
  * @param {string} source - Template source code.
+ * @param {{videoPlaceholder?: string}} [options] - As {@link replaceDemoMedia}.
  * @returns {{source: string, demoContentReplaced: number, demoMediaReplaced: number}}
  */
-export function replaceTemplateDemos(source) {
+export function replaceTemplateDemos(source, options) {
   const {source: withContent, demoContentReplaced} = replaceDemoContent(source);
-  const {source: output, demoMediaReplaced} = replaceDemoMedia(withContent);
+  const {source: output, demoMediaReplaced} = replaceDemoMedia(
+    withContent,
+    options,
+  );
   return {source: output, demoContentReplaced, demoMediaReplaced};
 }
 
@@ -822,9 +836,10 @@ function fixtureSegments(reference) {
  * @param {number} start
  * @param {number} at
  * @param {number} end
+ * @param {string} videoPlaceholder
  * @returns {{text: string, end: number} | null}
  */
-function fixtureEdit(source, start, at, end) {
+function fixtureEdit(source, start, at, end, videoPlaceholder) {
   const token = source.slice(start, end);
   if (ABSOLUTE_URL.test(token)) return null;
   if (!token.startsWith('/')) {
@@ -892,7 +907,9 @@ function fixtureEdit(source, start, at, end) {
     .extname(segments[segments.length - 1])
     .slice(1)
     .toLowerCase();
-  if (VIDEO_EXTENSIONS.has(ext)) return {text: '', end: referenceEnd};
+  if (VIDEO_EXTENSIONS.has(ext)) {
+    return {text: videoPlaceholder, end: referenceEnd};
+  }
   if (IMAGE_EXTENSIONS.has(ext)) {
     return {text: PLACEHOLDER_IMAGE, end: referenceEnd};
   }

@@ -11,8 +11,8 @@
  * items create public re-exports; blocks and pages copy app-level composition
  * source that already imports published package paths and add adjacent receipts
  * so Astryx can reconcile later releases without taking ownership of user edits.
- * An install is a copy: each block and page source arrives as authored, and its
- * demo content and demo media are replaced as `template copy` replaces them.
+ * An install is a copy: it replaces demo content and demo media as `template
+ * copy` does. The item description discloses that; the receipt keeps its shape.
  */
 
 import * as fs from 'node:fs';
@@ -23,7 +23,10 @@ import stylexPlugin from '@stylexjs/babel-plugin';
 import ts from 'typescript';
 import {registryItemSchema, registrySchema} from 'shadcn/schema';
 import {stripCopyrightHeader} from '../../../packages/cli/foundation/text/copyright-header.mjs';
-import {replaceTemplateDemos} from '../../../packages/cli/foundation/discovery/template-adapter.mjs';
+import {
+  MARKED_VIDEO_PLACEHOLDER,
+  replaceTemplateDemos,
+} from '../../../packages/cli/foundation/discovery/template-adapter.mjs';
 import {
   createShadcnPrecompiledDeclaration,
   shadcnJavaScriptTarget,
@@ -314,7 +317,29 @@ function precompiledDeclarationFile(itemName, sourceTarget) {
   };
 }
 
-function withCompositionReceipt(item, identity, sourceVersion, replaced) {
+/**
+ * The item description, plus a sentence that discloses the replaced demo
+ * content when there is any. The install writes into a project and returns no
+ * response, so the description and the marked placeholders are the disclosure.
+ * @param {string} description
+ * @param {{demoMediaReplaced: number, demoContentReplaced: number}} replaced
+ */
+export function withReplacementNote(description, replaced) {
+  const {demoMediaReplaced, demoContentReplaced} = replaced;
+  if (demoMediaReplaced + demoContentReplaced === 0) return description;
+  const counts = [
+    demoMediaReplaced > 0 &&
+      `${demoMediaReplaced} demo media ${demoMediaReplaced === 1 ? 'reference' : 'references'}`,
+    demoContentReplaced > 0 &&
+      `${demoContentReplaced} demo content ${demoContentReplaced === 1 ? 'element' : 'elements'}`,
+  ].filter(Boolean);
+  const lead = /[.!?]$/u.test(description.trimEnd())
+    ? description.trimEnd()
+    : `${description.trimEnd()}.`;
+  return `${lead} Astryx replaced ${counts.join(' and ')} with marked placeholders; put your own content there.`;
+}
+
+function withCompositionReceipt(item, identity, sourceVersion) {
   const [sourceFile, ...supportFiles] = item.files;
   const receiptTarget = registryReceiptTarget(sourceFile.target, item.name);
   const javascriptTarget = shadcnJavaScriptTarget(sourceFile.target);
@@ -337,8 +362,6 @@ function withCompositionReceipt(item, identity, sourceVersion, replaced) {
     },
     sourceVersion,
     receiptTarget,
-    demoMediaReplaced: replaced.demoMediaReplaced,
-    demoContentReplaced: replaced.demoContentReplaced,
     files: [
       {
         id: 'primary',
@@ -404,6 +427,7 @@ function blockItem(
   );
   const {source: copiedSource, ...replaced} = replaceTemplateDemos(
     block.source,
+    {videoPlaceholder: MARKED_VIDEO_PLACEHOLDER},
   );
   const compiled = precompileStylexSource(
     stripCopyrightHeader(copiedSource),
@@ -416,7 +440,10 @@ function blockItem(
       name: itemName,
       type: 'registry:block',
       title: block.displayName || block.name,
-      description: block.description || `Astryx ${kind}: ${block.name}.`,
+      description: withReplacementNote(
+        block.description || `Astryx ${kind}: ${block.name}.`,
+        replaced,
+      ),
       author: 'Astryx',
       dependencies: dependenciesForSource(
         compiled.source,
@@ -448,7 +475,6 @@ function blockItem(
     },
     identity,
     sourceVersion,
-    replaced,
   );
 }
 
@@ -471,6 +497,7 @@ function pageItem(
   );
   const {source: copiedSource, ...replaced} = replaceTemplateDemos(
     template.source,
+    {videoPlaceholder: MARKED_VIDEO_PLACEHOLDER},
   );
   const compiled = precompileStylexSource(
     stripCopyrightHeader(copiedSource),
@@ -483,7 +510,10 @@ function pageItem(
       name: itemName,
       type: 'registry:page',
       title: template.name,
-      description: template.description || `Astryx page: ${template.name}.`,
+      description: withReplacementNote(
+        template.description || `Astryx page: ${template.name}.`,
+        replaced,
+      ),
       author: 'Astryx',
       dependencies: dependenciesForSource(
         compiled.source,
@@ -517,7 +547,6 @@ function pageItem(
     },
     identity,
     sourceVersion,
-    replaced,
   );
 }
 

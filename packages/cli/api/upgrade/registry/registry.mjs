@@ -218,7 +218,7 @@ function sourceVersionMatches(sourceVersion, expectedVersion) {
 function receiptFileCandidates(receipt, file) {
   const canonical = {...file, format: 'typescript'};
   /** @type {Array<{format: 'javascript', target: string, registryTarget: string, sha256: string, content: string}>} */
-  let variants = receipt.schemaVersion === 1 ? [] : file.variants;
+  let variants = receipt.schemaVersion === 2 ? file.variants : [];
   if (receipt.schemaVersion === 1) {
     const target = shadcnJavaScriptTarget(file.target);
     const registryTarget = shadcnJavaScriptTarget(file.registryTarget);
@@ -347,9 +347,9 @@ async function fetchLatestReceipt(
   const primaryFile = receipt.files.find(file => file.id === 'primary');
   const typesFile = receipt.files.find(file => file.id === 'types');
   const typesVariants =
-    receipt.schemaVersion === 1
-      ? undefined
-      : receipt.files.find(file => file.id === 'types')?.variants;
+    receipt.schemaVersion === 2
+      ? receipt.files.find(file => file.id === 'types')?.variants
+      : undefined;
   if (typesFile) {
     let expectedTypesTarget;
     let expectedTypesContent;

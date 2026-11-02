@@ -25,8 +25,6 @@ function receipt() {
     },
     sourceVersion: '0.6.0',
     receiptTarget,
-    demoMediaReplaced: 0,
-    demoContentReplaced: 0,
     files: [
       {
         id: 'primary',
@@ -59,7 +57,7 @@ describe('ShadCN registry receipts', () => {
 
   it('records the installed base bytes and a relative target', () => {
     const value = receipt();
-    expect(value.schemaVersion).toBe(3);
+    expect(value.schemaVersion).toBe(2);
     expect(value.files[0]).toMatchObject({
       id: 'primary',
       target: '../ButtonExample.tsx',
@@ -93,8 +91,6 @@ describe('ShadCN registry receipts', () => {
       },
       sourceVersion: '0.6.0',
       receiptTarget: registryReceiptTarget(target, 'example-compiled'),
-      demoMediaReplaced: 0,
-      demoContentReplaced: 0,
       files: [
         {
           id: 'primary',
@@ -111,11 +107,7 @@ describe('ShadCN registry receipts', () => {
   });
 
   it('continues to parse version 1 receipts without variants', () => {
-    const {
-      demoMediaReplaced: _media,
-      demoContentReplaced: _content,
-      ...value
-    } = receipt();
+    const value = receipt();
     const {variants: _variants, ...legacyFile} = value.files[0];
     expect(
       parseRegistryReceipt({
@@ -124,28 +116,6 @@ describe('ShadCN registry receipts', () => {
         files: [legacyFile],
       }),
     ).toMatchObject({schemaVersion: 1, files: [{id: 'primary'}]});
-  });
-
-  it('continues to parse version 2 receipts without replacement counts', () => {
-    const {
-      demoMediaReplaced: _media,
-      demoContentReplaced: _content,
-      ...value
-    } = receipt();
-    expect(parseRegistryReceipt({...value, schemaVersion: 2})).toMatchObject({
-      schemaVersion: 2,
-      files: [{id: 'primary'}],
-    });
-  });
-
-  it('requires a version 3 receipt to count what the copy replaced', () => {
-    const value = receipt();
-    expect(value).toMatchObject({demoMediaReplaced: 0, demoContentReplaced: 0});
-    const {demoContentReplaced: _content, ...missing} = value;
-    expect(() => parseRegistryReceipt(missing)).toThrow();
-    expect(() =>
-      parseRegistryReceipt({...value, demoMediaReplaced: -1}),
-    ).toThrow();
   });
 
   it('rejects duplicate file identities', () => {
