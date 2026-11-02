@@ -630,7 +630,10 @@ export function SideNavItem({
     // Close the mobile nav when a nav item is activated inside the drawer. A
     // modified click on a link is the browser's (a new tab), so the drawer
     // stays open for the next one.
-    if (isInDrawer && !(href && isModifiedClick(e))) {
+    if (
+      isInDrawer &&
+      !(e.currentTarget.hasAttribute('href') && isModifiedClick(e))
+    ) {
       closeMobileNav();
     }
   };

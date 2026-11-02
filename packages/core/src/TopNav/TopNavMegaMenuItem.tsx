@@ -212,7 +212,7 @@ export function TopNavMegaMenuItem({
       onClick?.();
       // A modified click on a link is the browser's (a new tab): the drawer
       // stays open for the next one.
-      if (!(href && isModifiedClick(e))) {
+      if (!(e.currentTarget.hasAttribute('href') && isModifiedClick(e))) {
         closeMobileNav();
       }
     };

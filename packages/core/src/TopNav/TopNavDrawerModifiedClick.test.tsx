@@ -69,6 +69,17 @@ describe('TopNav drawer rows: a modified click on a link', () => {
       },
     );
 
+    it('closes the drawer on a modified click when the href renders no address', () => {
+      const {closeMobileNav} = renderInDrawer(
+        <TopNavItem label="Blocked" href="javascript:void(0)" />,
+      );
+      const row = screen.getByText('Blocked').closest('a, button');
+      expect(row).not.toBeNull();
+      expect(row).not.toHaveAttribute('href');
+      fireEvent.click(row as Element, {ctrlKey: true});
+      expect(closeMobileNav).toHaveBeenCalledTimes(1);
+    });
+
     it('closes the drawer on a modified click of an item with no href', () => {
       const {closeMobileNav} = renderInDrawer(
         <TopNavItem label="Action" onClick={vi.fn()} />,
