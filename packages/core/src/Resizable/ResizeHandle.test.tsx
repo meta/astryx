@@ -1160,6 +1160,24 @@ describe('ResizeHandle', () => {
     view.unmount();
   });
 
+  // A pane at 0px that is not collapsed has no length to protect. It keeps
+  // the whole zone, so a drag can reopen it.
+  it.each(['inline', 'overlay'] as const)(
+    'keeps the whole grab zone on a pane at 0px that is not collapsed (%s)',
+    position => {
+      render(
+        <Harness
+          config={{defaultSize: 0, minSize: 0}}
+          handleProps={{position}}
+        />,
+      );
+      expect(getSeparator()).not.toHaveAttribute('aria-valuetext');
+      const hitArea = getSeparator().firstElementChild as HTMLElement;
+      expect(hitArea.getAttribute('style') ?? '').not.toContain('min(');
+      expect(getSeparator().className).not.toContain('OnShortPane');
+    },
+  );
+
   // --- Prop composition (ordering choice: handler sits after {...props}) ---
 
   it('runs a consumer onKeyDown alongside keyboard resizing', () => {
