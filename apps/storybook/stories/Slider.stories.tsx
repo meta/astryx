@@ -306,3 +306,88 @@ export const PressedState: Story = {
     );
   },
 };
+
+export const TouchTracking: Story = {
+  name: 'Touch tracking',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Under a finger only the thumb takes a drag, through a touch target larger than it; a swipe from the track scrolls the page, and a tap on the track sets the value when the finger lifts. The value follows the finger’s travel past a 10 px start threshold, so the thumb never jumps to the finger, and a release coasts on before `onChangeEnd` reports the value.',
+      },
+    },
+  },
+  render: () => {
+    const [value, setValue] = useState(30);
+    const [range, setRange] = useState<[number, number]>([40, 40]);
+    const [ends, setEnds] = useState<string[]>([]);
+    const logEnd = (label: string) => (next: number | [number, number]) =>
+      setEnds(previous => [
+        ...previous.slice(-4),
+        `${label} ${Array.isArray(next) ? next.join('–') : next}`,
+      ]);
+    return (
+      <div style={{display: 'flex', flexDirection: 'column', gap: 24}}>
+        <Slider
+          label="Brightness"
+          value={value}
+          onChange={setValue}
+          onChangeEnd={logEnd('Brightness')}
+          valueDisplay="text"
+        />
+        <Slider
+          label="Hours"
+          value={range}
+          onChange={setRange}
+          onChangeEnd={logEnd('Hours')}
+          valueDisplay="text"
+        />
+        <output data-testid="slider-change-end" aria-live="polite">
+          {ends.length === 0 ? 'No change committed yet' : ends.join(', ')}
+        </output>
+      </div>
+    );
+  },
+};
+
+export const InScrollingList: Story = {
+  name: 'In a scrolling list',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Sliders in a scrolling list: a vertical swipe that starts on a thumb scrolls the list, a horizontal one drags the thumb, and inside the scroller the thumb lifts only after the content touch delay.',
+      },
+    },
+  },
+  render: () => {
+    const [values, setValues] = useState(() =>
+      Array.from({length: 12}, (_, index) => (index * 37) % 100),
+    );
+    return (
+      <div
+        data-testid="slider-list"
+        style={{
+          height: 360,
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 20,
+          padding: 16,
+        }}>
+        {values.map((value, index) => (
+          <Slider
+            key={index}
+            label={`Channel ${index + 1}`}
+            value={value}
+            onChange={(next: number) =>
+              setValues(previous =>
+                previous.map((current, i) => (i === index ? next : current)),
+              )
+            }
+          />
+        ))}
+      </div>
+    );
+  },
+};

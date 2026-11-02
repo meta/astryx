@@ -455,6 +455,18 @@ export const KEYBOARD_SPRING = {
 export const BANNER_SPRING = {mass: 3, stiffness: 1000, damping: 500} as const;
 
 /**
+ * UISlider's release: after a finger lifts, the thumb settles on this spring
+ * toward 0.4 of the release's momentum projection (`component:Slider` FR7).
+ * Critically damped, so it never overshoots a target ahead of it.
+ * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+ *   iPhone 17 Pro, the `UIViewSpringAnimationBehavior` read at the lift
+ *   (response 0.4, damping ratio 1), which the per-frame value of four
+ *   releases fits (the UIKit slider table, motion/uikit/slider.ts),
+ *   Oct 23 2026
+ */
+export const SLIDER_RELEASE_SPRING = {response: 0.4, dampingRatio: 1} as const;
+
+/**
  * Every spring above, by row name: the table the existing readers use. A
  * component imports only the rows it plays (`architecture:component-style-authoring`
  * INV6), each the same object as its row here.
@@ -494,10 +506,14 @@ export const springs = {
   segmentedThumb: SEGMENTED_THUMB_SPRING,
   keyboard: KEYBOARD_SPRING,
   banner: BANNER_SPRING,
+  sliderRelease: SLIDER_RELEASE_SPRING,
 } as const;
 
 /**
- * The springs spec:AST-094 FR4 names: the only ones that are motion roles.
+ * The springs spec:AST-094 FR4 names, and the ones a component's own record
+ * names, such as `component:Slider`'s `sliderRelease` (the generated motion
+ * role table, DEC-5, lists each with its record): the only ones that are
+ * motion roles.
  * The registry takes these rows alone, so registering ships no other spring.
  */
 const SPRING_ROLES = {
@@ -516,10 +532,11 @@ const SPRING_ROLES = {
   contextMenuLift: CONTEXT_MENU_LIFT_SPRING,
   contextMenuDismiss: CONTEXT_MENU_DISMISS_SPRING,
   contextMenuMorph: CONTEXT_MENU_MORPH_SPRING,
+  sliderRelease: SLIDER_RELEASE_SPRING,
 };
 
 /**
- * Registers the springs spec:AST-094 FR4 names as internal motion roles
+ * Registers the role springs (`SPRING_ROLES`) as internal motion roles
  * (motion/roles.ts), by their row names (`springs.settle`). Every other
  * spring, UIKit's menu spring under Reduce Motion and the keyboard's
  * included, is not a role. Nothing registers on import: the touch code that
