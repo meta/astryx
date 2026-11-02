@@ -35,8 +35,9 @@ not production content or a supported consumer asset library.
 This contract owns static demonstration assets used by templates, including
 images, posters, and videos. It covers their authored references, maintainer
 previews, copied output, and fallbacks. It also owns demo-content elements:
-docs-only demo contents, imported from the one repository-only demo-content
-module, that a real Astryx component wraps in a motion or gesture example.
+repository-only elements that stand in for docs-only demo contents, such as a
+playing-card face, that a real Astryx component wraps in a motion or gesture
+example.
 
 It does not own icons. Icons may be component props, registry values, imported
 modules, inline symbols, or product assets, and their conversion and portability
@@ -117,20 +118,29 @@ concerns require a separate contract.
   not imply that production-ready media was installed.
 - **FR13 — Demo-content elements are replaced during copy.** In a motion or
   gesture example, a real Astryx component MAY wrap docs-only demo contents,
-  such as `<Card><PlayingCardContents /></Card>`. A demo-content element is an
-  element imported from the one repository-only demo-content module. Copying a
-  template MUST replace repository-only demo assets (FR7–FR10) and every
-  demo-content element with generic placeholders and drop the demo-content
-  import, keeping the outer component and its props. The copy receipt (FR11)
-  MUST count the replaced elements as `demoContentReplaced`. `template show`
-  returns the same source a copy writes and MUST report `demoContentReplaced`
-  in its response, as it reports `demoMediaReplaced`. Live previews render the
-  originals (FR4). Docsite and Sandbox surfaces that hand out example source
-  run only the demo-content element replacement (`spec:AST-033` FR23). A check
-  MUST fail when copied or shown output still references a demo-content
-  element or its import. Implementation gap: the demo-content module, the
-  element replacement, and `demoContentReplaced` in the copy receipt and the
-  `template show` response are not built (Current-state impact).
+  such as `<Card><PlayingCardContents /></Card>`. A demo-content element is a
+  repository-only element that stands in for those contents. Every copy MUST
+  replace repository-only demo assets (FR7–FR10) and every demo-content element
+  with generic placeholders, keeping the outer component and its props, and the
+  copied source MUST NOT reference the repository-only code that defines a
+  demo-content element. The copies are `template copy` and the docsite's shadcn
+  Install item, which writes the example into the consumer's project. The copy
+  receipt (FR11) MUST count the replaced elements as `demoContentReplaced`.
+  `template show` returns the same source a copy writes and MUST report
+  `demoContentReplaced` in its response, as it reports `demoMediaReplaced`.
+  Surfaces that hand out example source without writing it into a project
+  replace only demo-content elements and carry fixture media as they do today:
+  `astryx component <Name> --showcase`, which prints the component's showcase
+  source, and the docsite surfaces of `spec:AST-033` FR23. Live previews render
+  the originals (FR4). A check MUST fail when copied, shown, or handed-out
+  output still references a demo-content element or the code that defines it.
+  How a demo-content element is marked and replaced belongs to
+  `architecture:template-authoring`. Implementation gap: the element
+  replacement and `demoContentReplaced` in the copy receipt and the
+  `template show` response are not built; `--showcase` prints the showcase file
+  as read from disk; the shadcn Install item installs block source as read from
+  disk, with its fixture media, and discloses no replacement (Current-state
+  impact).
 
 ### Boundary with icons
 
@@ -156,9 +166,12 @@ previously unwritten requirements for why assets are fixtures, which references
 may be transformed, what a safe fallback means, how unsupported formats fail,
 and why icons are separate.
 
-Demo-content elements (FR13) are not built: no demo-content module exists, the
-copy and show paths replace no elements, and neither the copy receipt nor the
-`template show` response has a `demoContentReplaced` count.
+Demo-content elements (FR13) are not built: the copy and show paths replace no
+elements, and neither the copy receipt nor the `template show` response has a
+`demoContentReplaced` count. `astryx component <Name> --showcase` prints the
+showcase file as read from disk. The shadcn Install item installs block source
+as read from disk, so it writes `/template-assets/` references into the
+consumer's project and discloses no replacement.
 
 This specification-only change alters no package, template, asset, preview,
 runtime, or public CLI behavior. Remaining implementation and verification
@@ -166,15 +179,15 @@ follow separately.
 
 ## Verification
 
-| Contract | Verification                                                 | Representative cases                                                                                                                                        | Failure expectation                                                                                                                                                                                                                                                |
-| -------- | ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| FR1–FR3  | Template-source and copy-boundary tests                      | built-in page, block, integration template; Astryx fixture; consumer path; third-party URL                                                                  | Copied source retains a preview runtime dependency or rewrites consumer-owned content                                                                                                                                                                              |
-| FR4–FR6  | Real preview request and rendered-media checks               | local, docsite, main sandbox, PR preview; image and video; missing fixture                                                                                  | Representative media 404s, resolves to another file, or silently uses the wrong kind                                                                                                                                                                               |
-| FR7–FR8  | End-to-end CLI copy tests                                    | image-only, video-only, and no-media template                                                                                                               | Generated source retains `/template-assets/` or does not parse/render without setup                                                                                                                                                                                |
-| FR9–FR10 | Classifier and mixed-source mutation tests                   | upper/lower case; multi-dot filename; image poster plus video; unknown suffix                                                                               | Last suffix is misread, image data enters video, or an unsupported kind is guessed                                                                                                                                                                                 |
-| FR11     | Human and structured copy-receipt tests                      | no replacement; one image; mixed media                                                                                                                      | The consumer is not told what must be replaced or is told assets were installed                                                                                                                                                                                    |
-| FR12     | Scope guard tests and review                                 | Icon prop, registry icon, imported SVG component, static hero image                                                                                         | Icon behavior is silently folded into the static-fixture transformer                                                                                                                                                                                               |
-| FR13     | End-to-end CLI copy and show tests plus a real preview check | a motion or gesture example whose `Card` wraps one demo-content element; one with two; an example with none; its `template show` response; its live preview | Copied or shown output still references a demo-content element or its import, the outer component or its props change, the copy receipt or the `template show` response omits or miscounts `demoContentReplaced`, or the live preview stops rendering the original |
+| Contract | Verification                                                                                       | Representative cases                                                                                                                                                                                                    | Failure expectation                                                                                                                                                                                                                                                                                                                                                                                    |
+| -------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| FR1–FR3  | Template-source and copy-boundary tests                                                            | built-in page, block, integration template; Astryx fixture; consumer path; third-party URL                                                                                                                              | Copied source retains a preview runtime dependency or rewrites consumer-owned content                                                                                                                                                                                                                                                                                                                  |
+| FR4–FR6  | Real preview request and rendered-media checks                                                     | local, docsite, main sandbox, PR preview; image and video; missing fixture                                                                                                                                              | Representative media 404s, resolves to another file, or silently uses the wrong kind                                                                                                                                                                                                                                                                                                                   |
+| FR7–FR8  | End-to-end CLI copy tests                                                                          | image-only, video-only, and no-media template                                                                                                                                                                           | Generated source retains `/template-assets/` or does not parse/render without setup                                                                                                                                                                                                                                                                                                                    |
+| FR9–FR10 | Classifier and mixed-source mutation tests                                                         | upper/lower case; multi-dot filename; image poster plus video; unknown suffix                                                                                                                                           | Last suffix is misread, image data enters video, or an unsupported kind is guessed                                                                                                                                                                                                                                                                                                                     |
+| FR11     | Human and structured copy-receipt tests                                                            | no replacement; one image; mixed media                                                                                                                                                                                  | The consumer is not told what must be replaced or is told assets were installed                                                                                                                                                                                                                                                                                                                        |
+| FR12     | Scope guard tests and review                                                                       | Icon prop, registry icon, imported SVG component, static hero image                                                                                                                                                     | Icon behavior is silently folded into the static-fixture transformer                                                                                                                                                                                                                                                                                                                                   |
+| FR13     | End-to-end CLI copy, show, and `--showcase` tests, a shadcn install test, and a real preview check | a motion or gesture example whose `Card` wraps one demo-content element; one with two; an example with none; its `template show` response; its `--showcase` output; its shadcn install into a project; its live preview | Copied, shown, or installed output still references a demo-content element, the code that defines it, or `/template-assets/`; `--showcase` output references a demo-content element or changes its fixture media; the outer component or its props change; the copy receipt or the `template show` response omits or miscounts `demoContentReplaced`; or the live preview stops rendering the original |
 
 ### Completion criteria
 
@@ -186,8 +199,8 @@ This spec moves from `accepted` to `shipped` only when:
 - image, poster, and video fallbacks are kind-safe and covered end to end;
 - unsupported static fixture formats fail with an actionable reference;
 - copy receipts identify replaced demonstration media;
-- copied templates retain no demo-content element or import, and the receipt
-  counts them; and
+- copied and installed templates retain no demo-content element or reference
+  to the code that defines it, and the receipt counts the replaced elements; and
 - icon sources are proven outside this transform and linked to a separate
   contract before any icon conversion is introduced.
 
@@ -242,9 +255,12 @@ Rejected: classifying every SVG or image-like source as a template fixture.
 Motion and gesture examples can show docs-only demo contents, such as a
 playing-card face, inside a real Astryx component without a second copy of each
 example to maintain. Those contents are fixtures in the DEC-1 sense: copy
-replaces each element imported from the one demo-content module with a generic
-placeholder and keeps the outer component, and previews render the originals
-(DEC-2). Other examples and fixture-media replacement are unchanged.
+replaces each demo-content element with a generic placeholder and keeps the
+outer component, and previews render the originals (DEC-2). The shadcn Install
+item writes the example into the consumer's project, so it is a copy and
+replaces fixture media and demo-content elements as `template copy` does.
+Surfaces that only hand out source replace demo-content elements alone. Other
+examples are unchanged.
 
 Rejected: a docs-only duplicate of each example, which adds documents to keep in sync.
 
