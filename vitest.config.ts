@@ -37,7 +37,12 @@ export default defineConfig({
             {
               dev: true,
               enableDebugDataProp: false,
-              runtimeInjection: true,
+              // StyleX's runtime injection, plus each rule its dev runtime drops
+              // under a prelude with more than one condition (StyleX 0.19.0).
+              runtimeInjection: path.join(
+                rootDir,
+                'internal/test-utils/src/stylexInject.ts',
+              ),
               genConditionalClasses: true,
               treeshakeCompensation: true,
               aliases: {
