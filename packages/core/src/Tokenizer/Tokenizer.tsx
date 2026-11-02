@@ -1089,10 +1089,14 @@ export function Tokenizer<T extends SearchableItem>({
 
   const isAtMax = maxEntries != null && value.length >= maxEntries;
 
-  // Filter out already-selected items from search results
+  // Filter out already-selected items from search results. Keyed by the ids,
+  // not the array, so a caller that passes an equal new `value` array on
+  // every render does not replace the search source, which would reload an
+  // open list (spec:AST-092 FR4) each time.
+  const selectedIdKey = JSON.stringify(value.map(item => item.id));
   const selectedIds = useMemo(
-    () => new Set(value.map(item => item.id)),
-    [value],
+    () => new Set<string>(JSON.parse(selectedIdKey) as string[]),
+    [selectedIdKey],
   );
 
   // Selected labels, lowercased, for the Create entry's duplicate check. The

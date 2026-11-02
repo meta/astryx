@@ -1178,6 +1178,73 @@ describe('Tokenizer', () => {
     });
   });
 
+  // After the tokens change, the list the field shows is the current one
+  // (spec:AST-092 FR4, component:Tokenizer FR13).
+  describe('list after the tokens change', () => {
+    function Controlled({initial}: {initial: SearchableItem[]}) {
+      const [value, setValue] = useState(initial);
+      return (
+        <>
+          <Tokenizer
+            label="Members"
+            searchSource={userSource}
+            value={value}
+            onChange={setValue}
+            hasEntriesOnFocus
+          />
+          <button type="button" onClick={() => setValue([users[2]])}>
+            Set Charlie
+          </button>
+        </>
+      );
+    }
+
+    it('offers a token removed with its button again in the list it opens', async () => {
+      const user = userEvent.setup();
+      render(<Controlled initial={[users[0], users[1]]} />);
+      const input = screen.getByRole('combobox');
+
+      await user.click(input);
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'true');
+      });
+      await user.keyboard('{Escape}');
+      await user.click(screen.getByRole('button', {name: 'Remove Alice'}));
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Alice', hidden: true}),
+        ).toBeInTheDocument();
+      });
+    });
+
+    it('drops a value set from outside from the open list', async () => {
+      const user = userEvent.setup();
+      render(<Controlled initial={[users[0]]} />);
+      const input = screen.getByRole('combobox');
+
+      await user.click(input);
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Charlie', hidden: true}),
+        ).toBeInTheDocument();
+      });
+      // A click() that keeps focus in the field, as a value set by code does.
+      act(() => {
+        screen.getByRole('button', {name: 'Set Charlie'}).click();
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Alice', hidden: true}),
+        ).toBeInTheDocument();
+      });
+      expect(
+        screen.queryByRole('option', {name: 'Charlie', hidden: true}),
+      ).not.toBeInTheDocument();
+    });
+  });
+
   describe('paste behavior', () => {
     it('pasting text triggers search results like typing', async () => {
       const user = userEvent.setup();

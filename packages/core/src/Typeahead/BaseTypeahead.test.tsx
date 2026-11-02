@@ -382,6 +382,117 @@ describe('BaseTypeahead', () => {
     ).not.toBeInTheDocument();
   });
 
+  // spec:AST-092 FR4: a list stops being current when its source is
+  // replaced, so an open list reloads from the replacement.
+  it('reloads an open focus list from a replaced source', async () => {
+    const user = userEvent.setup();
+    const originalSource: SearchSource<SearchableItem> = {
+      search: () => [],
+      bootstrap: () => [resultItem],
+    };
+    const updatedBootstrap = vi.fn(() => [{id: '2', label: 'Updated result'}]);
+    const updatedSource: SearchSource<SearchableItem> = {
+      search: () => [],
+      bootstrap: updatedBootstrap,
+    };
+    const renderField = (searchSource: SearchSource<SearchableItem>) => (
+      <BaseTypeahead
+        searchSource={searchSource}
+        value={null}
+        onChange={() => {}}
+        hasEntriesOnFocus
+      />
+    );
+    const {rerender} = render(renderField(originalSource));
+    const input = screen.getByRole('combobox');
+
+    await user.click(input);
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', {name: 'Result', hidden: true}),
+      ).toBeInTheDocument();
+    });
+    rerender(renderField(updatedSource));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', {name: 'Updated result', hidden: true}),
+      ).toBeInTheDocument();
+    });
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    expect(
+      screen.queryByRole('option', {name: 'Result', hidden: true}),
+    ).not.toBeInTheDocument();
+    expect(updatedBootstrap).toHaveBeenCalledTimes(1);
+  });
+
+  it('searches a replaced source for the typed query while its list is open', async () => {
+    const user = userEvent.setup();
+    const originalSource: SearchSource<SearchableItem> = {
+      search: () => [resultItem],
+      bootstrap: () => [],
+    };
+    const updatedSearch = vi.fn(() => [{id: '2', label: 'Updated result'}]);
+    const updatedSource: SearchSource<SearchableItem> = {
+      search: updatedSearch,
+      bootstrap: () => [],
+    };
+    const renderField = (searchSource: SearchSource<SearchableItem>) => (
+      <BaseTypeahead
+        searchSource={searchSource}
+        value={null}
+        onChange={() => {}}
+      />
+    );
+    const {rerender} = render(renderField(originalSource));
+    const input = screen.getByRole('combobox');
+
+    await user.type(input, 're');
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', {name: 'Result', hidden: true}),
+      ).toBeInTheDocument();
+    });
+    rerender(renderField(updatedSource));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('option', {name: 'Updated result', hidden: true}),
+      ).toBeInTheDocument();
+    });
+    expect(updatedSearch).toHaveBeenCalledWith('re', expect.anything());
+  });
+
+  it('leaves a closed list closed when its source is replaced', async () => {
+    const user = userEvent.setup();
+    const updatedBootstrap = vi.fn(() => [{id: '2', label: 'Updated result'}]);
+    const renderField = (searchSource: SearchSource<SearchableItem>) => (
+      <BaseTypeahead
+        searchSource={searchSource}
+        value={null}
+        onChange={() => {}}
+        hasEntriesOnFocus
+      />
+    );
+    const {rerender} = render(
+      renderField({search: () => [], bootstrap: () => [resultItem]}),
+    );
+    const input = screen.getByRole('combobox');
+
+    await user.click(input);
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
+    await user.keyboard('{Escape}');
+    rerender(renderField({search: () => [], bootstrap: updatedBootstrap}));
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 20));
+    });
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(updatedBootstrap).not.toHaveBeenCalled();
+  });
+
   it('re-shows cached results without bootstrapping again when the source is unchanged', async () => {
     const user = userEvent.setup();
     const bootstrap = vi.fn(() => [resultItem]);
