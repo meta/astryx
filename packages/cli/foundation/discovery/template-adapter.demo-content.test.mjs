@@ -54,6 +54,24 @@ describe('replaceDemoContent', () => {
     );
   });
 
+  it('replaces an element whose prop reads a variable the file still reads', () => {
+    const source =
+      DEMO +
+      'const [isFaceUp, setIsFaceUp] = useState(true);\n' +
+      'const a = (\n  <Card aria-pressed={!isFaceUp}>\n' +
+      '    <PlayingCardContents rank="Q" suit="hearts" faceDown={!isFaceUp} />\n' +
+      '  </Card>\n);\n';
+    expect(replaceDemoContent(source)).toEqual({
+      source:
+        "import {Text} from '@astryxdesign/core/Text';\n" +
+        'const [isFaceUp, setIsFaceUp] = useState(true);\n' +
+        'const a = (\n  <Card aria-pressed={!isFaceUp}>\n' +
+        '    <Text>Card content</Text>\n' +
+        '  </Card>\n);\n',
+      demoContentReplaced: 1,
+    });
+  });
+
   it('removes an unused demo import without adding Text', () => {
     const source = `${DEMO}export const x = 1;\n`;
     expect(replaceDemoContent(source)).toEqual({
@@ -85,9 +103,19 @@ describe('replaceDemoContent', () => {
       /spreads props/u,
     ],
     [
-      'a non-literal prop',
+      'a prop that runs code',
+      `${DEMO}const a = <PlayingCardContents rank={pickRank()} suit="hearts" />;\n`,
+      /prop rank is not a literal value or a variable read/u,
+    ],
+    [
+      'a prop whose variable nothing else reads',
       `${DEMO}const r = 'Q';\nconst a = <PlayingCardContents rank={r} suit="hearts" />;\n`,
-      /prop rank is not a literal value/u,
+      /reads r, and nothing else in the file reads it/u,
+    ],
+    [
+      'a prop whose variable is only declared elsewhere',
+      `${DEMO}const [isOpen, setIsOpen] = useState(false);\nfunction f({isOpen: x} = {}) {}\nconst a = <PlayingCardContents rank="Q" suit="hearts" faceDown={!isOpen} />;\n`,
+      /reads isOpen, and nothing else in the file reads it/u,
     ],
     [
       'children',

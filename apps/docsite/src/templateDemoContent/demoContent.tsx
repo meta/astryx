@@ -3,7 +3,7 @@
 /**
  * @file Docs-only demo content that catalog templates may show inside real
  *   Astryx components: a lightweight playing card's face and back.
- * @input A rank and suit for the face; nothing for the back.
+ * @input A rank and suit, and whether the card lies face down.
  * @output Token-styled card contents sized to fill their container.
  * @position The one demo-content module templates import, as
  *   `@astryx-docs/demo-content` (mapped by the docsite, template viewer, test,
@@ -11,7 +11,8 @@
  *   template, and the docsite's displayed code, replace every element imported
  *   from it with a generic `<Text>` placeholder (the CLI's
  *   `replaceDemoContent`), so only live previews ever render it. Elements are
- *   used with literal props and no children so that replacement stays safe.
+ *   used with no children, and each prop is a literal or a variable the
+ *   template also reads elsewhere, so that replacement stays safe.
  */
 
 import * as stylex from '@stylexjs/stylex';
@@ -36,10 +37,24 @@ export interface PlayingCardContentsProps {
   /** The card's rank as printed in its corner: `A`, `2`–`10`, `J`, `Q`, `K`. */
   rank: string;
   suit: PlayingCardSuit;
+  /** Show the card's back: a token-colored pattern with no rank or suit. */
+  faceDown?: boolean;
 }
 
-/** A playing card's face: rank and suit in the corner, the suit at center. */
-export function PlayingCardContents({rank, suit}: PlayingCardContentsProps) {
+/**
+ * A playing card: rank and suit in the corner and the suit at center, or its
+ * back when `faceDown`.
+ */
+export function PlayingCardContents({
+  rank,
+  suit,
+  faceDown = false,
+}: PlayingCardContentsProps) {
+  if (faceDown) {
+    return (
+      <span role="img" aria-label="Card back" {...stylex.props(styles.back)} />
+    );
+  }
   const symbol = SUIT_SYMBOLS[suit];
   return (
     <span
@@ -57,13 +72,6 @@ export function PlayingCardContents({rank, suit}: PlayingCardContentsProps) {
         {symbol}
       </span>
     </span>
-  );
-}
-
-/** A playing card's back: a token-colored pattern with no rank or suit. */
-export function PlayingCardBack() {
-  return (
-    <span role="img" aria-label="Card back" {...stylex.props(styles.back)} />
   );
 }
 

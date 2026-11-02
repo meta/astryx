@@ -404,11 +404,14 @@ const NON_CHILD_KEYS = new Set([
  * Astryx when the source does not import it already.
  *
  * Only a plain static use is replaced: a named import used as a JSX tag whose
- * props are literal values and whose children, if any, are whitespace. Anything
- * else (a namespace or type import, a re-export, a dynamic import, the element
- * used as a value, a spread or computed prop, children) throws, naming the
- * element, rather than leaving a reference behind or dropping code the rest of
- * the file relies on. Source that never names the module is returned as is.
+ * children, if any, are whitespace, and whose props are literal values or read
+ * only variables that the rest of the file still reads (so `faceDown={!isOpen}`
+ * is safe when `isOpen` is also used elsewhere). Anything else (a namespace or
+ * type import, a re-export, a dynamic import, the element used as a value, a
+ * spread or computed prop, a prop whose variable nothing else reads, children)
+ * throws, naming the element, rather than leaving a reference behind, leaving a
+ * variable unused, or dropping code the rest of the file relies on. Source that
+ * never names the module is returned as is.
  *
  * @param {string} source - Template source code.
  * @returns {{source: string, demoContentReplaced: number}}
@@ -476,13 +479,21 @@ export function replaceDemoContent(source) {
   const elementRanges = [];
   /** @type {Set<string>} */
   const boundNames = new Set();
+  /** Variables read outside every replaced element. */
+  /** @type {Set<string>} */
+  const readNames = new Set();
+  /** Variables a replaced element's props read, with the element's name. */
+  /** @type {Array<{variable: string, element: string}>} */
+  const propReads = [];
   /**
    * @param {any} node
    * @param {any} parent
    * @param {string} key
+   * @param {boolean} [inPattern] - The node is inside a binding pattern.
    */
-  const visit = (node, parent, key) => {
+  const visit = (node, parent, key, inPattern = false) => {
     if (!node || typeof node.type !== 'string') return;
+    const binds = inPattern || isPatternRoot(parent, key);
     if (node.type === 'StringLiteral' && node.value === DEMO_CONTENT_MODULE) {
       if (!(parent?.type === 'ImportDeclaration' && key === 'source')) {
         throw unsafeDemoContent(
@@ -510,6 +521,13 @@ export function replaceDemoContent(source) {
       if (node.name === 'Text' && isBindingPosition(parent, key)) {
         boundNames.add('Text');
       }
+      if (
+        !binds &&
+        !isImportBinding(parent, key) &&
+        !isNonReferenceKey(parent, key)
+      ) {
+        readNames.add(node.name);
+      }
     }
     if (
       node.type === 'JSXMemberExpression' &&
@@ -523,20 +541,32 @@ export function replaceDemoContent(source) {
       node.openingElement.name.type === 'JSXIdentifier' &&
       demoNames.has(node.openingElement.name.name)
     ) {
-      assertStaticDemoElement(node);
+      const element = node.openingElement.name.name;
+      for (const variable of assertStaticDemoElement(node)) {
+        propReads.push({variable, element});
+      }
       elementRanges.push([node.start, node.end]);
       return;
     }
     for (const [childKey, value] of Object.entries(node)) {
       if (NON_CHILD_KEYS.has(childKey)) continue;
+      const nextInPattern = binds && !isExpressionInPattern(node, childKey);
       if (Array.isArray(value)) {
-        for (const child of value) visit(child, node, childKey);
+        for (const child of value) visit(child, node, childKey, nextInPattern);
       } else if (value && typeof value === 'object') {
-        visit(value, node, childKey);
+        visit(value, node, childKey, nextInPattern);
       }
     }
   };
   visit(program, null, 'program');
+
+  for (const {variable, element} of propReads) {
+    if (!readNames.has(variable)) {
+      throw unsafeDemoContent(
+        `<${element}> reads ${variable}, and nothing else in the file reads it, so the copy would leave it unused`,
+      );
+    }
+  }
 
   if (elementRanges.length > 0 && textName === null && boundNames.has('Text')) {
     throw unsafeDemoContent(
@@ -573,11 +603,15 @@ export function replaceDemoContent(source) {
 
 /**
  * Throw unless a demo-content element can be replaced without dropping code:
- * literal props only, and no children but whitespace.
+ * each prop a literal or a read of variables (see {@link isVariableRead}), and
+ * no children but whitespace.
  * @param {any} element
+ * @returns {string[]} The variables its props read.
  */
 function assertStaticDemoElement(element) {
   const name = element.openingElement.name.name;
+  /** @type {string[]} */
+  const variables = [];
   for (const attribute of element.openingElement.attributes) {
     if (attribute.type === 'JSXSpreadAttribute') {
       throw unsafeDemoContent(`<${name}> spreads props`);
@@ -586,18 +620,69 @@ function assertStaticDemoElement(element) {
     if (value === null || value.type === 'StringLiteral') continue;
     if (
       value.type === 'JSXExpressionContainer' &&
-      isLiteralExpression(value.expression)
+      (isLiteralExpression(value.expression) ||
+        isVariableRead(value.expression, variables))
     ) {
       continue;
     }
     throw unsafeDemoContent(
-      `<${name}> prop ${attribute.name.name ?? ''} is not a literal value`,
+      `<${name}> prop ${attribute.name.name ?? ''} is not a literal value or a variable read`,
     );
   }
   for (const child of element.children) {
     if (child.type === 'JSXText' && child.value.trim() === '') continue;
     throw unsafeDemoContent(`<${name}> has children`);
   }
+  return variables;
+}
+
+/**
+ * Whether an expression only reads variables: a variable, a non-computed
+ * property of one, or its negation. Removing such a read runs no code. Adds
+ * each variable it reads to `variables`.
+ * @param {any} node
+ * @param {string[]} variables
+ * @returns {boolean}
+ */
+function isVariableRead(node, variables) {
+  switch (node.type) {
+    case 'Identifier':
+      variables.push(node.name);
+      return true;
+    case 'MemberExpression':
+      return !node.computed && isVariableRead(node.object, variables);
+    case 'UnaryExpression':
+      return node.operator === '!' && isVariableRead(node.argument, variables);
+    default:
+      return false;
+  }
+}
+
+/**
+ * Whether `parent[key]` starts a binding: a declared name, a function
+ * parameter, or a caught error.
+ * @param {any} parent
+ * @param {string} key
+ */
+function isPatternRoot(parent, key) {
+  return (
+    isBindingPosition(parent, key) ||
+    (parent?.type === 'FunctionExpression' && key === 'id') ||
+    (parent?.type === 'CatchClause' && key === 'param')
+  );
+}
+
+/**
+ * Whether `node[key]` is an expression inside a binding pattern rather than a
+ * binding: a default value or a computed key.
+ * @param {any} node
+ * @param {string} key
+ */
+function isExpressionInPattern(node, key) {
+  return (
+    (node.type === 'AssignmentPattern' && key === 'right') ||
+    (node.type === 'ObjectProperty' && key === 'key' && node.computed)
+  );
 }
 
 /** @param {any} node */
@@ -684,7 +769,7 @@ function isBindingPosition(parent, key) {
 /** @param {string} reason */
 function unsafeDemoContent(reason) {
   return new Error(
-    `Demo content from ${DEMO_CONTENT_MODULE} cannot be replaced safely: ${reason}. Use each element as a JSX tag with literal props and no children.`,
+    `Demo content from ${DEMO_CONTENT_MODULE} cannot be replaced safely: ${reason}. Use each element as a JSX tag with no children, and give each prop a literal or a variable the file also reads elsewhere.`,
   );
 }
 
