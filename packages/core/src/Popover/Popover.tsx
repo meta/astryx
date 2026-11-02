@@ -64,7 +64,13 @@ import {
   preloadPopoverBottomSheet,
 } from './lazyPopoverBottomSheet';
 import {Button} from '../Button';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Popover/Popover.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Helpers
@@ -519,7 +525,7 @@ export function Popover({
   style,
   'data-testid': testId,
 }: PopoverProps): ReactElement {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const measurementFrameRef = useRef<{id: number; view: Window} | null>(null);
   const [hasOverflow, setHasOverflow] = useState(false);

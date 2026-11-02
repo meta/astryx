@@ -31,7 +31,6 @@ import {
 import {Button} from '../Button';
 import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import {rtlStyles} from '../utils';
-import {useTranslator} from '../i18n';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {mergeProps} from '../utils/mergeProps';
@@ -39,6 +38,13 @@ import {themeProps} from '../utils/themeProps';
 import {paddingStyles} from '../Layout/padding.stylex';
 import type {SpacingStep} from '../utils/types';
 import {stableClassName} from '../naming';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Popover/usePopover.generated';
+
+registerEnglishFallback(english);
 
 /**
  * The fallback close button's wrapper (anchored layer) or button (sheet,
@@ -407,7 +413,7 @@ function usePopoverImplementation(
     isModal = true,
   } = options;
 
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const closeButtonLabel =
     closeButtonLabelFromProps ?? t('@astryx.popover.close');
 
