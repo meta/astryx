@@ -8269,7 +8269,7 @@ usePowerSearchConfig (.)
 ### Functions
 
 ```text
-function formatFilterValue: (_config: InternalConfig, operatorValue: OperatorValue, filterValue: FilterValue, maxLength: number, t: TranslatorFn, locale: Locale, timezoneID?: string) => string
+function formatFilterValue: (_config: InternalConfig, operatorValue: OperatorValue, filterValue: FilterValue, maxLength: number, t: TranslatorFn, locale: Locale, timezoneID?: string, calendar?: CalendarSystem) => string
 ```
 
 ### Types
