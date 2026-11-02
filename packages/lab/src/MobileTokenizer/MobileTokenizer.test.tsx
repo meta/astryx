@@ -670,13 +670,13 @@ describe('MobileTokenizer (Lab, single-sheet flow)', () => {
     const indicatorClasses = stylex
       .props(
         stylex.create({
-          border: {
+          indicator: {
             borderColor: {
               default: colorVars['--color-border'],
               '@media (forced-colors: active)': 'GrayText',
             },
           },
-        }).border,
+        }).indicator,
       )
       .className!.split(' ')
       .filter(name => !name.includes('__'));

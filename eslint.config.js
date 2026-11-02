@@ -423,6 +423,24 @@ export default defineConfig(
       '@astryx/disabled-cursor': 'error',
     },
   },
+  // StyleX compiles a `border` shorthand unevenly, and @astryxdesign/build's
+  // strict default refuses it, so a lab or charts component written with one
+  // ships without its border in the prebuilt stylesheet. Core already gets the
+  // rule from its config above; lab and charts get it at the same severity
+  // (error in strict mode, warning otherwise).
+  {
+    files: [
+      'packages/lab/src/**/*.{ts,tsx}',
+      'packages/charts/src/**/*.{ts,tsx}',
+    ],
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-border-shorthand':
+        astryxConfig.rules['@astryx/no-border-shorthand'],
+    },
+  },
   // `light-dark()` is the theme layer's mechanism, and reaches lab for the
   // same reason the two rules above do: a component that hardcodes a
   // light/dark decision is unreachable by every theme, and lab is where the
