@@ -49,7 +49,7 @@ import {
   LayoutSlotsContext,
   type LayoutSlots,
 } from '../Layout/LayoutSlotsContext';
-import {overlayPaddingReset} from '../Layout/padding.stylex';
+import {layoutReset} from '../Layout/layoutReset';
 import {MobileNavToggle} from '../MobileNav/MobileNavToggle';
 import {MAX_CLOSE_DELAY_MS as MOBILE_NAV_MAX_CLOSE_DELAY_MS} from '../MobileNav/MobileNav';
 import {SideNavRenderContext} from '../SideNav/SideNavRenderContext';
@@ -309,17 +309,6 @@ const styles = stylex.create({
     flexDirection: 'column',
     position: 'relative',
     overflow: 'clip',
-  },
-  // A layout root (FR18): with `overlayPaddingReset`, the layout values an
-  // ancestor Layout, Card or Section publishes stop here, so the shell lays
-  // out as it does at the page root. These are the ones the overlay reset
-  // leaves to its own roots.
-  layoutRoot: {
-    '--layout-content-width': 'initial',
-    '--layout-alignment-width': 'initial',
-    '--_layout-flush-block-start': 'initial',
-    '--_layout-flush-block-end': 'initial',
-    '--container-max-height': 'initial',
   },
   variantWash: {
     backgroundColor: colorVars['--color-background-body'],
@@ -1261,8 +1250,9 @@ export function AppShell({
           themeProps('app-shell', {variant}),
           stylex.props(
             styles.root,
-            overlayPaddingReset.reset,
-            styles.layoutRoot,
+            // A layout root (FR18): nothing an ancestor Layout, Card or
+            // Section publishes reaches the shell (component:Layout FR8).
+            layoutReset.root,
             variant === 'wash'
               ? styles.variantWash
               : variant === 'surface'
