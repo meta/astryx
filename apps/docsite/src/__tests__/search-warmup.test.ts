@@ -8,10 +8,13 @@
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {createCliSearchSource} from '../lib/cliSearchSource';
 import {
   SEARCH_WARMUP_INTERVAL_MS,
   SEARCH_WARMUP_URL,
+  SEARCH_WARMUP_WAIT_MS,
   resetSearchWarmup,
+  searchServerReady,
   warmSearch,
   whenIdle,
 } from '../lib/searchWarmup';
@@ -83,5 +86,88 @@ describe('whenIdle', () => {
     cancel();
     vi.advanceTimersByTime(5_000);
     expect(cancelled).not.toHaveBeenCalled();
+  });
+});
+
+/** A warm-up request the test answers when it chooses. */
+function heldWarmup() {
+  let answer: () => void = () => {};
+  const fetchWarmup = vi.fn(
+    () =>
+      new Promise<void>(resolve => {
+        answer = resolve;
+      }),
+  );
+  return {fetchWarmup, answer: () => answer()};
+}
+
+const settledYet = async (promise: Promise<unknown>) => {
+  let settled = false;
+  promise.then(
+    () => (settled = true),
+    () => (settled = true),
+  );
+  for (let i = 0; i < 5; i++) {
+    await Promise.resolve();
+  }
+  return settled;
+};
+
+describe('searchServerReady', () => {
+  beforeEach(() => resetSearchWarmup());
+  afterEach(() => vi.useRealTimers());
+
+  it('is ready at once when no warm-up is running', async () => {
+    expect(await settledYet(searchServerReady())).toBe(true);
+  });
+
+  it('waits for a running warm-up to answer', async () => {
+    const warmup = heldWarmup();
+    warmSearch(warmup.fetchWarmup, 1_000);
+    const ready = searchServerReady();
+    expect(await settledYet(ready)).toBe(false);
+    warmup.answer();
+    expect(await settledYet(ready)).toBe(true);
+    // Once answered, nothing is running.
+    expect(await settledYet(searchServerReady())).toBe(true);
+  });
+
+  it('stops waiting after the cap, so a stuck warm-up never holds results', async () => {
+    vi.useFakeTimers();
+    warmSearch(heldWarmup().fetchWarmup, 1_000);
+    const ready = searchServerReady();
+    vi.advanceTimersByTime(SEARCH_WARMUP_WAIT_MS - 1);
+    expect(await settledYet(ready)).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(await settledYet(ready)).toBe(true);
+  });
+
+  it('rejects when the query is abandoned while it waits', async () => {
+    warmSearch(heldWarmup().fetchWarmup, 1_000);
+    const controller = new AbortController();
+    const ready = searchServerReady(controller.signal);
+    controller.abort(new Error('superseded'));
+    await expect(ready).rejects.toThrow('superseded');
+  });
+});
+
+describe('a query typed during a warm-up', () => {
+  beforeEach(() => resetSearchWarmup());
+
+  it('is sent only after the warm-up answers, to the server it started', async () => {
+    const warmup = heldWarmup();
+    warmSearch(warmup.fetchWarmup, 1_000);
+    const fetchSearch = vi.fn((_url: string, _init: RequestInit) =>
+      Promise.resolve(Response.json({data: {results: []}})),
+    );
+    const source = createCliSearchSource(fetchSearch);
+    const results = source.search('app shell');
+    await new Promise(resolve => setTimeout(resolve, 200));
+    expect(fetchSearch).not.toHaveBeenCalled();
+
+    warmup.answer();
+    await results;
+    expect(fetchSearch).toHaveBeenCalledTimes(1);
+    expect(fetchSearch.mock.calls[0][0]).toBe('/api/search?q=app%20shell');
   });
 });

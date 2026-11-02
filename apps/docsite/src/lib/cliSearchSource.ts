@@ -3,7 +3,8 @@
 /**
  * @file The search panel's source: each query goes to the site's search API
  * (app/api/search/route.ts), which runs `astryx search`, and its results come
- * back in the CLI's order.
+ * back in the CLI's order. A query typed while the search server is still
+ * being warmed waits for that warm-up instead of starting a second server.
  * @position Consumed by SearchPalette.tsx.
  *
  * Items carry no `group`, since CommandPalette orders grouped items by group
@@ -12,6 +13,7 @@
 
 import type {SearchSource, SearchableItem} from '@astryxdesign/core/Typeahead';
 import type {SiteSearchResult} from './cliSearchTypes';
+import {searchServerReady} from './searchWarmup';
 
 export interface CliSearchItem extends SearchableItem<SiteSearchResult> {
   id: string;
@@ -81,12 +83,15 @@ const DEBOUNCE_MS = 120;
 /**
  * A SearchSource that answers with `astryx search`, through the site's API.
  * @param fetchSearch - Fetches one query's response; the site passes `fetch`.
+ * @param serverReady - Resolves when a query can be sent: after a running
+ *   warm-up (lib/searchWarmup.ts), so the query reaches the server it started.
  */
 export function createCliSearchSource(
   fetchSearch: (url: string, init: RequestInit) => Promise<Response> = (
     url,
     init,
   ) => fetch(url, init),
+  serverReady: (signal: AbortSignal) => Promise<void> = searchServerReady,
 ): SearchSource<CliSearchItem> & {
   item(id: string): CliSearchItem | undefined;
 } {
@@ -113,6 +118,7 @@ export function createCliSearchSource(
             reject(controller.signal.reason);
           });
         });
+        await serverReady(controller.signal);
         const response = await fetchSearch(
           `/api/search?q=${encodeURIComponent(query)}`,
           {signal: controller.signal},
@@ -129,7 +135,9 @@ export function createCliSearchSource(
         const opened = new Set<string>();
         const items = body.data.results
           .filter(result => {
-            if (opened.has(result.href)) return false;
+            if (opened.has(result.href)) {
+              return false;
+            }
             opened.add(result.href);
             return true;
           })
