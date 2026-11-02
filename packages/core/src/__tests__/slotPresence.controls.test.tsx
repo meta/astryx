@@ -14,6 +14,7 @@
 
 import {beforeAll, describe, it, expect} from 'vitest';
 import {render} from '@testing-library/react';
+import {Avatar} from '../Avatar/Avatar';
 import type {ReactNode} from 'react';
 import {Breadcrumbs} from '../Breadcrumbs/Breadcrumbs';
 import {BreadcrumbItem} from '../Breadcrumbs/BreadcrumbItem';
@@ -193,5 +194,23 @@ describe('Tokenizer startIcon follows isRenderable', () => {
         expect(parent?.tagName).toBe('SPAN');
       }
     });
+  });
+});
+
+// Avatar's status slot has its own emptiness test: a truthy value renders it,
+// and a falsy one, 0 included, renders nothing.
+describe('Avatar status renders for a truthy value only', () => {
+  it.each([...EMPTY_VALUES, ['0', 0] as const])(
+    'renders no status slot and no stray "0" for %s',
+    (_label, value) => {
+      render(<Avatar name="Ada Lovelace" status={value} />);
+      expect(document.querySelector('[class*="styles.status"]')).toBeNull();
+      expect(zeroParent()).toBeNull();
+    },
+  );
+
+  it('renders the status slot for a truthy value', () => {
+    render(<Avatar name="Ada Lovelace" status={<span>Online</span>} />);
+    expect(document.querySelector('[class*="styles.status"]')).not.toBeNull();
   });
 });

@@ -824,8 +824,9 @@ export function Avatar({
           </div>
         )}
       </div>
-      {/* eslint-disable-next-line @astryx/no-truthy-jsx-guard -- the status slot renders for a truthy value only; a falsy one, 0 included, renders none */}
-      {status && (
+      {/* The status slot renders for a truthy value only. A falsy one, 0
+          included, renders nothing, not a stray "0". */}
+      {Boolean(status) && (
         <div
           {...stylex.props(
             styles.status,
