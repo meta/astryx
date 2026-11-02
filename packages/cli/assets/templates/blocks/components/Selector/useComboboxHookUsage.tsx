@@ -30,7 +30,7 @@ function matching(query: string): Teammate[] {
 
 export default function UseComboboxHookUsage() {
   const listboxId = useId();
-  const announce = useAnnounce();
+  const announce = useAnnounce({hasReplace: true});
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [assignee, setAssignee] = useState<string>();
@@ -92,6 +92,9 @@ export default function UseComboboxHookUsage() {
                 density="compact"
                 label={teammate.label}
                 isHighlighted={index === combobox.highlightedIndex}
+                // Item writes aria-selected from isSelected, so the active
+                // option has to be passed here to keep aria-selected="true".
+                isSelected={index === combobox.highlightedIndex}
                 isDisabled={teammate.disabled}
                 {...combobox.getOptionProps(index)}
               />

@@ -92,6 +92,12 @@ describe('useCombobox example', () => {
     press(input, 'ArrowUp');
     expect(activeOption(input)).toBe('Alan Turing');
     expect(document.activeElement).toBe(input);
+    expect(
+      Array.from(
+        container.querySelectorAll('[role="option"][aria-selected="true"]'),
+        option => option.textContent,
+      ),
+    ).toEqual(['Alan Turing']);
   });
 
   it('picks the active option with Enter and closes the list', () => {
