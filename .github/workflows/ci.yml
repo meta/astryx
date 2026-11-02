@@ -185,12 +185,6 @@ jobs:
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 8 || 2 }}
           label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 3}'
 
-      # Stops a pull-request run that CI is full for (room found no room and ten
-      # other pull-request runs waiting), with the reason, so it builds nothing.
-      # It cancels the run when its token can. A fork's read-only token cannot;
-      # then admission fails, the jobs behind it skip, and build, test and
-      # docsite-test fail with the same reason, never skip or pass.
-
       # A pull-request run that waited its longest while another started at
       # its longest wait is turned away (spec:AST-030 DEC-16): ci-full stops
       # the run, and the jobs behind admission skip.
@@ -200,6 +194,12 @@ jobs:
           echo "::error title=CI is full::CI is full: re-run all jobs or push later. The run found no room under the CI ceiling."
           exit 1
 
+  # Stops a pull-request run that CI is full for, with the reason, so it builds
+  # nothing: room found no room and ten other pull-request runs waiting, or the
+  # run waited its longest while another started at its longest wait. It
+  # cancels the run when its token can. A fork's read-only token cannot; then
+  # admission fails, the jobs behind it skip or stop, and build, test and
+  # docsite-test fail with the same reason, never skip or pass.
   ci-full:
     needs: [room, admission]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name == 'pull_request' && !cancelled() && (needs.room.outputs.full == 'true' || needs.admission.outputs.full == 'true')) }}
@@ -2730,11 +2730,19 @@ jobs:
   # Audit and interaction fixtures stay with their existing browser checks.
   pr-visual:
     name: Stable visual regression
-    needs: [build-storybook, maintenance-request, visual-scout, run-labels]
+    needs:
+      [
+        admission,
+        build-storybook,
+        maintenance-request,
+        visual-scout,
+        run-labels,
+      ]
     if: >-
       (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() &&
       ((github.event_name == 'pull_request' &&
-        needs.build-storybook.result == 'success') ||
+        needs.build-storybook.result == 'success' &&
+        needs.admission.outputs.full != 'true') ||
        (github.event_name == 'workflow_dispatch' &&
         ((inputs.operation == 'release-check' &&
           needs.build-storybook.result == 'success') ||
@@ -3489,8 +3497,8 @@ jobs:
   # pull-request comment. No required context depends on it.
   pr-touched-components:
     name: Touched components (visual, accessibility, RTL)
-    needs: [build-storybook, pr-visual]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && github.event_name == 'pull_request' && needs.build-storybook.result == 'success' && needs.build-storybook.outputs.lab_only != 'true') }}
+    needs: [admission, build-storybook, pr-visual]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && github.event_name == 'pull_request' && needs.build-storybook.result == 'success' && needs.build-storybook.outputs.lab_only != 'true' && needs.admission.outputs.full != 'true') }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
     permissions:

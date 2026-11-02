@@ -15,7 +15,9 @@
 #   "Wait for room under the CI ceiling": a waiting run is found by that name.
 # - A pull-request run that finds no room and ten other pull-request runs
 #   already waiting is turned away (`full`): CI is full, and the run stops with
-#   that message. `main` runs are never turned away.
+#   that message. So is one still without room at its longest wait, unless it
+#   is the only pull-request run to start there in ten minutes and no run that
+#   waited longer still waits. `main` runs are never turned away.
 # - A run starts once the other active runs' estimated jobs plus `peak` fit
 #   under the ceiling. Small workflows that are not admitted (one or two slim
 #   jobs a run) always count at least eighteen jobs, which covers all but their
@@ -26,7 +28,7 @@
 # - It waits at most `max-wait-minutes` (fifteen for `main`, twelve for a pull
 #   request, inside its fifteen-minute job budget), looking at even intervals
 #   plus a random 0-20 s so runs that look together spread out, and then
-#   starts.
+#   starts (a pull request: see above).
 # - Each CI or Main run counts its live jobs, read once per look. A
 #   pull-request run still waiting here counts the jobs it runs, its waiting
 #   job and a Storybook build that found room, so waiting runs never hold each

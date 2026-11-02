@@ -140,15 +140,54 @@ describe('where runs wait', () => {
     expect(String(ci.jobs.build.if)).toContain(
       "needs.room.outputs.full == 'true'",
     );
-    // The jobs that would still run behind a failed admission build nothing.
-    for (const id of ['typecheck', 'pr-interaction', 'pr-interaction-webkit']) {
-      expect(needsOf(ci.jobs[id]), id).toEqual(
-        expect.arrayContaining(['room', 'admission']),
+    // Every job that would still run behind a failed admission builds
+    // nothing. It is every job with a status function that reaches admission
+    // or the Storybook build, unless it stops with the reason (the required
+    // contexts, ci-full), runs only after admission or the label lookup
+    // succeeded, never runs on a pull request, or does no work without a job
+    // behind admission.
+    const reaches = (id, target, seen = new Set()) =>
+      needsOf(ci.jobs[id]).some(
+        need =>
+          need === target ||
+          (!seen.has(need) && (seen.add(need), reaches(need, target, seen))),
       );
-      expect(String(ci.jobs[id].if), id).toContain(
-        "needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true'",
-      );
+    const FULL_GUARD = "needs.admission.outputs.full != 'true'";
+    const ADMITTED =
+      /needs\.(admission|run-labels)\.result == 'success'|needs\.run-labels\.outputs\./;
+    const DISPATCH_ONLY =
+      /^(always\(\) && )?\(?github\.event_name == 'workflow_dispatch' && inputs\.operation == 'release-check'/;
+    // Its every step after the runner pick reads native-swift-runner's
+    // `applies`, empty when that job skipped behind admission.
+    const NO_WORK_ALONE = ['test-native-swift'];
+    expect(ADMITTED.test(String(ci.jobs['run-labels'].if))).toBe(true);
+    expect(String(ci.jobs['run-labels'].if)).toContain(
+      "needs.admission.result == 'success'",
+    );
+    const guarded = [];
+    for (const [id, job] of Object.entries(ci.jobs)) {
+      const condition = String(job.if ?? '');
+      if (!/\b(always|cancelled)\(\)/.test(condition)) continue;
+      if (!reaches(id, 'admission') && !reaches(id, 'build-storybook'))
+        continue;
+      if (['build', 'test', 'docsite-test', 'ci-full'].includes(id)) continue;
+      if (
+        ADMITTED.test(condition) ||
+        DISPATCH_ONLY.test(ungated(condition).trim())
+      )
+        continue;
+      if (NO_WORK_ALONE.includes(id)) continue;
+      expect(needsOf(job), id).toContain('admission');
+      expect(condition, id).toContain(FULL_GUARD);
+      guarded.push(id);
     }
+    expect(guarded.sort()).toEqual([
+      'pr-interaction',
+      'pr-interaction-webkit',
+      'pr-touched-components',
+      'pr-visual',
+      'typecheck',
+    ]);
   });
 
   it('skips only with every other job, and never fails, so every job and required check decides as before', () => {

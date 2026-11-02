@@ -898,7 +898,8 @@ cost of one more look plus one call for its own jobs, and starts only if no
 other pull-request run started at its longest wait in the last ten minutes,
 about the time one run takes, and no run that waited longer still waits;
 otherwise it stops the same way. A run counts as started there once its
-admission job succeeded; until then it ranks as a waiter. Runs that wait out the same burst then start
+admission job succeeded, and any run that waited out about its whole longest
+wait counts, room on its last look or not; until then it ranks as a waiter. Runs that wait out the same burst then start
 one at a time instead of together. A `main` run is never stopped.
 
 CI can still pass ninety in five bounded ways, the first three rare:
