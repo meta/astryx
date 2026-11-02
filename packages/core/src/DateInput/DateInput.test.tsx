@@ -454,6 +454,30 @@ describe('DateInput', () => {
       });
     });
 
+    it('keeps a calendar hosted outside the field open on a press inside it', async () => {
+      // Inside a list item, Layer hosts the calendar outside the field.
+      render(
+        <ul>
+          <li>
+            <DateInput label="Date" onChange={() => {}} />
+          </li>
+          <li>Elsewhere</li>
+        </ul>,
+      );
+      const input = screen.getByRole('combobox');
+      fireEvent.keyDown(input, {key: 'ArrowDown'});
+      const layer = document.querySelector('[popover]') as HTMLElement;
+      expect(layer.closest('li')?.contains(input) ?? false).toBe(false);
+
+      press(layer);
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+
+      press(screen.getByText('Elsewhere'));
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
     it('keeps the calendar open when a scroll starts outside (pointercancel)', () => {
       render(
         <>
