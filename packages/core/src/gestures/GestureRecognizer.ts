@@ -36,6 +36,7 @@ import type {
   GestureTouch,
   Point,
   PointerKind,
+  ScrollType,
 } from './types';
 import {DEFAULT_ENVIRONMENT} from './types';
 
@@ -81,6 +82,17 @@ export interface GestureRecognizerOptions<R = GestureRecognizer> {
   delaysTouchesEnded?: boolean;
   /** Pointer kinds this recognizer listens to (UIKit's `allowedTouchTypes`). @default all */
   allowedPointerTypes?: ReadonlyArray<PointerKind>;
+  /**
+   * Scroll input this recognizer takes, as UIKit's `allowedScrollTypesMask`.
+   * A pan follows a trackpad's two-finger scroll (`continuous`), never a
+   * mouse wheel's notches, as a contact moving with the content, along its
+   * own axis and after the scrollers under the pointer; a pinch takes a
+   * ctrl-wheel of either, as a trackpad pinches (`spec:AST-094` FR43,
+   * DEC-24).
+   * @default none; a pinch takes both, the screen-edge pan none whatever a
+   *   caller passes
+   */
+  allowedScrollTypes?: ReadonlyArray<ScrollType>;
   /** Ignore a touch of a different kind than the ones already tracked. @default true */
   requiresExclusiveTouchType?: boolean;
   /**
@@ -202,6 +214,8 @@ export abstract class GestureRecognizer {
   delaysTouchesBegan: boolean;
   delaysTouchesEnded: boolean;
   allowedPointerTypes: ReadonlySet<PointerKind> | null;
+  /** See GestureRecognizerOptions.allowedScrollTypes. */
+  readonly allowedScrollTypes: ReadonlySet<ScrollType>;
   requiresExclusiveTouchType: boolean;
   /**
    * The element (or any object) the recognizer is attached to. The DOM host
@@ -247,6 +261,9 @@ export abstract class GestureRecognizer {
       options.allowedPointerTypes == null
         ? null
         : new Set(options.allowedPointerTypes);
+    this.allowedScrollTypes = new Set(
+      options.allowedScrollTypes ?? this.defaultScrollTypes,
+    );
     this.requiresExclusiveTouchType =
       options.requiresExclusiveTouchType ?? true;
   }
@@ -479,6 +496,11 @@ export abstract class GestureRecognizer {
   /** Clear per-gesture state before the next attempt. */
   protected reset(): void {}
 
+  /** The scroll types taken when the options name none (UIKit's: none). */
+  protected get defaultScrollTypes(): ReadonlyArray<ScrollType> {
+    return [];
+  }
+
   /**
    * Whether a touch may join. The base checks enabled, pointer kind and
    * exclusivity of kind; subclasses narrow it (a one-finger pan ignores a
@@ -487,6 +509,13 @@ export abstract class GestureRecognizer {
   protected acceptsTouch(touch: GestureTouch): boolean {
     if (!this.isEnabled) {
       return false;
+    }
+    if (touch.scrollType != null) {
+      // Scroll input is no pointer: only the scroll types allowed count.
+      return (
+        this.allowedScrollTypes.has(touch.scrollType) &&
+        (this.options.shouldReceiveTouch?.(this, touch) ?? true)
+      );
     }
     if (
       this.allowedPointerTypes != null &&
