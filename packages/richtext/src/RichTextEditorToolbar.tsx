@@ -10,7 +10,8 @@
  *   ToggleButton / Divider / Popover / TextInput / Layout primitives.
  * @output Exports RichTextEditorToolbar (a compact formatting toolbar with a
  *   RichText-owned 4px control gutter, a horizontally scrollable action row,
- *   and a link popover anchored to its Link button) and
+ *   a link popover anchored to its Link button, and the link card LinkCard
+ *   draws for the link at the caret or under the pointer) and
  *   RichTextEditorToolbarProps.
  * @position @astryxdesign/richtext. Drop into RichTextEditor's `toolbar` slot to
  *   add a flush top formatting toolbar. Themed via Astryx Toolbar, Selector,
@@ -20,6 +21,7 @@
  *
  * SYNC: When modified, update:
  * - /packages/richtext/src/index.ts (exports)
+ * - /packages/richtext/src/LinkCard.tsx (the link card it renders)
  * - /packages/richtext/src/RichTextEditor.doc.mjs (usage notes)
  * - /packages/richtext/src/RichTextEditor.test.tsx (tests)
  * - /apps/storybook/stories/RichTextEditor.stories.tsx (WithToolbar story)
@@ -104,6 +106,7 @@ import {
   type RangeSelection,
 } from 'lexical';
 import {sanitizeUrl} from './linkUtils';
+import {LinkCard} from './LinkCard';
 import {$selectedExtensionNodesOnly} from './markdownExtensionNode';
 
 /** Block types exposed by the toolbar's format selector. */
@@ -209,6 +212,8 @@ export const RICHTEXT_ICON_KEYS = {
   applyLink: 'richtext:applyLink',
   removeLink: 'richtext:removeLink',
   cancel: 'richtext:cancel',
+  openLink: 'richtext:openLink',
+  editLink: 'richtext:editLink',
 } as const;
 
 const INLINE_FORMAT_ACTIONS = [
@@ -459,6 +464,38 @@ const defaultToolbarIcons: Record<string, ReactNode> = {
       />
     </svg>
   ),
+  openLink: (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true">
+      <path
+        d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  ),
+  editLink: (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden="true">
+      <path
+        d="M4 20h4L19 9a2.83 2.83 0 0 0-4-4L4 16zM13.5 6.5l4 4"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  ),
 };
 
 /** Renders a short text label as a toolbar glyph (for heading buttons). */
@@ -663,6 +700,12 @@ export interface RichTextEditorToolbarProps extends BaseProps<HTMLDivElement> {
    * focus and the selection to the editor; a URL that cannot be linked shows
    * an error under the field, which keeps focus.
    *
+   * While the editor is editable, a card also shows for the link holding the
+   * caret, or the one the pointer rests on: its address (which opens it in a
+   * new tab), Open in new tab, Edit (its text and address, also Cmd/Ctrl+K
+   * with the caret in the link), and Remove. Cmd-click (Ctrl-click off Apple
+   * platforms) follows a link. `promptForUrl` replaces the card too.
+   *
    * Requires `LinkNode` to be registered (it is, by default) — no extra setup.
    * The entered URL is sanitized (see `sanitizeUrl`) so only
    * http/https/mailto/tel links are written.
@@ -673,7 +716,7 @@ export interface RichTextEditorToolbarProps extends BaseProps<HTMLDivElement> {
    * Called to obtain a URL when the link button is pressed on a non-link
    * selection. Return the URL string to link, or `null`/`''` to cancel.
    * Receives the currently selected text as a hint. When omitted, the built-in
-   * link popover is used. This synchronous override is retained
+   * link popover and link card are used. This synchronous override is retained
    * for consumers that already provide their own URL UI.
    */
   promptForUrl?: (selectedText: string) => string | null | undefined;
@@ -1237,6 +1280,22 @@ export function RichTextEditorToolbar({
               />
             ) : null
           }
+        />
+      )}
+      {/* The card renders into the editor's own positioned element, beside
+          the editable text, while the editor is editable. */}
+      {hasLink && promptForUrl == null && isEditable && (
+        <LinkCard
+          size={size}
+          isHidden={isLinkPopoverOpen}
+          icons={{
+            link: icon('link'),
+            openLink: icon('openLink'),
+            editLink: icon('editLink'),
+            removeLink: icon('removeLink'),
+            applyLink: icon('applyLink'),
+            cancel: icon('cancel'),
+          }}
         />
       )}
     </>

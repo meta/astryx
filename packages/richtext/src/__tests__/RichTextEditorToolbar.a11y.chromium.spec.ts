@@ -11,7 +11,11 @@
  *   24px target. And that the Link button's popover keeps the editor's
  *   selection through the keyboard: Escape returns focus and the selection to
  *   the editor, a refused URL keeps focus in the field, and Enter applies the
- *   link without the key reaching the editor as a new line.
+ *   link without the key reaching the editor as a new line. And that the link
+ *   card sits under its link inside the editor without reflowing a block,
+ *   renders beside the editable text, is reached with Escape then Tab, leaves
+ *   with Escape, opens from the pointer, and that Ctrl-click follows a link
+ *   whose pointer cursor shows only while Ctrl is held.
  *
  * Run after building Storybook:
  *   pnpm storybook:build
@@ -19,7 +23,7 @@
  */
 
 import AxeBuilder from '@axe-core/playwright';
-import {expect, test} from '@playwright/test';
+import {expect, test, type Locator, type Page} from '@playwright/test';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -173,4 +177,144 @@ test('the link popover keeps the selection through the keyboard', async ({
   ).toHaveAttribute('href', 'https://example.com/launch');
   await expect(editor.locator('p')).toHaveCount(1);
   await expect(editor).toHaveText('Ship the launch notes today.');
+});
+
+/**
+ * Puts the page's selection in the editor's text run holding `words`, from
+ * `from` to `to`, as a click or a drag would; the editor reads it from there.
+ */
+async function selectInEditor(
+  page: Page,
+  words: string,
+  from: number,
+  to = from,
+) {
+  await page.evaluate(
+    ({words, from, to}) => {
+      const root = document.querySelector('[contenteditable="true"]');
+      if (root == null) {
+        throw new Error('no editor');
+      }
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        if (node.textContent?.includes(words)) {
+          document.getSelection()?.setBaseAndExtent(node, from, node, to);
+          return;
+        }
+      }
+      throw new Error(`no text run holds "${words}"`);
+    },
+    {words, from, to},
+  );
+}
+
+test('the link card overlays its link without reflowing the document', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 900, height: 600});
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=${LINK_STORY}&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:ltr`,
+    {waitUntil: 'load'},
+  );
+  const editor = page.getByRole('textbox', {name: 'Notes'});
+  await editor.click();
+  await page.keyboard.type('Ship the launch notes today.');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('The next paragraph stays where it is.');
+  await selectInEditor(page, 'Ship the launch notes today.', 9, 21);
+  await page.getByRole('button', {name: 'Link', exact: true}).click();
+  await page.getByRole('textbox', {name: 'URL'}).fill('example.com/launch');
+  await page.keyboard.press('Enter');
+  const link = editor.getByRole('link', {name: 'launch notes'});
+  await expect(link).toHaveAttribute('href', 'https://example.com/launch');
+
+  // The caret outside the link: no card. Record where every block sits.
+  await selectInEditor(page, ' today.', 7);
+  const card = page.getByRole('group', {name: 'Link'});
+  await expect(card).toBeHidden();
+  const blocks = () =>
+    editor
+      .locator('p')
+      .evaluateAll(paragraphs =>
+        paragraphs.map(p => [
+          p.getBoundingClientRect().top,
+          p.getBoundingClientRect().height,
+        ]),
+      );
+  const before = await blocks();
+
+  // The caret in the link opens its card under the link's line.
+  await selectInEditor(page, 'launch notes', 2);
+  await expect(card).toBeVisible();
+  await expect(
+    card.getByRole('link', {name: 'example.com/launch'}),
+  ).toBeVisible();
+  expect(await blocks()).toEqual(before);
+  const boxOf = async (locator: Locator) => {
+    const box = await locator.boundingBox();
+    if (box == null) {
+      throw new Error('not rendered');
+    }
+    return box;
+  };
+  const linkBox = await boxOf(link);
+  const cardBox = await boxOf(card);
+  const editorBox = await boxOf(editor);
+  expect(cardBox.y).toBeGreaterThanOrEqual(linkBox.y + linkBox.height);
+  expect(Math.abs(cardBox.x - linkBox.x)).toBeLessThanOrEqual(1);
+  expect(cardBox.x + cardBox.width).toBeLessThanOrEqual(
+    editorBox.x + editorBox.width + 1,
+  );
+  expect(
+    await card.evaluate(element => {
+      const root = document.querySelector('[contenteditable="true"]');
+      return (
+        root != null &&
+        !root.contains(element) &&
+        element.parentElement === root.parentElement
+      );
+    }),
+  ).toBe(true);
+  const axe = await new AxeBuilder({page})
+    .include('[role="group"][aria-label="Link"]')
+    .analyze();
+  expect(axe.violations).toEqual([]);
+
+  // Escape, then Tab, reaches the card; Escape in it returns to the editor
+  // and the card stays away.
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Tab');
+  await expect(
+    card.getByRole('link', {name: 'example.com/launch'}),
+  ).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(card).toBeHidden();
+  await expect(editor).toBeFocused();
+
+  // The pointer resting on the link opens the card again.
+  await link.hover();
+  await expect(card).toBeVisible();
+  expect(await blocks()).toEqual(before);
+
+  // A link reads as text until Ctrl is held over it; then Ctrl-click opens it.
+  const cursor = () =>
+    link.evaluate(element => getComputedStyle(element).cursor);
+  expect(await cursor()).toBe('text');
+  await page.keyboard.down('Control');
+  await link.hover({position: {x: 4, y: 4}});
+  await expect.poll(cursor).toBe('pointer');
+  await page.evaluate(() => {
+    const opened: string[] = [];
+    Object.assign(window, {opened});
+    window.open = (url?: string | URL) => {
+      opened.push(String(url));
+      return null;
+    };
+  });
+  await link.click({modifiers: ['Control']});
+  await page.keyboard.up('Control');
+  await expect.poll(cursor).toBe('text');
+  expect(
+    await page.evaluate(() => (window as unknown as {opened: string[]}).opened),
+  ).toEqual(['https://example.com/launch']);
 });
