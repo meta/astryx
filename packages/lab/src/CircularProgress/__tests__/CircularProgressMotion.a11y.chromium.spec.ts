@@ -418,27 +418,46 @@ test('a value change lays out and paints nothing per frame', async ({
   browser,
 }) => {
   await open(page, 20);
-  // Stretch the theme's duration so the trace sits wholly inside the change.
+  // Stretch the theme's duration so the window below sits wholly inside the
+  // change.
   await page.evaluate(() =>
     (
       document.querySelector('.astryx-circular-progress-fill') as HTMLElement
     ).style.setProperty('--duration-medium', '3000ms'),
   );
+  // Tracing starts before the change, so however long it takes to start, it
+  // takes none of the change's time, and the page marks the window it judges
+  // in the trace itself: from two frames after the change's animations are
+  // ready, 200 ms in, to a second later.
+  await browser.startTracing(page, {
+    categories: [
+      'devtools.timeline',
+      'disabled-by-default-devtools.timeline',
+      'blink.user_timing',
+    ],
+  });
   await setArgs(page, {value: 80});
   await page.waitForTimeout(200);
-  await browser.startTracing(page, {
-    categories: ['devtools.timeline', 'disabled-by-default-devtools.timeline'],
+  await page.evaluate(async () => {
+    await Promise.all(document.getAnimations().map(async a => a.ready));
+    await new Promise(resolve =>
+      requestAnimationFrame(() => requestAnimationFrame(resolve)),
+    );
+    performance.mark('window-start');
   });
   await page.waitForTimeout(1000);
-  const moving = await page.evaluate(() =>
-    document.getAnimations().some(a => a.playState === 'running'),
-  );
+  const moving = await page.evaluate(() => {
+    performance.mark('window-end');
+    return document.getAnimations().some(a => a.playState === 'running');
+  });
   const trace = JSON.parse((await browser.stopTracing()).toString()) as {
     traceEvents: {
       name: string;
       ph: string;
       pid: number;
       tid: number;
+      cat?: string;
+      ts: number;
       args?: {name?: string};
     }[];
   };
@@ -448,9 +467,20 @@ test('a value change lays out and paints nothing per frame', async ({
       .filter(e => e.args?.name === 'CrRendererMain')
       .map(e => `${e.pid}:${e.tid}`),
   );
+  const mark = (name: string) =>
+    trace.traceEvents.find(
+      e => e.cat === 'blink.user_timing' && e.name === name,
+    )?.ts ?? NaN;
+  const from = mark('window-start');
+  const to = mark('window-end');
+  expect(to - from).toBeGreaterThanOrEqual(1_000_000);
   const count = (name: string) =>
     trace.traceEvents.filter(
-      e => e.name === name && mainThreads.has(`${e.pid}:${e.tid}`),
+      e =>
+        e.name === name &&
+        mainThreads.has(`${e.pid}:${e.tid}`) &&
+        e.ts >= from &&
+        e.ts <= to,
     ).length;
   // A full second of the change: nothing lays out or paints. A
   // stroke-dashoffset transition repainted every frame (36 paints in 410 ms).
