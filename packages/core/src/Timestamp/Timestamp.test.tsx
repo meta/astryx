@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import 'temporal-polyfill/full/global';
 import {
   describe,
   it,
@@ -7,9 +8,18 @@ import {
   vi,
   beforeAll,
   beforeEach,
+  afterAll,
   afterEach,
+  onTestFinished,
 } from 'vitest';
-import {render, screen, act, waitFor, fireEvent} from '@testing-library/react';
+import {
+  render,
+  screen,
+  act,
+  waitFor,
+  fireEvent,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Profiler} from 'react';
 import {hydrateRoot, type Root} from 'react-dom/client';
@@ -19,6 +29,8 @@ import {formatInstant} from './formatInstant';
 import {formatTooltipLines} from './tooltipEntries';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {InternationalizationProvider} from '../i18n';
+import type {CalendarSystem} from '../utils/calendarSystem';
+import {__resetDevWarnings} from '../utils/devWarning';
 
 async function openTimestampHoverCard(): Promise<HTMLElement> {
   const timestamp = document.querySelector('time');
@@ -1657,5 +1669,249 @@ describe('Timestamp server rendering', () => {
       act(() => root?.unmount());
       host.remove();
     }
+  });
+});
+
+describe('Timestamp calendar systems', () => {
+  const INSTANT = new Date('2026-10-30T12:00:00Z');
+  const VALUE = INSTANT.toISOString();
+
+  // Independent option bags: the date-bearing formats as Intl spells them.
+  const DATE_OPTIONS = {
+    full: {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit',
+      timeZoneName: 'short',
+    },
+    date: {year: 'numeric', month: 'short', day: 'numeric'},
+    date_long: {year: 'numeric', month: 'long', day: 'numeric'},
+    date_weekday: {
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+    },
+    date_time: {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    },
+  } as const satisfies Record<string, Intl.DateTimeFormatOptions>;
+  const DATE_FORMATS = Object.keys(
+    DATE_OPTIONS,
+  ) as (keyof typeof DATE_OPTIONS)[];
+  const CALENDAR_LOCALES = [
+    {calendar: 'persian', locale: 'en', year: '1405'},
+    {calendar: 'persian', locale: 'fa', year: '۱۴۰۵'},
+    {calendar: 'hebrew', locale: 'en', year: '5787'},
+    {calendar: 'hebrew', locale: 'he', year: '5787'},
+    {calendar: 'buddhist', locale: 'en', year: '2569'},
+    {calendar: 'buddhist', locale: 'th', year: '2569'},
+  ] as const;
+
+  afterEach(() => {
+    __resetDevWarnings();
+    vi.restoreAllMocks();
+  });
+
+  describe.each(CALENDAR_LOCALES)(
+    'formatInstant in $calendar under $locale',
+    ({calendar, locale, year}) => {
+      it.each(DATE_FORMATS)('writes %s in the calendar', format => {
+        const value = formatInstant(INSTANT, format, locale, {
+          timeZone: 'UTC',
+          calendar,
+        });
+        expect(value).toBe(
+          new Intl.DateTimeFormat(locale, {
+            ...DATE_OPTIONS[format],
+            timeZone: 'UTC',
+            calendar,
+          }).format(INSTANT),
+        );
+        expect(value).toContain(year);
+        expect(value).not.toContain('2026');
+      });
+
+      it.each([
+        'time',
+        'system_date',
+        'system_date_time',
+        'system_time',
+        'unix_seconds',
+      ] as const)('keeps %s unchanged', format => {
+        expect(
+          formatInstant(INSTANT, format, locale, {timeZone: 'UTC', calendar}),
+        ).toBe(formatInstant(INSTANT, format, locale, {timeZone: 'UTC'}));
+      });
+    },
+  );
+
+  it.each(DATE_FORMATS)('defaults %s to the Gregorian calendar', format => {
+    expect(formatInstant(INSTANT, format, 'fa', {timeZone: 'UTC'})).toBe(
+      formatInstant(INSTANT, format, 'fa', {
+        timeZone: 'UTC',
+        calendar: 'gregory',
+      }),
+    );
+    expect(formatInstant(INSTANT, format, 'en', {timeZone: 'UTC'})).toContain(
+      '2026',
+    );
+  });
+
+  it('keeps the system formats Gregorian ISO in every calendar', () => {
+    expect(
+      formatInstant(INSTANT, 'system_date_time', 'fa', {
+        timeZone: 'UTC',
+        calendar: 'persian',
+      }),
+    ).toBe('2026-10-30 12:00:00');
+  });
+
+  function renderTimestamp(
+    provider: {locale: string; calendar?: CalendarSystem},
+    format: 'date_long' | 'date_time' | 'system_date' | 'relative',
+  ) {
+    return render(
+      <InternationalizationProvider {...provider}>
+        <Timestamp
+          value={VALUE}
+          format={format}
+          hasTooltip={false}
+          data-testid="ts"
+        />
+      </InternationalizationProvider>,
+    );
+  }
+
+  it.each(CALENDAR_LOCALES)(
+    'renders date_long in the provider calendar $calendar under $locale',
+    ({calendar, locale, year}) => {
+      renderTimestamp({locale, calendar}, 'date_long');
+      const text = screen.getByTestId('ts').textContent;
+      expect(text).toBe(
+        formatInstant(INSTANT, 'date_long', locale, {calendar}),
+      );
+      expect(text).toContain(year);
+    },
+  );
+
+  it('keeps the time of day of date_time in the provider calendar', () => {
+    renderTimestamp({locale: 'en', calendar: 'persian'}, 'date_time');
+    const text = screen.getByTestId('ts').textContent ?? '';
+    expect(text).toBe(
+      formatInstant(INSTANT, 'date_time', 'en', {calendar: 'persian'}),
+    );
+    expect(text).toContain('Aban');
+    expect(text).toMatch(/\d:\d\d/);
+  });
+
+  it('keeps system_date Gregorian ISO under a provider calendar', () => {
+    renderTimestamp({locale: 'fa', calendar: 'persian'}, 'system_date');
+    expect(screen.getByTestId('ts').textContent).toBe(
+      formatInstant(INSTANT, 'system_date', 'fa'),
+    );
+    expect(screen.getByTestId('ts').textContent).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('names relative output with the full date in the provider calendar', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(INSTANT.getTime() + 2 * 3600 * 1000));
+    try {
+      renderTimestamp({locale: 'en', calendar: 'hebrew'}, 'relative');
+      const name = screen.getByTestId('ts').getAttribute('aria-label') ?? '';
+      expect(name).toBe(
+        formatInstant(INSTANT, 'full', 'en', {
+          calendar: 'hebrew',
+          timeZoneNameStyle: 'long',
+        }),
+      );
+      expect(name).toContain('5787');
+      expect(screen.getByTestId('ts').textContent).toBe('2 hours ago');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reads the calendar from a -u-ca- keyword in the provider locale', () => {
+    renderTimestamp({locale: 'th-TH-u-ca-buddhist'}, 'date_long');
+    expect(screen.getByTestId('ts')).toHaveTextContent('2569');
+  });
+
+  it('keeps Gregorian dates when the locale names no calendar', () => {
+    renderTimestamp({locale: 'fa-IR'}, 'date_long');
+    expect(screen.getByTestId('ts').textContent).toBe(
+      formatInstant(INSTANT, 'date_long', 'fa-IR'),
+    );
+  });
+
+  it('writes tooltip rows in the provider calendar', async () => {
+    await import('./TimestampHoverCard');
+    const originalShowPopover = HTMLElement.prototype.showPopover;
+    HTMLElement.prototype.showPopover = vi.fn();
+    onTestFinished(() => {
+      HTMLElement.prototype.showPopover = originalShowPopover;
+    });
+    render(
+      <InternationalizationProvider locale="en" calendar="persian">
+        <Timestamp
+          value={VALUE}
+          format="date"
+          tooltipEntries={[
+            {timezoneID: 'UTC', label: 'UTC'},
+            {timezoneID: 'UTC', format: 'system_date_time', label: 'ISO'},
+          ]}
+          data-testid="ts"
+        />
+      </InternationalizationProvider>,
+    );
+    const card = await openTimestampHoverCard();
+    expect(
+      within(card).getByText(
+        formatInstant(INSTANT, 'full', 'en', {
+          timeZone: 'UTC',
+          calendar: 'persian',
+        }),
+      ),
+    ).toBeInTheDocument();
+    expect(within(card).getByText('2026-10-30 12:00:00')).toBeInTheDocument();
+  });
+
+  describe('without Temporal', () => {
+    const globals = globalThis as {Temporal?: unknown};
+    let savedTemporal: unknown;
+
+    beforeAll(() => {
+      savedTemporal = globals.Temporal;
+      delete globals.Temporal;
+    });
+
+    afterAll(() => {
+      globals.Temporal = savedTemporal;
+    });
+
+    it('shows Gregorian dates for a calendar that needs Temporal', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      renderTimestamp({locale: 'en', calendar: 'persian'}, 'date_long');
+      expect(screen.getByTestId('ts').textContent).toBe(
+        formatInstant(INSTANT, 'date_long', 'en'),
+      );
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('needs Temporal'),
+      );
+    });
+
+    it('still shows the buddhist calendar, which needs no Temporal', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      renderTimestamp({locale: 'en', calendar: 'buddhist'}, 'date_long');
+      expect(screen.getByTestId('ts')).toHaveTextContent('2569');
+      expect(warn).not.toHaveBeenCalled();
+    });
   });
 });

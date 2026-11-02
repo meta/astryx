@@ -4,7 +4,7 @@
 
 /**
  * @file Timestamp.tsx
- * @input Uses React, Text, provider locale, and Timestamp formatters
+ * @input Uses React, Text, provider locale and calendar, and Timestamp formatters
  * @output Exports Timestamp component and related types
  * @position Core implementation; renders formatted timestamps
  *
@@ -31,6 +31,7 @@ import type {TextType, TextSize, TextColor, TextWeight} from '../theme/types';
 import {mergeProps} from '../utils';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {useLocale} from '../i18n/useLocale';
+import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {formatInstant} from './formatInstant';
@@ -297,6 +298,7 @@ export function Timestamp({
 }: TimestampProps) {
   const t = useComponentTranslator();
   const locale = useLocale();
+  const calendar = useCalendarSystem(undefined, 'Timestamp');
   const timeRef = useRef<HTMLTimeElement>(null);
   const mergedTimeRef = useMergedRefs(ref, timeRef);
   // Only relative and auto formats depend on the current time. Absolute
@@ -362,8 +364,8 @@ export function Timestamp({
               // the server and the hydrating client produce the same text in
               // every time zone.
               isClockPending
-                ? {timeZone: 'UTC', isTimezoneShown: true}
-                : {isTimezoneShown},
+                ? {timeZone: 'UTC', isTimezoneShown: true, calendar}
+                : {isTimezoneShown, calendar},
             )
           : '';
 
@@ -372,10 +374,13 @@ export function Timestamp({
   // out in full: abbreviations like "PST" or "GMT+2" are unexpanded
   // abbreviations to a screen-reader user (WCAG 3.1.4).
   const fullAbsoluteText = isValidDate
-    ? formatInstant(date, 'full', locale)
+    ? formatInstant(date, 'full', locale, {calendar})
     : '';
   const ariaLabelText = isValidDate
-    ? formatInstant(date, 'full', locale, {timeZoneNameStyle: 'long'})
+    ? formatInstant(date, 'full', locale, {
+        timeZoneNameStyle: 'long',
+        calendar,
+      })
     : '';
 
   // Syncs the relative time with an interval timer while the timestamp is live.
@@ -424,7 +429,7 @@ export function Timestamp({
   const lines: ReadonlyArray<TimestampTooltipLine> =
     entries === undefined
       ? [{value: fullAbsoluteText, isCopyable: true}]
-      : formatTooltipLines(date, entries, locale);
+      : formatTooltipLines(date, entries, locale, calendar);
 
   const timestampProps = mergeProps(
     themeProps('timestamp', {format: effectiveFormat}),

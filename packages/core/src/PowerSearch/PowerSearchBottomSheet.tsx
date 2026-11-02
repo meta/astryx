@@ -76,6 +76,7 @@ import {useAnnounce, type AnnounceFn} from '../hooks/useAnnounce';
 import type {TranslatorFn} from '../i18n';
 import {useListFormatter} from '../i18n/useListFormatter';
 import {useLocale} from '../i18n/useLocale';
+import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import {SheetConfirmation} from '../internal/SheetConfirmation';
 import {useDismissSearchOnTouchDrag} from '../internal/useDismissSearchOnTouchDrag';
 import {
@@ -968,6 +969,7 @@ export function PowerSearchBottomSheet({
   const {NestedEditor} = editors;
   const t = useComponentTranslator();
   const locale = useLocale();
+  const calendar = useCalendarSystem(undefined, 'PowerSearch');
   const formatList = useListFormatter();
   const isInteractive = !isDisabled && !isReadOnly;
 
@@ -1524,13 +1526,14 @@ export function PowerSearchBottomSheet({
               filter.value,
               Number.MAX_SAFE_INTEGER,
               locale,
+              calendar,
               t,
               formatList,
               timezoneID,
             );
       return {label, value};
     },
-    [config, editors, formatList, locale, t, timezoneID],
+    [calendar, config, editors, formatList, locale, t, timezoneID],
   );
   const describeFilter = useCallback(
     (filter: PowerSearchFilter): string => {
