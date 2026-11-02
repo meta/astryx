@@ -3,17 +3,17 @@
 'use client';
 
 /**
- * @file useAttachment.ts
- * @input An element ref, an attach function and a key
- * @output Exports useAttachment, useIsUnmountedRef, and the gesture-sync
- *   depth (syncingGestures, isSyncingGestures) both hooks read
- * @position Internal React helpers shared by useGestureRecognizer and
+ * @file gestureSync.ts
+ * @input Nothing: module state and a React ref
+ * @output Exports useIsUnmountedRef, and the gesture-sync depth
+ *   (syncingGestures, isSyncingGestures) the gesture hooks read
+ * @position Internal helpers shared by useGestureRecognizer and
  *   usePressTracker, so each hook imports only what it uses
  *
- * SYNC: When modified, update useGestureRecognizer.test.tsx.
+ * SYNC: When modified, update __tests__/useGestureRecognizer.test.tsx.
  */
 
-import {useRef, type RefObject} from 'react';
+import {useRef} from 'react';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 
 /**
@@ -57,43 +57,4 @@ export function useIsUnmountedRef(): {readonly current: boolean} {
     };
   }, []);
   return isUnmountedRef;
-}
-
-/**
- * Keep `attach` bound to the element `ref` holds after each commit. A
- * replaced node is released and the new one attached, a changed `key`
- * re-attaches, and the last attachment is released on unmount; a commit that
- * changes neither does nothing (react-component-runtime INV3).
- */
-export function useAttachment(
-  ref: RefObject<Element | null>,
-  attach: (element: Element) => () => void,
-  key: unknown,
-): void {
-  const attachmentRef = useRef<{
-    element: Element;
-    key: unknown;
-    release: () => void;
-  } | null>(null);
-
-  // Syncs the attachment with the DOM node `ref` holds after this commit.
-  useIsomorphicLayoutEffect(() => {
-    const element = ref.current;
-    const current = attachmentRef.current;
-    if (current?.element === element && current?.key === key) {
-      return;
-    }
-    current?.release();
-    attachmentRef.current =
-      element == null ? null : {element, key, release: attach(element)};
-  });
-
-  // Releases the attachment at unmount.
-  useIsomorphicLayoutEffect(
-    () => () => {
-      attachmentRef.current?.release();
-      attachmentRef.current = null;
-    },
-    [],
-  );
 }

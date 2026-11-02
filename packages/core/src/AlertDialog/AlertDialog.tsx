@@ -30,8 +30,14 @@ import type {ButtonVariant} from '../Button';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n/useTranslator';
 import {useMediaQuery} from '../hooks/useMediaQuery';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/AlertDialog/AlertDialog.generated';
+
+registerEnglishFallback(english);
 
 const SMALL_SCREEN_QUERY = '(max-width: 640px)';
 
@@ -158,7 +164,7 @@ export function AlertDialog({
   'data-testid': testId,
   ...rest
 }: AlertDialogProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const cancelLabel = cancelLabelFromProps ?? t('@astryx.alertDialog.cancel');
   const titleId = useId();
   const descriptionId = useId();

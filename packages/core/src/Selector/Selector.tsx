@@ -100,12 +100,18 @@ import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {VisuallyHidden} from '../VisuallyHidden';
-import {useTranslator} from '../i18n';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {SelectorBottomSheet} from './SelectorBottomSheet';
 import {useSelectorPresentation} from './useSelectorPresentation';
 import {selectorPresentationStyles} from './selectorPresentation.stylex';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Selector/Selector.generated';
+
+registerEnglishFallback(english);
 
 const styles = stylex.create({
   // Trigger container — the enhanced click target wrapping the combobox button and clear button as siblings
@@ -933,7 +939,7 @@ function filterOptionsByQuery(
 export function Selector<T extends SelectorOptionType>(
   props: SelectorProps<T>,
 ) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const pressable = usePressFeedback();
   const {
     label,

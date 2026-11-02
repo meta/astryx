@@ -102,12 +102,18 @@ import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {VisuallyHidden} from '../VisuallyHidden';
-import {useTranslator} from '../i18n';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {SelectorBottomSheet} from '../Selector/SelectorBottomSheet';
 import {useSelectorPresentation} from '../Selector/useSelectorPresentation';
 import {selectorPresentationStyles} from '../Selector/selectorPresentation.stylex';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/MultiSelector/MultiSelector.generated';
+
+registerEnglishFallback(english);
 
 // Sentinel value for the select-all item in keyboard navigation
 const SELECT_ALL_VALUE = '__xds_select_all__';
@@ -1142,7 +1148,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         controlClassName != null ||
         controlStyle != null),
   );
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const pressable = usePressFeedback();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =

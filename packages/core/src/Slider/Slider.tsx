@@ -56,7 +56,13 @@ import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Slider/Slider.generated';
+
+registerEnglishFallback(english);
 // =============================================================================
 // Types
 // =============================================================================
@@ -511,7 +517,7 @@ export function Slider({ref, ...props}: SliderProps) {
     'aria-describedby': ariaDescribedByProp,
     ...restWithRange
   } = props;
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {minStepsBetweenThumbs: _minSteps, ...restProps} =
     restWithRange as typeof restWithRange & {minStepsBetweenThumbs?: number};
   const {rest, container} = useFieldInputStyling('Slider', restProps, {
