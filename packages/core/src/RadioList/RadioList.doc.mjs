@@ -89,20 +89,21 @@ export const docs = {
     {
       name: 'isDisabled',
       type: 'boolean',
-      description: 'Whether all radio items are disabled.',
+      description:
+        'Whether all radio items are disabled. Disabled radios stay focusable and announce as disabled, refuse selection, and submit no value.',
       default: 'false',
     },
     {
       name: 'htmlName',
       type: 'string',
       description:
-        'The HTML name attribute shared by the radio inputs, useful for form submissions. When omitted, a unique internal name still groups the radios.',
+        'The HTML name attribute shared by the radio inputs, useful for form submissions. When omitted, a unique internal name still groups the radios. A disabled group submits nothing, so its radios use the internal name.',
     },
     {
       name: 'disabledMessage',
       type: 'string',
       description:
-        'Explains why the group is disabled. Applies to the whole-group disabled state (isDisabled), not per item. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the radios focusable via aria-disabled (selection stays blocked). Use this instead of wrapping a disabled RadioList in Tooltip. Disabled controls swallow the hover events an external Tooltip needs.',
+        'Explains why the group is disabled. Applies to the whole-group disabled state (isDisabled), not per item. With isDisabled, shows a tooltip on hover/keyboard focus. Disabled radios stay focusable via aria-disabled with or without a reason, and selection stays blocked. Use this instead of wrapping a disabled RadioList in Tooltip.',
     },
     {
       name: 'isRequired',
@@ -148,12 +149,14 @@ export const docs = {
     {
       name: 'containerClassName',
       type: 'string',
-      description: 'Class name for the field container. Same targeting as `containerXstyle`.',
+      description:
+        'Class name for the field container. Same targeting as `containerXstyle`.',
     },
     {
       name: 'containerStyle',
       type: 'CSSProperties',
-      description: 'Inline styles for the field container. Same targeting as `containerXstyle`.',
+      description:
+        'Inline styles for the field container. Same targeting as `containerXstyle`.',
     },
     {
       name: 'controlXstyle',
@@ -221,7 +224,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          'Wrap a disabled RadioList in Tooltip to explain why it is disabled; disabled controls swallow the hover events the wrapper needs. Use the disabledMessage prop instead.',
+          'Wrap a disabled RadioList in Tooltip to explain why it is disabled. Use the disabledMessage prop instead.',
       },
     ],
     anatomy: [
@@ -283,7 +286,7 @@ export const docsZh = {
       {
         guidance: false,
         description:
-          'Wrap a disabled RadioList in Tooltip to explain why it is disabled; disabled controls swallow the hover events the wrapper needs. Use the disabledMessage prop instead.',
+          'Wrap a disabled RadioList in Tooltip to explain why it is disabled. Use the disabledMessage prop instead.',
       },
     ],
     anatomy: [
@@ -347,7 +350,7 @@ export const docsDense = {
       {
         guidance: false,
         description:
-          'Wrap a disabled RadioList in Tooltip to explain why it is disabled; disabled controls swallow the hover events the wrapper needs. Use the disabledMessage prop instead.',
+          'Wrap a disabled RadioList in Tooltip to explain why it is disabled. Use the disabledMessage prop instead.',
       },
     ],
     anatomy: [
