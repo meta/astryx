@@ -154,8 +154,14 @@ async function recordFrames(row: Locator): Promise<void> {
         : new DOMMatrixReadOnly(getComputedStyle(el).transform).m41;
     const panel = node.querySelector('[data-swipe-panel="trailing"]');
     const track = panel?.firstElementChild ?? null;
+    // Every frame the page draws, travel or not: what a judgment per frame
+    // counts against.
+    const drawn: number[] = [];
     let last = Number.NaN;
     const sample = () => {
+      // One time for the frame, whether it shows a new travel or not.
+      const at = performance.now();
+      drawn.push(at);
       const style = getComputedStyle(node);
       const travel = parseFloat(
         style.getPropertyValue('--_item-swipe-travel') || '0',
@@ -164,7 +170,7 @@ async function recordFrames(row: Locator): Promise<void> {
         last = travel;
         frames.push({
           t: Number(document.timeline.currentTime),
-          at: performance.now(),
+          at,
           x: travel,
           opacity: Number(style.opacity),
           parts: {
@@ -180,9 +186,15 @@ async function recordFrames(row: Locator): Promise<void> {
       }
     };
     requestAnimationFrame(sample);
-    Object.assign(window, {__swipeFrames: frames});
+    Object.assign(window, {__swipeFrames: frames, __swipeDrawn: drawn});
   });
 }
+
+/** When the page drew each frame since `recordFrames` (`performance.now()` ms). */
+const framesDrawnOf = async (page: Page): Promise<number[]> =>
+  page.evaluate(
+    () => (window as unknown as {__swipeDrawn: number[]}).__swipeDrawn,
+  );
 
 const framesOf = async (page: Page): Promise<Frame[]> =>
   page.evaluate(
@@ -706,12 +718,22 @@ test('the settle after a held release is UIKit’s spring, frame by frame, with 
     );
   }
   // And the page drew it frame by frame: the gesture writes the travel on
-  // every frame the page draws, so a page that draws few frames (a starved
-  // main thread) shows the settle in few steps.
+  // every frame the page draws. That is judged against the frames the page
+  // drew during the settle (its animation-frame times), not a count at 60 Hz:
+  // a loaded page draws fewer, so it needs at least 4 to judge, and each of
+  // them shows a new travel, on the curve (above).
+  const first = samples[0].at;
+  const last = samples.at(-1)?.at ?? first;
+  const drawn = (await framesDrawnOf(page)).filter(
+    at => at >= first && at <= last,
+  );
   expect(
-    samples.length,
+    drawn.length,
     'frames the page drew during the settle',
-  ).toBeGreaterThan(10);
+  ).toBeGreaterThanOrEqual(4);
+  expect(samples.length, 'frames of the settle that showed a new travel').toBe(
+    drawn.length,
+  );
 });
 
 test('a flick hands the row’s velocity to the settle', async ({page}) => {
