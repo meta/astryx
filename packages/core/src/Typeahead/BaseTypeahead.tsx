@@ -1122,10 +1122,11 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       setHighlightedIndex(nextHighlightedIndex);
       if (bootstrapResults.length > 0) {
         showLayer();
-      } else {
-        // An open list whose focus entries are now all gone (each one
-        // committed as a Tokenizer token, say) closes rather than staying
-        // open and empty (component:Tokenizer FR15).
+      } else if (committedChoices != null) {
+        // A Tokenizer list left with no eligible choice (its focus entries
+        // all committed, or the request failed) closes rather than staying
+        // open and empty (component:Tokenizer FR15). A plain Typeahead
+        // provides no committed choices and keeps its current behavior.
         popover.hide();
       }
     },
@@ -1136,6 +1137,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       showLayer,
       replaceResults,
       popover,
+      committedChoices,
     ],
   );
 
