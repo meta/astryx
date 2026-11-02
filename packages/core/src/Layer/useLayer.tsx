@@ -606,12 +606,34 @@ function settledBox(layer: HTMLElement): DOMRect {
  * viewport on the block axis. Only a box that overlaps the anchor counts; a
  * layer flush against it does not.
  */
-function failsAnchor(layer: HTMLElement, anchor: HTMLElement): boolean {
+/**
+ * How far an anchor has moved since its layer was laid out. The layer follows
+ * the anchor only when the next frame renders, so a read in between moves the
+ * layer's box by this much to judge it where that frame will draw it.
+ */
+interface AnchorShift {
+  readonly dx: number;
+  readonly dy: number;
+}
+
+const NO_SHIFT: AnchorShift = {dx: 0, dy: 0};
+
+function failsAnchor(
+  layer: HTMLElement,
+  anchor: HTMLElement,
+  shift: AnchorShift = NO_SHIFT,
+): boolean {
   const a = anchor.getBoundingClientRect();
-  const l = settledBox(layer);
-  if (l.width <= 0 || l.height <= 0) {
+  const box = settledBox(layer);
+  if (box.width <= 0 || box.height <= 0) {
     return false;
   }
+  const l = {
+    top: box.top + shift.dy,
+    bottom: box.bottom + shift.dy,
+    left: box.left + shift.dx,
+    right: box.right + shift.dx,
+  };
   const covers =
     l.left < a.right &&
     a.left < l.right &&
@@ -636,25 +658,28 @@ function failsAnchor(layer: HTMLElement, anchor: HTMLElement): boolean {
  * content's size, its anchor's size or the viewport changes; each of those
  * reads lands before the next frame paints. A same-size anchor that moves on
  * screen, in layout or because something scrolled, is reported after paint by
- * the anchor-move observer and read in the next frame, before it paints (FR8),
- * or in the frame after, if a scroll moved the anchor since that frame was
- * laid out (`observeAnchorClearance`).
- * Scroll events are not read: during one the
- * anchor has moved but the layer anchored to it not yet, so the read would
- * compare a moved anchor with a stale layer. Once switched, a layer keeps its
+ * the anchor-move observer and read in the next frame, before it paints (FR8).
+ * A scroll can move the anchor after the layer was laid out, and the layer
+ * follows it only when the next frame renders, so that read moves the layer's
+ * box by the anchor's move since then (`shift`) and judges it where the next
+ * frame draws it (`observeAnchorClearance`). Scroll events are not read. Once switched, a layer keeps its
  * anchor-clear list until it next opens, so it never jumps back over its
  * trigger while open; it is placed afresh (`placeAfresh`) only when the switch
  * does not take effect at once, or when a later read finds it failing again.
  */
-function keepAnchorClear(layer: HTMLElement, anchor: HTMLElement | null): void {
-  if (anchor && failsAnchor(layer, anchor)) {
+function keepAnchorClear(
+  layer: HTMLElement,
+  anchor: HTMLElement | null,
+  shift: AnchorShift = NO_SHIFT,
+): void {
+  if (anchor && failsAnchor(layer, anchor, shift)) {
     const switching = !layer.hasAttribute(LAYER_CLEARS_ANCHOR_ATTRIBUTE);
     layer.setAttribute(LAYER_CLEARS_ANCHOR_ATTRIBUTE, '');
     // A switch usually takes effect at once. The engine may instead keep the
     // option it last used, even one the new list does not contain or one a
     // scroll has since made fail: then, and on any later read that finds the
     // switched layer failing again, place it afresh.
-    if (!switching || failsAnchor(layer, anchor)) {
+    if (!switching || failsAnchor(layer, anchor, shift)) {
       placeAfresh(layer);
     }
   }
@@ -692,7 +717,7 @@ function keepAnchorClear(layer: HTMLElement, anchor: HTMLElement | null): void {
  */
 function observeMove(
   element: HTMLElement,
-  onMove: (laidOut: DOMRectReadOnly | null) => void,
+  onMove: (laidOut: DOMRectReadOnly | null, at: number) => void,
 ): () => void {
   const doc = element.ownerDocument;
   if (typeof IntersectionObserver === 'undefined') {
@@ -706,8 +731,12 @@ function observeMove(
     visibility?.disconnect();
     visibility = null;
   };
-  const moved = (threshold: number, laidOut: DOMRectReadOnly | null) => {
-    onMove(laidOut);
+  const moved = (
+    threshold: number,
+    laidOut: DOMRectReadOnly | null,
+    at: number,
+  ) => {
+    onMove(laidOut, at);
     arm(threshold);
   };
   const arm = (threshold: number) => {
@@ -743,7 +772,11 @@ function observeMove(
           const firstVisible = isFirstVisible;
           isFirstVisible = false;
           if (visible && (!firstVisible || hasMoved())) {
-            moved(1, entry?.boundingClientRect ?? null);
+            moved(
+              1,
+              entry?.boundingClientRect ?? null,
+              entry?.time ?? Number.NEGATIVE_INFINITY,
+            );
           }
         },
         {root: doc, threshold: 0},
@@ -755,6 +788,7 @@ function observeMove(
       entries => {
         const entry = entries[entries.length - 1];
         const laidOut = entry?.boundingClientRect ?? null;
+        const at = entry?.time ?? Number.NEGATIVE_INFINITY;
         const ratio = entry?.intersectionRatio ?? 0;
         const first = isFirst;
         isFirst = false;
@@ -762,16 +796,16 @@ function observeMove(
           // Still over its own rectangle, but a move smaller than the
           // rounding of the root margin can leave the ratio at 1.
           if (ratio === 1 && hasMoved()) {
-            moved(1, laidOut);
+            moved(1, laidOut, at);
           }
           return;
         }
         if (!first || ratio > 0) {
-          moved(first ? ratio : 1, laidOut);
+          moved(first ? ratio : 1, laidOut, at);
           return;
         }
         if (hasMoved()) {
-          moved(1, laidOut);
+          moved(1, laidOut, at);
           return;
         }
         if (visibility === null) {
@@ -806,11 +840,13 @@ function observeMove(
  * paints, the fresh placement uses the moved anchor. Reports in one frame
  * share one read. A scroll that runs after the frame that laid the layer out
  * moves the anchor at once, but the layer follows it only when the next frame
- * renders, so reading then would compare the moved anchor with the layer's
- * old box and could switch a layer that fits. The read therefore compares the
- * anchor's box with the one the report saw when that frame was laid out, and
- * if the anchor has moved since, it reads in the next frame instead, once the
- * layer has followed. Returns the function that removes every
+ * renders, so comparing the moved anchor with the layer's box as it stands
+ * could switch a layer that fits. The read therefore moves the layer's box by
+ * however far the anchor has moved since the layer was laid out, from the box
+ * the report saw then or, if a read came later, the box that read saw, and
+ * judges the layer where the coming frame draws it. Every read happens in the
+ * frame after its report, so a move that spans many frames, such as a smooth
+ * scroll, is followed frame by frame. Returns the function that removes every
  * observer and listener it added.
  */
 function observeAnchorClearance(
@@ -837,32 +873,31 @@ function observeAnchorClearance(
     observer.observe(anchor);
   }
   let moveFrame: number | null = null;
-  // Where the anchor was when the layer was last laid out: the box the latest
-  // move report saw, or the one read when a read was put off.
-  let laidOut: {top: number; left: number} | null = null;
+  // Where the anchor stood when the layer was last laid out, and when that
+  // was: the box the latest move report saw, or the box the latest read saw,
+  // whichever is newer. A report that arrives after a later read is older
+  // than that read's box.
+  const start = anchor.getBoundingClientRect();
+  let laidOut = {top: start.top, left: start.left, at: view.performance.now()};
   const readMove = () => {
     if (moveFrame !== null) {
       return;
     }
-    moveFrame = view.requestAnimationFrame(() => {
+    moveFrame = view.requestAnimationFrame(frameTime => {
       moveFrame = null;
       const now = anchor.getBoundingClientRect();
-      if (
-        laidOut != null &&
-        (now.top !== laidOut.top || now.left !== laidOut.left)
-      ) {
-        // The anchor moved after that frame, by a scroll the layer follows
-        // only when the next frame renders: read once it has.
-        laidOut = {top: now.top, left: now.left};
-        readMove();
-        return;
+      const shift = {dx: now.left - laidOut.left, dy: now.top - laidOut.top};
+      // This frame lays the layer out against the anchor where it is now.
+      laidOut = {top: now.top, left: now.left, at: frameTime};
+      if (isCurrent()) {
+        keepAnchorClear(layer, anchor, shift);
       }
-      reread();
     });
   };
-  const stopObservingMove = observeMove(anchor, reported => {
-    laidOut =
-      reported == null ? null : {top: reported.top, left: reported.left};
+  const stopObservingMove = observeMove(anchor, (reported, at) => {
+    if (reported != null && at > laidOut.at) {
+      laidOut = {top: reported.top, left: reported.left, at};
+    }
     readMove();
   });
   view.addEventListener('resize', reread);

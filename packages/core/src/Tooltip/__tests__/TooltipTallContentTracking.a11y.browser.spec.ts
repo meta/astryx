@@ -603,13 +603,15 @@ test('a scroll that moves a tall tooltip’s trigger never leaves the tooltip ov
   expect(tooltip.bottom).toBeLessThanOrEqual(trigger.top);
 });
 
-test('a smooth scroll that carries a tall tooltip’s trigger leaves it clear and in view, and a later scroll is still followed', async ({
+test('a smooth scroll that carries a tall tooltip’s trigger keeps it clear and in view on every painted frame, and a later scroll is still followed', async ({
   page,
 }) => {
   // The 60-line tooltip, switched and below a trigger near the top of a
   // phone. One smooth scroll carries the trigger 440px down the screen over
   // many frames; the observer must follow every frame of it, not only the
-  // first, and stay armed for the next move.
+  // first, and stay armed for the next move. Each painted frame is a new
+  // move, so a frame that covers the trigger or leaves the viewport must be
+  // corrected by the next one (spec:AST-059 FR8).
   await openHeldTooltip(page, {width: 390, height: 700}, '', 150);
   expect(await hasSwitched(page)).toBe(true);
   const settle = async () =>
@@ -624,8 +626,55 @@ test('a smooth scroll that carries a tall tooltip’s trigger leaves it clear an
         last = window.scrollY;
       }
     });
-  await page.evaluate(() => window.scrollBy({top: -440, behavior: 'smooth'}));
-  await settle();
+  const during = await page.evaluate(
+    async ({sel, tip}) => {
+      const box = (el: Element) => {
+        const r = el.getBoundingClientRect();
+        return {top: r.top, bottom: r.bottom, left: r.left, right: r.right};
+      };
+      window.scrollBy({top: -440, behavior: 'smooth'});
+      const out: {tooltip: Box; trigger: Box}[] = [];
+      let last = Number.NaN;
+      let still = 0;
+      while (still < 5 && out.length < 600) {
+        await new Promise<void>(resolve => {
+          requestAnimationFrame(() => {
+            const channel = new MessageChannel();
+            channel.port1.onmessage = () => resolve();
+            channel.port2.postMessage(null);
+          });
+        });
+        const t = document.querySelector(tip);
+        const a = document.querySelector(sel);
+        if (t != null && a != null) {
+          out.push({tooltip: box(t), trigger: box(a)});
+        }
+        still = window.scrollY === last ? still + 1 : 0;
+        last = window.scrollY;
+      }
+      return out;
+    },
+    {sel: TRIGGER, tip: TOOLTIP},
+  );
+  // The scroll spans painted frames, the trigger and tooltip drawn on each; a
+  // loaded runner paints fewer of them, so their number is not the check.
+  expect(during.length).toBeGreaterThan(1);
+  for (const frame of during) {
+    expect(frame.tooltip.bottom - frame.tooltip.top).toBeGreaterThan(0);
+    expect(frame.trigger.bottom - frame.trigger.top).toBeGreaterThan(0);
+  }
+  const fails = (frame: {tooltip: Box; trigger: Box}) =>
+    overlaps(frame.tooltip, frame.trigger) ||
+    frame.tooltip.top < 0 ||
+    frame.tooltip.bottom > 700;
+  for (const [i, frame] of during.entries()) {
+    if (i > 0 && fails(during[i - 1])) {
+      expect(
+        fails(frame),
+        `smooth scroll, painted frame ${i + 1} still covers the trigger or leaves the viewport`,
+      ).toBe(false);
+    }
+  }
   let trigger = await rect(page, TRIGGER);
   let tooltip = await rect(page, TOOLTIP);
   expect(trigger.top).toBeGreaterThan(500);
