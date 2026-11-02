@@ -634,6 +634,36 @@ export function Dialog({
     }
   }, [isOpen, isInline]);
 
+  // A dialog that unmounts while open (rendered only while open, or removed
+  // with the rest of a view) never runs the close branch above, and removing a
+  // <dialog> does not run the browser's own focus return. Focus left inside
+  // it, or dropped to the body by the removal, goes back to the opener.
+  useEffect(() => {
+    if (isInline) {
+      return;
+    }
+    const dialog = dialogRef.current;
+    return () => {
+      const trigger = triggerElementRef.current;
+      if (dialog == null || trigger == null) {
+        return;
+      }
+      // Checked once the commit has finished: StrictMode's simulated unmount
+      // leaves the dialog in the document, and only a real removal returns
+      // focus.
+      queueMicrotask(() => {
+        if (dialog.isConnected || !trigger.isConnected) {
+          return;
+        }
+        const doc = trigger.ownerDocument;
+        const active = doc.activeElement;
+        if (active == null || active === doc.body || dialog.contains(active)) {
+          focusForLastInput(trigger);
+        }
+      });
+    };
+  }, [isInline]);
+
   // Host app-global surfaces (toasts) inside this modal while it is open, so
   // they stay visible and operable above it.
   useModalOutlet(dialogRef, isOpen && !isInline);

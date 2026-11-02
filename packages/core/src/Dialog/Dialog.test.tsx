@@ -9,7 +9,7 @@
  * SYNC: When Dialog.tsx changes, update tests to match new behavior
  */
 
-import {useState, type SyntheticEvent} from 'react';
+import {StrictMode, useState, type SyntheticEvent} from 'react';
 import {readFileSync} from 'node:fs';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import type {MockInstance} from 'vitest';
@@ -120,6 +120,106 @@ beforeEach(() => {
 });
 
 describe('Dialog', () => {
+  // AR2: a dialog that unmounts while open (rendered only while open, or
+  // removed with the rest of a view) returns focus to its opener, as a close
+  // does.
+  describe('unmounting while open', () => {
+    function Editor({unmountWith}: {unmountWith: 'save' | 'view'}) {
+      const [isEditing, setIsEditing] = useState(false);
+      const [showView, setShowView] = useState(true);
+      return (
+        <>
+          <button type="button" onClick={() => setIsEditing(true)}>
+            Edit
+          </button>
+          {showView && isEditing ? (
+            <Dialog
+              isOpen
+              onOpenChange={setIsEditing}
+              aria-label="Edit profile">
+              <button
+                type="button"
+                onClick={() =>
+                  unmountWith === 'save'
+                    ? setIsEditing(false)
+                    : setShowView(false)
+                }>
+                Save
+              </button>
+            </Dialog>
+          ) : null}
+        </>
+      );
+    }
+
+    it.each([['save'], ['view']] as const)(
+      'returns focus to the opener when the dialog unmounts (%s)',
+      async unmountWith => {
+        render(<Editor unmountWith={unmountWith} />);
+        const edit = screen.getByRole('button', {name: 'Edit'});
+        edit.focus();
+        fireEvent.click(edit);
+        const save = screen.getByRole('button', {name: 'Save'});
+        save.focus();
+
+        fireEvent.click(save);
+        await Promise.resolve();
+
+        expect(screen.queryByRole('button', {name: 'Save'})).toBeNull();
+        expect(document.activeElement).toBe(edit);
+      },
+    );
+
+    it('keeps focus inside an open dialog through StrictMode effects, then returns it on unmount', async () => {
+      render(
+        <StrictMode>
+          <Editor unmountWith="save" />
+        </StrictMode>,
+      );
+      const edit = screen.getByRole('button', {name: 'Edit'});
+      edit.focus();
+      fireEvent.click(edit);
+      const save = screen.getByRole('button', {name: 'Save'});
+      save.focus();
+      await Promise.resolve();
+      expect(document.activeElement).toBe(save);
+
+      fireEvent.click(save);
+      await Promise.resolve();
+
+      expect(document.activeElement).toBe(edit);
+    });
+
+    it('leaves focus that moved elsewhere when the dialog unmounts', async () => {
+      function Page() {
+        const [isOpen, setIsOpen] = useState(true);
+        return (
+          <>
+            <button type="button">Elsewhere</button>
+            {isOpen ? (
+              <Dialog isOpen onOpenChange={setIsOpen} aria-label="Notice">
+                <button type="button" onClick={() => setIsOpen(false)}>
+                  Close
+                </button>
+              </Dialog>
+            ) : null}
+            <button type="button" onClick={() => setIsOpen(false)}>
+              Remove
+            </button>
+          </>
+        );
+      }
+      render(<Page />);
+      const elsewhere = screen.getByRole('button', {name: 'Elsewhere'});
+      elsewhere.focus();
+
+      fireEvent.click(screen.getByRole('button', {name: 'Remove'}));
+      await Promise.resolve();
+
+      expect(document.activeElement).toBe(elsewhere);
+    });
+  });
+
   it('restores focus to the opener when content mounts in the open commit', () => {
     function Harness({
       open,
