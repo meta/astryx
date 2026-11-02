@@ -62,96 +62,21 @@
     "architecture:theme-tokens"
   ],
   "packages/core/src/BottomSheet/BottomSheet.tsx": [
-    "FR13",
-    "FR13",
-    "FR13",
-    "FR17",
-    "INV1",
-    "INV7",
-    "architecture:component-style-authoring",
-    "architecture:interaction-modality",
-    "spec quote",
-    "spec:AST-013",
-    "spec:AST-013",
-    "spec:AST-013",
-    "spec:AST-027"
+    "AST-013",
+    "AST-027",
+    "FR13"
   ],
   "packages/core/src/BottomSheet/BottomSheetPanel.tsx": [
-    "DR1",
-    "DR1",
-    "DR1",
-    "DR2",
-    "DR2",
-    "DR2",
-    "DR2",
-    "DR2",
-    "DR2",
-    "DR3",
-    "DR3",
-    "DR3",
-    "DR3",
-    "FR12",
     "FR13",
-    "FR13",
-    "FR5",
-    "INV7",
-    "architecture:component-style-authoring",
-    "component:Popover",
-    "design:reduced-motion",
-    "design:reduced-motion",
-    "design:reduced-motion",
-    "design:reduced-motion",
-    "design:reduced-motion",
-    "spec:AST-013",
-    "spec:AST-013",
-    "spec:AST-090"
+    "spec:AST-013"
   ],
-  "packages/core/src/BottomSheet/BottomSheetSwitcher.tsx": [
-    "FR13",
-    "FR13",
-    "FR17",
-    "FR2",
-    "component:BottomSheet",
-    "component:BottomSheet",
-    "design:reduced-motion",
-    "design:reduced-motion",
-    "spec quote",
-    "spec quote",
-    "spec quote",
-    "spec quote",
-    "spec:AST-013",
-    "spec:AST-027",
-    "spec:AST-027"
-  ],
+  "packages/core/src/BottomSheet/BottomSheetSwitcher.tsx": ["AST-013", "FR13"],
   "packages/core/src/BottomSheet/BottomSheetSwitcherContext.ts": [
     "FR13",
     "spec:AST-013"
   ],
-  "packages/core/src/BottomSheet/bottomSheetEscape.ts": [
-    "DEC-8",
-    "component:Popover",
-    "spec quote"
-  ],
   "packages/core/src/BottomSheet/bottomSheetStack.ts": [
     "DEP-0015",
-    "INV5",
-    "INV5",
-    "architecture:react-component-runtime",
-    "architecture:react-component-runtime",
-    "component:BottomSheet",
-    "spec quote",
-    "spec quote"
-  ],
-  "packages/core/src/BottomSheet/useSheetGestures.ts": [
-    "DR2",
-    "DR2",
-    "FR6",
-    "FR7",
-    "component:BottomSheet",
-    "design:reduced-motion",
-    "design:reduced-motion",
-    "spec quote",
-    "spec quote",
     "spec quote"
   ],
   "packages/core/src/Breadcrumbs/BreadcrumbItem.tsx": [
@@ -1317,8 +1242,11 @@
     "FR10",
     "FR10",
     "FR13",
+    "FR13",
+    "FR13",
     "FR14",
     "FR14",
+    "FR15",
     "FR16",
     "FR16",
     "FR17",
@@ -1512,6 +1440,13 @@
     "FR1",
     "FR1",
     "FR12",
+    "FR13",
+    "FR13",
+    "FR15",
+    "FR15",
+    "FR15",
+    "FR15",
+    "FR15",
     "FR2",
     "FR2",
     "FR2",
@@ -1519,6 +1454,7 @@
     "FR2",
     "FR2",
     "FR2",
+    "FR4",
     "FR4",
     "FR4",
     "FR6",
@@ -1538,7 +1474,11 @@
     "FR9",
     "architecture:layer-runtime",
     "component:BaseTypeahead",
+    "component:Tokenizer",
+    "component:Tokenizer",
+    "component:Tokenizer",
     "family:input-fields",
+    "spec quote",
     "spec quote",
     "spec quote",
     "spec quote",
@@ -1556,6 +1496,7 @@
     "spec:AST-086",
     "spec:AST-086",
     "spec:AST-086",
+    "spec:AST-092",
     "spec:AST-092",
     "spec:AST-092",
     "spec:AST-092",
@@ -1590,6 +1531,14 @@
     "spec:AST-056",
     "spec:AST-085",
     "spec:AST-086"
+  ],
+  "packages/core/src/Typeahead/committedChoicesKey.tsx": [
+    "FR13",
+    "FR15",
+    "FR4",
+    "component:Tokenizer",
+    "spec quote",
+    "spec:AST-092"
   ],
   "packages/core/src/Typeahead/trailingKeyDown.tsx": [
     "FR10",
@@ -1960,28 +1909,11 @@
   ],
   "packages/core/src/hooks/ModalAnnounceProvider.tsx": [
     "FR14",
-    "FR14",
-    "INV5",
-    "architecture:react-component-runtime",
     "spec quote",
     "spec:AST-086"
   ],
-  "packages/core/src/hooks/actionGroupTracker.ts": ["FR21", "spec:AST-094"],
-  "packages/core/src/hooks/menuPressOnItems.ts": [
-    "INV4",
-    "architecture:interaction-modality",
-    "spec quote"
-  ],
-  "packages/core/src/hooks/modalAnnounce.ts": [
-    "FR14",
-    "FR14",
-    "FR8",
-    "FR9",
-    "FR9",
-    "spec quote",
-    "spec quote",
-    "spec:AST-086"
-  ],
+  "packages/core/src/hooks/actionGroupTracker.ts": ["AST-094"],
+  "packages/core/src/hooks/modalAnnounce.ts": ["AST-086", "FR14"],
   "packages/core/src/hooks/useAdaptivePresentation.ts": [
     "FR9",
     "FR9",
@@ -1990,86 +1922,26 @@
     "spec:AST-012",
     "spec:AST-012"
   ],
-  "packages/core/src/hooks/useAnimatedLayout.ts": [
-    "FR1",
-    "INV12",
-    "architecture:react-component-runtime",
-    "spec quote",
-    "spec:AST-105",
-    "spec:AST-105"
-  ],
   "packages/core/src/hooks/useAnnounce.ts": [
+    "AST-086",
+    "AST-086",
     "FR14",
-    "FR14",
-    "FR14",
-    "FR14",
-    "FR14",
-    "FR3",
-    "FR5",
-    "FR8",
-    "FR8",
-    "FR8",
-    "FR9",
-    "FR9",
-    "FR9",
-    "FR9",
-    "FR9",
-    "FR9",
-    "spec quote",
-    "spec quote",
-    "spec quote",
-    "spec quote",
-    "spec quote",
-    "spec quote",
-    "spec:AST-086",
-    "spec:AST-086",
-    "spec:AST-086",
-    "spec:AST-086",
-    "spec:AST-086",
-    "spec:AST-086",
-    "spec:AST-086",
-    "spec:AST-086",
-    "spec:AST-086",
-    "spec:AST-086"
+    "FR8"
   ],
   "packages/core/src/hooks/useAnnounceRenderedText.ts": [
-    "AR1",
-    "FR11",
-    "FR13",
-    "FR13",
-    "FR3",
-    "FR4",
-    "FR5",
+    "AST-002",
+    "AST-056",
+    "AST-086",
     "spec quote",
-    "spec:AST-056",
-    "spec:AST-086",
-    "spec:AST-086",
-    "spec:AST-086"
+    "spec quote"
   ],
   "packages/core/src/hooks/useAttachment.ts": ["INV3"],
-  "packages/core/src/hooks/useBusyAnnouncement.ts": [
-    "FR14",
-    "FR14",
-    "FR3",
-    "FR6",
-    "FR8",
-    "FR8",
-    "spec quote",
-    "spec:AST-086",
-    "spec:AST-086"
-  ],
-  "packages/core/src/hooks/useClickableContainer.ts": [
-    "FR11",
-    "FR11",
-    "component:HoverCard",
-    "component:Tooltip"
-  ],
+  "packages/core/src/hooks/useBusyAnnouncement.ts": ["AST-086", "spec quote"],
   "packages/core/src/hooks/useEntryAnimation.ts": [
     "FR13",
     "spec quote",
     "spec:AST-013"
   ],
-  "packages/core/src/hooks/useHighlightedOptionScroll.ts": ["#6077"],
   "packages/core/src/hooks/useHotkeys.ts": ["spec quote"],
   "packages/core/src/hooks/useIsHydrating.ts": [
     "FR13",
@@ -2077,63 +1949,13 @@
     "spec quote",
     "spec:AST-013"
   ],
-  "packages/core/src/hooks/useListFocus.ts": [
-    "INV1",
-    "architecture:interaction-modality"
-  ],
-  "packages/core/src/hooks/useLongPress.ts": [
-    "FR2",
-    "INV12",
-    "architecture:public-component-api",
-    "spec quote",
-    "spec:AST-094"
-  ],
-  "packages/core/src/hooks/useMenuHover.ts": [
-    "#3121",
-    "#6893",
-    "INV1",
-    "architecture:interaction-modality"
-  ],
-  "packages/core/src/hooks/useMenuPress.ts": [
-    "FR2",
-    "FR24",
-    "FR29",
-    "FR29",
-    "FR29",
-    "FR29",
-    "FR43",
-    "FR43",
-    "FR9",
-    "INV1",
-    "architecture:interaction-modality",
-    "spec quote",
-    "spec:AST-094",
-    "spec:AST-094"
-  ],
-  "packages/core/src/hooks/useRenamedProp.ts": [
-    "FR28",
-    "FR29",
-    "FR29",
-    "INV9",
-    "architecture:public-component-api",
-    "spec quote",
-    "spec:AST-017",
-    "spec:AST-017"
-  ],
-  "packages/core/src/hooks/useScrollableArea.ts": [
-    "FR12",
-    "spec quote",
-    "spec:AST-025"
-  ],
+  "packages/core/src/hooks/useLongPress.ts": ["AST-094", "spec quote"],
+  "packages/core/src/hooks/useRenamedProp.ts": ["AST-002", "AST-017"],
+  "packages/core/src/hooks/useScrollableArea.ts": ["AST-025"],
   "packages/core/src/hooks/useSettledOpen.ts": [
     "FR13",
     "spec quote",
     "spec:AST-013"
-  ],
-  "packages/core/src/hooks/useTreeFocus.ts": [
-    "AR2",
-    "INV17",
-    "component:TreeList"
   ],
   "packages/core/src/hooks/useTypeahead.ts": [
     "INV17",
@@ -2580,63 +2402,23 @@
     "component:SideNav",
     "spec quote"
   ],
-  "packages/core/src/utils/clickGuard.ts": [
-    "FR24",
-    "FR24",
-    "FR24",
-    "FR5",
-    "FR6",
-    "module:DropdownMenu/useMenuPress",
-    "module:DropdownMenu/useMenuPress",
-    "spec quote",
-    "spec:AST-057",
-    "spec:AST-094",
-    "spec:AST-094"
-  ],
-  "packages/core/src/utils/coarsePointer.ts": [
-    "FR19",
-    "FR24",
-    "FR43",
-    "spec quote",
-    "spec:AST-094"
-  ],
+  "packages/core/src/utils/clickGuard.ts": ["AST-057", "AST-094", "spec quote"],
+  "packages/core/src/utils/coarsePointer.ts": ["AST-094", "spec quote"],
   "packages/core/src/utils/disabledInteraction.ts": [
     "FR1",
     "FR2",
     "spec:AST-085"
   ],
-  "packages/core/src/utils/focusOutline.stylex.ts": [
-    "INV3",
-    "architecture:interaction-modality"
-  ],
-  "packages/core/src/utils/focusReturn.ts": [
-    "AR3",
-    "INV1",
-    "architecture:interaction-modality",
-    "component:SideNav",
-    "spec quote",
+  "packages/core/src/utils/hitArea.ts": [
+    "AST-094",
+    "AST-103",
+    "FR5",
     "spec quote"
   ],
-  "packages/core/src/utils/hitArea.ts": [
-    "FR24",
-    "FR5",
-    "spec:AST-094",
-    "spec:AST-103"
-  ],
-  "packages/core/src/utils/inputPresentation.ts": [
-    "AST-043",
-    "FR1",
-    "FR3",
-    "spec:AST-043",
-    "spec:AST-043",
-    "spec:AST-043"
-  ],
-  "packages/core/src/utils/interactionModality.ts": ["INV3", "INV6", "INV6"],
+  "packages/core/src/utils/inputPresentation.ts": ["AST-043"],
   "packages/core/src/utils/interactionOverlay.stylex.ts": [
-    "FR15",
-    "FR4",
-    "component:Button",
-    "spec:AST-108"
+    "AST-108",
+    "spec quote"
   ],
   "packages/core/src/utils/plainDate.ts": [
     "AST-067",
@@ -2644,27 +2426,10 @@
     "component:Calendar"
   ],
   "packages/core/src/utils/presentation.ts": [
-    "FR13",
-    "FR13",
-    "FR13",
-    "FR13",
-    "FR13",
-    "FR3",
-    "FR9",
-    "INV16",
-    "INV5",
-    "INV5",
-    "architecture:public-component-api",
-    "architecture:react-component-runtime",
-    "architecture:react-component-runtime",
-    "spec quote",
-    "spec:AST-012",
-    "spec:AST-017",
-    "spec:AST-094",
-    "spec:AST-094",
-    "spec:AST-094",
-    "spec:AST-094",
-    "spec:AST-094"
+    "AST-012",
+    "AST-017",
+    "AST-094",
+    "spec quote"
   ],
   "packages/core/src/utils/pressDisabled.ts": [
     "FR23",
@@ -2676,69 +2441,25 @@
     "spec:AST-094"
   ],
   "packages/core/src/utils/pressFeedback.ts": [
-    "DEC-6",
-    "FR15",
-    "FR15",
-    "FR2",
-    "FR24",
-    "FR24",
-    "FR4",
-    "FR4",
-    "FR41",
-    "FR6",
-    "component:Button",
-    "component:Button",
-    "module:DropdownMenu/useMenuPress",
-    "spec quote",
-    "spec:AST-012",
-    "spec:AST-094",
-    "spec:AST-094",
-    "spec:AST-094",
-    "spec:AST-108",
-    "spec:AST-108"
+    "AST-012",
+    "AST-094",
+    "AST-108",
+    "spec quote"
   ],
   "packages/core/src/utils/primaryClick.ts": ["FR43", "spec:AST-094"],
   "packages/core/src/utils/selectionLock.ts": [
-    "DEC-9",
-    "FR41",
-    "FR41",
-    "FR41",
-    "FR59",
-    "spec quote",
-    "spec:AST-017",
-    "spec:AST-094",
-    "spec:AST-094",
-    "spec:AST-094"
-  ],
-  "packages/core/src/utils/touchPresentation.stylex.ts": [
-    "FR13",
-    "FR9",
-    "FR9",
-    "spec quote",
-    "spec:AST-012",
-    "spec:AST-012",
-    "spec:AST-094"
-  ],
-  "packages/core/src/utils/touchPresentation.ts": [
-    "FR9",
-    "FR9",
-    "FR9",
-    "FR9",
-    "spec quote",
-    "spec:AST-012",
-    "spec:AST-012",
-    "spec:AST-012",
-    "spec:AST-012"
-  ],
-  "packages/core/src/utils/touchQueries.ts": ["FR6", "spec:AST-013"],
-  "packages/core/src/utils/typeaheadMatch.ts": [
-    "INV17",
-    "INV17",
-    "INV17",
-    "INV17",
-    "architecture:internationalization",
+    "AST-017",
+    "AST-094",
     "spec quote"
   ],
+  "packages/core/src/utils/touchPresentation.stylex.ts": ["AST-012", "AST-094"],
+  "packages/core/src/utils/touchPresentation.ts": [
+    "AST-012",
+    "AST-012",
+    "FR9",
+    "spec quote"
+  ],
+  "packages/core/src/utils/touchQueries.ts": ["FR6", "spec:AST-013"],
   "packages/core/src/utils/useFocusAcrossSwap.ts": [
     "FR4",
     "spec quote",
