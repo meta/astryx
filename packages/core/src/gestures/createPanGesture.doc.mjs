@@ -37,7 +37,7 @@ export const docs = {
       name: 'options.axis',
       type: "'x' | 'y'",
       description:
-        'Limits the drag to one axis. A drag along the other axis is not reported, and that component of every value reads 0, so a scroll across it stays the page’s. Omit it to report both axes; a scroll that starts on the element then moves the element instead of the page.',
+        'Limits the drag to one axis. A drag along the other axis is not reported, and that component of every value reads 0, so a scroll across it stays the page’s. Omit it to report both axes; a finger’s scroll that starts on the element then moves the element instead of the page. A trackpad scroll still scrolls the page.',
       required: false,
     },
     {

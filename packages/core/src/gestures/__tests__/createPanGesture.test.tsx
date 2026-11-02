@@ -4,9 +4,9 @@
  * @file createPanGesture.test.tsx
  * @input createPanGesture and usePanGesture driven by touches through the
  *   document's gesture host
- * @output Tests for spec:AST-107 FR1 and FR6: a drag reported as values, on
- *   each axis, cancelled, and never for a press or a long press; one API at
- *   two layers; no listener left after destroy
+ * @output Tests for spec:AST-107 FR1 and FR6. A drag is reported as values,
+ *   on each axis, and as cancelled. A press or a long press reports nothing.
+ *   One API works at two layers. Destroy leaves no listener.
  * @position Tests of the public pan factory and its hook
  */
 
