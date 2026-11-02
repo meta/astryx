@@ -205,6 +205,15 @@ export function usePowerSearchSource(
                 ) {
                   continue;
                 }
+                // A free-text row commits a value the field's editor never
+                // offers when the operator takes its values from a search
+                // source, so skip those unless arbitrary strings are allowed.
+                if (
+                  op.value.searchSource != null &&
+                  op.value.isArbitraryStringAllowed !== true
+                ) {
+                  continue;
+                }
                 for (const match of resolveValueMatches(op, query)) {
                   const id = `${field.key}:${op.key}:value:${match.displayValue}`;
                   if (!seen.has(id)) {

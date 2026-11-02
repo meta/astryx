@@ -630,9 +630,7 @@ describe('usePowerSearchSource', () => {
       const source = createSource(allStringsConfig);
       const results = syncSearch(source, 'open');
       // Status is enum-only: no 'Status is "open"' value item.
-      expect(results.some(r => (r.label).startsWith('Status '))).toBe(
-        false,
-      );
+      expect(results.some(r => r.label.startsWith('Status '))).toBe(false);
     });
 
     it('respects isValueMatchAllowed: false', () => {
@@ -676,6 +674,54 @@ describe('usePowerSearchSource', () => {
       ).toEqual(['Title contains "nest/"']);
     });
 
+    it('skips search-source operators without arbitrary strings', () => {
+      const ownerSource = {
+        search: () => [{id: 'nest', label: 'nest'}],
+        bootstrap: () => [],
+      };
+      const config: PowerSearchConfig = {
+        name: 'SourceValues',
+        contentSearchFieldKey: 'title',
+        valueMatchMode: 'all-string-fields',
+        fields: [
+          {
+            key: 'title',
+            label: 'Title',
+            operators: [
+              {key: 'contains', label: 'contains', value: {type: 'string'}},
+            ],
+          },
+          {
+            key: 'owner',
+            label: 'Owner',
+            operators: [
+              {
+                key: 'is',
+                label: 'is',
+                value: {type: 'string', searchSource: ownerSource},
+              },
+              {
+                key: 'is-either',
+                label: 'is-either',
+                value: {
+                  type: 'string',
+                  searchSource: ownerSource,
+                  isArbitraryStringAllowed: true,
+                },
+              },
+            ],
+          },
+        ],
+      };
+      const labels = syncSearch(createSource(config), 'nest').map(r => r.label);
+      // Committing 'Owner is "nest"' would offer a value the Owner editor
+      // never lists, so the closed operator stays out; the open one and the
+      // plain Title operators still match.
+      expect(labels).toContain('Title contains "nest"');
+      expect(labels).toContain('Owner is-either "nest"');
+      expect(labels.some(l => l.startsWith('Owner is '))).toBe(false);
+    });
+
     it('leaves field-prefixed queries to the exact value path', () => {
       const source = createSource(allStringsConfig);
       const results = syncSearch(source, 'title nest');
@@ -686,9 +732,9 @@ describe('usePowerSearchSource', () => {
       const valueItems = results.filter(
         r => !String(r.id).startsWith('__content_search__'),
       );
-      expect(
-        valueItems.some(r => (r.label).includes('"title nest"')),
-      ).toBe(false);
+      expect(valueItems.some(r => r.label.includes('"title nest"'))).toBe(
+        false,
+      );
       expect(valueItems.map(r => r.label)).toContain('Title contains "nest"');
     });
   });
