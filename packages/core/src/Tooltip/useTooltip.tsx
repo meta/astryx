@@ -19,6 +19,7 @@ import {
   type ReactNode,
   type RefCallback,
 } from 'react';
+import {isFocusForTrigger} from '../utils/triggerFocus';
 import * as stylex from '@stylexjs/stylex';
 import {
   useLayerInternal,
@@ -220,29 +221,6 @@ export interface TooltipReturn {
 }
 
 /**
- * Check if an element is naturally focusable
- */
-function isFocusable(element: HTMLElement): boolean {
-  // Elements with explicit tabindex
-  if (element.hasAttribute('tabindex')) {
-    return element.tabIndex >= 0;
-  }
-
-  // Naturally focusable elements
-  const focusableTags = ['A', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA'];
-  if (focusableTags.includes(element.tagName)) {
-    return !(element as HTMLButtonElement).disabled;
-  }
-
-  // Elements with contenteditable
-  if (element.isContentEditable) {
-    return true;
-  }
-
-  return false;
-}
-
-/**
  * Hook for tooltip behavior with hover/focus triggers.
  *
  * Builds on useLayer to add:
@@ -428,21 +406,10 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     [isTouchPointerRef, layerId, scheduleHide],
   );
 
-  // Under `auto`, whether focus counts is decided when it arrives, not when
-  // the listeners attach: a roving-tabindex member that was `tabindex="-1"`
-  // then can be the tab stop now. A trigger that receives focus is focusable
-  // by definition; focus inside it counts only while the trigger is
-  // focusable too, so a plain wrapper still ignores its children's focus.
-  const isFocusForTrigger = useCallback(
-    (e: Event): boolean => {
-      if (focusTrigger === 'always') {
-        return true;
-      }
-      const triggerEl = e.currentTarget as HTMLElement | null;
-      return (
-        triggerEl != null && (e.target === triggerEl || isFocusable(triggerEl))
-      );
-    },
+  // Under `auto`, whether focus counts is decided when it arrives
+  // (utils/triggerFocus.ts).
+  const isTriggerFocus = useCallback(
+    (e: Event): boolean => isFocusForTrigger(e, focusTrigger),
     [focusTrigger],
   );
 
@@ -452,7 +419,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
 
   const handleFocusIn = useCallback(
     (e: Event) => {
-      focusCountedRef.current = isFocusForTrigger(e);
+      focusCountedRef.current = isTriggerFocus(e);
       if (!isEnabled || !focusCountedRef.current) {
         return;
       }
@@ -473,24 +440,18 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       clearTimeouts();
       showLayer();
     },
-    [
-      isEnabled,
-      isFocusForTrigger,
-      isTouchInteraction,
-      clearTimeouts,
-      showLayer,
-    ],
+    [isEnabled, isTriggerFocus, isTouchInteraction, clearTimeouts, showLayer],
   );
 
   const handleFocusOut = useCallback(
     (e: Event) => {
-      if (!focusCountedRef.current && !isFocusForTrigger(e)) {
+      if (!focusCountedRef.current && !isTriggerFocus(e)) {
         return;
       }
       focusCountedRef.current = false;
       scheduleHide();
     },
-    [isFocusForTrigger, scheduleHide],
+    [isTriggerFocus, scheduleHide],
   );
 
   // Pressing the trigger hides its own tooltip: once the control is activated
@@ -544,7 +505,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         el.addEventListener('pointerdown', handlePointerDown);
 
         // Focus listeners unless focus never opens the tooltip; `auto` decides
-        // per event (isFocusForTrigger).
+        // per event (isTriggerFocus).
         if (focusTrigger !== 'never') {
           el.addEventListener('focusin', handleFocusIn);
           el.addEventListener('focusout', handleFocusOut);

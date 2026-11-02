@@ -19,6 +19,7 @@ import {
   type ReactNode,
   type RefCallback,
 } from 'react';
+import {isFocusForTrigger} from '../utils/triggerFocus';
 import * as stylex from '@stylexjs/stylex';
 import {
   useLayer,
@@ -236,29 +237,6 @@ export interface HoverCardReturn {
 }
 
 /**
- * Check if an element is naturally focusable
- */
-function isFocusable(element: HTMLElement): boolean {
-  // Elements with explicit tabindex
-  if (element.hasAttribute('tabindex')) {
-    return element.tabIndex >= 0;
-  }
-
-  // Naturally focusable elements
-  const focusableTags = ['A', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA'];
-  if (focusableTags.includes(element.tagName)) {
-    return !(element as HTMLButtonElement).disabled;
-  }
-
-  // Elements with contenteditable
-  if (element.isContentEditable) {
-    return true;
-  }
-
-  return false;
-}
-
-/**
  * Hook for hover card behavior with hover/focus triggers.
  *
  * Builds on useLayer to add:
@@ -426,27 +404,41 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
     [handleTouchPointerDown],
   );
 
-  const handleFocusIn = useCallback(() => {
-    if (!isEnabled) {
-      return;
-    }
-    // A tap focuses the trigger it activates. Opening on that focus would
-    // reinstate exactly the behavior the touch path just decided against —
-    // and on an action trigger it covers the thing the user tapped.
-    if (isTouchInteraction()) {
-      return;
-    }
-    // Skip showing if we're in the middle of an Escape dismiss
-    if (isEscapeDismissingRef.current) {
-      isEscapeDismissingRef.current = false;
-      return;
-    }
-    clearTimeouts();
-    showLayer();
-  }, [isEnabled, isTouchInteraction, clearTimeouts, showLayer]);
+  // Whether the trigger's current focus counted when it arrived, so its blur
+  // hides the card even if the trigger has since left the tab order.
+  const focusCountedRef = useRef(false);
+
+  const handleFocusIn = useCallback(
+    (e: Event) => {
+      // Under `auto`, whether focus counts is decided when it arrives
+      // (utils/triggerFocus.ts).
+      focusCountedRef.current = isFocusForTrigger(e, focusTrigger);
+      if (!isEnabled || !focusCountedRef.current) {
+        return;
+      }
+      // A tap focuses the trigger it activates. Opening on that focus would
+      // reinstate exactly the behavior the touch path just decided against —
+      // and on an action trigger it covers the thing the user tapped.
+      if (isTouchInteraction()) {
+        return;
+      }
+      // Skip showing if we're in the middle of an Escape dismiss
+      if (isEscapeDismissingRef.current) {
+        isEscapeDismissingRef.current = false;
+        return;
+      }
+      clearTimeouts();
+      showLayer();
+    },
+    [focusTrigger, isEnabled, isTouchInteraction, clearTimeouts, showLayer],
+  );
 
   const handleFocusOut = useCallback(
     (e: FocusEvent) => {
+      if (!focusCountedRef.current && !isFocusForTrigger(e, focusTrigger)) {
+        return;
+      }
+      focusCountedRef.current = false;
       // Check if focus is moving to the hover card content
       const relatedTarget = e.relatedTarget as HTMLElement | null;
       const popoverElement = document.getElementById(layerId);
@@ -458,7 +450,7 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
 
       scheduleHide();
     },
-    [layerId, scheduleHide],
+    [focusTrigger, layerId, scheduleHide],
   );
 
   // Escape dismissal (WCAG 1.4.13) goes through the shared layer stack: a
@@ -558,12 +550,9 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
         el.addEventListener('mouseleave', handleMouseLeave);
         el.addEventListener('pointerdown', handlePointerDown);
 
-        // Attach focus listeners based on focusTrigger option
-        const shouldAttachFocus =
-          focusTrigger === 'always' ||
-          (focusTrigger === 'auto' && isFocusable(el));
-
-        if (shouldAttachFocus) {
+        // Focus listeners unless focus never opens the card; `auto` decides
+        // per event (utils/triggerFocus.ts).
+        if (focusTrigger !== 'never') {
           el.addEventListener('focusin', handleFocusIn);
           el.addEventListener('focusout', handleFocusOut as EventListener);
         }
