@@ -7,8 +7,9 @@
  *   that reports exactly when it ran —, `startBusyControl` — a plain
  *   compositor-only control animation recorded in the same window —,
  *   `busyWindowProof`, which reads frame evidence for that window, against
- *   the control when it has one, and `pooledBusyProof`, which judges several
- *   short blocks as one.
+ *   the control when it has one, `castStep`, the screencast's position step
+ *   read from its frames, and `pooledBusyProof`, which judges several short
+ *   blocks as one.
  * @position The busy-main-thread proof: an animation that runs on the
  *   compositor keeps advancing at display rate while JavaScript holds the main
  *   thread; one driven from the main thread (rAF, style writes, layout
@@ -416,6 +417,47 @@ function slowStretches(
 }
 
 /**
+ * The cast's position step along `axis`, CSS px, read from the cast: the
+ * coarsest `step` the tracked frames carry (`trackMarker` sets it from each
+ * frame's color resolution and scale), so 2 px in WebKit's 4:2:0 JPEG cast
+ * and 1 px in Chromium's PNG cast. Throws when no frame carries one: a step
+ * read from the motion would take a run whose changes are all even on a 1 px
+ * cast for a 2 px cast.
+ */
+export function castStep(
+  tracked: readonly TrackedFrame[],
+  axis: 'x' | 'y' | 'width' | 'height',
+): number {
+  const key = axis === 'x' || axis === 'width' ? 'x' : 'y';
+  const steps = tracked.flatMap(f => (f.step == null ? [] : [f.step[key]]));
+  if (steps.length === 0) {
+    throw new Error(
+      "castStep: no tracked frame carries the cast's step (trackMarker sets it)",
+    );
+  }
+  return Math.max(...steps);
+}
+
+/**
+ * The step a tracked value's changes share: the largest of 2, 1 and 0.5 CSS
+ * px that every change between consecutive positions is a multiple of.
+ * Changes rather than positions: a position the page commits once a block
+ * ends can sit off that grid. With no change to read, the finest step: a
+ * coarser one would let a larger jump pass for a single step.
+ */
+function motionStepPx(values: readonly number[]): number {
+  const changes = values
+    .slice(1)
+    .map((p, i) => Math.abs(p - values[i]))
+    .filter(d => d > 0.25);
+  return changes.length === 0
+    ? 0.5
+    : ([2, 1, 0.5].find(step =>
+        changes.every(d => Math.abs(d / step - Math.round(d / step)) < 0.01),
+      ) ?? 0.5);
+}
+
+/**
  * Frame evidence for a busy window: how many frames the screencast presented
  * inside it, how many of them moved the tracked axis, and the longest stall.
  * The window is trimmed by `marginMs` at both ends so the frame the block
@@ -490,9 +532,11 @@ function slowStretches(
  * change that ends it is a single cast step (`stepPx`): the component moves
  * under one step per frame there, as on an easing tail, which the cast cannot
  * show on every frame. Where the component moved under two steps per frame
- * over the frames just before the run, a frame delivered early can show no
- * step too, so the change may carry the motion of every frame the run held
- * at that pace, to the nearest step. The run also has to read as a slowing
+ * over the frames just before the run, or across the run itself (its
+ * catch-up over the frames it spans) where the curve slows faster than those
+ * frames show, a frame delivered early can show no step too, so the change
+ * may carry the motion of every frame the run held at that pace, to the
+ * nearest step. The run also has to read as a slowing
  * curve, at most one frame longer than the component's run before it. A
  * freeze ends in a larger catch-up, a stall in a frame-counted animation is
  * longer than its runs before it, and a run that no change ends stays a miss.
@@ -509,6 +553,7 @@ export function busyWindowProof(
     axis = 'y',
     marginMs = 20,
     settledWithin,
+    settledWithinSteps,
     settledAt,
     maxMedianFrameMs = Infinity,
     maxStallFrames = 3,
@@ -543,6 +588,17 @@ export function busyWindowProof(
      */
     settledWithin?: number;
     /**
+     * `settledWithin` counted in the cast's own position steps: stop judging
+     * once the value is within this many steps of where it ends, the step
+     * read from the cast (`castStep`): 1 px in Chromium's PNG cast, 2 px in
+     * WebKit's JPEG cast, whose 4:2:0 chroma holds the marker's color in
+     * 2 by 2 pixel blocks. A coarser cast shows an easing tail's last steps as
+     * longer plateaus, so a bound in px would read them as a stall in one
+     * engine and not the other; a freeze further from the end than that is
+     * still judged. Give this or `settledWithin`, not both.
+     */
+    settledWithinSteps?: number;
+    /**
      * Where the value ends, for `settledWithin`: read it from the page once the
      * animation has ended (`waitForRest`). Defaults to the last frame's value,
      * which can be stale: once an accelerated animation ends while the main
@@ -564,7 +620,16 @@ export function busyWindowProof(
   } = {},
 ): BusyProof {
   let end = window.to - marginMs;
-  if (settledWithin != null) {
+  if (settledWithin != null && settledWithinSteps != null) {
+    throw new Error(
+      'busyWindowProof: give settledWithin or settledWithinSteps, not both',
+    );
+  }
+  const settledWithinPx =
+    settledWithinSteps == null
+      ? settledWithin
+      : settledWithinSteps * castStep(tracked, axis);
+  if (settledWithinPx != null) {
     const valued = tracked.flatMap(f =>
       f.box == null ? [] : [{t: f.t, value: f.box[axis]}],
     );
@@ -574,7 +639,7 @@ export function busyWindowProof(
       f =>
         f.t >= window.from &&
         final != null &&
-        Math.abs(f.value - final) <= settledWithin,
+        Math.abs(f.value - final) <= settledWithinPx,
     );
     if (arrived != null) {
       end = Math.min(end, arrived.t);
@@ -756,29 +821,15 @@ export function busyWindowProof(
         ? expectedFrames
         : deliveredFrames;
   const movedFraction = (moved + recorderSkipped) / Math.max(1, judgedFrames);
-  // The cast's position step for the tracked value: the largest of 2, 1 and
-  // 0.5 CSS px that every change between its consecutive positions in the
-  // judged part is a multiple of. Changes rather than positions: a position
-  // the page commits once the block ends can sit off that grid.
-  const partValues = tracked.flatMap(f =>
-    f.box != null && f.t >= judged.from && f.t <= judged.to
-      ? [f.box[axis]]
-      : [],
+  // The cast's position step for the tracked value, read from the judged
+  // part.
+  const stepPx = motionStepPx(
+    tracked.flatMap(f =>
+      f.box != null && f.t >= judged.from && f.t <= judged.to
+        ? [f.box[axis]]
+        : [],
+    ),
   );
-  const stepChanges = partValues
-    .slice(1)
-    .map((p, i) => Math.abs(p - partValues[i]))
-    .filter(d => d > 0.25);
-  // With no change to read, the finest step: a coarser one would let a larger
-  // jump pass for a single step.
-  const stepPx =
-    stepChanges.length === 0
-      ? 0.5
-      : ([2, 1, 0.5].find(step =>
-          stepChanges.every(
-            d => Math.abs(d / step - Math.round(d / step)) < 0.01,
-          ),
-        ) ?? 0.5);
   const judgedValues = tracked.flatMap(f =>
     f.box != null && f.t >= judged.from && f.t <= judged.to
       ? [{t: f.t, value: f.box[axis]}]
@@ -883,7 +934,20 @@ export function busyWindowProof(
       // frame long, and under one step a frame it adds at most one step to
       // the catch-up.
       const catchUp = Math.abs(series[k].value - series[i].value);
-      const pace = pxPerFrameBefore(start);
+      // The pace at the run: the component's motion over the frames before
+      // it, or, where the curve slows faster than those frames show, across
+      // the run itself, its catch-up over the frames from the run's start to
+      // the change. A freeze still fails: its run is longer than one frame at
+      // a step a frame or more, and at a steady pace of two steps a frame its
+      // catch-up carries two frames of that pace.
+      const paceBefore = pxPerFrameBefore(start);
+      const runFrames = (series[k].t - series[start].t) / cadence;
+      const pace =
+        paceBefore == null
+          ? null
+          : runFrames > 0
+            ? Math.min(paceBefore, catchUp / runFrames)
+            : paceBefore;
       const shown =
         catchUp < 1.5 * stepPx ||
         (pace != null &&

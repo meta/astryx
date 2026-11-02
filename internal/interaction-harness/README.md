@@ -144,7 +144,12 @@ new position every frame of the block, and a main-thread animation shows none
 (nothing changed, so no frame is sent at all: `busyWindowProof` counts the
 whole window as one stall). `settledWithin` (2 px) stops judging at the easing
 tail: the screencast rounds to whole pixels, so a tail that still moves shows
-plateaus within a pixel or two of rest. A judged part shorter than four of the
+plateaus within a pixel or two of rest. `settledWithinSteps` counts that bound
+in the cast's own position steps, read from the cast (`castStep`, from the
+`step` `trackMarker` gives each frame): 1 px in Chromium's PNG cast and 2 px in
+WebKit's JPEG cast, whose 4:2:0 chroma holds the marker's color in 2 by 2
+pixel blocks and so makes the tail's plateaus longer. Two steps stop at the
+same tail in either engine while a freeze further from rest is still judged. A judged part shorter than four of the
 screencast's intervals fails: the animation under test was not moving during
 the block. With
 `during`, `blockMainThread` starts the loop from a task queued in the frame
@@ -215,8 +220,9 @@ presented too little to judge. A run of frames with no new position counts as
 moved when the change that ends it is a single cast step: the component moves
 under one step a frame there, as on an easing tail, which the cast cannot show
 on every frame. Where it moved under two steps a frame over the frames just
-before the run (a spring's slow tail inside a fast window), a frame delivered
-early can show no step too, so the change may carry the motion of every frame
+before the run (a spring's slow tail inside a fast window), or across the run
+itself (its catch-up over the frames it spans) where the curve slows faster
+than those frames show, a frame delivered early can show no step too, so the change may carry the motion of every frame
 the run held at that pace, to the nearest step. The run must also read as a
 slowing curve, at most one frame longer than the component's run before it. A
 freeze ends in a catch-up of more than that, a stall in a frame-counted animation is longer than its runs

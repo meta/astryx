@@ -2,20 +2,25 @@
 
 /**
  * @file busy.test.ts
- * @input Synthetic tracked frames (no browser)
+ * @input Synthetic tracked frames and recorded runs (no browser)
  * @output The busy-main-thread verdict's limits: dropped frames a loaded
  *   machine produces pass, a frozen animation fails every criterion, a window
  *   with nothing moving to judge fails, and out-of-order frames are judged in
- *   presentation order.
+ *   presentation order; a settle bound in cast steps reads the step from the
+ *   run (2 px in WebKit's cast, 1 px in Chromium's), stops a WebKit coast at
+ *   its tail's plateaus where a 2 px bound reads them as a stall, and still
+ *   fails a 40 ms freeze more than two steps from rest in either cast.
  * @position Unit test of ./busy and ./frames' ordering; the browser proof
  *   with a real compositor animation and a rAF control is in
  *   harness.interaction.browser.spec.ts.
  */
 
 import {describe, expect, it} from 'vitest';
-import {busyWindowProof} from './busy';
+import {busyWindowProof, castStep} from './busy';
 import * as skip from './busy.skip.fixture';
 import * as slowTail from './busy.slowtail.fixture';
+import * as webkitDecel from './busy.webkitdecel.fixture';
+import * as webkitTail from './busy.webkittail.fixture';
 import {inPresentationOrder, type TrackedFrame} from './frames';
 
 const FRAME = 1000 / 60;
@@ -651,5 +656,251 @@ describe('busyWindowProof in a slow tail', () => {
     );
     const proof = busyWindowProof(repeating([at(1300)]), BLOCK, {control});
     expect(proof.verdict.failures.join('\n')).toMatch(/moved on \d+ of/);
+  });
+});
+
+describe('busyWindowProof settledWithinSteps', () => {
+  /** Holds the position the frame at or before `fromT` shows for `ms`. */
+  const freeze = (
+    frames: readonly TrackedFrame[],
+    fromT: number,
+    ms: number,
+  ): TrackedFrame[] => {
+    const held = [...frames].reverse().find(f => f.t <= fromT)!.box!;
+    return frames.map(f =>
+      f.t > fromT && f.t <= fromT + ms
+        ? ({...f, box: {...held}} as TrackedFrame)
+        : f,
+    );
+  };
+  /** Frames as `trackMarker` returns them, with the cast's step. */
+  const cast = (
+    frames: ReadonlyArray<readonly [number, number | null]>,
+    step: {x: number; y: number},
+  ): TrackedFrame[] => slowTailFrames(frames).map(f => ({...f, step}));
+  // Chromium's cast is a PNG at the viewport's size: 1 px a step.
+  const PNG = {x: 1, y: 1};
+  const chromium = (frames: ReadonlyArray<readonly [number, number | null]>) =>
+    cast(frames, PNG);
+  const webkit = (frames: ReadonlyArray<readonly [number, number | null]>) =>
+    cast(frames, webkitTail.step);
+
+  it("reads the cast's position step from its frames, not from the motion", () => {
+    expect(castStep(webkit(webkitTail.tracked), 'x')).toBe(2);
+    expect(castStep(chromium(slowTail.tracked), 'x')).toBe(1);
+    expect(() => castStep(slowTailFrames(slowTail.tracked), 'x')).toThrow(
+      /no tracked frame carries the cast's step/,
+    );
+  });
+
+  it("judges a WebKit coast to two of its cast's 2 px steps from rest, where a 2 px bound reads the tail's plateaus as a stall", () => {
+    const control = webkit(webkitTail.control);
+    const tracked = webkit(webkitTail.tracked);
+    // Its tail during the block: 212, 212, 214, 214, 216 for four frames,
+    // then 218 from +225 ms, the control moving on every frame.
+    const inPx = busyWindowProof(tracked, webkitTail.block, {
+      axis: 'x',
+      settledWithin: 2,
+      control,
+    });
+    expect(inPx.verdict.failures.join('\n')).toMatch(
+      /longest stall 54\.\d ms, longer than the control's/,
+    );
+    const inSteps = busyWindowProof(tracked, webkitTail.block, {
+      axis: 'x',
+      settledWithinSteps: 2,
+      control,
+    });
+    expect(inSteps.verdict.failures).toEqual([]);
+    expect(inSteps.judged.to).toBeCloseTo(170, 0);
+  });
+
+  it('on a 1 px cast, judges a run whose changes are all even as settledWithin: 2 does', () => {
+    // A coast toward 200 px slowing 12, 10, 8, 6, 4 and 2 px a frame, held
+    // three frames at 196, 4 px from rest, the control moving every frame:
+    // its changes share a factor of 2, but its cast's step is 1 px.
+    const values = [
+      ...Array<number>(4).fill(146),
+      158,
+      168,
+      176,
+      182,
+      186,
+      188,
+      190,
+      192,
+      194,
+      196,
+      196,
+      196,
+      196,
+      198,
+      ...Array<number>(14).fill(200),
+    ];
+    const tracked = values.map(
+      (x, i) =>
+        ({
+          t: -50 + i * 16.7,
+          box: {x, y: 0, width: 1, height: 1},
+          pixels: 1,
+          step: PNG,
+        }) as TrackedFrame,
+    );
+    const control = values.map(
+      (_, i) =>
+        ({
+          t: -50 + i * 16.7,
+          box: {x: 10 * i, y: 0, width: 1, height: 1},
+          pixels: 1,
+          step: PNG,
+        }) as TrackedFrame,
+    );
+    const block = {from: 0, to: 400};
+    const inPx = busyWindowProof(tracked, block, {
+      axis: 'x',
+      settledWithin: 2,
+      control,
+    });
+    const inSteps = busyWindowProof(tracked, block, {
+      axis: 'x',
+      settledWithinSteps: 2,
+      control,
+    });
+    expect(inPx.verdict.failures.join('\n')).toMatch(/longest stall/);
+    expect(inSteps.judged).toEqual(inPx.judged);
+    expect(inSteps.verdict).toEqual(inPx.verdict);
+  });
+
+  it("still fails a 40 ms freeze in a WebKit coast's tail, more than two steps from rest", () => {
+    // Held at 200 px, 20 px from rest, then a 10 px catch-up.
+    const proof = busyWindowProof(
+      freeze(webkit(webkitTail.tracked), 48, 40),
+      webkitTail.block,
+      {
+        axis: 'x',
+        settledWithinSteps: 2,
+        control: webkit(webkitTail.control),
+      },
+    );
+    expect(proof.verdict.failures.join('\n')).toMatch(
+      /longest stall \d+\.\d ms, longer than the control's/,
+    );
+  });
+
+  it('still fails a 40 ms freeze in a Chromium tail, more than two steps from rest', () => {
+    const proof = busyWindowProof(
+      freeze(chromium(slowTail.tracked), 600, 40),
+      slowTail.block,
+      {
+        axis: 'x',
+        settledWithinSteps: 2,
+        control: chromium(slowTail.control),
+      },
+    );
+    expect(proof.verdict.failures.join('\n')).toMatch(
+      /longest stall \d+\.\d ms, longer than the control's/,
+    );
+  });
+
+  it("reads a held frame in a fast-slowing WebKit coast at the run's own pace, under two steps a frame", () => {
+    // 4.5 px a frame over the four frames before the hold, 2.3 across it:
+    // the frame at +52 ms shows no step while the control moves, and the
+    // next catches up 4 px, two frames' motion at the run's pace.
+    const proof = busyWindowProof(
+      webkit(webkitDecel.tracked),
+      webkitDecel.block,
+      {
+        axis: 'x',
+        settledWithinSteps: 2,
+        control: webkit(webkitDecel.control),
+      },
+    );
+    expect(proof.verdict.failures).toEqual([]);
+  });
+
+  it('reads a three-frame plateau that ends in a two-step change at about 1.3 px a frame as slow motion', () => {
+    // Held at 192 px from +63 ms through +91, then 196 at +109.
+    const proof = busyWindowProof(
+      freeze(webkit(webkitDecel.tracked), 80, 20),
+      webkitDecel.block,
+      {
+        axis: 'x',
+        settledWithinSteps: 2,
+        control: webkit(webkitDecel.control),
+      },
+    );
+    expect(proof.verdict.failures).toEqual([]);
+  });
+
+  it('still fails that plateau when its catch-up carries the time it held at the pace before it', () => {
+    // The same hold, then a jump to 200 px, where 2.3 px a frame would have
+    // carried it, and the rest of the coast 4 px further on.
+    const tracked = webkit(webkitDecel.tracked).map(f =>
+      f.box == null
+        ? f
+        : f.t > 80 && f.t <= 100
+          ? ({...f, box: {...f.box, x: 192}} as TrackedFrame)
+          : f.t > 100
+            ? ({...f, box: {...f.box, x: f.box.x + 4}} as TrackedFrame)
+            : f,
+    );
+    const proof = busyWindowProof(tracked, webkitDecel.block, {
+      axis: 'x',
+      settledWithinSteps: 2,
+      control: webkit(webkitDecel.control),
+    });
+    expect(proof.verdict.failures.join('\n')).toMatch(
+      /moved on \d+ of the \d+ frames the control moved/,
+    );
+  });
+
+  it('still fails a one-frame hold in a WebKit coast moving two steps a frame or more', () => {
+    // Held at 180 px at +25 ms, where the coast moves about 4.5 px a frame:
+    // the next frame catches up 8 px, two frames' motion at that pace.
+    const proof = busyWindowProof(
+      freeze(webkit(webkitDecel.tracked), 7, 20),
+      webkitDecel.block,
+      {
+        axis: 'x',
+        settledWithinSteps: 2,
+        control: webkit(webkitDecel.control),
+      },
+    );
+    expect(proof.verdict.failures.join('\n')).toMatch(
+      /moved on 7 of the 8 frames the control moved/,
+    );
+  });
+
+  it('on a 1 px cast, two steps judge what settledWithin: 2 judges', () => {
+    const tracked = chromium(slowTail.tracked);
+    const control = chromium(slowTail.control);
+    const inPx = busyWindowProof(tracked, slowTail.block, {
+      axis: 'x',
+      settledWithin: 2,
+      control,
+    });
+    const inSteps = busyWindowProof(tracked, slowTail.block, {
+      axis: 'x',
+      settledWithinSteps: 2,
+      control,
+    });
+    expect(inSteps.judged).toEqual(inPx.judged);
+    expect(inSteps.verdict).toEqual(inPx.verdict);
+  });
+
+  it("takes settledWithin or settledWithinSteps, not both, and settledWithinSteps needs the cast's step", () => {
+    expect(() =>
+      busyWindowProof(chromium(slowTail.tracked), slowTail.block, {
+        axis: 'x',
+        settledWithin: 2,
+        settledWithinSteps: 2,
+      }),
+    ).toThrow(/settledWithin or settledWithinSteps, not both/);
+    expect(() =>
+      busyWindowProof(slowTailFrames(slowTail.tracked), slowTail.block, {
+        axis: 'x',
+        settledWithinSteps: 2,
+      }),
+    ).toThrow(/no tracked frame carries the cast's step/);
   });
 });
