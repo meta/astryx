@@ -64,6 +64,9 @@ const styles = stylex.create({
   },
 });
 
+/** Room for a focus ring inside the preview's scroll box, in px. */
+const FOCUS_RING_ROOM = 5;
+
 /**
  * The example's root: a clean layout boundary, with no padding of its own
  * (the Card's padding is the example's only frame). Nothing the docs page or
@@ -123,7 +126,17 @@ function LivePreview({
   return (
     <div
       style={{
-        width: '100%',
+        // A focus ring (2px at a 3px offset) on a control at the preview's
+        // edge needs room inside this scroll box, or it loses that side. The
+        // room comes out of the card's padding through an equal negative
+        // margin, so the example still lines up with the title and no inset
+        // is added around it. At the block end it stays inside, above the
+        // tabs' divider.
+        boxSizing: 'border-box',
+        width: `calc(100% + ${2 * FOCUS_RING_ROOM}px)`,
+        marginInline: -FOCUS_RING_ROOM,
+        marginBlockStart: -FOCUS_RING_ROOM,
+        padding: FOCUS_RING_ROOM,
         overflow: 'auto',
         minHeight: 200,
         display: 'flex',
@@ -150,9 +163,9 @@ export function ExampleBlock({entry, componentName}: ExampleBlockProps) {
     <ExampleAnchor id={entry.anchorId}>
       <ComponentPreviewTheme>
         <Card padding={3}>
-          {/* The card's layout gap separates the title from the example, and
-              the tabs' divider separates the example from the tabs; nothing
-              pads the example itself. */}
+          {/* This stack's gap separates the title from the example, and the
+              tabs' divider separates the example from the tabs; nothing pads
+              the example itself. */}
           <VStack gap={3}>
             <Text type="body" weight="medium">
               {entry.name}
