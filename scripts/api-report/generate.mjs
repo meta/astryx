@@ -68,6 +68,21 @@ const cap = s =>
 const kebabAttr = p =>
   `data-${p.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}`;
 
+// StyleX names a `defineVars` key that is not a literal `--` name as `--`,
+// the class name prefix, and a base-36 hash of a 32-bit value (1 to 7
+// characters). Package builds use the default prefix `x`. Do not give a public
+// custom property this form: the report leaves it out.
+const STYLEX_HASHED_VAR = /^--x[0-9a-z]{1,7}$/;
+
+/**
+ * Whether a stylesheet's custom property is public: not a private `--_*`
+ * name and not a name StyleX hashed.
+ * @param {string} name
+ * @returns {boolean}
+ */
+const isPublicCustomProperty = name =>
+  !name.startsWith('--_') && !STYLEX_HASHED_VAR.test(name);
+
 /**
  * The file an entry point publishes: its stylesheet for a stylesheet entry,
  * otherwise its built declarations, falling back to the module itself.
@@ -535,8 +550,8 @@ export async function generateReport(opts) {
   for (const e of entries.filter(e => e.kind === 'css')) {
     const css = fs.readFileSync(e.abs, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const names = new Set();
-    for (const m of css.matchAll(/(?:^|[;{\s])(--[A-Za-z][\w-]*)\s*:/g))
-      names.add(m[1]);
+    for (const m of css.matchAll(/(?:^|[;{\s])(--[\w-]+)\s*:/g))
+      if (isPublicCustomProperty(m[1])) names.add(m[1]);
     for (const n of [...names].sort(byName))
       cssLines.push(`var ${n} (${e.subpath})`);
   }

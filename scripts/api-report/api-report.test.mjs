@@ -86,11 +86,22 @@ describe('generateReport', () => {
     expect(report).toContain('interface ChipExperimentalOptions @experimental');
   });
 
-  it('leaves out ./internal/*, private custom properties, and unlisted attributes', () => {
+  it('leaves out ./internal/*, commented-out custom properties, and unlisted attributes', () => {
     expect(report).not.toContain('secret');
-    expect(report).not.toContain('--_demo-private');
     expect(report).not.toContain('--commented-out');
     expect(report).not.toContain('data-astryx-private');
+  });
+
+  it('leaves out a private --_* custom property', () => {
+    expect(report).not.toContain('--_demo-private');
+  });
+
+  it('leaves out a custom property name that StyleX hashed', () => {
+    expect(report).not.toContain('--x1ue0wla');
+  });
+
+  it('still lists a public --astryx-* custom property', () => {
+    expect(report).toContain('var --astryx-demo-offset (./demo.css)');
   });
 
   it('details a declaration once and points later entry points at it', () => {

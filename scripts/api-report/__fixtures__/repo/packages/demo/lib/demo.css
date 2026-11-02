@@ -4,6 +4,8 @@
 :root {
   --demo-accent: blue;
   --_demo-private: 1px;
+  --x1ue0wla: 0px;
+  --astryx-demo-offset: 2px;
 }
 .astryx-chip[data-astryx-theme] {
   --demo-gap: 4px;
