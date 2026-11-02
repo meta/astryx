@@ -869,9 +869,10 @@ describe('runNpm time limit', () => {
     });
     expect(/** @type {any} */ (result.error)?.code).toBe('ETIMEDOUT');
     const pid = Number(fs.readFileSync(pidFile, 'utf-8'));
-    // The guard sends SIGKILL and exits at once; the killed process can still
-    // exist for a moment (the signal in flight, or awaiting reaping).
-    expect(await waitFor(() => !alive(pid), 5_000)).toBe(true);
+    // The guard sent npm's group SIGKILL before it exited, so npm stops
+    // running: the signal can still be in flight, and its new parent reaps
+    // it when it gets to it, which a loaded machine can hold off for seconds.
+    await eventually(() => ended(pid));
   });
 });
 
@@ -914,7 +915,9 @@ describe('no install outlives its run', () => {
     const npmPid = Number(fs.readFileSync(pidFile, 'utf-8'));
     const exited = new Promise(resolve => cli.on('exit', resolve));
     process.kill(-(/** @type {number} */ (cli.pid)), 'SIGINT');
-    expect(await waitFor(() => !alive(npmPid), 5_000)).toBe(true);
+    // The guard ends npm's group on Ctrl-C: npm stops running, however late
+    // its new parent reaps it.
+    await eventually(() => ended(npmPid));
     await exited;
   }, 30_000);
 
