@@ -40,6 +40,7 @@ import {
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 import {useInternalListFocus} from '../hooks/useListFocus';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 
 /**
  * Size of the radio controls, matching CheckboxInput sizes.
@@ -420,12 +421,13 @@ export function RadioList({
    * engine (WebKit does not mirror horizontal arrows in right-to-left). A
    * group with no disabled radio keeps the browser's own arrow keys.
    */
-  const listFocus = useInternalListFocus<HTMLDivElement>({
-    itemSelector: `input[type="radio"][name="${radioName.replace(/["\\]/g, '\\$&')}"]`,
-    orientation: 'both',
-    hasHomeEnd: false,
-    wrap: true,
-  });
+  const {listRef, handleKeyDown: handleListKeyDown} =
+    useInternalListFocus<HTMLDivElement>({
+      itemSelector: `input[type="radio"][name="${radioName.replace(/["\\]/g, '\\$&')}"]`,
+      orientation: 'both',
+      hasHomeEnd: false,
+      wrap: true,
+    });
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       const group = groupRef.current;
@@ -440,7 +442,7 @@ export function RadioList({
       ) {
         return;
       }
-      listFocus.handleKeyDown(e);
+      handleListKeyDown(e);
       const focused = group.ownerDocument.activeElement;
       if (
         focused !== target &&
@@ -450,7 +452,14 @@ export function RadioList({
         focused.click();
       }
     },
-    [listFocus, radioName],
+    [handleListKeyDown, radioName],
+  );
+
+  const groupRefs = useMergedRefs(
+    ref,
+    groupRef,
+    listRef,
+    disabledMessageTooltip.ref,
   );
 
   return (
@@ -480,19 +489,9 @@ export function RadioList({
       width={width}>
       <div
         {...rest}
-        ref={el => {
-          groupRef.current = el;
-          listFocus.listRef.current = el;
-          if (typeof ref === 'function') {
-            ref(el);
-          } else if (ref) {
-            ref.current = el;
-          }
-          // Anchor + hover/focus listeners for the disabled-message tooltip.
-          // Handlers are gated internally by isEnabled, so attaching
-          // unconditionally is safe.
-          disabledMessageTooltip.ref(el);
-        }}
+        // The disabled-message tooltip's anchor and hover/focus listeners are
+        // gated internally by isEnabled, so attaching unconditionally is safe.
+        ref={groupRefs}
         role="radiogroup"
         // A caller aria-labelledby names the group together with its label.
         aria-labelledby={joinAriaIDs(labelID, ariaLabelledByProp)}

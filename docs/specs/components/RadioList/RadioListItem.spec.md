@@ -72,8 +72,9 @@ Consumer usage lives in `RadioListItem.doc.mjs`.
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: records shipped behavior; no public prop, default,
-  export, or DOM change
+- Compatibility class: nonbreaking; no public prop, default, or export
+  change. A disabled radio renders `aria-disabled` instead of native
+  `disabled` (FR6).
 - Controlled/uncontrolled behavior: controlled by the parent RadioList's
   `value`
 - Migration decision: none
@@ -177,8 +178,8 @@ No design record beyond `design:user-states` governs RadioListItem.
 
 - `component:RadioList` supplies the name, value, size, and group availability.
 - `design:user-states` owns the pressed treatment the radio indicator paints.
-- `spec:AST-085` owns disabled focusability; RadioListItem meets its FR1–FR3
-  and FR6.
+- `spec:AST-085` owns disabled focusability; RadioListItem meets its FR1, FR2
+  and FR6, and FR3 once hydrated (FR6's implementation gap).
 
 ## Verification map
 

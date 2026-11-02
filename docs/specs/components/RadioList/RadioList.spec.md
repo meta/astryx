@@ -73,8 +73,10 @@ Each option is `component:RadioListItem`. Consumer usage lives in
 
 - Released default preserved: `yes`; `orientation="vertical"`, `size="md"`,
   not disabled
-- Compatibility class: records shipped behavior; no public prop, default,
-  export, or DOM change
+- Compatibility class: nonbreaking; no public prop, default, or export
+  change. Disabled radios render `aria-disabled` instead of native
+  `disabled`, and a disabled group's radios take the generated name (FR2,
+  FR5).
 - Controlled/uncontrolled behavior: controlled only; `value` is required and
   `''` means nothing is selected
 - Migration decision: none
@@ -183,8 +185,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 - `spec:AST-085` owns disabled reasons and `family:input-fields` FR10 and DEC-7
   own prop targets; RadioList
   meets FR10.
-- `spec:AST-085` owns disabled focusability; RadioList meets its FR1–FR4 and
-  FR7, and FR5 records the reason gap.
+- `spec:AST-085` owns disabled focusability; RadioList meets its FR1–FR5 and
+  FR7.
 - `component:RadioListItem` owns each option and reads the group through
   context.
 
