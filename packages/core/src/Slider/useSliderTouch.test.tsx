@@ -757,4 +757,51 @@ describe('Slider touch presentation (UISlider tracking)', () => {
     // Handed back to the stylesheet: no inline translate is left.
     expect(thumb.style.translate).toBe('');
   });
+
+  it('a pen lifted while it moves ends its drag at the release, with no coast (component:Slider FR7)', async () => {
+    stubMatchMedia(true);
+    stubControlGeometry();
+    // A running stand-in, as for the finger's coast: a coast that started
+    // would carry the value on.
+    Object.defineProperty(HTMLElement.prototype, 'animate', {
+      configurable: true,
+      value: () =>
+        ({
+          finished: new Promise<never>(() => {}),
+          cancel: () => {},
+          startTime: null,
+        }) as unknown as Animation,
+    });
+    onTestFinished(() => {
+      delete (HTMLElement.prototype as {animate?: unknown}).animate;
+    });
+    const onChange = vi.fn();
+    const onChangeEnd = vi.fn();
+    await renderTouch(
+      <Controlled initial={20} onChange={onChange} onChangeEnd={onChangeEnd} />,
+    );
+    const thumb = screen.getByRole('slider');
+    const hit = hitOf(thumb);
+    // 10 moves of 6 px, 16 ms apart, then the lift 16 ms later: 375 px/s at
+    // the lift, which a finger's release would coast on.
+    const t = nextStart();
+    pen('pointerdown', hit, 60, 12, t);
+    for (let i = 1; i <= 10; i++) {
+      pen('pointermove', hit, 60 + 6 * i, 12, t + 16 * i);
+    }
+    const liftValue = 20 + Math.round(((60 - 10) / LENGTH) * 100);
+    expect(onChange).toHaveBeenLastCalledWith(liftValue);
+    pen('pointerup', hit, 120, 12, t + 16 * 11);
+    expect(onChangeEnd).toHaveBeenCalledTimes(1);
+    expect(onChangeEnd).toHaveBeenCalledWith(liftValue);
+    for (let frame = 0; frame < 120; frame++) {
+      await act(async () => {
+        vi.advanceTimersByTime(16);
+      });
+    }
+    expect(thumb).toHaveAttribute('aria-valuenow', String(liftValue));
+    expect(onChange).toHaveBeenLastCalledWith(liftValue);
+    expect(onChangeEnd).toHaveBeenCalledTimes(1);
+    expect(thumb.style.translate).toBe('');
+  });
 });
