@@ -61,7 +61,10 @@ import {
   plainDateWeekFieldName,
   DATE_FORMAT_WITH_WEEKDAY,
 } from '../utils/plainDate';
-import {plainDateFormatStandaloneMonthYear} from '../utils/plainDate';
+import {
+  plainDateFormatDayNumber,
+  plainDateFormatStandaloneMonthYear,
+} from '../utils/plainDate';
 import {mergeProps, composeEventHandlers, rtlStyles} from '../utils';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
@@ -1155,7 +1158,7 @@ function MonthGrid({
                 <div
                   role="rowheader"
                   {...stylex.props(monthGridStyles.weekNumber)}>
-                  {weekNum}
+                  {plainDateFormatDayNumber(weekNum, locale)}
                 </div>
               )}
               {week.map((day, dayIndex) => {
@@ -1422,7 +1425,7 @@ function DayCell({
             state.effectivelyDisabled && dayCellTheme.dayDisabled,
           ),
         )}>
-        {dayNumber}
+        {plainDateFormatDayNumber(dayNumber, locale)}
       </button>
     </div>
   );
