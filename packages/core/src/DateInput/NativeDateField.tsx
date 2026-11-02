@@ -52,7 +52,7 @@ import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {Icon} from '../Icon';
-import {useLocale, useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
 import {useInputGroup} from '../InputGroup';
 import {useFieldInputStyling} from '../Field/fieldParts';
 import {joinAriaIDs} from '../utils/inputAria';
@@ -81,6 +81,13 @@ import {
   type ISODateString,
 } from '../utils';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/DateInput/NativeDateField.generated';
+
+registerEnglishFallback(english);
 
 const styles = stylex.create({
   // Same as DateInput's: no hover ring while disabled or busy, and the
@@ -308,7 +315,7 @@ export function NativeDateField({
     onBlur: onBlurProp,
     ...controlProps
   } = rest;
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =

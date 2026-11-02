@@ -38,10 +38,16 @@ import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/CommandPalette/CommandPaletteInput.generated';
+
+registerEnglishFallback(english);
 const styles = stylex.create({
   wrapper: {
     display: 'flex',
@@ -187,7 +193,7 @@ export function CommandPaletteInput({
   style,
   ...props
 }: CommandPaletteInputProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const placeholder =
     placeholderFromProps ?? t('@astryx.commandPalette.input.placeholder');
   const ctx = useCommandPaletteContext();

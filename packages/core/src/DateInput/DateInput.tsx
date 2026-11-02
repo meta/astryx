@@ -211,10 +211,17 @@ import {
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
-import {useLocale, useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/DateInput/DateInput.generated';
+
+registerEnglishFallback(english);
 export interface DateInputProps extends Omit<
   FieldInputBaseProps<HTMLInputElement>,
   'onChange' | 'defaultValue'
@@ -533,7 +540,7 @@ function PointerDateField({
     onKeyDown: onKeyDownProp,
     ...controlProps
   } = rest;
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =

@@ -77,7 +77,7 @@ import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext
 import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useTooltip} from '../Tooltip';
 import {themeProps} from '../utils/themeProps';
-import {useLocale, useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
 import {
   formatLocaleTime,
   parseLocaleTime,
@@ -94,6 +94,13 @@ import {
 } from '../utils/inputPresentation';
 import {useDevWarning} from '../hooks/useDevWarning';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/TimeInput/TimeInput.generated';
+
+registerEnglishFallback(english);
 
 const TOUCH_POINTER_QUERY = '(pointer: coarse)';
 
@@ -454,7 +461,7 @@ function TimeField({
     onKeyDown: onKeyDownProp,
     ...controlProps
   } = rest;
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =

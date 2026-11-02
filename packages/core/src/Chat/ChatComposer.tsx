@@ -52,13 +52,19 @@ import {ChatComposerContext} from './ChatContext';
 import type {ChatComposerInputControl} from './ChatContext';
 import {ChatSendButton} from './ChatSendButton';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {innermostInteractive} from '../hooks/useClickableContainer';
 import {isLayerSurface} from '../Layer/layerSurfacePress';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatComposer.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -362,7 +368,7 @@ function isComposerEditor(target: EventTarget | null): target is HTMLElement {
  * ```
  */
 export function ChatComposer(props: ChatComposerProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {
     ref,
     onSubmit,

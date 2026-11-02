@@ -56,6 +56,7 @@ afterEach(() => {
 const FULL_FALLBACK_FILES = {
   'i18n/useTranslator.ts': 'registerFullEnglishFallback();\n',
   'i18n/publicContext.ts': 'registerFullEnglishFallback();\n',
+  'PowerSearch/resolveOperatorLabel.ts': 'registerFullEnglishFallback();\n',
 };
 
 describe('collectCatalogKeys', () => {
@@ -180,7 +181,7 @@ describe('findWiringProblems', () => {
     ]);
   });
 
-  it('accepts a module that still resolves its keys through the public useTranslator', () => {
+  it('rejects a Core module that imports the public useTranslator or context export', () => {
     const dir = fixture({
       ...FULL_FALLBACK_FILES,
       'Table/Table.tsx': [
@@ -188,21 +189,24 @@ describe('findWiringProblems', () => {
         `t('@astryx.pagination.next');`,
         '',
       ].join('\n'),
-    });
-    expect(
-      findWiringProblems(collectEnglishFallbackSlices(CATALOG, dir), dir),
-    ).toEqual([]);
-  });
-
-  it('rejects a module that registers its map but also imports the public useTranslator', () => {
-    const dir = fixture({
-      ...FULL_FALLBACK_FILES,
       'Button/Button.tsx': `import {useTranslator} from '../i18n/useTranslator';\n${WIRED}`,
+      'Link/Link.tsx': `import {InternationalizationContext} from '../i18n';\n`,
     });
     expect(
       findWiringProblems(collectEnglishFallbackSlices(CATALOG, dir), dir),
     ).toEqual([
-      expect.stringMatching(/^Button\/Button\.tsx: .*also imports the public/),
+      expect.stringMatching(
+        /^Button\/Button\.tsx: imports the public useTranslator/,
+      ),
+      expect.stringMatching(
+        /^Link\/Link\.tsx: imports the public InternationalizationContext/,
+      ),
+      expect.stringMatching(
+        /^Table\/Table\.tsx: imports the public useTranslator/,
+      ),
+      expect.stringMatching(
+        /^Table\/Table\.tsx: .*does not import its English/,
+      ),
     ]);
   });
 
@@ -241,7 +245,14 @@ describe('import cost', () => {
   it('bundles only the English a component names, not the whole catalog', () => {
     const keys = loadCatalogKeys();
     expect(keys.length).toBeGreaterThan(100);
-    for (const name of ['Button', 'TreeList', 'SideNav', 'Selector']) {
+    for (const name of [
+      'Button',
+      'TreeList',
+      'SideNav',
+      'Selector',
+      'Table',
+      'DateInput',
+    ]) {
       const text = bundleImport(path.join(CORE_DIST, name, `${name}.js`));
       expect(text, name).not.toBeNull();
       const bundled = catalogKeysIn(text, keys);

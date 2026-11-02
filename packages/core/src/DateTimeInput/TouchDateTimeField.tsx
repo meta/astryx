@@ -50,7 +50,6 @@ import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {Icon} from '../Icon';
 import {IconButton} from '../IconButton';
-import {useTranslator, InternationalizationContext} from '../i18n';
 import {SegmentedControl, SegmentedControlItem} from '../SegmentedControl';
 import {useSize} from '../SizeContext/SizeContext';
 import {Spinner} from '../Spinner';
@@ -108,6 +107,14 @@ import {
   monthIndexOf,
 } from '../DateInput/monthGeometry';
 import type {DateTimeInputProps, ISODateTimeString} from './DateTimeInput';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import {InternationalizationContext} from '../i18n/InternationalizationContext';
+import english from '../i18n/generated-english/DateTimeInput/TouchDateTimeField.generated';
+
+registerEnglishFallback(english);
 
 function splitDateTime(dt: ISODateTimeString | undefined): {
   date: ISODateString | undefined;
@@ -503,7 +510,7 @@ export function TouchDateTimeField({
     onKeyDown: onKeyDownProp,
     ...controlProps
   } = rest;
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const {locale} = use(InternationalizationContext);
   const placeholder =
