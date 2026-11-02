@@ -519,12 +519,12 @@ export function Calendar({ref, ...props}: CalendarProps) {
         !(maxDateForKeys && plainDateIsAfter(pd, maxDateForKeys));
       let targetPd: PlainDate;
       if (unit === 'months') {
-        // A page targets the same day of the month a month away (clamped to
-        // that month's length). Past `min`/`max` nothing moves; a month with
-        // no enabled day is no destination either, the same as an arrow with
-        // no enabled day in its direction; a target disabled by a constraint
-        // lands on that month's first enabled day instead.
-        const candidate = plainDateAddMonths(currentPd, delta);
+        // A page targets the same day of the month `offset` months away
+        // (clamped to that month's length). Past `min`/`max` nothing moves; a
+        // month with no enabled day is no destination either, the same as an
+        // arrow with no enabled day in its direction; a target disabled by a
+        // constraint lands on that month's first enabled day instead.
+        const candidate = plainDateAddMonths(currentPd, delta * (offset ?? 1));
         if (!inRange(candidate)) {
           return;
         }
@@ -1009,6 +1009,28 @@ function MonthGrid({
     onPageDown: handlePageDown,
   });
 
+  // Shift+PageUp and Shift+PageDown move a year: twelve months, so the
+  // month keys' clamping and bounds apply. The grid hook handles the rest.
+  const handleDayGridKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.shiftKey && (e.key === 'PageUp' || e.key === 'PageDown')) {
+        e.preventDefault();
+        e.stopPropagation();
+        const focusedDate = getFocusedDate();
+        if (focusedDate) {
+          if (e.key === 'PageUp') {
+            onNavigatePrevious?.(focusedDate, 12, 'months');
+          } else {
+            onNavigateNext?.(focusedDate, 12, 'months');
+          }
+        }
+        return;
+      }
+      handleGridKeyDown(e);
+    },
+    [getFocusedDate, onNavigatePrevious, onNavigateNext, handleGridKeyDown],
+  );
+
   // Handle pending focus after month navigation. Every mounted month grid
   // sees the same pending date; only the grid showing that date's month acts,
   // so a neighbouring grid's fallback never overrides the right target. The
@@ -1108,7 +1130,7 @@ function MonthGrid({
         // APG grid pattern: a range selection holds multiple selected cells,
         // so the grid must advertise multi-selectability.
         aria-multiselectable={mode === 'range' ? true : undefined}
-        onKeyDown={handleGridKeyDown}
+        onKeyDown={handleDayGridKeyDown}
         onFocus={handleGridFocus}
         {...stylex.props(
           monthGridStyles.daysGrid,

@@ -1533,6 +1533,38 @@ describe('Calendar', () => {
       expect(document.activeElement).toBe(getDayButton(15));
     });
 
+    it('moves the focused day by a year with Shift+PageUp and Shift+PageDown, clamped to the month length', async () => {
+      const user = userEvent.setup();
+      render(<Calendar focusDate="2028-02-01" />);
+      getDayButton(29, 'February', 2028).focus();
+      await user.keyboard('{Shift>}{PageUp}{/Shift}');
+      await waitFor(() => {
+        expect(document.activeElement).toHaveAttribute(
+          'data-date',
+          '2027-02-28',
+        );
+      });
+      await user.keyboard('{Shift>}{PageDown}{/Shift}');
+      await waitFor(() => {
+        expect(document.activeElement).toHaveAttribute(
+          'data-date',
+          '2028-02-28',
+        );
+      });
+    });
+
+    it('a Shift+page whose target lies past min changes nothing and keeps focus', async () => {
+      const user = userEvent.setup();
+      render(<Calendar focusDate="2026-06-01" min="2025-07-01" />);
+      getDayButton(15, 'June').focus();
+      await user.keyboard('{Shift>}{PageUp}{/Shift}');
+      expect(getDayButton(15, 'June')).toHaveAttribute(
+        'data-date',
+        '2026-06-15',
+      );
+      expect(document.activeElement).toBe(getDayButton(15, 'June'));
+    });
+
     it('in a two-month view a boundary blocks only out-of-range targets, not month movement', async () => {
       const user = userEvent.setup();
       render(
