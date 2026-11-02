@@ -10,7 +10,7 @@
 export const docs = {
   type: 'namespace',
   name: 'internationalization',
-  title: 'Internationalization',
+  title: 'Internationalization & localization',
   summary:
     'Set the active locale, load catalogs, coexist with your own i18n library, handle RTL, and test translations.',
   keywords: [
