@@ -6,7 +6,12 @@ import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import {fsGuardTests, scopedExtraTests} from './fs-guard-tests.mjs';
+import {
+  fsGuardTests,
+  scopedExtraTests,
+  specReaderTests,
+} from './fs-guard-tests.mjs';
+import yaml from 'yaml';
 
 const sources = {
   'packages/core/src/Button/Button.test.tsx':
@@ -169,4 +174,145 @@ describe('scopedExtraTests on this repository (contract)', () => {
       expect(tests).toContain(expected);
     }
   });
+});
+
+describe('specReaderTests: the tests a spec-only change runs (spec:AST-030 FR2)', () => {
+  const sources = {
+    // Reads one record by a path relative to itself.
+    'packages/core/src/motion/roles.test.ts':
+      "import {readFileSync} from 'node:fs';\nconst spec = readFileSync(resolve(import.meta.dirname, '../../../../docs/specs/AST-094-x/spec.md'), 'utf8');",
+    // Reads the component tree through a helper it imports.
+    'scripts/components.test.mjs': "import {records} from './lib/records.mjs';",
+    'scripts/lib/records.mjs':
+      "import fs from 'node:fs';\nexport const records = () => fs.readdirSync('docs/specs/components');",
+    // A computed record path names the whole tree.
+    'scripts/any.test.mjs':
+      "import fs from 'node:fs';\nconst read = id => fs.readFileSync(`docs/specs/${id}/spec.md`, 'utf8');",
+    // So does path.join(root, 'docs', 'specs', …).
+    'scripts/joined.test.mjs':
+      "import fs from 'node:fs';\nconst dir = path.join(root, 'docs', 'specs');",
+    // Names a record only in prose.
+    'packages/core/src/Button/Button.a11y.test.tsx':
+      "import fs from 'node:fs';\n/**\n * The contract (`docs/specs/AST-021/spec.md` FR5).\n */\n// see docs/specs/AST-021/spec.md\nexport {};",
+    // Names a record as data but reads no files.
+    'scripts/classify.test.mjs':
+      "const path = 'docs/specs/AST-094-x/spec.md';\nexpect(classify(path)).toBe(true);",
+  };
+  const files = Object.keys(sources);
+  const read = file => sources[file];
+
+  it('lists every test whose imports read files and name a spec path in code', () => {
+    expect(specReaderTests(files, read)).toEqual([
+      'packages/core/src/motion/roles.test.ts',
+      'scripts/components.test.mjs',
+      'scripts/any.test.mjs',
+      'scripts/joined.test.mjs',
+    ]);
+  });
+
+  it('narrows to the readers of a changed record: the record, a directory above it, or the whole tree', () => {
+    expect(
+      specReaderTests(files, read, ['docs/specs/AST-094-x/spec.md']),
+    ).toEqual([
+      'packages/core/src/motion/roles.test.ts',
+      'scripts/any.test.mjs',
+      'scripts/joined.test.mjs',
+    ]);
+    expect(
+      specReaderTests(files, read, [
+        'docs/specs/components/Button/Button.spec.md',
+      ]),
+    ).toEqual([
+      'scripts/components.test.mjs',
+      'scripts/any.test.mjs',
+      'scripts/joined.test.mjs',
+    ]);
+    // A record no test names at all still runs the whole-tree readers.
+    expect(
+      specReaderTests(files, read, ['docs/specs/AST-001/spec.md']),
+    ).toEqual(['scripts/any.test.mjs', 'scripts/joined.test.mjs']);
+  });
+
+  it('lists none for a change outside the spec tree', () => {
+    expect(specReaderTests(files, read, ['packages/core/src/x.ts'])).toEqual(
+      [],
+    );
+  });
+});
+
+describe('spec readers on this repository (contract)', () => {
+  const root = path.resolve(import.meta.dirname, '../..');
+  const files = execFileSync('git', ['ls-files', '-z'], {
+    cwd: root,
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  })
+    .split('\0')
+    .filter(Boolean);
+  const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+
+  it('a spec-only change to AST-094 runs the motion roles test that reads its FR4 table', () => {
+    expect(
+      specReaderTests(files, read, [
+        'docs/specs/AST-094-touch-presentations/spec.md',
+      ]),
+    ).toContain('packages/core/src/motion/roles.test.ts');
+  });
+
+  it('a change to AST-084 runs the icon-set checks that read it', () => {
+    expect(
+      specReaderTests(files, read, ['docs/specs/AST-084-icon-sets/spec.md']),
+    ).toContain('packages/cli/foundation/discovery/icon-set-checks.test.mjs');
+  });
+
+  const ci = yaml.parse(read('.github/workflows/ci.yml'));
+  it.each([
+    ['test-ui', 'test:ui'],
+    ['test-node', 'test:node'],
+  ])(
+    '%s runs the readers of a changed record on a spec-only change, on one leg',
+    (id, script) => {
+      const steps = ci.jobs[id].steps;
+      const index = name => steps.findIndex(step => step.name === name);
+      const SPEC_LEG =
+        "matrix.shard == 1 && steps.scope.outputs.spec_only == 'true'";
+      const checkout =
+        steps[
+          index('Check out the change for the tests that read its records')
+        ];
+      expect(checkout).toMatchObject({
+        if: SPEC_LEG,
+        uses: 'actions/checkout@v7',
+        with: {'fetch-depth': 2},
+      });
+      const list = steps[index('List the tests that read a changed record')];
+      expect(list.if).toBe(SPEC_LEG);
+      expect(list.run).toContain(
+        'node .github/scripts/fs-guard-tests.mjs --spec-readers --changed HEAD^1',
+      );
+      const setup =
+        steps[index('List the tests that read a changed record') + 1];
+      expect(setup).toEqual({
+        uses: './.github/actions/setup',
+        if: "steps.spec-readers.outputs.any == 'true'",
+      });
+      const runner = steps.find(
+        step =>
+          step.name?.startsWith('Run the ') &&
+          step.name.endsWith(' tests that read a changed record'),
+      );
+      expect(runner.if).toBe("steps.spec-readers.outputs.any == 'true'");
+      expect(runner.run).toContain(
+        `pnpm ${script} --passWithNoTests "\${READERS[@]}"`,
+      );
+      // Before the steps a spec-only change skips.
+      expect(steps.indexOf(runner)).toBeLessThan(
+        steps.findIndex(
+          step =>
+            step.uses === 'actions/checkout@v7' &&
+            String(step.if).includes("spec_only != 'true'"),
+        ),
+      );
+    },
+  );
 });

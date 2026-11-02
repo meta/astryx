@@ -17,7 +17,12 @@
 //   subpath) or a relative path into its `dist/`. A project that loads a
 //   package from its build sees its source change only through those.
 //
-// Usage: node .github/scripts/fs-guard-tests.mjs [--changed <ref>]
+// - With `--spec-readers --changed <ref>`: instead, the tests that read a
+//   changed spec record (`docs/specs/`). A spec-only pull request runs no other
+//   Vitest test, so these are the ones its change can break
+//   (spec:AST-030 FR2).
+//
+// Usage: node .github/scripts/fs-guard-tests.mjs [--spec-readers] [--changed <ref>]
 //   (newline-separated paths)
 
 import {execFileSync} from 'node:child_process';
@@ -181,6 +186,94 @@ export function scopedExtraTests(files, read, changedFiles = []) {
   return files.filter(file => guards.has(file));
 }
 
+const SPEC_ROOT = 'docs/specs/';
+/** A path literal into the spec tree, relative (`../…/docs/specs/…`) or from the root. */
+const SPEC_LITERAL = /(['"`])((?:\.\.?\/)*docs\/specs(?:\/[^'"`\n]*)?)\1/g;
+/** `path.join(root, 'docs', 'specs', …)` and the like: the whole tree. */
+const SPEC_SEGMENTS = /(['"])docs\1\s*,\s*(['"])specs\2/;
+
+/** The source without block comments and whole-line `//` comments, where prose names records. */
+function code(source) {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
+
+/**
+ * The spec-tree paths a file names in its code, as repository paths: an
+ * exact record, a directory, or a prefix where a template computes the rest
+ * (`docs/specs/${id}/spec.md` names the whole tree).
+ */
+function specPathsIn(file, source) {
+  const body = code(source);
+  const paths = new Set();
+  for (const [, , literal] of body.matchAll(SPEC_LITERAL)) {
+    const fixed = literal.split('${')[0];
+    const joined = fixed.startsWith('.')
+      ? path.posix.normalize(path.posix.join(path.posix.dirname(file), fixed))
+      : fixed;
+    if (joined === 'docs/specs' || joined.startsWith(SPEC_ROOT))
+      paths.add(joined.length < SPEC_ROOT.length ? SPEC_ROOT : joined);
+  }
+  if (SPEC_SEGMENTS.test(body)) paths.add(SPEC_ROOT);
+  return paths;
+}
+
+/**
+ * The tests that read a spec record: the import closure (relative imports
+ * followed, as for the guards above) reads files and names a spec-tree path in
+ * its code. With `changedFiles`, only those whose named paths cover a changed
+ * record: the record itself, a directory above it, or a computed prefix.
+ *
+ * @param {string[]} files tracked repository paths
+ * @param {(file: string) => string} read
+ * @param {string[] | null} changedFiles the change's paths, or null for every reader
+ */
+export function specReaderTests(files, read, changedFiles = null) {
+  const tracked = new Set(files);
+  const memo = new Map();
+  const visit = (file, visiting) => {
+    if (memo.has(file)) return memo.get(file);
+    const result = {reads: false, paths: new Set()};
+    if (visiting.has(file)) return result;
+    visiting.add(file);
+    let source = '';
+    try {
+      source = read(file);
+    } catch {
+      source = '';
+    }
+    result.reads = READS_FILES.test(source);
+    for (const named of specPathsIn(file, source)) result.paths.add(named);
+    for (const [, raw] of source.matchAll(SPECIFIER)) {
+      if (!raw.startsWith('.')) continue;
+      const target = resolve(file, raw, tracked);
+      if (target == null) continue;
+      const inner = visit(target, visiting);
+      result.reads ||= inner.reads;
+      for (const named of inner.paths) result.paths.add(named);
+    }
+    visiting.delete(file);
+    memo.set(file, result);
+    return result;
+  };
+  const changedSpecs =
+    changedFiles == null
+      ? null
+      : changedFiles.filter(file => file.startsWith(SPEC_ROOT));
+  return files.filter(file => {
+    if (!TEST_FILE.test(file)) return false;
+    const {reads, paths} = visit(file, new Set());
+    if (!reads || paths.size === 0) return false;
+    if (changedSpecs == null) return true;
+    return changedSpecs.some(changed =>
+      [...paths].some(
+        named =>
+          changed === named ||
+          changed.startsWith(named.endsWith('/') ? named : `${named}/`),
+      ),
+    );
+  });
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const files = execFileSync('git', ['ls-files', '-z'], {
     encoding: 'utf8',
@@ -200,6 +293,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
           .split('\0')
           .filter(Boolean);
   const read = file => fs.readFileSync(file, 'utf8');
-  const tests = scopedExtraTests(files, read, changedFiles);
+  const tests = process.argv.includes('--spec-readers')
+    ? specReaderTests(files, read, changedFlag === -1 ? null : changedFiles)
+    : scopedExtraTests(files, read, changedFiles);
   process.stdout.write(tests.length > 0 ? `${tests.join('\n')}\n` : '');
 }
