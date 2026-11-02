@@ -160,8 +160,16 @@ const styles = stylex.create({
   iconButtonDisabled: {
     cursor: 'default',
   },
+  // When the presets and the calendar do not fit side by side, the row wraps
+  // and the presets stack above the calendar, in DOM order. The preset group
+  // draws a divider on its inline end and its block end. A negative margin
+  // moves each divider 1 border width past the group's margin box, and the
+  // layout clips at its edges. Thus only the divider between the two parts
+  // shows: the inline-end one side by side, the block-end one when stacked.
   popoverLayout: {
     display: 'flex',
+    flexWrap: 'wrap',
+    overflow: 'clip',
   },
   presetSidebar: {
     display: 'flex',
@@ -171,7 +179,21 @@ const styles = stylex.create({
     borderInlineEndWidth: borderVars['--border-width'],
     borderInlineEndStyle: 'solid',
     borderInlineEndColor: colorVars['--color-border-emphasized'],
+    borderBlockEndWidth: borderVars['--border-width'],
+    borderBlockEndStyle: 'solid',
+    borderBlockEndColor: colorVars['--color-border-emphasized'],
+    marginInlineEnd: `calc(-1 * ${borderVars['--border-width']})`,
+    marginBlockEnd: `calc(-1 * ${borderVars['--border-width']})`,
+    // Alone on its line, the group fills the line, so its inline-end divider
+    // reaches the clipped edge. Side by side, the row has no free space: the
+    // layer is as wide as its content or narrower.
+    flexGrow: 1,
     minWidth: 140,
+  },
+  calendarPane: {
+    // Gives back the border width the preset group's margin takes, so the
+    // calendar keeps its side-by-side position.
+    marginInlineStart: borderVars['--border-width'],
   },
   presetButton: {
     display: 'block',
@@ -876,6 +898,7 @@ export function DateRangeInput({
               minRangeSpan={minRangeSpan}
               numberOfMonths={numberOfMonths}
               weekStartsOn={weekStartsOn}
+              xstyle={presets && presets.length > 0 && styles.calendarPane}
             />
           )}
         </div>,
