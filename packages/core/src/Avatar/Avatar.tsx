@@ -5,7 +5,7 @@
 /**
  * @file Avatar.tsx
  * @input Uses React, HTMLAttributes, ReactNode, useState, useRef; useTooltip
- *   (Tooltip hook) for the optional name-on-hover tooltip; useTranslator (i18n)
+ *   (Tooltip hook) for the optional name-on-hover tooltip; useComponentTranslator (i18n)
  * @output Exports Avatar component, AvatarProps, AvatarSize types
  * @position Core implementation; consumed by index.ts
  *
@@ -50,7 +50,14 @@ import {useTooltip} from '../Tooltip/useTooltip';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
-import {useTranslator, type TranslatorFn} from '../i18n';
+import type {TranslatorFn} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Avatar/Avatar.generated';
+
+registerEnglishFallback(english);
 
 /**
  * The offset ratio for positioning elements on a circle's edge at 45°.
@@ -612,7 +619,7 @@ export function Avatar({
   // neither a name nor a labelled status, the avatar is decorative — expose
   // it as `presentation`/`aria-hidden` rather than announcing a meaningless
   // generic "Avatar" (obs-9).
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const nameLabel = meaningfulAlt || meaningfulName;
   // This render can only see a label introspected off a directly-passed
   // element. A status inside a consumer's own wrapper reports through the ref

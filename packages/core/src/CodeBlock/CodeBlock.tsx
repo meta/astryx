@@ -57,8 +57,14 @@ import {ensureHighlightStyles} from './highlightStyles';
 import {applyHighlightRangesChunked} from './highlightRanges';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
-import {useTranslator} from '../i18n';
 import {SyntaxTheme, type SyntaxThemeDefinition} from '../theme/syntax';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/CodeBlock/CodeBlock.generated';
+
+registerEnglishFallback(english);
 
 // ---------------------------------------------------------------------------
 // Styles
@@ -978,7 +984,7 @@ export function CodeBlock({
   ref,
   ...props
 }: CodeBlockProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   // Owns the clipboard write, the transient copied flag, its reset timer, and
   // the polite copy announcement (a swapped aria-label alone is not reliably
   // announced) — shared with Timestamp via the same hook.
