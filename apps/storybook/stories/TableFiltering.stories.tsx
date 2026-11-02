@@ -610,3 +610,98 @@ export const EmptyState: Story = {
     );
   },
 };
+
+export const BottomSheetPresentation: Story = {
+  name: 'Bottom sheet presentation (touch)',
+  parameters: {
+    viewport: {defaultViewport: 'mobile1'},
+  },
+  render: () => {
+    const {config, applyFilters} = usePowerSearchConfig(fieldDefs);
+    const {filters, onFilterChange, clearAll} = useTableFilterState();
+    const columns: TableColumn<Employee>[] = [
+      {key: 'name', header: 'Name', filter: 'name'},
+      {key: 'role', header: 'Role', filter: 'role'},
+      {key: 'department', header: 'Department', filter: 'department'},
+    ];
+    // Pinned to 'bottom-sheet' so the sheet shows on any device. With
+    // 'adaptive', a table takes it on a compact touch screen only.
+    const filterPlugin = useTableFiltering<Employee>({
+      filters,
+      onFilterChange,
+      onClearAll: clearAll,
+      presentation: 'bottom-sheet',
+      searchConfig: config,
+    });
+    const data = applyFilters(
+      toSearchFilters(filters, columns, config) as PowerSearchFilter[],
+      employees,
+    );
+    return (
+      <div style={{maxWidth: 420}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
+          Every filter lives behind the Filter button, which carries the active
+          count. Toggling one applies it straight away and the sheet has no
+          scrim, so the rows keep updating behind it. Showing {data.length}/
+          {employees.length} rows.
+        </p>
+        <Table
+          data={data}
+          columns={columns}
+          idKey="name"
+          plugins={{filter: filterPlugin}}
+        />
+      </div>
+    );
+  },
+};
+
+export const AdaptivePresentation: Story = {
+  name: 'Adaptive presentation',
+  render: () => {
+    const {config, applyFilters} = usePowerSearchConfig(fieldDefs);
+    const {filters, onFilterChange, clearAll} = useTableFilterState();
+    const columns: TableColumn<Employee>[] = [
+      {key: 'name', header: 'Name'},
+      {key: 'role', header: 'Role', filter: 'role'},
+      {key: 'department', header: 'Department', filter: 'department'},
+    ];
+    // Header popovers with a mouse or on a wide screen; the bottom sheet on a
+    // compact touch screen. With only short lists to pick from, the sheet
+    // hugs its content and the rows behind stay in view.
+    const filterPlugin = useTableFiltering<Employee>({
+      filters,
+      onFilterChange,
+      onClearAll: clearAll,
+      presentation: 'adaptive',
+      searchConfig: config,
+    });
+    const data = applyFilters(
+      toSearchFilters(filters, columns, config) as PowerSearchFilter[],
+      employees,
+    );
+    return (
+      <div style={{maxWidth: 800}}>
+        <p
+          style={{
+            marginBottom: 8,
+            fontSize: 14,
+            color: 'var(--color-text-secondary)',
+          }}>
+          Showing {data.length}/{employees.length} rows.
+        </p>
+        <Table
+          data={data}
+          columns={columns}
+          idKey="name"
+          plugins={{filter: filterPlugin}}
+        />
+      </div>
+    );
+  },
+};

@@ -7,7 +7,7 @@ export const docs = {
   subComponentOf: 'Table',
   displayName: 'useTableFilterState',
   isHiddenFromOverview: true,
-  description: 'Managed state hook for table filtering. Returns the current filter map and an onChange handler. Pass the result directly to useTableFiltering.',
+  description: 'Managed state hook for table filtering. Returns the current filter map, an onFilterChange handler, and clearAll. Pass filters and onFilterChange to useTableFiltering, and clearAll as its onClearAll.',
   props: [
     {
       name: 'initialState',
@@ -21,7 +21,7 @@ export const docsZh = {
   name: 'useTableFilterState',
   isHiddenFromOverview: true,
   displayName: 'useTableFilterState',
-  description: '表格筛选的受管状态 hook。返回当前筛选映射和 onChange 处理程序。将结果直接传递给 useTableFiltering。',
+  description: '表格筛选的受管状态 hook。返回当前筛选映射、onFilterChange 处理程序和 clearAll。将 filters 和 onFilterChange 传给 useTableFiltering，clearAll 作为其 onClearAll。',
   props: [
     {
       name: 'initialState',
@@ -35,7 +35,7 @@ export const docsDense = {
   name: 'useTableFilterState',
   isHiddenFromOverview: true,
   displayName: 'useTableFilterState',
-  description: 'Managed filter state hook. Returns filter map + onChange handler for useTableFiltering.',
+  description: 'Managed filter state hook. Returns filter map + onFilterChange + clearAll (pass as onClearAll) for useTableFiltering.',
   propDescriptions: {
     initialState: 'Optional initial filter state map.',
   },
