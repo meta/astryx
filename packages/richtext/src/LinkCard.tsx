@@ -13,10 +13,10 @@
  *   while the editor is editable. The card renders into the positioned
  *   element that holds the content editable, a sibling of the editable text
  *   as CodeBlockHeaderPlugin's headers are, never inside it. It is absolutely
- *   positioned, so it overlays the document and never reflows it
- *   (spec:AST-061 FR9, DEC-2). It also makes Cmd-click (Ctrl-click off Apple
- *   platforms) follow a link, and marks the editor root so editorTheme draws
- *   its links with a text cursor until that modifier is held over one.
+ *   positioned, so it overlays the document and never reflows it. It also
+ *   makes Cmd-click (Ctrl-click off Apple platforms) follow a link, and marks
+ *   the editor root so editorTheme draws its links with a text cursor until
+ *   that modifier is held over one.
  *
  * SYNC: When modified, update:
  * - /packages/richtext/src/RichTextEditorToolbar.tsx (renders it)
