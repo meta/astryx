@@ -103,6 +103,10 @@ Consumer migration instructions belong in consumer docs and release notes.
   `architecture:public-component-api` INV7 has handlers compose.
 - **Collapse and open do not slide yet (FR8).** A LayoutPanel's pane jumps
   closed and open, where `spec:AST-105` FR9 slides it.
+- **No `collapsedLabel` yet (AR1).** `createResizable` and the options form
+  of `useResizable` are not built, so a caller without a provider cannot
+  replace the English "Collapsed" announcement, where
+  `architecture:internationalization` INV3a gives it a per-message option.
 - **`shrinkOrder` is inert.** useResizable accepts and documents
   `shrinkOrder`, but no code reads it, so it has no effect.
 
@@ -198,6 +202,12 @@ Consumer migration instructions belong in consumer docs and release notes.
   `role="separator"` with an accessible name, `aria-orientation` (the axis the
   divider lies along), `aria-valuemin`, `aria-valuemax`, and `aria-valuenow` in
   pixels, `aria-valuetext` while collapsed, and `aria-disabled` when disabled.
+  `CreateResizableOptions`, which `useResizable(handleRef, options)` also
+  takes, has `collapsedLabel?: string`, announced as the Handle's
+  `aria-valuetext` while collapsed; absent, the catalog's "Collapsed"
+  (`architecture:internationalization` INV3a). Implementation gap:
+  `CreateResizableOptions` and the options form of `useResizable` are not
+  built, so `collapsedLabel` does not exist yet.
   ArrowRight and ArrowDown move the divider toward the end of its axis and
   ArrowLeft and ArrowUp toward the start, the inline arrows following the
   reading direction under RTL, with Shift for a larger step, so the pane grows
