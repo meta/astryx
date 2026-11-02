@@ -10,6 +10,7 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/HoverCard/HoverCard.test.tsx
+ * - /packages/core/src/HoverCard/HoverCard.doc.mjs
  * - /packages/core/src/HoverCard/index.ts
  * - /apps/storybook/stories/HoverCard.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/HoverCard/ (showcase blocks)
@@ -190,9 +191,10 @@ export interface HoverCardProps extends Pick<
   onOpenChange?: (isOpen: boolean) => void;
 
   /**
-   * Whether to show hover indication (dashed underline) on the trigger.
-   * - `'auto'`: Show for text-only children
-   * - `true`: Always show
+   * Whether to show hover indication (dashed underline) on a text trigger.
+   * An element trigger keeps its own styling, so this has no effect on it.
+   * - `'auto'`: Show when children is a single string or number
+   * - `true`: Show on a text trigger
    * - `false`: Never show
    *
    * @default 'auto'

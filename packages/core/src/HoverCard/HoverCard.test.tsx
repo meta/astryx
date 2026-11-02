@@ -16,6 +16,7 @@ import {
   vi,
   beforeAll,
   beforeEach,
+  afterEach,
   afterAll,
 } from 'vitest';
 import {
@@ -28,7 +29,7 @@ import {
 } from '@testing-library/react';
 import {renderToString} from 'react-dom/server';
 import {hydrateRoot} from 'react-dom/client';
-import {StrictMode} from 'react';
+import {StrictMode, type ComponentProps} from 'react';
 import {Button} from '../Button/Button';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
 import {Theme, defineTheme} from '../theme';
@@ -1431,5 +1432,168 @@ describe('HoverCard surface press', () => {
     // click on its text is not label activation.
     fireEvent.click(screen.getByText('Card content'));
     expect(screen.getByRole('checkbox')).not.toBeChecked();
+  });
+});
+
+// Contract claims the record lists as read from source only.
+describe('HoverCard timing, hold, and controlled state', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function advance(ms: number) {
+    act(() => {
+      vi.advanceTimersByTime(ms);
+    });
+  }
+
+  function renderCard(props: Partial<ComponentProps<typeof HoverCard>> = {}) {
+    const onOpenChange = vi.fn();
+    const result = render(
+      <HoverCard
+        content={<button type="button">Card action</button>}
+        onOpenChange={onOpenChange}
+        {...props}>
+        <button type="button">Trigger</button>
+      </HoverCard>,
+    );
+    return {
+      ...result,
+      onOpenChange,
+      trigger: screen.getByRole('button', {name: 'Trigger'}),
+    };
+  }
+
+  function cardSurface(): HTMLElement {
+    const action = screen.getByText('Card action');
+    return action.parentElement as HTMLElement;
+  }
+
+  it('opens only once the hover delay has passed', () => {
+    const {trigger, onOpenChange} = renderCard({delay: 300});
+    fireEvent.mouseEnter(trigger);
+    advance(299);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    advance(1);
+    expect(onOpenChange).toHaveBeenCalledWith(true);
+  });
+
+  it('closes only once the hide delay has passed after the pointer leaves', () => {
+    const {trigger, onOpenChange} = renderCard({delay: 0, hideDelay: 200});
+    fireEvent.mouseEnter(trigger);
+    advance(0);
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    fireEvent.mouseLeave(trigger);
+    advance(199);
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    advance(1);
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('stays open while the pointer moves from the trigger into the card, and closes when it leaves the card', () => {
+    const {trigger, onOpenChange} = renderCard({delay: 0, hideDelay: 200});
+    fireEvent.mouseEnter(trigger);
+    advance(0);
+    fireEvent.mouseLeave(trigger);
+    fireEvent.mouseEnter(cardSurface());
+    advance(500);
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    expect(screen.getByText('Card action')).toBeInTheDocument();
+
+    fireEvent.mouseLeave(cardSurface());
+    advance(200);
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('keeps a card held open by isOpen={true} open when the pointer leaves', () => {
+    const {trigger, onOpenChange} = renderCard({
+      isOpen: true,
+      delay: 0,
+      hideDelay: 0,
+    });
+    expect(screen.getByText('Card action')).toBeInTheDocument();
+    fireEvent.mouseEnter(trigger);
+    fireEvent.mouseLeave(trigger);
+    advance(500);
+    expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    expect(screen.getByText('Card action')).toBeInTheDocument();
+  });
+
+  it('keeps a card held closed by isOpen={false} closed on hover', () => {
+    const {trigger, onOpenChange} = renderCard({isOpen: false, delay: 0});
+    fireEvent.mouseEnter(trigger);
+    advance(500);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(screen.queryByText('Card action')).not.toBeInTheDocument();
+  });
+
+  it('returns focus to the trigger, without reopening, when the caller closes a card that holds focus', () => {
+    const {trigger, onOpenChange, rerender} = renderCard({isOpen: true});
+    const action = screen.getByText('Card action');
+    act(() => {
+      action.focus();
+    });
+    expect(action).toHaveFocus();
+    onOpenChange.mockClear();
+
+    rerender(
+      <HoverCard
+        content={<button type="button">Card action</button>}
+        onOpenChange={onOpenChange}
+        isOpen={false}>
+        <button type="button">Trigger</button>
+      </HoverCard>,
+    );
+    advance(500);
+    expect(trigger).toHaveFocus();
+    expect(onOpenChange).not.toHaveBeenCalledWith(true);
+  });
+
+  it('applies className and style to the themed card surface', () => {
+    renderCard({
+      isOpen: true,
+      className: 'caller-card',
+      style: {maxInlineSize: 320},
+    });
+    const card = screen.getByText('Card action').closest('[popover]');
+    expect(card).toHaveClass('astryx-hover-card');
+    expect(card).toHaveClass('caller-card');
+    expect(card?.getAttribute('style')).toContain('max-inline-size: 320px');
+  });
+
+  it("restores the trigger's own popup attributes when the label is removed", () => {
+    const {rerender} = render(
+      <HoverCard content={<span>Card content</span>} label="Profile">
+        <button
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded="false"
+          aria-controls="own-menu">
+          Trigger
+        </button>
+      </HoverCard>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Trigger'});
+    expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
+
+    rerender(
+      <HoverCard content={<span>Card content</span>}>
+        <button
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded="false"
+          aria-controls="own-menu">
+          Trigger
+        </button>
+      </HoverCard>,
+    );
+    expect(trigger).toHaveAttribute('aria-haspopup', 'menu');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveAttribute('aria-controls', 'own-menu');
+    expect(trigger).toHaveAttribute('aria-describedby');
   });
 });
