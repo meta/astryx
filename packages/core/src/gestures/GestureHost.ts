@@ -431,6 +431,12 @@ interface WheelGesture {
   span: number;
   /** The latest wheel's time. */
   last: number;
+  /**
+   * How long after its last wheel it ends, ms: a trackpad pan stream's pause
+   * bound for its axis, whoever keeps it, and 100 ms for a pinch or a mouse
+   * wheel's notches.
+   */
+  readonly endMs: number;
   timer: unknown;
   /** The recognizers that took it; none where the page keeps it. */
   readonly takers: ReadonlyArray<GestureRecognizer>;
@@ -459,8 +465,23 @@ interface WheelFollow {
   /** The fingers' speed at that move, content px per ms. */
   speedX: number;
   speedY: number;
-  /** How long after its last event it ends, ms. */
-  readonly endMs: number;
+}
+
+/**
+ * How long after its last wheel a wheel gesture ends, ms (`spec:AST-094`
+ * FR43): a trackpad's two-finger scroll waits out a slow drag's pauses for
+ * its axis, whoever keeps the stream, while a pinch and a mouse wheel's
+ * notches end 100 ms after their last wheel.
+ */
+function wheelEndMs(
+  kind: 'pan' | 'pinch',
+  scrollType: ScrollType,
+  isHorizontal: boolean,
+): number {
+  if (kind === 'pinch' || scrollType !== 'continuous') {
+    return WHEEL_END_MS;
+  }
+  return isHorizontal ? WHEEL_FOLLOW_END_MS : WHEEL_FOLLOW_END_V_MS;
 }
 
 /**
@@ -2141,8 +2162,7 @@ export class GestureHost {
     let gesture = this.wheel;
     if (
       gesture != null &&
-      (gesture.kind !== kind ||
-        time - gesture.last >= (gesture.follow?.endMs ?? WHEEL_END_MS))
+      (gesture.kind !== kind || time - gesture.last >= gesture.endMs)
     ) {
       this.endWheel(time);
       gesture = null;
@@ -2159,6 +2179,7 @@ export class GestureHost {
       // until the splitter's next gesture or the end timer, and moves
       // nothing (FR43).
       this.endWheel();
+      const left = wheelPixels(wheel, this.doc.defaultView);
       gesture = {
         kind,
         scrollType: scrollTypeOf(wheel),
@@ -2167,6 +2188,11 @@ export class GestureHost {
         y: wheel.clientY,
         span: WHEEL_PINCH_SPAN,
         last: time,
+        endMs: wheelEndMs(
+          kind,
+          scrollTypeOf(wheel),
+          Math.abs(left.dx) > Math.abs(left.dy),
+        ),
         timer: null,
         takers: [],
       };
@@ -2174,13 +2200,21 @@ export class GestureHost {
     }
     const {dx, dy} = wheelPixels(wheel, this.doc.defaultView);
     const horizontal = Math.abs(dx) > Math.abs(dy);
-    const seg = this.segmenter.push(
-      time,
-      horizontal ? dx : dy,
-      horizontal ? WHEEL_FOLLOW_END_MS : WHEEL_FOLLOW_END_V_MS,
-    );
+    // The splitter reads a pan's stream only: a ctrl-wheel pinch has no
+    // fingers' phase or momentum to tell apart, and ends 100 ms after its
+    // last wheel (FR43).
+    let seg: WheelSegment | null = null;
+    if (kind === 'pan') {
+      seg = this.segmenter.push(
+        time,
+        horizontal ? dx : dy,
+        horizontal ? WHEEL_FOLLOW_END_MS : WHEEL_FOLLOW_END_V_MS,
+      );
+    } else {
+      this.segmenter.end();
+    }
     this.wheelSegment = seg;
-    if (seg.boundary != null) {
+    if (seg?.boundary != null) {
       if (gesture != null) {
         this.endWheel(time);
         gesture = null;
@@ -2197,11 +2231,12 @@ export class GestureHost {
     if (gesture.timer != null) {
       this.clock.clearTimeout(gesture.timer);
     }
-    // A followed trackpad scroll waits out a slow drag's pauses (DEC-24).
+    // A trackpad scroll waits out a slow drag's pauses (DEC-24), whoever
+    // keeps it; a pinch or a mouse wheel's notches 100 ms.
     gesture.timer = this.clock.setTimeout(() => {
       this.segmenter.end();
       this.endWheel();
-    }, gesture.follow?.endMs ?? WHEEL_END_MS);
+    }, gesture.endMs);
     if (gesture.ids.length === 0) {
       return;
     }
@@ -2302,6 +2337,7 @@ export class GestureHost {
     time: number,
   ): WheelGesture {
     const type = scrollTypeOf(wheel);
+    const isHorizontal = Math.abs(dx) > Math.abs(dy);
     const kept: WheelGesture = {
       kind,
       scrollType: type,
@@ -2310,6 +2346,7 @@ export class GestureHost {
       y: wheel.clientY,
       span: WHEEL_PINCH_SPAN,
       last: time,
+      endMs: wheelEndMs(kind, type, isHorizontal),
       timer: null,
       takers: [],
     };
@@ -2325,7 +2362,6 @@ export class GestureHost {
       return kept;
     }
     const view = this.doc.defaultView;
-    const isHorizontal = Math.abs(dx) > Math.abs(dy);
     // Every scroller under the pointer, the page included, as a finger's
     // probe reads them, without touch-action, which a wheel ignores.
     // What the wheel landed on: at a shadow host's listener the event's
@@ -2393,7 +2429,6 @@ export class GestureHost {
         baseY: kept.y,
         speedX: 0,
         speedY: 0,
-        endMs: isHorizontal ? WHEEL_FOLLOW_END_MS : WHEEL_FOLLOW_END_V_MS,
       };
     }
     this.arena.began(
@@ -2520,7 +2555,7 @@ export class GestureHost {
     // later than the input that ends it (a press, the next gesture's first
     // wheel): the arena's clock only moves forward, so a later stamp would
     // move that input's times too (FR16).
-    const end = gesture.last + (gesture.follow?.endMs ?? WHEEL_END_MS);
+    const end = gesture.last + gesture.endMs;
     const time =
       endTime == null ? end : Math.max(gesture.last, Math.min(end, endTime));
     this.arena.ended(
