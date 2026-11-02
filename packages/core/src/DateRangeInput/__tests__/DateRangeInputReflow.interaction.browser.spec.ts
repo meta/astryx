@@ -7,7 +7,8 @@
  *   above the calendar, and every month grid and the month navigation stay
  *   inside the layer; on a short phone screen the layer stays on screen and
  *   its content scrolls to the last month; where the presets fit beside a
- *   one-month calendar (440 px) and on a desktop page they stay beside it.
+ *   one-month calendar (440 px) and on a desktop page they stay beside it,
+ *   with nothing in the popover scrolling.
  * @position DateRangeInput reflow evidence (WCAG 1.4.10), run in the Chromium
  *   interaction lane; jsdom has no layout.
  */
@@ -37,6 +38,22 @@ function expectInside(inner: Box, outer: Box) {
   expect(inner.right).toBeLessThanOrEqual(outer.right + 0.5);
   expect(inner.top).toBeGreaterThanOrEqual(outer.top - 0.5);
   expect(inner.bottom).toBeLessThanOrEqual(outer.bottom + 0.5);
+}
+
+/** Whether anything in the popover scrolls (a scrollbar on classic-scrollbar
+ * systems). */
+async function hasScrollableOverflow(layer: Locator): Promise<boolean> {
+  return layer.evaluate(root =>
+    [root, ...Array.from(root.querySelectorAll('*'))].some(node => {
+      const style = getComputedStyle(node);
+      const scrolls = /auto|scroll/.test(style.overflowX + style.overflowY);
+      return (
+        scrolls &&
+        (node.scrollHeight > node.clientHeight + 0.5 ||
+          node.scrollWidth > node.clientWidth + 0.5)
+      );
+    }),
+  );
 }
 
 async function openPicker(page: Page) {
@@ -112,6 +129,7 @@ test.describe('where the presets fit beside one month, 440 px', () => {
     const gridBox = await boxOf(grids.first());
     expect(presetBox.right).toBeLessThanOrEqual(gridBox.left + 0.5);
     expectInside(gridBox, await boxOf(layer));
+    expect(await hasScrollableOverflow(layer)).toBe(false);
   });
 });
 
@@ -123,10 +141,12 @@ test.describe('on a desktop page', () => {
   });
 
   test('the presets stay beside the calendar', async ({page}) => {
-    const {presets, grids} = await openPicker(page);
+    const {presets, layer, grids} = await openPicker(page);
     const presetBox = await boxOf(presets);
     const gridBox = await boxOf(grids.first());
     expect(presetBox.right).toBeLessThanOrEqual(gridBox.left + 0.5);
     expect(presetBox.top).toBeLessThan(gridBox.top);
+    // The divider's clipped overhang is never scrollable overflow.
+    expect(await hasScrollableOverflow(layer)).toBe(false);
   });
 });
