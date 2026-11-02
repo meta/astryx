@@ -77,6 +77,7 @@ import {LayerDepthProvider, useLayerDismissal} from '../Layer';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
+import {useModalOutlet} from '../Layer/modalOutlet';
 import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {composeEventHandlers, mergeProps, themeProps} from '../utils';
@@ -496,6 +497,12 @@ export function Drawer({
     isModal: hasScrim,
     setIsRendered,
   });
+
+  // An open modal drawer hosts app-global surfaces (toasts), so they stay
+  // visible and operable above it: outside the modal they are inert. A
+  // closing drawer stops supplying when it starts to close. Passive: it runs
+  // after the effect that runs showModal().
+  useModalOutlet(dialogRef, isOpen && hasScrim);
 
   const handleDismiss = useCallback(() => {
     onOpenChange(false);
