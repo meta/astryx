@@ -624,12 +624,18 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
     ],
   );
 
-  // `search` is the committed query the on-screen results correspond to (it
-  // still holds the previous query while a transition is pending). Keeping both
-  // flags ungated by `isPending` makes them exhaustive over the empty case, so
-  // the empty state is never unmounted and re-added mid-search (which flashed).
-  const showEmptyBootstrap = search === '' && optimisticResults.length === 0;
-  const showEmptySearch = search !== '' && optimisticResults.length === 0;
+  // "No query" is the field's current value (`optimisticSearch`), so the
+  // bootstrap text never shows over a query the person has typed
+  // (component:CommandPaletteEmpty FR2). The search-empty text belongs to a
+  // committed query (`search`, which still holds the previous query while a
+  // transition is pending): it stays mounted across keystrokes after a query
+  // settled empty, so it never flashes. While the first query is pending and
+  // nothing is committed, neither text shows; the Input's Loading spinner is
+  // the indicator (component:CommandPalette FR3, spec:AST-092 FR5).
+  const hasQuery = optimisticSearch !== '';
+  const showEmptyBootstrap = !hasQuery && optimisticResults.length === 0;
+  const showEmptySearch =
+    hasQuery && search !== '' && optimisticResults.length === 0;
   // Announce only once the search settles: while it is pending, optimistic
   // narrowing can empty the list before the source answers, which would
   // speak "No results" early or wrongly.
@@ -648,6 +654,8 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
         {emptySearchText}
       </CommandPaletteEmpty>
     );
+  } else if (optimisticResults.length === 0) {
+    listContent = null;
   } else {
     listContent = (
       <ItemRenderer

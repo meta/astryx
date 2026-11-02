@@ -382,6 +382,114 @@ describe('CommandPalette', () => {
     );
   });
 
+  // component:CommandPaletteEmpty FR2: "no query" is the field's current value.
+  it('shows no empty text while the first query is pending, then its outcome', async () => {
+    const resolvers: ((items: SearchableItem[]) => void)[] = [];
+    const source: SearchSource = {
+      bootstrap: () => [],
+      async search(): Promise<SearchableItem[]> {
+        return new Promise<SearchableItem[]>(resolve => {
+          resolvers.push(resolve);
+        });
+      },
+    };
+
+    render(
+      <CommandPalette
+        isOpen={true}
+        onOpenChange={() => {}}
+        searchSource={source}
+        emptyBootstrapText="Type to search"
+        emptySearchText="No results"
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByText('Type to search')).toBeInTheDocument(),
+    );
+
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: 'ap'}});
+    await waitFor(() => expect(resolvers).toHaveLength(1));
+    // Pending: no bootstrap text, no search-empty text; the spinner shows.
+    expect(screen.queryByText('Type to search')).toBeNull();
+    expect(screen.queryByText('No results')).toBeNull();
+    // The Input's spinner is decorative (spec:AST-086 FR8): find it by class.
+    expect(document.querySelector('.astryx-spinner')).not.toBeNull();
+
+    resolvers[0]([]);
+    await waitFor(() =>
+      expect(screen.getByText('No results')).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('Type to search')).toBeNull();
+  });
+
+  it('shows the first query results once they arrive, with no empty text before', async () => {
+    const resolvers: ((items: SearchableItem[]) => void)[] = [];
+    const source: SearchSource = {
+      bootstrap: () => [],
+      async search(): Promise<SearchableItem[]> {
+        return new Promise<SearchableItem[]>(resolve => {
+          resolvers.push(resolve);
+        });
+      },
+    };
+
+    render(
+      <CommandPalette
+        isOpen={true}
+        onOpenChange={() => {}}
+        searchSource={source}
+        emptyBootstrapText="Type to search"
+        emptySearchText="No results"
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: 'ap'}});
+    await waitFor(() => expect(resolvers).toHaveLength(1));
+    expect(screen.queryByText('Type to search')).toBeNull();
+
+    resolvers[0]([{id: 'apple', label: 'Apple'}]);
+    await waitFor(() =>
+      expect(screen.getByRole('option', {name: /Apple/})).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('No results')).toBeNull();
+  });
+
+  it('brings the bootstrap text back when the field is cleared', async () => {
+    const resolvers: ((items: SearchableItem[]) => void)[] = [];
+    const source: SearchSource = {
+      bootstrap: () => [],
+      async search(): Promise<SearchableItem[]> {
+        return new Promise<SearchableItem[]>(resolve => {
+          resolvers.push(resolve);
+        });
+      },
+    };
+
+    render(
+      <CommandPalette
+        isOpen={true}
+        onOpenChange={() => {}}
+        searchSource={source}
+        emptyBootstrapText="Type to search"
+        emptySearchText="No results"
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: 'zq'}});
+    await waitFor(() => expect(resolvers).toHaveLength(1));
+    resolvers[0]([]);
+    await waitFor(() =>
+      expect(screen.getByText('No results')).toBeInTheDocument(),
+    );
+
+    fireEvent.change(input, {target: {value: ''}});
+    await waitFor(() =>
+      expect(screen.getByText('Type to search')).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('No results')).toBeNull();
+  });
+
   it('discards a search response that resolves after the palette closed', async () => {
     // A source whose search resolves only when released, and no cancel()
     // implementation — closing the palette must invalidate the request itself.
