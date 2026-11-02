@@ -5,7 +5,9 @@
  * @input Storybook story core-daterangeinput--with-presets-and-value
  * @output In a real browser: on a 390 px wide page the preset group stacks
  *   above the calendar, and every month grid and the month navigation stay
- *   inside the layer; on a desktop page the presets stay beside the calendar.
+ *   inside the layer; on a short phone screen the layer stays on screen and
+ *   its content scrolls to the last month; where the presets fit beside a
+ *   one-month calendar (440 px) and on a desktop page they stay beside it.
  * @position DateRangeInput reflow evidence (WCAG 1.4.10), run in the Chromium
  *   interaction lane; jsdom has no layout.
  */
@@ -33,6 +35,8 @@ async function boxOf(locator: Locator): Promise<Box> {
 function expectInside(inner: Box, outer: Box) {
   expect(inner.left).toBeGreaterThanOrEqual(outer.left - 0.5);
   expect(inner.right).toBeLessThanOrEqual(outer.right + 0.5);
+  expect(inner.top).toBeGreaterThanOrEqual(outer.top - 0.5);
+  expect(inner.bottom).toBeLessThanOrEqual(outer.bottom + 0.5);
 }
 
 async function openPicker(page: Page) {
@@ -46,7 +50,7 @@ async function openPicker(page: Page) {
   await trigger.click();
   const presets = page.getByRole('group', {name: /preset/i});
   await presets.waitFor();
-  const layer = page.locator('[popover]:popover-open');
+  const layer = page.getByRole('dialog');
   return {presets, layer, grids: layer.getByRole('grid')};
 }
 
@@ -72,6 +76,42 @@ test.describe('on a 390 px wide page', () => {
     }
     const nextMonth = layer.getByRole('button', {name: /next/i});
     expectInside(await boxOf(nextMonth), layerBox);
+  });
+});
+
+test.describe('on a short phone screen, 390 by 664 px', () => {
+  test.use({
+    isMobile: false,
+    hasTouch: false,
+    viewport: {width: 390, height: 664},
+  });
+
+  test('the layer stays on screen and scrolls to the last month', async ({
+    page,
+  }) => {
+    const {layer, grids} = await openPicker(page);
+    const layerBox = await boxOf(layer);
+    expect(layerBox.top).toBeGreaterThanOrEqual(0);
+    expect(layerBox.bottom).toBeLessThanOrEqual(664);
+    const lastGrid = grids.last();
+    await lastGrid.evaluate(grid => grid.scrollIntoView({block: 'end'}));
+    expectInside(await boxOf(lastGrid), layerBox);
+  });
+});
+
+test.describe('where the presets fit beside one month, 440 px', () => {
+  test.use({
+    isMobile: false,
+    hasTouch: false,
+    viewport: {width: 440, height: 800},
+  });
+
+  test('the presets stay beside the calendar', async ({page}) => {
+    const {presets, layer, grids} = await openPicker(page);
+    const presetBox = await boxOf(presets);
+    const gridBox = await boxOf(grids.first());
+    expect(presetBox.right).toBeLessThanOrEqual(gridBox.left + 0.5);
+    expectInside(gridBox, await boxOf(layer));
   });
 });
 

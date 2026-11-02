@@ -88,6 +88,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/DateRangeInput/DateRangeInput.generated';
+import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 
 registerEnglishFallback(english);
 
@@ -160,16 +161,23 @@ const styles = stylex.create({
   iconButtonDisabled: {
     cursor: 'default',
   },
-  // When the presets and the calendar do not fit side by side, the row wraps
-  // and the presets stack above the calendar, in DOM order. The preset group
-  // draws a divider on its inline end and its block end. A negative margin
-  // moves each divider 1 border width past the group's margin box, and the
-  // layout clips at its edges. Thus only the divider between the two parts
-  // shows: the inline-end one side by side, the block-end one when stacked.
+  // When the presets and a one-month calendar do not fit side by side, the
+  // row wraps and the presets stack above the calendar, in DOM order. The
+  // preset group draws a divider on its inline end and its block end. A
+  // negative margin moves each divider 1 border width past the group's margin
+  // box, and the layout clips at its edges. Thus only the divider between the
+  // two parts shows: the inline-end one side by side, the block-end one when
+  // stacked. The layout takes the layer's block cap and scrolls when it is
+  // taller, so a stacked calendar stays reachable on a short screen.
   popoverLayout: {
     display: 'flex',
     flexWrap: 'wrap',
-    overflow: 'clip',
+    overflow: 'auto',
+    overscrollBehavior: 'contain',
+    maxBlockSize: stylex.firstThatWorks(
+      `calc(${layerViewportInset.maxBlockSize})`,
+      `calc(${layerViewportInset.maxBlockSizeFallback})`,
+    ),
   },
   presetSidebar: {
     display: 'flex',
@@ -185,8 +193,7 @@ const styles = stylex.create({
     marginInlineEnd: `calc(-1 * ${borderVars['--border-width']})`,
     marginBlockEnd: `calc(-1 * ${borderVars['--border-width']})`,
     // Alone on its line, the group fills the line, so its inline-end divider
-    // reaches the clipped edge. Side by side, the row has no free space: the
-    // layer is as wide as its content or narrower.
+    // reaches the clipped edge.
     flexGrow: 1,
     minWidth: 140,
   },
@@ -194,6 +201,11 @@ const styles = stylex.create({
     // Gives back the border width the preset group's margin takes, so the
     // calendar keeps its side-by-side position.
     marginInlineStart: borderVars['--border-width'],
+    // The row wraps on the calendar's one-month width, and the calendar then
+    // takes the free space, so its months sit in a row where they fit. The
+    // large factor keeps the preset group at its own width beside it.
+    flexBasis: 'min-content',
+    flexGrow: 1_000_000,
   },
   presetButton: {
     display: 'block',
