@@ -8,7 +8,8 @@
  *   edge, for each `pillPlacement` and both `position`s
  * @output Checks that the Grab zone stays on the Handle whatever
  *   `pillPlacement` says, and takes at most half of a short item, so the item
- *   keeps its own drag (component:Resizable FR1; the clamp follows
+ *   keeps its own drag, and that a drag on the Grip pill resizes the item
+ *   wherever the pill sits (component:Resizable FR1; the clamp follows
  *   `spec:AST-094` FR42's grown targets that stop at half the gap)
  * @position Browser proof for ResizeHandle.tsx's Grab zone
  */
@@ -115,17 +116,30 @@ for (const position of ['inline', 'overlay'] as const) {
           `${id}: how much of the event the Grab zone covers`,
         ).toBeLessThanOrEqual(height / 2 + 0.5);
         // The event's own drag answers just above the Grab zone, over its
-        // whole upper half.
+        // whole upper half, except on the Grip pill, which resizes it.
         const x = (geometry.event.left + geometry.event.right) / 2;
         const free = await page.evaluate(
           ({id: testId, x: atX, from, to}) => {
             const body = document.querySelector(
               `[data-testid="${testId}-body"]`,
             );
+            const pill = document
+              .querySelector(`[data-testid="${testId}"]`)
+              ?.querySelector('.astryx-resize-handle-pill')
+              ?.getBoundingClientRect();
+            const onPill = (y: number) =>
+              pill != null &&
+              atX >= pill.left &&
+              atX <= pill.right &&
+              y >= pill.top &&
+              y <= pill.bottom;
             const missed: number[] = [];
             for (let y = from; y < to; y += 1) {
               const hit = document.elementFromPoint(atX, y);
-              if (body == null || hit == null || !body.contains(hit)) {
+              if (
+                !onPill(y) &&
+                (body == null || hit == null || !body.contains(hit))
+              ) {
                 missed.push(y);
               }
             }
@@ -140,9 +154,40 @@ for (const position of ['inline', 'overlay'] as const) {
         );
         expect(
           free,
-          `${id}: points of the event's upper half not on its body`,
+          `${id}: points of the event's upper half, off its Grip pill, not on its body`,
         ).toEqual([]);
       }
+    });
+  }
+}
+
+for (const position of ['inline', 'overlay'] as const) {
+  for (const pillPlacement of PLACEMENTS) {
+    test(`a drag on the Grip pill resizes the 30-minute event wherever the pill sits (${position}, pillPlacement="${pillPlacement}")`, async ({
+      page,
+    }) => {
+      await open(page, pillPlacement, position);
+      const event = page.getByTestId('thirty');
+      const handle = page.getByRole('separator', {
+        name: 'Resize the 30-minute event',
+      });
+      const pill = handle.locator('.astryx-resize-handle-pill');
+      // The pill is present and painted before the drag.
+      await expect(pill).toHaveCount(1);
+      await expect(pill).toHaveCSS('opacity', '1');
+      const box = await pill.boundingBox();
+      if (box == null) {
+        throw new Error('the Grip pill has no box');
+      }
+      expect(box.width * box.height, "the Grip pill's area").toBeGreaterThan(0);
+      const x = box.x + box.width / 2;
+      const y = box.y + box.height / 2;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x, y + 12, {steps: 4});
+      await page.mouse.up();
+      await expect(handle).toHaveAttribute('aria-valuenow', '36');
+      await expect(event).toHaveAttribute('data-top', '24');
     });
   }
 }

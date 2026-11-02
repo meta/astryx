@@ -1178,6 +1178,19 @@ describe('ResizeHandle', () => {
     },
   );
 
+  it('starts a drag from the Grip pill as from the Grab zone', () => {
+    const resizable = makeResizable();
+    render(<ResizeHandle resizable={resizable} label="Resize" />);
+    const pill = getSeparator().querySelector('.astryx-resize-handle-pill');
+    expect(pill).not.toBeNull();
+    fireEvent.pointerDown(pill as Element, {
+      pointerId: 1,
+      clientX: 0,
+      button: 0,
+    });
+    expect(resizable._onResizeStart).toHaveBeenCalledTimes(1);
+  });
+
   // --- Prop composition (ordering choice: handler sits after {...props}) ---
 
   it('runs a consumer onKeyDown alongside keyboard resizing', () => {
