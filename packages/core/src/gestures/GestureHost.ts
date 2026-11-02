@@ -140,7 +140,11 @@ import {
 import type {GestureRecognizer, SelectionLock} from './GestureRecognizer';
 import type {PressBounds} from './PressTracker';
 import type {PanGestureRecognizer} from './PanGestureRecognizer';
-import {createNativeScrollProbe, parentAcrossShadow} from './nativeScroll';
+import {
+  canElementScroll,
+  createNativeScrollProbe,
+  parentAcrossShadow,
+} from './nativeScroll';
 import {containsAlongFlatTree} from '../utils/flatTree';
 import {isIosWebKit} from '../utils/touchQueries';
 import {type WheelSegment, WheelSegmenter} from './wheelSegmenter';
@@ -606,37 +610,6 @@ function panTakesMove(
   }
 }
 
-/** Whether `element` scrolls natively by `delta` along one axis now. */
-function scrollsBy(
-  element: Element,
-  delta: number,
-  isHorizontal: boolean,
-  view: Window | null,
-): boolean {
-  if (delta === 0 || view == null) {
-    return false;
-  }
-  const style = view.getComputedStyle(element);
-  const overflow = isHorizontal ? style.overflowX : style.overflowY;
-  if (overflow !== 'auto' && overflow !== 'scroll') {
-    return false;
-  }
-  const room = isHorizontal
-    ? element.scrollWidth - element.clientWidth
-    : element.scrollHeight - element.clientHeight;
-  if (room <= 0) {
-    return false;
-  }
-  // Right to left, scrollLeft runs from 0 at the start to minus the
-  // overflow, and a scroll right moves it toward 0. A scroller a pixel
-  // short of either end, where Chromium stops one, is at that end.
-  const isRtl = isHorizontal && isRtlElement(element as HTMLElement);
-  const min = isRtl ? -room : 0;
-  const max = isRtl ? 0 : room;
-  const position = isHorizontal ? element.scrollLeft : element.scrollTop;
-  return delta > 0 ? position < max - 1 : position > min + 1;
-}
-
 /**
  * An event's time on the arena's clock (`performance.now()`). Some engines
  * and DOM emulators stamp events in epoch milliseconds instead.
@@ -789,7 +762,8 @@ export class GestureHost {
   /** The wheel gesture in progress (FR43). */
   private wheel: WheelGesture | null = null;
   /** Whether the document routes every wheel to the live wheel gesture. */
-  private isWheelLatched = false;
+  /** The wheel latch's subscription to the shared input stream, while a gesture is latched. */
+  private stopWheelLatch: (() => void) | null = null;
   /** Splits the wheel stream into gestures and reads a trackpad's lift. */
   private readonly segmenter = new WheelSegmenter();
   /** The latest wheel's segment. */
@@ -2363,7 +2337,6 @@ export class GestureHost {
     ) {
       return kept;
     }
-    const view = this.doc.defaultView;
     // Every scroller under the pointer, the page included, as a finger's
     // probe reads them, without touch-action, which a wheel ignores.
     // What the wheel landed on: at a shadow host's listener the event's
@@ -2396,7 +2369,7 @@ export class GestureHost {
         if (
           kind === 'pan' &&
           (!panTakesMove(recognizer, -dx, -dy) ||
-            this.scrollerTakes(target, node, dx, dy, isHorizontal, view) ||
+            this.scrollerTakes(target, node, dx, dy, isHorizontal) ||
             // A scroll-edge pan only past every scroller's edge (FR19).
             (isScrollEdgePan(recognizer) && scroll.canScroll(-dx, -dy)))
         ) {
@@ -2451,14 +2424,17 @@ export class GestureHost {
     return gesture;
   }
 
-  /** Whether a scroller between `target` and `boundary` (both included) scrolls this wheel now. */
+  /**
+   * Whether a scroller between `target` and `boundary` (both included)
+   * scrolls this wheel now, by the edge test a finger's probe uses
+   * (canElementScroll), along the wheel's major axis.
+   */
   private scrollerTakes(
     target: unknown,
     boundary: Element,
     dx: number,
     dy: number,
     isHorizontal: boolean,
-    view: Window | null,
   ): boolean {
     for (
       let node: Node | null = target instanceof Node ? target : null;
@@ -2467,7 +2443,7 @@ export class GestureHost {
     ) {
       if (
         node instanceof Element &&
-        scrollsBy(node, isHorizontal ? dx : dy, isHorizontal, view)
+        canElementScroll(node, isHorizontal ? -dx : 0, isHorizontal ? 0 : -dy)
       ) {
         return true;
       }
@@ -2504,14 +2480,18 @@ export class GestureHost {
     });
   }
 
-  /** Route every wheel on the page to the live wheel gesture, from its claim. */
+  /**
+   * Route every wheel on the page to the live wheel gesture, from its claim:
+   * through the shared input stream's capture listener on the window, before
+   * any document listener (architecture:react-component-runtime INV13), and
+   * non-passive only while it is subscribed.
+   */
   private latchWheel(): void {
-    if (!this.isWheelLatched) {
-      this.doc.addEventListener('wheel', this.onWheel, {
-        capture: true,
-        passive: false,
+    const view = this.doc.defaultView;
+    if (this.stopWheelLatch == null && view != null) {
+      this.stopWheelLatch = subscribeInput(view, 'wheel', this.onWheel, {
+        cancels: true,
       });
-      this.isWheelLatched = true;
     }
   }
 
@@ -2524,10 +2504,8 @@ export class GestureHost {
    */
   private endWheel(endTime?: number): void {
     const gesture = this.wheel;
-    if (this.isWheelLatched) {
-      this.doc.removeEventListener('wheel', this.onWheel, {capture: true});
-      this.isWheelLatched = false;
-    }
+    this.stopWheelLatch?.();
+    this.stopWheelLatch = null;
     if (gesture == null) {
       return;
     }

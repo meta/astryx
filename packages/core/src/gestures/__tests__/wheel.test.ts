@@ -14,6 +14,7 @@
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {GestureHost} from '../GestureHost';
+import {createNativeScrollProbe} from '../nativeScroll';
 import {LongPressGestureRecognizer} from '../LongPressGestureRecognizer';
 import {PanGestureRecognizer} from '../PanGestureRecognizer';
 import {PinchGestureRecognizer} from '../PinchGestureRecognizer';
@@ -153,7 +154,7 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     expect(states).toEqual(['began', 'changed']);
   });
 
-  it('reads a right-to-left scroller a pixel short of its end, where Chromium stops it, as at its end: a scroll on toward the end is the pan’s', () => {
+  it("reads a right-to-left scroller by a finger's edge test: one WebKit leaves a pixel past its reported range is at its end, and a scroll on toward it is the pan’s", () => {
     const {strip, scroller, item} = mount(
       '<div id="strip"><div id="scroller" dir="rtl"><div id="item"></div></div></div>',
     );
@@ -163,10 +164,11 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     });
     const states = statesOf(pan);
     detachers.push(host.attach(strip, pan));
-    // The end is minus the overflow (-100); Chromium stops at -99.
+    // A fractional width rounds the reported overflow down to 99, while
+    // WebKit scrolls to -100 (measured): past the reported end, so at it.
     scrollableX(scroller, {
-      scrollLeft: -99,
-      scrollWidth: 300,
+      scrollLeft: -100,
+      scrollWidth: 299,
       clientWidth: 200,
     });
     expect(
@@ -176,6 +178,44 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
       wheel(item, {trackpad: true, dx: -20, time: 16}).defaultPrevented,
     ).toBe(true);
     expect(states).toEqual(['began', 'changed']);
+  });
+
+  it("reads a scroller's ends as a finger's probe does: 0.75 px short of its end it can still scroll, so the stream is the scroller's; within half a pixel, the pan's (spec:AST-094 FR43, FR19)", () => {
+    const {sheet, list, row} = mount(
+      '<div id="sheet"><div id="list"><div id="row"></div></div></div>',
+    );
+    const pan = new PanGestureRecognizer({
+      direction: 'vertical',
+      allowedScrollTypes: ['continuous'],
+    });
+    const states = statesOf(pan);
+    detachers.push(host.attach(sheet, pan));
+    scrollableY(list, {
+      scrollTop: 299.25,
+      scrollHeight: 400,
+      clientHeight: 100,
+    });
+    expect(
+      createNativeScrollProbe(row, {readsTouchAction: false}).canScroll(0, -8),
+    ).toBe(true);
+    expect(wheel(row, {trackpad: true, dy: 8, time: 0}).defaultPrevented).toBe(
+      false,
+    );
+    expect(states).toEqual([]);
+    Object.defineProperty(list, 'scrollTop', {
+      configurable: true,
+      value: 299.6,
+    });
+    expect(
+      createNativeScrollProbe(row, {readsTouchAction: false}).canScroll(0, -8),
+    ).toBe(false);
+    expect(
+      wheel(row, {trackpad: true, dy: 8, time: 400}).defaultPrevented,
+    ).toBe(true);
+    expect(
+      wheel(row, {trackpad: true, dy: 8, time: 416}).defaultPrevented,
+    ).toBe(true);
+    expect(states[0]).toBe('began');
   });
 
   it('finds a scroller inside a shadow tree between the pointer and the pan, from what the wheel landed on', () => {
@@ -258,7 +298,7 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     });
     const states = statesOf(pan);
     detachers.push(host.attach(card, pan));
-    const added = vi.spyOn(document, 'addEventListener');
+    const added = vi.spyOn(window, 'addEventListener');
     expect(
       wheel(card, {trackpad: true, dx: 16, time: 0}).defaultPrevented,
     ).toBe(true);
@@ -276,10 +316,17 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     }
     expect(pan.translation().x).toBe(afterTwo - 64);
     expect(states.at(-1)).toBe('changed');
+    // One capturing, non-passive wheel listener on the window: the shared
+    // input stream's (architecture:react-component-runtime INV13).
     expect(
-      (added.mock.calls as unknown[][]).filter(call => call[0] === 'wheel'),
+      (added.mock.calls as unknown[][]).filter(
+        call =>
+          call[0] === 'wheel' &&
+          (call[2] as AddEventListenerOptions | undefined)?.capture === true &&
+          (call[2] as AddEventListenerOptions | undefined)?.passive === false,
+      ),
     ).toHaveLength(1);
-    const removed = vi.spyOn(document, 'removeEventListener');
+    const removed = vi.spyOn(window, 'removeEventListener');
     // A followed trackpad swipe ends 220 ms after its last wheel.
     clock.runDue(80 + 220);
     expect(states.slice(-2)).toEqual(['ended', 'possible']);
@@ -292,7 +339,37 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     ).toBe(false);
   });
 
-  it("ends a wheel gesture whose pan is detached mid-gesture at once, and takes the document's wheel listener with it (FR24)", () => {
+  it("hears a latched wheel through the shared input stream, so an app's window-capture stopPropagation of a wheel outside the moved element cannot hand it to the page (architecture:react-component-runtime INV13)", () => {
+    const {card, outside} = mount(
+      '<div id="card"></div><div id="outside"></div>',
+    );
+    const pan = new PanGestureRecognizer({
+      direction: 'horizontal',
+      allowedScrollTypes: ['continuous'],
+    });
+    detachers.push(host.attach(card, pan));
+    // The app stops every wheel that does not land on the card, on the
+    // window's capture phase.
+    const stop = (event: Event) => {
+      if (event.target !== card) {
+        event.stopPropagation();
+      }
+    };
+    window.addEventListener('wheel', stop, {capture: true});
+    try {
+      wheel(card, {trackpad: true, dx: 16, time: 0});
+      wheel(card, {trackpad: true, dx: 16, time: 16});
+      expect(pan.state).toBe('changed');
+      // The card moved from under the cursor: the next step lands outside.
+      const step = wheel(outside, {trackpad: true, dx: 16, time: 32});
+      expect(step.defaultPrevented).toBe(true);
+      expect(pan.translation().x).toBeLessThan(-16);
+    } finally {
+      window.removeEventListener('wheel', stop, {capture: true});
+    }
+  });
+
+  it("ends a wheel gesture whose pan is detached mid-gesture at once, and takes the window's wheel listener with it (FR24)", () => {
     const {card} = mount('<div id="card"></div>');
     const pan = new PanGestureRecognizer({
       direction: 'horizontal',
@@ -302,8 +379,10 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     wheel(card, {trackpad: true, dx: 16, time: 0});
     wheel(card, {trackpad: true, dx: 16, time: 16});
     expect(pan.state).toBe('changed');
-    const removed = vi.spyOn(document, 'removeEventListener');
+    const removed = vi.spyOn(window, 'removeEventListener');
     detach();
+    // The latch leaves the shared stream, and its window listener goes with
+    // its last subscriber.
     expect(
       (removed.mock.calls as unknown[][]).filter(call => call[0] === 'wheel'),
     ).toHaveLength(1);

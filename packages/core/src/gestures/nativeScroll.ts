@@ -199,7 +199,10 @@ function canMoveY(element: Element, dy: number): boolean {
         element.scrollHeight - element.clientHeight - EDGE_TOLERANCE + 0.5;
 }
 
-function canMoveX(entry: ChainEntry, dx: number): boolean {
+function canMoveX(
+  entry: Pick<ChainEntry, 'element' | 'isRtl'>,
+  dx: number,
+): boolean {
   const {element} = entry;
   const overflow = element.scrollWidth - element.clientWidth;
   if (overflow <= EDGE_TOLERANCE) {
@@ -211,6 +214,33 @@ function canMoveX(entry: ChainEntry, dx: number): boolean {
   return dx > 0
     ? element.scrollLeft > min + EDGE_TOLERANCE - 0.5
     : element.scrollLeft < max - EDGE_TOLERANCE + 0.5;
+}
+
+/**
+ * Whether `element` itself scrolls natively now for a finger moving by
+ * (dx, dy), by the probe's own test of each scroller: overflow that scrolls
+ * on that axis, room past the edge tolerance, and a position short of the
+ * end it moves toward, a right-to-left range included. A wheel moves the
+ * content the other way: pass its deltas negated.
+ */
+export function canElementScroll(
+  element: Element,
+  dx: number,
+  dy: number,
+): boolean {
+  const view = element.ownerDocument.defaultView;
+  if (view == null) {
+    return false;
+  }
+  const style = view.getComputedStyle(element);
+  if (dy !== 0 && SCROLLABLE.has(style.overflowY) && canMoveY(element, dy)) {
+    return true;
+  }
+  return (
+    dx !== 0 &&
+    SCROLLABLE.has(style.overflowX) &&
+    canMoveX({element, isRtl: isRtlElement(element as HTMLElement)}, dx)
+  );
 }
 
 /**
