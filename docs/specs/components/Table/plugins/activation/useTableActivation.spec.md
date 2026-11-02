@@ -3,11 +3,11 @@ schema_version: 3
 template_version: 4
 kind: module
 id: module:Table/useTableActivation
-authority: draft
+authority: current
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
+approved_by: humbertovirtudes
+approved_at: 2026-10-24
 owners: [cixzhang]
 review_triggers:
   [public-api, behavior, layout, theming, accessibility, interaction]
@@ -39,11 +39,11 @@ references:
 | Behavior                | Eligible flat product rows request activation on primary click or Enter/Space after non-owning handlers; canonical identity, cancellation, descendant controls, and intersecting text selection gate the request.    |
 | End-user impact         | One product row anchors adjacent detail or preview state without becoming selection, navigation, or focus ownership.                                                                                                 |
 | Builder impact          | The caller supplies explicit stable unique `idKey`, controls the active key, and owns adjacent content; no second extractor, interaction mode, or theme state is public.                                             |
-| Compatibility/readiness | Additive and unreleased. Draft choices are closed; actual owner review of this text and the parent additions, source implementation, and all implementation evidence remain pending.                                 |
+| Compatibility/readiness | Additive and unreleased. The module and parent contract decisions have owner approval; source implementation and runtime evidence remain release gates.                                                              |
 | Review checks           | Reject implicit identity, multiple whole-row owners, non-flat opt-in, nested-control activation, competing paint writers, a colour-only active cue, pinned-cell divergence, or invented approval/evidence.           |
 | Governing rules         | `component:Table` owns composition. Its FR16-FR21 and DEC-4/DEC-5 are required parent additions, not authority supplied by this draft; shared modality, public API, theming, and evidence rules retain their owners. |
 
-This table is a review projection; the body below defines the draft contract.
+This table is a review projection; the body below defines the module contract.
 
 ## Intent
 
@@ -55,7 +55,7 @@ This table is a review projection; the body below defines the draft contract.
 - Compatibility class: additive unreleased hook; unsupported new-capability combinations are neutralised without disabling legacy plugins.
 - Migration decision: `module:Table/useTableActivation/DEC-1` and DEC-5.
 
-Consumer signatures, imports, examples, and migration instructions belong in the module's consumer docs. This draft is not implementation authority. Promotion requires actual owner review of the exact module and parent contract text; merged code, authored decisions, or successful checks do not substitute for approval.
+Consumer signatures, imports, examples, and migration instructions belong in the module's consumer docs. Owner approval establishes the normative module and parent decisions; implementation and release evidence remain separate. Merged code or successful checks alone do not establish approval.
 
 ## Ownership boundary
 
@@ -194,7 +194,7 @@ evidence; the frontmatter file list retains those targets without claiming they 
 ### DEC-1 — Controlled canonical identity and eligibility
 
 **Reference:** `module:Table/useTableActivation/DEC-1`
-**Decider:** pending owner review
+**Decider:** humbertovirtudes (2026-10-24)
 
 One caller-owned active key matches and emits the parent's validated canonical key
 strictly. Eligibility controls both requests and presentation without changing the
@@ -204,7 +204,7 @@ Rejected: a second extractor, index fallback, activation-side coercion, or deriv
 ### DEC-2 — Native rows support press activation
 
 **Reference:** `module:Table/useTableActivation/DEC-2`
-**Decider:** pending owner review
+**Decider:** humbertovirtudes (2026-10-24)
 
 Eligible rows retain native semantics, default sequential focus only when no earlier
 focus owner exists, and composed Enter/Space shortcuts. Focus remains independent.
@@ -213,7 +213,7 @@ Rejected: row button/link roles, pointer-only operation, `aria-current="page"`, 
 ### DEC-3 — Selection-dominant fill and a separate active marker
 
 **Reference:** `module:Table/useTableActivation/DEC-3`
-**Decider:** pending owner review
+**Decider:** humbertovirtudes (2026-10-24)
 
 The six-state matrix fixes fill precedence; active state has an inline-start
 non-colour marker and matching `aria-current="true"` on the native row. The same
@@ -226,7 +226,7 @@ Rejected: competing imperative paint writers, a focus-only active cue, or a new 
 ### DEC-4 — Earlier handlers and gesture boundaries precede activation
 
 **Reference:** `module:Table/useTableActivation/DEC-4`
-**Decider:** pending owner review
+**Decider:** humbertovirtudes (2026-10-24)
 
 Non-owning handlers run first and may cancel. Shared interactive guards, portal
 containment, and selected-range intersection gate primary-click and Enter/Space.
@@ -235,7 +235,7 @@ Rejected: hover activation, copied selector catalogs, whole-navigation-hook impo
 ### DEC-5 — Flat admission and declarative ownership
 
 **Reference:** `module:Table/useTableActivation/DEC-5`
-**Decider:** pending owner review
+**Decider:** humbertovirtudes (2026-10-24)
 
 The parent context and declarations admit flat product rows with one whole-row
 owner. Non-flat, unknown custom-body, and competing-owner combinations neutralise
@@ -244,8 +244,7 @@ Rejected: inferring row kind/ownership from plugin names, insertion order, key p
 
 ## Open questions
 
-None. The choices above remain draft and require actual owner review; this is not
-an approval record. All implementation and behavior evidence remains pending.
+None. Implementation and release evidence remain separate from owner approval.
 
 ## Content boundary
 
