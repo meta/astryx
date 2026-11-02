@@ -228,10 +228,11 @@ export function selectionRangesOf(
 
 /**
  * Whether a press at (`x`, `y`) lands on text a drag would select: a text
- * field, or a character of non-empty text whose
- * element allows a selection. A point beside text, which a caret query
- * snaps to the nearest character, lands on none. Where the engine has no
- * caret query, nothing is selectable text.
+ * field, or a character of non-empty text whose element allows a selection.
+ * A native button's label is not selectable text, because the engine starts
+ * no selection from a drag inside a button. A point beside text, which a
+ * caret query snaps to the nearest character, lands on none. Where the engine
+ * has no caret query, nothing is selectable text.
  */
 export function startsOnSelectableText(
   doc: Document,
@@ -251,7 +252,7 @@ export function startsOnSelectableText(
     return false;
   }
   const element = node.parentElement;
-  if (element == null || !allowsSelection(element)) {
+  if (element == null || !allowsSelection(element) || isInButton(node)) {
     return false;
   }
   const length = (node.textContent ?? '').length;
@@ -275,6 +276,24 @@ export function startsOnSelectableText(
         return true;
       }
     }
+  }
+  return false;
+}
+
+/** Whether `node` is inside a native button, across slots and shadow roots. */
+function isInButton(node: Node): boolean {
+  let current: Node | null = node;
+  while (current != null) {
+    if (current.nodeType === 1 && (current as Element).localName === 'button') {
+      return true;
+    }
+    const parent: Node | null =
+      (current as Node & {assignedSlot?: Element | null}).assignedSlot ??
+      current.parentNode;
+    current =
+      parent != null && parent.nodeType === 11
+        ? (parent as ShadowRoot).host
+        : parent;
   }
   return false;
 }

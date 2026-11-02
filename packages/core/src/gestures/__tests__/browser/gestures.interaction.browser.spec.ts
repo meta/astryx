@@ -2169,6 +2169,44 @@ test.describe('where the primary pointer is fine', () => {
     );
   });
 
+  test("a mouse drag that starts on a native button's label inside a pan pans: the engine starts no selection there (spec:AST-094 FR41)", async ({
+    page,
+  }) => {
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, PanGestureRecognizer} = window.__api;
+      document.body.style.font = '16px sans-serif';
+      document.body.innerHTML =
+        '<div id="card" style="width: 320px; height: 120px; padding: 16px; background: #ccd"><button id="next" style="font: inherit; padding: 8px 16px">Next page</button></div>';
+      const pan = new PanGestureRecognizer({direction: 'horizontal'});
+      const states: string[] = [];
+      (window as unknown as {__panStates: string[]}).__panStates = states;
+      pan.addTransitionListener((_current, _from, to) => states.push(to));
+      host.attach(document.getElementById('card') as HTMLElement, pan);
+    });
+    const label = await page.locator('#next').boundingBox();
+    if (label == null) {
+      throw new Error('no box for #next');
+    }
+    const y = label.y + label.height / 2;
+    await page.mouse.move(label.x + label.width / 2, y);
+    await page.mouse.down();
+    await page.mouse.move(label.x + label.width / 2 + 60, y, {steps: 10});
+    await page.mouse.up();
+    const selected = await paintedSelection(page);
+    const states = await page.evaluate(
+      () => (window as unknown as {__panStates: string[]}).__panStates,
+    );
+    expect({began: states.includes('began'), selected}).toEqual({
+      began: true,
+      selected: '',
+    });
+  });
+
   test("the host registers no page touch listener while idle and warns for nothing, though the page attaches recognizers: an element keeps only a claiming recognizer's blocking touchmove; a mouse drag pans (spec:AST-094 FR43, FR24, FR19)", async ({
     page,
   }) => {

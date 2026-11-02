@@ -5679,6 +5679,57 @@ describe('a mouse or pen drag and the page selection (spec:AST-094 FR41)', () =>
     }
   });
 
+  it("claims a mouse or a pen drag that starts on a native button's label: the engine starts no selection there, so the pan takes it", async () => {
+    const {box, label} = mount(
+      '<div id="box"><button id="label">Next page</button></div>',
+    );
+    const undo = textUnderEveryPoint(label.firstChild as Text);
+    try {
+      const fine = fineHost();
+      const pan = new PanGestureRecognizer({direction: 'horizontal'});
+      detachers.push(fine.attach(box, pan));
+      let time = 0;
+      for (const pointerType of ['mouse', 'pen'] as const) {
+        time = drag(label, pointerType, time + 1000, [10, 30, 50]);
+        expect(['began', 'changed']).toContain(pan.state);
+        pointer('pointerup', label, {
+          pointerType,
+          x: 50,
+          y: 10,
+          time: time + 16,
+        });
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+    } finally {
+      undo();
+    }
+  });
+
+  it('claims a mouse drag that starts on a slotted label inside a native button in a shadow tree', async () => {
+    const {box, next} = mount(
+      '<div id="box"><x-next id="next">Next page</x-next></div>',
+    );
+    next.attachShadow({mode: 'open'}).innerHTML =
+      '<button><slot></slot></button>';
+    const undo = textUnderEveryPoint(next.firstChild as Text);
+    try {
+      const fine = fineHost();
+      const pan = new PanGestureRecognizer({direction: 'horizontal'});
+      detachers.push(fine.attach(box, pan));
+      const time = drag(next, 'mouse', 1000, [10, 30, 50]);
+      expect(['began', 'changed']).toContain(pan.state);
+      pointer('pointerup', next, {
+        pointerType: 'mouse',
+        x: 50,
+        y: 10,
+        time: time + 16,
+      });
+      await new Promise(resolve => setTimeout(resolve, 0));
+    } finally {
+      undo();
+    }
+  });
+
   it("still claims a press a group claims at its own pointerdown on selectable text: it has not moved, so it is no drag, and the page's selection stays; a pen's hold ends a task after its lift, though the row's long press locks too", async () => {
     const {text, row, group, copy} = mount(
       '<p id="text">Text the page selected</p><div id="row"><div id="group"><button id="copy">Copy</button></div></div>',
