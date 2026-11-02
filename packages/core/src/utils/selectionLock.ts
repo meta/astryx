@@ -28,7 +28,7 @@
 //
 // A mouse never takes the lock, so its released behavior stays (AST-017).
 
-import {containsAlongFlatTree} from './flatTree';
+import {containsAlongFlatTree, parentAcrossShadow} from './flatTree';
 import {isIosWebKit} from './touchQueries';
 
 /** What a held finger must not start on a control or a cell. */
@@ -280,20 +280,12 @@ export function startsOnSelectableText(
   return false;
 }
 
-/** Whether `node` is inside a native button, across slots and shadow roots. */
+/** Whether `node` is inside a native button, along the flat tree. */
 function isInButton(node: Node): boolean {
-  let current: Node | null = node;
-  while (current != null) {
-    if (current.nodeType === 1 && (current as Element).localName === 'button') {
+  for (let at: Node | null = node; at != null; at = parentAcrossShadow(at)) {
+    if (at.nodeType === 1 && (at as Element).localName === 'button') {
       return true;
     }
-    const parent: Node | null =
-      (current as Node & {assignedSlot?: Element | null}).assignedSlot ??
-      current.parentNode;
-    current =
-      parent != null && parent.nodeType === 11
-        ? (parent as ShadowRoot).host
-        : parent;
   }
   return false;
 }
