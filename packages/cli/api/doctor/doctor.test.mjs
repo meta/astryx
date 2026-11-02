@@ -29,6 +29,7 @@ import {
   checkImplicitIntegrations,
   checkProviderIdentity,
   checkIntegrationIssues,
+  checkIntegrationCoreRange,
   checkVersionAlignment,
   checkPackageManager,
   checkComputerIntegrationsAvailable,
@@ -1652,4 +1653,77 @@ describe('no Astryx-owned environment variables (spec:AST-017 FR14)', () => {
     walk(cliDir);
     expect(hits).toEqual([]);
   });
+});
+
+describe('integration-core-range: each loaded integration supports the installed Core', () => {
+  /**
+   * A package folder with this package.json.
+   * @param {object} pkg
+   */
+  const packageDir = pkg => {
+    const dir = mkProject({'package.json': JSON.stringify(pkg)});
+    return dir;
+  };
+  const theme = (range, name = '@acme/theme') =>
+    ({name, __packageDir: packageDir({name, version: '0.2.0', peerDependencies: {'@astryxdesign/core': range}})});
+
+  it('is left out when no loaded integration declares a Core range', () => {
+    const plain = {name: '@acme/plain', __packageDir: packageDir({name: '@acme/plain', version: '1.0.0'})};
+    expect(checkIntegrationCoreRange({projectCore: '0.7.4', integrations: [plain]})).toBeNull();
+  });
+
+  it('is left out when the project Core is unknown', () => {
+    expect(checkIntegrationCoreRange({projectCore: null, integrations: [theme('>=0.6.3 <0.7.0')]})).toBeNull();
+  });
+
+  it('passes and names the packages when every range includes the Core', () => {
+    expect(
+      checkIntegrationCoreRange({projectCore: '0.7.4', integrations: [theme('>=0.7.0 <0.8.0')]}),
+    ).toEqual({
+      id: 'integration-core-range',
+      label: 'Integrations support the installed Core',
+      status: 'pass',
+      message: '1 loaded integration supports @astryxdesign/core 0.7.4 (@acme/theme).',
+    });
+  });
+
+  it('warns, naming the package, its range and the installed Core, when a range excludes it', () => {
+    const check = checkIntegrationCoreRange({
+      projectCore: '0.7.4',
+      integrations: [theme('>=0.6.3 <0.7.0'), theme('^0.7.1', '@acme/ok')],
+    });
+    expect(check).toMatchObject({id: 'integration-core-range', status: 'warn'});
+    expect(check?.message).toBe(
+      '@acme/theme@0.2.0 supports @astryxdesign/core >=0.6.3 <0.7.0, but the project has 0.7.4. Its components, themes and docs were made for another Core and may not work.',
+    );
+    expect(check?.fix).toContain('whose @astryxdesign/core range includes 0.7.4');
+  });
+
+  it('skips a package that failed to load: configured-integrations reports it', () => {
+    const broken = {...theme('>=0.6.3 <0.7.0'), __loadError: new Error('boom')};
+    expect(checkIntegrationCoreRange({projectCore: '0.7.4', integrations: [broken]})).toBeNull();
+  });
+
+  it(
+    'doctor warns for an installed theme package made for an older Core',
+    async () => {
+      const dir = mkProject({
+        'package.json': JSON.stringify({name: 'app', dependencies: {'@acme/theme': '0.2.0'}}),
+        'node_modules/@astryxdesign/core/package.json': JSON.stringify({name: '@astryxdesign/core', version: '0.7.4'}),
+        'node_modules/@acme/theme/package.json': JSON.stringify({
+          name: '@acme/theme',
+          version: '0.2.0',
+          peerDependencies: {'@astryxdesign/core': '>=0.6.3 <0.7.0'},
+        }),
+        'node_modules/@acme/theme/astryx.integration.mjs': "export default {docs: './docs'};\n",
+        'node_modules/@acme/theme/docs/acme-theme.doc.mjs':
+          "export default {type: 'guide', name: 'acme-theme', title: 'Acme theme', description: 'Fixture.', sections: [{id: 'use', title: 'Use', content: [{type: 'prose', text: 'Use it.'}]}]};\n",
+      });
+      const {checks} = (await doctor({cwd: dir})).data;
+      const check = checks.find(c => c.id === 'integration-core-range');
+      expect(check?.status).toBe('warn');
+      expect(check?.message).toMatch(/^@acme\/theme@0\.2\.0 supports @astryxdesign\/core >=0\.6\.3 <0\.7\.0, but the project has 0\.7\.4\./);
+    },
+    SLOW,
+  );
 });

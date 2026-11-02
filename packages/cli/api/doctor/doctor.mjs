@@ -922,6 +922,58 @@ export function checkIntegrationIssues(ctx) {
 }
 
 /**
+ * Every loaded integration's `@astryxdesign/core` peer range admits the
+ * project's Core: a package's declared peer ranges define the Core versions it
+ * supports (spec:AST-017 FR12). A package made for another Core installs with
+ * only a package manager warning, and its components, themes and docs may not
+ * work. New, so it warns: a project that passed before keeps passing.
+ * Null when the project's Core is unknown or no loaded integration declares a
+ * Core range.
+ * @param {DoctorContext} ctx
+ * @returns {DoctorCheck | null}
+ */
+export function checkIntegrationCoreRange(ctx) {
+  const core = ctx.projectCore;
+  if (!core || ctx.integrations == null) return null;
+  /** @type {Array<{name: string, version: string | null, range: string}>} */
+  const declared = [];
+  for (const integration of ctx.integrations) {
+    if (integration.__loadError != null || !integration.__packageDir) continue;
+    const range = readPkg(path.join(integration.__packageDir, 'package.json'))
+      ?.peerDependencies?.['@astryxdesign/core'];
+    if (typeof range !== 'string' || range.trim() === '') continue;
+    declared.push({
+      name: integration.name,
+      version: pkgVersion(integration.__packageDir),
+      range: range.trim(),
+    });
+  }
+  if (declared.length === 0) return null;
+  const excluded = declared.filter(d => !satisfiesRange(core, d.range));
+  const label = 'Integrations support the installed Core';
+  if (excluded.length === 0) {
+    return {
+      id: 'integration-core-range',
+      label,
+      status: 'pass',
+      message: `${declared.length} loaded integration${declared.length === 1 ? ' supports' : 's support'} @astryxdesign/core ${core} (${nameIntegrations(declared)}).`,
+    };
+  }
+  return {
+    id: 'integration-core-range',
+    label,
+    status: 'warn',
+    message: `${excluded
+      .map(
+        d =>
+          `${d.name}${d.version ? `@${d.version}` : ''} supports @astryxdesign/core ${d.range}`,
+      )
+      .join('; ')}, but the project has ${core}. ${excluded.length === 1 ? 'Its' : 'Their'} components, themes and docs were made for another Core and may not work.`,
+    fix: `Install a release of ${excluded.length === 1 ? 'that package' : 'each package'} whose @astryxdesign/core range includes ${core}, or move the project to a Core in that range. When no such release exists, ask the package's owner for one.`,
+  };
+}
+
+/**
  * The project's icon sets (AST-084 FR17). Fails when `experimental.iconSet` names a set
  * that is not installed, or one that is installed but withdrawn (with why);
  * warns when two or more sets are installed and none is the project's, and
@@ -1992,6 +2044,7 @@ export const SYNC_CHECKS = [
   checkConfiguredIntegrations,
   checkProviderIdentity,
   checkIntegrationIssues,
+  checkIntegrationCoreRange,
   checkIconSets,
   checkAgentDocs,
   checkPeerDeps,

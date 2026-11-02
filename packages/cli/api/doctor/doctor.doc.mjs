@@ -20,7 +20,7 @@ export const doc = {
     '@astryxdesign/core install and version alignment with the CLI, installed ' +
     'themes and wiring, astryx.config validity, whether every integration ' +
     'astryx.config names loads (a failed one fails the run), integrations linked from ' +
-    'package.json without a config entry, core peer dependencies, ' +
+    'package.json without a config entry, core peer dependencies, whether the @astryxdesign/core peer range of each loaded integration includes the installed Core (`integration-core-range`, a warning), ' +
     'integration provider identity and contribution issues, agent docs, the ' +
     'detected package manager, and the health of the docs the CLI reads (authoring ' +
     'and CLI docs, the docs tree, doc size), and returns a structured ' +
