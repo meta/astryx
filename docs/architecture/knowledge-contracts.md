@@ -1319,7 +1319,7 @@ Current enforcement gap: no checked-in gate yet proves the open-pull-request
 search. Until one exists, the pull-request summary records the search terms,
 canonical owner/path, and overlapping open work inspected.
 
-Current enforcement gap: the example-coverage report reads component-doc
-examples only and cannot see whether an example demonstrates its hook, so
-review checks INV28. Each public hook without a conforming example is an open
+Current enforcement gap: the example-coverage report lists each public hook
+that has no hook doc or no example block naming it, but it cannot see whether
+an example demonstrates its hook, so review checks that part of INV28. Each public hook without a conforming example is an open
 docs gap under INV28, tracked in the repository's issue queue.
