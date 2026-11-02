@@ -551,6 +551,94 @@ test('a scroll that lands between a move report and its read never switches a to
   expect(after.bottom).toBeLessThanOrEqual(movedTrigger.top);
 });
 
+test('a trigger that moves in layout between a move report and its read never switches a tooltip that fits', async ({
+  page,
+}) => {
+  // A move in layout, unlike a scroll, reaches the tooltip as soon as the
+  // read lays it out, so the read must not count it as one the tooltip has
+  // yet to follow. A small scroll queues a read; right after its report the
+  // trigger moves in layout, as a transition or content growing above it can.
+  await page.addInitScript(() => {
+    const w = window as unknown as {moveAfterReport?: number};
+    const frame = window.requestAnimationFrame.bind(window);
+    let inReport = false;
+    let queuedRead = false;
+    window.requestAnimationFrame = callback => {
+      queuedRead ||= inReport;
+      return frame(callback);
+    };
+    const Observer = window.IntersectionObserver;
+    window.IntersectionObserver = class extends Observer {
+      constructor(
+        callback: IntersectionObserverCallback,
+        options?: IntersectionObserverInit,
+      ) {
+        super((entries, observer) => {
+          inReport = true;
+          queuedRead = false;
+          try {
+            callback(entries, observer);
+          } finally {
+            inReport = false;
+          }
+          const dy = w.moveAfterReport;
+          const root = document.getElementById('storybook-root');
+          if (queuedRead && dy !== undefined && root != null) {
+            w.moveAfterReport = undefined;
+            // Content above the trigger grows.
+            root.style.paddingTop = `${parseFloat(root.style.paddingTop || '0') + dy}px`;
+          }
+        }, options);
+      }
+    };
+  });
+  await page.setViewportSize({width: 1280, height: 720});
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-tooltip--tall-content&viewMode=story&args=content:A+short+tooltip`,
+  );
+  await holdMotionStill(page);
+  const button = page.getByRole('button', {name: 'Hover for details'});
+  await expect(button).toBeVisible();
+  await page.evaluate(sel => {
+    // Scroll anchoring would answer the content growing above the trigger
+    // with a scroll, so the trigger would not move in layout.
+    document.documentElement.style.overflowAnchor = 'none';
+    document.body.style.overflowAnchor = 'none';
+    const el = document.querySelector(sel) as HTMLElement;
+    const r = el.getBoundingClientRect();
+    window.scrollBy(0, r.top + r.height / 2 - 200);
+  }, TRIGGER);
+  await button.focus();
+  await expect(page.getByRole('tooltip')).toBeVisible();
+  await page.waitForTimeout(200);
+  expect(await hasSwitched(page)).toBe(false);
+  const before = await rect(page, TOOLTIP);
+  const trigger = await rect(page, TRIGGER);
+  expect(before.bottom - before.top).toBeGreaterThan(0);
+  expect(trigger.bottom - trigger.top).toBeGreaterThan(0);
+  // The tooltip sits closer to its trigger than the late move carries it.
+  expect(trigger.top - before.bottom).toBeLessThan(12);
+  await page.evaluate(() => {
+    (window as unknown as {moveAfterReport?: number}).moveAfterReport = 12;
+  });
+  await page.evaluate(() => window.scrollBy(0, 6));
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        () => (window as unknown as {moveAfterReport?: number}).moveAfterReport,
+      ),
+    )
+    .toBeUndefined();
+  await page.waitForTimeout(300);
+  expect(await hasSwitched(page)).toBe(false);
+  const after = await rect(page, TOOLTIP);
+  const movedTrigger = await rect(page, TRIGGER);
+  // The scroll carried the trigger 6 px up and the content above it grew by
+  // 12 px; the tooltip came with it.
+  expect(movedTrigger.top - trigger.top).toBeCloseTo(6, 0);
+  expect(after.bottom).toBeLessThanOrEqual(movedTrigger.top);
+});
+
 test('a scroll that moves a tall tooltip’s trigger never leaves the tooltip over it past the first painted frame, and it ends on the roomier side', async ({
   page,
 }) => {
