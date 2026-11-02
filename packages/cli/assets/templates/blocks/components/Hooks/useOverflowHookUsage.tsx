@@ -49,7 +49,7 @@ function MoreMenu({items}: {items: string[]}) {
   return (
     <DropdownMenu
       button={{label: 'More', variant: 'ghost', size: 'sm'}}
-      items={items.map(label => ({label, onClick: () => {}}))}
+      items={items.map(label => ({label}))}
     />
   );
 }
