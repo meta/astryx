@@ -37,6 +37,7 @@
 
 import {expect, test, type Locator, type Page} from '@playwright/test';
 import {
+  CONTROL_RGB,
   blockMainThread,
   busyWindowProof,
   castStoryboard,
@@ -51,6 +52,7 @@ import {
   releaseAnimations,
   sampleCurve,
   springStep,
+  startBusyControl,
   startScreencast,
   tap,
   touchDriver,
@@ -611,10 +613,6 @@ test('a drag that rests 40 ms before the lift does not coast: the release filter
     'core-slider--touch-tracking',
     {name: 'Brightness'},
   );
-  test.skip(
-    !driver.scriptedTimestamps,
-    'the velocity filter needs the scripted timestamps (README: engine limits)',
-  );
   const at = await center();
   // 60 px at 300 px/s, then 300 ms without a move. UIKit keeps the last
   // motion through a silent rest (a 312 ms rest still coasted 12.56 pt);
@@ -1107,11 +1105,7 @@ test('right to left: dragging toward the inline end raises the value', async ({
 test(
   'the coast keeps advancing every frame while the main thread is blocked',
   {tag: '@storyboard'},
-  async ({page, browserName}, testInfo) => {
-    test.skip(
-      browserName === 'webkit',
-      'In Playwright’s Linux WebKit the coast that follows the lift freezes under a blocked main thread in about half the runs (with the lift disabled it advances in 6 of 6; an isolated translate beside a scale advances, so the cause is still open). The iOS simulator take proves Mobile Safari keeps coasting (README: engine limits)',
-    );
+  async ({page}, testInfo) => {
     // A fast throw with room ahead: about 90 px of coast, never clamped.
     const {driver, thumb, center} = await openSlider(
       page,
@@ -1119,6 +1113,9 @@ test(
       {name: 'Brightness'},
     );
     await markElement(thumb);
+    // A compositor-only control in the same screencast: the coast is judged
+    // against what this machine's compositor presented in the block.
+    await startBusyControl(page);
     const cast = await startScreencast(page);
     const at = await center();
     // Block mid-flight, once the coast itself runs (the harness's contract:
@@ -1131,14 +1128,28 @@ test(
       during: fillOf(thumb),
       minProgressMs: 48,
     });
-    await driver.play(flick(at, {velocity: {x: 900, y: 0}, durationMs: 60}));
+    // A moderate iPhone flick, 900 px/s over 60 ms, paced by the script's own
+    // spacing: in WebKit the page reads the release velocity from when the
+    // moves arrive, and a burst behind a stalled dispatch reads as a far
+    // faster finger, whose coast reaches the end of the track before the
+    // block. A stall that reaches the stillness interval fails the run as
+    // `TouchPacingError`, the runner's fault, not the coast's.
+    await driver.play(flick(at, {velocity: {x: 900, y: 0}, durationMs: 60}), {
+      pacing: 'spacing',
+    });
     const block = await blocking;
     await page.waitForTimeout(150);
     const castFrames = await cast.stop();
     const tracked = await trackMarker(page, castFrames);
+    const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
+    // Judged until two of the cast's own position steps from rest: 2 px in
+    // Chromium's PNG cast, 4 px in WebKit's JPEG cast, whose 4:2:0 chroma
+    // holds the marker's color in 2 px blocks. The tail's plateaus there are
+    // the cast's resolution, not a stall.
     const proof = busyWindowProof(tracked, block, {
       axis: 'x',
-      settledWithin: 2,
+      settledWithinSteps: 2,
+      control,
     });
     await writeEvidence(
       'busy-main-thread/slider-coast',
