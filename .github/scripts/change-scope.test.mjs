@@ -539,6 +539,10 @@ describe('Lab-only change scope (spec:AST-030 FR26)', () => {
   it('runs full CI for any other path beside a Lab change', () => {
     for (const other of [
       'packages/core/src/Button/Button.tsx',
+      'packages/core/src/internal/touch.ts',
+      'packages/cli/api/search/search.mjs',
+      'scripts/sync-exports.js',
+      'tsconfig.json',
       'packages/charts/src/index.ts',
       'apps/storybook/stories/Tour.stories.tsx',
       'apps/docsite/src/app/page.tsx',

@@ -488,9 +488,11 @@ they are separately named.
   interaction or touched-components suite, and an agent lane's push defers
   nothing (FR20). The required `build`, `test` and `docsite-test` contexts
   report success with the notice "Lab-only: Lab tests + Storybook build",
-  never a skip. Any other changed path, Lab stories under
-  `apps/storybook/stories/` included, an incomplete file list, or a base whose
-  classifier has no Lab-only lane runs CI as for any pull request. An outside
+  never a skip. A change to any other path is mixed and runs CI as for any
+  pull request: Core (its internal modules included), the CLI, scripts, shared
+  or root configuration, the lockfile, and Lab stories under
+  `apps/storybook/stories/`. So does an incomplete file list or a base whose
+  classifier has no Lab-only lane. An outside
   contributor's pull request still needs `ci:run` (FR17), and `main` and the
   release-check cover Lab as before (DEC-21).
 
@@ -941,8 +943,9 @@ keeping it hourly (the run is the largest share of main's runner use).
 **Reference:** `spec:AST-030/DEC-21`
 **Decider:** `cixzhang`, `2026-11-01`
 
-The Lab package is experimental: it is published, but outside the
-compatibility promise, and its changes merge without the spec gates. The
+The Lab package is unpublished (`private` in the workspace), so no released
+user can be affected by a Lab change, and its changes merge without the spec
+gates. The
 decider's words: "Lab can just merge since its not shipped"; "Lab could
 likely skip a lot of CI"; "LAb-only updates at least. Maybe it only runs the
 lab tests"; "Theymight need storybook". A Lab-only pull request therefore
@@ -963,7 +966,7 @@ the accepted cost: about one pull-request run in a hundred is Lab-only, and
 each skips most of a full run's work.
 
 Rejected: keeping full CI for Lab (it spends shipped-surface checks on a
-package outside the compatibility promise); Lab tests alone, without the
+package no released user receives); Lab tests alone, without the
 repository-wide guards (a landed guard break blocks everyone else's pull
 requests); counting Lab stories under `apps/storybook/stories/` as Lab-only
 (they share the visual surface, and a path cannot tell a Lab story from a core
