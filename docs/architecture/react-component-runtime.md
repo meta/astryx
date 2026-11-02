@@ -320,12 +320,13 @@ those contracts.
   that slot; numeric counts and plain string fields are not slots. (Known
   implementation gaps include: ToggleButton decides whether `children` replaces
   `label` with a bare nullish check, so children of `''`, `false`, or `true`
-  render an empty label instead of `label`; List `header`, Toolbar
+  render an empty label instead of `label`; Button and TopNavItem `children` (`children ?? label`) do the same, leaving the label blank and the TopNavItem link without an accessible name; ComplexSelector `triggerLabel` (`triggerLabel ?? placeholder`) drops the placeholder for those values; List `header`, Toolbar
   `startContent`, `centerContent`, and `endContent`, Layout `header`, `footer`,
-  `start`, and `end`, TopNav `centerContent`, and Spinner `label` still test
+  `start`, and `end`, TopNav `startContent` and `centerContent`, and Spinner `label` still test
   presence with a bare `!= null`, so a value of `''`, `false`, or `true` draws a
   wrapper or switches the layout as content would (an empty List header also
-  names the list, and an empty Spinner label names the status); Dialog calls
+  names the list, an empty Spinner label names the status, and an empty TopNav
+  `startContent` shows the mobile toggle for an empty drawer); Dialog calls
   `useInteractionModalityTracking()` and also keeps its own Effect that tracks
   modality in a second document; MobileNav keeps its own page scroll lock Effect
   instead of `useScrollLock`; BottomSheet's gestures and mobile keyboard,
