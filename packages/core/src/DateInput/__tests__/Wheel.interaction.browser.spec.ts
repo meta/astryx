@@ -44,6 +44,9 @@ import {
   trackMarker,
   waitForAnimation,
   waitForRest,
+  retakeOnWheelPacing,
+  webInputDriver,
+  WHEEL_SKIP,
   withStorybook,
   writeEvidence,
   type TouchDriver,
@@ -1008,6 +1011,118 @@ test('under reduced motion, a tap’s cross-fade never shows the old row again w
       `the row at +${Math.round(frame.t - block.from)} ms, at rest y ${Math.round(to.y)} (${timeline})`,
     ).toBeLessThan(3);
   }
+});
+
+test.describe('a mouse wheel and a trackpad (component:DateInput FR15)', () => {
+  test('one mouse-wheel notch turns the touch column one row, as an arrow key does; three turn it three', async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'chromium',
+      "a mouse wheel's notch is Chromium's driver's wheel; WebKit's sends a trackpad's precise deltas, from a desktop context only",
+    );
+    const {field, minutes} = await openWheel(page);
+    const input = await webInputDriver(page);
+    test.skip(!input.wheels, WHEEL_SKIP);
+    const box = await minutes.boundingBox();
+    if (box == null) {
+      throw new Error('no minute column');
+    }
+    const at = {x: box.x + box.width / 2, y: box.y + box.height / 2};
+    await input.wheel({...at, dy: 100});
+    // As an arrow key: the next row commits at once, with no coast.
+    await expect(field).toHaveValue('01');
+    await input.wheel({...at, dy: 100});
+    await input.wheel({...at, dy: 100});
+    await expect(field).toHaveValue('03');
+    await page.waitForTimeout(600);
+    await expect(field).toHaveValue('03');
+    // A ctrl-wheel is the page's zoom: the wheel keeps its row.
+    await input.wheel({...at, dy: 100, ctrl: true});
+    await page.waitForTimeout(600);
+    await expect(field).toHaveValue('03');
+  });
+
+  test.describe('a trackpad', () => {
+    // WebKit's driver sends a trackpad's precise deltas from a desktop
+    // context; the touch column is opened alone there.
+    test.use({hasTouch: false, isMobile: false});
+
+    async function openTouchColumn(page: Page) {
+      await openStory(page, storybook(), 'core-wheel--touch-minutes');
+      const field = page.getByRole('textbox', {name: 'Committed minute'});
+      await expect(field).toHaveValue('00');
+      const minutes = page.getByRole('listbox', {name: 'Minute'});
+      await expect(minutes).toBeVisible();
+      await expect(page.locator('[data-wheel]')).toHaveCount(1);
+      await page.waitForTimeout(600);
+      const box = await minutes.boundingBox();
+      if (box == null) {
+        throw new Error('no minute column');
+      }
+      return {
+        field,
+        at: {x: box.x + box.width / 2, y: box.y + box.height / 2},
+      };
+    }
+
+    test('a trackpad flick drives the touch column as a finger does: it follows, coasts on at the lift, and commits the row it rests on', async ({
+      page,
+      browserName,
+    }, testInfo) => {
+      test.skip(
+        browserName !== 'webkit',
+        "Chromium's driver sends each wheel as a mouse wheel's notch; only WebKit's sends a trackpad's precise deltas",
+      );
+      await retakeOnWheelPacing(testInfo, async () => {
+        const {field, at} = await openTouchColumn(page);
+        const input = await webInputDriver(page);
+        test.skip(!input.wheels, WHEEL_SKIP);
+        // The fingers: 12 px a frame for 12 frames (144 px, five rows and a
+        // bit), then the platform's momentum, a shrinking run.
+        const fingers = Array.from({length: 12}, () => ({dy: 12}));
+        const momentum = [11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map(dy => ({dy}));
+        await input.wheelBurst({
+          ...at,
+          steps: [...fingers, ...momentum],
+          maxGapMs: 100,
+        });
+        // It coasts on at UIKit's deceleration, well past the fingers'
+        // travel and the momentum's (66 px), and commits where it rests.
+        await expect
+          .poll(async () => Number(await field.inputValue()), {timeout: 8000})
+          .toBeGreaterThanOrEqual(10);
+        const rested = await field.inputValue();
+        await page.waitForTimeout(1000);
+        await expect(field).toHaveValue(rested);
+      });
+    });
+
+    test('a slow trackpad drag that stops rests on the nearest row, without coasting', async ({
+      page,
+      browserName,
+    }, testInfo) => {
+      test.skip(
+        browserName !== 'webkit',
+        "Chromium's driver sends each wheel as a mouse wheel's notch; only WebKit's sends a trackpad's precise deltas",
+      );
+      await retakeOnWheelPacing(testInfo, async () => {
+        const {field, at} = await openTouchColumn(page);
+        const input = await webInputDriver(page);
+        test.skip(!input.wheels, WHEEL_SKIP);
+        // 2 px a frame for 20 frames: 40 px, a row and a half less a bit.
+        await input.wheelBurst({
+          ...at,
+          steps: Array.from({length: 20}, () => ({dy: 2})),
+          maxGapMs: 100,
+        });
+        await expect(field).toHaveValue('01', {timeout: 5000});
+        await page.waitForTimeout(1000);
+        await expect(field).toHaveValue('01');
+      });
+    });
+  });
 });
 
 test.describe('under a mouse', () => {

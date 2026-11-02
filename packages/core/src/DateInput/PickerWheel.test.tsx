@@ -772,35 +772,148 @@ describe('PickerWheel — a mouse', () => {
   });
 });
 
-describe('PickerWheel — a scroll wheel', () => {
-  /** One wheel event over the column; returns whether it was cancelled. */
-  function wheel(target: Element, deltaY: number, ctrlKey = false): boolean {
+describe('PickerWheel — a scroll wheel and a trackpad', () => {
+  /**
+   * One wheel event over the column at the fake clock's time; returns whether
+   * it was cancelled. `legacy` is the `wheelDeltaX`/`wheelDeltaY` that Chromium
+   * and WebKit send. A mouse wheel's notch is 120 a step, and a trackpad's
+   * precise delta is three times its own. The gesture host reads which it is.
+   */
+  function wheel(
+    target: Element,
+    init: {
+      dx?: number;
+      dy?: number;
+      mode?: number;
+      ctrl?: boolean;
+      legacy?: {x: number; y: number};
+    },
+  ): boolean {
     const event = new WheelEvent('wheel', {
       bubbles: true,
       cancelable: true,
-      deltaY,
-      ctrlKey,
+      composed: true,
+      clientX: 60,
+      clientY: CENTRE,
+      deltaX: init.dx ?? 0,
+      deltaY: init.dy ?? 0,
+      deltaMode: init.mode ?? 0,
+      ctrlKey: init.ctrl ?? false,
     });
+    Object.defineProperty(event, 'timeStamp', {value: performance.now()});
+    if (init.legacy != null) {
+      Object.defineProperty(event, 'wheelDeltaX', {value: init.legacy.x});
+      Object.defineProperty(event, 'wheelDeltaY', {value: init.legacy.y});
+    }
     act(() => {
       target.dispatchEvent(event);
     });
     return event.defaultPrevented;
   }
+  /** A mouse wheel's notch down, as Chromium sends one. */
+  const notch = (target: Element) =>
+    wheel(target, {dy: 100, legacy: {x: 0, y: -120}});
+  /** A trackpad's precise delta down, as Chromium and WebKit send one. */
+  const trackpad = (target: Element, dy: number) =>
+    wheel(target, {dy, legacy: {x: 0, y: -3 * dy}});
 
-  it('turns with a scroll and rests on a row', () => {
-    const {column, onChange} = renderWheel();
-    // Two rows down.
-    expect(wheel(column, 64)).toBe(true);
-    advance(1000);
+  it('turns one row for a mouse wheel’s notch, as an arrow key does, with no coast (component:DateInput FR15)', () => {
+    const {column, option, onChange} = renderWheel();
+    expect(notch(column)).toBe(true);
+    // As an arrow key: the next row commits at once.
     expect(onChange).toHaveBeenCalledTimes(1);
-    expect(onChange).toHaveBeenCalledWith(12);
+    expect(onChange).toHaveBeenLastCalledWith(11);
+    advance(2000);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(distanceOf(option('11'))).toBeCloseTo(0, 1);
+  });
+
+  it('turns three rows for three notches, one each', () => {
+    const {column, option, onChange} = renderWheel();
+    for (let i = 0; i < 3; i++) {
+      expect(notch(column)).toBe(true);
+      advance(40);
+    }
+    expect(onChange.mock.calls).toEqual([[11], [12], [13]]);
+    advance(2000);
+    expect(distanceOf(option('13'))).toBeCloseTo(0, 1);
+  });
+
+  it('turns one row for a line-mode notch, as Firefox sends', () => {
+    const {column, onChange} = renderWheel();
+    expect(wheel(column, {dy: 3, mode: 1})).toBe(true);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenLastCalledWith(11);
   });
 
   it('leaves a ctrl-wheel, a trackpad pinch, to the page (spec:AST-094 FR10, FR43)', () => {
     const {column, onChange} = renderWheel();
-    expect(wheel(column, 64, true)).toBe(false);
+    expect(wheel(column, {dy: 100, ctrl: true, legacy: {x: 0, y: -120}})).toBe(
+      false,
+    );
     advance(1000);
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('leaves a sideways scroll to the page', () => {
+    const {column, onChange} = renderWheel();
+    expect(wheel(column, {dx: 100, legacy: {x: -120, y: 0}})).toBe(false);
+    advance(1000);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('follows a trackpad’s fingers, coasts on at their lift and rests on a row, as a finger’s flick does (component:DateInput FR15)', () => {
+    const {column, option, onChange} = renderWheel({
+      options: MINUTES,
+      value: 10,
+      label: 'Minute',
+    });
+    /** The wheel's offset, from where minute 10 is drawn. */
+    const offsetOf = () => 10 * ROW - distanceOf(option('10'));
+    // The fingers: 12 px a frame for 12 frames.
+    for (let i = 0; i < 12; i++) {
+      expect(trackpad(column, 12)).toBe(true);
+      advance(16);
+    }
+    const atLift = offsetOf();
+    // The rows followed the fingers' travel.
+    expect(atLift).toBeGreaterThan(10 * ROW + 60);
+    expect(onChange).not.toHaveBeenCalled();
+    // The momentum the platform sends after the lift: a shrinking run.
+    for (const dy of [11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1]) {
+      trackpad(column, dy);
+      advance(16);
+    }
+    advance(3000);
+    // It coasted on past the fingers' travel at UIKit's deceleration, much
+    // farther than the platform's momentum. That momentum (66 px) never moves
+    // it. It rests on a row there, committed once.
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const [[rested]] = onChange.mock.calls as [[number]];
+    expect(rested * ROW - atLift).toBeGreaterThan(5 * ROW);
+    expect(distanceOf(option(String(rested).padStart(2, '0')))).toBeCloseTo(
+      0,
+      1,
+    );
+  });
+
+  it('rests on the nearest row after a slow trackpad drag that stops, without coasting', () => {
+    const {column, option, onChange} = renderWheel({
+      options: MINUTES,
+      value: 10,
+      label: 'Minute',
+    });
+    const offsetOf = () => 10 * ROW - distanceOf(option('10'));
+    // 2 px a frame for 20 frames, then the fingers stop on the pad.
+    for (let i = 0; i < 20; i++) {
+      trackpad(column, 2);
+      advance(16);
+    }
+    const stopped = offsetOf();
+    advance(3000);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const [[rested]] = onChange.mock.calls as [[number]];
+    expect(Math.abs(rested * ROW - stopped)).toBeLessThanOrEqual(ROW / 2 + 1);
   });
 });
 
