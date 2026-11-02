@@ -64,7 +64,11 @@ import {
 } from '../Calendar';
 import {useCalendarConstraints} from '../Calendar/hooks';
 import {usePopover} from '../Popover';
-import {isFocusInsideOwnedLayer, useOutsidePress} from '../Layer/outsidePress';
+import {
+  isFocusInsideOwnedLayer,
+  isPressInsideOwnedLayer,
+  useOutsidePress,
+} from '../Layer/outsidePress';
 import {useTooltip} from '../Tooltip';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
@@ -1193,13 +1197,7 @@ function PointerDateTimeField({
       }
       timeOutsidePress.start(
         field,
-        // The list may be hosted outside the field, so it counts on its own.
-        path =>
-          path.some(
-            target =>
-              target === field ||
-              (target instanceof Element && target.id === timePopover.id),
-          ),
+        path => isPressInsideOwnedLayer(path, field, timePopover.id),
         // Called after usePopover has returned, so `timePopover` is assigned.
         () => timePopover.hide(),
       );

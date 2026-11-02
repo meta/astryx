@@ -63,7 +63,11 @@ import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {usePopover} from '../Popover';
-import {isFocusInsideOwnedLayer, useOutsidePress} from '../Layer/outsidePress';
+import {
+  isFocusInsideOwnedLayer,
+  isPressInsideOwnedLayer,
+  useOutsidePress,
+} from '../Layer/outsidePress';
 import {NativeDateField} from './NativeDateField';
 import {TouchDateField} from './TouchDateField';
 import {useTooltip} from '../Tooltip';
@@ -477,6 +481,20 @@ export interface DateInputProps extends Omit<
 const TOUCH_POINTER_QUERY = '(pointer: coarse)';
 
 /**
+ * Whether `target` is a label whose control is `input`. Checked by nodeType
+ * and tag name, so a label in a same-origin iframe counts.
+ */
+function isLabelFor(target: EventTarget, input: HTMLInputElement | null) {
+  const node = target as Partial<HTMLLabelElement>;
+  return (
+    input != null &&
+    node.nodeType === 1 &&
+    node.localName === 'label' &&
+    node.control === input
+  );
+}
+
+/**
  * The pointer-driven field: a text input you can type into, with a calendar
  * in a popover beside it. `DateInput` renders this whenever the primary
  * pointer is not a finger — see {@link TOUCH_POINTER_QUERY}.
@@ -638,15 +656,14 @@ function PointerDateField({
       ? true
       : parseDateInput(pendingInput, locale) !== null;
 
-  // Not light dismiss: a text input cannot be an invoker, so the browser
-  // would count a press in it as outside and close the calendar the press
-  // just opened.
   const fieldElementRef = useRef<HTMLDivElement | null>(null);
   // Set just before a close that focus already left the field for, so onHide
   // does not pull focus back to the input.
   const isFocusMovingAwayRef = useRef(false);
   const outsidePress = useOutsidePress();
   const popover = usePopover({
+    // A text input cannot be an invoker. Light dismiss would count a press in
+    // it as outside and close the calendar.
     hasLightDismiss: false,
     onShow: () => {
       const field = fieldElementRef.current;
@@ -655,19 +672,11 @@ function PointerDateField({
       }
       outsidePress.start(
         field,
-        // The calendar layer may be hosted outside the field (Layer portals it
-        // out of lists, labels and inline text), so it counts on its own.
-        // Its label counts too: a press there focuses the input, which would
+        // The label counts too: a press there focuses the input, which would
         // otherwise close the calendar and reopen it on the same press.
         path =>
-          path.some(
-            target =>
-              target === field ||
-              (target instanceof Element && target.id === popover.id) ||
-              (target instanceof HTMLLabelElement &&
-                target.control != null &&
-                target.control === inputRef.current),
-          ),
+          isPressInsideOwnedLayer(path, field, popover.id) ||
+          path.some(target => isLabelFor(target, inputRef.current)),
         // Called after usePopover has returned, so `popover` is assigned.
         () => popover.hide(),
       );

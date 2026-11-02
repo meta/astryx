@@ -2,14 +2,14 @@
 
 /**
  * @file outsidePress.test.ts
- * @input isFocusInsideOwnedLayer
+ * @input isFocusInsideOwnedLayer and isPressInsideOwnedLayer
  * @output The shared focus-leave test: the field, the layer (by id, across
  *   shadow roots and through popovers nested in it) are inside; anything
  *   else and a null target are outside
  */
 
 import {afterEach, describe, expect, it} from 'vitest';
-import {isFocusInsideOwnedLayer} from './outsidePress';
+import {isFocusInsideOwnedLayer, isPressInsideOwnedLayer} from './outsidePress';
 
 describe('isFocusInsideOwnedLayer', () => {
   function setup() {
@@ -57,5 +57,37 @@ describe('isFocusInsideOwnedLayer', () => {
     root.append(option);
     document.body.append(host);
     expect(isFocusInsideOwnedLayer(option, null, 'owned-layer')).toBe(true);
+  });
+});
+
+describe('inside tests across realms', () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  it('count a field and layer in a same-origin iframe, whose nodes fail instanceof here', () => {
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const frameDocument = frame.contentDocument!;
+    const field = frameDocument.createElement('div');
+    const input = frameDocument.createElement('input');
+    field.append(input);
+    const layer = frameDocument.createElement('div');
+    layer.id = 'framed-layer';
+    const option = frameDocument.createElement('button');
+    layer.append(option);
+    frameDocument.body.append(field, layer);
+    // The precondition this guards: another realm's nodes are not this
+    // window's Node.
+    expect(option instanceof Node).toBe(false);
+
+    expect(isFocusInsideOwnedLayer(input, field, 'framed-layer')).toBe(true);
+    expect(isFocusInsideOwnedLayer(option, field, 'framed-layer')).toBe(true);
+    expect(
+      isPressInsideOwnedLayer([option, layer], field, 'framed-layer'),
+    ).toBe(true);
+    expect(
+      isPressInsideOwnedLayer([frameDocument.body], field, 'framed-layer'),
+    ).toBe(false);
   });
 });
