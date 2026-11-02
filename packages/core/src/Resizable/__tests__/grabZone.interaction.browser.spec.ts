@@ -1,0 +1,178 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file grabZone.interaction.browser.spec.ts
+ * @input The "Core/Resizable / Grab Zone On Short Items" story in a real
+ *   browser: a 30-minute and a 15-minute calendar event at 48px an hour, each
+ *   moved by a drag on its body and resized by the ResizeHandle on its bottom
+ *   edge, for each `pillPlacement` and both `position`s
+ * @output Checks that the Grab zone stays on the Handle whatever
+ *   `pillPlacement` says, and takes at most half of a short item, so the item
+ *   keeps its own drag (component:Resizable FR1; the clamp follows
+ *   `spec:AST-094` FR42's grown targets that stop at half the gap)
+ * @position Browser proof for ResizeHandle.tsx's Grab zone
+ */
+
+import {expect, test, type Page} from '@playwright/test';
+import {openStory, withStorybook} from '@astryxdesign/interaction-harness';
+
+const storybook = withStorybook(test);
+
+const STORY = 'core-resizable--grab-zone-on-short-items';
+
+type PillPlacement = 'auto' | 'start' | 'center' | 'end';
+type Position = 'inline' | 'overlay';
+
+interface Box {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+interface Geometry {
+  event: Box;
+  handle: Box;
+  zone: Box;
+}
+
+async function open(
+  page: Page,
+  pillPlacement: PillPlacement,
+  position: Position,
+): Promise<void> {
+  await openStory(page, storybook(), STORY, {pillPlacement, position});
+  await expect(page.getByTestId('thirty')).toBeVisible();
+}
+
+/** The event, its Handle (the separator) and its Grab zone, in page pixels. */
+async function measure(page: Page, testId: string): Promise<Geometry> {
+  return page.evaluate(id => {
+    const event = document.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+    const handle = event?.querySelector<HTMLElement>('[role="separator"]');
+    // The Grab zone is the Handle's first child: the invisible element that
+    // takes the pointer.
+    const zone = handle?.firstElementChild;
+    if (event == null || handle == null || zone == null) {
+      throw new Error(`no event, Handle or Grab zone for ${id}`);
+    }
+    const box = (element: Element) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
+      };
+    };
+    return {event: box(event), handle: box(handle), zone: box(zone)};
+  }, testId);
+}
+
+/** How much of the event the Grab zone covers, on the resize axis. */
+function overlap(geometry: Geometry): number {
+  const {event, zone} = geometry;
+  return Math.max(
+    0,
+    Math.min(zone.bottom, event.bottom) - Math.max(zone.top, event.top),
+  );
+}
+
+const PLACEMENTS: PillPlacement[] = ['auto', 'start', 'center', 'end'];
+
+for (const pillPlacement of PLACEMENTS) {
+  test(`the Grab zone stays on the Handle with pillPlacement="${pillPlacement}"`, async ({
+    page,
+  }) => {
+    await open(page, pillPlacement, 'inline');
+    for (const id of ['thirty', 'fifteen']) {
+      const geometry = await measure(page, id);
+      const handleCentre = (geometry.handle.top + geometry.handle.bottom) / 2;
+      const zoneCentre = (geometry.zone.top + geometry.zone.bottom) / 2;
+      expect(
+        Math.abs(zoneCentre - handleCentre),
+        `${id}: the Grab zone's centre against the Handle's`,
+      ).toBeLessThanOrEqual(0.5);
+    }
+  });
+}
+
+for (const position of ['inline', 'overlay'] as const) {
+  for (const pillPlacement of PLACEMENTS) {
+    test(`a 30-minute and a 15-minute event keep at least half of themselves for their own drag (${position}, pillPlacement="${pillPlacement}")`, async ({
+      page,
+    }) => {
+      await open(page, pillPlacement, position);
+      for (const id of ['thirty', 'fifteen']) {
+        const geometry = await measure(page, id);
+        const height = geometry.event.bottom - geometry.event.top;
+        expect(height, `${id}: the event's height`).toBeCloseTo(
+          id === 'thirty' ? 24 : 12,
+          0,
+        );
+        expect(
+          overlap(geometry),
+          `${id}: how much of the event the Grab zone covers`,
+        ).toBeLessThanOrEqual(height / 2 + 0.5);
+        // The event's own drag answers just above the Grab zone, over its
+        // whole upper half.
+        const x = (geometry.event.left + geometry.event.right) / 2;
+        const free = await page.evaluate(
+          ({id: testId, x: atX, from, to}) => {
+            const body = document.querySelector(
+              `[data-testid="${testId}-body"]`,
+            );
+            const missed: number[] = [];
+            for (let y = from; y < to; y += 1) {
+              const hit = document.elementFromPoint(atX, y);
+              if (body == null || hit == null || !body.contains(hit)) {
+                missed.push(y);
+              }
+            }
+            return missed;
+          },
+          {
+            id,
+            x,
+            from: Math.ceil(geometry.event.top),
+            to: Math.floor(geometry.event.top + height / 2),
+          },
+        );
+        expect(
+          free,
+          `${id}: points of the event's upper half not on its body`,
+        ).toEqual([]);
+      }
+    });
+  }
+}
+
+test('a drag on a 30-minute event moves it, and a drag on its Handle resizes it', async ({
+  page,
+}) => {
+  await open(page, 'auto', 'inline');
+  const event = page.getByTestId('thirty');
+  const handle = page.getByRole('separator', {
+    name: 'Resize the 30-minute event',
+  });
+  const before = await measure(page, 'thirty');
+  const x = (before.event.left + before.event.right) / 2;
+  // A third of the way down the event: its body, which moves it.
+  const y = before.event.top + (before.event.bottom - before.event.top) / 3;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x, y + 24, {steps: 4});
+  await page.mouse.up();
+  await expect(event).toHaveAttribute('data-top', '48');
+  await expect(handle).toHaveAttribute('aria-valuenow', '24');
+
+  // On the Handle's line: the Grab zone, which resizes it.
+  const moved = await measure(page, 'thirty');
+  const lineY = (moved.handle.top + moved.handle.bottom) / 2;
+  await page.mouse.move(x, lineY);
+  await page.mouse.down();
+  await page.mouse.move(x, lineY + 12, {steps: 4});
+  await page.mouse.up();
+  await expect(handle).toHaveAttribute('aria-valuenow', '36');
+  await expect(event).toHaveAttribute('data-top', '48');
+});
