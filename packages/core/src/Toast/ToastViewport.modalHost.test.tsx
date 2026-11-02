@@ -741,18 +741,44 @@ describe('ToastViewport above a Drawer', () => {
     );
   });
 
-  it('stays in place when a drawer without a scrim opens', () => {
-    trackPopoverState();
+  it('re-enters the top layer in place when a drawer without a scrim opens after it', () => {
+    // A `hasScrim={false}` drawer is a manual popover: it enters the top
+    // layer above the viewport and blocks nothing, so the viewport stays
+    // where it is and leaves and re-enters to paint above the drawer again.
+    const {showPopover, hidePopover} = trackPopoverState();
     const {container} = render(
       <ToastViewport>
+        <ToastButton />
         <DrawerFixture label="Candidate" hasScrim={false} />
       </ToastViewport>,
     );
+    const viewport = getViewport();
+    const onViewport = (spy: typeof showPopover) =>
+      spy.mock.contexts.filter(context => context === viewport).length;
+    fireEvent.click(screen.getByRole('button', {name: 'Show toast'}));
+    expect(onViewport(showPopover)).toBe(1);
+
     fireEvent.click(screen.getByRole('button', {name: 'Open Candidate'}));
-    // A non-modal drawer leaves the page operable, so it supplies no outlet.
+    expect(getDialog('Candidate')).toHaveAttribute('popover', 'manual');
+    // Re-entered (hide, then show) after the drawer's own showPopover, and
+    // not moved: a non-modal drawer is not an outlet.
+    expect(onViewport(hidePopover)).toBe(1);
+    expect(onViewport(showPopover)).toBe(2);
+    const drawerShow = showPopover.mock.contexts.indexOf(
+      getDialog('Candidate'),
+    );
+    expect(drawerShow).toBeGreaterThan(-1);
+    expect(showPopover.mock.contexts.lastIndexOf(viewport)).toBeGreaterThan(
+      drawerShow,
+    );
     expect(getViewport().closest('dialog')).toBeNull();
     expect(container.contains(getViewport())).toBe(true);
     expect(getActiveModalOutlet()).toBeNull();
+
+    // Closing the drawer moves nothing and re-enters nothing.
+    fireEvent.click(screen.getByRole('button', {name: 'Close Candidate'}));
+    expect(onViewport(hidePopover)).toBe(1);
+    expect(onViewport(showPopover)).toBe(2);
   });
 });
 
