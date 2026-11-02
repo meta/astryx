@@ -1274,6 +1274,53 @@ describe("a trackpad scroll through the splitter's undecided stretch (spec:AST-0
     ).toEqual(['possible']);
   });
 
+  it.each([
+    ['a blur', 'blur', false],
+    ['a hidden page', 'hidden', false],
+    ['a blur, under a coarse primary pointer', 'blur', true],
+  ] as const)(
+    'keeps a ctrl-wheel pinch through %s: the pinch keeps its stream, and the page never zooms',
+    (_name, how, isCoarse) => {
+      const {photo} = mount('<div id="photo"></div>');
+      const subject = isCoarse
+        ? new GestureHost(document, {clock, isPrimaryPointerCoarse: () => true})
+        : host;
+      const pinch = new PinchGestureRecognizer();
+      const states = statesOf(pinch);
+      detachers.push(subject.attach(photo, pinch));
+      for (const time of [0, 16, 32]) {
+        expect(wheel(photo, {dy: -10, ctrl: true, time}).defaultPrevented).toBe(
+          true,
+        );
+      }
+      expect(states[0]).toBe('began');
+      clock.runDue(40);
+      if (how === 'blur') {
+        window.dispatchEvent(new Event('blur'));
+      } else {
+        Object.defineProperty(document, 'visibilityState', {
+          configurable: true,
+          get: () => 'hidden',
+        });
+        detachers.push(() => {
+          delete (document as {visibilityState?: unknown}).visibilityState;
+        });
+        document.dispatchEvent(new Event('visibilitychange'));
+      }
+      expect(states).not.toContain('cancelled');
+      const scale = pinch.scale;
+      for (const time of [48, 64, 80]) {
+        expect(wheel(photo, {dy: -10, ctrl: true, time}).defaultPrevented).toBe(
+          true,
+        );
+      }
+      expect(pinch.scale).toBeGreaterThan(scale);
+      clock.runDue(80 + 100);
+      expect(states).toContain('ended');
+      expect(states).not.toContain('cancelled');
+    },
+  );
+
   it('cancels nothing when focus moves between elements mid-swipe: only the window’s own blur ends a trackpad pan', () => {
     const {box, field} = mount(
       '<div id="box"></div><input id="field" type="text" />',
