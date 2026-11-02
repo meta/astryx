@@ -81,6 +81,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/SideNav/SideNav.generated';
+import {isRenderable} from '../utils/isRenderable';
 
 registerEnglishFallback(english);
 // =============================================================================
@@ -770,7 +771,9 @@ export function SideNav({
   // =========================================================================
   // Drawer mode — render inside MobileNav with heading as header
   // =========================================================================
-  const hasDrawerFooter = !!(footer || footerIcons);
+  // Slot presence follows `isRenderable` (`architecture:react-component-runtime`
+  // INV16), so the footer area shows whenever a slot inside it renders.
+  const hasDrawerFooter = isRenderable(footer) || isRenderable(footerIcons);
 
   if (renderMode === 'drawer') {
     return (
@@ -786,7 +789,7 @@ export function SideNav({
         {hasDrawerFooter && (
           <div {...stylex.props(styles.drawerFooter)}>
             {footer}
-            {footerIcons && (
+            {isRenderable(footerIcons) && (
               <div {...stylex.props(styles.drawerFooterIcons)}>
                 <SizeProvider value={FOOTER_ICON_SIZE}>
                   {footerIcons}
@@ -811,7 +814,7 @@ export function SideNav({
         {hasDrawerFooter && (
           <div {...stylex.props(styles.drawerFooter)}>
             {footer}
-            {footerIcons && (
+            {isRenderable(footerIcons) && (
               <div {...stylex.props(styles.drawerFooterIcons)}>
                 <SizeProvider value={FOOTER_ICON_SIZE}>
                   {footerIcons}
@@ -827,8 +830,8 @@ export function SideNav({
   // =========================================================================
   // Default mode — full sidebar
   // =========================================================================
-  const hasStickyTop = !!(header || topContent);
-  const hasStickyBottom = !!(footer || footerIcons);
+  const hasStickyTop = isRenderable(header) || isRenderable(topContent);
+  const hasStickyBottom = isRenderable(footer) || isRenderable(footerIcons);
   // The built-in collapse button only renders when collapse is enabled and it
   // hasn't been opted out via `collapsible.hasButton: false` (e.g. when the
   // consumer places a SideNavCollapseButton in the header instead).
@@ -862,7 +865,7 @@ export function SideNav({
             collapsed && styles.stickyTopCollapsed,
           )}>
           {header}
-          {topContent && (
+          {isRenderable(topContent) && (
             <div {...stylex.props(styles.topContent)}>{topContent}</div>
           )}
         </div>

@@ -5,22 +5,6 @@
   "packages/core/src/Lightbox/Lightbox.tsx": ["currentItem.caption"],
   "packages/core/src/NavMenu/NavHeadingMenuItem.tsx": ["description"],
   "packages/core/src/SegmentedControl/SegmentedControlItem.tsx": ["icon"],
-  "packages/core/src/SideNav/SideNav.tsx": [
-    "footerIcons",
-    "footerIcons",
-    "topContent"
-  ],
-  "packages/core/src/SideNav/SideNavHeading.tsx": [
-    "headerEndContent",
-    "icon",
-    "icon",
-    "icon",
-    "icon",
-    "icon",
-    "icon"
-  ],
-  "packages/core/src/SideNav/SideNavItem.tsx": ["endContent"],
-  "packages/core/src/SideNav/SideNavSection.tsx": ["endContent"],
   "packages/core/src/TabList/Tab.tsx": ["displayIcon", "endContent"],
   "packages/core/src/Tokenizer/Tokenizer.tsx": ["startIcon", "startIcon"],
   "packages/core/src/TopNav/TopNav.tsx": [
