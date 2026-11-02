@@ -683,8 +683,6 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   its neighbors, unless a component or module record sets its own (FR42).
 - `component:DropdownMenu`, `component:ContextMenu` and `component:Popover`:
   under a finger they follow FR26–FR35 as each applies.
-- `component:ContextMenu`: implementation gap: the three `springs.contextMenu*`
-  roles (FR4) are not registered motion roles.
 - `component:AlertDialog`, `component:Dialog`, `component:BottomSheet`,
   `component:BottomSheetSwitcher`, `component:Drawer`, `component:MobileNav`
   and `component:Lightbox`: under a finger, a tap or a drag during the
