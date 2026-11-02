@@ -2,8 +2,8 @@
 
 /**
  * @file ResizeHandle.test.tsx
- * @input Uses vitest, @testing-library/react, useResizable, ResizeHandle
- * @output Unit tests for ResizeHandle keyboard operability and ARIA state
+ * @input Uses vitest, @testing-library/react, react-dom, useResizable, ResizeHandle
+ * @output Unit tests for ResizeHandle keyboard operability, ARIA state and hydration
  * @position Testing; validates ResizeHandle.tsx implementation
  *
  * SYNC: When ResizeHandle.tsx changes, update tests to match new behavior
@@ -49,6 +49,48 @@ function getSeparator(): HTMLElement {
 
 function getHitArea(): HTMLElement {
   return getSeparator().firstElementChild as HTMLElement;
+}
+
+/**
+ * Hydrates `probe` over `serverHTML` and waits for the separator to announce
+ * `expected`, with no hydration mismatch on the way.
+ */
+async function hydrateExpecting(
+  probe: React.ReactElement,
+  serverHTML: string,
+  expected: string,
+): Promise<void> {
+  const container = document.createElement('div');
+  container.innerHTML = serverHTML;
+  document.body.appendChild(container);
+  const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const recoverableErrors: unknown[] = [];
+  let root: ReturnType<typeof hydrateRoot>;
+  try {
+    await act(async () => {
+      root = hydrateRoot(container, probe, {
+        onRecoverableError: error => recoverableErrors.push(error),
+      });
+    });
+    await waitFor(() =>
+      expect(container.querySelector('[role="separator"]')).toHaveAttribute(
+        'aria-valuenow',
+        expected,
+      ),
+    );
+    expect(recoverableErrors).toEqual([]);
+    expect(
+      consoleError.mock.calls.filter(call =>
+        String(call[0] ?? '')
+          .toLowerCase()
+          .includes('hydrat'),
+      ),
+    ).toEqual([]);
+  } finally {
+    await act(async () => root!.unmount());
+    consoleError.mockRestore();
+    container.remove();
+  }
 }
 
 /** Stub region props, so drag assertions read the calls directly. */
@@ -195,6 +237,48 @@ describe('ResizeHandle', () => {
       await act(async () => root!.unmount());
       consoleError.mockRestore();
       container.remove();
+      window.innerWidth = previous;
+    }
+  });
+
+  it('hydrates a saved size with the server markup, then announces the saved size', async () => {
+    // The server has no storage, so it renders the default.
+    localStorage.clear();
+    const probe = (
+      <Harness
+        config={{
+          defaultSize: 200,
+          minSize: 100,
+          maxSize: 400,
+          autoSaveId: 'hydrate-saved',
+        }}
+      />
+    );
+    const serverHTML = renderToString(probe);
+    expect(serverHTML).toContain('aria-valuenow="200"');
+    localStorage.setItem(
+      'astryx-resizable:hydrate-saved',
+      JSON.stringify({size: 300, isCollapsed: false}),
+    );
+    try {
+      await hydrateExpecting(probe, serverHTML, '300');
+    } finally {
+      localStorage.clear();
+    }
+  });
+
+  it('hydrates a percentage default with no container with the server markup, then resolves it against the window', async () => {
+    const previous = window.innerWidth;
+    const probe = <Harness config={{defaultSize: '30%', minSize: 100}} />;
+    try {
+      // The server has no window: a percentage resolves against its 1200px
+      // basis, which a 1200px window reproduces here.
+      window.innerWidth = 1200;
+      const serverHTML = renderToString(probe);
+      expect(serverHTML).toContain('aria-valuenow="360"');
+      window.innerWidth = 800;
+      await hydrateExpecting(probe, serverHTML, '240');
+    } finally {
       window.innerWidth = previous;
     }
   });
