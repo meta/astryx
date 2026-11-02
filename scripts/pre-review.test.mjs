@@ -5,7 +5,6 @@ import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import {
   CHECKS,
-  addedLinesByFile,
   applicableChecks,
   fileClass,
   formatReport,
@@ -31,16 +30,6 @@ function idsFor(entries) {
     .join('\n');
   return applicableChecks(files, diff).map(item => item.id);
 }
-
-describe('addedLinesByFile', () => {
-  it('keeps added lines per file and skips headers and context', () => {
-    const diff = `${diffAdding('a.ts', ['one'])}\n context\n-removed\n${diffAdding('b.ts', ['two'])}`;
-    expect(Object.fromEntries(addedLinesByFile(diff))).toEqual({
-      'a.ts': ['one'],
-      'b.ts': ['two'],
-    });
-  });
-});
 
 describe('applicableChecks', () => {
   it('always applies the public boundary item', () => {
@@ -116,6 +105,23 @@ describe('applicableChecks', () => {
     ).toEqual(['d']);
   });
 
+  it('routes published code outside src and shipped catalogs to the behavior item', () => {
+    expect(
+      idsFor([['packages/cli/clients/cli/bin/astryx.mjs', ['run();']]]),
+    ).toEqual(['b', 'd']);
+    expect(
+      idsFor([['packages/core/locales/fr-FR.json', ['"key": "value"']]]),
+    ).toEqual(['b', 'd']);
+  });
+
+  it('keeps private packages out of the behavior item', () => {
+    expect(
+      idsFor([
+        ['packages/charts/src/Chart/Chart.tsx', ['// Clear the ring first.']],
+      ]),
+    ).toEqual(['d', 'f']);
+  });
+
   it('applies the comment item to Lab source but not the behavior item', () => {
     expect(
       idsFor([
@@ -146,7 +152,10 @@ describe('fileClass', () => {
     expect(fileClass('packages/core/api-report.md', plain)).toBe('API report');
     expect(fileClass('packages/lab/src/A/A.tsx', plain)).toBe('Lab');
     expect(fileClass('packages/core/src/A/A.tsx', plain)).toBe(
-      'package source',
+      'published package code',
+    );
+    expect(fileClass('packages/charts/src/A/A.tsx', plain)).toBe(
+      'package file',
     );
     expect(fileClass('scripts/x.mjs', plain)).toBe('repository');
   });
@@ -159,7 +168,9 @@ describe('formatReport', () => {
       head: 'working tree',
       mergeBase: 'a'.repeat(40),
       scope: 'changes include another surface',
-      files: [{file: 'packages/core/src/A/A.tsx', class: 'package source'}],
+      files: [
+        {file: 'packages/core/src/A/A.tsx', class: 'published package code'},
+      ],
       records: [{id: 'component:A', path: 'docs/specs/components/A/A.spec.md'}],
       claims: [],
       baselines: {command: null, claims: []},

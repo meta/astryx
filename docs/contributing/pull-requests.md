@@ -121,7 +121,7 @@ pnpm review:pre --json                # the same report as JSON
 The report reads only the local repository. It prints:
 
 - each changed file and its class: record, owner-gated record, API report,
-  package source, Lab, or repository;
+  published package code, other package file, Lab, or repository;
 - the current records that govern those files, and the claims that the files
   cite or that the added lines route;
 - the global baseline claims that the linked components' review triggers route,
@@ -175,13 +175,14 @@ to every pull request.
 - **d. Public boundary.** No internal or private context in source, tests,
   fixtures, Changesets, commit messages, branch names, or pull request text
   ([Public repository boundary](#public-repository-boundary)).
-- **e. New public hook.** A hook that becomes public has a hook doc (a
-  `.doc.mjs` entry with the hook's name) and a template block that names the
-  hook in `exampleFor` or `alsoExampleFor`, in the same pull request. A hook
-  becomes public when a package's API report gets a new Hooks row, or a
-  published entry point newly exports it. Motion and gesture hooks count
+- **e. New public hook.** Each public hook has a minimal, runnable example: a
+  live template block that names the hook in `exampleFor` or `alsoExampleFor`.
+  A public hook is a hook that a package's API report lists, so a new Hooks row
+  or a new export from a published entry point makes one. Motion and gesture
+  hooks count. A public hook without a conforming example is a docs gap that an
+  issue tracks
   ([`architecture:knowledge-contracts`](../architecture/knowledge-contracts.md#consumer-docs)
-  INV28).
+  INV28 and DEC-16).
 - **f. Comments.** New or changed comments in `packages/*/src/**`, Lab
   included, explain only a reason, a constraint, an invariant, or a platform
   quirk. They do not narrate the code, restate names, or cite pull requests,
@@ -192,11 +193,12 @@ to every pull request.
   ([`architecture:knowledge-contracts`](../architecture/knowledge-contracts.md#source-comments)
   INV29).
 - **g. Records.** A change to an owner-gated path waits on `review-required`
-  until a spec owner approves the exact head with `/approve-spec <sha>`. A later
-  change to the approved spec text resets that approval. The description
-  reports `## Writing rubric results`
+  until a spec owner approves its spec content, with `/approve-spec <sha>` or an
+  approving review. Base merges, rebases, and commits to other paths keep that
+  approval. A later change to the approved spec text resets it
   ([`architecture:knowledge-contracts`](../architecture/knowledge-contracts.md#dec-14--one-owner-approval-binds-a-pull-requests-spec-content)
-  DEC-14).
+  DEC-14). The description also reports `## Writing rubric results`
+  ([Writing specification records](spec-writing.md)).
 
 ### Use a fresh session for an agent's change
 

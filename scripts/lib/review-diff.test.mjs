@@ -25,6 +25,21 @@ const routed = name =>
   );
 
 describe('readDiff', () => {
+  it('keeps every added line of each path in addedByFile', () => {
+    const diff = [
+      'diff --git a/docs/a.md b/docs/a.md',
+      '--- a/docs/a.md',
+      '+++ b/docs/a.md',
+      '@@ -1,1 +1,2 @@',
+      ' context',
+      '+added',
+      '-removed',
+    ].join('\n');
+    const {addedLines, addedByFile} = readDiff(diff);
+    expect(addedLines).toEqual([]);
+    expect(addedByFile).toEqual({'docs/a.md': ['added']});
+  });
+
   it('reads added shipped-source lines with their new line numbers', () => {
     const {files, addedLines} = readDiff(fixture('pr-8381.diff'));
     expect(files).toEqual([

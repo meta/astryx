@@ -12,6 +12,7 @@
  */
 /* global console, process */
 import {execFileSync} from 'node:child_process';
+import fs from 'node:fs';
 import {createRequire} from 'node:module';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -39,31 +40,49 @@ export const CHECKS = {
   b: 'Behavior: each observable behavior change cites a current record and clause, or the description says "No behavior change"',
   c: 'Behavior props: a prop that selects a behavior follows the naming and one-prop rules',
   d: 'Public boundary: no internal or private context in source, tests, fixtures, commits, or pull request text',
-  e: 'New public hook: a hook doc and a template block that names the hook in exampleFor or alsoExampleFor',
+  e: 'New public hook: a runnable example in a template block that names the hook in exampleFor or alsoExampleFor',
   f: 'Comments: new or changed source comments explain only non-obvious work, in Simplified Technical English',
-  g: 'Records: a changed record needs a spec owner to approve the exact head',
+  g: 'Records: a changed record needs a spec owner to approve its spec content',
 };
 
 const API_REPORT = /(?:^|\/)api-report\.md$/;
 const LAB = /^packages\/lab\//;
 const TEMPLATES = /^packages\/cli\/assets\/templates\//;
+const NOT_PACKAGE_CODE =
+  /\.stories\.[^/]+$|\.doc\.mjs$|\.md$|(?:^|\/)(?:package\.json|package-lock\.json|tsconfig[^/]*\.json)$|\/(?:scripts|test-utils)\//;
 const COMMENT = /^\s*(?:\/\/|\/\*|\*)/;
 const DIRECTIVE = /Copyright|eslint-|@ts-|prettier-ignore|@pr-a11y/;
 
-/** Each file's added lines, from a unified diff. */
-export function addedLinesByFile(diff) {
-  const byFile = new Map();
-  let file = null;
-  for (const line of diff.split('\n')) {
-    const header = /^diff --git a\/\S+ b\/(\S+)/.exec(line);
-    if (header) {
-      file = header[1];
-      byFile.set(file, byFile.get(file) ?? []);
-    } else if (file && line.startsWith('+') && !line.startsWith('+++ ')) {
-      byFile.get(file).push(line.slice(1));
+const publishedByRoot = new Map();
+
+/** True when the nearest package manifest above `file` is not private. */
+function isPublished(file) {
+  let dir = path.posix.dirname(file);
+  while (dir.startsWith('packages/')) {
+    if (!publishedByRoot.has(dir)) {
+      const manifest = path.join(ROOT, dir, 'package.json');
+      publishedByRoot.set(
+        dir,
+        fs.existsSync(manifest)
+          ? JSON.parse(fs.readFileSync(manifest, 'utf8')).private !== true
+          : null,
+      );
     }
+    const published = publishedByRoot.get(dir);
+    if (published != null) return published;
+    dir = path.posix.dirname(dir);
   }
-  return byFile;
+  return false;
+}
+
+/** Code or data a published package ships: not tests, stories, docs, or config. */
+function isPublishedPackageCode(file) {
+  return (
+    isPackageReleasePath(file) &&
+    !API_REPORT.test(file) &&
+    !NOT_PACKAGE_CODE.test(file) &&
+    isPublished(file)
+  );
 }
 
 function isPackageSource(file) {
@@ -82,8 +101,8 @@ export function fileClass(file, classes) {
   if (classes.specRecord) return 'record';
   if (API_REPORT.test(file)) return 'API report';
   if (LAB.test(file)) return 'Lab';
-  if (isPackageSource(file)) return 'package source';
-  if (isPackageReleasePath(file)) return 'package file';
+  if (isPublishedPackageCode(file)) return 'published package code';
+  if (file.startsWith('packages/')) return 'package file';
   return 'repository';
 }
 
@@ -92,40 +111,33 @@ export function fileClass(file, classes) {
  * applies to every pull request.
  */
 export function applicableChecks(files, diff) {
-  const added = addedLinesByFile(diff);
+  const {addedByFile} = readDiff(diff);
   const classes = classifyPaths(files);
   const reasons = new Map([['d', 'every pull request is public']]);
   const note = (id, reason) => reasons.has(id) || reasons.set(id, reason);
   for (const file of files) {
-    const lines = added.get(file) ?? [];
+    const lines = addedByFile[file] ?? [];
+    const adds = pattern => lines.some(line => pattern.test(line));
     if (API_REPORT.test(file) && lines.length > 0) {
       note('a', `${file} has added or changed rows`);
-      if (lines.some(line => /^\s*hook use[A-Z]/.test(line))) {
-        note('e', `${file} adds a hook row`);
-      }
-      if (
-        lines.some(line =>
-          /^\s*prop (?:\w+Behavior|(?:is|has)[A-Z]\w*)\??:/.test(line),
-        )
-      ) {
+      if (adds(/^\s*hook use[A-Z]/)) note('e', `${file} adds a hook row`);
+      if (adds(/^\s*prop (?:\w+Behavior|(?:is|has)[A-Z]\w*)\??:/)) {
         note('c', `${file} adds a behavior or boolean prop row`);
       }
     }
     if (classes[file].ownerGatedRecord) note('g', `${file} is owner-gated`);
-    if (!isPackageSource(file)) continue;
-    if (!LAB.test(file)) {
-      note('b', `${file} is published package source`);
-      if (lines.some(line => /\b\w+Behavior\??\s*:/.test(line))) {
+    if (isPublishedPackageCode(file)) {
+      note('b', `${file} is published package code`);
+      if (adds(/\b\w+Behavior\??\s*:/))
         note('c', `${file} adds a behavior prop`);
-      }
-      if (
-        /\/index\.tsx?$/.test(file) &&
-        lines.some(line => /^export\b.*\buse[A-Z]/.test(line))
-      ) {
+      if (/\/index\.tsx?$/.test(file) && adds(/^export\b.*\buse[A-Z]/)) {
         note('e', `${file} exports a hook`);
       }
     }
-    if (lines.some(line => COMMENT.test(line) && !DIRECTIVE.test(line))) {
+    if (
+      isPackageSource(file) &&
+      lines.some(line => COMMENT.test(line) && !DIRECTIVE.test(line))
+    ) {
       note('f', `${file} adds comments`);
     }
   }
