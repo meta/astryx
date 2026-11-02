@@ -893,6 +893,48 @@ function DefaultOption({option}: {option: SelectorOptionData}) {
   );
 }
 
+/**
+ * Whether the pointer has moved since the last key while the list is open.
+ * A key that scrolls the list (End, PageDown, typeahead) moves rows under a
+ * stationary mouse, and the browser reports the row now under it as entered;
+ * that is not the person moving the mouse, so it must not take the highlight:
+ * only a mouse that moves does.
+ */
+function usePointerMovedSinceKey(isOpen: boolean): () => boolean {
+  const movedRef = useRef(true);
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    let last: {x: number; y: number} | null = null;
+    const onKey = () => {
+      movedRef.current = false;
+    };
+    const onPress = () => {
+      movedRef.current = true;
+    };
+    const onMove = (event: PointerEvent) => {
+      // Compare screen coordinates: a scroll moves rows, not the pointer.
+      if (
+        last != null &&
+        (last.x !== event.screenX || last.y !== event.screenY)
+      ) {
+        movedRef.current = true;
+      }
+      last = {x: event.screenX, y: event.screenY};
+    };
+    document.addEventListener('keydown', onKey, true);
+    document.addEventListener('pointerdown', onPress, true);
+    document.addEventListener('pointermove', onMove, true);
+    return () => {
+      document.removeEventListener('keydown', onKey, true);
+      document.removeEventListener('pointerdown', onPress, true);
+      document.removeEventListener('pointermove', onMove, true);
+    };
+  }, [isOpen]);
+  return useCallback(() => movedRef.current, []);
+}
+
 // Case-insensitive substring match for a single option. The one predicate used
 // by both the flat filter (count + keyboard nav) and the grouped renderer, so
 // what is shown while searching stays in lockstep with the announced count.
@@ -1370,6 +1412,16 @@ export function Selector<T extends SelectorOptionType>(
     onSearchSeed: appendSearchQuery,
     listboxId,
   });
+  const hasPointerMovedSinceKey = usePointerMovedSinceKey(surface.isOpen);
+  // A row the list scrolled under a still mouse does not take the highlight.
+  const onRowPointerEnter = useCallback(
+    (item: SelectorOptionData, index: number) => {
+      if (hasPointerMovedSinceKey()) {
+        onItemMouseEnter(item, index);
+      }
+    },
+    [hasPointerMovedSinceKey, onItemMouseEnter],
+  );
 
   // Type-to-select, shared with the other collections (menus, listboxes).
   // Open, it walks the highlight — aria-activedescendant announces each match.
@@ -1637,7 +1689,7 @@ export function Selector<T extends SelectorOptionType>(
           aria-selected={isSelected}
           aria-disabled={item.disabled}
           onClick={() => onItemSelect(item)}
-          onMouseEnter={() => onItemMouseEnter(item, flatIndex)}
+          onMouseEnter={() => onRowPointerEnter(item, flatIndex)}
           {...mergeProps(
             // Stable theme target on the option row itself, mirroring
             // `multi-selector-option`: it carries the row's size and runtime
@@ -1672,7 +1724,7 @@ export function Selector<T extends SelectorOptionType>(
       normalizedValue,
       getItemId,
       onItemSelect,
-      onItemMouseEnter,
+      onRowPointerEnter,
       SelectionMark,
     ],
   );

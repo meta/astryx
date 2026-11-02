@@ -5153,6 +5153,36 @@ describe('Selector press model', () => {
     expect(listbox).not.toHaveClass(hash(touchStyles.panYPinchZoom));
   });
 
+  it('a row that scrolls under a still mouse after a key does not take the highlight; a mouse that moves does', async () => {
+    const user = userEvent.setup();
+    const many = Array.from({length: 30}, (_, i) => `Option ${i}`);
+    render(<Selector label="Item" options={many} onChange={() => {}} />);
+    const trigger = screen.getByRole('combobox');
+    trigger.focus();
+    await user.keyboard('{ArrowDown}');
+    const listbox = screen.getByRole('listbox', h);
+    const rows = within(listbox).getAllByRole('option', h);
+    const active = () =>
+      document
+        .querySelector('[aria-activedescendant]')
+        ?.getAttribute('aria-activedescendant');
+    // The mouse rests over row 3.
+    fireEvent.pointerMove(rows[3], {screenX: 100, screenY: 200});
+    fireEvent.mouseOver(rows[3]);
+    expect(active()).toBe(rows[3].id);
+    // End moves the highlight to the last row and scrolls; the browser then
+    // reports whichever row is now under the still mouse as entered.
+    await user.keyboard('{End}');
+    expect(active()).toBe(rows[29].id);
+    fireEvent.pointerMove(rows[20], {screenX: 100, screenY: 200});
+    fireEvent.mouseOver(rows[20]);
+    expect(active()).toBe(rows[29].id);
+    // The mouse moves: the row under it takes the highlight.
+    fireEvent.pointerMove(rows[21], {screenX: 100, screenY: 230});
+    fireEvent.mouseOver(rows[21]);
+    expect(active()).toBe(rows[21].id);
+  });
+
   it('marks the listbox as carrying the press model', async () => {
     const user = userEvent.setup();
     render(<Selector label="Fruit" options={OPTIONS} onChange={() => {}} />);
