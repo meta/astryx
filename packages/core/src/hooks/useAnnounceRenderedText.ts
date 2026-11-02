@@ -16,7 +16,8 @@
 // Some content reaches assistive technology only through a live region. For
 // example, a listbox permits only `option` and `group` children, so a panel
 // message in it has `role="presentation"`. When that content is a caller's
-// `ReactNode`, announce what was rendered, not a built-in default (AST-056).
+// `ReactNode`, announce what was rendered, not a built-in default (AST-056,
+// AST-086).
 //
 // The text comes from the DOM after render, not from React children, so text
 // that a child component generates is included. A live region that mounts
@@ -64,10 +65,9 @@ function blockText(element: HTMLElement): string {
 export interface AnnounceRenderedTextOptions {
   /**
    * Text that is present or changes while the document loads or hydrates is
-   * silent. Text that appears or changes later is announced once
-   * (AST-086). A mounted live container speaks its own content, and each
-   * child is a block. A reveal without a re-render is read on the next
-   * render.
+   * silent. Text that appears or changes later is announced once. A mounted
+   * live container speaks its own content, and each child is a block. A
+   * reveal without a re-render is read on the next render.
    */
   skipFirstRender?: boolean;
   /**

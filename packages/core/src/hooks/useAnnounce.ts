@@ -84,8 +84,8 @@ export function handleOf(receipt: AnnounceReceipt): WithdrawAnnouncement {
 /**
  * Move `waiting` words elsewhere, one delivery per announcer and in order,
  * and point each receipt at its delivery, so every announcer can still take
- * back its own share (`spec:AST-086` FR9, FR14). The deliveries join where
- * they land, so the words are spoken once. @internal
+ * back its own share. The deliveries join where they land, so the words are
+ * spoken once. @internal
  */
 export function forwardWaiting(
   waiting: ReadonlyArray<WaitingWords>,
@@ -286,7 +286,7 @@ export function clearRegion(politeness: AnnouncePoliteness): void {
  * An instance created with `hasReplace` states one current state, such as a
  * search's result count: each message it writes withdraws its previous one
  * while that one is not yet exposed, so typing faster than a frame says only
- * the latest count (`spec:AST-086` FR9).
+ * the latest count.
  *
  * @param options - `hasReplace` (default false)
  * @example
@@ -404,7 +404,7 @@ export function isOpenModal(
  * The nearest open native modal dialog enclosing `element` in the DOM, Astryx
  * or app-rendered. Internal: the busy-announcement hook routes by its owner's
  * element so a busy start inside a native modal an app renders without Astryx
- * is still heard inside it (`spec:AST-086` FR14, last sentence).
+ * is still heard inside it.
  */
 export function enclosingModalDialog(
   element: Element | null | undefined,
@@ -427,8 +427,7 @@ export function enclosingModalDialog(
  * written to the dialog while it is open as a modal, else to the shared
  * channel. Returns how to take the words back while they wait, wherever they
  * move, so a busy start overtaken by its own outcome is never heard ahead of
- * it inside a modal (`spec:AST-086` FR8). Internal: used by the
- * busy-announcement hook.
+ * it inside a modal. Internal: used by the busy-announcement hook.
  */
 export function announceInModal(
   dialog: HTMLDialogElement,
@@ -679,9 +678,10 @@ export function takeJoinedAnnouncement(): object | null {
   return joined;
 }
 
+// A busy start overtaken by its own outcome is never spoken (AST-086 FR8).
 /**
  * Withdraws one announcer's share of a message still waiting to be exposed, so
- * a busy start overtaken by its own outcome is never spoken (spec:AST-086 FR8).
+ * a busy start overtaken by its own outcome is never spoken.
  * The message stays while another announcer still holds it.
  *
  * @internal
