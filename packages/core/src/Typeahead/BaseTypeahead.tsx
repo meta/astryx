@@ -39,6 +39,7 @@ import {useAnnounce} from '../hooks/useAnnounce';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {useOutsidePress} from '../Layer/outsidePress';
 import {isImeKeyEvent} from '../utils/ime';
 import {TypeaheadItem} from './TypeaheadItem';
 import {Icon} from '../Icon';
@@ -692,10 +693,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     onLoadingChangeRef.current?.(next);
   }, []);
 
-  // Track active pointer to defer popover.show() past click events.
-  // With popover="auto", showing the popover between pointerdown and
-  // pointerup/click causes the browser's light-dismiss to immediately
-  // close it (the click is seen as "outside" the newly-opened popover).
+  // Track active pointer to defer popover.show() past click events, so a
+  // list that opens during a press starts its outside-press watch after that
+  // press ends and never judges it.
   const pointerActiveRef = useRef(false);
 
   // Whether the input was ALREADY the active element the moment the current
@@ -778,23 +778,56 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     }
   }, [searchSource]);
 
-  // Layer for dropdown
+  // Layer for dropdown. The list is a manual popover (see usePopover below):
+  // while it is open, a press on the combobox itself (its input or its
+  // buttons) or in the list is inside, and a press anywhere else closes it
+  // (component:BaseTypeahead FR12). The watch starts when the list shows and
+  // stops when it hides or the field unmounts (useOutsidePress owns that).
+  // An outside press hides the
+  // popover element directly, which useLayer reconciles like the browser's
+  // own light dismiss.
+  const outsidePress = useOutsidePress();
   const handleLayerShow = useCallback(() => {
     onOpenChange?.(true);
-  }, [onOpenChange]);
+    const anchorEl = anchorRef?.current ?? fallbackAnchorRef.current;
+    if (anchorEl == null) {
+      outsidePress.stop();
+      return;
+    }
+    // The list's own element sits inside the popover element.
+    const findLayer = () =>
+      dropdownRef.current?.closest<HTMLElement>('[popover]') ?? null;
+    outsidePress.start(
+      anchorEl,
+      path => {
+        const anchor = anchorRef?.current ?? fallbackAnchorRef.current;
+        const layer = findLayer();
+        return path.some(
+          target => target === anchor || (layer != null && target === layer),
+        );
+      },
+      () => findLayer()?.hidePopover(),
+    );
+  }, [onOpenChange, anchorRef, outsidePress]);
 
   const handleLayerHide = useCallback(() => {
+    outsidePress.stop();
     onOpenChange?.(false);
     setHighlightedIndex(-1);
     closedGenRef.current = searchGenRef.current;
     setHeldHeight(null);
     searchSource.cancel?.();
-  }, [onOpenChange, searchSource]);
+  }, [onOpenChange, searchSource, outsidePress]);
 
   const popover = usePopover({
     onShow: handleLayerShow,
     onHide: handleLayerHide,
-    hasLightDismiss: true,
+    // A manual popover: the browser's light dismiss counts a press in the
+    // input as outside (a text input cannot be an invoker), so it would close
+    // the list on every press in the field. handleLayerShow watches for a
+    // press outside instead (architecture:layer-runtime); Escape stays on the
+    // shared layer stack.
+    hasLightDismiss: false,
     hasCloseButton: false,
     hasAutoFocus: false,
     // The popup's own role="listbox" is the exposed semantics; the input keeps
@@ -802,9 +835,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     role: 'none',
   });
 
-  // Show the layer, deferring past the active click if a pointer is down.
-  // Without this, popover="auto" light-dismiss immediately closes the
-  // dropdown when it opens between pointerdown and pointerup/click.
+  // Show the layer, deferring past the active click if a pointer is down
+  // (see pointerActiveRef).
   // Read at show time, so a search or bootstrap that settles after the field
   // became disabled does not open the list (spec:AST-085 FR2).
   const isDisabledRef = useRef(isDisabled);
@@ -1273,10 +1305,10 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
 
   // Handle blur — close the dropdown when focus leaves the input for an
   // element that is neither inside the field wrapper (anchor) nor inside the
-  // dropdown popover. The native popover="auto" light-dismiss only fires on
-  // outside pointer clicks and Escape; it does not close when focus moves away
-  // via the keyboard (Tab) or programmatically, which would otherwise leave an
-  // orphaned open menu. Clicking a result moves focus onto the option (it is
+  // dropdown popover. The outside-press watch only answers pointer presses
+  // and Escape stays on the layer stack; neither closes the list when focus
+  // moves away via the keyboard (Tab) or programmatically, which would
+  // otherwise leave an orphaned open menu. Clicking a result moves focus onto the option (it is
   // tabIndex={-1}, so it lives inside the popover) and selection re-focuses the
   // input, so this only closes on a genuine focus-out of the whole field.
   const handleBlur = useCallback(
