@@ -126,6 +126,56 @@ afterEach(() => {
 });
 
 describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
+  it.each([
+    ['a blur', 'blur', false],
+    ['a hidden page', 'hidden', false],
+    ['a blur, under a coarse primary pointer', 'blur', true],
+  ] as const)(
+    'cancels a trackpad pan mid-swipe at %s: it reads cancelled, never ended, and the next wheel is decided afresh',
+    (_name, how, isCoarse) => {
+      const {box, outside} = mount(
+        '<div id="box"></div><div id="outside"></div>',
+      );
+      const subject = isCoarse
+        ? new GestureHost(document, {clock, isPrimaryPointerCoarse: () => true})
+        : host;
+      const pan = new PanGestureRecognizer({
+        direction: 'horizontal',
+        allowedScrollTypes: ['continuous'],
+      });
+      const states = statesOf(pan);
+      detachers.push(subject.attach(box, pan));
+      for (const time of [0, 16, 32]) {
+        clock.runDue(time);
+        expect(
+          wheel(box, {trackpad: true, dx: 10, time}).defaultPrevented,
+        ).toBe(true);
+      }
+      expect(states.at(-1)).toBe('changed');
+      clock.runDue(40);
+      if (how === 'blur') {
+        window.dispatchEvent(new Event('blur'));
+      } else {
+        Object.defineProperty(document, 'visibilityState', {
+          configurable: true,
+          get: () => 'hidden',
+        });
+        detachers.push(() => {
+          delete (document as {visibilityState?: unknown}).visibilityState;
+        });
+        document.dispatchEvent(new Event('visibilitychange'));
+      }
+      expect(states.slice(-2)).toEqual(['cancelled', 'possible']);
+      // Its end window releases nothing later.
+      clock.runDue(32 + 400);
+      expect(states).not.toContain('ended');
+      // The latch is gone: a wheel outside the pan is the page's.
+      expect(
+        wheel(outside, {trackpad: true, dx: 10, time: 500}).defaultPrevented,
+      ).toBe(false);
+    },
+  );
+
   it('reads a right-to-left scroller under the pointer by its own range: at its start a scroll toward it is the pan’s, a scroll away from it the scroller’s', () => {
     const {strip, scroller, item} = mount(
       '<div id="strip"><div id="scroller" dir="rtl"><div id="item"></div></div></div>',
@@ -1173,6 +1223,18 @@ describe("a trackpad scroll through the splitter's undecided stretch (spec:AST-0
     expect(
       seen.slice(seen.indexOf(ended[0]) + 1).map(entry => entry.state),
     ).toEqual(['possible']);
+  });
+
+  it('keeps the momentum of a pan its lift released latched through a blur: the blur cancels nothing, and the momentum still moves no surface (spec:AST-094 FR43)', () => {
+    const {box, seen} = followed();
+    const deltas = [10, 10, 10, 10, 9.5, 9, 8.5, 8, 7.5, 7, 6.5, 6];
+    deltas.forEach((dx, i) => wheel(box, {trackpad: true, dx, time: i * 16}));
+    expect(seen.some(entry => entry.state === 'ended')).toBe(true);
+    window.dispatchEvent(new Event('blur'));
+    expect(seen.map(entry => entry.state)).not.toContain('cancelled');
+    expect(
+      wheel(box, {trackpad: true, dx: 5.5, time: 12 * 16}).defaultPrevented,
+    ).toBe(true);
   });
 
   it('keeps the momentum after the lift prevented, latched to the pan it released: momentum never moves a surface or continues a gesture (spec:AST-094 FR43)', () => {

@@ -509,7 +509,9 @@ selection. A gesture a
 recognizer took is latched to it, as a browser latches a scroller: while it
 lasts, the host hears every step first, through the shared input stream's
 window-capture listener, wherever it lands, so a pan whose element moves from
-under a still pointer keeps the gesture.
+under a still pointer keeps the gesture. A page that loses focus or hides
+cancels a wheel gesture a recognizer still drives, as it cancels every touch;
+a pan its lift released keeps its momentum latched until the stream ends.
 
 ## Time
 

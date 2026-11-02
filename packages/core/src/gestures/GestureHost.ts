@@ -2487,10 +2487,59 @@ export class GestureHost {
   private latchWheel(): void {
     const view = this.doc.defaultView;
     if (this.stopWheelLatch == null && view != null) {
-      this.stopWheelLatch = subscribeInput(view, 'wheel', this.onWheel, {
-        cancels: true,
-      });
+      const cancelWheel = () => {
+        const ids = this.dropDrivenWheel();
+        if (ids.length > 0) {
+          this.arena.cancelled(ids, this.arena.now());
+        }
+      };
+      const stops = [
+        subscribeInput(view, 'wheel', this.onWheel, {cancels: true}),
+        // A page that loses focus or hides ends the gesture, as it ends
+        // every touch. An element's blur reaches the window's capture phase
+        // too and means nothing here.
+        subscribeInput(view, 'blur', event => {
+          if (!(event.target instanceof view.Node)) {
+            cancelWheel();
+          }
+        }),
+        subscribeInput(view, 'visibilitychange', () => {
+          if (this.doc.visibilityState === 'hidden') {
+            cancelWheel();
+          }
+        }),
+      ];
+      this.stopWheelLatch = () => {
+        for (const stop of stops) {
+          stop();
+        }
+      };
     }
+  }
+
+  /**
+   * End the wheel gesture a recognizer still drives, when the page loses
+   * focus or hides, and return its contacts to cancel. A gesture the page
+   * keeps stays as it is. So does a pan its lift released: its momentum
+   * stays latched and prevented until the stream ends.
+   */
+  private dropDrivenWheel(): ReadonlyArray<number> {
+    const gesture = this.wheel;
+    if (
+      gesture == null ||
+      gesture.ids.length === 0 ||
+      gesture.follow?.lifted === true
+    ) {
+      return [];
+    }
+    this.wheel = null;
+    if (gesture.timer != null) {
+      this.clock.clearTimeout(gesture.timer);
+    }
+    this.stopWheelLatch?.();
+    this.stopWheelLatch = null;
+    this.segmenter.end();
+    return gesture.ids;
   }
 
   /**
@@ -3743,6 +3792,8 @@ export class GestureHost {
     this.unpairedTouches.clear();
     this.lastFed.clear();
     this.pointerFed.clear();
+    // A wheel gesture a recognizer still drives is cancelled with them.
+    ids.push(...this.dropDrivenWheel());
     if (ids.length > 0) {
       this.arena.cancelled(ids, time);
     }
