@@ -61,6 +61,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/SideNav/SideNavHeading.generated';
+import {isRenderable} from '../utils/isRenderable';
 
 registerEnglishFallback(english);
 
@@ -474,11 +475,13 @@ export function SideNavHeading({
     menu ? setTriggerEl : undefined,
   );
 
-  // In collapsed mode: hide if no icon, show icon-only if has icon
-  if (isCollapsed && !icon) {
+  // In collapsed mode: hide if no icon, show icon-only if has icon. Icon
+  // presence follows `isRenderable` (`architecture:react-component-runtime`
+  // INV16), so `0` is an icon like any other content.
+  if (isCollapsed && !isRenderable(icon)) {
     return null;
   }
-  if (isCollapsed && icon) {
+  if (isCollapsed) {
     const collapsedIcon = <span {...stylex.props(styles.icon)}>{icon}</span>;
 
     let collapsedElement: ReactNode;
@@ -540,7 +543,9 @@ export function SideNavHeading({
                 {...focusOutlineProps.focusVisible(styles.popoverHeading)}
                 // A close affordance, not the trigger: dismiss only.
                 onClick={closeMenu}>
-                {icon && <span {...stylex.props(styles.icon)}>{icon}</span>}
+                {isRenderable(icon) && (
+                  <span {...stylex.props(styles.icon)}>{icon}</span>
+                )}
                 <span {...stylex.props(styles.textContainer)}>
                   {superheading && (
                     <span {...stylex.props(styles.superheading)}>
@@ -672,7 +677,7 @@ export function SideNavHeading({
     />
   );
 
-  const headerEndContentElement = headerEndContent && (
+  const headerEndContentElement = isRenderable(headerEndContent) && (
     <span {...stylex.props(styles.headerEndContent)}>{headerEndContent}</span>
   );
 
@@ -684,7 +689,7 @@ export function SideNavHeading({
       {...focusOutlineProps.focusVisible(styles.popoverHeading)}
       // A close affordance, not the trigger: dismiss only.
       onClick={closeMenu}>
-      {icon && <span {...stylex.props(styles.icon)}>{icon}</span>}
+      {isRenderable(icon) && <span {...stylex.props(styles.icon)}>{icon}</span>}
       {renderTextContent(
         <Icon
           icon="chevronDown"
@@ -718,7 +723,9 @@ export function SideNavHeading({
             styles.menuTrigger,
           )}
           {...(props as React.AnchorHTMLAttributes<HTMLAnchorElement>)}>
-          {icon && <span {...stylex.props(styles.icon)}>{icon}</span>}
+          {isRenderable(icon) && (
+            <span {...stylex.props(styles.icon)}>{icon}</span>
+          )}
           {renderTextContent()}
         </LinkComponent>
         {headerEndContentElement}
@@ -744,7 +751,9 @@ export function SideNavHeading({
           style,
         )}
         {...(props as React.AnchorHTMLAttributes<HTMLAnchorElement>)}>
-        {icon && <span {...stylex.props(styles.icon)}>{icon}</span>}
+        {isRenderable(icon) && (
+          <span {...stylex.props(styles.icon)}>{icon}</span>
+        )}
         {renderTextContent()}
         {headerEndContentElement}
         {chevronElement}
@@ -766,7 +775,9 @@ export function SideNavHeading({
             className,
             style,
           )}>
-          {icon && <span {...stylex.props(styles.icon)}>{icon}</span>}
+          {isRenderable(icon) && (
+            <span {...stylex.props(styles.icon)}>{icon}</span>
+          )}
           {renderTextContent(
             <button
               ref={setTriggerEl}
@@ -838,7 +849,7 @@ export function SideNavHeading({
             className,
             style,
           )}>
-          {icon &&
+          {isRenderable(icon) &&
             (headingHref ? (
               <LinkComponent
                 href={headingHref}
@@ -919,7 +930,7 @@ export function SideNavHeading({
           style,
         )}
         {...props}>
-        {icon &&
+        {isRenderable(icon) &&
           (headingHref ? (
             <LinkComponent
               href={headingHref}
@@ -979,7 +990,7 @@ export function SideNavHeading({
         style,
       )}
       {...props}>
-      {icon && <span {...stylex.props(styles.icon)}>{icon}</span>}
+      {isRenderable(icon) && <span {...stylex.props(styles.icon)}>{icon}</span>}
       {renderTextContent()}
       {headerEndContentElement}
       {chevronElement}
