@@ -1,13 +1,35 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, expect, it} from 'vitest';
+import {createDiffFile} from '../../../../../../../packages/lab/src/DiffViewer/createDiffFile';
 import {
   countLines,
   createMultiFileWorkload,
   createSingleFileWorkload,
   formatMegabytes,
   MULTI_FILE_WORKLOADS,
+  SINGLE_FILE_LINES,
+  type DiffBenchmarkWorkload,
 } from './benchmark';
+
+/** Added plus removed lines in the diff DiffViewer renders, per file. */
+function diffChangedLines(workload: DiffBenchmarkWorkload): number[] {
+  return workload.files.map(file => {
+    const diff = createDiffFile({
+      oldValue: file.oldContents ?? '',
+      newValue: file.newContents ?? '',
+    });
+    let changed = 0;
+    for (const hunk of diff.hunks) {
+      for (const line of hunk.lines) {
+        if (line.kind !== 'context') {
+          changed++;
+        }
+      }
+    }
+    return changed;
+  });
+}
 
 describe('DiffViewer performance workloads', () => {
   it('builds the same multi-file workload on every call', () => {
@@ -26,7 +48,7 @@ describe('DiffViewer performance workloads', () => {
       expect(workload.totalLines).toBe(countLines(workload.files));
       expect(
         Math.abs(workload.changedLines - changedLines) / changedLines,
-      ).toBeLessThan(0.1);
+      ).toBeLessThan(0.02);
       expect(workload.largestFileChangedLines).toBeLessThan(changedLines);
     },
   );
@@ -42,7 +64,7 @@ describe('DiffViewer performance workloads', () => {
         )
         .sort((a, b) => a - b);
       // Mostly small files, with a few far larger than the median.
-      expect(sizes[Math.floor(files / 2)]).toBeLessThan(400);
+      expect(sizes[Math.floor(files / 2)]).toBeLessThan(500);
       expect(sizes[files - 1]).toBeGreaterThan(
         sizes[Math.floor(files / 2)] * 10,
       );
@@ -63,6 +85,29 @@ describe('DiffViewer performance workloads', () => {
       const workload = createMultiFileWorkload(files, changedLines);
       expect(workload.files.some(file => file.oldContents == null)).toBe(true);
       expect(workload.files.some(file => file.newContents == null)).toBe(true);
+    },
+  );
+
+  it.each([
+    ...MULTI_FILE_WORKLOADS.map(({label, files, changedLines}) => ({
+      label,
+      workload: () => createMultiFileWorkload(files, changedLines),
+    })),
+    ...SINGLE_FILE_LINES.flatMap(lines =>
+      (['sparse', 'rewrite'] as const).map(change => ({
+        label: `${lines} lines, ${change}`,
+        workload: () => createSingleFileWorkload(lines, change),
+      })),
+    ),
+  ])(
+    '$label reports the changed lines its diff renders',
+    ({workload: build}) => {
+      const workload = build();
+      const perFile = diffChangedLines(workload);
+      expect(perFile.reduce((total, lines) => total + lines, 0)).toBe(
+        workload.changedLines,
+      );
+      expect(Math.max(...perFile)).toBe(workload.largestFileChangedLines);
     },
   );
 

@@ -121,10 +121,18 @@ function baseSourceLine(
   }
 }
 
+/**
+ * A file never ends on a blank line: a diff reads a last blank line as the
+ * final newline and does not count it, so the changed-line totals would drift.
+ */
 function fileLines(fileIndex: number, count: number, variant = ''): string[] {
-  return Array.from({length: count}, (_, line) =>
+  const lines = Array.from({length: count}, (_, line) =>
     sourceLine(fileIndex, line, variant),
   );
+  if (lines.at(-1) === '') {
+    lines[lines.length - 1] = `// End of file ${fileIndex}`;
+  }
+  return lines;
 }
 
 interface EditedLines {
@@ -134,14 +142,30 @@ interface EditedLines {
 }
 
 /**
+ * `createDiffFile` shows a file with more changed lines than this as one
+ * replaced block, so a sparse-edited file must not go above it.
+ */
+const DIFF_EDIT_LIMIT = 2000;
+/** A site replaces up to three lines and inserts up to two more. */
+const MAX_SITE_CHANGED_LINES = 8;
+const MAX_SPARSE_SITES = Math.floor(DIFF_EDIT_LIMIT / MAX_SITE_CHANGED_LINES);
+
+/**
  * Edit roughly one site per `spacing` lines: each site replaces one to three
- * lines and sometimes inserts one or two more.
+ * lines and sometimes inserts one or two more. A long file gets a wider
+ * spacing, so it never reaches the diff's edit limit.
  */
 function applySparseEdits(
   lines: ReadonlyArray<string>,
   random: () => number,
-  spacing: number,
+  minSpacing: number,
 ): EditedLines {
+  // Sites are at least half the spacing apart, so the file holds at most
+  // MAX_SPARSE_SITES sites.
+  const spacing = Math.max(
+    minSpacing,
+    2 * Math.ceil(lines.length / MAX_SPARSE_SITES),
+  );
   const next: string[] = [];
   let changedLines = 0;
   let line = 0;
@@ -268,27 +292,38 @@ function createChangeSet(
 
 /**
  * First guess at file lines per changed line, from the mix of sparse edits,
- * new, deleted and rewritten files; the second pass corrects it.
+ * new, deleted and rewritten files; later passes correct it.
  */
 const FILE_LINES_PER_CHANGED_LINE = 5;
+/** Size passes stop once the change set is this close to its target. */
+const CHANGED_LINES_TOLERANCE = 0.01;
+const MAX_SIZE_PASSES = 5;
 
 /**
- * A change set of `files` files that changes about `changedLines` lines. The
- * first pass measures how many lines the mix changes and the second scales
- * the file sizes to the target; both draw the same file kinds.
+ * A change set of `files` files that changes about `changedLines` lines. Each
+ * pass measures how many lines the mix changes and scales the file sizes
+ * toward the target; every pass draws the same file kinds. Long files get
+ * sparser edits, so the scale is not linear and can take a few passes.
  */
 export function createMultiFileWorkload(
   files: number,
   changedLines: number,
 ): DiffBenchmarkWorkload {
   const seed = files * 7919 + changedLines;
-  const firstTotal = changedLines * FILE_LINES_PER_CHANGED_LINE;
-  const first = createChangeSet(seed, files, firstTotal);
-  const changeSet = createChangeSet(
-    seed,
-    files,
-    Math.round((firstTotal * changedLines) / first.changedLines),
-  );
+  let totalLines = changedLines * FILE_LINES_PER_CHANGED_LINE;
+  let changeSet = createChangeSet(seed, files, totalLines);
+  for (
+    let pass = 1;
+    pass < MAX_SIZE_PASSES &&
+    Math.abs(changeSet.changedLines - changedLines) >
+      changedLines * CHANGED_LINES_TOLERANCE;
+    pass++
+  ) {
+    totalLines = Math.round(
+      (totalLines * changedLines) / changeSet.changedLines,
+    );
+    changeSet = createChangeSet(seed, files, totalLines);
+  }
   return {
     id: `files-${files}-changed-${changedLines}`,
     label: `${files.toLocaleString()} files`,
