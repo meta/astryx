@@ -91,9 +91,9 @@ export interface GestureArenaOptions {
   clock?: GestureClock;
   environment?: GestureEnvironment;
   /**
-   * Touches a recognizer now owns, and the recognizer that claimed them,
-   * whatever its state: one waiting on another's failure claims while still
-   * `possible`, and a discrete one (a swipe) as `ended`. Each claim is
+   * Touches a recognizer now owns, and the recognizer that claimed them. A
+   * claim comes in any state: a recognizer that waits on another's failure
+   * claims while `possible`, and a swipe claims as `ended`. Each claim is
    * reported once.
    */
   onClaim?: (
@@ -111,10 +111,10 @@ export interface GestureArenaOptions {
    */
   onIdle?: () => void;
   /**
-   * A contact the browser keeps for itself while it is down: no recognizer
-   * that claims touches recognizes with it before its lift (a mouse or pen
-   * drag that starts on selectable text selects text, `spec:AST-094` FR41).
-   * A recognition at the lift, such as a tap's, is unaffected.
+   * Whether the browser keeps a contact for itself while it is down. Then no
+   * claiming recognizer recognizes with it before its lift. So a mouse or pen
+   * drag that starts on selectable text selects that text. A recognition at
+   * the lift, such as a tap's, is unaffected.
    */
   refusesClaim?: (touch: GestureTouch) => boolean;
   /** Every recognizer transition, for debugging and tests. */

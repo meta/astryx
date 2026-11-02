@@ -116,20 +116,21 @@ export interface DragSelectionReleaseOptions {
 }
 
 /**
- * Refuse a new selection while a mouse or a pen drag a recognizer claimed
- * runs, until the returned function runs (`spec:AST-094` FR41). `kept` is
- * the page's selection when the press began: it stays, and whatever replaces
- * it while the drag runs (the press's own collapse, or a selection the drag
- * started before its claim) is put back to it, so the drag takes no new
- * selection and never clears an existing one. `elements` refuse one with
- * inline styles, on every engine. The document refuses one too, as WebKit
- * extends a drag's selection over text outside the elements without another
- * `selectstart`: a `selectstart` anywhere is refused and the selection is
- * put back. The press's own `mouseup` and `click` come after its
- * `pointerup` in the same task, and WebKit settles the drag's selection
- * there, so the document's hold ends a task after a lift; a cancel, which
- * nothing follows, ends it at once. `onReleased` runs once the document's
- * hold has ended. Page listeners only during a press (FR24). Idempotent.
+ * Refuse a new selection while a mouse or pen drag that a recognizer claimed
+ * runs, until the returned function runs. `kept` is the page's selection
+ * when the press began, and it stays. Anything that replaces it while the
+ * drag runs is put back to it. That includes the press's own collapse and a
+ * selection the drag started before its claim. So the drag takes no new
+ * selection and never clears an existing one. `elements` refuse a
+ * selection with inline styles, on every engine. The document refuses one
+ * too, because WebKit extends a drag's selection over text outside the
+ * elements without another `selectstart`. So a `selectstart` anywhere is
+ * refused, and the selection is put back. The press's own `mouseup` and
+ * `click` come after its `pointerup` in the same task, and WebKit settles
+ * the drag's selection there. So the document's hold ends a task after a
+ * lift. A cancel ends it at once, because nothing follows a cancel.
+ * `onReleased` runs once the document's hold has ended. The page listeners
+ * exist only during a press. Idempotent.
  */
 export function lockDragSelection(
   elements: Iterable<Element>,
@@ -226,8 +227,8 @@ export function selectionRangesOf(
 }
 
 /**
- * Whether a press at (`x`, `y`) lands on text a drag would select
- * (`spec:AST-094` FR41): a text field, or a character of non-empty text whose
+ * Whether a press at (`x`, `y`) lands on text a drag would select: a text
+ * field, or a character of non-empty text whose
  * element allows a selection. A point beside text, which a caret query
  * snaps to the nearest character, lands on none. Where the engine has no
  * caret query, nothing is selectable text.

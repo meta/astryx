@@ -88,7 +88,7 @@
  *   takes it under any primary pointer; a mouse never does (`spec:AST-017`
  *   FR59).
  * - A mouse or a pen drag that a recognizer claims takes no new text
- *   selection and never clears the page's (`spec:AST-094` FR41): the
+ *   selection and never clears the page's: the
  *   claiming elements and the document refuse one until a task after the
  *   lift, and the selection the press began with is put back
  *   (lockDragSelection). A drag that starts on selectable text is not
@@ -653,13 +653,12 @@ export class GestureHost {
   >();
   /**
    * The page's selection when each mouse or pen press began: a drag a
-   * recognizer claims keeps it (`spec:AST-094` FR41).
+   * recognizer claims keeps it.
    */
   private readonly pressSelections = new Map<number, ReadonlyArray<Range>>();
   /**
    * Mouse and pen contacts that began on selectable text: once one moves, it
-   * is a drag the browser keeps for a selection, and no recognizer claims it
-   * (FR41).
+   * is a drag the browser keeps for a selection, and no recognizer claims it.
    */
   private readonly selectingContacts = new Set<number>();
   /**
@@ -856,7 +855,7 @@ export class GestureHost {
       onTransition: options.onTransition,
       // A mouse or pen drag a recognizer claims takes no new selection and
       // keeps the page's; one that starts on selectable text is the
-      // browser's, and selects text (FR41).
+      // browser's, and selects text.
       onClaim: (ids, claimer) => this.lockClaimedDrags(ids, claimer),
       onRelease: ids => this.releaseClaimedDrags(ids),
       refusesClaim: touch =>
@@ -2560,17 +2559,17 @@ export class GestureHost {
   }
 
   /**
-   * A mouse or a pen that a recognizer claims (a pan's drag, or a press a
-   * group claims at its own pointerdown) takes no new text selection while
-   * it is down and never clears the page's (`spec:AST-094` FR41): the
-   * claiming recognizers' elements refuse one, and whatever replaced the
-   * selection the page had when the press began (the press's own collapse,
-   * or a selection the drag made before its claim) is put back. The claiming
-   * recognizer's element holds from its claim whatever its state (one that
-   * waits on another's failure claims while possible, a swipe as ended),
-   * with those of the participants already recognizing; a claim given back
-   * to the browser lets its hold go (releaseClaimedDrags). A drag that
-   * starts on selectable text never gets here: no recognizer claims it
+   * Hold the page's selection for a mouse or pen contact that a recognizer
+   * claims. Examples are a pan's drag and a press a group claims at its own
+   * pointerdown. While the contact is down, the claiming recognizers'
+   * elements refuse a new selection. The selection the page had at the press
+   * is put back over anything that replaced it. That includes the press's own
+   * collapse and a selection the drag made before its claim. The claiming
+   * recognizer's element holds from its claim, in any state: a waiting
+   * recognizer claims while possible, and a swipe claims as ended. The
+   * participants that already recognize hold too. A claim given back to the
+   * browser lets its hold go (releaseClaimedDrags). A drag that starts on
+   * selectable text never gets here, because no recognizer claims it
    * (`selectingContacts`). A tap claims only at its lift, so a click keeps
    * the selection it made. A finger keeps the touch-down lock alone.
    */
@@ -2625,7 +2624,7 @@ export class GestureHost {
   /**
    * Claimed contacts given back to the browser (a waiting recognizer that
    * failed or was cancelled, with no other owner): their drag holds end at
-   * once, so the browser's drag selects again (`spec:AST-094` FR41). A
+   * once, so the browser's drag selects again. A
    * contact's press lock (lockSelection) is not a drag hold and stays.
    */
   private releaseClaimedDrags(ids: ReadonlyArray<number>): void {
@@ -2721,7 +2720,7 @@ export class GestureHost {
 
   /**
    * At a mouse or pen press, mark one that lands on selectable text: once it
-   * moves, it is the browser's drag, and selects text (`spec:AST-094` FR41).
+   * moves, it is the browser's drag, and selects text.
    * Text whose hold does something is locked at this press already
    * (lockSelection), so it is not selectable text.
    */
@@ -3521,7 +3520,7 @@ export class GestureHost {
       this.retargeted.set(id, {x: event.clientX, y: event.clientY, target});
     }
     // Before the arena admits it: a press a group claims at its own
-    // pointerdown keeps the selection the page has now (FR41).
+    // pointerdown keeps the selection the page has now.
     if (event.pointerType !== 'touch') {
       this.pressSelections.set(id, selectionRangesOf(this.doc.defaultView));
     }
