@@ -596,8 +596,8 @@ export function useTriggerMenu(
           isLoading: false,
           isHidden,
         }));
-        // A hidden menu closes its popover, which also releases the popover's
-        // Escape and outside-press handling; matches reopen it at the caret.
+        // A hidden menu closes its popover. That also stops its Escape and
+        // outside-press handling. Matches reopen it at the caret.
         if (isHidden && !isMenuSuppressedRef.current) {
           isMenuSuppressedRef.current = true;
           hidePopover();

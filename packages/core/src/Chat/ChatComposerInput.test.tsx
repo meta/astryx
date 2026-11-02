@@ -1572,6 +1572,41 @@ describe('ChatComposerInput', () => {
       });
     });
 
+    it('closes the trigger menu when a click in the editor moves the caret out of the query, and Enter then sends the draft', async () => {
+      const onSubmit = vi.fn();
+      render(
+        <ChatComposerInput
+          triggers={[
+            createMentionTrigger({searchSource: createStaticSource(USERS)}),
+          ]}
+          debounceMs={0}
+          onSubmit={onSubmit}
+        />,
+      );
+      const editable = screen.getByRole('combobox');
+      editable.focus();
+      typeAtEnd(editable, 'hello @c');
+      await waitFor(() => {
+        expect(editable).toHaveAttribute('aria-expanded', 'true');
+      });
+      // The click puts the caret between "he" and "llo".
+      const text = editable.firstChild as Text;
+      fireEvent.pointerDown(editable);
+      const range = document.createRange();
+      range.setStart(text, 2);
+      range.collapse(true);
+      const selection = window.getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+      fireEvent.pointerUp(editable);
+      fireEvent.click(editable);
+      await waitFor(() => {
+        expect(editable).toHaveAttribute('aria-expanded', 'false');
+      });
+      fireEvent.keyDown(editable, {key: 'Enter'});
+      expect(onSubmit).toHaveBeenCalledWith('hello @c');
+    });
+
     it('Enter while a newer trigger search is pending sends the typed text, picks no row, and no menu reopens after the send', async () => {
       const onSubmit = vi.fn();
       let resolveSlow: (items: SearchableItem[]) => void = () => {};
