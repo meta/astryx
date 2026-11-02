@@ -1247,3 +1247,28 @@ describe('CheckboxListItem ARIA props', () => {
     });
   });
 });
+
+describe('CheckboxList group disabled state', () => {
+  it('marks a disabled group aria-disabled', () => {
+    render(
+      <CheckboxList label="Toppings" isDisabled>
+        <CheckboxListItem value="cheese" label="Cheese" />
+      </CheckboxList>,
+    );
+    expect(screen.getByRole('group', {name: 'Toppings'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+
+  it('leaves an enabled group without aria-disabled', () => {
+    render(
+      <CheckboxList label="Toppings">
+        <CheckboxListItem value="cheese" label="Cheese" />
+      </CheckboxList>,
+    );
+    expect(screen.getByRole('group', {name: 'Toppings'})).not.toHaveAttribute(
+      'aria-disabled',
+    );
+  });
+});
