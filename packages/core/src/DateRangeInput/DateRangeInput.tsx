@@ -25,6 +25,7 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {
   plainDateFromISO,
   plainDateToday,
@@ -98,18 +99,6 @@ export type {
 } from '../Field';
 
 const styles = stylex.create({
-  // The shared disabled style drops the focus ring; restore it while a
-  // control inside the field holds focus (spec:AST-085 FR6). Defaults repeat it.
-  disabledFocusRing: {
-    borderColor: {
-      default: colorVars['--color-border-emphasized'],
-      ':focus-within': colorVars['--color-accent'],
-    },
-    boxShadow: {
-      default: 'none',
-      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
-    },
-  },
   trigger: {
     display: 'block',
     flex: 1,
@@ -720,7 +709,7 @@ export function DateRangeInput({
             inputWrapperStyles.base,
             sizeStyles[size],
             isEffectivelyDisabled && inputWrapperStyles.disabled,
-            isEffectivelyDisabled && styles.disabledFocusRing,
+            isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
             status && inputStatusBorderStyles[status.type],
             status &&
               !isEffectivelyDisabled &&

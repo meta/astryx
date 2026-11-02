@@ -59,6 +59,7 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {BottomSheet} from '../BottomSheet';
 import {Button} from '../Button';
 import {useCalendarConstraints} from '../Calendar';
@@ -167,18 +168,6 @@ const sizeStyles = stylex.create({
 });
 
 const styles = stylex.create({
-  // Same as DateInput's: no hover ring while disabled or busy, and the
-  // focus ring while the field's input holds focus.
-  disabledFocusRing: {
-    borderColor: {
-      default: colorVars['--color-border-emphasized'],
-      ':has(input:focus)': colorVars['--color-accent'],
-    },
-    boxShadow: {
-      default: 'none',
-      ':has(input:focus)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
-    },
-  },
   // ---- the closed field ----
   wrapper: {
     gap: spacingVars['--spacing-2'],
@@ -1249,7 +1238,7 @@ export function TouchDateField({
           // keeps its ordinary paint and shows the Spinner (spec:AST-085
           // FR6, family:buttons FR4).
           isDisabled && inputWrapperStyles.disabled,
-          isEffectivelyDisabled && styles.disabledFocusRing,
+          isEffectivelyDisabled && inputDisabledFocusStyles.inputFocusRing,
           status && inputStatusBorderStyles[status.type],
           status &&
             !isEffectivelyDisabled &&

@@ -34,6 +34,7 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {BottomSheet} from '../BottomSheet';
 import {Button} from '../Button';
 import {useCalendarConstraints, type ISODateString} from '../Calendar';
@@ -159,17 +160,6 @@ const sizeStyles = stylex.create({
 const HORIZONTAL_SEGMENT_BASIS = 196;
 
 const styles = stylex.create({
-  // Same as DateTimeInput's: the focus ring for a focused disabled field.
-  disabledFocusRing: {
-    borderColor: {
-      default: colorVars['--color-border-emphasized'],
-      ':focus-within': colorVars['--color-accent'],
-    },
-    boxShadow: {
-      default: 'none',
-      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
-    },
-  },
   iconButton: {
     display: 'flex',
     alignItems: 'center',
@@ -1346,7 +1336,7 @@ export function TouchDateTimeField({
               sizeStyles[size],
               styles.touchDateWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
-              isEffectivelyDisabled && styles.disabledFocusRing,
+              isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
               status && inputStatusBorderStyles[status.type],
               status &&
                 !isEffectivelyDisabled &&
@@ -1437,7 +1427,7 @@ export function TouchDateTimeField({
               sizeStyles[size],
               styles.touchTimeWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
-              isEffectivelyDisabled && styles.disabledFocusRing,
+              isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
               status && inputStatusBorderStyles[status.type],
               status &&
                 !isEffectivelyDisabled &&
