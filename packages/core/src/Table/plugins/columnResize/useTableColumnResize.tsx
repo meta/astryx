@@ -30,7 +30,13 @@ import {
 } from '../../columnUtils';
 import {observeResize} from '../../../utils/sharedResizeObserver';
 import {getNodeText} from '../../../utils/getNodeText';
-import {useTranslator} from '../../../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/columnResize/useTableColumnResize.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Config Type
@@ -386,7 +392,7 @@ function ResizeHandle({
   isDraggingRef,
   tableRef,
 }: ResizeHandleProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const setTableDragging = useCallback(
     (dragging: boolean) => {
       const table = tableRef.current;
