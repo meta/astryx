@@ -22,6 +22,10 @@ import {renderToString} from 'react-dom/server';
 import {act, render, screen, fireEvent} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {AppShell} from './AppShell';
+import {Card} from '../Card/Card';
+import {Section} from '../Section/Section';
+import {Layout} from '../Layout/Layout';
+import {LayoutHeader} from '../Layout/LayoutHeader';
 import {InternationalizationProvider} from '../i18n';
 import {MobileNav} from '../MobileNav';
 import {SideNav, SideNavItem, SideNavSection} from '../SideNav';
@@ -1345,5 +1349,115 @@ describe('AppShell main keyboard access', () => {
     setMainGeometry(main, 1200);
     remeasure();
     expect(main).toHaveAttribute('tabindex', '-1');
+  });
+});
+
+describe('AppShell layout root (FR18)', () => {
+  const CLEARED_READBACK = ['', 'initial'];
+
+  function shell(testId: string) {
+    return (
+      <AppShell
+        data-testid={testId}
+        contentPadding={6}
+        topNav={
+          <TopNav label="Main" heading={<TopNavHeading heading="App" />} />
+        }
+        sideNav={
+          <SideNav>
+            <SideNavSection title="Main" isHeaderHidden>
+              <SideNavItem label="Dashboard" href="#" isSelected />
+            </SideNavSection>
+          </SideNav>
+        }>
+        {/* A page Layout of the app's own: its header takes the divider
+            default of the nearest Layout that sets one. */}
+        <Layout
+          header={<LayoutHeader>Page header</LayoutHeader>}
+          content={<p>Page content</p>}
+        />
+      </AppShell>
+    );
+  }
+
+  /** The shell's markup without its generated ids, for comparing two renders. */
+  function markup(testId: string): string {
+    const root = screen.getByTestId(testId);
+    return root.outerHTML
+      .replaceAll(testId, 'shell')
+      .replace(/(id|for|aria-[a-z]+|href)="[^"]*"/g, '$1=""');
+  }
+
+  it('stops the container padding, Layout values and height cap of a padded host at its root', () => {
+    render(<Card padding={3}>{shell('shell')}</Card>);
+    const computed = getComputedStyle(screen.getByTestId('shell'));
+    for (const edge of [
+      'inline-start',
+      'inline-end',
+      'block-start',
+      'block-end',
+    ]) {
+      expect(
+        computed.getPropertyValue(`--container-padding-${edge}`),
+        edge,
+      ).toBe('0px');
+    }
+    for (const name of [
+      '--layout-padding-outer-x',
+      '--layout-padding-outer-y',
+      '--layout-padding-own-outer-x',
+      '--layout-padding-own-outer-y',
+      '--layout-padding-inner-x',
+      '--layout-padding-inner-y',
+      '--layout-content-width',
+      '--layout-alignment-width',
+      '--_layout-flush-block-start',
+      '--_layout-flush-block-end',
+      '--_section-padding-propagated',
+      '--container-max-height',
+    ]) {
+      expect(CLEARED_READBACK, name).toContain(computed.getPropertyValue(name));
+    }
+  });
+
+  it('renders the same shell inside a padded Card and inside a Layout as at the page root', () => {
+    const {unmount} = render(shell('shell'));
+    const atRoot = markup('shell');
+    unmount();
+
+    const inCard = render(<Card padding={3}>{shell('shell')}</Card>);
+    expect(markup('shell')).toBe(atRoot);
+    inCard.unmount();
+
+    render(
+      <Layout
+        padding={4}
+        defaultHasDividers
+        header={<LayoutHeader>Outer header</LayoutHeader>}
+        content={shell('shell')}
+      />,
+    );
+    expect(markup('shell')).toBe(atRoot);
+  });
+
+  it('keeps the caller style and a Section host out of each other', () => {
+    render(
+      <Section padding={6}>
+        <AppShell
+          data-testid="shell"
+          style={{['--container-padding-inline-start' as string]: '8px'}}>
+          <p>Page content</p>
+        </AppShell>
+      </Section>,
+    );
+    const computed = getComputedStyle(screen.getByTestId('shell'));
+    // The Section's propagated padding stops at the root...
+    expect(CLEARED_READBACK).toContain(
+      computed.getPropertyValue('--_section-padding-propagated'),
+    );
+    // ...and the caller's own style still applies after the reset (FR15).
+    expect(computed.getPropertyValue('--container-padding-inline-start')).toBe(
+      '8px',
+    );
   });
 });

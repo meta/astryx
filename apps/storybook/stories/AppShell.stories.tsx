@@ -3,6 +3,9 @@
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {AppShell} from '@astryxdesign/core/AppShell';
+import {Layout} from '@astryxdesign/core/Layout';
+import {Card} from '@astryxdesign/core/Card';
+import {Section} from '@astryxdesign/core/Section';
 import {Banner} from '@astryxdesign/core/Banner';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Button} from '@astryxdesign/core/Button';
@@ -840,6 +843,67 @@ export const WithBanner: Story = {
       <MockContent />
     </AppShell>
   ),
+};
+
+/**
+ * A layout root (FR18): a With Banner shell at the page root (`host: root`)
+ * or placed in a padded Card that clips overflow, as a docs example card
+ * does (`card`), in an outer Layout's content area (`layout`), or in a
+ * Section with explicit padding (`section`). It lays out the same in each:
+ * nothing an ancestor Layout, Card or Section publishes reaches its regions.
+ */
+type LayoutHost = 'root' | 'card' | 'layout' | 'section';
+
+export const InsideLayoutHosts: StoryObj<{host: LayoutHost}> = {
+  args: {host: 'card'},
+  argTypes: {
+    host: {
+      control: 'select',
+      options: ['root', 'card', 'layout', 'section'],
+      type: {name: 'string'},
+    },
+  },
+  render: ({host}) => {
+    const shell = (
+      <AppShell
+        data-testid="shell"
+        contentPadding={6}
+        style={{height: 420}}
+        topNav={<AppTopNav />}
+        sideNav={<SideNavWithoutHeader />}
+        banner={
+          <Banner
+            status="info"
+            container="section"
+            title="System maintenance scheduled"
+            description="The system will undergo maintenance tonight at 10pm UTC."
+            isDismissable
+          />
+        }>
+        <MockContent />
+      </AppShell>
+    );
+    switch (host) {
+      case 'card':
+        return (
+          <Card padding={3} style={{overflow: 'hidden'}}>
+            {shell}
+          </Card>
+        );
+      case 'layout':
+        return (
+          <Layout
+            padding={4}
+            header={<Text type="body">Outer layout header</Text>}
+            content={shell}
+          />
+        );
+      case 'section':
+        return <Section padding={6}>{shell}</Section>;
+      default:
+        return shell;
+    }
+  },
 };
 
 /**
