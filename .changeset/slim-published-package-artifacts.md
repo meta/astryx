@@ -12,6 +12,6 @@
 '@astryxdesign/theme-y2k': patch
 ---
 
-[fix] Published packages no longer include repository test and benchmark files, reducing install size without changing exports.
+[fix] Published packages no longer include repository test and benchmark files, reducing install size without changing exports. (#9153)
 
 @parinith-web
