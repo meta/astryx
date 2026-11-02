@@ -66,7 +66,8 @@ const styles = stylex.create({
   heading: {
     display: 'flex',
     alignItems: 'center',
-    flexShrink: 0,
+    flexShrink: 1,
+    minWidth: 0,
   },
   startContent: {
     display: 'flex',

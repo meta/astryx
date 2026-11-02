@@ -212,6 +212,19 @@ describe('TopNav', () => {
     // positioning context for the mega menu panel.
     expect(nav).not.toHaveStyle({position: 'relative'});
   });
+
+  it('lets the heading column shrink so a long heading can truncate', () => {
+    render(
+      <TopNav
+        label="Main navigation"
+        heading={<span>A very long product name</span>}
+        endContent={<span>End</span>}
+      />,
+    );
+    const column = screen.getByText('A very long product name').parentElement!;
+    expect(getComputedStyle(column).flexShrink).toBe('1');
+    expect(getComputedStyle(column).minWidth).toBe('0');
+  });
 });
 
 describe('TopNavHeading', () => {
