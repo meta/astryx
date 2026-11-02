@@ -110,6 +110,15 @@ const STRUCTURAL_VARS = new Set([
   // every render and read by the fill's transform. Runtime state, never
   // authored by a theme.
   '--_progress-bar-fill',
+  // ProgressBar's touch layer (ProgressBarTouch) writes these inline on every
+  // render: the touch move's duration and curve (the progress table's motion
+  // roles, which no theme sets), the three-step offset that keeps a return
+  // off CSS's reversing path, and the touch minimum. Runtime state, never
+  // authored by a theme.
+  '--_progress-bar-move',
+  '--_progress-bar-curve',
+  '--_progress-bar-flip',
+  '--_progress-bar-min',
 ]);
 
 /**

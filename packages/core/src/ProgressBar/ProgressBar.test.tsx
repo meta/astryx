@@ -7,10 +7,23 @@
  * @position Colocated unit tests; mark geometry is checked in Storybook
  */
 
-import {describe, it, expect, beforeAll} from 'vitest';
+import {describe, it, expect, beforeAll, vi} from 'vitest';
 import {render, screen, waitFor} from '@testing-library/react';
 import {ProgressBar} from './ProgressBar';
 import {getForcedColorsRules} from '../__tests__/forcedColors';
+import {readFileSync} from 'node:fs';
+import path from 'node:path';
+import {
+  progressBar,
+  registerProgressBarTable,
+} from '../motion/uikit/progressBar';
+import {formatMotionRoleValue, motionRole, motionRoleOf} from '../motion/roles';
+import {
+  REDUCED_MOTION_FADE_QUERY,
+  REDUCED_MOTION_INSTANT_QUERY,
+} from '../motion/reducedMotion';
+import {TOUCH_QUERY} from '../utils/touchQueries';
+import {TOUCH_MIN_FILL_PX} from './ProgressBarTouch';
 
 // A labeled mark wraps the tick in a lazily-loaded Tooltip (React.lazy +
 // Suspense). Preload that chunk once so the Tooltip (and its
@@ -911,6 +924,335 @@ describe('ProgressBar theme target names', () => {
     expect(container.querySelector('.astryx-progressbar-track')).toBeNull();
     expect(container.querySelector('.astryx-progressbar-fill')).toBeNull();
     expect(container.querySelector('.astryx-progressbar-mark')).toBeNull();
+  });
+});
+
+/**
+ * The value the browser would give `property` on `el` with this pointer and
+ * reduced-motion preference: the last rule (in stylesheet order) for one of
+ * its classes whose media conditions all hold. StyleX rewrites a key into
+ * conditions that negate its later siblings, so this evaluates them rather
+ * than matching their text. `@supports` blocks never hold (no engine gate).
+ */
+function valueUnder(
+  el: Element,
+  property: string,
+  env: {coarse: boolean; reduce: boolean},
+): string | undefined {
+  const holds = (condition: string): boolean => {
+    const tokens = condition
+      .replace(/\(pointer:\s*coarse\)/g, env.coarse ? ' T ' : ' F ')
+      .replace(
+        /\(prefers-reduced-motion:\s*reduce\)/g,
+        env.reduce ? ' T ' : ' F ',
+      )
+      // A mouse hovers; any other feature is taken as unmet.
+      .replace(/\(hover:\s*hover\)/g, env.coarse ? ' F ' : ' T ')
+      .replace(/\([a-z-]+:[^()]*\)/g, ' F ')
+      .replace(/\(/g, ' ( ')
+      .replace(/\)/g, ' ) ')
+      .trim()
+      .split(/\s+/);
+    let i = 0;
+    const or = (): boolean => {
+      let value = and();
+      while (tokens[i] === 'or') {
+        i += 1;
+        value = and() || value;
+      }
+      return value;
+    };
+    const and = (): boolean => {
+      let value = unary();
+      while (tokens[i] === 'and') {
+        i += 1;
+        value = unary() && value;
+      }
+      return value;
+    };
+    const unary = (): boolean => {
+      const token = tokens[i++];
+      if (token === 'not') {
+        return !unary();
+      }
+      if (token === '(') {
+        const value = or();
+        i += 1; // ')'
+        return value;
+      }
+      if (token === 'T' || token === 'F') {
+        return token === 'T';
+      }
+      throw new Error(`unexpected ${token} in ${condition}`);
+    };
+    return or();
+  };
+  // StyleX raises a conditional rule's specificity by repeating its class,
+  // so the winner is the most specific matching rule, then the last one.
+  let best: {value: string; specificity: number} | undefined;
+  const specificityOf = (selector: string) =>
+    (selector.split(':not(')[0].match(/\./g) ?? []).length;
+  const visit = (rules: CSSRuleList, ok: boolean) => {
+    for (const rule of Array.from(rules)) {
+      if (rule instanceof CSSMediaRule) {
+        visit(
+          rule.cssRules,
+          ok && holds(rule.conditionText ?? rule.media.mediaText),
+        );
+      } else if (rule instanceof CSSSupportsRule) {
+        visit(rule.cssRules, false);
+      } else if (rule instanceof CSSStyleRule) {
+        if (
+          ok &&
+          Array.from(el.classList).some(c =>
+            rule.selectorText.includes(`.${c}`),
+          ) &&
+          rule.style.getPropertyValue(property) !== ''
+        ) {
+          const specificity = specificityOf(rule.selectorText);
+          if (best == null || specificity >= best.specificity) {
+            best = {value: rule.style.getPropertyValue(property), specificity};
+          }
+        }
+      } else if ('cssRules' in rule) {
+        // @layer and other grouping rules hold whatever they wrap.
+        visit((rule as CSSGroupingRule).cssRules, ok);
+      }
+    }
+  };
+  for (const sheet of Array.from(document.styleSheets)) {
+    visit(sheet.cssRules, true);
+  }
+  return best?.value;
+}
+
+/**
+ * The declarations the element's classes carry in rules at the top level
+ * (`media` null), inside `@media <media>`, or inside exactly the nested
+ * conditions listed (`@media` texts as they are, `@supports` ones prefixed,
+ * in either nesting order), as `prop: value`.
+ */
+function rulesOf(
+  el: Element,
+  media: string | null | ReadonlyArray<string>,
+): string[] {
+  const out: string[] = [];
+  const key = (list: ReadonlyArray<string>) => list.slice().sort().join(' & ');
+  const want = key(
+    media == null ? [] : typeof media === 'string' ? [media] : media,
+  );
+  const visit = (rules: CSSRuleList, conditions: ReadonlyArray<string>) => {
+    for (const rule of Array.from(rules)) {
+      if (rule instanceof CSSMediaRule) {
+        visit(rule.cssRules, [
+          ...conditions,
+          rule.conditionText ?? rule.media.mediaText,
+        ]);
+      } else if (rule instanceof CSSSupportsRule) {
+        visit(rule.cssRules, [
+          ...conditions,
+          `@supports ${rule.conditionText}`,
+        ]);
+      } else if (rule instanceof CSSStyleRule && key(conditions) === want) {
+        if (
+          Array.from(el.classList).some(c =>
+            rule.selectorText.includes(`.${c}`),
+          )
+        ) {
+          for (let i = 0; i < rule.style.length; i += 1) {
+            const prop = rule.style[i];
+            out.push(`${prop}: ${rule.style.getPropertyValue(prop)}`);
+          }
+        }
+      }
+    }
+  };
+  for (const sheet of Array.from(document.styleSheets)) {
+    visit(sheet.cssRules, []);
+  }
+  return out;
+}
+
+const valueOf = (declarations: string[], prop: string) =>
+  declarations
+    .filter(d => d.startsWith(`${prop}:`))
+    .map(d => d.slice(prop.length + 1).trim());
+
+describe('ProgressBar under a finger: UIProgressView', () => {
+  const view = progressBar.progressView;
+  // The resolver's touch query, as TOUCH_QUERY spells it: every touch device.
+  const TOUCH = TOUCH_QUERY;
+  const fillOf = () =>
+    screen.getByRole('progressbar').firstElementChild as HTMLElement;
+  const moveOf = () => fillOf().style.getPropertyValue('--_progress-bar-move');
+  const source = () =>
+    readFileSync(path.resolve(__dirname, 'ProgressBar.tsx'), 'utf8');
+
+  it('styles a mark the minimum fill covers as on the fill', () => {
+    // A finger, as the touch presentation resolver reads it, and
+    // a track measured 200 px wide: the 16 px minimum covers its first 8%.
+    const originalMatchMedia = window.matchMedia;
+    const originalObserver = globalThis.ResizeObserver;
+    window.matchMedia = (query: string) => ({
+      matches: /pointer:\s*coarse/.test(query),
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    });
+    class MeasuredTrack {
+      constructor(private readonly callback: ResizeObserverCallback) {}
+      observe(target: Element) {
+        const entry = {target, contentRect: {width: 200}};
+        this.callback([entry as unknown as ResizeObserverEntry], this);
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    globalThis.ResizeObserver = MeasuredTrack;
+    // The shared observer's first call reads the box itself.
+    const box = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue({width: 200} as unknown as DOMRect);
+    try {
+      render(
+        <ProgressBar
+          value={2}
+          label="Upload"
+          marks={[
+            {value: 5, label: 'Covered'},
+            {value: 20, label: 'Ahead'},
+          ]}
+        />,
+      );
+      const placements = Array.from(
+        document.querySelectorAll('[data-placement]'),
+      ).map(mark => mark.getAttribute('data-placement'));
+      // 5% sits inside the drawn 8%; 20% is out on the track.
+      expect(placements).toEqual(['fill', 'track']);
+    } finally {
+      window.matchMedia = originalMatchMedia;
+      globalThis.ResizeObserver = originalObserver;
+      box.mockRestore();
+    }
+  });
+
+  it('moves linearly for the progress.fillTrackMs role times the share of the track it moved, from the last value', () => {
+    const {rerender} = render(<ProgressBar value={10} label="Upload" />);
+    // Nothing to animate on the first render.
+    expect(moveOf()).toBe('0ms');
+    rerender(<ProgressBar value={60} label="Upload" />);
+    expect(moveOf()).toBe(`${0.5 * progressBar.fillTrackMs}ms`);
+    // A re-render with the same value keeps the running move's length.
+    rerender(<ProgressBar value={60} label="Upload" />);
+    expect(moveOf()).toBe(`${0.5 * progressBar.fillTrackMs}ms`);
+    // The duration is the model change: 60 → 40 is 0.2 of the track.
+    rerender(<ProgressBar value={40} label="Upload" />);
+    expect(moveOf()).toBe(`${0.2 * progressBar.fillTrackMs}ms`);
+    // On the progress.curves.fill role: linear.
+    expect(fillOf().style.getPropertyValue('--_progress-bar-curve')).toBe(
+      formatMotionRoleValue('curve', progressBar.curves.fill),
+    );
+    const touch = {coarse: true, reduce: false};
+    // CSS scales the move by the theme's tempo (spec:AST-108 FR3).
+    expect(valueUnder(fillOf(), 'transition-duration', touch)).toMatch(
+      /^calc\(var\(--_progress-bar-move,\s*0m?s\)\s*\*\s*var\(--_astryx-motion-tempo,\s*1\)\)$/,
+    );
+    expect(valueUnder(fillOf(), 'transition-timing-function', touch)).toMatch(
+      /^var\(--_progress-bar-curve,\s*linear\)$/,
+    );
+    // No engine gate: the touch query alone decides, on every touch device.
+    const css = Array.from(document.querySelectorAll('style'))
+      .map(style => style.textContent ?? '')
+      .join('\n');
+    expect(css).not.toContain('-webkit-touch-callout');
+    // With a mouse or trackpad the theme's tokens still time it.
+    const fine = rulesOf(fillOf(), null);
+    expect(valueOf(fine, 'transition-duration')[0]).toMatch(/^var\(--/);
+    expect(valueOf(fine, 'transition-timing-function')[0]).toMatch(/^var\(--/);
+  });
+
+  it('never draws shorter than two track heights above zero, and paints nothing at zero', () => {
+    const {rerender} = render(<ProgressBar value={0} label="Upload" />);
+    const track = screen.getByRole('progressbar');
+    const trackHeight = Number.parseFloat(
+      valueOf(rulesOf(track, null), 'height')[0],
+    );
+    const minimum = view.minimumFillHeights * trackHeight;
+    expect(TOUCH_MIN_FILL_PX).toBe(minimum);
+    expect(fillOf().style.getPropertyValue('--_progress-bar-min')).toBe(
+      `${minimum}px`,
+    );
+    // Read from the source: the touch transform sits under a negated StyleX
+    // condition (the forced-colors key after it), which the jsdom runtime
+    // injects only in part; the Chromium spec checks what a browser draws.
+    const compact = source().replace(/\s+/g, '');
+    const fill = compact.slice(compact.indexOf('fill:{'));
+    const transform = fill.slice(
+      fill.indexOf('transform:{'),
+      fill.indexOf('willChange:'),
+    );
+    const coarse = transform.slice(
+      transform.indexOf("'@media(pointer:coarse)':{"),
+    );
+    const atLeast =
+      'max(var(--_progress-bar-fill,0%),var(--_progress-bar-min,0px))';
+    expect(coarse).toContain(atLeast);
+    // Mirrored in RTL: the fill stops at the same minimum from the right.
+    expect(coarse).toContain('calc(100%-var(--_progress-bar-min,0px))');
+    // Under forced colors with a finger the sized fill keeps that minimum.
+    const width = fill.slice(fill.indexOf('width:{'), fill.indexOf('height:'));
+    expect(width).toContain(atLeast);
+    // At zero the fill paints nothing under a finger (UIKit's alpha 0)…
+    expect(view.emptyFillAlpha).toBe(0);
+    expect(valueOf(rulesOf(fillOf(), TOUCH), 'opacity')).toEqual(['0']);
+    // …and is drawn as soon as there is any progress.
+    rerender(<ProgressBar value={1} label="Upload" />);
+    expect(valueOf(rulesOf(fillOf(), TOUCH), 'opacity')).toEqual([]);
+  });
+
+  it('plays the progress table roles, never a literal', () => {
+    // component:ProgressBar FR4; spec:AST-094 FR4: touch motion plays its
+    // roles, never a literal.
+    registerProgressBarTable();
+    expect(motionRole('progress.fillTrackMs')?.value).toBe(
+      progressBar.fillTrackMs,
+    );
+    expect(motionRoleOf(progressBar.curves.fill)?.id).toBe(
+      'progress.curves.fill',
+    );
+    const text = source();
+    const fill = text.slice(
+      text.indexOf('  fill: {'),
+      text.indexOf('  fillEmpty: {'),
+    );
+    expect(fill).not.toMatch(/\d+m?s\)'|'linear'|\b16px\b/);
+  });
+
+  it('declares 0 s under both shared reduced-motion queries, after the touch key', () => {
+    // The fill's transition-duration declares 0 s under both shared
+    // reduced-motion queries, after the touch key so they win there. Read
+    // from the source: the jsdom runtime injects only some of StyleX's
+    // negated conditions, and the Chromium spec checks what a browser does.
+    const text = source();
+    const fill = text.slice(text.indexOf('  fill: {'));
+    const duration = fill.slice(
+      fill.indexOf('transitionDuration: {'),
+      fill.indexOf('},', fill.indexOf('transitionDuration: {')),
+    );
+    const keys = [REDUCED_MOTION_INSTANT_QUERY, REDUCED_MOTION_FADE_QUERY].map(
+      query => duration.indexOf(`'@media ${query}':`),
+    );
+    expect(keys.every(index => index >= 0)).toBe(true);
+    expect(duration.indexOf("'@media (pointer: coarse)':")).toBeLessThan(
+      Math.min(...keys),
+    );
+    for (const index of keys) {
+      expect(duration.slice(index).split(',')[0]).toMatch(/'0s'$|\n\s*'0s'$/);
+    }
   });
 });
 
