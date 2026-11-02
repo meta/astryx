@@ -438,6 +438,13 @@ function usePopoverImplementation(
     if (!container) {
       return;
     }
+    // Focus already on a control inside (the app's `onShow` put it there, or
+    // the person pressed one while the frame was pending) is the better
+    // target; the first control would take it back.
+    const active = container.ownerDocument.activeElement;
+    if (active != null && active !== container && container.contains(active)) {
+      return;
+    }
     if (focusFirstContentControl(container)) {
       return;
     }
