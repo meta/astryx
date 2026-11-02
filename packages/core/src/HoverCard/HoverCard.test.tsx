@@ -29,7 +29,7 @@ import {
 } from '@testing-library/react';
 import {renderToString} from 'react-dom/server';
 import {hydrateRoot} from 'react-dom/client';
-import {StrictMode, type ComponentProps} from 'react';
+import {StrictMode, useState, type ComponentProps} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button/Button';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
@@ -744,6 +744,78 @@ describe('HoverCard', () => {
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(false);
       });
+    });
+  });
+
+  describe('a replaced trigger element', () => {
+    function SwapsItsRoot() {
+      const [isLink, setIsLink] = useState(false);
+      return isLink ? (
+        <a href="#profile">Profile link</a>
+      ) : (
+        <button type="button" onClick={() => setIsLink(true)}>
+          Profile button
+        </button>
+      );
+    }
+
+    it('wires the new element when the children change', async () => {
+      const onOpenChange = vi.fn();
+      const {rerender} = render(
+        <HoverCard
+          label="Profile"
+          content={<span>Card</span>}
+          onOpenChange={onOpenChange}
+          delay={0}>
+          <button type="button">First</button>
+        </HoverCard>,
+      );
+      rerender(
+        <HoverCard
+          label="Profile"
+          content={<span>Card</span>}
+          onOpenChange={onOpenChange}
+          delay={0}>
+          <a href="#second">Second</a>
+        </HoverCard>,
+      );
+      const second = screen.getByRole('link', {name: 'Second'});
+      await waitFor(() =>
+        expect(second).toHaveAttribute('aria-haspopup', 'dialog'),
+      );
+      fireEvent.mouseEnter(second);
+      await waitFor(() => expect(onOpenChange).toHaveBeenLastCalledWith(true));
+    });
+
+    it('wires the new element when a child component swaps its own root', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <HoverCard
+          label="Profile"
+          content={<span>Card</span>}
+          onOpenChange={onOpenChange}
+          delay={0}>
+          <SwapsItsRoot />
+        </HoverCard>,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Profile button'}));
+      const link = screen.getByRole('link', {name: 'Profile link'});
+      await waitFor(() =>
+        expect(link).toHaveAttribute('aria-haspopup', 'dialog'),
+      );
+      fireEvent.mouseEnter(link);
+      await waitFor(() => expect(onOpenChange).toHaveBeenLastCalledWith(true));
+    });
+
+    it('describes the new element of an unnamed card', async () => {
+      render(
+        <HoverCard content={<span>Card</span>} delay={0}>
+          <SwapsItsRoot />
+        </HoverCard>,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Profile button'}));
+      const link = screen.getByRole('link', {name: 'Profile link'});
+      await waitFor(() => expect(link).toHaveAttribute('aria-describedby'));
     });
   });
 
