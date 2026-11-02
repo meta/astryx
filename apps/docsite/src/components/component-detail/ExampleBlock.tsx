@@ -9,7 +9,8 @@
  * @position Used by ComponentDetailClient's Examples section.
  */
 
-import {useEffect, useState, type ComponentType} from 'react';
+import {useEffect, useState, type ComponentType, type ReactNode} from 'react';
+import * as stylex from '@stylexjs/stylex';
 import {Card} from '@astryxdesign/core/Card';
 import {Section} from '@astryxdesign/core/Section';
 import {Center} from '@astryxdesign/core/Center';
@@ -18,7 +19,12 @@ import {CodeExampleBlock} from '../CodeExampleBlock';
 import {TabList, Tab} from '@astryxdesign/core/TabList';
 import {Spinner} from '@astryxdesign/core/Spinner';
 import {Button} from '@astryxdesign/core/Button';
-import {HStack, VStack} from '@astryxdesign/core/Layout';
+import {
+  HStack,
+  LayoutAreaContext,
+  LayoutDividerContext,
+  VStack,
+} from '@astryxdesign/core/Layout';
 import type {ExampleEntry} from '../../generated/exampleRegistry';
 import {ComponentPreviewTheme} from './ComponentPreviewTheme';
 import {ExampleAnchor} from './ExampleAnchor';
@@ -31,6 +37,48 @@ import {
   shadcnRegistryOrigin,
 } from '../../generated/shadcnRegistry';
 import {shadcnInstallCommand} from '../../lib/shadcnRegistry.mjs';
+
+const styles = stylex.create({
+  // The layout values the docs card publishes stop at the example, so it
+  // renders as it does at a page root: no Layout in the example escapes the
+  // card's padding, or takes its insets, widths or height cap. The same values
+  // AppShell resets at its root (component:AppShell FR18).
+  exampleRoot: {
+    minWidth: 'fit-content',
+    '--container-padding-inline-start': '0px',
+    '--container-padding-inline-end': '0px',
+    '--container-padding-block-start': '0px',
+    '--container-padding-block-end': '0px',
+    '--layout-padding-outer-x': 'initial',
+    '--layout-padding-outer-y': 'initial',
+    '--layout-padding-own-outer-x': 'initial',
+    '--layout-padding-own-outer-y': 'initial',
+    '--layout-padding-inner-x': 'initial',
+    '--layout-padding-inner-y': 'initial',
+    '--_section-padding-propagated': 'initial',
+    '--layout-content-width': 'initial',
+    '--layout-alignment-width': 'initial',
+    '--_layout-flush-block-start': 'initial',
+    '--_layout-flush-block-end': 'initial',
+    '--container-max-height': 'initial',
+  },
+});
+
+/**
+ * The example's root: a clean layout boundary, with no padding of its own
+ * (the Card's padding is the example's only frame). Nothing the docs page or
+ * card passes down (container padding, Layout insets and widths, the Layout
+ * area and divider defaults) reaches the example.
+ */
+function ExampleLayoutRoot({children}: {children: ReactNode}) {
+  return (
+    <LayoutAreaContext value={null}>
+      <LayoutDividerContext value={null}>
+        <div {...stylex.props(styles.exampleRoot)}>{children}</div>
+      </LayoutDividerContext>
+    </LayoutAreaContext>
+  );
+}
 
 function LivePreview({
   entry,
@@ -83,10 +131,9 @@ function LivePreview({
         justifyContent: 'center',
       }}
       {...previewNavigationProps}>
-      {/* No padding here: the Card's padding is the example's only frame. */}
-      <div style={{minWidth: 'fit-content'}}>
+      <ExampleLayoutRoot>
         <Component />
-      </div>
+      </ExampleLayoutRoot>
     </div>
   );
 }
