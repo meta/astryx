@@ -191,6 +191,12 @@ async function runThrough(door, argv, setUp) {
   });
   let stdout = '';
   let stderr = '';
+  // Decode each stream as UTF-8 across chunk boundaries. Appending raw
+  // chunks decodes each one alone, so a multi-byte character split between
+  // two chunks turns into replacement characters at a place that depends on
+  // the pipe, not on the output.
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
   child.stdout.on('data', chunk => (stdout += chunk));
   child.stderr.on('data', chunk => (stderr += chunk));
   const timer = setTimeout(() => child.kill('SIGKILL'), RUN_TIMEOUT_MS);
