@@ -108,6 +108,27 @@ describe('useOverflow example', () => {
     expect(labels(row)).not.toContain('More');
   });
 
+  it('lists only the actions that do not fit in the More menu', () => {
+    const row = renderExample(450);
+    const more = Array.from(row.querySelectorAll('button')).at(-1);
+    act(() => {
+      more?.focus();
+      more?.dispatchEvent(
+        new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}),
+      );
+    });
+    const menuItems = Array.from(
+      document.querySelectorAll('[role="menuitem"]'),
+    ).filter(item => item.closest('[aria-hidden="true"]') == null);
+    expect(menuItems.map(item => (item.textContent ?? '').trim())).toEqual([
+      'Strikethrough',
+      'Link',
+      'Quote',
+      'Code',
+      'Clear formatting',
+    ]);
+  });
+
   it('measures every action and the marked More menu in a hidden copy', () => {
     renderExample(450);
     const measure = container.querySelector<HTMLElement>(
