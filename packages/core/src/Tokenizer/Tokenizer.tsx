@@ -1102,6 +1102,12 @@ export function Tokenizer<T extends SearchableItem>({
     () => new Set<string>(JSON.parse(selectedIdKey) as string[]),
     [selectedIdKey],
   );
+  // Tells an open list to reload when the committed values change, or to
+  // close once they reach the limit (FR13, FR15).
+  const committedChoices = useMemo(
+    () => ({key: selectedIdKey, isAtLimit: isAtMax}),
+    [selectedIdKey, isAtMax],
+  );
 
   // Selected labels, lowercased, for the Create entry's duplicate check. The
   // typed text is a label, not an id: real selections usually carry an opaque
@@ -1426,7 +1432,7 @@ export function Tokenizer<T extends SearchableItem>({
           button rather than as a second one inside the base. */}
       <BusyIndicatorLaneProvider value={busyLane}>
         <TrailingKeyDownContext value={onKeyDown}>
-          <CommittedChoicesKeyContext value={selectedIdKey}>
+          <CommittedChoicesKeyContext value={committedChoices}>
             <BaseTypeahead
               {...rest}
               ref={useMergedRefs(

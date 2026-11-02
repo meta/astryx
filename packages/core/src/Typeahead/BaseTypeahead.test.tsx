@@ -386,12 +386,16 @@ describe('BaseTypeahead', () => {
   // component:Tokenizer FR13, spec:AST-092 FR4: when the caller's committed
   // values change, an open list reloads from the source they now filter.
   describe('committed values change', () => {
+    const COMMITTED: Record<string, {key: string; isAtLimit: boolean}> = {
+      a: {key: 'a', isAtLimit: false},
+      b: {key: 'b', isAtLimit: false},
+    };
     const renderField = (
       searchSource: SearchSource<SearchableItem>,
-      key: string,
+      key: 'a' | 'b',
       props: {hasEntriesOnFocus?: boolean} = {hasEntriesOnFocus: true},
     ) => (
-      <CommittedChoicesKeyContext value={key}>
+      <CommittedChoicesKeyContext value={COMMITTED[key]}>
         <BaseTypeahead
           searchSource={searchSource}
           value={null}
@@ -497,6 +501,34 @@ describe('BaseTypeahead', () => {
         expect(input).toHaveAttribute('aria-expanded', 'true');
       });
       rerender(renderField({search: () => [], bootstrap: () => []}, 'b'));
+
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
+    it('closes an open focus list when the reload fails', async () => {
+      const user = userEvent.setup();
+      const {rerender} = render(
+        renderField({search: () => [], bootstrap: () => [resultItem]}, 'a'),
+      );
+      const input = screen.getByRole('combobox');
+
+      await user.click(input);
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'true');
+      });
+      rerender(
+        renderField(
+          {
+            search: () => [],
+            bootstrap: async () => {
+              throw new Error('offline');
+            },
+          },
+          'b',
+        ),
+      );
 
       await waitFor(() => {
         expect(input).toHaveAttribute('aria-expanded', 'false');

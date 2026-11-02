@@ -33,7 +33,7 @@ import React, {
 import * as stylex from '@stylexjs/stylex';
 import {useBusyIndicatorLane} from './busyIndicatorLane';
 import {useTrailingKeyDown} from './trailingKeyDown';
-import {useCommittedChoicesKey} from './committedChoicesKey';
+import {useCommittedChoices} from './committedChoicesKey';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {usePopover} from '../Popover/usePopover';
 import {useAnnounce} from '../hooks/useAnnounce';
@@ -1116,8 +1116,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     try {
       bootstrapResult = searchSource.bootstrap();
     } catch {
+      // A failed request offers nothing: an open list closes (FR15).
+      applyBootstrapResults([], gen);
       if (searchGenRef.current === gen) {
-        replaceResults([]);
         setLoading(false);
       }
       return;
@@ -1133,37 +1134,45 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     try {
       applyBootstrapResults(await bootstrapResult, gen);
     } catch {
-      if (searchGenRef.current === gen) {
-        replaceResults([]);
-      }
+      applyBootstrapResults([], gen);
     } finally {
       if (searchGenRef.current === gen) {
         setLoading(false);
       }
     }
-  }, [searchSource, applyBootstrapResults, setLoading, replaceResults]);
+  }, [searchSource, applyBootstrapResults, setLoading]);
 
   // A list shown before the caller's committed values changed is no longer
   // current (component:Tokenizer FR13, spec:AST-092 FR4). While the list is
   // open, it reloads the same query, its typed text or the focus list, from
   // the source those values now filter. A closed list stays closed; opening it
   // loads that source.
-  const committedChoicesKey = useCommittedChoicesKey();
+  const committedChoices = useCommittedChoices();
+  const committedChoicesKey = committedChoices?.key;
+  const isAtCommitLimit = committedChoices?.isAtLimit === true;
   const reloadForCommittedChoices = useCallback(() => {
     if (isDisabled || !isMountedRef.current || !isShowingRef.current) {
       return;
     }
-    if (query.length > 0 && !isBelowMinQueryLength(query, minQueryLength)) {
+    if (isAtCommitLimit) {
+      // At the limit nothing more can be committed, whatever the query, so
+      // the list closes (component:Tokenizer FR15).
+      popover.hide();
+    } else if (
+      query.length > 0 &&
+      !isBelowMinQueryLength(query, minQueryLength)
+    ) {
       void performSearch(query);
     } else if (query.length === 0 && hasEntriesOnFocus) {
       void performBootstrap();
     } else if (query.length === 0) {
-      // Nothing current can be loaded (a Tokenizer at its maximum turns its
-      // focus entries off), so the old list closes instead of staying stale.
+      // Nothing current can be loaded, so the old list closes instead of
+      // staying stale.
       popover.hide();
     }
   }, [
     isDisabled,
+    isAtCommitLimit,
     query,
     minQueryLength,
     hasEntriesOnFocus,

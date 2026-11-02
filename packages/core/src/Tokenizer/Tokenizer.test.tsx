@@ -1305,6 +1305,26 @@ describe('Tokenizer', () => {
       });
     });
 
+    it('closes the open list with typed text when a value set from outside reaches the maximum', async () => {
+      const user = userEvent.setup();
+      render(<Controlled initial={[users[0]]} maxEntries={3} />);
+      const input = screen.getByRole('combobox');
+
+      await user.type(input, 'i');
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Diana', hidden: true}),
+        ).toBeInTheDocument();
+      });
+      act(() => {
+        screen.getByRole('button', {name: 'Set all three'}).click();
+      });
+
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
     it('drops a value set from outside from the open list', async () => {
       const user = userEvent.setup();
       render(<Controlled initial={[users[0]]} />);
