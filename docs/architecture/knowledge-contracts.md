@@ -22,6 +22,7 @@ verified_by:
     .github/scripts/review-signal-decision.test.mjs,
     .github/scripts/review-signal-workflow.test.mjs,
     .github/scripts/spec-owner-decision.test.mjs,
+    apps/docsite/src/__tests__/example-coverage.test.ts,
   ]
 deciding_specs: []
 ---
@@ -49,7 +50,8 @@ deciding_specs: []
       "DEC-10",
       "DEC-12",
       "DEC-13",
-      "DEC-15"
+      "DEC-15",
+      "INV28"
     ]
   }
 }
@@ -336,6 +338,27 @@ Every record is either:
   and a candidate that is not a valid record fails `pnpm check:knowledge`.
   `README.md` index files, `plan.md` implementation plans, and the paths
   discovery already ignores are not candidates.
+
+### Consumer docs
+
+- **INV28 — Every public hook has a minimal, runnable example that
+  demonstrates it.** A public hook is a hook that a package's committed API
+  report lists. Its documentation includes at least one realistic, runnable
+  example: a live template block that names the hook as its example target
+  (`exampleFor`, or `alsoExampleFor` when the block also serves another page).
+  The example:
+  - shows the hook inside a component solving the use case its docs state;
+  - imports the package's own code only through its public entry points;
+  - covers the hook's main parameters and return values;
+  - passes the docs build;
+  - gets its visible behavior from the hook itself, so removing the hook breaks
+    what the example shows; and
+  - is minimal: only the code needed to show the use case, with no unrelated UI
+    or styling.
+
+  How a docs page selects and orders its example blocks belongs to
+  `architecture:template-authoring`. A public hook without a conforming example
+  is a docs gap, tracked as an issue in the repository's issue queue (DEC-16).
 
 ## Path applicability
 
@@ -1130,6 +1153,26 @@ Rejected: records beside each package's code, because a component's core and
 platform records then sit in different packages and every platform package
 needs its own spec location.
 
+### DEC-16 — Hook examples are governed by spec, and gaps are issues
+
+**Reference:** `architecture:knowledge-contracts/DEC-16`
+**Decider:** `cixzhang`, `2026-11-01`
+
+Hook documentation is governed by this record, and every public hook's docs
+carry a minimal, runnable example that demonstrates the hook (INV28). A missing
+or non-conforming example is an issue in the repository's issue queue, sized as
+a contributor's first pick-up. The owner's direction: "should be governed by
+spec and any gaps should be issues in astryx issue queue. They would be good
+first pick ups by contributors" and "for any example, make sure it actually
+demonstrates the hook. Ideally it should appear fairly minimal".
+
+The example-coverage report checks hook examples the way it checks
+component-doc examples: it reports missing and non-conforming examples and never
+gates a merge or release (owner decision, 2026-09-30).
+
+Rejected: an example that renders a component which calls the hook internally,
+because the reader never sees the hook wired.
+
 ## Verification
 
 | Invariant                         | Evidence                                                                                                                                                                                                     | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
@@ -1149,12 +1192,13 @@ needs its own spec location.
 | DEC-14                            | `.github/scripts/spec-owner-reconcile.test.mjs`, `.github/scripts/spec-owner-decision.test.mjs`, and `.github/scripts/spec-owner-workflow.test.mjs`                                                          | A non-spec commit, base merge, rebase, or status flip resets approval; changed spec text or a new spec path keeps it; a command naming other spec content, a reaction, a non-owner act, or an author review approves; `review-required` succeeds while spec approval is missing or before the spec decision is published; a revoke or request for changes naming other spec content is ignored; a missing approval reports failure; or an evaluation leaves its head without a terminal state |
 | DEC-11                            | `.github/scripts/review-signal-decision.test.mjs`, `.github/scripts/review-clear-workflow.test.mjs`, and `.github/scripts/review-signal-workflow.test.mjs`                                                   | An app approval clears a read-only or fork author or an earlier head; a later app request for changes or dismissal leaves the gate clear; an app approval overrides an ENGOWNER request for changes; or an unset app or unreadable permission clears the gate                                                                                                                                                                                                                                 |
 
-| Invariant            | Evidence                                                                                                                                                                               | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| INV22–INV24          | Contributor/reviewer evidence inventory; public-link and byte verification; retained remote refs; unchanged fixture/baseline/media paths                                               | Disposable captures enter the source tree, cleanup loses a referenced image, a temporary branch is called durable, or storage changes overwrite an owner's proof or retention contract                                                                                                                                                                                                                                             |
-| INV25, INV26, DEC-12 | `scripts/specs-for-file.test.mjs`, `scripts/check-knowledge.test.mjs`, and `pnpm check:knowledge`                                                                                      | A current record is reached by no tracked non-record path, a lookup infers a link from a name, a pattern matches nothing or the whole repository, or a pattern match widens a claim or outranks a narrower owner                                                                                                                                                                                                                   |
-| INV27, DEC-13        | `scripts/check-knowledge.test.mjs`, `.github/scripts/change-scope.test.mjs`, and `pnpm check:knowledge`                                                                                | A `*.spec.md` file or a Markdown file under a `specs` directory without valid record frontmatter, outside its kind's location, or following a package-local template passes                                                                                                                                                                                                                                                        |
-| DEC-15               | `.github/scripts/knowledge-paths.test.mjs`, `.github/scripts/change-scope.test.mjs`, `scripts/check-knowledge.test.mjs`, `scripts/specs-for-file.test.mjs`, and `pnpm check:knowledge` | A component or module record outside `docs/specs/components/<ComponentRoot>/`, a `*.spec.md` left in a component package's source tree or beside a Swift view, a record matched to the wrong package when two share a root, a record whose component root no registered package's source tree has, a platform record whose id or `platform_of` does not match its path, or a platform record change that skips the spec-owner gate |
+| Invariant            | Evidence                                                                                                                                                                                                      | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INV22–INV24          | Contributor/reviewer evidence inventory; public-link and byte verification; retained remote refs; unchanged fixture/baseline/media paths                                                                      | Disposable captures enter the source tree, cleanup loses a referenced image, a temporary branch is called durable, or storage changes overwrite an owner's proof or retention contract                                                                                                                                                                                                                                             |
+| INV25, INV26, DEC-12 | `scripts/specs-for-file.test.mjs`, `scripts/check-knowledge.test.mjs`, and `pnpm check:knowledge`                                                                                                             | A current record is reached by no tracked non-record path, a lookup infers a link from a name, a pattern matches nothing or the whole repository, or a pattern match widens a claim or outranks a narrower owner                                                                                                                                                                                                                   |
+| INV27, DEC-13        | `scripts/check-knowledge.test.mjs`, `.github/scripts/change-scope.test.mjs`, and `pnpm check:knowledge`                                                                                                       | A `*.spec.md` file or a Markdown file under a `specs` directory without valid record frontmatter, outside its kind's location, or following a package-local template passes                                                                                                                                                                                                                                                        |
+| INV28, DEC-16        | `apps/docsite/src/lib/exampleCoverage.mjs` and `apps/docsite/src/__tests__/example-coverage.test.ts` (advisory: the report prints and never gates), plus review of each hook example against INV28's criteria | The report omits a public hook that has no hook doc or no conforming example block, or a missing or non-conforming hook example fails a merge or release                                                                                                                                                                                                                                                                           |
+| DEC-15               | `.github/scripts/knowledge-paths.test.mjs`, `.github/scripts/change-scope.test.mjs`, `scripts/check-knowledge.test.mjs`, `scripts/specs-for-file.test.mjs`, and `pnpm check:knowledge`                        | A component or module record outside `docs/specs/components/<ComponentRoot>/`, a `*.spec.md` left in a component package's source tree or beside a Swift view, a record matched to the wrong package when two share a root, a record whose component root no registered package's source tree has, a platform record whose id or `platform_of` does not match its path, or a platform record change that skips the spec-owner gate |
 
 Evidence placement is enforced by contributors and reviewers. The local
 `docs/pr-assets/` ignore prevents accidental staging; it is not a blocking CI
@@ -1184,3 +1228,8 @@ the core record beside it.
 Current enforcement gap: no checked-in gate yet proves the open-pull-request
 search. Until one exists, the pull-request summary records the search terms,
 canonical owner/path, and overlapping open work inspected.
+
+Current enforcement gap: the example-coverage report reads component-doc
+examples only and cannot see whether an example demonstrates its hook, so
+review checks INV28. Each public hook without a conforming example is an open
+docs gap under INV28, tracked in the repository's issue queue.
