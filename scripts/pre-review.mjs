@@ -384,12 +384,7 @@ export function buildReport({
     ...sizeFindings(authoredLines, body),
     ...sharedOwnerFindings(addedLines),
     ...effectFindings(addedLines, readHead),
-    ...changesetFindings({
-      coverage,
-      changesets,
-      changedFiles: present,
-      readHead,
-    }),
+    ...changesetFindings({coverage, changesets}),
     ...recordGapFindings({
       records: recordPaths,
       changedFiles: present,

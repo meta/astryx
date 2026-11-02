@@ -209,6 +209,16 @@ describe('effectFindings', () => {
     expect(
       findingsFor(
         [
+          '// Keeps the getter current for gesture callbacks.',
+          'useIsomorphicLayoutEffect(() => {',
+          '  getPartsRef.current = getParts;',
+          '});',
+        ].join('\n'),
+      ),
+    ).toEqual([[2, 'The Effect only copies a value into a ref']]);
+    expect(
+      findingsFor(
+        [
           '// Syncs the handler to the native listener.',
           'useEffect(() => {',
           '  onChangeRef.current = onChange;',
@@ -234,23 +244,6 @@ describe('effectFindings', () => {
 
 describe('changesetFindings', () => {
   const core = '@astryxdesign/core';
-  const tree = {
-    'packages/core/package.json': JSON.stringify({
-      name: core,
-      exports: {
-        '.': {source: './src/index.ts'},
-        './Button': {source: './src/Button/index.ts'},
-      },
-    }),
-    'packages/core/src/index.ts': "export * from './utils';\n",
-    'packages/core/src/utils/index.ts': "export {clamp} from './clamp';\n",
-    'packages/core/src/utils/clamp.ts': 'export function clamp() {}',
-    'packages/core/src/utils/hold.ts': 'export function hold() {}',
-    'packages/core/src/Button/index.ts': "export {Button} from './Button';\n",
-    'packages/core/src/Button/Button.tsx': 'export function Button() {}',
-    'packages/core/src/Button/useButtonPress.ts': 'export function use() {}',
-  };
-  const readHead = file => tree[file] ?? null;
   const changeset = category => ({
     file: '.changeset/a.md',
     text: `---\n'${core}': patch\n---\n\n[${category}] A sentence.\n\n@someone\n`,
@@ -265,8 +258,6 @@ describe('changesetFindings', () => {
         covered: new Set(covered),
       },
       changesets,
-      changedFiles: new Set(shipped),
-      readHead,
     }).map(f => [f.item, f.file, f.line, f.rule]);
   }
 
@@ -294,34 +285,16 @@ describe('changesetFindings', () => {
     ]);
   });
 
-  it('flags a [fix] when only internal files change', () => {
-    const [finding] = findingsFor({
-      shipped: ['packages/core/src/utils/hold.ts'],
-      changesets: [changeset('fix')],
-      covered: [core],
-    });
-    expect(finding[3]).toContain('no entry point reaches a changed file');
-  });
-
-  it('accepts a [fix] on a reachable file or a component folder, and [chore] anywhere', () => {
-    for (const file of [
-      'packages/core/src/utils/clamp.ts',
-      'packages/core/src/Button/useButtonPress.ts',
-    ]) {
-      expect(
-        findingsFor({
-          shipped: [file],
-          changesets: [changeset('fix')],
-          covered: [core],
-        }),
-      ).toEqual([]);
-    }
+  it('accepts a covered change, and a [chore] with nothing shipped', () => {
     expect(
       findingsFor({
         shipped: ['packages/core/src/utils/hold.ts'],
-        changesets: [changeset('chore')],
+        changesets: [changeset('fix')],
         covered: [core],
       }),
+    ).toEqual([]);
+    expect(
+      findingsFor({shipped: [], changesets: [changeset('chore')]}),
     ).toEqual([]);
   });
 });
@@ -398,6 +371,13 @@ describe('recordGapFindings', () => {
 });
 
 describe('mergeFindings', () => {
+  it('lists ten conflicts, then a count of the rest', () => {
+    const files = Array.from({length: 12}, (_, i) => `f${i}.ts`);
+    const findings = mergeFindings(files, 'origin/main');
+    expect(findings).toHaveLength(11);
+    expect(findings.at(-1).rule).toBe('2 more files conflict with origin/main');
+  });
+
   it('names each conflicting path', () => {
     expect(mergeFindings(['a.ts'], 'origin/main')).toEqual([
       {

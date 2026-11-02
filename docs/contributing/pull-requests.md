@@ -207,11 +207,27 @@ each finding at its file and line.
   ([`architecture:knowledge-contracts`](../architecture/knowledge-contracts.md#dec-14--one-owner-approval-binds-a-pull-requests-spec-content)
   DEC-14). The description also reports `## Writing rubric results`
   ([Writing specification records](spec-writing.md)).
-- **h. Size (automatic).** More than 2,000 authored lines, without lockfiles, snapshots, or generated files, is a finding unless the description declares a behavior-module pull request, a `Batch:` row, or a `Stack:` line.
-- **i. Shared owners (automatic).** In Core source, an added `new ResizeObserver`, document or window listener, module-level warn-once set, or parent walk across shadow roots is a finding: call `observeResize`, `subscribeInput`, `useDevWarning`, or `parentAcrossShadow` ([`architecture:react-component-runtime`](../architecture/react-component-runtime.md#boundaries-and-invariants) INV16).
-- **j. Effects (automatic).** An added Effect with no comment that names the system it syncs, an Effect that only copies a value into a ref, and a DOM node in React state are findings ([`architecture:react-component-runtime`](../architecture/react-component-runtime.md#boundaries-and-invariants) INV1 and INV3).
-- **k. Release notes and records (automatic).** A package that ships a change with no Changeset, a `[fix]`, `[feat]`, or `[perf]` Changeset when only tests, tooling, or internal files change, and a gap row left in a record for a claim this change builds are findings.
-- **l. Mergeable (automatic).** A conflict with the base branch is a finding. The check writes nothing to the repository.
+- **h. Size (automatic).** More than 2,000 authored lines, without lockfiles,
+  snapshots, or generated files, is a finding unless the description declares a
+  behavior-module pull request, a `Batch:` row, or a `Stack:` line.
+- **i. Shared owners (automatic).** In Core source, an added resize observer,
+  document or window listener, module-level warn-once set, or parent walk
+  across shadow roots is a finding: call `observeResize`,
+  `subscribeInput`, `useDevWarning`, or `parentAcrossShadow`
+  ([`architecture:react-component-runtime`](../architecture/react-component-runtime.md#boundaries-and-invariants)
+  INV16).
+- **j. Effects (automatic).** An added Effect with no comment that names the
+  system it syncs, an Effect that only copies a value into a ref, and a DOM node
+  in React state are findings
+  ([`architecture:react-component-runtime`](../architecture/react-component-runtime.md#boundaries-and-invariants)
+  INV1 and INV3).
+- **k. Release notes and records (automatic).** A package that ships a change
+  with no Changeset, a `[fix]`, `[feat]`, or `[perf]` Changeset for a package
+  where nothing that ships changes, such as a change to tests or tooling only,
+  and a gap row left in a record for a claim this change builds are findings.
+- **l. Mergeable (automatic).** A conflict with the base branch is a finding.
+  For the working tree, the check merges the last commit. It writes nothing to
+  the repository.
 
 ### Use a fresh session for an agent's change
 

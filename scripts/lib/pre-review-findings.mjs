@@ -176,7 +176,7 @@ export function sharedOwnerFindings(addedLines) {
   return findings;
 }
 
-const EFFECT = /\b(?:React\.)?use(?:Layout)?Effect\s*\(/;
+const EFFECT = /\b(?:React\.)?use(?:Isomorphic)?(?:Layout)?Effect\s*\(/;
 const DOM_STATE =
   /\buseState\s*<[^>]*(?<![\w$.])(?:(?:HTML|SVG)\w*Element|Element|Node|NodeList|HTMLCollection)\b/;
 
@@ -236,9 +236,7 @@ export function copiesIntoRef(body) {
   );
 }
 
-/**
- * Item j. `readHead(file)` returns the file at the head, or null.
- */
+/** Item j. `readHead(file)` returns the file at the head, or null. */
 export function effectFindings(addedLines, readHead) {
   const findings = [];
   const sources = new Map();
@@ -280,109 +278,12 @@ export function effectFindings(addedLines, readHead) {
 
 const NAMED_CATEGORIES = new Set(['fix', 'feat', 'perf']);
 
-function resolveModule(readHead, from, specifier) {
-  const base = path.posix.join(path.posix.dirname(from), specifier);
-  const candidates = [
-    base,
-    ...['.ts', '.tsx', '.js', '.mjs'].map(ext => base + ext),
-    ...['ts', 'tsx', 'js', 'mjs'].map(ext => `${base}/index.${ext}`),
-  ];
-  return candidates.find(file => readHead(file) != null) ?? null;
-}
-
-function reExports(source) {
-  return [
-    ...source.matchAll(
-      /export\s+(?:type\s+)?(?:\*(?:\s+as\s+[\w$]+)?|\{[^}]*\})\s+from\s+['"](\.[^'"]+)['"]/g,
-    ),
-  ].map(match => match[1]);
-}
-
-function sourceEntries(exportsField) {
-  if (typeof exportsField === 'string') return [exportsField];
-  if (exportsField == null || typeof exportsField !== 'object') return [];
-  if (typeof exportsField.source === 'string') return [exportsField.source];
-  return Object.values(exportsField).flatMap(sourceEntries);
-}
-
-/**
- * Whether a package file is public: an entry point reaches it through
- * re-exports, or it sits in a component folder (capitalized, top level of
- * `src`) that an entry point reaches.
- */
-export function publicModuleTest(readHead, packageDir) {
-  const manifest = JSON.parse(readHead(`${packageDir}/package.json`) ?? '{}');
-  const entries = [
-    ...sourceEntries(manifest.exports),
-    './src/index.ts',
-    './src/index.tsx',
-  ]
-    .map(entry => path.posix.join(packageDir, entry))
-    .filter(file => /\.[cm]?[jt]sx?$/.test(file) && readHead(file) != null);
-  const srcDir = `${packageDir}/src/`;
-  const topFolder = file =>
-    file.startsWith(srcDir) && file.slice(srcDir.length).includes('/')
-      ? file.slice(srcDir.length).split('/')[0]
-      : null;
-  const folderOf = file =>
-    file.startsWith(srcDir) ? file.slice(srcDir.length).split('/')[0] : null;
-  const reachedByFolder = new Map();
-  const reached = folder => {
-    if (!reachedByFolder.has(folder)) {
-      const files = new Set();
-      const queue = [...entries];
-      const seen = new Set(queue);
-      while (queue.length > 0) {
-        const from = queue.shift();
-        if (topFolder(from) === folder) files.add(from);
-        for (const specifier of reExports(readHead(from) ?? '')) {
-          const joined = path.posix.join(path.posix.dirname(from), specifier);
-          if (folderOf(joined) !== folder) continue;
-          const target = resolveModule(readHead, from, specifier);
-          if (target != null && !seen.has(target)) {
-            seen.add(target);
-            queue.push(target);
-          }
-        }
-      }
-      reachedByFolder.set(folder, files);
-    }
-    return reachedByFolder.get(folder);
-  };
-  return file => {
-    if (entries.includes(file)) return true;
-    const folder = topFolder(file);
-    if (folder == null) return false;
-    const files = reached(folder);
-    return files.has(file) || (/^[A-Z]/.test(folder) && files.size > 0);
-  };
-}
-
-function packageDirFor(readHead, packageName, file) {
-  for (
-    let dir = path.posix.dirname(file);
-    dir && dir !== '.';
-    dir = path.posix.dirname(dir)
-  ) {
-    const manifest = readHead(`${dir}/package.json`);
-    if (manifest != null) {
-      return JSON.parse(manifest).name === packageName ? dir : null;
-    }
-  }
-  return null;
-}
-
 /**
  * Item k, Changesets. `coverage` is `checkCoverage` from
  * `scripts/release/changeset-coverage.mjs`; `changesets` are the Changesets
  * the change adds or edits, as `{file, text}`.
  */
-export function changesetFindings({
-  coverage,
-  changesets,
-  changedFiles,
-  readHead,
-}) {
+export function changesetFindings({coverage, changesets}) {
   const findings = [];
   const shippedFiles = pkg =>
     [...(coverage.required.get(pkg)?.values() ?? [])]
@@ -408,32 +309,13 @@ export function changesetFindings({
       null;
     for (const [pkg, bump] of Object.entries(frontmatter.releases)) {
       if (bump === 'none') continue;
-      const files = shippedFiles(pkg);
-      if (files.length === 0) {
-        findings.push({
-          item: 'k',
-          file,
-          line,
-          rule: `\`[${category}]\` names ${pkg}, but nothing ${pkg} ships changes`,
-          fix: 'Remove the Changeset. Tests, stories, fixtures, and tooling need none.',
-        });
-        continue;
-      }
-      const packageDir = packageDirFor(readHead, pkg, files[0]);
-      if (
-        packageDir == null ||
-        changedFiles.has(`${packageDir}/api-report.md`)
-      ) {
-        continue;
-      }
-      const isPublic = publicModuleTest(readHead, packageDir);
-      if (files.some(isPublic)) continue;
+      if (shippedFiles(pkg).length > 0) continue;
       findings.push({
         item: 'k',
         file,
         line,
-        rule: `\`[${category}]\` names ${pkg}, but no entry point reaches a changed file and the API report is unchanged`,
-        fix: 'Use `[chore] Internal:` when a consumer sees no change. Otherwise name the public behavior that changes.',
+        rule: `\`[${category}]\` names ${pkg}, but nothing ${pkg} ships changes`,
+        fix: 'Remove the Changeset. Tests, stories, fixtures, and tooling need none.',
       });
     }
   }
@@ -497,13 +379,25 @@ export function recordGapFindings({
   return findings;
 }
 
+const MAX_CONFLICTS = 10;
+
 /** Item l. `conflicts` lists the paths that do not merge cleanly. */
 export function mergeFindings(conflicts, base) {
-  return conflicts.map(file => ({
+  const findings = conflicts.slice(0, MAX_CONFLICTS).map(file => ({
     item: 'l',
     file,
     line: null,
     rule: `Conflicts with ${base}`,
     fix: `Merge or rebase onto ${base}, and resolve the conflict.`,
   }));
+  if (conflicts.length > MAX_CONFLICTS) {
+    findings.push({
+      item: 'l',
+      file: null,
+      line: null,
+      rule: `${conflicts.length - MAX_CONFLICTS} more files conflict with ${base}`,
+      fix: `Merge or rebase onto ${base}, and resolve each conflict.`,
+    });
+  }
+  return findings;
 }
