@@ -565,10 +565,13 @@ position; only Tooltip and HoverCard surfaces are guarded, and only against
 the Core containers that check them (`component:Tooltip` FR11,
 `component:HoverCard` FR11). Compatibility: the owner ruled on 2026-11-01
 that closing the gap ships as a patch `[fix]` (`spec:AST-017` FR5's fix
-class): no record ever promised that a press inside a layer reaches the
-layer's JSX ancestors, so that propagation is the defect the fix removes, not
-a supported behavior with a migration. A handler that needs presses inside a
-layer belongs on the layer content.
+class) for every caller no released record covered: no record promised that
+a press inside a layer reaches the layer's JSX ancestors, and a handler that
+needs those presses belongs on the layer content. The one released promise is
+`component:SelectableCard` FR2, whose caller `onClick` also runs for clicks
+that do not toggle, including a click inside an open Tooltip or HoverCard
+surface; SelectableCard keeps that until the next minor, where the change is
+staged as `[breaking]` (`spec:AST-017` FR32).
 
 ## Change coupling
 
@@ -590,7 +593,7 @@ layer belongs on the layer content.
 - A local outside, backdrop, touch, hover, or swipe change preserves the owning
   component's policy and verifies interactions with nested surfaces.
 - A change to a layer content root or to the INV17 seam verifies that a press
-  inside each kind of root reaches no ancestor handler and still reaches
+  inside each kind of root reaches no ancestor bubble-phase handler and still reaches
   document listeners and light dismiss.
 - A Toast host change preserves queued and visible toasts, timers, focus handoff,
   theme context, and ordering.
