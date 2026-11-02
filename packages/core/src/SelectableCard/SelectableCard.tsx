@@ -415,6 +415,24 @@ export function SelectableCard({
       }
     : onClick;
 
+  // Compatibility until the next minor (component:SelectableCard FR2,
+  // CLN-0026): a click that starts inside an open layer within the card still
+  // reaches the caller's onClick. The layer boundary (layer-runtime INV17)
+  // stops it before the bubble phase, so it is delivered here during capture,
+  // before the layer's own handlers. It never toggles. Delete with CLN-0026.
+  const handleLayerClickCapture = onClickProp
+    ? (e: MouseEvent<HTMLElement>) => {
+        const target = e.target;
+        if (!(target instanceof Element)) {
+          return;
+        }
+        const layer = target.closest('[popover], dialog');
+        if (layer != null && !layer.contains(e.currentTarget)) {
+          onClickProp(e);
+        }
+      }
+    : undefined;
+
   const composedOnMouseUp = onMouseUpProp
     ? (e: MouseEvent<HTMLElement>) => {
         onMouseUp(e);
@@ -455,7 +473,15 @@ export function SelectableCard({
       }
       onClick={!isDisabled ? composedOnClick : undefined}
       onMouseUp={!isDisabled ? composedOnMouseUp : undefined}
-      {...props}>
+      {...props}
+      onClickCapture={
+        !isDisabled && handleLayerClickCapture
+          ? (e: MouseEvent<HTMLDivElement>) => {
+              handleLayerClickCapture(e);
+              props.onClickCapture?.(e);
+            }
+          : props.onClickCapture
+      }>
       <input
         ref={interactiveRef}
         type="checkbox"

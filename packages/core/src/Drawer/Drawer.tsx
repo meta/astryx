@@ -77,6 +77,7 @@ import {LayerDepthProvider, useLayerDismissal} from '../Layer';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
+import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {composeEventHandlers, mergeProps, themeProps} from '../utils';
 import {container, overlayPaddingReset} from '../Layout';
@@ -601,7 +602,12 @@ export function Drawer({
       {...(purpose === 'required' && hasScrim
         ? {role: 'alertdialog'}
         : undefined)}
-      onClick={composeEventHandlers(onClickProp, handleClick)}
+      // A press inside the drawer stops at its root (layer-runtime INV17),
+      // after the caller's and the drawer's own handlers run.
+      {...layerClickBoundary({
+        ...safeProps,
+        onClick: composeEventHandlers(onClickProp, handleClick),
+      })}
       onKeyDown={onKeyDownProp}
       onCancel={handleCancel}>
       <ModalAnnounceProvider dialogRef={dialogRef} isOpen={isOpen && hasScrim}>

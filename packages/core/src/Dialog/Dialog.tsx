@@ -49,6 +49,7 @@ import {useScrollLock} from '../hooks/useScrollLock';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
+import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {useModalOutlet} from '../Layer/modalOutlet';
@@ -849,7 +850,12 @@ export function Dialog({
         className,
         style,
       )}
-      onClick={chainEventHandlers(handleClick, onClickProp)}
+      // A press inside the dialog stops at its root (layer-runtime INV17),
+      // after the caller's and the dialog's own handlers run.
+      {...layerClickBoundary({
+        ...safeProps,
+        onClick: chainEventHandlers(handleClick, onClickProp),
+      })}
       onCancel={handleCancel}
       aria-modal={isHydrating ? undefined : 'true'}
       // The default aria-labelledby (from a DialogHeader title) is set
