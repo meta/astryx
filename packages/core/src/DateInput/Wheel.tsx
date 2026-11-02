@@ -5,14 +5,14 @@
 /**
  * @file Wheel.tsx
  * @input Option list, selected value and change callback
- * @output Exports Wheel (one picker column), ScrollWheel (today's column) and
- *   the shared types of wheelOptions.ts
+ * @output Exports Wheel (one picker column), ScrollWheel (the scrolling
+ *   column) and the shared types of wheelOptions.ts
  * @position Internal component; consumed by MonthYearWheels.tsx,
  *   TouchTimeField.tsx and TouchDateTimeField.tsx
  *
  * Wheel picks its column by the primary pointer. Under a finger it is
  * PickerWheel.tsx, the touch layer, imported here alone. Under a fine pointer
- * it is the snap-scrolling column below, today's wheel.
+ * it is the snap-scrolling column below.
  *
  * The scrolling column is a scroll container: momentum, rubber-banding and the
  * settle are the platform's. Its rows fade and tip on a CSS `view()` timeline,
@@ -219,7 +219,7 @@ const styles = stylex.create({
 });
 
 /**
- * One picker column: UIPickerView's motion in today's look under a finger, today's
+ * One picker column: UIPickerView's motion with flat rows under a finger, the
  * snap-scrolling column under a fine pointer.
  *
  * @example
@@ -233,8 +233,8 @@ const styles = stylex.create({
  * ```
  */
 export function Wheel(props: WheelProps) {
-  // One touch model on every touch device: a finger gets UIPickerView's
-  // motion in today's look, a fine pointer today's column.
+  // One touch model on every touch device: a finger gets UIPickerView's motion
+  // with flat rows, a fine pointer the scrolling column.
   const {isTouch} = useTouchPresentation();
   return isTouch ? <PickerWheel {...props} /> : <ScrollWheel {...props} />;
 }
@@ -242,7 +242,7 @@ export function Wheel(props: WheelProps) {
 Wheel.displayName = 'Wheel';
 
 /**
- * One snap-scrolling picker column: today's wheel, under a fine pointer.
+ * One snap-scrolling picker column, under a fine pointer.
  *
  * @example
  * ```

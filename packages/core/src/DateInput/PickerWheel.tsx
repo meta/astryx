@@ -57,11 +57,11 @@ import {
   type WheelProps,
 } from './wheelOptions';
 
-/** Today's row, px: the touch column's rows keep today's pitch. */
+/** Row pitch, px: the touch column keeps the scrolling column's pitch. */
 const ROW_HEIGHT = WHEEL_ROW_HEIGHT;
-/** UIKit's picker measures scaled to today's row (UIKit's row is 32 pt). */
+/** UIKit's picker measures scaled to that pitch (UIKit's row is 32 pt). */
 const UIKIT_SCALE = ROW_HEIGHT / picker.geometry.rowHeight;
-/** UIKit's rubber band dimension for the picker's table, at today's row. */
+/** UIKit's rubber band dimension for the picker's table, at that pitch. */
 const RUBBER_BAND_DIMENSION = picker.geometry.rubberBandDimension * UIKIT_SCALE;
 
 const styles = stylex.create({
@@ -74,10 +74,10 @@ const styles = stylex.create({
     blockSize: dateInputTouchGeometry.paneBlockSize,
     overflow: 'hidden',
     outline: 'none',
-    // The rows fade toward the column's edges, from today's 0.3 to fully opaque
-    // at the band and back. Today's column fades them the same way under
-    // reduced motion. A static mask: nothing paints it again as the strip
-    // moves.
+    // The rows fade toward the column's edges, from the scrolling column's 0.3
+    // to fully opaque at the band and back. The scrolling column fades them the
+    // same way under reduced motion. A static mask: nothing paints it again as
+    // the strip moves.
     maskImage:
       'linear-gradient(to bottom, rgb(0 0 0 / 0.3), rgb(0 0 0) 50%, rgb(0 0 0 / 0.3))',
     WebkitTapHighlightColor: 'transparent',
@@ -123,11 +123,11 @@ const styles = stylex.create({
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     userSelect: 'none',
-    // The mark has no transition, unlike today's column. A colour or weight
-    // that animates lays out and paints every frame on the main thread. A mark
-    // set as a drag lets go would do so through the coast.
+    // The mark has no transition, unlike the scrolling column's. A colour or
+    // weight that animates lays out and paints every frame on the main thread.
+    // A mark set as a drag lets go would do so through the coast.
   },
-  /** The row under the band, as today's column marks it. */
+  /** The row under the band, as the scrolling column marks it. */
   rowActive: {
     color: colorVars['--color-text-accent'],
     fontWeight: fontWeightVars['--font-weight-semibold'],
@@ -217,12 +217,12 @@ export function PickerWheel({
     latestRef.current = {options, value, onChange, layout};
   });
 
-  // The row under the band is marked as today's column marks it. At rest that
-  // is the committed row, styled in render. While a finger drags the wheel, the
-  // row reaching the band is painted directly, so marking it never re-renders.
-  // A motion unmarks every row as it starts and marks the row it stops or ends
-  // on. The compositor then plays it with no layout or paint per frame, and no
-  // mark rides away from the band.
+  // The row under the band is marked as the scrolling column marks it. At rest
+  // that is the committed row, styled in render. While a finger drags the
+  // wheel, the row reaching the band is painted directly, so marking it never
+  // re-renders. A motion unmarks every row as it starts and marks the row it
+  // stops or ends on. The compositor then plays it with no layout or paint per
+  // frame, and no mark rides away from the band.
   const paintedRef = useRef<Set<HTMLElement>>(new Set());
   const paintRow = useCallback((position: number | null) => {
     const container = rowsRef.current;

@@ -33,8 +33,8 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 /**
- * A finger gets the touch column, a mouse today's column; either commits into
- * the field above it.
+ * A finger gets the touch column, a mouse the scrolling column; either commits
+ * into the field above it.
  */
 export const Minutes: Story = {
   render: () => {

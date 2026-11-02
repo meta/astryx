@@ -14,7 +14,7 @@
  */
 
 /**
- * Today's row, px (`dateInputTouchSizes.wheelItemSize`): the pitch of both
+ * The row height, px (`dateInputTouchSizes.wheelItemSize`): the pitch of both
  * columns' rows, and the unit of the touch wheel's offset.
  */
 export const WHEEL_ROW_HEIGHT = 28;
