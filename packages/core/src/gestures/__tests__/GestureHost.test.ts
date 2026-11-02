@@ -5871,6 +5871,81 @@ describe('a mouse or pen drag and the page selection (spec:AST-094 FR41)', () =>
     }
   });
 
+  it("keeps the page's selection for a pen drag a pan claims after the press took the row's press lock: the drag hold sits beside the lock (spec:AST-094 FR41)", async () => {
+    const {text, row, box} = mount(
+      '<p id="text">Text the page selected</p><div id="row"><div id="box"></div></div>',
+    );
+    const fine = fineHost();
+    // The row's context-menu long press brings a selection lock, which a
+    // pen's press takes at its pointerdown.
+    detachers.push(
+      fine.attach(row, new LongPressGestureRecognizer({name: 'menu'})),
+    );
+    const pan = new PanGestureRecognizer({direction: 'horizontal'});
+    detachers.push(fine.attach(box, pan));
+    let time = 0;
+    for (const pointerType of ['pen', 'mouse'] as const) {
+      const selection = select(text);
+      time += 1000;
+      pointer('pointerdown', box, {
+        pointerType,
+        x: 10,
+        y: 10,
+        buttons: 1,
+        time,
+      });
+      // The engine collapses the selection at the press.
+      selection.removeAllRanges();
+      document.dispatchEvent(new Event('selectionchange'));
+      time = drag(box, pointerType, time + 16, [30, 50], true);
+      expect(['began', 'changed']).toContain(pan.state);
+      expect(selection.toString()).toBe('Text the page selected');
+      pointer('pointerup', box, {pointerType, x: 50, y: 10, time: time + 16});
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(selection.toString()).toBe('Text the page selected');
+      expect(row.style.getPropertyValue('user-select')).toBe('');
+      expect(box.style.getPropertyValue('user-select')).toBe('');
+    }
+  });
+
+  it("keeps the page's selection for a pen press a group claims at its own pointerdown before the row's press lock, and ends both at the lift (spec:AST-094 FR41)", async () => {
+    const {text, row, group, copy} = mount(
+      '<p id="text">Text the page selected</p><div id="row"><div id="group"><button id="copy">Copy</button></div></div>',
+    );
+    const fine = fineHost();
+    detachers.push(
+      fine.attach(row, new LongPressGestureRecognizer({name: 'menu'})),
+    );
+    // The action-group adapter's press claims at the pointerdown, before the
+    // row's lock is taken.
+    const press = new LongPressGestureRecognizer({
+      minimumPressDuration: 0,
+      allowableMovement: Number.POSITIVE_INFINITY,
+    });
+    detachers.push(fine.attach(group, press, {actionGroup: true}));
+    const selection = select(text);
+    pointer('pointerdown', copy, {
+      pointerType: 'pen',
+      x: 10,
+      y: 10,
+      buttons: 1,
+      time: 1000,
+    });
+    expect(press.state).toBe('began');
+    // The engine collapses the selection at the press.
+    selection.removeAllRanges();
+    document.dispatchEvent(new Event('selectionchange'));
+    expect(selection.toString()).toBe('Text the page selected');
+    pointer('pointerup', copy, {pointerType: 'pen', x: 10, y: 10, time: 1080});
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(selection.toString()).toBe('Text the page selected');
+    expect(row.style.getPropertyValue('user-select')).toBe('');
+    expect(group.style.getPropertyValue('user-select')).toBe('');
+    const later = new Event('selectstart', {bubbles: true, cancelable: true});
+    text.dispatchEvent(later);
+    expect(later.defaultPrevented).toBe(false);
+  });
+
   for (const ending of ['pointercancel', 'blur', 'detach'] as const) {
     it(`ends a claimed drag's document-wide hold at once when it ends in a ${ending}: no mouseup or click follows a cancel`, () => {
       const {box, outside} = mount(

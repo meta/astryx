@@ -2572,7 +2572,7 @@ export class GestureHost {
     claimer: GestureRecognizer,
   ): void {
     for (const id of ids) {
-      if (this.lockedBy.has(id)) {
+      if (this.claimHolds.has(id)) {
         continue;
       }
       const touch = this.arena.touches.find(each => each.id === id);
@@ -2612,7 +2612,11 @@ export class GestureHost {
         },
       );
       this.dragHolds.add(release);
-      this.lockedBy.set(id, release);
+      // A press lock the contact took at its press stays in `lockedBy`. The
+      // hold sits beside it, and the contact's end releases both.
+      if (!this.lockedBy.has(id)) {
+        this.lockedBy.set(id, release);
+      }
       this.claimHolds.set(id, release);
     }
   }
@@ -2741,8 +2745,8 @@ export class GestureHost {
   private unlockSelection(id: number, isCancel = false): void {
     const lock = this.lockedBy.get(id);
     lock?.({isCancel});
-    // A press lock can replace the drag hold in `lockedBy`. Release the hold
-    // too.
+    // A press lock keeps `lockedBy` when the contact also has a drag hold.
+    // Release the hold too.
     const hold = this.claimHolds.get(id);
     if (hold != null && hold !== lock) {
       hold({isCancel});
