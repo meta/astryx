@@ -177,6 +177,54 @@ export function usePowerSearchSource(
           }
         }
 
+        // Opt-in free-text value matches across every visible string field.
+        // `valueMatchMode: 'all-string-fields'` emits a `<Field> <op> "<text>"`
+        // item per visible string/string_list operator. Only runs when the
+        // query does not start with a field label: that path already suggests
+        // exact values above, and reusing the whole query as the value there
+        // would be wrong.
+        if (config.config.valueMatchMode === 'all-string-fields') {
+          const startsWithFieldLabel = config
+            .getVisibleFields()
+            .some(f => lower.startsWith(`${f.label.toLowerCase()} `));
+          if (!startsWithFieldLabel) {
+            for (const field of config.getVisibleFields()) {
+              if (field.isValueMatchAllowed === false) {
+                continue;
+              }
+              if (
+                field.typeaheadMinQueryLength != null &&
+                lower.length < field.typeaheadMinQueryLength
+              ) {
+                continue;
+              }
+              for (const op of field.operators) {
+                if (
+                  op.value.type !== 'string' &&
+                  op.value.type !== 'string_list'
+                ) {
+                  continue;
+                }
+                for (const match of resolveValueMatches(op, query)) {
+                  const id = `${field.key}:${op.key}:value:${match.displayValue}`;
+                  if (!seen.has(id)) {
+                    seen.add(id);
+                    results.push({
+                      id,
+                      label: `${field.label} ${opLabel(op)} ${match.quoted ? `"${match.displayValue}"` : match.displayValue}`,
+                      auxiliaryData: {
+                        fieldKey: field.key,
+                        operatorKey: op.key,
+                        filterValue: match.filterValue,
+                      },
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+
         // If contentSearchFieldKey is set and no field or field+operator
         // exactly matches the query, prepend a content search item
         const contentFieldKey = config.config.contentSearchFieldKey;

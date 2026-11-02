@@ -345,6 +345,13 @@ export interface PowerSearchConfig {
   readonly fields: ReadonlyArray<PowerSearchField>;
   /** Key of the field used for content/text search. */
   readonly contentSearchFieldKey?: string;
+  /**
+   * How free text (not starting with a field label) suggests values.
+   * `'field-prefix'` (default) only offers the content-search item;
+   * `'all-string-fields'` additionally emits a `<Field> <op> "<text>"` item
+   * for every visible string/string_list operator.
+   */
+  readonly valueMatchMode?: 'field-prefix' | 'all-string-fields';
 }
 
 // =============================================================================

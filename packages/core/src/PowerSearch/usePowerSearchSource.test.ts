@@ -596,6 +596,102 @@ describe('usePowerSearchSource', () => {
       expect(aux.filterValue).toEqual({type: 'enum_list', value: ['bug']});
     });
   });
+  describe("valueMatchMode: 'all-string-fields'", () => {
+    const allStringsConfig: PowerSearchConfig = {
+      ...baseConfig,
+      contentSearchFieldKey: 'title',
+      valueMatchMode: 'all-string-fields',
+    };
+
+    it('is off by default: free text offers only the content-search item', () => {
+      const source = createSource(configWithContentSearch);
+      const results = syncSearch(source, 'nest');
+      expect(results.map(r => r.label)).toEqual(['"nest"']);
+    });
+
+    it('emits one item per visible string operator for free text', () => {
+      const source = createSource(allStringsConfig);
+      const results = syncSearch(source, 'nest');
+
+      // Content-search item still leads; per-field value items follow.
+      expect(results.map(r => r.label)).toEqual([
+        '"nest"',
+        'Title contains "nest"',
+        'Title is "nest"',
+      ]);
+
+      const aux = results[1].auxiliaryData as PowerSearchAuxData;
+      expect(aux.fieldKey).toBe('title');
+      expect(aux.operatorKey).toBe('contains');
+      expect(aux.filterValue).toEqual({type: 'string', value: 'nest'});
+    });
+
+    it('skips enum operators and enum-only fields', () => {
+      const source = createSource(allStringsConfig);
+      const results = syncSearch(source, 'open');
+      // Status is enum-only: no 'Status is "open"' value item.
+      expect(results.some(r => (r.label).startsWith('Status '))).toBe(
+        false,
+      );
+    });
+
+    it('respects isValueMatchAllowed: false', () => {
+      const config: PowerSearchConfig = {
+        name: 'OptOut',
+        contentSearchFieldKey: 'title',
+        valueMatchMode: 'all-string-fields',
+        fields: [
+          {
+            key: 'title',
+            label: 'Title',
+            isValueMatchAllowed: false,
+            operators: [
+              {key: 'contains', label: 'contains', value: {type: 'string'}},
+            ],
+          },
+        ],
+      };
+      const results = syncSearch(createSource(config), 'nest');
+      expect(results.map(r => r.label)).toEqual(['"nest"']);
+    });
+
+    it('respects typeaheadMinQueryLength', () => {
+      const config: PowerSearchConfig = {
+        name: 'MinLength',
+        valueMatchMode: 'all-string-fields',
+        fields: [
+          {
+            key: 'title',
+            label: 'Title',
+            typeaheadMinQueryLength: 5,
+            operators: [
+              {key: 'contains', label: 'contains', value: {type: 'string'}},
+            ],
+          },
+        ],
+      };
+      expect(syncSearch(createSource(config), 'nest')).toEqual([]);
+      expect(
+        syncSearch(createSource(config), 'nest/').map(r => r.label),
+      ).toEqual(['Title contains "nest/"']);
+    });
+
+    it('leaves field-prefixed queries to the exact value path', () => {
+      const source = createSource(allStringsConfig);
+      const results = syncSearch(source, 'title nest');
+
+      // The prefix path owns this query: no field item may reuse the whole
+      // query ('title nest') as the value. (The content-search item quotes
+      // the raw query by design, so it is excluded here.)
+      const valueItems = results.filter(
+        r => !String(r.id).startsWith('__content_search__'),
+      );
+      expect(
+        valueItems.some(r => (r.label).includes('"title nest"')),
+      ).toBe(false);
+      expect(valueItems.map(r => r.label)).toContain('Title contains "nest"');
+    });
+  });
 });
 
 describe('typed-result cap', () => {
