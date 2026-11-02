@@ -1760,6 +1760,104 @@ describe('RichTextEditorToolbar — links', () => {
     });
   });
 
+  describe('with a collapsed selection', () => {
+    /** The paragraph's children as `text` or `link:<href>:<text>`. */
+    function paragraphParts(editor: LexicalEditor): string[] {
+      const parts: string[] = [];
+      editor.getEditorState().read(() => {
+        const paragraph = $getRoot().getFirstChild();
+        if (!$isElementNode(paragraph)) {
+          return;
+        }
+        for (const child of paragraph.getChildren()) {
+          parts.push(
+            'getURL' in child
+              ? `link:${(child as {getURL(): string}).getURL()}:${child.getTextContent()}`
+              : child.getTextContent(),
+          );
+        }
+      });
+      return parts;
+    }
+
+    async function renderWithPrompt() {
+      let editor!: LexicalEditor;
+      render(
+        <RichTextEditor
+          label="Notes"
+          toolbar={<RichTextEditorToolbar promptForUrl={() => 'example.com'} />}
+          plugins={<CaptureEditor onReady={e => (editor = e)} />}
+        />,
+      );
+      await waitFor(() => expect(editor).toBeDefined());
+      return editor;
+    }
+
+    it('inserts the URL as a link in an empty paragraph', async () => {
+      const editor = await renderWithPrompt();
+      editor.update(() => {
+        const root = $getRoot();
+        root.clear();
+        const paragraph = $createParagraphNode();
+        root.append(paragraph);
+        paragraph.select();
+      });
+
+      fireEvent.click(screen.getByRole('button', {name: 'Link'}));
+
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toEqual([
+          'link:https://example.com/:example.com',
+        ]),
+      );
+    });
+
+    it('inserts the link at a caret inside text, linking nothing else', async () => {
+      const editor = await renderWithPrompt();
+      editor.update(() => {
+        const root = $getRoot();
+        root.clear();
+        const paragraph = $createParagraphNode();
+        const textNode = $createTextNode('hello world');
+        paragraph.append(textNode);
+        root.append(paragraph);
+        textNode.select(6, 6);
+      });
+
+      fireEvent.click(screen.getByRole('button', {name: 'Link'}));
+
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toEqual([
+          'hello ',
+          'link:https://example.com/:example.com',
+          'world',
+        ]),
+      );
+    });
+
+    it('still links the selected text when the selection is not empty', async () => {
+      const editor = await renderWithPrompt();
+      editor.update(() => {
+        const root = $getRoot();
+        root.clear();
+        const paragraph = $createParagraphNode();
+        const textNode = $createTextNode('hello world');
+        paragraph.append(textNode);
+        root.append(paragraph);
+        textNode.select(0, 5);
+      });
+
+      fireEvent.click(screen.getByRole('button', {name: 'Link'}));
+
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toEqual([
+          'link:https://example.com/:hello',
+          ' world',
+        ]),
+      );
+    });
+  });
+
   it('does not create a link when promptForUrl returns an unsafe scheme', async () => {
     let editor!: LexicalEditor;
     const promptForUrl = vi.fn(() => 'javascript:alert(1)');

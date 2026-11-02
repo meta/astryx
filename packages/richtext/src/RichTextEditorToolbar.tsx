@@ -483,7 +483,9 @@ export interface RichTextEditorToolbarProps extends BaseProps<HTMLDivElement> {
   /**
    * Whether to show the insert/edit-link button. By default, pressing it opens
    * an Astryx Dialog. The form can add, update, or remove a link without
-   * losing the editor selection.
+   * losing the editor selection. With a collapsed selection, Insert link
+   * inserts the entered URL as link text at the caret; with a non-empty
+   * selection it links the selected text.
    *
    * Requires `LinkNode` to be registered (it is, by default) — no extra setup.
    * The entered URL is sanitized (see `sanitizeUrl`) so only
@@ -698,19 +700,22 @@ export function RichTextEditorToolbar({
       const linkAttributes = hasNewTabLinks
         ? {target: '_blank', rel: 'noopener noreferrer'}
         : {};
-      const handled = editor.dispatchCommand(TOGGLE_LINK_COMMAND, {
-        url,
-        ...linkAttributes,
+      // With a collapsed selection there is no text to link, so the entered
+      // URL goes in at the caret as the link's text. This runs before the
+      // toggle command: LinkPlugin handles that command for every selection,
+      // and at a caret it would link the whole text node around it.
+      let isInsertedAtCaret = false;
+      editor.update(() => {
+        const selection = $getSelection();
+        if ($isRangeSelection(selection) && selection.isCollapsed()) {
+          const linkNode = $createLinkNode(url, linkAttributes);
+          linkNode.append($createTextNode(trimmed));
+          selection.insertNodes([linkNode]);
+          isInsertedAtCaret = true;
+        }
       });
-      if (!handled) {
-        editor.update(() => {
-          const selection = $getSelection();
-          if ($isRangeSelection(selection) && selection.isCollapsed()) {
-            const linkNode = $createLinkNode(url, linkAttributes);
-            linkNode.append($createTextNode(trimmed));
-            selection.insertNodes([linkNode]);
-          }
-        });
+      if (!isInsertedAtCaret) {
+        editor.dispatchCommand(TOGGLE_LINK_COMMAND, {url, ...linkAttributes});
       }
       return true;
     },
