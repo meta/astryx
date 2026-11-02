@@ -204,8 +204,8 @@ const styles = stylex.create({
    * a theme scales motion down.
    */
   sheetClosing: {
-    // Under reduced motion the exit does not travel (DR1); on a coarse
-    // pointer it fades out where it is (DR2), at once on a fine one (DR3).
+    // Under reduced motion the exit does not travel. On a coarse pointer it
+    // fades out where it is, and on a fine one it ends at once.
     transform: {
       default: 'translateY(100%)',
       '@media (prefers-reduced-motion: reduce)': 'translateY(0)',
