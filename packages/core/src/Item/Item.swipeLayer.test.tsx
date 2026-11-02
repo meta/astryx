@@ -13,13 +13,22 @@
 
 import {createElement, type ReactNode} from 'react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
-import {act, render, screen, waitFor} from '@testing-library/react';
+import {act, render, screen} from '@testing-library/react';
 import {Item} from './Item';
 import {createSwipe} from '../Swipe/createSwipe';
 import type {SwipeLayerProps} from '../Swipe/swipeHost';
 import {emulateTouch} from './__tests__/emulateTouch';
+import {swipeLayerLoaded} from './__tests__/swipeLayerLoaded';
 
 const {layerRenders} = vi.hoisted(() => ({layerRenders: vi.fn()}));
+
+// DEP-0017's loaded layer arrives 1.5 s late, as on a loaded machine: longer
+// than `waitFor`'s second, so only a test that waits for the load itself sees
+// the panel.
+vi.mock('../Swipe/DeprecatedSwipeLayer', async importOriginal => {
+  await new Promise(resolve => setTimeout(resolve, 1500));
+  return importOriginal();
+});
 
 vi.mock('../Swipe/SwipeActionsLayer', async importOriginal => {
   const actual = await importOriginal<{
@@ -135,16 +144,10 @@ describe('Item and the swipe layer', () => {
       />,
     );
     const row = screen.getByTestId('row');
-    // DEP-0017's loader: the chunk carries the gesture core, and its first
-    // load in a cold worker can take longer than waitFor's default second.
-    const panel = await waitFor(
-      () => {
-        const found = row.querySelector('[data-swipe-panel="trailing"]');
-        expect(found).not.toBeNull();
-        return found;
-      },
-      {timeout: 10_000},
-    );
+    // DEP-0017's loader, however long its chunk takes to arrive.
+    await swipeLayerLoaded();
+    const panel = row.querySelector('[data-swipe-panel="trailing"]');
+    expect(panel).not.toBeNull();
     expect(layerRenders).toHaveBeenCalled();
     expect(panel?.parentElement).toBe(row);
     expect(row.childElementCount).toBe(2);

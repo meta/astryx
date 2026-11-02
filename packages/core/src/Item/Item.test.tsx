@@ -19,14 +19,8 @@ import {
   expect,
   vi,
 } from 'vitest';
-import {
-  act,
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react';
+import {act, cleanup, fireEvent, render, screen} from '@testing-library/react';
+import {swipeLayerLoaded} from './__tests__/swipeLayerLoaded';
 import {rulesDeclaredFor} from '../__tests__/pressState';
 import userEvent from '@testing-library/user-event';
 import {LinkProvider} from '../Link/LinkProvider';
@@ -2558,14 +2552,10 @@ describe('swipe', () => {
           swipeActions={{leading: [{label: 'Unread', onActivate: () => {}}]}}
         />,
       );
-      await waitFor(
-        () => {
-          expect(
-            screen.getByTestId('warm').querySelector('[data-swipe-panel]'),
-          ).not.toBeNull();
-        },
-        {timeout: 10_000},
-      );
+      await swipeLayerLoaded();
+      expect(
+        screen.getByTestId('warm').querySelector('[data-swipe-panel]'),
+      ).not.toBeNull();
       cleanup();
     });
 

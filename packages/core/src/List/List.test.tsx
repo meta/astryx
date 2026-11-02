@@ -10,10 +10,11 @@
  */
 
 import {describe, it, expect, vi} from 'vitest';
-import {cleanup, render, screen, waitFor} from '@testing-library/react';
+import {cleanup, render, screen} from '@testing-library/react';
 import {createSwipe} from '../Swipe/createSwipe';
 import userEvent from '@testing-library/user-event';
 import {rulesDeclaredFor} from '../__tests__/pressState';
+import {swipeLayerLoaded} from '../Item/__tests__/swipeLayerLoaded';
 import {List} from './List';
 import {ListItem} from './ListItem';
 import {ListMarkerScope} from './ListContext';
@@ -1063,17 +1064,10 @@ describe('List and swipe actions', () => {
     );
     const row = screen.getByTestId('row');
     expect(row.tagName).toBe('LI');
-    // The panel arrives with DEP-0017's loader. Its chunk carries the gesture
-    // core: its first load in a cold worker can take longer than waitFor's
-    // default second.
-    const panel = await waitFor(
-      () => {
-        const found = row.querySelector('[data-swipe-panel="trailing"]');
-        expect(found).not.toBeNull();
-        return found;
-      },
-      {timeout: 10_000},
-    );
+    // The panel arrives with DEP-0017's loader.
+    await swipeLayerLoaded();
+    const panel = row.querySelector('[data-swipe-panel="trailing"]');
+    expect(panel).not.toBeNull();
     // Commit: presentational.
     expect(panel).toHaveAttribute('aria-hidden', 'true');
   });
