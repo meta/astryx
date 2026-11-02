@@ -246,6 +246,27 @@ describe('native contracts', () => {
     );
   });
 
+  it('gives ListItem the row contract without density or markers, which come from its list', async () => {
+    const {contracts} = await buildContracts(loadCoreDoc);
+    const row = contracts.find(contract => contract.name === 'ListItem');
+    expect(row).toBeDefined();
+    expect(row!.core.label).toMatchObject({
+      type: {kind: 'string'},
+      optional: false,
+    });
+    expect(row!.core.startContent?.type).toEqual({kind: 'content'});
+    expect(Object.keys(row!.core)).not.toContain('density');
+    expect(row!.webOnly.map(prop => prop.name)).toEqual(
+      expect.arrayContaining([
+        'swipeActions',
+        'swipeBehavior',
+        'target',
+        'rel',
+        'interactiveRef',
+      ]),
+    );
+  });
+
   it('reports naming and portability errors', () => {
     const bad: ComponentContract = {
       name: 'Bad',

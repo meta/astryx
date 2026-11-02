@@ -29,18 +29,22 @@
  *   two frames later; a touch filmstrip keeps scripted event times while a
  *   handler clock sees its pacing; the timer gate holds a component timer
  *   until the filmstrip is done, drops callbacks the page cancels, stamps held
- *   frames with the time they run, and leaves the harness its own frames.
+ *   frames with the time they run, and leaves the harness its own frames; a
+ *   cast filmstrip keeps exactly the presented frames of its window, labelled
+ *   from its zero, as PNG.
  * @position The harness's own test. A component spec trusts these
  *   instruments; this file is why it may.
  */
 
 import fs from 'node:fs';
+import path from 'node:path';
 
 import {expect, test, type Page} from '@playwright/test';
 import type {CastFrame, TrackedFrame} from './frames';
 import {
   armHold,
   animationStoryboard,
+  castStoryboard,
   blockMainThread,
   busyWindowProof,
   compareCurve,
@@ -68,6 +72,7 @@ import {
   releaseAnimations,
   retakeOnWheelPacing,
   sampleCurve,
+  sampleRects,
   seekAnimations,
   springStep,
   startCompositorTrace,
@@ -1114,6 +1119,83 @@ test.describe('frame evidence', () => {
     });
     expect(proof.verdict.failures, proof.summary).toEqual([]);
     expect(proof.monotonic).toBe(true);
+  });
+
+  test('in the WebKit container, compiled shaders outlive the run', async ({
+    browser,
+  }, testInfo) => {
+    // The official Playwright image keeps its browsers here.
+    test.skip(
+      testInfo.project.name !== 'webkit' ||
+        process.env.PLAYWRIGHT_BROWSERS_PATH !== '/ms-playwright',
+      'runs inside webkit-container.mjs',
+    );
+    // A cache inside the container dies with it: every run then compiled each
+    // shader again, 450–700 ms in the first frame of a blurred layer.
+    const dir = process.env.MESA_SHADER_CACHE_DIR;
+    expect(dir, 'MESA_SHADER_CACHE_DIR names the host-kept cache').toBeTruthy();
+    // Written on the host by the script before the container starts.
+    expect(
+      fs.readFileSync(path.join(dir ?? '', 'ASTRYX-SHADER-CACHE'), 'utf8'),
+    ).toContain('playwright');
+    // Mesa writes what it compiles there once a page draws a blurred layer.
+    // Earlier runs have filled the cache already, so this run's browser gets
+    // an empty directory beside them, in the same host-kept mount, and the
+    // test watches its own writes arrive.
+    const fresh = fs.mkdtempSync(path.join(dir ?? '', 'self-test-'));
+    try {
+      const own = await browser.browserType().launch({
+        env: {...process.env, MESA_SHADER_CACHE_DIR: fresh},
+      });
+      try {
+        const page = await own.newPage();
+        await page.setContent(
+          '<div id="glass" style="width:120px;height:80px;backdrop-filter:blur(16px) saturate(180%)"></div>',
+        );
+        await page.evaluate(
+          () =>
+            document
+              .getElementById('glass')
+              ?.animate([{scale: '1'}, {scale: '0.9'}], {duration: 200})
+              .finished,
+        );
+      } finally {
+        await own.close();
+      }
+      expect(fs.readdirSync(fresh, {recursive: true})).not.toEqual([]);
+    } finally {
+      fs.rmSync(fresh, {recursive: true, force: true});
+    }
+  });
+
+  test('rect sampling reads one rect per animation frame while the main thread is free', async ({
+    page,
+    browserName,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    await box.evaluate(el => {
+      el.animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(200px)'}],
+        {duration: 600, easing: 'linear'},
+      );
+    });
+    const samples = await sampleRects(box, 400);
+    const xs = samples.map(s => s.box?.x ?? NaN);
+    const gaps = samples
+      .slice(1)
+      .map((s, i) => s.t - samples[i].t)
+      .sort((a, b) => a - b);
+    const cadence = gaps[Math.floor(gaps.length / 2)];
+    expect(cadence).toBeLessThan(34);
+    expect(samples.length).toBeGreaterThanOrEqual(10);
+    if (browserName === 'chromium') {
+      // One sample per presented frame at 60 Hz. (Headless WebKit's animation
+      // frames are irregular, so only the cadence is checked there.)
+      expect(samples.length).toBeGreaterThanOrEqual(20);
+    }
+    expect(xs.every((x, i) => i === 0 || x >= xs[i - 1])).toBe(true);
+    expect(xs.at(-1) ?? 0).toBeGreaterThan(xs[0] + 80);
   });
 
   test('the trace counts no Layout for a transform animation and one per frame for `top`', async ({
@@ -3775,7 +3857,7 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     }
   });
 
-  test("the harness's own waits run on the real timers: a frozen timer gate does not hold blockMainThread's block", async ({
+  test("the harness's own waits run on the real timers: a frozen timer gate holds neither blockMainThread's block nor sampleRects", async ({
     page,
   }) => {
     await fixture(page);
@@ -3799,6 +3881,7 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     expect(
       await within(blockMainThread(page, 100, {during: box, timeout: 2_000})),
     ).toBe('settled');
+    expect(await within(sampleRects(box, 200))).toBe('settled');
     await thawTimers(page);
   });
 
@@ -4004,5 +4087,59 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     });
     expect(state).toMatchObject({timer: false, frame: false});
     expect(state.heldFor).toBeGreaterThanOrEqual(140);
+  });
+
+  test('a cast filmstrip keeps exactly the presented frames of its window, labelled from its zero', async ({
+    page,
+  }, testInfo) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // JPEG frames (WebKit's are always JPEG) take the conversion path.
+    const cast = await startScreencast(page, {format: 'jpeg'});
+    await box.evaluate(el =>
+      el.animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(200px)'}],
+        {duration: 600},
+      ),
+    );
+    await page.waitForTimeout(500);
+    const presented = await cast.stop();
+    expect(presented.length).toBeGreaterThan(8);
+    // A window of the middle frames, zeroed on one of them.
+    const zero = presented[2].t;
+    const from = presented[3].t;
+    const to = presented[presented.length - 3].t;
+    const inside = presented.filter(f => f.t >= from && f.t <= to);
+    const seen: number[] = [];
+    const film = await castStoryboard(page, presented, {
+      name: 'harness-self-test-cast',
+      zero,
+      from,
+      to,
+      data: t => {
+        seen.push(t);
+        return {t};
+      },
+    });
+    expect(film.frames.map(f => f.t)).toEqual(inside.map(f => f.t - zero));
+    expect(film.frames.map(f => f.label)).toEqual(
+      inside.map(f => `t=${(f.t - zero).toFixed(1)} ms`),
+    );
+    expect(seen).toEqual(inside.map(f => f.t));
+    // Every cell is a PNG, whatever the screencast delivered.
+    for (const frame of film.frames) {
+      expect([...frame.png.subarray(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+    }
+    const files = await film.write(testInfo);
+    expect(files['sheet.png']).toMatch(/sheet\.png$/);
+    // A window with no presented frame in it films nothing.
+    const empty = await castStoryboard(page, presented, {
+      name: 'harness-self-test-cast-empty',
+      zero,
+      from: to + 1,
+      to: to + 2,
+    });
+    expect(empty.frames).toEqual([]);
+    await expect(empty.write(testInfo)).rejects.toThrow(/no frames/);
   });
 });

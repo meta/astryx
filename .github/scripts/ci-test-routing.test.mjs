@@ -93,6 +93,11 @@ const rootScripts = JSON.parse(read('package.json')).scripts;
  * A run block with each `pnpm <root script>` replaced by the script's body,
  * recursively; arguments after the script name stay after its body.
  */
+// The spec-only lane's run of the tests that read a changed record
+// (fs-guard-tests.test.mjs holds its contract); not a lane's suite.
+const specReaderRun = step =>
+  / tests that read a changed record$/.test(step.name ?? '');
+
 function expandScripts(run) {
   return run.replace(/\bpnpm ([a-z][\w:-]*)(?=\s|$)/g, (whole, name) =>
     Object.hasOwn(rootScripts, name) ? expandScripts(rootScripts[name]) : whole,
@@ -147,8 +152,10 @@ describe.each(Object.entries(WORKFLOWS))(
     it('runs FR23 only after the parallel UI suite has exited', () => {
       const benchmark = 'packages/core/src/Markdown/Markdown.fr23.perf.test.ts';
       const job = workflow.jobs['test-ui'];
-      const suites = job.steps.filter(step =>
-        expandScripts(step.run ?? '').includes('--project ui'),
+      const suites = job.steps.filter(
+        step =>
+          !specReaderRun(step) &&
+          expandScripts(step.run ?? '').includes('--project ui'),
       );
       // The two package scripts every lane calls: the parallel suite without
       // FR23, and FR23 alone with no file parallelism.
@@ -172,7 +179,17 @@ describe.each(Object.entries(WORKFLOWS))(
       if (graphScoped) {
         expect(share.run.trim()).toBe(
           [
-            'if [ "$SCOPED" = true ]; then',
+            'if [ "$LAB_ONLY" = true ]; then',
+            '  # A change only to the Lab package runs every Lab test across the',
+            '  # same legs, and the guards below as any scoped run does',
+            '  # (spec:AST-030 FR26).',
+            `  pnpm test:ui --passWithNoTests ${SHARD_ARG} packages/lab/`,
+            '  node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 > "$RUNNER_TEMP/fs-guards.txt"',
+            '  mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"',
+            '  if [ "${#GUARDS[@]}" -gt 0 ]; then',
+            `    pnpm test:ui --passWithNoTests ${SHARD_ARG} "\${GUARDS[@]}"`,
+            '  fi',
+            'elif [ "$SCOPED" = true ]; then',
             `  pnpm test:ui --changed=HEAD^1 --passWithNoTests ${SHARD_ARG}`,
             '  # Tests no module graph relates to the change run too: guards',
             '  # that read sources, and tests that load a changed package from',
@@ -221,8 +238,11 @@ describe.each(Object.entries(WORKFLOWS))(
       expect(job.steps.indexOf(isolated)).toBeGreaterThan(
         job.steps.indexOf(share),
       );
+      // The core benchmark is not a Lab test (spec:AST-030 FR26).
       expect(isolated.if).toBe(
-        share.if ? `matrix.shard == 1 && ${share.if}` : 'matrix.shard == 1',
+        share.if
+          ? `matrix.shard == 1 && ${share.if} && steps.scope.outputs.lab_only != 'true'`
+          : 'matrix.shard == 1',
       );
     });
 
@@ -242,8 +262,10 @@ describe.each(Object.entries(WORKFLOWS))(
           );
           expect(Object.keys(job.strategy.matrix)).toEqual(['shard']);
           expect(job.strategy['fail-fast']).toBe(false);
-          const suites = job.steps.filter(step =>
-            /--project \w+/.test(expandScripts(step.run ?? '')),
+          const suites = job.steps.filter(
+            step =>
+              !specReaderRun(step) &&
+              /--project \w+/.test(expandScripts(step.run ?? '')),
           );
           // The one step that is not sharded is the isolated FR23 benchmark.
           const unsharded = suites.filter(
@@ -297,11 +319,16 @@ describe.each(Object.entries(WORKFLOWS))(
           );
         }
       } else {
-        const commands = runLines(join);
+        // deploy.yml passes each result through the step's environment;
+        // main-unit-run.test.mjs runs its pass and fail cases.
+        const step = join.steps.find(
+          candidate => candidate.name === 'Assert every push gate succeeded',
+        );
         for (const lane of lanes) {
-          expect(commands, `join does not assert ${lane}`).toContain(
-            `needs.${lane}.result }}" = "success"`,
-          );
+          expect(
+            Object.values(step.env),
+            `join does not assert ${lane}`,
+          ).toContain(`\${{ needs.${lane}.result }}`);
         }
       }
     });
@@ -325,8 +352,10 @@ describe.each(Object.entries(WORKFLOWS))(
             `${lane} has no scope step`,
           ).toBe(true);
           const steps = workflow.jobs[lane].steps;
-          const suite = steps.find(step =>
-            expandScripts(step.run ?? '').includes('--project'),
+          const suite = steps.find(
+            step =>
+              !specReaderRun(step) &&
+              expandScripts(step.run ?? '').includes('--project'),
           );
           expect(suite.if, `${lane} suite is unconditional`).toContain(
             "docsite_only != 'true'",
@@ -708,9 +737,11 @@ describe('deploy.yml push gating', () => {
     ]);
     const join = workflow.jobs.test.steps.find(
       step => step.name === 'Assert every push gate succeeded',
-    ).run;
+    );
     for (const owner of ['test-ui', 'test-node', 'typecheck']) {
-      expect(join).toContain(`needs.${owner}.result`);
+      expect(Object.values(join.env)).toContain(
+        `\${{ needs.${owner}.result }}`,
+      );
     }
   });
 
@@ -779,7 +810,12 @@ describe('ci.yml interaction proofs', () => {
     // One fixed runner: out of scope, every step after the scope step skips.
     expect(KNOWN_RUNNERS.has(job['runs-on']), job['runs-on']).toBe(true);
     // Admission too: the Storybook build starts beside it (spec:AST-030 FR16).
-    expect(job.needs).toEqual(['admission', 'build-storybook']);
+    expect(job.needs).toEqual([
+      'room',
+      'admission',
+      'heavy-ci',
+      'build-storybook',
+    ]);
     const checkout = job.steps.find(
       candidate =>
         candidate.uses?.startsWith('actions/checkout@') &&

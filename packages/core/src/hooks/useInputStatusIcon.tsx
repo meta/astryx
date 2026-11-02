@@ -38,11 +38,17 @@ import * as stylex from '@stylexjs/stylex';
 import {Icon, type IconName, type IconSize} from '../Icon';
 import type {InputStatus, InputStatusType} from '../Field/types';
 import {useTooltip} from '../Tooltip';
-import {useTranslator} from '../i18n';
 import {radiusVars} from '../theme/tokens.stylex';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/hooks/useInputStatusIcon.generated';
+
+registerEnglishFallback(english);
 
 /**
  * Maps each status type to its glyph. Shared so every input shows the same icon
@@ -140,7 +146,7 @@ export function useInputStatusIcon({
   isInGroup = false,
   size = 'md',
 }: UseInputStatusIconOptions): UseInputStatusIconReturn {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const isTooltipVariant = statusVariant === 'tooltip';
   const hasTooltip = isTooltipVariant && !!status?.message;
 

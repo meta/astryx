@@ -44,7 +44,13 @@ import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {NavHeadingCloseContext} from '../NavMenu/NavMenuContext';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/TopNav/TopNavHeading.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Styles
@@ -333,7 +339,7 @@ export function TopNavHeading({
   ref,
   ...props
 }: TopNavHeadingProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const LinkComponent = useLinkComponent(as);
   // When the logo is wrapped in a link it needs its own accessible name (the
   // logo image itself is decorative). Prefer an explicit logoLabel, fall back

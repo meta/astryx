@@ -603,6 +603,38 @@ The presets ship it as a warning. The repository config enforces it in core and 
 
 See: https://github.com/meta/astryx/issues/2538
 
+### `@astryx/no-truthy-jsx-guard`
+
+Flags a bare truthiness guard on a `ReactNode` value in front of rendered JSX. A `ReactNode` can be `0`: `0 && <Slot />` evaluates to `0`, so React renders a stray "0" where the slot should be, and a ternary drops the slot although `0` is content that renders. Use `isRenderable(value)` from `@astryxdesign/core/utils`; it is false only for `null`, `undefined`, `true`, `false` and `''`.
+
+**Scope:** the guard is a bare value reference (`icon`, `item.icon`) in an `&&` chain whose right side is JSX, or the test of a ternary that renders JSX or `null`. The rule reads types and flags only a value whose type can be both a number and an object, as `ReactNode` and `ReactNode | IconType` can. A boolean, a string, a plain number or a data object is not flagged, and neither is a converted guard (`!!icon`, `Boolean(icon)`, a `hasIcon` local) or a value typed `any`.
+
+**Bad:**
+
+```tsx
+{
+  startIcon && <Slot>{startIcon}</Slot>;
+}
+{
+  label ? <span>{label}</span> : null;
+}
+```
+
+**Good:**
+
+```tsx
+import {isRenderable} from '@astryxdesign/core/utils';
+
+{
+  isRenderable(startIcon) && <Slot>{startIcon}</Slot>;
+}
+{
+  isOpen && <Panel />; // a boolean guard
+}
+```
+
+The rule needs type information (`parserOptions.projectService`) and stops with an error without it, so it is not in the presets. The repository config enforces it in core, where it is an error in strict mode. Other packages read core's types from core's build output, so a core type there is `any` before a build and real after it; the rule would give a different result per build state, so they are out of scope. The guards that predate it are listed in `no-truthy-jsx-guard.baseline.json`, once per guard, and that many stay allowed until they move to `isRenderable`; one more is reported. Regenerate the list with `node internal/eslint-plugin-astryx/no-truthy-jsx-guard.baseline.mjs` (`--check` verifies it). A guard that is right as written says so with `// eslint-disable-next-line @astryx/no-truthy-jsx-guard -- <reason>`. The rule also provides an ESLint suggestion that wraps the guard in `isRenderable(value)` (add the import manually).
+
 ### `@astryx/focus-outline-keyboard-only`
 
 Flags a focus outline written against `:focus` or `:focus-within` inside `stylex.create()`. A focus outline is a **keyboard** affordance; both of those selectors also match a plain mouse click, so the ring gets shown to pointer users too — most easily missed on the paths where focus is restored programmatically (an overlay that returns focus to its trigger after a click-to-dismiss puts the ring back up with no keyboard involved).

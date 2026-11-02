@@ -22,15 +22,18 @@ const {jobs} = yaml.parse(
 );
 const owner = jobs['docsite-test'];
 const step = name => owner.steps.find(candidate => candidate.name === name);
+// A Lab-only change skips the docsite work too (spec:AST-030 FR26).
 const ACTIVE =
-  "steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'";
+  "steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only != 'true'";
 
 describe('docsite-test', () => {
   it('is one job that builds the docsite once and runs both suites on it', () => {
     expect(jobs['docsite-data']).toBeUndefined();
     expect(jobs['docsite-browser']).toBeUndefined();
     // Only CI's run admission, which never skips (ci-admission.test.mjs).
-    expect(owner.needs).toEqual(['admission']);
+    // room tells it when CI is full (ci-admission.test.mjs); heavy-ci whether
+    // an agent push deferred it (spec:AST-030 FR20).
+    expect(owner.needs).toEqual(['room', 'admission', 'heavy-ci']);
     expect(owner['continue-on-error']).toBeUndefined();
     // A required context keeps only the draft skip in its condition; an
     // outside contributor's run stops at the first step with the reason.
@@ -43,7 +46,11 @@ describe('docsite-test', () => {
     expect(owner.steps[0].name).toBe(
       'Require a branch in this repository or the ci:run label',
     );
-    expect(owner.steps.findIndex(s => s.id === 'scope')).toBe(2);
+    // After the FR17 gate and the CI-is-full stop (ci-admission.test.mjs).
+    expect(owner.steps[1].name).toBe('Stop when CI is full');
+    // Then an agent push's deferral (spec:AST-030 FR20), then the scope.
+    expect(owner.steps[2].name).toBe('Heavy CI deferred');
+    expect(owner.steps.findIndex(s => s.id === 'scope')).toBe(4);
 
     const builds = owner.steps.filter(s =>
       /pnpm -F @astryxdesign\/docsite build/.test(s.run ?? ''),
@@ -72,6 +79,21 @@ describe('docsite-test', () => {
     expect(step('test-docsite (data test results)').if).toBe(
       "${{ !cancelled() && steps.data.outcome == 'success' }}",
     );
+  });
+
+  it('builds and tests the docs prompt with placeholder origins only', () => {
+    // One job-level value reaches the build and the browser contracts alike.
+    expect(owner.env).toEqual({
+      NEXT_PUBLIC_INTERNAL_DOCS_ORIGIN: 'https://docs.example.test',
+      NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN: 'https://probe.example.test',
+    });
+    for (const s of owner.steps) {
+      expect(s.env?.NEXT_PUBLIC_INTERNAL_DOCS_ORIGIN, s.name).toBeUndefined();
+      expect(
+        s.env?.NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN,
+        s.name,
+      ).toBeUndefined();
+    }
   });
 
   it.each([0, 1])(

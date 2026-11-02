@@ -73,7 +73,9 @@ import {
   d1GlyphKey,
   d1PairKey,
   glyphRendersOnBlockAxis,
+  gradeDirectionalPair,
   gradePositionedPair,
+  ignoredStoryIdentities,
   isUnchangedBlockAxisPair,
   orderD1StoryCandidates,
   resolveD1Applicability,
@@ -98,6 +100,7 @@ import {
 const {
   componentExportsFromBarrel,
   componentPackage,
+  documentedComponentsOutsideComponentDirectories,
   flatPackageComponentNames,
   nestedPackageComponentNames,
 } = componentPackages;
@@ -940,7 +943,7 @@ async function checkD2(page, port, t, card) {
   const pR = await boxOf(page, prev), nR = await boxOf(page, next);
   if (!pL || !nL || !pR || !nR) { card.dims.D2 = 'N-A'; card.notes.push('D2: prev/next not found'); return; }
   const ltrOk = pL.cx < nL.cx, rtlOk = pR.cx > nR.cx;
-  card.dims.D2 = ltrOk && rtlOk ? 'pass' : ltrOk || rtlOk ? 'partial' : 'fail';
+  card.dims.D2 = gradeDirectionalPair(ltrOk, rtlOk);
   card.notes.push(`D2 prev/next cx: LTR ${pL.cx.toFixed(0)}<${nL.cx.toFixed(0)}=${ltrOk}; RTL ${pR.cx.toFixed(0)}>${nR.cx.toFixed(0)}=${rtlOk}`);
 }
 async function checkD3Scroll(page, port, t, card) {
@@ -957,7 +960,7 @@ async function checkD3Scroll(page, port, t, card) {
   const dL = await run(false), dR = await run(true);
   if (dL == null || dR == null) { card.dims.D3 = 'N-A'; card.notes.push('D3: scroller/next not found'); return; }
   const ltrOk = dL > 1, rtlOk = dR < -1;
-  card.dims.D3 = ltrOk && rtlOk ? 'pass' : ltrOk || rtlOk ? 'partial' : 'fail';
+  card.dims.D3 = gradeDirectionalPair(ltrOk, rtlOk);
   card.notes.push(`D3 scroll delta on next: LTR ${dL.toFixed(0)} (>0=${ltrOk}); RTL ${dR.toFixed(0)} (<0=${rtlOk})`);
 }
 async function checkD4(page, port, t, card) {
@@ -1283,6 +1286,8 @@ function readVerifiedNa() {
  * its package's barrel (`core/resizehandle` → core/ResizeHandle in
  * packages/core/src/Resizable), or null.
  */
+const barrelExportsByPackage = new Map();
+
 function sourceOwnerOf(filter, publicComponentsByPackage) {
   const [packageName, requested] = filter.includes('/')
     ? filter.split('/')
@@ -1295,10 +1300,14 @@ function sourceOwnerOf(filter, publicComponentsByPackage) {
     );
     if (!component) continue;
     const sourceRoot = path.join(PROJECT_ROOT, pkg.src);
-    const implementation = componentExportsFromBarrel(
-      path.join(sourceRoot, 'index.ts'),
-      sourceRoot,
-    ).get(component);
+    // A full run asks for every storyless component, so read each barrel once.
+    if (!barrelExportsByPackage.has(name)) {
+      barrelExportsByPackage.set(
+        name,
+        componentExportsFromBarrel(path.join(sourceRoot, 'index.ts'), sourceRoot),
+      );
+    }
+    const implementation = barrelExportsByPackage.get(name).get(component);
     if (!implementation) continue;
     const folder = path
       .relative(PROJECT_ROOT, path.dirname(implementation))
@@ -1365,9 +1374,15 @@ async function cleanupRuntime() {
     try {
       const pkg = componentPackage(packageName);
       if (!pkg) throw new Error('package is missing from component registry');
+      // Documented exports outside component directories (Core's Theme
+      // family) are public too (INV5): they get roster entries and route
+      // their stories.
       const componentNames = pkg.layout === 'flat'
         ? flatPackageComponentNames(PROJECT_ROOT, pkg)
-        : nestedPackageComponentNames(PROJECT_ROOT, pkg);
+        : Array.from(new Set([
+          ...nestedPackageComponentNames(PROJECT_ROOT, pkg),
+          ...documentedComponentsOutsideComponentDirectories(PROJECT_ROOT, pkg),
+        ])).sort();
       publicComponentsByPackage[packageName] = componentNames;
       if (ACTIVE_PACKAGE_NAMES.includes(packageName)) {
         sourceComponents.push(
@@ -1385,7 +1400,8 @@ async function cleanupRuntime() {
   }).filter(belongsToActivePackage);
   // Filters resolve through the index: a sub-component whose stories carry
   // its parent folder's non-component title (ResizeHandle under
-  // Core/Resizable) audits them under its own name.
+  // Core/Resizable) audits them under its own name, in a filtered run and in
+  // the full run alike.
   const resolvedFilters = resolveFilterRoutes({
     routes: storyRoutes,
     filters: FILTER,
@@ -1643,6 +1659,13 @@ async function cleanupRuntime() {
     enforced: !AUTO_ONLY && !CURATED_ONLY,
   });
   if (verifiedNaError) coverage.registryError = verifiedNaError;
+  // Story identities with no public component are not roster entries (INV5);
+  // name them so the report shows what the roster left out.
+  coverage.ignoredStoryIdentities = ignoredStoryIdentities({
+    sourceComponents,
+    storyComponents: scopedStoryRoutes.map(route => route.component),
+    filters: FILTER,
+  });
 
   const autoFails = autoResults.filter(r => r.verdict === 'fail' || r.verdict === 'ERROR');
   // No allowlist: every not-RTL component is a surprise. The RTL migration is
@@ -1737,6 +1760,7 @@ async function cleanupRuntime() {
   console.error(`DEC : ${report.directionalDecorations.pass} pass / ${report.directionalDecorations.fail} fail / ${report.directionalDecorations.na} N-A`);
   console.error(`POOL: ${pageRecoveries.length} page replacement(s) after a failed story`);
   console.error(`COV : ${coverage.measured} measured / ${coverage.verifiedNa} verified N-A / ${coverage.gaps} gap / ${coverage.staleVerifiedNa} stale`);
+  if (coverage.ignoredStoryIdentities.length > 0) console.error(`IGN : ${coverage.ignoredStoryIdentities.length} story identities name no public component (not roster entries): ${coverage.ignoredStoryIdentities.map(entry => entry.component).join(', ')}`);
   if (declaredD5PhysicalRegions.length > 0) console.error(`D5P : ${declaredD5PhysicalRegions.length} declared physical region(s): ${declaredD5PhysicalRegions.map(r => `${r.storyId} (${r.physical} within ${r.within})`).join('; ')}`);
   // Non-zero exit only signals CI (which is soft/continue-on-error). Surface a
   // signal but never let it hard-block during the stability window.

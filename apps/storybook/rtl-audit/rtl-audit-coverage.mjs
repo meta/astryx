@@ -218,6 +218,10 @@ export function componentRoutesForFilters(routes, filters) {
  * own component, so it keeps its own coverage entry and verified-N/A record.
  * A filter with neither selects nothing and stays a coverage gap
  * (`architecture:rtl-audit-evidence` INV5).
+ *
+ * A run with no filters (the release check's full audit) keeps every route
+ * and applies the same adoption to every known component no route names, so
+ * a full run and a filtered run audit ResizeHandle through the same stories.
  * @param {{
  *   routes: {id: string, component: string}[],
  *   filters: string[],
@@ -235,20 +239,14 @@ export function resolveFilterRoutes({
   ownerOf,
   renders,
 }) {
-  if (filters.length === 0) return {routes, adopted: {}};
   const known = new Set(knownComponents.map(name => name.toLowerCase()));
   const selected = new Map();
   const adopted = {};
-  for (const filter of filters) {
-    const direct = routes.filter(route =>
-      routeMatchesComponentFilter(route, filter),
-    );
-    for (const route of direct) {
-      selected.set(`${route.component}::${route.id}`, route);
-    }
-    if (direct.length > 0) continue;
+  const keep = route => selected.set(`${route.component}::${route.id}`, route);
+  /** Route a filter's folder's orphan stories that render it to its component. */
+  const adopt = filter => {
     const owner = ownerOf(filter);
-    if (owner == null) continue;
+    if (owner == null) return;
     const orphans = routes.filter(
       route =>
         !known.has(route.component.toLowerCase()) &&
@@ -257,14 +255,25 @@ export function resolveFilterRoutes({
           .startsWith(`${owner.folder}/`) &&
         renders(route.id, owner.component),
     );
-    if (orphans.length === 0) continue;
+    if (orphans.length === 0) return;
     adopted[owner.component] = orphans.map(route => route.id).sort();
-    for (const {id} of orphans) {
-      selected.set(`${owner.component}::${id}`, {
-        id,
-        component: owner.component,
-      });
+    for (const {id} of orphans) keep({id, component: owner.component});
+  };
+  if (filters.length === 0) {
+    routes.forEach(keep);
+    const named = new Set(routes.map(route => route.component.toLowerCase()));
+    for (const component of knownComponents) {
+      const filter = component.toLowerCase();
+      if (!named.has(filter)) adopt(filter);
     }
+    return {routes: [...selected.values()], adopted};
+  }
+  for (const filter of filters) {
+    const direct = routes.filter(route =>
+      routeMatchesComponentFilter(route, filter),
+    );
+    direct.forEach(keep);
+    if (direct.length === 0) adopt(filter);
   }
   return {routes: [...selected.values()], adopted};
 }
@@ -401,6 +410,16 @@ export function validateStoryRtlAuditParameters(value, storyId) {
   return result;
 }
 
+/**
+ * Grade a curated order (D2) or scroll-direction (D3) pair. The relationship
+ * must hold in LTR and reverse in RTL. A relationship that keeps its LTR
+ * physical order in RTL is the RTL defect these checks exist for, so it fails
+ * rather than grading `partial` (INV3); so does one already wrong in LTR.
+ */
+export function gradeDirectionalPair(ltrOk, rtlOk) {
+  return ltrOk && rtlOk ? 'pass' : 'fail';
+}
+
 // rtlAudit.D5 declares a region whose positioned elements stay physical
 // (DR5); it never turns D5 off for the story.
 function validatePhysicalPosition(value, storyId) {
@@ -418,6 +437,38 @@ function validatePhysicalPosition(value, storyId) {
     );
   }
   return {physical: value.physical, within: value.within.trim()};
+}
+
+/**
+ * Canonical order for curated RTL targets: by component, then story id
+ * (case-insensitive), keeping entries with the same key in file order. A sorted
+ * `targets.json` lets parallel pull requests add targets in different places
+ * instead of all appending at the end.
+ */
+export function compareTargets(left, right) {
+  const key = target => [
+    String(target.component).toLowerCase(),
+    String(target.storyId).toLowerCase(),
+  ];
+  const [lc, ls] = key(left);
+  const [rc, rs] = key(right);
+  return lc < rc ? -1 : lc > rc ? 1 : ls < rs ? -1 : ls > rs ? 1 : 0;
+}
+
+/** Index of the first target out of canonical order, or -1 when sorted. */
+export function firstUnsortedTarget(targets) {
+  for (let i = 1; i < targets.length; i++) {
+    if (compareTargets(targets[i - 1], targets[i]) > 0) return i;
+  }
+  return -1;
+}
+
+/** The targets in canonical order (a stable sort). */
+export function sortTargets(targets) {
+  return targets
+    .map((target, index) => ({target, index}))
+    .sort((a, b) => compareTargets(a.target, b.target) || a.index - b.index)
+    .map(({target}) => target);
 }
 
 /** Selected owners for which the canonical Storybook route has no story. */
@@ -1061,14 +1112,61 @@ function componentName(component) {
 }
 
 /**
- * Build the component roster for a scoped audit.
+ * Story-title identities that name no public component, such as
+ * `core/hooks-useclipboard` or `core/tablesortable`. The roster is the public
+ * components (`architecture:rtl-audit-evidence` INV5), so these are not roster
+ * entries and cannot be coverage gaps; the audit reports them, typed, rather
+ * than dropping them silently.
+ *
+ * Public components are `sourceComponents`, package-qualified. The caller
+ * includes documented exports that directory discovery misses (Core's `Theme`
+ * and `MediaTheme`), so they stay roster entries whatever their stories are
+ * titled. It fails closed. An identity stays a roster entry when:
+ * - a filter names it explicitly (an umbrella surface such as `Core/Chat`);
+ * - its package has no discovered public component at all, so a discovery
+ *   failure cannot hide that package's gaps.
+ */
+export function ignoredStoryIdentities({
+  sourceComponents = [],
+  storyComponents = [],
+  filters = [],
+}) {
+  const publicKeys = new Set(sourceComponents.map(c => c.toLowerCase()));
+  const packagesWithPublic = new Set(
+    sourceComponents.map(c => c.split('/')[0].toLowerCase()),
+  );
+  const normalizedFilters = filters.map(filter => filter.toLowerCase());
+  const named = component =>
+    normalizedFilters.some(
+      filter =>
+        component.toLowerCase() === filter ||
+        componentName(component) === filter,
+    );
+  const ignorable = component =>
+    !publicKeys.has(component.toLowerCase()) &&
+    packagesWithPublic.has(component.split('/')[0].toLowerCase()) &&
+    !named(component);
+  return Array.from(
+    new Map(
+      storyComponents.filter(ignorable).map(c => [c.toLowerCase(), c]),
+    ).values(),
+  )
+    .sort((left, right) => left.localeCompare(right))
+    .map(component => ({component, reason: 'no-public-component'}));
+}
+
+/**
+ * Build the component roster for a scoped audit: the public components, plus
+ * any story identity a filter names explicitly.
  *
  * Storybook can expose an umbrella story whose name matches the PR analyzer's
  * module name even when no source component has that exact name. Chat is the
  * canonical example: the source directory contains ChatComposer, ChatMessage,
  * and related components, while Storybook also has a `Core/Chat` surface. A
  * matching story must satisfy the filter so the roster does not invent a
- * second `unknown/chat` coverage entry for the same surface.
+ * second `unknown/chat` coverage entry for the same surface. Story identities
+ * with no public component and no filter naming them are left out (see
+ * `ignoredStoryIdentities`).
  */
 export function buildAuditedComponentRoster({
   sourceComponents = [],
@@ -1085,13 +1183,19 @@ export function buildAuditedComponentRoster({
         !knownComponents.some(component => matchesFilter(component, filter)),
     )
     .map(filter => `unknown/${filter}`);
+  const ignored = new Set(
+    ignoredStoryIdentities({
+      sourceComponents,
+      storyComponents,
+      filters,
+    }).map(entry => entry.component.toLowerCase()),
+  );
 
   return Array.from(
     new Map(
-      [...knownComponents, ...unmatchedFilters].map(component => [
-        component.toLowerCase(),
-        component,
-      ]),
+      [...knownComponents, ...unmatchedFilters]
+        .filter(component => !ignored.has(component.toLowerCase()))
+        .map(component => [component.toLowerCase(), component]),
     ).values(),
   ).filter(
     component =>

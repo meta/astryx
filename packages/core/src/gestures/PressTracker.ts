@@ -46,10 +46,10 @@
  * swallows for a touch a recognizer took.
  */
 
-import {UIKIT_GESTURES} from '../motion/uikit/gestures';
+import {UIKIT_CONTROL, UIKIT_PAN, UIKIT_PRESS} from '../motion/uikit/gestures';
 import {timing} from '../motion/uikit/timing';
 import {travel} from './geometry';
-import type {GestureRecognizer} from './GestureRecognizer';
+import type {GestureRecognizer, SelectionLock} from './GestureRecognizer';
 import type {TapGestureRecognizer} from './TapGestureRecognizer';
 import type {GestureTouch, TouchConsumer} from './types';
 
@@ -77,6 +77,24 @@ export interface PressTrackerOptions {
   view?: unknown;
   onControlEvent?: (event: ControlEvent, touch: GestureTouch) => void;
   onHighlightChange?: (isHighlighted: boolean) => void;
+  /**
+   * A continuous-tracking control (a held stepper) keeps its touch once its
+   * press is delivered: the host cancels the browser's pan for that finger,
+   * as UIKit's `touchesShouldCancel(in:)` is false for a tracking control.
+   * Its element then gets a blocking `touchmove` listener, so a scroll that
+   * starts on it waits on the main thread: never set it on plain buttons,
+   * links, cards or list cells.
+   * @default false
+   */
+  keepsTouch?: boolean;
+  /**
+   * For a control whose own record defines a hold action (a stepper's
+   * hold-repeat): pass `lockSelection` (utils/selectionLock.ts) to turn
+   * text selection and the callout off for each press by a finger or a pen,
+   * under any primary pointer (`spec:AST-094` FR41). A control whose hold
+   * does nothing passes none. @default undefined
+   */
+  selectionLock?: SelectionLock;
   trackingExpansion?: number;
   /**
    * When the highlight waits `contentTouchDelay`: inside a scroller (a
@@ -107,7 +125,7 @@ export interface PressTrackerOptions {
   isBraking?: (touch: GestureTouch) => boolean;
 }
 
-const PRESS = UIKIT_GESTURES.press;
+const PRESS = UIKIT_PRESS;
 
 export type PressHighlightDelay = 'inScrollers' | 'always' | 'never';
 
@@ -139,7 +157,7 @@ export const PRESS_PROFILES = {
    */
   cell: {
     highlightDelay: 'inScrollers',
-    cancelTravel: UIKIT_GESTURES.pan.hysteresis.value,
+    cancelTravel: UIKIT_PAN.hysteresis.value,
     quickTapFlash: 0,
     releaseMs: timing.press.highlightOutMs,
   },
@@ -163,8 +181,8 @@ export function vetoesSingleTap(recognizer: GestureRecognizer): boolean {
 /**
  * A control's touch tracking, the gesture host's consumer for one element
  * (UIControl's `beginTracking` / `continueTracking` / `endTracking`): it
- * reports control events and the highlight. Built by
- * {@link createPressTracker}.
+ * reports control events and the highlight, and keeps a continuous-tracking
+ * control's touch. Built by {@link createPressTracker}.
  */
 export interface PressTracker extends TouchConsumer {
   /** Whether the control paints its pressed highlight now. */
@@ -186,10 +204,21 @@ export interface PressTracker extends TouchConsumer {
   allowsAncestorRecognizer(recognizer: unknown): boolean;
   /** Drop any highlight and timers (the control unmounted or was disabled). */
   dispose(): void;
+  /**
+   * Present only for a continuous-tracking control created with
+   * `keepsTouch: true` (a held stepper): once its press is delivered, the
+   * browser's pan must not take the touch. A plain pressable leaves it
+   * undefined and keeps passive listeners, so a scroll starting on it never
+   * waits on the main thread.
+   */
+  readonly keepsTouch?: (touchId: number) => boolean;
+  /** The selection lock of a control whose hold acts (FR41); see the option. */
+  readonly selectionLock: SelectionLock | undefined;
 }
 
 /** Track a control's touches (see {@link PressTracker}). */
 export function createPressTracker(options: PressTrackerOptions): PressTracker {
+  let isKept = false;
   let touchId: number | null = null;
   let bounds: PressBounds | null = null;
   let highlightTimer: ReturnType<typeof setTimeout> | null = null;
@@ -220,6 +249,11 @@ export function createPressTracker(options: PressTrackerOptions): PressTracker {
   };
 
   const setHighlighted = (value: boolean): void => {
+    if (value && touchId != null) {
+      // Delivered: the control keeps this touch until it ends (also when a
+      // quick tap's flash is still showing as the press arrives).
+      isKept = true;
+    }
     if (state.isHighlighted === value) {
       return;
     }
@@ -242,6 +276,8 @@ export function createPressTracker(options: PressTrackerOptions): PressTracker {
   };
 
   const finish = (): void => {
+    // A highlight shown at the lift (a quick tap's flash) keeps nothing.
+    isKept = false;
     touchId = null;
     state.isTracking = false;
     state.isTouchInside = false;
@@ -252,6 +288,7 @@ export function createPressTracker(options: PressTrackerOptions): PressTracker {
     if (touch.id !== touchId) {
       return;
     }
+    isKept = false;
     clearHighlightTimer();
     emit('touchCancel', touch);
     setHighlighted(false);
@@ -269,8 +306,7 @@ export function createPressTracker(options: PressTrackerOptions): PressTracker {
       return state.isTouchInside;
     },
     trackingExpansion:
-      options.trackingExpansion ??
-      UIKIT_GESTURES.control.trackingExpansion.value,
+      options.trackingExpansion ?? UIKIT_CONTROL.trackingExpansion.value,
 
     isEnabled(): boolean {
       return options.isEnabled?.() !== false;
@@ -341,6 +377,7 @@ export function createPressTracker(options: PressTrackerOptions): PressTracker {
       if (touch.id !== touchId) {
         return;
       }
+      isKept = false;
       const inside = contains(touch);
       const wasPending = highlightTimer != null;
       clearHighlightTimer();
@@ -381,6 +418,16 @@ export function createPressTracker(options: PressTrackerOptions): PressTracker {
       setHighlighted(false);
       finish();
     },
+
+    get selectionLock() {
+      return options.selectionLock;
+    },
   };
+  if (options.keepsTouch === true) {
+    // Only the tracked touch whose press was delivered is kept.
+    return Object.assign(tracker, {
+      keepsTouch: (id: number) => isKept && touchId === id,
+    });
+  }
   return tracker;
 }

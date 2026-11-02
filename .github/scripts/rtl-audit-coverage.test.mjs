@@ -9,8 +9,10 @@ import {JSDOM} from 'jsdom';
 import {describe, expect, it} from 'vitest';
 import componentPackages from '../../scripts/component-packages.cjs';
 import {
+  assertSelectorParses,
   AUDITED_PACKAGE_NAMES,
   AUDITED_STORY_PREFIXES,
+  bindDetectorValue,
   buildAuditedComponentRoster,
   buildComponentCoverage,
   buildD1Target,
@@ -19,18 +21,21 @@ import {
   classifyLogicalGroupedCorners,
   classifyLogicalInlinePair,
   collectDirectionalDecorations,
-  filterStoryRoutesByPackages,
-  assertSelectorParses,
-  bindDetectorValue,
+  compareTargets,
   d1GlyphKey,
   d1PairKey,
-  glyphRendersOnBlockAxis,
-  isUnchangedBlockAxisPair,
+  filterStoryRoutesByPackages,
   finishFiniteAnimations,
+  firstUnsortedTarget,
+  glyphRendersOnBlockAxis,
+  gradeDirectionalPair,
   gradePositionedPair,
+  ignoredStoryIdentities,
+  isUnchangedBlockAxisPair,
   orderD1StoryCandidates,
   resolveD1Applicability,
   resolveFilterRoutes,
+  sortTargets,
   storyIdsForComponentFilters,
   unresolvedComponentFilters,
   validateStoryRtlAuditParameters,
@@ -613,6 +618,87 @@ describe('buildAuditedComponentRoster', () => {
     ).toEqual(['core/chat']);
   });
 
+  it('leaves out a story identity that names no public component', () => {
+    const input = {
+      sourceComponents: ['core/Button', 'core/Table'],
+      storyComponents: [
+        'core/button',
+        'core/hooks-useclipboard',
+        'core/tablesortable',
+      ],
+    };
+    // A public component keeps its entry (the story spelling, as before).
+    expect(buildAuditedComponentRoster(input)).toEqual([
+      'core/button',
+      'core/Table',
+    ]);
+    expect(ignoredStoryIdentities(input)).toEqual([
+      {component: 'core/hooks-useclipboard', reason: 'no-public-component'},
+      {component: 'core/tablesortable', reason: 'no-public-component'},
+    ]);
+  });
+
+  it('keeps a documented component discovery misses, whatever its story is titled', () => {
+    // The caller passes Core's Theme and MediaTheme as package-qualified
+    // public components; a retitled or missing story cannot drop them.
+    const input = {
+      sourceComponents: [
+        'core/Button',
+        'core/Theme',
+        'core/MediaTheme',
+        'lab/CodeEditor',
+      ],
+      storyComponents: [
+        'core/button',
+        'core/appearance-theming',
+        'lab/codeeditor',
+        'lab/themes-codeeditortheme',
+      ],
+    };
+    expect(buildAuditedComponentRoster(input)).toEqual([
+      'core/button',
+      'core/Theme',
+      'core/MediaTheme',
+      'lab/codeeditor',
+    ]);
+    // Core's Theme no longer keeps a Lab story identity that ends in "theme".
+    expect(ignoredStoryIdentities(input)).toEqual([
+      {component: 'core/appearance-theming', reason: 'no-public-component'},
+      {component: 'lab/themes-codeeditortheme', reason: 'no-public-component'},
+    ]);
+  });
+
+  it('ignores nothing in a package whose public roster is empty', () => {
+    const input = {
+      sourceComponents: ['core/Button'],
+      storyComponents: ['core/button', 'lab/chart-interactions'],
+    };
+    expect(ignoredStoryIdentities(input)).toEqual([]);
+    expect(buildAuditedComponentRoster(input)).toEqual([
+      'core/button',
+      'lab/chart-interactions',
+    ]);
+  });
+
+  it('keeps a public component with no story as a roster entry', () => {
+    expect(
+      buildAuditedComponentRoster({
+        sourceComponents: ['core/Button', 'core/LayerProvider'],
+        storyComponents: ['core/button'],
+      }),
+    ).toEqual(['core/button', 'core/LayerProvider']);
+  });
+
+  it('keeps a story identity a filter names explicitly', () => {
+    const input = {
+      sourceComponents: ['core/ChatComposer'],
+      storyComponents: ['core/chat'],
+      filters: ['chat'],
+    };
+    expect(buildAuditedComponentRoster(input)).toEqual(['core/chat']);
+    expect(ignoredStoryIdentities(input)).toEqual([]);
+  });
+
   it('retains an unknown entry when neither source nor stories match', () => {
     expect(
       buildAuditedComponentRoster({
@@ -621,6 +707,25 @@ describe('buildAuditedComponentRoster', () => {
         filters: ['missing'],
       }),
     ).toEqual(['unknown/missing']);
+  });
+});
+
+describe('documented components outside component directories', () => {
+  it('routes a Core/Themes/Theme story to the documented Theme component', () => {
+    const routes = buildStoryComponentRoutes({
+      stories: [{id: 'core-themes-theme--default', title: 'Core/Themes/Theme'}],
+      publicComponentsByPackage: {core: ['Button', 'Theme']},
+    });
+    expect(routes.map(route => route.component)).toEqual(['core/Theme']);
+  });
+
+  it('finds Core Theme-family exports that live in a lowercase directory', () => {
+    const names =
+      componentPackages.documentedComponentsOutsideComponentDirectories(
+        new URL('../..', import.meta.url).pathname,
+        componentPackages.componentPackage('core'),
+      );
+    expect(names).toEqual(expect.arrayContaining(['MediaTheme', 'Theme']));
   });
 });
 
@@ -1300,7 +1405,85 @@ describe('resolveFilterRoutes (filters resolve through the Storybook index)', ()
     expect(resolve(['core/nosuchthing']).routes).toEqual([]);
   });
 
-  it('is the whole route list when no filter is given', () => {
-    expect(resolve([]).routes).toBe(routes);
+  it('keeps every route in a full run and adopts the same orphan stories there', () => {
+    const full = resolve([]);
+    // Every existing route stays, including the orphan route itself.
+    for (const route of routes) expect(full.routes).toContainEqual(route);
+    expect(full.adopted).toEqual({
+      'core/ResizeHandle': [
+        'core-resizable--horizontal-split',
+        'core-resizable--snap-points',
+      ],
+    });
+  });
+
+  it('agrees with a filtered run on ResizeHandle and ChatLayoutScrollButton', () => {
+    const owned = (result, component) =>
+      result.routes
+        .filter(route => route.component === component)
+        .map(route => route.id)
+        .sort();
+    const full = resolve([]);
+    expect(owned(full, 'core/ResizeHandle')).toEqual(
+      owned(resolve(['core/resizehandle']), 'core/ResizeHandle'),
+    );
+    // Core/Chat never renders the scroll button: no adoption in either run,
+    // so its verified-N/A record still stands.
+    expect(owned(full, 'core/ChatLayoutScrollButton')).toEqual([]);
+    expect(
+      owned(
+        resolve(['core/chatlayoutscrollbutton']),
+        'core/ChatLayoutScrollButton',
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe('gradeDirectionalPair (D2 order, D3 scroll direction)', () => {
+  it('passes a relationship that holds in LTR and reverses in RTL', () => {
+    expect(gradeDirectionalPair(true, true)).toBe('pass');
+  });
+
+  it('fails a relationship that keeps its LTR physical order in RTL', () => {
+    expect(gradeDirectionalPair(true, false)).toBe('fail');
+  });
+
+  it('fails a relationship already wrong in LTR, or wrong in both', () => {
+    expect(gradeDirectionalPair(false, true)).toBe('fail');
+    expect(gradeDirectionalPair(false, false)).toBe('fail');
+  });
+});
+
+describe('curated target order (targets.json)', () => {
+  it('sorts by component, then story, case-insensitively and stably', () => {
+    const targets = [
+      {component: 'Table', storyId: 'core-table--b'},
+      {component: 'button', storyId: 'core-button--a'},
+      {component: 'Table', storyId: 'core-table--a', dims: ['D2']},
+      {component: 'Table', storyId: 'core-table--a', dims: []},
+    ];
+    expect(firstUnsortedTarget(targets)).toBe(1);
+    expect(sortTargets(targets)).toEqual([
+      targets[1],
+      targets[2],
+      targets[3],
+      targets[0],
+    ]);
+    expect(compareTargets(targets[2], targets[3])).toBe(0);
+  });
+
+  it('keeps apps/storybook/rtl-audit/targets.json sorted (fix: sort-targets.mjs --fix)', () => {
+    const targets = JSON.parse(
+      fs.readFileSync(
+        new URL('../../apps/storybook/rtl-audit/targets.json', import.meta.url),
+        'utf8',
+      ),
+    );
+    const index = firstUnsortedTarget(targets);
+    expect(
+      index === -1
+        ? null
+        : `${targets[index].component} / ${targets[index].storyId}`,
+    ).toBeNull();
   });
 });

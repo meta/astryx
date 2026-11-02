@@ -896,3 +896,19 @@ export const CollapseFocusWithoutToggle: Story = {
   name: 'Collapse Focus Without Toggle',
   render: () => <CollapseFocusDemo hasButton={false} />,
 };
+
+/**
+ * Fixture for the RTL audit: a section header with end content, so the
+ * title-then-end-content order can be measured in both directions.
+ */
+export const SectionEndContent: Story = {
+  name: 'Section / End content',
+  render: () => (
+    <SideNav>
+      <SideNavSection title="Projects" endContent={<Badge label="12" />}>
+        <SideNavItem label="Atlas" icon={FolderIcon} href="/atlas" />
+        <SideNavItem label="Beacon" icon={FolderIcon} href="/beacon" />
+      </SideNavSection>
+    </SideNav>
+  ),
+};

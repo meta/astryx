@@ -48,7 +48,13 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Thumbnail/Thumbnail.generated';
+
+registerEnglishFallback(english);
 
 export interface ThumbnailProps extends BaseProps<HTMLDivElement> {
   /** Ref forwarded to the root element */
@@ -358,7 +364,7 @@ export function Thumbnail({
   ...props
 }: ThumbnailProps) {
   const pressable = usePressFeedback();
-  const t = useTranslator();
+  const t = useComponentTranslator();
 
   // Track the exact src that failed (rather than a boolean) so a changed src
   // gets a fresh load attempt instead of the stale error.

@@ -236,8 +236,12 @@ export function useTreeFocus<T extends HTMLElement = HTMLElement>(
   options: UseTreeFocusOptions = {},
 ): UseTreeFocusReturn<T> {
   // The flag is pinned off here so an untyped options object cannot smuggle
-  // it through the public hook.
-  return useTreeFocusInternal<T>({...options, matchLabelledBy: false});
+  // it through the public hook, and the internal stop move stays internal.
+  const {takeTabStop: _takeTabStop, ...result} = useTreeFocusInternal<T>({
+    ...options,
+    matchLabelledBy: false,
+  });
+  return result;
 }
 
 /**
@@ -257,13 +261,25 @@ export type UseTreeFocusInternalOptions = UseTreeFocusOptions & {
   matchLabelledBy?: boolean;
 };
 
+/** What the package's own components get beyond the public hook. */
+export type UseTreeFocusInternalReturn<T extends HTMLElement = HTMLElement> =
+  UseTreeFocusReturn<T> & {
+    /**
+     * With `hasRovingTabIndex`, makes `item` the tree's one Tab stop, by the
+     * same rule the hook's own moves follow: a disabled or hidden row never
+     * takes it, and the stop stays where it is. TreeList calls it when it
+     * moves focus to a collapsing row (`component:TreeList` AR2).
+     */
+    takeTabStop: (item: HTMLElement) => void;
+  };
+
 /**
  * The implementation behind {@link useTreeFocus}. Not exported from the
  * package; the public hook calls it without the internal options.
  */
 export function useTreeFocusInternal<T extends HTMLElement = HTMLElement>(
   options: UseTreeFocusInternalOptions = {},
-): UseTreeFocusReturn<T> {
+): UseTreeFocusInternalReturn<T> {
   const {
     itemSelector = '[role="treeitem"]',
     isItemDisabled,
@@ -630,11 +646,25 @@ export function useTreeFocusInternal<T extends HTMLElement = HTMLElement>(
     }
   }, [hasRovingTabIndex, syncTabStops]);
 
+  const takeTabStop = useCallback(
+    (item: HTMLElement) => {
+      if (!hasRovingTabIndex || itemDisabled(item)) {
+        return;
+      }
+      const items = getItems();
+      if (items.includes(item)) {
+        moveTabStop(items, item);
+      }
+    },
+    [getItems, hasRovingTabIndex, itemDisabled, moveTabStop],
+  );
+
   return {
     treeRef,
     handleKeyDown,
     handleFocus,
     focusFirst,
     focusLast,
+    takeTabStop,
   };
 }
