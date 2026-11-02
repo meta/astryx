@@ -262,6 +262,26 @@ describe('createDiffFile', () => {
     expect(file.hunks[0].header).toBe('@@ -6 +6 @@');
   });
 
+  it('lowers the edit limit for a very long file', () => {
+    // 4,000 changed lines through 150,000 lines: a line diff in a shorter
+    // file, but past the work the search may spend on this one.
+    const changes = (lineCount: number) => {
+      const base = Array.from({length: lineCount}, (_, i) => `line ${i}`);
+      const step = Math.floor(lineCount / 2000);
+      const next = base.map((line, i) =>
+        i % step === 1 ? `${line} changed` : line,
+      );
+      return createDiffFile({
+        oldValue: base.join('\n'),
+        newValue: next.join('\n'),
+      });
+    };
+    expect(changes(20_000).hunks.some(hunk => hunk.isReplacedBlock)).toBe(
+      false,
+    );
+    expect(changes(150_000).hunks[0].isReplacedBlock).toBe(true);
+  });
+
   it('diffs up to 10,000 changed lines and replaces the block past that', () => {
     const rewrite = (lineCount: number) => {
       const oldLines = Array.from({length: lineCount}, (_, i) => `old ${i}`);

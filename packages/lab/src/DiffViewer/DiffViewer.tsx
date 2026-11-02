@@ -410,10 +410,10 @@ function addInlineEmphasis(
 }
 
 /**
- * Most changed lines a file shows before the reader asks for them. Each row
- * costs render time and the rows are not virtualized, so a file with more
- * changed lines (outside replaced blocks, which fold on their own) starts
- * folded behind the large-change row.
+ * Most changed lines a file shows before the reader asks for them. Rows are
+ * not virtualized, and each row costs render time. A file with more changed
+ * lines starts folded. Lines in replaced blocks do not count, because those
+ * blocks fold on their own.
  */
 const MAX_UNFOLDED_CHANGED_LINES = 2000;
 

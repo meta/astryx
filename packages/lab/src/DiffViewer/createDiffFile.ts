@@ -8,12 +8,6 @@
  * @position Lab utility; computes a line diff (Myers) when the caller has two
  *   texts rather than a patch
  *
- * Shared leading and trailing lines are matched without a search. The minimal
- * search over the rest keeps its memory small for any input and stops after
- * MAX_EDIT_DISTANCE changed lines, so its time stays bounded; a middle that
- * differs more than that becomes one replaced block, marked with
- * `isReplacedBlock` on its hunk.
- *
  * SYNC: When modified, update:
  * - /packages/lab/src/DiffViewer/createDiffFile.test.ts
  * - /packages/lab/src/DiffViewer/DiffViewer.doc.mjs (utilities section)
@@ -67,11 +61,16 @@ function splitLines(value: string): string[] {
 /**
  * Most changed lines the search compares line by line; past it the changed
  * middle is shown as one replaced block. The search keeps a few arrays the
- * size of the input, so its memory does not grow with this limit. Its time
- * grows with this limit times the input length; at this value the worst case
- * stays well under a second.
+ * size of the input, so its memory does not grow with this limit.
  */
 const MAX_EDIT_DISTANCE = 10_000;
+
+/**
+ * Most search work, counted as changed-middle lines times edits. The search
+ * time grows with both, so a long file gets a lower edit limit. A file of up
+ * to 50,000 lines keeps the full MAX_EDIT_DISTANCE.
+ */
+const MAX_SEARCH_WORK = 1_000_000_000;
 
 /**
  * Most changed lines the traced search tries first. Most changes are small,
@@ -89,10 +88,11 @@ interface EditScript {
 
 /**
  * Line edit script from `a` to `b`. Shared leading and trailing lines are
- * context without a search; the middle uses a shortest edit script, or, when
- * it needs more than MAX_EDIT_DISTANCE edits, removes the old middle and adds
- * the new one. The traced search runs first and the linear-space search takes
- * over when the change is larger than TRACED_SEARCH_LIMIT.
+ * context without a search. The middle uses a shortest edit script, or, when
+ * it needs more edits than the limit, removes the old middle and adds the new
+ * one. The limit is MAX_EDIT_DISTANCE, lowered for a long middle so the work
+ * stays under MAX_SEARCH_WORK. The traced search runs first; the linear-space
+ * search takes over when the change is larger than TRACED_SEARCH_LIMIT.
  */
 function diffLines(a: string[], b: string[]): EditScript {
   let head = 0;
@@ -113,10 +113,20 @@ function diffLines(a: string[], b: string[]): EditScript {
   // When one side of the middle is empty, adding or removing the other side
   // is already the minimal script.
   const isOneSided = tailA === head || tailB === head;
+  const editLimit = Math.min(
+    MAX_EDIT_DISTANCE,
+    Math.floor(MAX_SEARCH_WORK / (tailA - head + (tailB - head))),
+  );
   const middle = isOneSided
     ? null
-    : (tracedEditScript(a, b, head, tailA, tailB, TRACED_SEARCH_LIMIT) ??
-      shortestEditScript(a, b, head, tailA, tailB));
+    : (tracedEditScript(
+        a,
+        b,
+        head,
+        tailA,
+        tailB,
+        Math.min(TRACED_SEARCH_LIMIT, editLimit),
+      ) ?? shortestEditScript(a, b, head, tailA, tailB, editLimit));
   if (middle != null) {
     // A loop, not a spread: one call argument per op overflows the stack on
     // long inputs.
@@ -139,8 +149,7 @@ function diffLines(a: string[], b: string[]): EditScript {
 
 /**
  * Shortest edit script over `a[start, endA)` and `b[start, endB)`, with
- * absolute indexes in the ops; null when it needs more than
- * MAX_EDIT_DISTANCE edits.
+ * absolute indexes in the ops; null when it needs more than `maxEdits` edits.
  *
  * This is Myers' O(ND) search in linear space. Each step searches forward
  * from the start and backward from the end at the same time until the two
@@ -154,6 +163,7 @@ function shortestEditScript(
   start: number,
   endA: number,
   endB: number,
+  maxEdits: number,
 ): Op[] | null {
   const ids = new Map<string, number>();
   const toIds = (lines: string[], end: number) => {
@@ -185,7 +195,7 @@ function shortestEditScript(
   for (const count of surplus) {
     minEdits += Math.abs(count);
   }
-  if (minEdits > MAX_EDIT_DISTANCE) {
+  if (minEdits > maxEdits) {
     return null;
   }
   // The furthest x each search reached on diagonal k (x - y), stored at
@@ -324,7 +334,7 @@ function shortestEditScript(
     return true;
   };
 
-  if (!solve(0, oldIds.length, 0, newIds.length, MAX_EDIT_DISTANCE)) {
+  if (!solve(0, oldIds.length, 0, newIds.length, maxEdits)) {
     return null;
   }
   return removalsFirst(ops);
