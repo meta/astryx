@@ -142,11 +142,13 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
       wheel(item, {trackpad: true, dx: -20, time: 0}).defaultPrevented,
     ).toBe(false);
     expect(states).toEqual([]);
+    // The scroller's stream ends 220 ms after its last wheel (FR43); the
+    // next one is decided afresh.
     expect(
-      wheel(item, {trackpad: true, dx: 20, time: 200}).defaultPrevented,
+      wheel(item, {trackpad: true, dx: 20, time: 400}).defaultPrevented,
     ).toBe(true);
     expect(
-      wheel(item, {trackpad: true, dx: 20, time: 216}).defaultPrevented,
+      wheel(item, {trackpad: true, dx: 20, time: 416}).defaultPrevented,
     ).toBe(true);
     expect(states).toEqual(['began', 'changed']);
   });
@@ -704,6 +706,71 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     expect(pinch.scale).toBeLessThanOrEqual(Math.exp(0.5) + 1e-6);
     clock.runDue(64 + 100);
     expect(states).toContain('ended');
+  });
+
+  it("keeps a trackpad stream a scroller took for FR43's pause bound, not 100 ms: a slow drag that rests 130 ms at the list's end stays the list's, and the pan takes only the next stream (spec:AST-094 FR43)", () => {
+    const {sheet, list, row} = mount(
+      '<div id="sheet"><div id="list"><div id="row"></div></div></div>',
+    );
+    const pan = new PanGestureRecognizer({
+      direction: 'vertical',
+      allowedScrollTypes: ['continuous'],
+    });
+    const states = statesOf(pan);
+    detachers.push(host.attach(sheet, pan));
+    scrollableY(list, {scrollTop: 0, scrollHeight: 400, clientHeight: 100});
+    const at = (time: number) => {
+      clock.runDue(time);
+      return wheel(row, {trackpad: true, dy: 8, time});
+    };
+    // Three wheels the list scrolls.
+    expect([0, 16, 32].map(at).some(event => event.defaultPrevented)).toBe(
+      false,
+    );
+    // The list reaches its end; the fingers rest 130 ms and carry on: still
+    // the list's stream, so the pan never takes it midway.
+    Object.defineProperty(list, 'scrollTop', {configurable: true, value: 300});
+    expect([162, 178, 194].map(at).some(event => event.defaultPrevented)).toBe(
+      false,
+    );
+    expect(states).toEqual([]);
+    // Past the 180 ms bound the stream has ended; the next one is the pan's.
+    expect([600, 616].map(at).every(event => event.defaultPrevented)).toBe(
+      true,
+    );
+    expect(states[0]).toBe('began');
+  });
+
+  it('keeps a ctrl-wheel pinch out of the trackpad splitter: a pinch that slows and reverses, or rests 60 ms, stays one gesture, and ends 100 ms after its last wheel (spec:AST-094 FR43)', () => {
+    const {photo} = mount('<div id="photo"></div>');
+    const pinch = new PinchGestureRecognizer();
+    const states = statesOf(pinch);
+    detachers.push(host.attach(photo, pinch));
+    const at = (time: number, dy: number) => {
+      clock.runDue(time);
+      return wheel(photo, {dy, ctrl: true, time});
+    };
+    const deltas = [-3, -4, -5, -4, -3, -2.5, -2, -1.5, 1, 2, 3, 4];
+    for (const [i, dy] of deltas.entries()) {
+      expect(at(i * 16, dy).defaultPrevented).toBe(true);
+    }
+    expect(states.filter(state => state === 'began')).toHaveLength(1);
+    expect(states).not.toContain('ended');
+    // One pinch throughout: still magnified after the reversal, where a
+    // second pinch starting from 1 would read below it.
+    expect(pinch.scale).toBeGreaterThan(1);
+    clock.runDue(11 * 16 + 99);
+    expect(states).not.toContain('ended');
+    clock.runDue(11 * 16 + 100);
+    expect(states.filter(state => state === 'ended')).toHaveLength(1);
+    // Slowing, then resting 60 ms, is still one pinch.
+    states.length = 0;
+    for (const [i, dy] of [-5, -4, -3, -2.5, -2].entries()) {
+      at(1000 + i * 16, dy);
+    }
+    at(1000 + 4 * 16 + 60, -2);
+    expect(states.filter(state => state === 'began')).toHaveLength(1);
+    expect(states).not.toContain('ended');
   });
 
   it("keeps the page's text selection when a wheel pan claims, as a scroll does", () => {
