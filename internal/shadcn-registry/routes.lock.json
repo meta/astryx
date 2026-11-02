@@ -3725,6 +3725,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-toast-settings-saved",
+      "path": "examples/use-toast/settings-saved",
+      "aliases": []
+    },
+    {
       "name": "example-v-stack-basic",
       "path": "examples/v-stack/basic",
       "aliases": []
