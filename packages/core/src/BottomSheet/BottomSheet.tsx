@@ -259,6 +259,12 @@ function stackPositionerStyles(view: BottomSheetStackView) {
 }
 
 /** The `data-sheet-stack` value for a host: only set while sheets stack. */
+/** Stops a click, from any input, before it reaches its target. */
+function ignoreActivation(event: React.MouseEvent): void {
+  event.preventDefault();
+  event.stopPropagation();
+}
+
 function stackStateAttribute(
   view: BottomSheetStackView,
   isOpen: boolean,
@@ -817,6 +823,10 @@ function StandaloneBottomSheet({
         hasScrim && stackView.depth > 0 ? stackView.depth : undefined
       }
       onCancel={handleCancel}
+      // A closing sheet that keeps focus takes no activation during its
+      // exit: a repeated Enter or Space on the control that closed it does
+      // not run that control again.
+      onClickCapture={isExitHoldingFocus ? ignoreActivation : undefined}
       // Presses inside the sheet do not reach handlers around where it is
       // written. The dialog, not the panel, is the root, as in a switcher.
       {...layerClickBoundary({onClick: handleClick})}>

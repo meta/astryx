@@ -107,6 +107,36 @@ describe('BottomSheet close order for focus', () => {
     expect(done).toHaveFocus();
   });
 
+  it('does not run the closing control again during the exit', () => {
+    let presses = 0;
+    function Counting() {
+      const [isOpen, setIsOpen] = useState(true);
+      return (
+        <BottomSheet isOpen={isOpen} onOpenChange={setIsOpen} label="Filters">
+          <button
+            type="button"
+            onClick={() => {
+              presses += 1;
+              setIsOpen(false);
+            }}>
+            Done
+          </button>
+        </BottomSheet>
+      );
+    }
+    render(<Counting />);
+    const done = screen.getByRole('button', {name: 'Done'});
+    act(() => done.focus());
+
+    // The first activation closes; a repeated Enter or Space during the exit
+    // dispatches another click on the still-focused control.
+    fireEvent.click(done);
+    fireEvent.click(done);
+
+    expect(presses).toBe(1);
+    expect(done).toHaveFocus();
+  });
+
   it('returns focus to the opener when the exit ends, then closes', () => {
     const opener = openFilters();
     const done = screen.getByRole('button', {name: 'Done'});
