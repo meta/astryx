@@ -2,8 +2,8 @@
 
 /**
  * @file HoverCardSecondDocumentA11y.stories.tsx
- * @input HoverCard rendered in the page and portalled into a same-origin
- *   iframe
+ * @input HoverCard portalled into a same-origin iframe and into a Document
+ *   Picture-in-Picture window
  * @output A fixture for the Chromium check that Escape and focus work in the
  *   card's own document; excluded from the visual matrix
  * @position Browser fixture for component:HoverCard FR6 in a second document
@@ -53,6 +53,41 @@ function Card() {
   );
 }
 
+interface DocumentPictureInPicture {
+  requestWindow(options?: {width?: number; height?: number}): Promise<Window>;
+}
+
+/** The card again, portalled into a Document Picture-in-Picture window. */
+function PictureInPictureCard() {
+  const [body, setBody] = useState<HTMLElement | null>(null);
+  const pictureInPicture = (
+    window as Window & {documentPictureInPicture?: DocumentPictureInPicture}
+  ).documentPictureInPicture;
+  const popOut = useCallback(async () => {
+    if (pictureInPicture == null) {
+      return;
+    }
+    // Opening the window needs the user gesture of this click.
+    const pipWindow = await pictureInPicture.requestWindow({
+      width: 420,
+      height: 260,
+    });
+    adoptPageStyles(pipWindow.document);
+    pipWindow.addEventListener('pagehide', () => setBody(null));
+    setBody(pipWindow.document.body);
+  }, [pictureInPicture]);
+  return (
+    <>
+      <Button
+        label="Pop out"
+        isDisabled={pictureInPicture == null}
+        onClick={popOut}
+      />
+      {body != null && createPortal(<Card />, body)}
+    </>
+  );
+}
+
 export const SecondDocument: StoryObj = {
   render: function SecondDocumentStory() {
     const [body, setBody] = useState<HTMLElement | null>(null);
@@ -75,6 +110,7 @@ export const SecondDocument: StoryObj = {
           style={{width: 420, height: 260, border: '1px solid'}}
         />
         {body != null && createPortal(<Card />, body)}
+        <PictureInPictureCard />
       </>
     );
   },

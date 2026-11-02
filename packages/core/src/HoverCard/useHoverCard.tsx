@@ -60,9 +60,6 @@ const styles = stylex.create({
 });
 
 /**
- * Focus trigger behavior for hover cards
- */
-/**
  * The document the card lives in: its trigger's, which may be an iframe or a
  * Picture-in-Picture window. This page's before a trigger attaches; null with
  * no DOM.
@@ -74,6 +71,9 @@ function ownerDocumentOf(el: HTMLElement | null): Document | null {
   return typeof document === 'undefined' ? null : document;
 }
 
+/**
+ * Focus trigger behavior for hover cards
+ */
 export type HoverCardFocusTrigger = 'auto' | 'always' | 'never';
 
 /**
