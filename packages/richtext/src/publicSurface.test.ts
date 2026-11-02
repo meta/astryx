@@ -22,6 +22,7 @@ describe('@astryxdesign/richtext public surface', () => {
         'RICHTEXT_ICON_KEYS',
         'RichTextEditor',
         'RichTextEditorAutoLinkPlugin',
+        'RichTextEditorSelectionToolbar',
         'RichTextEditorToolbar',
         'RichTextExtensionError',
         'RichTextView',
@@ -34,8 +35,15 @@ describe('@astryxdesign/richtext public surface', () => {
     );
   });
 
-  it('keeps the editor theme classes and autolink patterns internal', () => {
-    for (const name of ['sharedEditorTheme', 'URL_MATCHER', 'EMAIL_MATCHER']) {
+  it('keeps the editor theme classes, autolink patterns, and toolbar internals internal', () => {
+    for (const name of [
+      'sharedEditorTheme',
+      'URL_MATCHER',
+      'EMAIL_MATCHER',
+      'selectionToolbarPlacement',
+      'useToolbarLink',
+      'ToolbarLinkPopover',
+    ]) {
       expect(richtext).not.toHaveProperty(name);
     }
   });

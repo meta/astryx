@@ -747,6 +747,10 @@
     "defaultMessage": "Update link",
     "description": "Label and tooltip of the icon button that applies the changes to an existing link in the RichTextEditor link popover or the link card's edit form."
   },
+  "@astryx.richTextEditor.selectionToolbar.label": {
+    "defaultMessage": "Selected text",
+    "description": "Screen-reader name of the small toolbar RichTextEditor shows beside selected text, which holds formatting for that text (bold, italic, link, and so on). Read as the toolbar's name, e.g. 'Selected text, toolbar'."
+  },
   "@astryx.richTextEditor.linkCard.label": {
     "defaultMessage": "Link",
     "description": "Screen-reader name of the card RichTextEditor shows for the link at the caret or under the pointer, which holds the link's address and its actions. Noun."

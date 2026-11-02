@@ -4,16 +4,18 @@
 
 /**
  * @file index.ts
- * @input Imports RichTextEditor and RichTextView components and their types
+ * @input Imports RichTextEditor, RichTextView, the toolbars, and the
+ *   Markdown and link helpers, with their types
  * @output Public API surface for @astryxdesign/richtext
  * @position Package entry point (barrel) for @astryxdesign/richtext — the
  *   Lexical-based rich text editor and viewer, promoted out of
  *   @astryxdesign/lab so it can be canaried independently.
  *
  * Exports only what a caller builds with (spec:AST-061/DEC-8): the generated
- * editor theme classes and the autolink regular expressions stay internal,
- * and Lexical's `Transformer` type comes from `@lexical/markdown`.
- * `publicSurface.test.ts` holds the runtime list.
+ * editor theme classes, the autolink regular expressions, and the pieces the
+ * two toolbars share (the link popover, the selection toolbar's placement)
+ * stay internal, and Lexical's `Transformer` type comes from
+ * `@lexical/markdown`. `publicSurface.test.ts` holds the runtime list.
  *
  * SYNC: When modified, update this header, /packages/richtext/README.md,
  *   /packages/richtext/src/publicSurface.test.ts, and the editor component doc
@@ -48,6 +50,13 @@ export {
   RICHTEXT_ICON_KEYS,
 } from './RichTextEditorToolbar';
 export type {RichTextEditorToolbarProps} from './RichTextEditorToolbar';
+
+export {RichTextEditorSelectionToolbar} from './RichTextEditorSelectionToolbar';
+export type {
+  RichTextEditorSelectionToolbarFormat,
+  RichTextEditorSelectionToolbarPresentation,
+  RichTextEditorSelectionToolbarProps,
+} from './RichTextEditorSelectionToolbar';
 
 export {
   RichTextEditorAutoLinkPlugin,
