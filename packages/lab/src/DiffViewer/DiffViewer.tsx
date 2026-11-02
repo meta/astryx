@@ -1750,7 +1750,9 @@ export function DiffViewer({
                   renderFold(row.fold)
                 ) : (
                   <>
-                    <span aria-hidden="true" {...stylex.props(styles.invisible)}>
+                    <span
+                      aria-hidden="true"
+                      {...stylex.props(styles.invisible)}>
                       {renderFold(row.fold)}
                     </span>
                     <VisuallyHidden>
