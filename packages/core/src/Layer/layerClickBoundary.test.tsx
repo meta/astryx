@@ -29,6 +29,7 @@ import {Drawer} from '../Drawer/Drawer';
 import {Lightbox} from '../Lightbox/Lightbox';
 import {MobileNav} from '../MobileNav/MobileNav';
 import {BottomSheet} from '../BottomSheet/BottomSheet';
+import {BottomSheetSwitcher} from '../BottomSheet/BottomSheetSwitcher';
 import {ToastViewport} from '../Toast/ToastViewport';
 import {useToast} from '../Toast/useToast';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
@@ -250,6 +251,29 @@ describe('layer click boundary (layer-runtime INV17)', () => {
         expect(onClick).not.toHaveBeenCalled();
       },
     );
+
+    it("a BottomSheetSwitcher's forwarded handlers still receive presses on sheet content", () => {
+      const switcher = {click: vi.fn(), pointerDown: vi.fn()};
+      const wrapperClick = vi.fn();
+      render(
+        <div onClick={wrapperClick}>
+          <BottomSheetSwitcher
+            activeSheet="details"
+            onActiveSheetChange={() => {}}
+            onClick={switcher.click}
+            onPointerDown={switcher.pointerDown}>
+            <BottomSheet sheetId="details" label="Details">
+              Step text
+            </BottomSheet>
+          </BottomSheetSwitcher>
+        </div>,
+      );
+      press(screen.getByText('Step text'));
+      // component:BottomSheetSwitcher FR9: the step's dialog carries them.
+      expect(switcher.click).toHaveBeenCalledTimes(1);
+      expect(switcher.pointerDown).toHaveBeenCalledTimes(1);
+      expect(wrapperClick).not.toHaveBeenCalled();
+    });
 
     it("runs the root's own onClick before the stop (Dialog)", () => {
       const ancestorClick = vi.fn();

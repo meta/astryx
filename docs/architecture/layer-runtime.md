@@ -574,8 +574,10 @@ the non-modal sheet's popover host — alongside its scrim; the ordering rules
 above are the stack's, the mounting under them is this gap's.
 
 INV17 is met through one seam, `Layer/layerClickBoundary.ts`, which every
-listed root spreads; Dialog's inline rendering mode layers nothing and is not a
-layer root. The per-component Tooltip and HoverCard guards
+listed root spreads; BottomSheetPanel's root is the BottomSheet dialog that
+hosts it, so a BottomSheetSwitcher's forwarded handlers there still receive
+presses on sheet content (`component:BottomSheetSwitcher` FR9); Dialog's
+inline rendering mode layers nothing and is not a layer root. The per-component Tooltip and HoverCard guards
 (`component:Tooltip` FR11, `component:HoverCard` FR11) remain beside it until
 they are removed. Compatibility: the owner ruled on 2026-11-01 that the
 boundary ships as a patch `[fix]` (`spec:AST-017` FR5's fix class) for every

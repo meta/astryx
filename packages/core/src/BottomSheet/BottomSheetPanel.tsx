@@ -54,7 +54,6 @@ import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
-import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {container} from '../Layout/container.stylex';
 import type {SpacingToken} from '../Layout/container.stylex';
 import {
@@ -900,10 +899,7 @@ export function BottomSheetPanel({
               : {}),
           ...style,
         },
-      )}
-      // A press inside the sheet stops at its root (layer-runtime INV17),
-      // after the caller's handlers run.
-      {...layerClickBoundary(props)}>
+      )}>
       <div
         {...stylex.props(styles.handleBar)}
         {...handleProps}

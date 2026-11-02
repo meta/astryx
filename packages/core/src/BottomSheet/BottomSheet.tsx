@@ -150,6 +150,7 @@ import {
 export type {BottomSheetHeight, BottomSheetSnapPoint} from './BottomSheetPanel';
 import type {BottomSheetHeight, BottomSheetSnapPoint} from './BottomSheetPanel';
 import {BottomSheetEscapeContext} from './bottomSheetEscape';
+import {layerClickBoundary} from '../Layer/layerClickBoundary';
 
 const styles = stylex.create({
   dialog: {
@@ -845,7 +846,10 @@ function StandaloneBottomSheet({
         hasScrim && stackView.depth > 0 ? stackView.depth : undefined
       }
       onCancel={handleCancel}
-      onClick={handleClick}>
+      // The dialog hosting the panel is the sheet's layer root: a press
+      // inside stops here (layer-runtime INV17), after the panel's and the
+      // dialog's own handlers run.
+      {...layerClickBoundary({onClick: handleClick})}>
       <BottomSheetPanel
         {...props}
         ref={ref}
@@ -1179,8 +1183,15 @@ function SwitcherBottomSheetItem({
       }
       role={purpose === 'required' ? 'alertdialog' : switcherDialogProps.role}
       onCancel={onDialogCancel}
-      onClick={onDialogClick}
-      onKeyDown={onDialogKeyDown}>
+      onKeyDown={onDialogKeyDown}
+      // The step's dialog hosting the panel is the sheet's layer root: a
+      // press inside stops here (layer-runtime INV17), after the switcher's
+      // forwarded handlers (component:BottomSheetSwitcher FR9) and the
+      // dialog's own handlers run.
+      {...layerClickBoundary({
+        ...switcherDialogProps,
+        onClick: onDialogClick,
+      })}>
       <div
         {...stylex.props(
           styles.positioner,
