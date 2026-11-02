@@ -9,7 +9,9 @@
  */
 
 import {describe, it, expect, vi} from 'vitest';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {act, render, screen, fireEvent} from '@testing-library/react';
+import {renderToString} from 'react-dom/server';
+import {hydrateRoot} from 'react-dom/client';
 import {RadioList} from './RadioList';
 import {RadioListItem} from './RadioListItem';
 
@@ -398,6 +400,60 @@ describe('RadioList: disabled values are not submitted (spec:AST-085 FR3)', () =
     // That its value leaves the submitted entries is proved in a real browser
     // (RadioListDisabledForm.interaction.browser.spec.ts): jsdom fires no
     // `formdata` event.
+  });
+
+  it('renders a disabled option natively disabled in server markup, so it can be neither checked nor submitted before hydration', () => {
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(
+      <form>
+        <input name="order" defaultValue="1001" />
+        <RadioList
+          label="Delivery"
+          htmlName="delivery"
+          value="express"
+          onChange={() => {}}>
+          <RadioListItem label="Standard" value="standard" />
+          <RadioListItem label="Express" value="express" isDisabled />
+        </RadioList>
+      </form>,
+    );
+    const [standard, express] = container.querySelectorAll<HTMLInputElement>(
+      'input[type="radio"]',
+    );
+    expect(express.disabled).toBe(true);
+    expect(express.checked).toBe(true);
+    expect(standard.disabled).toBe(false);
+    // A natively disabled radio contributes nothing (spec:AST-085 FR3).
+    expect([...new FormData(formOf(container)).entries()]).toEqual([
+      ['order', '1001'],
+    ]);
+  });
+
+  it('turns a server-rendered disabled option focusable once hydrated', async () => {
+    const element = (
+      <form>
+        <RadioList
+          label="Delivery"
+          htmlName="delivery"
+          value="standard"
+          onChange={() => {}}>
+          <RadioListItem label="Standard" value="standard" />
+          <RadioListItem label="Express" value="express" isDisabled />
+        </RadioList>
+      </form>
+    );
+    const container = document.createElement('div');
+    container.innerHTML = renderToString(element);
+    document.body.appendChild(container);
+    const express = () =>
+      container.querySelectorAll<HTMLInputElement>('input[type="radio"]')[1];
+    expect(express().disabled).toBe(true);
+    await act(async () => {
+      hydrateRoot(container, element);
+    });
+    expect(express().disabled).toBe(false);
+    expect(express()).toHaveAttribute('aria-disabled', 'true');
+    container.remove();
   });
 
   it('does not block a required submit, and keeps one group, when the selected option is disabled', () => {
