@@ -3,25 +3,18 @@
 /**
  * @file scrollbarGutter.ts
  * @input The element a scroll lock pins, plus live layout measurements
- * @output Exports holdScrollbarGutter and the ScrollbarGutterHold it returns
+ * @output holdScrollbarGutter and the ScrollbarGutterHold it returns
  * @position Internal hook utility; used by useScrollLock and MobileNav so that
  *   locking background scroll does not resize the layout viewport.
- *
- * Locking scroll hides the document's scrollbar. Where that scrollbar is a
- * classic (space-taking) one — Windows/Linux desktop, and macOS set to
- * "Always" show scroll bars — hiding it widens the layout viewport by the
- * scrollbar's width and the whole page jumps sideways behind the overlay.
- *
- * The fix is `scrollbar-gutter: stable`, which holds the gutter open once the
- * scrollbar goes away. Being a real layout change it holds `position: fixed`
- * chrome (sticky headers, toast viewports) as well as in-flow content, which
- * padding fundamentally cannot: fixed elements resolve against the viewport,
- * not against the padded element.
- *
- * Padding is kept only as a fallback for engines without `scrollbar-gutter`
- * (Safari shipped it in 18.2), and it is applied by measuring whether the
- * element actually moved rather than by assuming it did.
  */
+
+// A scroll lock hides the document's scrollbar. A classic, space-taking
+// scrollbar then gives its width back, and the page jumps sideways behind the
+// overlay. `scrollbar-gutter: stable` keeps the gutter open. It is a layout
+// change, so it also holds `position: fixed` chrome, which padding cannot:
+// fixed elements resolve against the viewport. Padding is only a fallback for
+// engines without `scrollbar-gutter`, and it applies only when a measurement
+// shows that the element moved.
 
 const NOOP: ScrollbarGutterHold = {
   settle() {},

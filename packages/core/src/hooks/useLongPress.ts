@@ -11,29 +11,20 @@
  *   `useMenuPress` for the held-finger menu open
  *
  * SYNC: When modified, update the hooks barrel /packages/core/src/hooks/index.ts
- *
- * Detects a single-finger long-press: fires `onLongPress` with the press
- * start point after `delayMs`. Cancels if the finger moves past
- * `moveCancelPx` on either axis (treated as a scroll/drag), lifts, or the
- * touch is cancelled. The pending timer is also cleared on unmount. The
- * default duration and tolerance are the long-press recognizer's
- * (motion/uikit/longPress.ts); the recognizer measures its tolerance as a
- * distance, as UIKit does, and this hook on each axis: the released rule
- * that ContextMenu's hold and the menu trigger keep. GUESS (`spec:AST-094`
- * FR2): the context menu's own movement allowance and press thresholds are
- * not measured yet (motion/MEASUREMENTS.md M-CM3, M-CM6).
- *
- * Two ways in, one detector. Spread the touch handlers onto an element, or —
- * when the caller already runs its own pointer-event machine, as
- * `useMenuPress` does — call `start`, `moveTo` and `cancel` from it. Either
- * way the hold duration, the movement tolerance and the timer are this
- * hook's, so a long press cannot come to mean one thing on a context menu
- * and another on a menu trigger.
- *
- * Motivation: iOS Safari never synthesizes a `contextmenu` event on
- * long-press, so long-press is the only touch affordance for opening
- * cursor-positioned surfaces.
  */
+
+// iOS Safari sends no `contextmenu` event on a long press. So a long press is
+// the only touch way to open a surface at the press point.
+//
+// A caller can spread the touch handlers, or call `start`, `moveTo` and
+// `cancel` from its own pointer events, as `useMenuPress` does. Both ways use
+// this hook's hold time, movement tolerance and timer, so a long press means
+// the same thing on a context menu and on a menu trigger.
+//
+// The defaults come from the long-press recognizer. The recognizer measures
+// its tolerance as a distance, as UIKit does. This hook measures it on each
+// axis. The context menu's own movement allowance is a guess and is not
+// measured yet (AST-094).
 
 import {useCallback, useEffect, useRef} from 'react';
 import {
@@ -105,8 +96,8 @@ export function useLongPress(
   options: UseLongPressOptions,
 ): UseLongPressHandlers {
   const {start, ...handlers} = useLongPressDetector(options);
-  // The public start takes the point only: a per-press tolerance stays
-  // internal to its core caller (architecture:public-component-api INV12).
+  // The public start takes only the point. A per-press tolerance stays
+  // internal to its core caller.
   const startAt = useCallback(
     (point: {x: number; y: number}) => start(point),
     [start],
@@ -146,8 +137,8 @@ export function useLongPressDetector(
       if (disabled) {
         return;
       }
-      // Clear any stale timer first, THEN record the start point — clearing
-      // also nulls startRef, so order matters.
+      // Clear a stale timer first, then record the start point. The clear
+      // also sets startRef to null.
       clear();
       startRef.current = {x: point.x, y: point.y};
       pressToleranceRef.current = tolerance ?? null;
@@ -174,7 +165,6 @@ export function useLongPressDetector(
         Math.abs(point.x - from.x) > limit ||
         Math.abs(point.y - from.y) > limit
       ) {
-        // Treat as a scroll/drag, not a long-press.
         clear();
         return false;
       }
@@ -189,7 +179,6 @@ export function useLongPressDetector(
         return;
       }
       if (e.touches.length !== 1) {
-        // Multi-touch cancels any pending long-press.
         clear();
         return;
       }
@@ -205,7 +194,6 @@ export function useLongPressDetector(
         return;
       }
       if (e.touches.length !== 1) {
-        // Multi-touch cancels the pending long-press.
         clear();
         return;
       }
@@ -215,7 +203,6 @@ export function useLongPressDetector(
     [clear, moveTo],
   );
 
-  // Cancel any pending long-press timer on unmount.
   useEffect(() => clear, [clear]);
 
   return {

@@ -7,21 +7,19 @@
  * @input Uses React effects and refs supplied by BottomSheet
  * @output Exports internal useMobileKeyboard hook
  * @position Internal to BottomSheet; not exported from the core entry point
- *
- * Gives a fully expanded, explicitly Tall sheet a keyboard-aware internal
- * scroll range while leaving the sheet itself stationary. Shorter detents and
- * other heights opt out entirely. Starting Tall-sheet travel or closing the
- * sheet blurs the field and dismisses the keyboard.
- *
- * Every route into a field also has to reach it without the browser revealing
- * it for us. On iOS that reveal scrolls the DOCUMENT, and a fixed sheet travels
- * with it, so the whole page lurches. The reveal is attached to the focus
- * operation, which is where it can be refused: take the focus transition over
- * on the capture-phase blur, deliver it with preventScroll, and bring the
- * control into view with the sheet's own scroller afterwards. Every route in —
- * a tap, the keyboard's Next, Tab, a programmatic focus() — passes through that
- * one transition.
  */
+
+// A fully expanded, explicitly Tall sheet gets a keyboard-aware internal
+// scroll range, and the sheet itself stays still. Other detents and heights
+// opt out. Tall-sheet travel or a close blurs the field and dismisses the
+// keyboard.
+//
+// On iOS the browser reveals a focused field by scrolling the document, and
+// a fixed sheet moves with it, so the page lurches. The reveal belongs to the
+// focus operation, so refuse it there: take over the focus change on the
+// capture-phase blur, focus with preventScroll, and then scroll the control
+// into view in the sheet's own scroller. A tap, the keyboard's Next, Tab and
+// focus() all pass through that one change.
 
 import {useEffect, useRef, type RefObject} from 'react';
 

@@ -32,6 +32,7 @@ verified_by:
     packages/core/src/Layer/layerHost.test.ts,
     packages/core/src/Layer/anchorName.test.ts,
     packages/core/src/Layer/useLayerDismissal.test.tsx,
+    packages/core/src/Layer/layerClickBoundary.test.tsx,
     packages/core/src/Layer/layerDismissalInvariants.test.tsx,
     packages/core/src/Popover/Popover.test.tsx,
     packages/core/src/DropdownMenu/DropdownMenu.test.tsx,
@@ -299,14 +300,14 @@ during a press so native light dismissal does not mistake them for outside
 interaction. Their click action is cancelled as an invoker toggle so the control
 can perform its own action without closing the layer.
 
-A text input cannot be an invoker, so BaseTypeahead's list and DateTimeInput's
-time list, which their text fields own, are manual popovers. A press that starts and ends on the field's input or
-its buttons, or in the list, is inside, judged across open shadow roots; a press
+A text input cannot be an invoker, so BaseTypeahead's list, DateTimeInput's
+time list and ChatComposerInput's trigger menu, which their text fields own,
+are manual popovers. A press that starts and ends on the field's input or its
+buttons, or in the list, is inside, judged across open shadow roots; a press
 that starts and ends anywhere else closes the list, a scroll or pinch that
 starts outside does not, and Escape stays on the shared stack. Implementation
-gap: DateInput's calendar and ChatComposerInput's trigger menu are still auto
-popovers with native light dismiss, so a press in
-their own text input closes them.
+gap: DateInput's calendar is still an auto popover with native light dismiss,
+so a press in its own text input closes it.
 
 ### Current dismissal plumbing
 
@@ -332,8 +333,8 @@ Outside interaction is not coordinated by the shared stack. Current paths are
 independent:
 
 - auto popovers use native light dismiss;
-- BaseTypeahead's list and DateTimeInput's time list, manual popovers, use
-  Layer's outside-press watch,
+- BaseTypeahead's list, DateTimeInput's time list and ChatComposerInput's
+  trigger menu, manual popovers, use Layer's outside-press watch,
   which closes on a press that starts and ends outside the field and the list
   and forgets a cancelled press (a scroll);
 - native dialogs handle backdrop clicks locally;
@@ -572,19 +573,24 @@ keeps a document's sheets in open order, a step dialog's modal present, and
 the non-modal sheet's popover host — alongside its scrim; the ordering rules
 above are the stack's, the mounting under them is this gap's.
 
-INV17 is not met yet. Implementation gap: not built. A press inside a layer
-still propagates through the React tree to the ancestors of the layer's JSX
-position; only Tooltip and HoverCard surfaces are guarded, and only against
-the Core containers that check them (`component:Tooltip` FR11,
-`component:HoverCard` FR11). Compatibility: the owner ruled on 2026-11-01
-that closing the gap ships as a patch `[fix]` (`spec:AST-017` FR5's fix
-class) for every caller no released record covered: no record promised that
-a press inside a layer reaches the layer's JSX ancestors, and a handler that
-needs those presses belongs on the layer content. The one released promise is
+INV17 is met through one seam, `Layer/layerClickBoundary.ts`, which every
+listed root spreads; BottomSheetPanel's root is the BottomSheet dialog that
+hosts it, so a BottomSheetSwitcher's forwarded handlers there still receive
+presses on sheet content (`component:BottomSheetSwitcher` FR9); Dialog's
+inline rendering mode layers nothing and is not a layer root. The per-component Tooltip and HoverCard guards
+(`component:Tooltip` FR11, `component:HoverCard` FR11) remain beside it until
+they are removed. Compatibility: the owner ruled on 2026-11-01 that the
+boundary ships as a patch `[fix]` (`spec:AST-017` FR5's fix class) for every
+caller no released record covered: no record promised that a press inside a
+layer reaches the layer's JSX ancestors, and a handler that needs those presses
+belongs on the layer content. The one released promise is
 `component:SelectableCard` FR2, whose caller `onClick` also runs for clicks
 that do not toggle, including a click inside an open Tooltip or HoverCard
-surface; SelectableCard keeps that until the next minor, where the change is
-staged as `[breaking]` (`spec:AST-017` FR32).
+surface. Until the next minor, SelectableCard keeps it by calling the caller's
+`onClick` from a capture-phase handler on the card root for a click that starts
+inside a layer within the card, so before the layer's own handlers; the change
+is staged as `[breaking]` (`spec:AST-017` FR32) and `component:SelectableCard`
+`CLN-0026` removes that handler.
 
 ## Change coupling
 
@@ -635,6 +641,9 @@ staged as `[breaking]` (`spec:AST-017` FR32).
   transitions of a layer and its content across the re-placement's display
   reset.
 - `Layer/gestureCounter.ts` owns physical pointer/key gesture identity.
+- `Layer/layerClickBoundary.ts` owns the INV17 seam: the React-tree stop every
+  layer content root spreads, with the layer-root mark that
+  `privateAttributes/layerRoot.stylex.ts` owns.
 - One shared seam in the layer runtime owns INV17's stop on every layer content
   root. It stops propagation through the React tree only. React's
   `stopPropagation()` also stops the native event in React 19, which would
@@ -652,7 +661,8 @@ staged as `[breaking]` (`spec:AST-017` FR32).
 - `Layer/useTouchTrigger.ts` owns touch trigger classification and the current
   touch-only outside listener for Tooltip/HoverCard.
 - `Layer/outsidePress.ts` owns the outside-press watch for a text field's
-  manual layer, used by BaseTypeahead and DateTimeInput.
+  manual layer, used by BaseTypeahead, DateTimeInput and ChatComposerInput's
+  trigger menu.
 - `DropdownMenuContext` and `DropdownMenuSubMenu` own the current local
   menu-cascade parent-close chain.
 - Dialog families own native modal/backdrop presentation and their local channel
