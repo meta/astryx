@@ -849,7 +849,7 @@ export function SideNavHeading({
             className,
             style,
           )}>
-          {icon &&
+          {isRenderable(icon) &&
             (headingHref ? (
               <LinkComponent
                 href={headingHref}
@@ -930,7 +930,7 @@ export function SideNavHeading({
           style,
         )}
         {...props}>
-        {icon &&
+        {isRenderable(icon) &&
           (headingHref ? (
             <LinkComponent
               href={headingHref}

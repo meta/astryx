@@ -39,8 +39,8 @@ const EMPTY_VALUES = [
 ] as const;
 
 /** The element whose own text is exactly "0", if any. */
-function zeroParent(root: ParentNode): HTMLElement | null {
-  const walker = document.createTreeWalker(root as Node, NodeFilter.SHOW_TEXT);
+function zeroParent(root: Node): HTMLElement | null {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     if (node.textContent === '0') {
       return node.parentElement;
@@ -54,10 +54,21 @@ function zeroIsInside(style: string): boolean {
   return zeroParent(document.body)?.closest(`[class*="${style}"]`) != null;
 }
 
+const COLLAPSED = {isCollapsed: true, toggle: () => {}, isCollapsible: true};
+
+const OPEN_MOBILE_NAV = {
+  isMobile: true,
+  isMobileNavOpen: true,
+  toggleMobileNav: vi.fn(),
+  openMobileNav: vi.fn(),
+  closeMobileNav: vi.fn(),
+  isMobileNavEnabled: true,
+  hasAutoToggle: true,
+};
+
 function Collapsed({children}: {children: ReactNode}) {
   return (
-    <SideNavCollapseContext
-      value={{isCollapsed: true, toggle: () => {}, isCollapsible: true}}>
+    <SideNavCollapseContext value={COLLAPSED}>
       {children}
     </SideNavCollapseContext>
   );
@@ -65,16 +76,7 @@ function Collapsed({children}: {children: ReactNode}) {
 
 function InDrawer({children}: {children: ReactNode}) {
   return (
-    <AppShellMobileContext
-      value={{
-        isMobile: true,
-        isMobileNavOpen: true,
-        toggleMobileNav: vi.fn(),
-        openMobileNav: vi.fn(),
-        closeMobileNav: vi.fn(),
-        isMobileNavEnabled: true,
-        hasAutoToggle: true,
-      }}>
+    <AppShellMobileContext value={OPEN_MOBILE_NAV}>
       <SideNavRenderContext value="drawer">{children}</SideNavRenderContext>
     </AppShellMobileContext>
   );
@@ -82,7 +84,7 @@ function InDrawer({children}: {children: ReactNode}) {
 
 describe('SideNav slots follow isRenderable', () => {
   const renderModes: ReadonlyArray<[string, (node: ReactNode) => ReactNode]> = [
-    ['the default sidebar', node => node],
+    ['the default sidebar', (node): ReactNode => node],
     ['the drawer', node => <InDrawer>{node}</InDrawer>],
     [
       'drawer content',
@@ -132,6 +134,14 @@ describe('SideNavHeading slots follow isRenderable', () => {
       {headingHref: '/home', headerEndContent: <span>End</span>},
     ],
     ['a whole-heading menu trigger', {menu: <span>Menu</span>}],
+    [
+      'a menu with a heading link',
+      {headingHref: '/home', menu: <span>Menu</span>},
+    ],
+    [
+      'a heading with independent links',
+      {superheading: 'Suite', superheadingHref: '/suite'},
+    ],
   ];
 
   describe.each(paths)('icon in %s', (_path, props) => {
