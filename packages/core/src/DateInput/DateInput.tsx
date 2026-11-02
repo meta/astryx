@@ -87,7 +87,12 @@ const styles = stylex.create({
   disabledFocusRing: {
     borderColor: {
       default: colorVars['--color-border-emphasized'],
-      ':has(input:focus)': colorVars['--color-accent'],
+      ':has(input:focus)': {
+        default: colorVars['--color-accent'],
+        // Forced colors repaint author borders in one system color and drop
+        // the inset shadow; Highlight keeps the focused field visible.
+        '@media (forced-colors: active)': 'Highlight',
+      },
     },
     boxShadow: {
       default: 'none',

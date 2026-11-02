@@ -303,8 +303,12 @@ const styles = stylex.create({
   triggerDisabledFocus: {
     borderColor: {
       default: colorVars['--color-border-emphasized'],
-      ':has(> [aria-disabled="true"]:focus-visible)':
-        colorVars['--color-accent'],
+      ':has(> [aria-disabled="true"]:focus-visible)': {
+        default: colorVars['--color-accent'],
+        // Forced colors repaint author borders in one system color and drop
+        // the inset shadow; Highlight keeps the focused field visible.
+        '@media (forced-colors: active)': 'Highlight',
+      },
     },
     boxShadow: {
       default: 'none',
