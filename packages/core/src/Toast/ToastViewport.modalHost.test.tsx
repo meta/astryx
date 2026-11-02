@@ -26,6 +26,16 @@ import {Dialog} from '../Dialog';
 import {getActiveModalOutlet} from '../Layer/modalOutlet';
 import type {ToastDismissReason} from './types';
 
+// jsdom reports no window focus until an element is focused, but a test page
+// stands for a focused window: a toast raised while the window is blurred
+// starts held (FR2), which the blur tests set up on purpose.
+beforeEach(() => {
+  vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+});
+afterEach(() => {
+  vi.mocked(document.hasFocus).mockRestore?.();
+});
+
 // jsdom does not implement the native dialog methods.
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = vi.fn(function (
