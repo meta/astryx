@@ -16,6 +16,7 @@ import {useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   Button,
+  ClickableCard,
   Dialog,
   DialogHeader,
   HoverCard,
@@ -25,6 +26,7 @@ import {
   LayoutFooter,
   Lightbox,
   MobileNav,
+  MoreMenu,
   Popover,
   Text,
   Tooltip,
@@ -1016,4 +1018,47 @@ function PinnedTooltipInModalExample() {
 
 export const PinnedTooltipInModal: Story = {
   render: () => <PinnedTooltipInModalExample />,
+};
+
+/**
+ * A menu and a popover written inside a clickable card. A press inside either
+ * open layer stays in the layer: choosing "Rename" counts a menu choice, and a
+ * click on the popover's text does nothing, but neither activates the card
+ * around them (`architecture:layer-runtime` INV17). A click on the card's own
+ * text still activates it.
+ */
+function PressInsideLayerExample() {
+  const [cardActivations, setCardActivations] = useState(0);
+  const [menuChoices, setMenuChoices] = useState(0);
+  return (
+    <VStack gap={3}>
+      <ClickableCard
+        label="Project Atlas"
+        onClick={() => setCardActivations(count => count + 1)}>
+        <HStack gap={2}>
+          <Text type="body">Project Atlas</Text>
+          <MoreMenu
+            items={[
+              {
+                label: 'Rename',
+                onClick: () => setMenuChoices(count => count + 1),
+              },
+            ]}
+          />
+          <Popover
+            label="Details"
+            content={<Text type="body">Owned by the design team.</Text>}>
+            <Button label="Details" variant="secondary" />
+          </Popover>
+        </HStack>
+      </ClickableCard>
+      <Text type="body">
+        Card activations: {cardActivations} · Menu choices: {menuChoices}
+      </Text>
+    </VStack>
+  );
+}
+
+export const PressInsideLayer: Story = {
+  render: () => <PressInsideLayerExample />,
 };
