@@ -19,7 +19,13 @@
  *   touchscreen gives Chromium a phone's (a coarse primary pointer).
  */
 
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type CDPSession,
+  type Locator,
+  type Page,
+} from '@playwright/test';
 // @ts-expect-error -- pngjs ships no declarations; runtime support is pinned.
 import {PNG} from 'pngjs';
 import {
@@ -44,6 +50,34 @@ test.afterAll(async () => {
 // a context that has a touchscreen. A phone-sized viewport keeps the commit
 // point within a finger's reach.
 test.use({hasTouch: true, viewport: {height: 800, width: 420}});
+
+/**
+ * Dispatches touches stamped on the script's own clock, as a digitizer stamps
+ * a real finger's. A dispatch returns only once the page has handled the
+ * touch, so on a loaded page the next one goes out late. Stamped, its time
+ * still follows the script, and the release velocity, which reads the
+ * touches' own times, reads the gesture the script made. Each touch waits
+ * out its gap in real time too, so no stamp is ahead of the page's clock.
+ */
+function stampedTouches(page: Page, cdp: CDPSession, y: number) {
+  const origin = Date.now() / 1000;
+  let elapsed = 0;
+  return async (
+    type: 'touchStart' | 'touchMove' | 'touchEnd',
+    x: number | null,
+    afterMs: number,
+  ) => {
+    if (afterMs > 0) {
+      await page.waitForTimeout(afterMs);
+    }
+    elapsed += afterMs;
+    await cdp.send('Input.dispatchTouchEvent', {
+      type,
+      touchPoints: x == null ? [] : [{x, y}],
+      timestamp: origin + elapsed / 1000,
+    });
+  };
+}
 
 /** Opens the story under a finger: the context's touchscreen makes the primary pointer coarse. */
 async function openUnderFinger(page: Page, url: string) {
@@ -290,24 +324,20 @@ test('opens the row on a fling without firing, and fires the outermost trailing 
   const y = rest.y + rest.height / 2;
   const startX = rest.x + rest.width - 24;
   const cdp = await page.context().newCDPSession(page);
-  const at = async (x: number, type: 'touchStart' | 'touchMove') =>
-    cdp.send('Input.dispatchTouchEvent', {touchPoints: [{x, y}], type});
+  const touch = stampedTouches(page, cdp, y);
 
   // Toward the inline start: the trailing panel, Delete outermost. A slow
-  // start claims the drag; the last step is quick, so the release is a fling
-  // short of the commit point: it opens the row, as UIKit's does, and fires
-  // nothing.
-  await at(startX, 'touchStart');
-  for (const dx of [6, 14, 28, 36]) {
-    await at(startX - dx, 'touchMove');
-    await page.waitForTimeout(40);
+  // start claims the drag; the last steps are quick (8 ms apart, the lift
+  // with them), so the release is a fling short of the commit point: it
+  // opens the row, as UIKit's does, and fires nothing.
+  await touch('touchStart', startX, 0);
+  await touch('touchMove', startX - 6, 0);
+  for (const dx of [14, 28, 36]) {
+    await touch('touchMove', startX - dx, 40);
   }
-  await at(startX - 60, 'touchMove');
-  await at(startX - 90, 'touchMove');
-  await cdp.send('Input.dispatchTouchEvent', {
-    touchPoints: [],
-    type: 'touchEnd',
-  });
+  await touch('touchMove', startX - 60, 40);
+  await touch('touchMove', startX - 90, 8);
+  await touch('touchEnd', null, 8);
   const panel = row.locator('[data-swipe-panel="trailing"]');
   await expect(panel).not.toHaveAttribute('inert');
   // How far the row opens: the entries (the track's children) together.
@@ -324,16 +354,12 @@ test('opens the row on a fling without firing, and fires the outermost trailing 
   // one beat, the slide out, then the entry fires and the story removes the
   // row.
   const from = rest.x + rest.width - panelWidth - 24;
-  await at(from, 'touchStart');
-  for (const dx of [10, 30, 60, 120, 180, 240]) {
-    await at(from - dx, 'touchMove');
-    await page.waitForTimeout(40);
+  await touch('touchStart', from, 0);
+  await touch('touchMove', from - 10, 0);
+  for (const dx of [30, 60, 120, 180, 240]) {
+    await touch('touchMove', from - dx, 40);
   }
-  await page.waitForTimeout(100);
-  await cdp.send('Input.dispatchTouchEvent', {
-    touchPoints: [],
-    type: 'touchEnd',
-  });
+  await touch('touchEnd', null, 140);
   await expect(page.getByText('Message 1')).toHaveCount(0);
   await expect(rows).toHaveCount(before - 1);
 });
