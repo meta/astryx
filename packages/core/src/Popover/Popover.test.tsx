@@ -1038,6 +1038,76 @@ describe('Popover', () => {
       expect(trigger).toHaveFocus();
     });
 
+    it('leaves focus on a control inside that took it before the first frame', () => {
+      // Auto-focus waits a frame for content that is not mounted yet. Focus an
+      // app or a press put on a later control in that frame is not the first
+      // control's to take back.
+      const frames = new Map<number, FrameRequestCallback>();
+      let nextFrame = 0;
+      vi.stubGlobal(
+        'requestAnimationFrame',
+        (callback: FrameRequestCallback) => {
+          nextFrame += 1;
+          frames.set(nextFrame, callback);
+          return nextFrame;
+        },
+      );
+      vi.stubGlobal('cancelAnimationFrame', (frame: number) => {
+        frames.delete(frame);
+      });
+      try {
+        render(
+          <Popover
+            content={
+              <>
+                <button type="button">First</button>
+                <button type="button" data-testid="second">
+                  Second
+                </button>
+              </>
+            }
+            label="Test">
+            <button type="button">Open</button>
+          </Popover>,
+        );
+        fireEvent.click(screen.getByRole('button', {name: 'Open'}));
+
+        const second = screen.getByTestId('second');
+        second.focus();
+        for (const callback of [...frames.values()]) {
+          callback(0);
+        }
+
+        expect(second).toHaveFocus();
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('still moves focus to the first control when focus is not inside', async () => {
+      render(
+        <Popover
+          content={
+            <>
+              <button type="button">First</button>
+              <button type="button">Second</button>
+            </>
+          }
+          label="Test">
+          <button type="button">Open</button>
+        </Popover>,
+      );
+      const trigger = screen.getByRole('button', {name: 'Open'});
+      trigger.focus();
+      fireEvent.click(trigger);
+
+      await waitFor(() =>
+        expect(
+          screen.getByRole('button', {name: 'First', hidden: true}),
+        ).toHaveFocus(),
+      );
+    });
+
     it('does not move focus into a popover that closed before its first frame', () => {
       // Auto-focus waits a frame for the content to mount. A popover dismissed
       // within that frame must not pull focus into its hidden content.

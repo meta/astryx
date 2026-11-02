@@ -458,9 +458,11 @@ function usePopoverImplementation(
     if (!container) {
       return;
     }
-    // Focus already inside (set in `onShow`, or a press in the content) is
-    // where the user or the caller wants it; moving it would undo that.
-    if (container.contains(container.ownerDocument.activeElement)) {
+    // Focus already on a control inside (set in `onShow`, or a press in the
+    // content) is where the user or the caller wants it; moving it would
+    // undo that.
+    const active = container.ownerDocument.activeElement;
+    if (active != null && active !== container && container.contains(active)) {
       return;
     }
     if (focusFirstContentControl(container)) {
