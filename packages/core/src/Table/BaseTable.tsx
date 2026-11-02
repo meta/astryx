@@ -14,7 +14,14 @@
  * - /packages/cli/assets/templates/blocks/components/Table/ (showcase blocks)
  */
 
-import {memo, useRef, type ReactElement, type ReactNode, type Ref} from 'react';
+import {
+  memo,
+  useId,
+  useRef,
+  type ReactElement,
+  type ReactNode,
+  type Ref,
+} from 'react';
 import {isRenderable} from '../utils/isRenderable';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
@@ -423,6 +430,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
   } satisfies TableRenderProps);
 
   // --- Plugin pipeline: header cells ---
+  const headerLabelIdBase = useId();
   const headerCells = resolvedColumns.map((col, columnIndex) => {
     const headerContent = col.header ?? col.key;
 
@@ -477,28 +485,53 @@ function BaseTableInner<T extends Record<string, unknown>>({
     const hasSlots =
       before != null || after != null || overlay != null || below != null;
 
-    const headerInner = hasSlots ? (
-      <>
-        {before}
-        {isRenderable(after) ? (
-          <div {...stylex.props(styles.headerLabelRow)}>
-            {resolvedContent}
-            {after}
-          </div>
-        ) : (
-          resolvedContent
-        )}
-        {overlay}
-        {below}
-      </>
+    const labelRow = isRenderable(after) ? (
+      <div {...stylex.props(styles.headerLabelRow)}>
+        {resolvedContent}
+        {after}
+      </div>
     ) : (
       resolvedContent
     );
+
+    // An overlay (a resize handle) is a control of its own, so it must not add
+    // to the header's name: the header is named by the rest of its content.
+    const namesOwnHeader =
+      isRenderable(overlay) &&
+      mergedHtmlProps['aria-label'] == null &&
+      mergedHtmlProps['aria-labelledby'] == null;
+    const labelId = `${headerLabelIdBase}-label-${columnIndex}`;
+    const belowId = `${headerLabelIdBase}-below-${columnIndex}`;
+    const hasBelow = isRenderable(below);
+
+    const headerInner = !hasSlots ? (
+      resolvedContent
+    ) : namesOwnHeader ? (
+      <>
+        <div id={labelId}>
+          {before}
+          {labelRow}
+        </div>
+        {overlay}
+        {hasBelow && <div id={belowId}>{below}</div>}
+      </>
+    ) : (
+      <>
+        {before}
+        {labelRow}
+        {overlay}
+        {below}
+      </>
+    );
+    const headerNameProps = namesOwnHeader
+      ? {'aria-labelledby': hasBelow ? `${labelId} ${belowId}` : labelId}
+      : {};
 
     return (
       <HeaderCellComponent
         key={col.key}
         {...mergedHtmlProps}
+        {...headerNameProps}
         {...headerTitleProp}
         contextMenuActions={cellRenderProps.contextMenuActions}
         xstyle={cellRenderProps.xstyle}>
