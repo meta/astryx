@@ -4,7 +4,7 @@
 
 /**
  * @file Switch.tsx
- * @input Uses React, useId, ChangeEvent, FieldLabel, FieldStatus, IconType, InputStatus, useTooltip, i18n (useTranslator)
+ * @input Uses React, useId, ChangeEvent, FieldLabel, FieldStatus, IconType, InputStatus, useTooltip, i18n (useComponentTranslator)
  * @output Exports Switch component, SwitchProps, SwitchLabelPosition, SwitchLabelSpacing
  * @position Core implementation; consumed by index.ts, tested by Switch.test.tsx
  *
@@ -51,10 +51,16 @@ import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Switch/Switch.generated';
+
+registerEnglishFallback(english);
 const wrapperSizeStyles = stylex.create({
   sm: {
     width: 32,
@@ -573,7 +579,7 @@ export function Switch({
   'aria-labelledby': ariaLabelledByProp,
   ...rest
 }: SwitchProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const id = useId();
   // The row is the pressable: the input, the track and the label all sit
   // inside it, and the pressed arms above read the row's scope marker.

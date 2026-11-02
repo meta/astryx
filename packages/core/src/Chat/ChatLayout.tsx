@@ -39,9 +39,15 @@ import {useChatNewMessages} from './useChatNewMessages';
 import {ChatLayoutScrollButton} from './ChatLayoutScrollButton';
 import {ChatLayoutContext} from './ChatContext';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatLayout.generated';
+
+registerEnglishFallback(english);
 // =============================================================================
 // Types
 // =============================================================================
@@ -296,7 +302,7 @@ export function ChatLayout({
   ref,
   ...rest
 }: ChatLayoutProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const rootRef = useRef<HTMLDivElement>(null);
 
   const scrollContainerRef = externalScrollRef ?? rootRef;

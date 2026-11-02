@@ -1,7 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @input A production docsite build and exact-origin reachability fixtures
+ * @input A production docsite build configured with the docs and probe origins,
+ *   and exact-origin reachability fixtures
  * @output Browser evidence of unified banner CTAs and page-view-only dismissal
  * @position Docsite integration tests; run against both latest and canary builds
  */
@@ -19,10 +20,25 @@ const deployments = [
 ];
 const isCanary = process.env.DOCSITE_TEST_TARGET !== 'latest';
 const target = isCanary ? 'canary' : 'latest';
-const internalOrigin = 'https://astryx.internalmeta.com';
-const probeOrigin = 'https://codebunny.internalmeta.com';
+// The build under test must be configured with these origins (CI builds with
+// placeholder values); the probe and the destination are both routed below.
+const internalOrigin = process.env.NEXT_PUBLIC_INTERNAL_DOCS_ORIGIN ?? '';
+const probeOrigin = process.env.NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN ?? '';
+const isConfigured = internalOrigin !== '' && probeOrigin !== '';
 const noticeName = 'Documentation notice';
 const dismissName = 'Dismiss documentation notice for this page view';
+
+// CI must always run these contracts; a local build without the origins
+// disables the prompt, so there is nothing to check.
+if (!isConfigured && (process.env.CI ?? '') !== '') {
+  throw new Error(
+    'Set NEXT_PUBLIC_INTERNAL_DOCS_ORIGIN and NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN for both the docsite build and this run',
+  );
+}
+test.skip(
+  !isConfigured,
+  'Build and run with NEXT_PUBLIC_INTERNAL_DOCS_ORIGIN and NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN set',
+);
 
 test.afterEach(async ({page}) => {
   await page.waitForLoadState('networkidle');

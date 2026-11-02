@@ -130,25 +130,32 @@ a measured, sourced difference exists.
   wherever the native motion settles with an overshoot or stretches with a
   rubber band.
 
-  | Role                       | Default                             | Source                                                                                         |
-  | -------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------- |
-  | `springs.fingerTracking`   | response 0.15 s, damping ratio 0.86 | Apple: SwiftUI `interactiveSpring()`                                                           |
-  | `springs.emphasis`         | duration 0.5 s, bounce 0.3          | Apple: SwiftUI `.bouncy`                                                                       |
-  | `springs.settle`           | duration 0.5 s, bounce 0            | Apple: SwiftUI `.smooth`                                                                       |
-  | `springs.quickChange`      | duration 0.5 s, bounce 0.15         | Apple: SwiftUI `.snappy`                                                                       |
-  | `springs.viewChange`       | mass 3, stiffness 1000, damping 500 | measured: UIKit `UISpringTimingParameters()`, iOS 26.2 simulator, 2026-10-23                   |
-  | `springs.timedChange`      | duration 0.5 s, bounce 0            | Apple: UIKit `UIView.animate(springDuration:bounce:)`                                          |
-  | `springs.stateChange`      | response 0.55 s, damping ratio 1    | Apple: SwiftUI `Animation.default`                                                             |
-  | `springs.directChange`     | response 0.5 s, damping ratio 0.825 | Apple: SwiftUI `.spring(response:dampingFraction:)`                                            |
-  | `springs.menuOpen`         | damping ratio 0.8, response 0.32 s  | measured: UIMenu opening, iOS 26.2 simulator, 2026-10-23                                       |
-  | `springs.menuClose`        | damping ratio 0.85, response 0.35 s | measured: UIMenu closing, iOS 26.2 simulator, 2026-10-23                                       |
-  | `springs.subMenuOpen`      | damping ratio 0.85, response 0.4 s  | measured: UIKit's own spring for UIMenu's sub-menu opening, iOS 26.2 simulator, 2026-10-24     |
-  | `springs.subMenuBack`      | damping ratio 1, response 0.4 s     | measured: UIKit's own spring for UIMenu's sub-menu header back, iOS 26.2 simulator, 2026-10-24 |
-  | `timing.stateChangeMs`     | 250 ms                              | measured: Core Animation's implicit transaction, iOS 26.2 simulator, 2026-10-23                |
-  | `timing.curves.viewChange` | cubic-bezier(0.25, 0.1, 0.25, 1)    | Apple: `CAMediaTimingFunctionName.default`                                                     |
-  | `timing.curves.exit`       | cubic-bezier(0.42, 0, 1, 1)         | measured: UIKit's ease-in, iOS 26.2 simulator, 2026-10-23                                      |
-  | `timing.curves.entrance`   | cubic-bezier(0, 0, 0.58, 1)         | measured: UIKit's ease-out, iOS 26.2 simulator, 2026-10-23                                     |
-  | `timing.curves.move`       | cubic-bezier(0.42, 0, 0.58, 1)      | measured: UIKit's ease-in-out, iOS 26.2 simulator, 2026-10-23                                  |
+  | Role                         | Default                             | Source                                                                                                |
+  | ---------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------- |
+  | `springs.fingerTracking`     | response 0.15 s, damping ratio 0.86 | Apple: SwiftUI `interactiveSpring()`                                                                  |
+  | `springs.emphasis`           | duration 0.5 s, bounce 0.3          | Apple: SwiftUI `.bouncy`                                                                              |
+  | `springs.settle`             | duration 0.5 s, bounce 0            | Apple: SwiftUI `.smooth`                                                                              |
+  | `springs.quickChange`        | duration 0.5 s, bounce 0.15         | Apple: SwiftUI `.snappy`                                                                              |
+  | `springs.viewChange`         | mass 3, stiffness 1000, damping 500 | measured: UIKit `UISpringTimingParameters()`, iOS 26.2 simulator, 2026-10-23                          |
+  | `springs.timedChange`        | duration 0.5 s, bounce 0            | Apple: UIKit `UIView.animate(springDuration:bounce:)`                                                 |
+  | `springs.stateChange`        | response 0.55 s, damping ratio 1    | Apple: SwiftUI `Animation.default`                                                                    |
+  | `springs.directChange`       | response 0.5 s, damping ratio 0.825 | Apple: SwiftUI `.spring(response:dampingFraction:)`                                                   |
+  | `springs.menuOpen`           | damping ratio 0.8, response 0.32 s  | measured: UIMenu opening, iOS 26.2 simulator, 2026-10-23                                              |
+  | `springs.menuClose`          | damping ratio 0.85, response 0.35 s | measured: UIMenu closing, iOS 26.2 simulator, 2026-10-23                                              |
+  | `springs.subMenuOpen`        | damping ratio 0.85, response 0.4 s  | measured: UIKit's own spring for UIMenu's sub-menu opening, iOS 26.2 simulator, 2026-10-24            |
+  | `springs.subMenuBack`        | damping ratio 1, response 0.4 s     | measured: UIKit's own spring for UIMenu's sub-menu header back, iOS 26.2 simulator, 2026-10-24        |
+  | `springs.contextMenuLift`    | damping ratio 0.8, response 0.32 s  | measured: UIContextMenuInteraction's preview lift, iOS 26.2 simulator, 2026-10-23                     |
+  | `springs.contextMenuDismiss` | damping ratio 0.85, response 0.35 s | measured: UIContextMenuInteraction's dismissal, iOS 26.2 simulator, 2026-10-23                        |
+  | `springs.contextMenuMorph`   | damping ratio 0.8, response 0.3 s   | measured: UIContextMenuInteraction's menu entrance and preview shadow, iOS 26.2 simulator, 2026-10-23 |
+  | `timing.stateChangeMs`       | 250 ms                              | measured: Core Animation's implicit transaction, iOS 26.2 simulator, 2026-10-23                       |
+  | `timing.curves.viewChange`   | cubic-bezier(0.25, 0.1, 0.25, 1)    | Apple: `CAMediaTimingFunctionName.default`                                                            |
+  | `timing.curves.exit`         | cubic-bezier(0.42, 0, 1, 1)         | measured: UIKit's ease-in, iOS 26.2 simulator, 2026-10-23                                             |
+  | `timing.curves.entrance`     | cubic-bezier(0, 0, 0.58, 1)         | measured: UIKit's ease-out, iOS 26.2 simulator, 2026-10-23                                            |
+  | `timing.curves.move`         | cubic-bezier(0.42, 0, 0.58, 1)      | measured: UIKit's ease-in-out, iOS 26.2 simulator, 2026-10-23                                         |
+
+  The three `springs.contextMenu*` rows are measured for ContextMenu's lift,
+  and `component:ContextMenu` owns them (DEC-5). They play only in a
+  ContextMenu that a touch opens.
 
 ### Motion
 
@@ -197,7 +204,7 @@ a measured, sourced difference exists.
   activation stays the browser's click, except that an action a
   `family:action-groups` member tracks activates at the lift (FR26), and a toggle
   under `spec:AST-020` FR9's slide-off exception (Switch, Checkbox,
-  CheckboxListItem) may also complete on a lift after the finger slid off.
+  CheckboxListItem) may also complete on a lift after the finger slid off. Where the engine hit-tests an element a compositor animation moves at the motion's start (iOS WebKit), a touch on moving content goes to what was drawn under the finger at touch-down, and a tap there (no recognizer claimed it, the browser did not take it, and it stayed within 45 pt) MUST activate it: the browser's own click for that touch is cancelled or swallowed, and that element receives one click, an editable focused first.
   Under a fine pointer a control uses a third profile with no delay: its
   press paint starts at once on `pointerdown`, through the same press
   controller and release fade as a finger's, in place of CSS `:active`; the
@@ -312,7 +319,7 @@ a measured, sourced difference exists.
   recognizer that must claim mid-gesture registers that blocking listener; an
   element whose recognizers decide only at the lift keeps its `touchmove`
   listener passive, and its `touchend` listener stays cancelable so the
-  gesture can cancel the click (FR21). Known limit: a native scroll that starts on an element with a
+  gesture can cancel the click (FR21). While an element that holds, or sits inside, an element with a recognizer that claims moving touches moves on the compositor (iOS WebKit), the document MAY carry a non-passive `touchmove` listener; it cancels only the moves of a touch a recognizer owns under this rule and comes off when the motion ends. While it is on, a native scroll that starts anywhere on the page waits for a free main thread. Known limit: a native scroll that starts on an element with a
   blocking listener waits for a free main thread in iOS Safari and Chromium.
   That is never worse than UIKit, whose scrolling stops on a busy main thread,
   and a passive listener, or one added at `touchstart`, would hand diagonal
@@ -398,7 +405,8 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   Under a finger, on every touch device, an anchored menu or a Popover MUST
   open by growing out of its trigger and close by shrinking back into it, on
   its motion roles (FR4; a menu on `springs.menuOpen` and
-  `springs.menuClose`). The shrink plays in full after the surface has
+  `springs.menuClose`; a lifted ContextMenu's menu grows on
+  `springs.contextMenuMorph`). The shrink plays in full after the surface has
   closed. This is its exit under FR7 (`family:overlay-dismissal` AV6); under
   reduced motion FR8 applies. A menu or popover presented as a bottom sheet
   follows the sheet instead.
@@ -617,6 +625,10 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   recordings for every claim about the reference values, and real-device
   evidence for every claim about iOS Safari and Android Chrome behavior
   (`spec:AST-013` FR10).
+- Presented hit testing (FR11's and FR19's iOS WebKit sentences): unit tests
+  that mimic iOS WebKit's hit testing at the motion's start, the WebKit tap and
+  drag proof with the correction off as its control, and the iOS Simulator
+  gate a merge; real-device evidence for it follows merge.
 
 ## Current-state impact
 

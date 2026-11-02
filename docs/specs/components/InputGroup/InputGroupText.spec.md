@@ -10,7 +10,11 @@ approved_by: cixzhang
 approved_at: 2026-10-27
 owners: [cixzhang]
 review_triggers: [public-api, layout, theming]
-verified_by: [packages/core/src/InputGroup/InputGroup.test.tsx]
+verified_by:
+  [
+    packages/core/src/InputGroup/InputGroup.test.tsx,
+    apps/storybook/rtl-audit/targets.json,
+  ]
 modules: []
 families: []
 design_specs: []
@@ -120,10 +124,11 @@ No design record governs InputGroupText.
 
 ## Verification map
 
-| Contract | Verification                                                     | Representative states  | Mutation or failure expectation                                                                                     | Audit section                  |
-| -------- | ---------------------------------------------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
-| FR1      | `InputGroup.test.tsx` addon and prefix/suffix cases              | Prefix and suffix text | Missing addon text fails. Evidence gap: no test asserts the absent role or that `ref` and DOM props reach the cell. | `audit:InputGroupText/anatomy` |
-| FR2–FR4  | Evidence gap: no assertion of cell paint, border join, or target | —                      | —                                                                                                                   | `audit:InputGroupText/layout`  |
+| Contract     | Verification                                                                                        | Representative states                          | Mutation or failure expectation                                                                                     | Audit section                   |
+| ------------ | --------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| FR1          | `InputGroup.test.tsx` addon and prefix/suffix cases                                                 | Prefix and suffix text                         | Missing addon text fails. Evidence gap: no test asserts the absent role or that `ref` and DOM props reach the cell. | `audit:InputGroupText/anatomy`  |
+| FR2–FR4      | Evidence gap: no assertion of cell paint, border join, or target                                    | —                                              | —                                                                                                                   | `audit:InputGroupText/layout`   |
+| RTL relation | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `InputGroup / With prefix` | A text prefix before a text input; LTR and RTL | A prefix that is not at the inline start of its input fails D2.                                                     | `audit:InputGroupText/i18n-rtl` |
 
 ## Decision log
 

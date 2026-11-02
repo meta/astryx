@@ -93,7 +93,7 @@ describe('spec-only workflow contract', () => {
       );
       expect(result.status, result.stderr).toBe(0);
       expect(fs.readFileSync(output, 'utf8')).toBe(
-        'spec_only=true\ndocsite_only=false\ntooling_only=false\nfull_suite=false\n',
+        'spec_only=true\ndocsite_only=false\ntooling_only=false\nlab_only=false\nfull_suite=false\n',
       );
 
       fs.rmSync(path.join(classifierDir, 'knowledge-paths.cjs'));
@@ -223,7 +223,7 @@ describe('spec-only workflow contract', () => {
   it('fails closed when file APIs are truncated or scope classification fails', () => {
     const ci = read('.github/workflows/ci.yml');
     expect(ci).toContain(
-      `if: ${gated("${{ github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v') }}", PR_REPORT_GATE)}`,
+      `if: ${gated("${{ github.event_name != 'workflow_dispatch' && !startsWith(github.base_ref, 'release/v') && !cancelled() }}", PR_REPORT_GATE)}`,
     );
     const action = read('.github/actions/test-scope/action.yml');
     expect(action).toContain(

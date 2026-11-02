@@ -37,6 +37,7 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {isRenderable} from '../utils/isRenderable';
 
 // =============================================================================
 // Styles
@@ -231,7 +232,9 @@ export function TopNavMegaMenuItem({
           className,
           style,
         )}>
-        {icon && <div {...stylex.props(styles.drawerItemIcon)}>{icon}</div>}
+        {isRenderable(icon) && (
+          <div {...stylex.props(styles.drawerItemIcon)}>{icon}</div>
+        )}
         <div {...stylex.props(styles.drawerItemContent)}>
           {title}
           {description && (
@@ -267,7 +270,9 @@ export function TopNavMegaMenuItem({
         className,
         style,
       )}>
-      {icon && <div {...stylex.props(styles.desktopIcon)}>{icon}</div>}
+      {isRenderable(icon) && (
+        <div {...stylex.props(styles.desktopIcon)}>{icon}</div>
+      )}
       <div {...stylex.props(styles.desktopContent)}>
         <span {...stylex.props(styles.desktopTitle)}>{title}</span>
         {description && (

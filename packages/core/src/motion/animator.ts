@@ -181,6 +181,7 @@
 
 import {cubicBezier} from './bezier';
 import {solveSpring, toSpring, type SpringDescription} from './spring';
+import {registerPresentedOffset, type PresentedSource} from './presentation';
 import {resolveMotion} from './resolveMotion';
 import {
   reducedMotionCrossFade,
@@ -732,6 +733,9 @@ export const PROMOTION_LINGER_MS = 500;
 
 type Channel = 'translate' | 'rotate' | 'scale' | 'opacity';
 
+/** The custom property whose writes make WebKit resolve a moving element. */
+const RESOLVE_PROPERTY = '--astryx-presented';
+
 const CHANNELS: Record<Channel, ReadonlyArray<MotionProperty>> = {
   translate: ['x', 'y'],
   rotate: ['rotate'],
@@ -957,6 +961,14 @@ export function createAnimator(
   const running = new Map<Channel, Animation>();
   /** Drops a finished, still-filling animation once the main thread runs. */
   const retireTimers = new Map<Channel, ReturnType<typeof setTimeout>>();
+  /**
+   * Animations whose retire looks again at the next frame (scheduleRetire):
+   * each its own, so one still waiting for a replaced animation does not
+   * stand in for the next.
+   */
+  const retireFrames = new Set<Animation>();
+  /** The timer that starts those looks a frame before a curve's end. */
+  const retireLooks = new Map<Channel, ReturnType<typeof setTimeout>>();
   const touched = new Set<Channel>();
   /**
    * The stylesheet's opacity a Reduce Motion dip borrowed because no call
@@ -988,6 +1000,16 @@ export function createAnimator(
   };
   /** The call being committed, when it starts from rest. */
   let callGroup: StartGroup | null = null;
+  /** The element reported to presentation.ts while translate moves. */
+  let presented: Element | null = null;
+  /**
+   * The translate the engine hit-tests the element at while the compositor
+   * moves it: where the animation started, or where a `resolve` left it.
+   */
+  let hitTested = {x: 0, y: 0};
+  /** Counts the style writes that make WebKit resolve the element again. */
+  let resolutions = 0;
+  let unpresent: (() => void) | null = null;
   /** Channels promoted to the element's compositing layer (will-change). */
   const promoted = new Set<Channel>();
   /** The element's own inline will-change, restored when promotion ends. */
@@ -1086,6 +1108,62 @@ export function createAnimator(
   const finalValue = (property: MotionProperty): number =>
     segments.get(property)?.target ?? resting[property];
 
+  /**
+   * Where translate is drawn relative to where the translate animation
+   * started, read live when a touch lands. iOS WebKit keeps the transform it
+   * resolved when the animation went to the compositor (iOS 26.2: the
+   * element's rect and its hit tests stay at the start for the whole curve,
+   * while the computed style is live), until the animation is retired. A
+   * segment whose start still waits for the browser's commit has painted
+   * nothing of its curve yet.
+   */
+  const drawnTranslate = (property: MotionProperty, time: number) => {
+    const segment = segments.get(property);
+    return segment?.group != null && !segment.group.resolved
+      ? segment.at(0)
+      : valueAt(property, time);
+  };
+
+  const presentedSource: PresentedSource = {
+    offset: (time = now()) => {
+      syncPending();
+      return {
+        x: drawnTranslate('x', time) - hitTested.x,
+        y: drawnTranslate('y', time) - hitTested.y,
+      };
+    },
+    resolve: () => {
+      if (target == null) {
+        return;
+      }
+      syncPending();
+      const time = now();
+      // Any style write makes WebKit resolve the element's transform again,
+      // to the value drawn now, where it then stays (iOS 26.2: in the same
+      // task); a custom property changes nothing else.
+      resolutions += 1;
+      target.style.setProperty(RESOLVE_PROPERTY, String(resolutions));
+      hitTested = {x: drawnTranslate('x', time), y: drawnTranslate('y', time)};
+    },
+  };
+
+  /** Reports the element while its translate moves (not a pseudo-element's). */
+  const present = (isMoving: boolean) => {
+    const element = isMoving && pseudoElement == null ? target : null;
+    if (element === presented) {
+      return;
+    }
+    unpresent?.();
+    unpresent = null;
+    if (presented instanceof HTMLElement) {
+      presented.style.removeProperty(RESOLVE_PROPERTY);
+    }
+    presented = element;
+    if (element != null) {
+      unpresent = registerPresentedOffset(element, presentedSource);
+    }
+  };
+
   const writeInline = (
     channel: Channel,
     value: (property: MotionProperty) => number,
@@ -1179,6 +1257,8 @@ export function createAnimator(
     running.delete(channel);
     clearTimeout(retireTimers.get(channel));
     retireTimers.delete(channel);
+    clearTimeout(retireLooks.get(channel));
+    retireLooks.delete(channel);
     // An element's inline style takes the value on screen below, so its old
     // animation can go first. A pseudo-element has none: its old animation
     // keeps holding the value until the new one exists (same task, no frame in
@@ -1196,6 +1276,16 @@ export function createAnimator(
       }
     }
     const moving = properties.filter(p => segments.has(p));
+    if (channel === 'translate') {
+      // The animation built below starts from the value at `time` (its first
+      // keyframe); a rebase or a retarget builds a new one, so a new start.
+      hitTested = {x: valueAt('x', time), y: valueAt('y', time)};
+      present(
+        moving.length > 0 &&
+          target != null &&
+          typeof target.animate === 'function',
+      );
+    }
     if (
       moving.length === 0 ||
       target == null ||
@@ -1369,27 +1459,65 @@ export function createAnimator(
     end: number,
   ) => {
     clearTimeout(retireTimers.get(channel));
-    const retire = () => {
-      retireTimers.delete(channel);
+    retireTimers.delete(channel);
+    clearTimeout(retireLooks.get(channel));
+    retireLooks.delete(channel);
+    // Looks for the end in the next frame, before it paints: the frame whose
+    // time reaches the curve's end retires it there, where a timer could land
+    // between two frames under load and leave it on the element a frame or two
+    // past its curve. The timers stay, for a page that draws no frames (a
+    // hidden tab).
+    const lookAtFrame = () => {
+      if (requestFrame == null || retireFrames.has(animation)) {
+        return;
+      }
+      retireFrames.add(animation);
+      requestFrame(() => {
+        retireFrames.delete(animation);
+        retire(true);
+      });
+    };
+    // `atFrame`: a look from a frame callback, which leaves a pending timer
+    // where it is.
+    const retire = (atFrame = false) => {
+      if (!atFrame) {
+        retireTimers.delete(channel);
+      }
       if (running.get(channel) !== animation) {
         return;
       }
       // Paused or sought (a sampler holding it): retire when its own time
       // reaches the curve's end, never from the wall clock.
       const remaining = remainingCurve(animation);
-      if (remaining != null && remaining > 0) {
-        retireTimers.set(
-          channel,
-          setTimeout(
-            retire,
-            animation.playState === 'paused'
-              ? RETIRE_RECHECK_MS
-              : Math.max(remaining, END_RECHECK_MS),
-          ),
-        );
+      if (atFrame && remaining == null) {
+        // Its time cannot be read: the timer decides.
         return;
       }
+      if (remaining != null && remaining > 0) {
+        const paused = animation.playState === 'paused';
+        // A frame look keeps looking while up to two frames remain: the frame
+        // it ran in can be dated before the timer that started the looks was
+        // due, and the frame after it is the one that reaches the end.
+        if (!paused && remaining <= (atFrame ? 2 : 1) * END_RECHECK_MS) {
+          lookAtFrame();
+        }
+        if (!retireTimers.has(channel)) {
+          retireTimers.set(
+            channel,
+            setTimeout(
+              retire,
+              paused ? RETIRE_RECHECK_MS : Math.max(remaining, END_RECHECK_MS),
+            ),
+          );
+        }
+        return;
+      }
+      clearTimeout(retireTimers.get(channel));
+      retireTimers.delete(channel);
       running.delete(channel);
+      if (channel === 'translate') {
+        present(false);
+      }
       // A pseudo-element holds its resting value, unless the stylesheet
       // takes it back now (a borrowed dip that has ended).
       const handsBack =
@@ -1423,6 +1551,20 @@ export function createAnimator(
       flushReleases();
     };
     retireTimers.set(channel, setTimeout(retire, Math.max(0, end - now())));
+    if (requestFrame != null) {
+      // Frames start looking a frame before the end, so the frame that
+      // reaches it retires it even when the timer above runs late.
+      retireLooks.set(
+        channel,
+        setTimeout(
+          () => {
+            retireLooks.delete(channel);
+            lookAtFrame();
+          },
+          Math.max(0, end - now() - END_RECHECK_MS),
+        ),
+      );
+    }
   };
 
   /** The element's own (stylesheet) opacity, read once when a dip starts. */
@@ -2935,6 +3077,7 @@ export function createAnimator(
         return;
       }
       flushDeferred();
+      present(false);
       if (next == null) {
         // Unmount, unless a node replaces this one in the same task (React's
         // replacement order: attach(null), then the new node): nothing is
@@ -2969,6 +3112,11 @@ export function createAnimator(
                 clearTimeout(timer);
               }
               retireTimers.clear();
+              for (const timer of retireLooks.values()) {
+                clearTimeout(timer);
+              }
+              retireLooks.clear();
+              retireFrames.clear();
               demote();
               // demote() asks for a fresh will-change read of the node it
               // demotes; a detached node gets none.
@@ -3018,6 +3166,11 @@ export function createAnimator(
         clearTimeout(timer);
       }
       retireTimers.clear();
+      for (const timer of retireLooks.values()) {
+        clearTimeout(timer);
+      }
+      retireLooks.clear();
+      retireFrames.clear();
       if (isOpacityBorrowed) {
         // A running borrowed dip (or an exit by role returning to the
         // stylesheet) stays in the model through any attach, so a pending
@@ -3622,6 +3775,12 @@ export function createAnimator(
         clearTimeout(timer);
       }
       retireTimers.clear();
+      present(false);
+      for (const timer of retireLooks.values()) {
+        clearTimeout(timer);
+      }
+      retireLooks.clear();
+      retireFrames.clear();
       handBackBorrow();
       demote();
       cancelSheetWillChangeRead();

@@ -60,6 +60,8 @@
  */
 
 import {useCallback, useRef, useState, type ReactNode} from 'react';
+import {useIsHydrating} from '../hooks/useIsHydrating';
+import {useSettledOpen} from '../hooks/useSettledOpen';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {
@@ -75,6 +77,7 @@ import {LayerDepthProvider, useLayerDismissal} from '../Layer';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
+import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {composeEventHandlers, mergeProps, themeProps} from '../utils';
 import {container, overlayPaddingReset} from '../Layout';
@@ -201,6 +204,14 @@ const styles = stylex.create({
         default: 'translateX(-100%)',
         ':dir(rtl)': 'translateX(100%)',
       },
+    },
+  },
+  // A drawer present on page load opens where it rests (spec:AST-013 FR13):
+  // the collapse reduced motion uses, so the transition still ends.
+  openSettled: {
+    transitionDuration: '0.01s',
+    '::backdrop': {
+      transitionDuration: '0.01s',
     },
   },
   // Scrim via the browser's ::backdrop pseudo-element (top layer).
@@ -426,7 +437,7 @@ export interface DrawerProps extends BaseProps<HTMLDialogElement> {
  * ```
  */
 export function Drawer({
-  isOpen,
+  isOpen: isOpenProp,
   onOpenChange,
   side = 'end',
   width = 400,
@@ -444,6 +455,17 @@ export function Drawer({
   ref,
   ...props
 }: DrawerProps) {
+  // A drawer open on the server renders closed until hydration, and opens in
+  // the render after it, the first one that can enter its native host: a
+  // <dialog> painted open with aria-modal before it is modal claims a state it
+  // does not have (FR17).
+  const isHydrating = useIsHydrating();
+  const isOpen = isOpenProp && !isHydrating;
+  // A drawer open on the server was present on page load, so it opens settled,
+  // with no slide-in; its later opens and closes animate as usual
+  // (spec:AST-013 FR13).
+  const [settledOpen] = useSettledOpen(isOpenProp, isOpen, false);
+  const opensSettled = settledOpen && isOpen;
   const dialogRef = useRef<HTMLDialogElement>(null);
   const {containerRef: focusTrapRef} = useFocusTrap<HTMLDialogElement>({
     isActive: isOpen && hasScrim,
@@ -567,6 +589,7 @@ export function Drawer({
           isOpen && sideOpenStyle,
           hasScrim && styles.scrim,
           hasScrim && isOpen && styles.scrimOpen,
+          opensSettled && styles.openSettled,
           xstyle,
         ),
         className,
@@ -575,11 +598,16 @@ export function Drawer({
       {...safeProps}
       popover={hasScrim ? undefined : 'manual'}
       aria-label={label}
-      aria-modal={hasScrim ? 'true' : undefined}
+      aria-modal={hasScrim && !isHydrating ? 'true' : undefined}
       {...(purpose === 'required' && hasScrim
         ? {role: 'alertdialog'}
         : undefined)}
-      onClick={composeEventHandlers(onClickProp, handleClick)}
+      // Presses inside the drawer do not reach handlers around where it is
+      // written.
+      {...layerClickBoundary({
+        ...safeProps,
+        onClick: composeEventHandlers(onClickProp, handleClick),
+      })}
       onKeyDown={onKeyDownProp}
       onCancel={handleCancel}>
       <ModalAnnounceProvider dialogRef={dialogRef} isOpen={isOpen && hasScrim}>

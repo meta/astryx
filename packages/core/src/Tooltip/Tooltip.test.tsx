@@ -27,8 +27,15 @@ import {
 } from '@testing-library/react';
 import {useRef} from 'react';
 import {Tooltip} from './Tooltip';
+import {ClickableCard} from '../ClickableCard/ClickableCard';
+import {Item} from '../Item/Item';
+import {Token} from '../Token/Token';
 import {useTooltip} from './useTooltip';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
+import userEvent from '@testing-library/user-event';
+import {IconButton} from '../IconButton/IconButton';
+import {Toolbar} from '../Toolbar/Toolbar';
+import {TestIcon} from '../__tests__/TestIcon';
 
 // Store original matches to restore later
 const originalMatches = HTMLElement.prototype.matches;
@@ -815,5 +822,159 @@ describe('Tooltip sibling mode (anchorRef)', () => {
     // Unmounting detaches: the aria-describedby the tooltip added is removed.
     unmount();
     expect(anchor.getAttribute('aria-describedby')).toBe(null);
+  });
+});
+
+describe('Tooltip in a roving Toolbar (focusTrigger="auto")', () => {
+  it('opens on arrow-key focus for a member whose tooltip was added after mount', async () => {
+    const user = userEvent.setup();
+    function FormatToolbar({hasHints}: {hasHints: boolean}) {
+      return (
+        <Toolbar
+          label="Format"
+          startContent={
+            <>
+              <IconButton
+                label="Copy"
+                icon={<TestIcon />}
+                tooltip="Copy"
+                onClick={() => {}}
+              />
+              <IconButton
+                label="Filter"
+                icon={<TestIcon />}
+                tooltip={hasHints ? 'Filter (F)' : undefined}
+                onClick={() => {}}
+              />
+            </>
+          }
+        />
+      );
+    }
+    const {rerender} = render(<FormatToolbar hasHints={false} />);
+    rerender(<FormatToolbar hasHints />);
+    const filter = screen.getByRole('button', {name: 'Filter'});
+    const realMatches = filter.matches.bind(filter);
+    vi.spyOn(filter, 'matches').mockImplementation((selector: string) =>
+      selector === ':focus-visible' ? true : realMatches(selector),
+    );
+
+    screen.getByRole('button', {name: 'Copy'}).focus();
+    await user.keyboard('{ArrowRight}');
+    expect(filter).toHaveFocus();
+    const describedBy = filter.getAttribute('aria-describedby') ?? '';
+    await waitFor(() => {
+      const layer = describedBy
+        .split(' ')
+        .map(id => document.getElementById(id))
+        .find(element => element?.textContent === 'Filter (F)');
+      expect(layer).toBeDefined();
+      expect(layer?.matches(':popover-open')).toBe(true);
+    });
+  });
+});
+
+// FR11: a press inside an open tooltip acts only within the tooltip.
+describe('Tooltip surface press', () => {
+  it('keeps a click on the tooltip text from activating a clickable card', () => {
+    const onCardClick = vi.fn();
+    render(
+      <ClickableCard label="Card" onClick={onCardClick}>
+        <span>Card body</span>
+        <Tooltip content="Tooltip text" isOpen>
+          <button type="button">Trigger</button>
+        </Tooltip>
+      </ClickableCard>,
+    );
+    fireEvent.click(screen.getByText('Tooltip text'));
+    expect(onCardClick).not.toHaveBeenCalled();
+    // Positive control: a click on the card's own content still activates it.
+    fireEvent.click(screen.getByText('Card body'));
+    expect(onCardClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a click on the tooltip text from running an Item row', () => {
+    const onRowClick = vi.fn();
+    render(
+      <Item
+        label="Row"
+        onClick={onRowClick}
+        endContent={
+          <Tooltip content="Tooltip text" isOpen>
+            <span tabIndex={0}>Info</span>
+          </Tooltip>
+        }
+      />,
+    );
+    fireEvent.click(screen.getByText('Tooltip text'));
+    expect(onRowClick).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Row'));
+    expect(onRowClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a click on the tooltip text from running a Token', () => {
+    const onTokenClick = vi.fn();
+    render(
+      <Token
+        label="Tag"
+        onClick={onTokenClick}
+        endContent={
+          <Tooltip content="Tooltip text" isOpen>
+            <span tabIndex={0}>Info</span>
+          </Tooltip>
+        }
+      />,
+    );
+    fireEvent.click(screen.getByText('Tooltip text'));
+    expect(onTokenClick).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Tag'));
+    expect(onTokenClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a middle-button press on the tooltip text from opening a card link', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    render(
+      <ClickableCard label="Card" href="https://example.com/">
+        <Tooltip content="Tooltip text" isOpen>
+          <button type="button">Trigger</button>
+        </Tooltip>
+      </ClickableCard>,
+    );
+    fireEvent.mouseUp(screen.getByText('Tooltip text'), {button: 1});
+    expect(open).not.toHaveBeenCalled();
+    open.mockRestore();
+  });
+
+  it('still lets document listeners see a click on the tooltip text', () => {
+    // A Typeahead or menu inside a layer closes and opens from document
+    // listeners, so the press must keep propagating.
+    const onDocumentClick = vi.fn();
+    document.addEventListener('click', onDocumentClick);
+    render(
+      <Tooltip content="Tooltip text" isOpen>
+        <button type="button">Trigger</button>
+      </Tooltip>,
+    );
+    fireEvent.click(screen.getByText('Tooltip text'));
+    document.removeEventListener('click', onDocumentClick);
+    expect(onDocumentClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a click on the tooltip text inside a label from toggling its control', () => {
+    render(
+      <label>
+        <input type="checkbox" /> Accept{' '}
+        <Tooltip content="Why we ask" isOpen>
+          <button type="button">Info</button>
+        </Tooltip>
+      </label>,
+    );
+    // The surface mounts outside the label (a label cannot contain it), so
+    // a click on its text is not label activation.
+    fireEvent.click(screen.getByText('Why we ask'));
+    expect(screen.getByRole('checkbox')).not.toBeChecked();
+    // Positive control: a click on the label's own text still toggles it.
+    fireEvent.click(screen.getByText('Accept'));
+    expect(screen.getByRole('checkbox')).toBeChecked();
   });
 });

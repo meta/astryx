@@ -1,0 +1,9 @@
+{
+  "packages/core/src/Avatar/Avatar.tsx": ["status"],
+  "packages/core/src/Breadcrumbs/BreadcrumbItem.tsx": ["startIcon"],
+  "packages/core/src/Button/Button.tsx": ["endContent", "icon"],
+  "packages/core/src/Lightbox/Lightbox.tsx": ["currentItem.caption"],
+  "packages/core/src/SegmentedControl/SegmentedControlItem.tsx": ["icon"],
+  "packages/core/src/TabList/Tab.tsx": ["displayIcon", "endContent"],
+  "packages/core/src/Tokenizer/Tokenizer.tsx": ["startIcon", "startIcon"]
+}

@@ -70,15 +70,22 @@ import {mergeProps, composeEventHandlers} from '../utils';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
+import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {overlayPaddingReset} from '../Layout/padding.stylex';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/MobileNav/MobileNav.generated';
+
+registerEnglishFallback(english);
 // =============================================================================
 // Styles
 // =============================================================================
@@ -477,7 +484,7 @@ export function MobileNav({
   ref,
   ...rest
 }: MobileNavProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   // Read from AppShell context as fallback
   const appShellMobile = useAppShellMobile();
   const isOpen = isOpenProp ?? appShellMobile.isMobileNavOpen;
@@ -706,7 +713,12 @@ export function MobileNav({
           ? header
           : t('@astryx.mobileNav.navigation'))
       }
-      onClick={composeEventHandlers(onClickProp, handleDialogClick)}
+      // Presses inside the navigation do not reach handlers around where it
+      // is written.
+      {...layerClickBoundary({
+        ...rest,
+        onClick: composeEventHandlers(onClickProp, handleDialogClick),
+      })}
       onCancel={handleCancel}>
       <ModalAnnounceProvider dialogRef={dialogRef} isOpen={isOpen}>
         <LayerDepthProvider>

@@ -7,7 +7,8 @@
  * @output `scope`: GitHub step outputs naming what each suite audits.
  *   `report`: touched-components.json, one row per touched component with a
  *   pass/fail/changed/not-run result for each suite, for the pull-request
- *   comment; a step summary; exit 1 when a suite failed.
+ *   comment; a step summary; exit 1 when visual or accessibility failed
+ *   (RTL findings are soft, as in pr-rtl).
  * @position Default pull-request check (spec:AST-030 FR12). It audits only the
  *   components a change touches and never widens to a full suite; full suites
  *   run behind their `ci:run-<suite>` labels and in the release check.
@@ -434,9 +435,16 @@ export function buildTouchedReport({
   };
 }
 
+/**
+ * The suites whose failure fails the job. RTL findings are soft, as in
+ * pr-rtl (a failed check or a coverage gap reports, never blocks), so an RTL
+ * `fail` is recorded and shown but does not turn the job red.
+ */
+const BLOCKING_SUITES = ['visual', 'a11y'];
+
 export function hasFailure(report) {
   return report.components.some(component =>
-    SUITES.some(suite => component.results[suite] === 'fail'),
+    BLOCKING_SUITES.some(suite => component.results[suite] === 'fail'),
   );
 }
 

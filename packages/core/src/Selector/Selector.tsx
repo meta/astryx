@@ -32,6 +32,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useTooltip} from '../Tooltip';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {useIndicator} from '../Indicator';
@@ -99,12 +100,26 @@ import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {VisuallyHidden} from '../VisuallyHidden';
-import {useTranslator} from '../i18n';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {SelectorBottomSheet} from './SelectorBottomSheet';
 import {useSelectorPresentation} from './useSelectorPresentation';
 import {selectorPresentationStyles} from './selectorPresentation.stylex';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Selector/Selector.generated';
+
+registerEnglishFallback(english);
+
+/**
+ * A guess, confirmed by the open measure: more options than this overflow
+ * the popover listbox's 300 px block size even at 24 px rows, under the
+ * smallest default row (28 px). A wrong guess (a theme with shorter rows, a
+ * taller bottom sheet) costs only the measure's correction.
+ */
+const MOST_ROWS_THAT_FIT = 12;
 
 const styles = stylex.create({
   // Trigger container — the enhanced click target wrapping the combobox button and clear button as siblings
@@ -294,21 +309,6 @@ const styles = stylex.create({
         '@media (pointer: coarse)': 'scale(1)',
       },
       '[data-astryx-press="on"]': 'scale(0.98)',
-    },
-  },
-  // A disabled input-variant trigger keeps its tab stop (`spec:AST-085` FR1),
-  // and the shared disabled wrapper style drops the field focus ring, so the
-  // trigger shows keyboard focus here instead (FR6). It keys on the trigger
-  // itself, a direct child, so a focused status button keeps its own outline.
-  triggerDisabledFocus: {
-    borderColor: {
-      default: colorVars['--color-border-emphasized'],
-      ':has(> [aria-disabled="true"]:focus-visible)':
-        colorVars['--color-accent'],
-    },
-    boxShadow: {
-      default: 'none',
-      ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
     },
   },
   triggerGhostDisabled: {
@@ -947,7 +947,7 @@ function filterOptionsByQuery(
 export function Selector<T extends SelectorOptionType>(
   props: SelectorProps<T>,
 ) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const pressable = usePressFeedback();
   const {
     label,
@@ -1415,10 +1415,13 @@ export function Selector<T extends SelectorOptionType>(
     return match == null ? -1 : Number(match[1]);
   }, []);
   // Re-measured when the option set changes; the count is the dependency.
+  // A list longer than the most rows that can fit cannot fit, so it starts
+  // as a scroll container and the open measure only confirms it.
   const listboxHasOverflow = useMenuOverflow(
     listboxRef,
     filteredItems.length,
     surface.isOpen,
+    filteredItems.length > MOST_ROWS_THAT_FIT,
   );
   const listboxPress = useMenuPress({
     menuRef: listboxRef,
@@ -2008,7 +2011,7 @@ export function Selector<T extends SelectorOptionType>(
             variant === 'input' &&
               isDisabled &&
               !surface.isTriggerFocusRingSuppressed &&
-              styles.triggerDisabledFocus,
+              inputDisabledFocusStyles.ring,
             isEffectivelyReadOnly && styles.triggerReadOnly,
             variant !== 'input' && isDisabled && styles.triggerGhostDisabled,
             variant !== 'input' &&

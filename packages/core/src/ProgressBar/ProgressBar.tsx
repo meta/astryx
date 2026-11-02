@@ -611,7 +611,7 @@ export function ProgressBar({
         {resolvedMarks.map(mark => {
           // The tick element. It is both the Tooltip's anchor and the Suspense
           // fallback shown while the lazy Tooltip chunk loads, so the tick is
-          // always visible and the label attaches once ready. The list `key`
+          // always visible and the tooltip attaches once ready. The list `key`
           // lives on the mapped <Suspense>, not here.
           //
           // `placement` is reflected as `data-placement` (and a class) so a
@@ -620,6 +620,8 @@ export function ProgressBar({
           // for the same reason.
           const markEl = (
             <span
+              role="img"
+              aria-label={mark.label}
               tabIndex={0}
               {...mergeProps(
                 themeProps('progress-bar-mark', {

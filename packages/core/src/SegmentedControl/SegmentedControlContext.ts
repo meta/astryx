@@ -24,15 +24,8 @@ export interface SegmentedControlContextValue {
   layout: SegmentedControlLayout;
   isDisabled: boolean;
   /**
-   * True when the whole control is disabled *and* a `disabledMessage` is set.
-   * In that mode the selected segment stays focusable (via `aria-disabled`
-   * rather than being dropped from the tab order) so the group's disabled-reason
-   * tooltip is keyboard-discoverable; selection is still blocked.
-   */
-  hasDisabledMessage?: boolean;
-  /**
-   * The id of the group's disabled-reason tooltip while `hasDisabledMessage`
-   * is true. It also describes each segment, so the segment that has focus is
+   * The id of the group's disabled-reason tooltip while the group is disabled
+   * with a `disabledMessage`. It also describes each segment, so the segment that has focus is
    * described by the reason (spec:AST-085 FR5).
    */
   disabledReasonID?: string;

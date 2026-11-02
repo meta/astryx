@@ -47,10 +47,12 @@ import {
   type BusyIndicatorLane,
 } from '../Typeahead/busyIndicatorLane';
 import {TrailingKeyDownContext} from '../Typeahead/trailingKeyDown';
+import {CommittedChoicesKeyContext} from '../Typeahead/committedChoicesKey';
 import {
   type FieldInputBaseProps,
   useFieldInputStyling,
 } from '../Field/fieldParts';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {TokenizerClearAllMessageContext} from './TokenizerClearAllMessageContext';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
@@ -93,10 +95,16 @@ import {composeEventHandlers, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import {isFocusDetached} from '../utils/focusReturn';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 import type {TokenizerBottomSheetProps} from './TokenizerBottomSheet';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Tokenizer/Tokenizer.generated';
+
+registerEnglishFallback(english);
 
 // Re-export status types for convenience
 export type {
@@ -264,7 +272,13 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
    * @default 'No results found'
    */
   emptySearchText?: ReactNode;
-  /** Whether the input is disabled. @default false */
+  /**
+   * Whether the input is disabled. The disabled input keeps its tab stop: it
+   * is announced as disabled (`aria-disabled`), is read-only, and opens and
+   * picks nothing. With `tokenOverflowBehavior="unfocusedLayer"` and no
+   * `disabledMessage`, the input is natively disabled and out of the tab order.
+   * @default false
+   */
   isDisabled?: boolean;
   /**
    * Explains why the tokenizer is disabled. When set together with
@@ -273,8 +287,8 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
    * reason is discoverable by keyboard and assistive technology. Input stays
    * blocked.
    *
-   * Use this instead of wrapping a disabled tokenizer in `Tooltip` — disabled
-   * controls don't emit the pointer events an external tooltip needs.
+   * Use this instead of wrapping a disabled tokenizer in `Tooltip`, so the
+   * reason is attached to the field itself.
    */
   disabledMessage?: string;
   /** Show clear button (clears all tokens). @default false */
@@ -775,7 +789,7 @@ export function Tokenizer<T extends SearchableItem>({
   // A caller's onClick arrives through the base props; the sheet trigger
   // composes it with its own open handler rather than letting either win.
   const {onClick: callerOnClick, ...restWithoutClick} = rest;
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const size = useSize(sizeProp, 'md');
   const generatedInputId = useId();
   const inputId = idProp ?? generatedInputId;
@@ -1082,10 +1096,23 @@ export function Tokenizer<T extends SearchableItem>({
 
   const isAtMax = maxEntries != null && value.length >= maxEntries;
 
-  // Filter out already-selected items from search results
-  const selectedIds = useMemo(
-    () => new Set(value.map(item => item.id)),
+  // Filter out already-selected items from search results. Keyed by the ids,
+  // not the array: an equal new `value` array on every render keeps the
+  // filtered source, and the key tells an open list to reload only when the
+  // committed values really change (FR13).
+  const selectedIdKey = useMemo(
+    () => JSON.stringify(value.map(item => item.id)),
     [value],
+  );
+  const selectedIds = useMemo(
+    () => new Set<string>(JSON.parse(selectedIdKey) as string[]),
+    [selectedIdKey],
+  );
+  // Tells an open list to reload when the committed values change, or to
+  // close once they reach the limit (FR13, FR15).
+  const committedChoices = useMemo(
+    () => ({key: selectedIdKey, ids: selectedIds, isAtLimit: isAtMax}),
+    [selectedIdKey, selectedIds, isAtMax],
   );
 
   // Selected labels, lowercased, for the Create entry's duplicate check. The
@@ -1378,6 +1405,7 @@ export function Tokenizer<T extends SearchableItem>({
           isTruncated ? truncatedSizeStyles[size] : sizeStyle,
           isTruncated && styles.truncatedWrapper,
           isDisabled && inputWrapperStyles.disabled,
+          isDisabled && inputDisabledFocusStyles.nestedRing,
           status && inputStatusBorderStyles[status.type],
           status && !isDisabled && inputStatusHoverShadowStyles[status.type],
           status && inputStatusFocusWithinStyles[status.type],
@@ -1410,63 +1438,70 @@ export function Tokenizer<T extends SearchableItem>({
           button rather than as a second one inside the base. */}
       <BusyIndicatorLaneProvider value={busyLane}>
         <TrailingKeyDownContext value={onKeyDown}>
-          <BaseTypeahead
-            {...rest}
-            ref={useMergedRefs(
-              inputRef,
-              // With `experimental`, the ref type admits the trigger too; in
-              // this presentation it receives the input.
-              ref as React.Ref<HTMLInputElement> | undefined,
-              handOffFocusRef,
-            )}
-            searchSource={isAtMax ? emptySource : filteredSource}
-            value={null}
-            onChange={handleAdd}
-            renderItem={renderItem}
-            // A space keeps :placeholder-shown available as the CSS-only empty
-            // query signal without painting placeholder text beside tokens.
-            placeholder={value.length === 0 ? placeholder : ' '}
-            hasEntriesOnFocus={isAtMax ? false : hasEntriesOnFocus}
-            maxMenuItems={maxMenuItems}
-            menuWidth={menuWidth}
-            minQueryLength={minQueryLength}
-            emptySearchText={emptySearchText}
-            isDisabled={isDisabled}
-            isFocusableDisabled={showsDisabledMessage}
-            hasAutoFocus={hasAutoFocus}
-            inputId={inputId}
-            ariaLabelledBy={fieldLabelledBy}
-            ariaDescribedBy={
-              [ariaDescribedByProp, ariaDescribedBy]
-                .filter(Boolean)
-                .join(' ') || undefined
-            }
-            onChangeQuery={onChangeQuery}
-            // The resolved required state reaches the combobox, also when a
-            // FormLayout default hides the visible marker (component:FormLayout
-            // FR5, AR2).
-            aria-required={isEffectivelyRequired || rest['aria-required']}
-            // An error status is exposed on the combobox as on every other field
-            // (WCAG 4.1.2; spec:AST-020 FR9). Without one, a caller's own
-            // aria-required / aria-invalid still applies.
-            aria-invalid={status?.type === 'error' || rest['aria-invalid']}
-            __queryEntries={createEntries}
-            debounceMs={debounceMs}
-            onKeyDown={handleKeyDown}
-            anchorRef={wrapperRef}
-            size={size}
-            inputXStyle={[
-              isAtMax || isTruncated
-                ? styles.inputAtMax
-                : value.length > 0
-                  ? styles.inputCompact
-                  : undefined,
-              // With tokens, wrapperWithTokens reserves the lane for every row.
-              // This rule is only for an empty Tokenizer; it still resolves to
-              // zero until the lane publishes a width.
-              !(isAtMax || isTruncated || value.length > 0) && laneReserve,
-            ]}
-          />
+          <CommittedChoicesKeyContext value={committedChoices}>
+            <BaseTypeahead
+              {...rest}
+              ref={useMergedRefs(
+                inputRef,
+                // With `experimental`, the ref type admits the trigger too; in
+                // this presentation it receives the input.
+                ref as React.Ref<HTMLInputElement> | undefined,
+                handOffFocusRef,
+              )}
+              searchSource={isAtMax ? emptySource : filteredSource}
+              value={null}
+              onChange={handleAdd}
+              renderItem={renderItem}
+              // A space keeps :placeholder-shown available as the CSS-only empty
+              // query signal without painting placeholder text beside tokens.
+              placeholder={value.length === 0 ? placeholder : ' '}
+              hasEntriesOnFocus={isAtMax ? false : hasEntriesOnFocus}
+              maxMenuItems={maxMenuItems}
+              menuWidth={menuWidth}
+              minQueryLength={minQueryLength}
+              emptySearchText={emptySearchText}
+              isDisabled={isDisabled}
+              // A disabled field keeps its tab stop (spec:AST-085 FR1), except in
+              // unfocusedLayer mode, where the input lives in a layer a disabled
+              // field never opens; how that field takes focus is undecided.
+              isFocusableDisabled={
+                showsDisabledMessage || (isDisabled && !isLayerMode)
+              }
+              hasAutoFocus={hasAutoFocus}
+              inputId={inputId}
+              ariaLabelledBy={fieldLabelledBy}
+              ariaDescribedBy={
+                [ariaDescribedByProp, ariaDescribedBy]
+                  .filter(Boolean)
+                  .join(' ') || undefined
+              }
+              onChangeQuery={onChangeQuery}
+              // The resolved required state reaches the combobox, also when a
+              // FormLayout default hides the visible marker (component:FormLayout
+              // FR5, AR2).
+              aria-required={isEffectivelyRequired || rest['aria-required']}
+              // An error status is exposed on the combobox as on every other field
+              // (WCAG 4.1.2; spec:AST-020 FR9). Without one, a caller's own
+              // aria-required / aria-invalid still applies.
+              aria-invalid={status?.type === 'error' || rest['aria-invalid']}
+              __queryEntries={createEntries}
+              debounceMs={debounceMs}
+              onKeyDown={handleKeyDown}
+              anchorRef={wrapperRef}
+              size={size}
+              inputXStyle={[
+                isAtMax || isTruncated
+                  ? styles.inputAtMax
+                  : value.length > 0
+                    ? styles.inputCompact
+                    : undefined,
+                // With tokens, wrapperWithTokens reserves the lane for every row.
+                // This rule is only for an empty Tokenizer; it still resolves to
+                // zero until the lane publishes a width.
+                !(isAtMax || isTruncated || value.length > 0) && laneReserve,
+              ]}
+            />
+          </CommittedChoicesKeyContext>
         </TrailingKeyDownContext>
       </BusyIndicatorLaneProvider>
       {htmlName != null &&

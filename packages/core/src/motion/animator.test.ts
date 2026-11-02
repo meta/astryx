@@ -26,6 +26,11 @@ import {
 } from './animator';
 import {cubicBezier} from './bezier';
 import {coast} from './coast';
+import {
+  presentedElements,
+  presentedOffsetOf,
+  resolvePresented,
+} from './presentation';
 import {solveDecay} from './decay';
 import {solveSpring, solveSpringTowardRamp, toSpring} from './spring';
 import {scroll} from './uikit/scroll';
@@ -469,7 +474,7 @@ describe('animate: keyframes on the compositor', () => {
     );
   });
 
-  it('looks for its end again on the next frame when the engine dates animations per frame (WebKit), not in a spin', async () => {
+  it('looks for its end again on the next frame when the engine dates animations per frame, not in a spin, and retires in that frame', async () => {
     // WebKit moves an animation's currentTime once per frame. A retire that
     // looks within a frame reads the frame's time, a fraction of a ms short of
     // the end, and a timer set to that fraction fires again before anything
@@ -502,12 +507,93 @@ describe('animate: keyframes on the compositor', () => {
       await vi.advanceTimersByTimeAsync(1);
     }
     expect(timers.mock.calls.length).toBeLessThanOrEqual(2);
-    // The next frame: the engine's time passes the end, and it retires.
+    // The next frame: the engine's time passes the end, and it retires in
+    // that frame, before it paints, with no timer run in between.
     frameTime = start + curve + 16;
     clock += 1;
-    await vi.advanceTimersByTimeAsync(17);
+    await commitFrame(clock);
     expect(animation.cancelled).toBe(true);
+    await vi.advanceTimersByTimeAsync(17);
     await expect(handle.finished).resolves.toBe(true);
+  });
+
+  it('keeps looking while the frame it looked in was dated short of the end, and retires in the frame that reaches it, before a late end timer runs', async () => {
+    const {animator} = setup();
+    animator.animate({x: 100}, {spring: springs.settle});
+    const [animation] = live('translate');
+    await commitFrame(clock);
+    const start = animation.startTime as number;
+    const curve = Number(animation.options.duration) - END_HOLD_MS;
+    const end = start + curve;
+    // The engine dates each animation per frame, at `frameTime`.
+    let frameTime = start;
+    Object.defineProperty(animation, 'currentTime', {
+      configurable: true,
+      get: () => frameTime - start,
+    });
+    Object.defineProperty(animation, 'effect', {
+      configurable: true,
+      value: {getTiming: () => ({duration: animation.options.duration})},
+    });
+    // Inside the last frame before the end: the timer that starts the frame
+    // looks has run, the end timer has not.
+    const toLook = end - 16 - clock;
+    clock += toLook;
+    await vi.advanceTimersByTimeAsync(toLook);
+    // The frame the look runs in is dated 20 ms short of the end, before
+    // that timer was due.
+    frameTime = end - 20;
+    await commitFrame(clock);
+    expect(animation.cancelled).toBe(false);
+    // The next frame reaches the end while the end timer, late, has still
+    // not run: the frame retires it before it paints.
+    frameTime = end + 1;
+    await commitFrame(clock);
+    expect(animation.cancelled).toBe(true);
+  });
+
+  it('a retarget while a look at the old curve\u2019s end waits for its frame still looks at the new curve\u2019s end in a frame', async () => {
+    // Each animation's frame look is its own: one still waiting for its frame
+    // for a replaced animation does not stand in for the new animation's.
+    const {animator} = setup();
+    animator.animate({x: 100}, {spring: springs.settle});
+    const [first] = live('translate');
+    await commitFrame(clock);
+    // The engine dates each animation per frame, at `frameTime`.
+    let frameTime = clock;
+    const datedPerFrame = (animation: Recorded) => {
+      Object.defineProperty(animation, 'currentTime', {
+        configurable: true,
+        get: () => frameTime - (animation.startTime as number),
+      });
+      Object.defineProperty(animation, 'effect', {
+        configurable: true,
+        value: {getTiming: () => ({duration: animation.options.duration})},
+      });
+    };
+    datedPerFrame(first);
+    const firstCurve = Number(first.options.duration) - END_HOLD_MS;
+    // Inside the last frame before its end, with no frame drawn: its look
+    // waits for the next frame.
+    clock += firstCurve - 10;
+    await vi.advanceTimersByTimeAsync(firstCurve - 10);
+    expect(frameQueue.length).toBeGreaterThan(0);
+    // Retargeted before that frame comes; the page then draws no frame until
+    // the new curve is inside its own last frame.
+    animator.animate({x: 200}, {spring: springs.settle});
+    const second = live('translate').at(-1) as Recorded;
+    datedPerFrame(second);
+    const secondCurve = Number(second.options.duration) - END_HOLD_MS;
+    const secondEnd = (second.startTime as number) + secondCurve;
+    const wait = secondEnd - 10 - clock;
+    clock += wait;
+    await vi.advanceTimersByTimeAsync(wait);
+    expect(second.cancelled).toBe(false);
+    // The next frame reaches the new curve's end: it retires there, before
+    // that frame paints, with no timer run in between.
+    frameTime = secondEnd + 1;
+    await commitFrame(clock);
+    expect(second.cancelled).toBe(true);
   });
 
   it('never retires an animation a sampler has paused', async () => {
@@ -3862,5 +3948,93 @@ describe('attach', () => {
     const element = document.createElement('div');
     createAnimator(element);
     expect(element.getAttribute('style')).toBeNull();
+  });
+});
+
+describe('the presented offset iOS hit testing reads', () => {
+  it('reports translate while it moves: drawn minus where its animation started, zero before the browser starts it', async () => {
+    const {element, animator} = setup();
+    animator.animate({y: 300}, {spring: springs.sheetPresent});
+    // A call from rest starts at the browser's commit: nothing has moved yet.
+    expect(presentedOffsetOf(element)).toEqual({x: 0, y: 0});
+    await commitFrame(clock);
+    expect(presentedElements()).toContain(element);
+    expect(presentedOffsetOf(element)).toEqual({x: 0, y: 0});
+    clock += 120;
+    await vi.advanceTimersByTimeAsync(120);
+    const offset = presentedOffsetOf(element);
+    expect(offset.x).toBe(0);
+    expect(offset.y).toBeCloseTo(animator.get('y'), 9);
+    expect(offset.y).toBeGreaterThan(0);
+    expect(offset.y).toBeLessThan(300);
+    // The curve ends and its animation retires: nothing left to report.
+    clock += 5000;
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(presentedElements()).not.toContain(element);
+  });
+
+  it('stops reporting on stop, set, dispose and detach, and never for a pseudo-element or opacity alone', async () => {
+    const {element, animator} = setup();
+    const play = async () => {
+      animator.animate({x: 200}, {spring: springs.sheetPresent});
+      await advance(16);
+      expect(presentedElements()).toContain(element);
+    };
+    await play();
+    animator.stop();
+    expect(presentedElements()).not.toContain(element);
+    await play();
+    animator.set({x: 10});
+    expect(presentedElements()).not.toContain(element);
+    await play();
+    const other = document.createElement('div');
+    animator.attach(other);
+    expect(presentedElements()).not.toContain(element);
+    expect(presentedElements()).toContain(other);
+    animator.dispose();
+    expect(presentedElements()).not.toContain(other);
+
+    const fade = setup();
+    fade.animator.animate({opacity: 0}, {spring: springs.sheetPresent});
+    await advance(16);
+    expect(presentedElements()).not.toContain(fade.element);
+
+    const backdrop = setup({pseudoElement: '::backdrop'});
+    backdrop.animator.animate({y: 100}, {spring: springs.sheetPresent});
+    await advance(16);
+    expect(presentedElements()).not.toContain(backdrop.element);
+    backdrop.animator.dispose();
+    fade.animator.dispose();
+  });
+
+  it('resolves where it is drawn on request: one custom-property write, the offset restarting there', async () => {
+    const {element, animator} = setup();
+    animator.play({y: {duration: 1, at: t => 300 * t, velocity: () => 300}});
+    await advance(400);
+    expect(presentedOffsetOf(element).y).toBeCloseTo(120, 6);
+    resolvePresented([element]);
+    expect(element.style.getPropertyValue('--astryx-presented')).toBe('1');
+    expect(presentedOffsetOf(element).y).toBeCloseTo(0, 6);
+    await advance(100);
+    expect(presentedOffsetOf(element).y).toBeCloseTo(30, 6);
+    // Unreported once at rest, the property goes too.
+    animator.stop();
+    expect(element.style.getPropertyValue('--astryx-presented')).toBe('');
+    animator.dispose();
+  });
+
+  it('starts over from the current value when a rebase or a retarget builds a new animation', async () => {
+    const {element, animator} = setup();
+    animator.play({y: {duration: 1, at: t => 300 * t, velocity: () => 300}});
+    await advance(500);
+    expect(presentedOffsetOf(element).y).toBeCloseTo(150, 6);
+    animator.rebase({y: 40});
+    // The new animation starts where the element is drawn now.
+    expect(presentedOffsetOf(element).y).toBeCloseTo(0, 6);
+    await advance(100);
+    expect(presentedOffsetOf(element).y).toBeCloseTo(30, 6);
+    animator.animate({y: 0}, {spring: springs.sheetPresent});
+    expect(presentedOffsetOf(element).y).toBeCloseTo(0, 6);
+    animator.dispose();
   });
 });

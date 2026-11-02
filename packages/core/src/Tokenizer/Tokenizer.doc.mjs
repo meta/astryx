@@ -91,7 +91,8 @@ export const docs = {
     {
       name: 'isDisabled',
       type: 'boolean',
-      description: 'Disables the input and all token interactions.',
+      description:
+        'Disables the input and all token interactions. The input keeps its tab stop: it is announced as disabled (aria-disabled), is read-only, and opens and picks nothing. With tokenOverflowBehavior="unfocusedLayer" and no disabledMessage, the input is natively disabled and out of the tab order.',
       default: 'false',
     },
     {
@@ -104,7 +105,7 @@ export const docs = {
       name: 'disabledMessage',
       type: 'string',
       description:
-        'Explains why the tokenizer is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the input focusable via aria-disabled (input stays blocked). Use this instead of wrapping a disabled Tokenizer in Tooltip. Disabled controls swallow the hover events an external Tooltip needs.',
+        'Explains why the tokenizer is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the input focusable via aria-disabled (input stays blocked). Use this instead of wrapping a disabled Tokenizer in Tooltip, so the reason is attached to the field itself.',
     },
     {
       name: 'status',
@@ -474,7 +475,7 @@ export const docsZh = {
       name: 'disabledMessage',
       type: 'string',
       description:
-        'Explains why the tokenizer is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the input focusable via aria-disabled (input stays blocked). Use this instead of wrapping a disabled Tokenizer in Tooltip. Disabled controls swallow the hover events an external Tooltip needs.',
+        'Explains why the tokenizer is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the input focusable via aria-disabled (input stays blocked). Use this instead of wrapping a disabled Tokenizer in Tooltip, so the reason is attached to the field itself.',
     },
     {
       name: 'status',

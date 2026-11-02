@@ -207,6 +207,66 @@ describe('native contracts', () => {
     );
   });
 
+  it('gives Item typed text and content slots, a press, and a link, and leaves swipes on the web', async () => {
+    const {contracts} = await buildContracts(loadCoreDoc);
+    const item = contracts.find(contract => contract.name === 'Item');
+    expect(item).toBeDefined();
+    expect(item!.core.label).toMatchObject({
+      type: {kind: 'string'},
+      optional: false,
+    });
+    expect(item!.core.description?.type).toEqual({kind: 'string'});
+    for (const slot of ['marker', 'startContent', 'endContent']) {
+      expect(item!.core[slot]?.type).toEqual({kind: 'content'});
+    }
+    expect(Object.keys(item!.core)).toEqual(
+      expect.arrayContaining([
+        'align',
+        'density',
+        'labelLines',
+        'descriptionLines',
+        'layout',
+        'onClick',
+        'href',
+        'isHighlighted',
+        'isSelected',
+        'isDisabled',
+      ]),
+    );
+    expect(item!.webOnly.map(prop => prop.name)).toEqual(
+      expect.arrayContaining([
+        'swipeActions',
+        'swipeBehavior',
+        'target',
+        'rel',
+        'data-testid',
+        'as',
+        'interactiveRef',
+      ]),
+    );
+  });
+
+  it('gives ListItem the row contract without density or markers, which come from its list', async () => {
+    const {contracts} = await buildContracts(loadCoreDoc);
+    const row = contracts.find(contract => contract.name === 'ListItem');
+    expect(row).toBeDefined();
+    expect(row!.core.label).toMatchObject({
+      type: {kind: 'string'},
+      optional: false,
+    });
+    expect(row!.core.startContent?.type).toEqual({kind: 'content'});
+    expect(Object.keys(row!.core)).not.toContain('density');
+    expect(row!.webOnly.map(prop => prop.name)).toEqual(
+      expect.arrayContaining([
+        'swipeActions',
+        'swipeBehavior',
+        'target',
+        'rel',
+        'interactiveRef',
+      ]),
+    );
+  });
+
   it('reports naming and portability errors', () => {
     const bad: ComponentContract = {
       name: 'Bad',

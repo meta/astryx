@@ -23,7 +23,7 @@ import {
   findCoreDir,
   findProjectCoreDir,
 } from '../../../foundation/fs/paths.mjs';
-import {registerDoctor} from './doctor.mjs';
+import {printIntegrationCheckResponse, registerDoctor} from './doctor.mjs';
 import {expectRecordsCarry} from '../../../test-utils/text-projection.mjs';
 
 let tmpDir;
@@ -1238,8 +1238,15 @@ describe('doctor integration — command', () => {
       return logCalls.join('\n');
     };
 
-    const report = JSON.parse(await run(['--json'])).data.propDrift;
-    const output = await run([]);
+    // One run: comparing props starts the project's TypeScript, which takes
+    // most of a busy runner's time limit, so the text is printed from the
+    // response the JSON run returned. Without --json the command prints that
+    // same response through the same printer.
+    const response = JSON.parse(await run(['--json']));
+    const report = response.data.propDrift;
+    logCalls.length = 0;
+    printIntegrationCheckResponse(response);
+    const output = logCalls.join('\n');
 
     expect(report.findings.map(f => `${f.prop} ${f.kind}`)).toEqual([
       'elevation not_in_code',
