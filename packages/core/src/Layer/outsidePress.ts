@@ -118,8 +118,8 @@ function isWithinLayer(node: Node, layerId: string): boolean {
 /**
  * Whether focus moving to `next` stays with a text field's own layer: on the
  * field, or in the layer, which may be hosted outside the field or inside a
- * shadow root. Each owner decides what a blur that fails this means
- * (`family:overlay-dismissal` AV4), including when `next` is null.
+ * shadow root. Each owner decides what a blur that fails this means,
+ * including when `next` is null.
  *
  * @param next - The blur's `relatedTarget`.
  * @param field - The field that owns the layer.

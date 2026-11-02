@@ -3,10 +3,10 @@
 /**
  * @file DateInputFocusLeave.interaction.browser.spec.ts
  * @input Storybook story core-dateinput--formats (four DateInput fields)
- * @output component:DateInput FR8 in a real browser: with one calendar open
- *   from its input, a press in the same input keeps it open; Tab to the next
- *   field or a press in another field's text closes it, and focus stays where
- *   the person moved it (the close never pulls focus back).
+ * @output In a real browser, with one calendar open from its input: a press
+ *   in the same input keeps it open; a press in another field's text or focus
+ *   moved to another field closes it, and focus stays where it moved (the
+ *   close never pulls focus back).
  * @position DateInput press and focus-leave evidence, run in the Chromium
  *   interaction lane; jsdom has neither light dismiss nor real focus order.
  */

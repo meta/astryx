@@ -421,7 +421,6 @@ describe('DateInput', () => {
     expect(input).toHaveAttribute('aria-expanded', 'true');
   });
 
-  // architecture:layer-runtime: a press on the field is inside the calendar.
   describe('press inside and outside the open calendar', () => {
     function press(target: Element) {
       fireEvent.pointerDown(target, {composed: true});

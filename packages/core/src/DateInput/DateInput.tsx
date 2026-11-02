@@ -638,15 +638,12 @@ function PointerDateField({
       ? true
       : parseDateInput(pendingInput, locale) !== null;
 
-  // The calendar is a manual popover: the browser's light dismiss counts a
-  // press in the text input as outside (a text input cannot be an invoker),
-  // so a press in the field would close the calendar it just opened. A press
-  // on the field (its label, input, clear button) or in the calendar is inside; a press
-  // anywhere else closes it (architecture:layer-runtime,
-  // component:BaseTypeahead FR12's rule).
+  // Not light dismiss: a text input cannot be an invoker, so the browser
+  // would count a press in it as outside and close the calendar the press
+  // just opened.
   const fieldElementRef = useRef<HTMLDivElement | null>(null);
-  // Set just before a close that focus already left the field for (the
-  // input's blur), so onHide does not pull focus back to the input.
+  // Set just before a close that focus already left the field for, so onHide
+  // does not pull focus back to the input.
   const isFocusMovingAwayRef = useRef(false);
   const outsidePress = useOutsidePress();
   const popover = usePopover({
@@ -835,12 +832,9 @@ function PointerDateField({
     commitPendingInput();
   }, [commitPendingInput]);
 
-  // Focus that moves from anywhere in the field (its text, clear button or
-  // calendar button) to anything outside the field and its calendar (Tab to
-  // the next field) closes the calendar: a manual popover has no auto-popover
-  // exclusivity to close it when that field opens its own, and outside
-  // dismissal is the member's to own (family:overlay-dismissal AV4). Focus
-  // going nowhere (a window switch) leaves it open.
+  // A manual popover has no auto-popover exclusivity, so without this close
+  // the next field's calendar would open beside this one. Focus going nowhere
+  // (a window switch) leaves it open.
   const handleFieldBlur = useCallback(
     (e: React.FocusEvent<HTMLDivElement>) => {
       const next = e.relatedTarget;
