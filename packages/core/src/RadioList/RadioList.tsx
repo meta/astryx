@@ -19,9 +19,6 @@
 import {RadioListReasonContext} from './RadioListReasonContext';
 import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
 import React, {
-  Children,
-  Fragment,
-  isValidElement,
   useCallback,
   useId,
   useMemo,
@@ -77,10 +74,10 @@ RadioListContext.displayName = 'RadioListContext';
  */
 export interface RadioListFormContextValue {
   /**
-   * Every radio leaves the form: the whole group is disabled, or its checked
-   * option is, so nothing submits and a required group does not block the
-   * submit (spec:AST-085 FR3). Detaching all of them, never one, keeps the
-   * radios one native group with one Tab stop.
+   * Every radio leaves the form: the whole group is disabled, so nothing
+   * submits and a required group does not block the submit (spec:AST-085
+   * FR3). Detaching all of them, never one, keeps the radios one native group
+   * with one Tab stop.
    */
   detachesFromForm: boolean;
   /**
@@ -90,38 +87,6 @@ export interface RadioListFormContextValue {
    * nothing, so the form field name does not matter for it.
    */
   radioName: string;
-}
-
-/**
- * Whether the option `value` names is individually disabled, read from the
- * options among the group's children (direct, or inside fragments). The group
- * decides it while rendering, so server-rendered markup already leaves the
- * form when the checked option is disabled (spec:AST-085 FR3). An option
- * rendered by another component is not visible here; its own submission
- * filter excludes its value once hydrated (RadioListItem).
- */
-function isCheckedOptionDisabled(children: ReactNode, value: string): boolean {
-  for (const child of Children.toArray(children)) {
-    if (
-      !isValidElement<{
-        value?: unknown;
-        isDisabled?: unknown;
-        children?: ReactNode;
-      }>(child)
-    ) {
-      continue;
-    }
-    if (child.type === Fragment) {
-      if (isCheckedOptionDisabled(child.props.children, value)) {
-        return true;
-      }
-      continue;
-    }
-    if (child.props.value === value) {
-      return child.props.isDisabled === true;
-    }
-  }
-  return false;
 }
 
 export const RadioListFormContext =
@@ -336,14 +301,10 @@ export function RadioList({
     isEnabled: showsDisabledMessage,
   });
 
-  // The group leaves the form together when it is disabled or its checked
-  // option is (spec:AST-085 FR3), under its own generated name.
-  const detachesFromForm =
-    isDisabled || (value !== '' && isCheckedOptionDisabled(children, value));
-  const radioName = detachesFromForm ? autoName : name;
+  const radioName = isDisabled ? autoName : name;
   const formContextValue = useMemo<RadioListFormContextValue>(
-    () => ({detachesFromForm, radioName}),
-    [detachesFromForm, radioName],
+    () => ({detachesFromForm: isDisabled, radioName}),
+    [isDisabled, radioName],
   );
 
   const contextValue = useMemo<RadioListContextValue>(

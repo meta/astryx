@@ -10,7 +10,6 @@
 
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen, fireEvent} from '@testing-library/react';
-import {renderToString} from 'react-dom/server';
 import {RadioList} from './RadioList';
 import {RadioListItem} from './RadioListItem';
 
@@ -379,82 +378,26 @@ describe('RadioList: disabled values are not submitted (spec:AST-085 FR3)', () =
     expect(radio('First standard').name).not.toBe(radio('Second express').name);
   });
 
-  it('detaches the whole group, from the server-rendered markup on, when its checked option is disabled', () => {
-    // Server markup, before any hydration: the group decides this while
-    // rendering, so no script has to run (spec:AST-085 FR3).
-    const container = document.createElement('div');
-    container.innerHTML = renderToString(
-      <form>
-        <input name="order" defaultValue="1001" />
-        <RadioList
-          label="Delivery"
-          htmlName="delivery"
-          value="express"
-          onChange={() => {}}>
-          <RadioListItem label="Standard" value="standard" />
-          <>
-            <RadioListItem label="Express" value="express" isDisabled />
-          </>
-        </RadioList>
-      </form>,
-    );
-    const form = formOf(container);
-    const radios = [
-      ...container.querySelectorAll<HTMLInputElement>('input[type="radio"]'),
-    ];
-    expect(radios).toHaveLength(2);
-    // Every radio leaves the form together, under one name of its own, so the
-    // radios stay one native group with one Tab stop...
-    for (const radio of radios) {
-      expect(radio.getAttribute('form')).toBe('');
-      expect(radio.name).toBe(radios[0].name);
-    }
-    expect(radios[0].name).not.toBe('delivery');
-    expect(radios.find(radio => radio.checked)?.value).toBe('express');
-    // ...and the group submits nothing.
-    expect([...new FormData(form).entries()]).toEqual([['order', '1001']]);
-  });
-
-  it('keeps the group in the form when its checked option is enabled', () => {
+  it('keeps a selected disabled option in its form group from the first render', () => {
     const {container} = render(
       <form>
         <RadioList
           label="Delivery"
           htmlName="delivery"
-          value="standard"
+          value="express"
           onChange={() => {}}>
           <RadioListItem label="Standard" value="standard" />
           <RadioListItem label="Express" value="express" isDisabled />
         </RadioList>
       </form>,
     );
-    expect(radio('Express')).not.toHaveAttribute('form');
-    expect(new FormData(formOf(container)).get('delivery')).toBe('standard');
-  });
-
-  it('leaves an option another component renders to its own submission filter', () => {
-    // RadioList cannot see this option among its children, so the group stays
-    // in the form; the item excludes its value from the form owner's
-    // `formdata` event once hydrated (proved in a real browser: jsdom fires no
-    // `formdata` event).
-    function ExpressOption() {
-      return <RadioListItem label="Express" value="express" isDisabled />;
-    }
-    const {container} = render(
-      <form>
-        <RadioList
-          label="Delivery"
-          htmlName="delivery"
-          value="express"
-          onChange={() => {}}>
-          <RadioListItem label="Standard" value="standard" />
-          <ExpressOption />
-        </RadioList>
-      </form>,
-    );
     const form = formOf(container);
+    expect(radio('Express')).not.toHaveAttribute('form');
     expect(radio('Express').form).toBe(form);
     expect(radio('Standard').form).toBe(form);
+    // That its value leaves the submitted entries is proved in a real browser
+    // (RadioListDisabledForm.interaction.browser.spec.ts): jsdom fires no
+    // `formdata` event.
   });
 
   it('does not block a required submit, and keeps one group, when the selected option is disabled', () => {
@@ -473,10 +416,10 @@ describe('RadioList: disabled values are not submitted (spec:AST-085 FR3)', () =
     );
     const form = formOf(container);
     expect(form.checkValidity()).toBe(true);
-    // The radios stay one group: they leave the form together, under one
-    // name, so the selected radio remains the group's only Tab stop.
+    // The radios stay one group: every radio shares the same form owner, so
+    // the selected radio remains the group's only Tab stop. Its value leaving
+    // the submitted entries is proved in a real browser.
     expect(radio('Standard').form).toBe(radio('Express').form);
-    expect(radio('Standard').name).toBe(radio('Express').name);
     expect(radio('Express')).toBeChecked();
   });
 });

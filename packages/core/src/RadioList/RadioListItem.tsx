@@ -281,15 +281,12 @@ export function RadioListItem({
   const isDisabled = context.isDisabled || isItemDisabled;
   const isChecked = context.value === value;
   const radioRef = useRef<HTMLInputElement>(null);
-  // A group whose checked option is disabled leaves the form as a whole
-  // (RadioList), so it submits nothing from the server-rendered markup on.
-  // When RadioList cannot see this option among its children (another
-  // component renders it), this filter on the form owner's `formdata` event
-  // removes the selected, disabled option's value once hydrated, as a natively
-  // disabled radio's would (spec:AST-085 FR3). A click on a disabled option
-  // before hydration can still check and submit it (RadioListItem FR6).
-  const excludesValue =
-    isItemDisabled && isChecked && !formContext?.detachesFromForm;
+  // Synchronizes the form owner's submitted entries (its `formdata` event): a
+  // selected, individually disabled radio stays in the form, so the group
+  // keeps one form owner, one Tab stop, and a satisfied `required`, but its
+  // value leaves the entry list, as a natively disabled radio's would
+  // (spec:AST-085 FR3).
+  const excludesValue = isItemDisabled && isChecked && !context.isDisabled;
   useEffect(() => {
     const form = radioRef.current?.form;
     if (!excludesValue || form == null) {
@@ -349,9 +346,8 @@ export function RadioListItem({
         value={value}
         checked={isChecked}
         // A disabled radio stays focusable (spec:AST-085 FR1): never native
-        // `disabled`. A wholly disabled group, or one whose checked option is
-        // disabled, leaves the form together, so it submits nothing and blocks
-        // no submit (FR3).
+        // `disabled`. A wholly disabled group leaves the form together, so it
+        // submits nothing and blocks no submit (FR3).
         aria-disabled={isDisabled ? 'true' : undefined}
         form={formContext?.detachesFromForm ? '' : undefined}
         // A disabled radio is not required: a group whose options are all
