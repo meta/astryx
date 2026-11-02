@@ -480,10 +480,12 @@ function CalendarEvent({
           </Text>
         )}
       </button>
+      {/* The grab zone sits on the bottom edge and below it, so the event
+          body keeps its own drag. */}
       <ResizeHandle
         direction="vertical"
         position="overlay"
-        isAlwaysVisible={false}
+        pillPlacement="end"
         resizable={length.props}
         label={`Length of ${event.title}`}
         aria-valuetext={`${duration} minutes`}
@@ -492,8 +494,9 @@ function CalendarEvent({
           if (keyEvent.key === 'ArrowUp' || keyEvent.key === 'ArrowDown') {
             onResizeEnd(duration);
           }
-        }}
-      />
+        }}>
+        <span className="mgc-grip" aria-hidden="true" />
+      </ResizeHandle>
     </div>
   );
 }
@@ -516,6 +519,7 @@ const CALENDAR_CSS = `
 .mgc-event-body{appearance:none;position:absolute;inset:0;display:flex;flex-direction:column;align-items:flex-start;overflow:hidden;border:0;border-radius:inherit;background:none;padding:2px var(--spacing-1);text-align:start;color:inherit;font:inherit;cursor:grab;touch-action:none;-webkit-touch-callout:none}
 .mgc-event-body::after{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--color-overlay-pressed);opacity:0;transition:opacity var(--duration-fast-min) linear;pointer-events:none}
 .mgc-event-body[data-astryx-press="on"]::after,.mgc-event-body:active::after{opacity:1}
+.mgc-grip{position:absolute;left:50%;bottom:2px;width:22px;height:3px;margin-left:-11px;border-radius:2px;background:var(--event-border);opacity:.7;pointer-events:none}
 .mgc-status{margin:0;min-height:1.6em}
 .mgc-help{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 @media (forced-colors: active){.mgc-snap{border-color:Highlight}.mgc-event[data-picked-up]{outline-color:Highlight}}
