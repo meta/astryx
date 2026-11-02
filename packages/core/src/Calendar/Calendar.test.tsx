@@ -1103,6 +1103,118 @@ describe('Calendar', () => {
       });
     });
 
+    it('moves the focused day by a year with Shift+PageDown and Shift+PageUp', async () => {
+      const user = userEvent.setup();
+      render(<Calendar focusDate="2026-03-01" />);
+
+      getDayButton(15, 'March').focus();
+      await user.keyboard('{Shift>}{PageDown}{/Shift}');
+      await waitFor(() => {
+        expect(politeRegion()).toHaveTextContent('March 2027');
+      });
+      await waitFor(() => {
+        expect(document.activeElement).toHaveAttribute(
+          'data-date',
+          '2027-03-15',
+        );
+      });
+
+      await user.keyboard('{Shift>}{PageUp}{/Shift}');
+      await waitFor(() => {
+        expect(politeRegion()).toHaveTextContent('March 2026');
+      });
+      await waitFor(() => {
+        expect(document.activeElement).toHaveAttribute(
+          'data-date',
+          '2026-03-15',
+        );
+      });
+    });
+
+    it('a year from February 29 lands on February 28', async () => {
+      const user = userEvent.setup();
+      render(<Calendar focusDate="2024-02-01" />);
+
+      getDayButton(29, 'February', 2024).focus();
+      await user.keyboard('{Shift>}{PageDown}{/Shift}');
+      await waitFor(() => {
+        expect(document.activeElement).toHaveAttribute(
+          'data-date',
+          '2025-02-28',
+        );
+      });
+      expect(screen.getByRole('grid')).toHaveAttribute(
+        'aria-label',
+        'February 2025',
+      );
+    });
+
+    it('a year step whose target lies past max changes nothing and keeps focus', async () => {
+      const user = userEvent.setup();
+      render(<Calendar focusDate="2026-03-01" max="2027-03-14" />);
+
+      getDayButton(15, 'March').focus();
+      await user.keyboard('{Shift>}{PageDown}{/Shift}');
+      expect(screen.getByRole('grid')).toHaveAttribute(
+        'aria-label',
+        'March 2026',
+      );
+      expect(document.activeElement).toBe(getDayButton(15, 'March'));
+    });
+
+    it("a year step onto a day disabled by a constraint focuses that month's first enabled day", async () => {
+      const user = userEvent.setup();
+      // March 1–19, 2027 disabled.
+      const noEarlyMarch2027 = (date: Date) =>
+        !(
+          date.getFullYear() === 2027 &&
+          date.getMonth() === 2 &&
+          date.getDate() < 20
+        );
+      render(
+        <Calendar
+          focusDate="2026-03-01"
+          dateConstraints={[noEarlyMarch2027]}
+        />,
+      );
+
+      getDayButton(15, 'March').focus();
+      await user.keyboard('{Shift>}{PageUp}{/Shift}');
+      await waitFor(() => {
+        expect(document.activeElement).toHaveAttribute(
+          'data-date',
+          '2025-03-15',
+        );
+      });
+      await user.keyboard('{Shift>}{PageDown}{/Shift}');
+      await user.keyboard('{Shift>}{PageDown}{/Shift}');
+      await waitFor(() => {
+        expect(document.activeElement).toHaveAttribute(
+          'data-date',
+          '2027-03-20',
+        );
+      });
+    });
+
+    it('in a two-month view a year step forward makes the target month the second one shown', async () => {
+      const user = userEvent.setup();
+      render(<Calendar focusDate="2026-01-01" numberOfMonths={2} />);
+
+      getDayButton(15).focus();
+      await user.keyboard('{Shift>}{PageDown}{/Shift}');
+      await waitFor(() => {
+        expect(document.activeElement).toHaveAttribute(
+          'data-date',
+          '2027-01-15',
+        );
+      });
+      expect(
+        screen.getAllByRole('grid').map(g => g.getAttribute('aria-label')),
+      ).toEqual(['December 2026', 'January 2027']);
+      const grids = screen.getAllByRole('grid');
+      expect(grids[1].querySelectorAll('button[tabindex="0"]')).toHaveLength(1);
+    });
+
     it("pages from the first of two months onto the right day, not the second grid's fallback", async () => {
       const user = userEvent.setup();
       render(<Calendar focusDate="2026-01-01" numberOfMonths={2} />);

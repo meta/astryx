@@ -104,8 +104,8 @@ import english from '../i18n/generated-english/Calendar/Calendar.generated';
 
 registerEnglishFallback(english);
 
-/** How a month navigation moves the focused day: by its row offset in days, or by whole months. */
-type NavigationUnit = 'days' | 'months';
+/** How a month navigation moves the focused day: by its row offset in days, or by whole months or years. */
+type NavigationUnit = 'days' | 'months' | 'years';
 
 /** Imperative handle for Calendar handleRef */
 export interface CalendarHandle {
@@ -518,13 +518,16 @@ export function Calendar({ref, ...props}: CalendarProps) {
         !(minDateForKeys && plainDateIsBefore(pd, minDateForKeys)) &&
         !(maxDateForKeys && plainDateIsAfter(pd, maxDateForKeys));
       let targetPd: PlainDate;
-      if (unit === 'months') {
-        // A page targets the same day of the month a month away (clamped to
-        // that month's length). Past `min`/`max` nothing moves; a month with
-        // no enabled day is no destination either, the same as an arrow with
-        // no enabled day in its direction; a target disabled by a constraint
-        // lands on that month's first enabled day instead.
-        const candidate = plainDateAddMonths(currentPd, delta);
+      if (unit === 'months' || unit === 'years') {
+        // A page targets the same day of the month a month or a year away,
+        // clamped to that month's length. Past `min`/`max` nothing moves; a
+        // month with no enabled day is no destination either, the same as an
+        // arrow with no enabled day in its direction; a target disabled by a
+        // constraint lands on that month's first enabled day instead.
+        const candidate = plainDateAddMonths(
+          currentPd,
+          unit === 'years' ? delta * 12 : delta,
+        );
         if (!inRange(candidate)) {
           return;
         }
@@ -961,7 +964,8 @@ function MonthGrid({
     [getFocusedDate, onNavigateNext],
   );
 
-  // Handle PageUp/PageDown
+  // PageUp/PageDown move by a month. useGridFocus calls these without the
+  // event, so handleKeyDown below catches Shift+PageUp/PageDown first.
   const handlePageUp = useCallback(() => {
     const focusedDate = getFocusedDate();
     if (focusedDate) {
@@ -1008,6 +1012,27 @@ function MonthGrid({
     onPageUp: handlePageUp,
     onPageDown: handlePageDown,
   });
+
+  // Shift+PageUp/PageDown move by a year (APG date picker dialog).
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.shiftKey && (e.key === 'PageUp' || e.key === 'PageDown')) {
+        const focusedDate = getFocusedDate();
+        if (focusedDate) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.key === 'PageUp') {
+            onNavigatePrevious?.(focusedDate, 1, 'years');
+          } else {
+            onNavigateNext?.(focusedDate, 1, 'years');
+          }
+          return;
+        }
+      }
+      handleGridKeyDown(e);
+    },
+    [getFocusedDate, handleGridKeyDown, onNavigateNext, onNavigatePrevious],
+  );
 
   // Handle pending focus after month navigation. Every mounted month grid
   // sees the same pending date; only the grid showing that date's month acts,
@@ -1108,7 +1133,7 @@ function MonthGrid({
         // APG grid pattern: a range selection holds multiple selected cells,
         // so the grid must advertise multi-selectability.
         aria-multiselectable={mode === 'range' ? true : undefined}
-        onKeyDown={handleGridKeyDown}
+        onKeyDown={handleKeyDown}
         onFocus={handleGridFocus}
         {...stylex.props(
           monthGridStyles.daysGrid,
