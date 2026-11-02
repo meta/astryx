@@ -39,6 +39,18 @@ public struct AstryxNodeView: View {
       } endContent: {
         AstryxNodeList(nodes: row.props.endContent ?? [], send: send)
       }
+    case .list(let list):
+      // A list's rows are its children; a header draws above them only when
+      // the node has one, as a header closure does.
+      if let header = list.props.header, !header.isEmpty {
+        List(list.viewProps(send: send)) {
+          AstryxNodeList(nodes: list.props.children ?? [], send: send)
+        } header: {
+          VStack(alignment: .leading, spacing: 0) { AstryxNodeList(nodes: header, send: send) }
+        }
+      } else {
+        List(list.viewProps(send: send)) { AstryxNodeList(nodes: list.props.children ?? [], send: send) }
+      }
     default: AstryxUnsupportedNode(component: Self.componentName(node))
     }
   }
@@ -56,6 +68,7 @@ public struct AstryxNodeView: View {
     case .hStack: "HStack"
     case .icon: "Icon"
     case .item: "Item"
+    case .list: "List"
     case .listItem: "ListItem"
     case .progressBar: "ProgressBar"
     case .selector: "Selector"
