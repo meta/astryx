@@ -486,7 +486,7 @@ function CalendarEvent({
         <Text type="supporting" weight="semibold" maxLines={1}>
           {event.title}
         </Text>
-        {duration >= 45 && (
+        {duration >= 60 && (
           <Text type="supporting" color="secondary" maxLines={1}>
             {timeRange}
           </Text>
