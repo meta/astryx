@@ -51,9 +51,15 @@ import type {BaseProps} from '../BaseProps';
 import {mergeProps, rtlStyles} from '../utils';
 import type {SpacingStep} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Carousel/Carousel.generated';
+
+registerEnglishFallback(english);
 /**
  * Imperative control surface for the Carousel, accessed via the `handleRef`
  * prop. Methods drive the same native-scroll machinery as the built-in
@@ -340,7 +346,7 @@ export function Carousel({
   'data-testid': testId,
   ...htmlProps
 }: CarouselProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const ariaLabel = ariaLabelFromProps ?? t('@astryx.carousel.label');
   const scrollElRef = useRef<HTMLElement | null>(null);
   const startButtonRef = useRef<HTMLButtonElement>(null);

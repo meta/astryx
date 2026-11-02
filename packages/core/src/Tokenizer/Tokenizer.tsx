@@ -94,10 +94,16 @@ import {composeEventHandlers, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import {isFocusDetached} from '../utils/focusReturn';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 import type {TokenizerBottomSheetProps} from './TokenizerBottomSheet';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Tokenizer/Tokenizer.generated';
+
+registerEnglishFallback(english);
 
 // Re-export status types for convenience
 export type {
@@ -782,7 +788,7 @@ export function Tokenizer<T extends SearchableItem>({
   // A caller's onClick arrives through the base props; the sheet trigger
   // composes it with its own open handler rather than letting either win.
   const {onClick: callerOnClick, ...restWithoutClick} = rest;
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const size = useSize(sizeProp, 'md');
   const generatedInputId = useId();
   const inputId = idProp ?? generatedInputId;
