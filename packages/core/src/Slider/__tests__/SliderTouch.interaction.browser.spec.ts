@@ -37,33 +37,35 @@
 
 import {expect, test, type Locator, type Page} from '@playwright/test';
 import {
-  CONTROL_RGB,
   blockMainThread,
   busyWindowProof,
   castStoryboard,
   compareCurve,
+  CONTROL_RGB,
   countBetween,
   drag,
   flick,
   frames,
   holdAnimations,
   markElement,
+  merge,
   openStory,
+  type Point,
   releaseAnimations,
   sampleCurve,
   springStep,
   startBusyControl,
   startScreencast,
   tap,
+  type TouchDriver,
   touchDriver,
+  type TouchScript,
   traceRendering,
   trackMarker,
   waitForRest,
+  withFinger,
   withStorybook,
   writeEvidence,
-  type Point,
-  type TouchDriver,
-  type TouchScript,
 } from '@astryxdesign/interaction-harness';
 
 const storybook = withStorybook(test);
@@ -855,26 +857,36 @@ test('a finger landing on a coasting thumb stops it where it is', async ({
     !driver.scriptedTimestamps,
     'the coast target needs the scripted release velocity (README: engine limits)',
   );
+  const start = await value();
   const at = await center();
   const velocity = 600;
-  const script = flick(at, {velocity: {x: velocity, y: 0}, durationMs: 100});
-  const [liftValue] = await playReading(
-    page,
-    driver,
-    script,
-    [script.length - 2],
-    value,
+  const throwScript = flick(at, {
+    velocity: {x: velocity, y: 0},
+    durationMs: 100,
+  });
+  const liftValue = Math.round(
+    trackedValue(start, (velocity * 100) / 1000, length),
   );
   const target = Math.round(
     liftValue + (UISLIDER.projectionShare * project(velocity) * 100) / length,
   );
-  // At once, on the thumb where the coast presents it now.
-  const box = await thumb.boundingBox();
-  if (box == null) {
-    throw new Error('no thumb');
-  }
+  // A second finger lands 48 ms after the lift, 18 px past where the drag
+  // left the thumb, about where the coast has carried it by then, in the same
+  // script: no round trip to the test sits between the lift and the catch, so
+  // a loaded runner cannot let the coast settle first, and the paced play
+  // keeps those 48 ms after a slow dispatch.
+  const liftAt = throwScript[throwScript.length - 1].t;
+  const thumbAtLift = at.x + ((liftValue - start) * length) / 100;
   await driver.play(
-    tap({x: box.x + box.width / 2, y: box.y + box.height / 2}, {holdMs: 200}),
+    merge(
+      throwScript,
+      withFinger(
+        tap({x: thumbAtLift + 18, y: at.y}, {holdMs: 200}),
+        1,
+        liftAt + 48,
+      ),
+    ),
+    {pacing: 'spacing'},
   );
   await page.waitForTimeout(700);
   const caught = await value();
