@@ -6,7 +6,7 @@
 
 Before, a disabled radio rendered native `disabled`, so Tab skipped a group disabled without a reason and a screen reader moving by focus never reached it. Now it takes focus and is announced as disabled. Accessibility target: `spec:AST-085` FR1–FR4 (disabled controls stay focusable) and the WAI-ARIA radio group pattern.
 
-One known gap remains: a form submitted before the page hydrates still includes a selected, individually disabled radio's value. It is excluded once the page hydrates (RadioListItem FR6).
+When the selected option is disabled, the whole group leaves the form, so it submits nothing, already in server-rendered markup. One known gap remains (RadioListItem FR6, against `spec:AST-085` FR3): before the page hydrates, a click on a disabled option can still check it and submit its value.
 
 @korkt-kim also proposed keeping a disabled radio focusable and inert in #9301.
 
