@@ -9,9 +9,12 @@
  * success. Packages that are already visible are not fetched again while a
  * slower package continues propagating.
  *
- * The wait between checks starts at 15 s and grows to at most 60 s, for up to
- * 30 minutes in total. A new version of a package with a very large registry
- * document (Core keeps every canary) can take minutes to become readable.
+ * One run is a bounded window: the wait between checks starts at 15 s and
+ * grows to at most 60 s, and no new check starts after 8 minutes. A new
+ * version of a package with a very large registry document can take longer
+ * than that to become readable, so packages still unreadable at the end exit 2
+ * ("not yet readable") rather than 1, and the release workflow continues in a
+ * follow-up verification job with a window of its own.
  */
 
 import fs from 'node:fs';
@@ -27,28 +30,23 @@ import {
 
 const DEFAULT_INTERVAL_MS = 15_000;
 const DEFAULT_MAX_INTERVAL_MS = 60_000;
-const DEFAULT_MAX_WAIT_MS = 30 * 60_000;
+const DEFAULT_WINDOW_MS = 8 * 60_000;
 const INTERVAL_GROWTH = 1.5;
+export const EXIT_NOT_YET_READABLE = 2;
 
-/**
- * The waits between checks: `intervalMs`, growing by half each time up to
- * `maxIntervalMs`, while their sum stays within `maxWaitMs`.
- */
-export function verificationWaits({
+/** Packages still unreadable when a verification window ends. */
+export class NotYetReadableError extends Error {}
+
+/** The wait before check `attempt + 1`: grows by half, capped. */
+export function verificationWait(
+  attempt,
   intervalMs = DEFAULT_INTERVAL_MS,
   maxIntervalMs = DEFAULT_MAX_INTERVAL_MS,
-  maxWaitMs = DEFAULT_MAX_WAIT_MS,
-} = {}) {
-  const waits = [];
-  let total = 0;
-  let wait = intervalMs;
-  while (total + wait <= maxWaitMs && waits.length < 10_000) {
-    waits.push(wait);
-    total += wait;
-    wait = Math.min(Math.round(wait * INTERVAL_GROWTH), maxIntervalMs);
-    if (wait <= 0) break;
-  }
-  return waits;
+) {
+  return Math.min(
+    Math.round(intervalMs * INTERVAL_GROWTH ** (attempt - 1)),
+    maxIntervalMs,
+  );
 }
 
 async function jsonResponse(response, label) {
@@ -111,17 +109,19 @@ export async function verifyPublishedPackages({
   version,
   tag = 'latest',
   registry = DEFAULT_REGISTRY,
-  waits = verificationWaits(),
+  intervalMs = DEFAULT_INTERVAL_MS,
+  maxIntervalMs = DEFAULT_MAX_INTERVAL_MS,
+  windowMs = DEFAULT_WINDOW_MS,
   fetchImpl = fetch,
+  now = () => Date.now(),
   sleep = ms => new Promise(resolve => setTimeout(resolve, ms)),
   onAttempt = () => {},
 }) {
   const pending = new Map(packages.map(name => [name, 'not checked']));
-  const attempts = waits.length + 1;
-  let waitedMs = 0;
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+  const start = now();
+  for (let attempt = 1; ; attempt += 1) {
     const names = [...pending.keys()];
-    onAttempt({attempt, attempts, names, waitedMs});
+    onAttempt({attempt, names, elapsedMs: now() - start});
     await Promise.all(
       names.map(async name => {
         try {
@@ -139,12 +139,11 @@ export async function verifyPublishedPackages({
       }),
     );
     if (pending.size === 0) return;
-    if (attempt < attempts) {
-      await sleep(waits[attempt - 1]);
-      waitedMs += waits[attempt - 1];
-    }
+    const wait = verificationWait(attempt, intervalMs, maxIntervalMs);
+    if (now() - start + wait > windowMs) break;
+    await sleep(wait);
   }
-  throw new Error(
+  throw new NotYetReadableError(
     [...pending]
       .map(([name, error]) => `${name}@${version}: ${error}`)
       .join('\n'),
@@ -187,7 +186,7 @@ function parseArgs(argv) {
     const value = argv[index + 1];
     if (!key?.startsWith('--') || value == null) {
       throw new Error(
-        'expected --version X.Y.Z and optional --tag, --registry, --interval-ms, --max-interval-ms, or --max-wait-ms',
+        'expected --version X.Y.Z and optional --tag, --registry, --interval-ms, --max-interval-ms, or --window-ms',
       );
     }
     values[key.slice(2)] = value;
@@ -212,16 +211,12 @@ async function main() {
     version,
     tag: values.tag ?? 'latest',
     registry: values.registry ?? DEFAULT_REGISTRY,
-    waits: verificationWaits({
-      intervalMs: Number(values['interval-ms'] ?? DEFAULT_INTERVAL_MS),
-      maxIntervalMs: Number(
-        values['max-interval-ms'] ?? DEFAULT_MAX_INTERVAL_MS,
-      ),
-      maxWaitMs: Number(values['max-wait-ms'] ?? DEFAULT_MAX_WAIT_MS),
-    }),
-    onAttempt({attempt, attempts, names, waitedMs}) {
+    intervalMs: Number(values['interval-ms'] ?? DEFAULT_INTERVAL_MS),
+    maxIntervalMs: Number(values['max-interval-ms'] ?? DEFAULT_MAX_INTERVAL_MS),
+    windowMs: Number(values['window-ms'] ?? DEFAULT_WINDOW_MS),
+    onAttempt({attempt, names, elapsedMs}) {
       console.log(
-        `Registry verification ${attempt}/${attempts} after ${Math.round(waitedMs / 1000)} s: ${names.length} package(s) pending`,
+        `Registry verification ${attempt} after ${Math.round(elapsedMs / 1000)} s: ${names.length} package(s) pending`,
       );
     },
   });
@@ -235,6 +230,12 @@ if (
   fileURLToPath(import.meta.url) === path.resolve(process.argv[1])
 ) {
   main().catch(error => {
+    if (error instanceof NotYetReadableError) {
+      console.error(
+        `published packages are not yet readable on the registry:\n${error.message}`,
+      );
+      process.exit(EXIT_NOT_YET_READABLE);
+    }
     console.error(
       `published package registry verification failed:\n${error.message}`,
     );

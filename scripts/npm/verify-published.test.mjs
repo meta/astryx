@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {spawnSync} from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,8 +8,9 @@ import path from 'node:path';
 import {afterEach, describe, expect, it} from 'vitest';
 
 import {
+  NotYetReadableError,
   stablePackageNames,
-  verificationWaits,
+  verificationWait,
   verifyPublishedPackages,
   verifyRegistryEntry,
 } from './verify-published.mjs';
@@ -111,7 +113,7 @@ describe('verifyPublishedPackages', () => {
     await verifyPublishedPackages({
       packages: ['@astryxdesign/cli', '@astryxdesign/core'],
       version: '0.7.5',
-      waits: [1],
+      intervalMs: 1,
       fetchImpl,
       sleep: async ms => sleeps.push(ms),
     });
@@ -129,7 +131,8 @@ describe('verifyPublishedPackages', () => {
       verifyPublishedPackages({
         packages: ['@astryxdesign/core'],
         version: '0.7.5',
-        waits: [0],
+        intervalMs: 0,
+        windowMs: 0,
         fetchImpl: async () => response({}, 404),
         sleep: async () => {},
       }),
@@ -182,33 +185,84 @@ describe('stablePackageNames', () => {
   });
 });
 
-describe('verificationWaits', () => {
-  it('waits 15 s first, grows by half to at most 60 s, and stops within 30 minutes', () => {
-    const waits = verificationWaits();
-    expect(waits.slice(0, 5)).toEqual([15_000, 22_500, 33_750, 50_625, 60_000]);
-    expect(Math.max(...waits)).toBe(60_000);
-    const total = waits.reduce((sum, wait) => sum + wait, 0);
-    expect(total).toBeLessThanOrEqual(30 * 60_000);
-    expect(total).toBeGreaterThan(29 * 60_000);
-  });
-
-  it('waits longer in total than the slowest propagation seen so far', () => {
-    // A new Core version has taken more than 10 minutes to become readable.
-    const total = verificationWaits().reduce((sum, wait) => sum + wait, 0);
-    expect(total).toBeGreaterThan(2 * 10 * 60_000);
-  });
-
-  it('keeps a version that stays unreadable failing once the budget is spent', async () => {
+describe('verification window', () => {
+  /** A clock that moves only when the verifier sleeps. */
+  function clock() {
+    let time = 0;
     const sleeps = [];
-    await expect(
-      verifyPublishedPackages({
-        packages: ['@astryxdesign/core'],
-        version: '0.7.5',
-        waits: verificationWaits({maxWaitMs: 100_000}),
-        fetchImpl: async () => response({}, 404),
-        sleep: async ms => sleeps.push(ms),
-      }),
-    ).rejects.toThrow('version document returned HTTP 404');
-    expect(sleeps).toEqual([15_000, 22_500, 33_750]);
+    return {
+      sleeps,
+      now: () => time,
+      sleep: async ms => {
+        sleeps.push(ms);
+        time += ms;
+      },
+    };
+  }
+
+  it('waits 15 s first and grows by half to at most 60 s', () => {
+    expect(
+      [1, 2, 3, 4, 5, 6].map(attempt => verificationWait(attempt)),
+    ).toEqual([15_000, 22_500, 33_750, 50_625, 60_000, 60_000]);
+  });
+
+  it('starts no check after 8 minutes, then reports the packages as not yet readable', async () => {
+    const time = clock();
+    const result = verifyPublishedPackages({
+      packages: ['@astryxdesign/core'],
+      version: '0.7.5',
+      fetchImpl: async () => response({}, 404),
+      now: time.now,
+      sleep: time.sleep,
+    });
+    await expect(result).rejects.toBeInstanceOf(NotYetReadableError);
+    await expect(result).rejects.toThrow('version document returned HTTP 404');
+    const total = time.sleeps.reduce((sum, wait) => sum + wait, 0);
+    expect(total).toBeLessThanOrEqual(8 * 60_000);
+    expect(total).toBeGreaterThan(7 * 60_000);
+  });
+
+  it('passes as soon as a slow package becomes readable inside the window', async () => {
+    const time = clock();
+    let coreReads = 0;
+    await verifyPublishedPackages({
+      packages: ['@astryxdesign/core'],
+      version: '0.7.5',
+      now: time.now,
+      sleep: time.sleep,
+      fetchImpl: async url => {
+        if (url.includes('/dist-tags')) return response({latest: '0.7.5'});
+        if (url.endsWith('.tgz')) return response('tarball');
+        coreReads += 1;
+        if (coreReads < 4) return response({}, 404);
+        return response({
+          version: '0.7.5',
+          dist: {tarball: 'https://registry.npmjs.org/core-0.7.5.tgz'},
+        });
+      },
+    });
+    expect(time.sleeps).toEqual([15_000, 22_500, 33_750]);
+  });
+
+  it('exits 2, "not yet readable", when the window ends with packages unreadable', () => {
+    const root = path.resolve(import.meta.dirname, '../..');
+    const {version} = JSON.parse(
+      fs.readFileSync(path.join(root, 'packages/core/package.json'), 'utf8'),
+    );
+    const result = spawnSync(
+      process.execPath,
+      [
+        'scripts/npm/verify-published.mjs',
+        '--version',
+        version,
+        '--registry',
+        'http://127.0.0.1:9',
+        '--window-ms',
+        '0',
+      ],
+      {cwd: root, encoding: 'utf8'},
+    );
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('not yet readable on the registry');
   });
 });
