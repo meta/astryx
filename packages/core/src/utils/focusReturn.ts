@@ -12,7 +12,7 @@
  *   that return focus to their control when the overlay closes, but only when
  *   the dismiss did not already move focus somewhere the user chose, and by
  *   overlays (Dialog, DropdownMenu) that move focus programmatically, and by
- *   disclosures that hide focused content (`component:SideNav` AR3). Only
+ *   disclosures that hide focused content. Only
  *   `isFocusDetached` is exported from the utils entry; the rest is internal.
  */
 
@@ -104,8 +104,7 @@ export function moveFocusLeftBehind(
 }
 
 /**
- * Move focus programmatically so its ring follows the last input
- * (`architecture:interaction-modality` INV1). After pointer input the browser's
+ * Move focus programmatically so its ring follows the last input. After pointer input the browser's
  * focus option keeps the element from matching `:focus-visible`, which is the
  * one way to reach an element the overlay does not render: the consumer's
  * autofocus target, the control that opened a Dialog, or a menu trigger the
