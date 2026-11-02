@@ -14,8 +14,8 @@ Initials size by tier, old to new (default text size):
 | `lg`   | 48px  | 19.2px | 20px | `--text-heading-2-size` |
 | `xl`   | 128px | 51.2px | 42px | `--text-display-1-size` |
 
-`xl` gets smaller because 42px is the scale's largest step. Each size is also capped at half its box (10/12/18/24/64px), so a larger root text size cannot grow two-letter initials past the circle; at the default size no tier reaches its cap.
+`xl` gets smaller because 42px is the scale's largest step. Each size is also capped at half its box (10/12/18/24/64px), so a larger root text size cannot grow two-letter initials past the circle. At the default text size only `xsm` sits at its cap (its token is 10px) and never grows; where a token is larger than the cap, the cap holds it back: touch-and-narrow `xsm` draws 10px instead of 12px, and Gothic `lg` draws 24px instead of 25px.
 
-To keep the old look, give the size an `avatar-fallback` theme rule with the `font-size` you want, or pass a numeric `size` (a numeric `size` that is not one of the named boxes keeps the `size × 0.4` ratio, since there is no step to snap an arbitrary pixel value to).
+To keep the old look, give the size an `avatar-fallback` theme rule with the `font-size` you want, or pass a numeric `size`. Every numeric `size` keeps the `size × 0.4` ratio, including one equal to a named box, so `size={24}` is how to get the old `sm` look.
 
 @HelloOjasMutreja
