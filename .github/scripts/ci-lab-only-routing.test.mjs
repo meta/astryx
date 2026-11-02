@@ -197,11 +197,17 @@ describe('Lab-only lane (spec:AST-030 FR26)', () => {
     expect(String(ci.jobs['pr-touched-components'].if)).toContain(
       "needs.build-storybook.outputs.lab_only != 'true'",
     );
+    // The default visual check is a focused check of touched Core
+    // components, so a Lab-only change has none; a maintainer's label still
+    // runs the visual, accessibility or RTL suite on Lab's components (FR12).
     for (const name of ['visual-scout', 'pr-visual']) {
       const specialized = steps(name).find(s => s.env?.SPECIALIZED)?.env
         .SPECIALIZED;
-      expect(specialized, name).toContain(LAB_TRUE);
+      expect(specialized, name).not.toContain('lab_only');
     }
+    expect(read('.github/actions/test-scope/action.yml')).toContain(
+      "if (specialized && classified.lab_only !== 'true') {",
+    );
     const decide = step(
       'heavy-ci',
       'Defer the heavy suites unless the change is spec-only or Lab-only',

@@ -559,6 +559,16 @@ describe('per-job scope step', () => {
       });
     });
 
+    it('keeps the component audits for a Lab-only change, so a label still runs its suite (spec:AST-030 FR26)', async () => {
+      const {outputs} = await decide({
+        files: changed('packages/lab/src/Tour/Tour.tsx'),
+        inputs,
+      });
+      expect(outputs.lab_only).toBe('true');
+      expect(outputs.applies).toBe('false');
+      expect(outputs.has_components).toBe('true');
+    });
+
     it('runs every audit in full when the base lacks the audit classifier', async () => {
       const {outputs, messages} = await decide({
         files: changed('packages/core/src/Button/Button.tsx'),

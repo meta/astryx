@@ -271,7 +271,10 @@ runs:
           if (headFilePresent === 'false') applies = 'false';
           let componentScope = {};
           if (audit) {
-            if (specialized) {
+            // A Lab-only change keeps its component audits: the default
+            // touched check skips it, but a maintainer's label still runs its
+            // suite on Lab's components (spec:AST-030 FR12, FR26).
+            if (specialized && classified.lab_only !== 'true') {
               componentScope = auditNone;
             } else {
               const auditFile = path.join(root, 'component-audit');

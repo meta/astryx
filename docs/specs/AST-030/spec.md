@@ -107,7 +107,8 @@ they are separately named.
   A category does not earn a specialized lane merely by existing in this table.
   Until every selected surface has an admitted, complete specialized owner route,
   that surface set uses the broad check set. `shared-or-unknown` always uses the
-  broad check set.
+  broad check set, except a Changeset beside a Lab-only change, which keeps the
+  Lab-only route (FR26).
 
 - **FR3 — Classification uses trusted base policy.** Pull-request code MUST NOT
   choose its own lane. The workflow MUST load the classifier and every classifier
@@ -121,7 +122,8 @@ they are separately named.
   set MUST select the broad lane. No fallback may grant a specialized lane.
 - **FR5 — Mixed scope keeps every owner.** A change touching multiple classified
   surfaces MUST run the union of their checks. It MUST NOT run specialized lanes
-  for untouched surfaces. A set containing `shared-or-unknown`, a fail-closed
+  for untouched surfaces. A set containing `shared-or-unknown` (apart from a
+  Changeset beside a Lab-only change, FR26), a fail-closed
   condition from FR3–FR4, or any selected surface without a complete admitted
   specialized owner route MUST use broad CI. A specification beside runtime code
   does not hide the runtime surface.
@@ -204,7 +206,9 @@ they are separately named.
   suite's label at the event:
   `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl`, in each case last applied by
   someone with write, maintain or admin access, and a lookup that cannot
-  confirm that runs nothing. A label runs only its own suite. Without a label, a pull request update
+  confirm that runs nothing. A label runs only its own suite. A Lab-only pull
+  request (FR26) runs no default touched-components check; its labels still
+  run their suites. Without a label, a pull request update
   runs none of these owners at their opted-in scope, and no required context
   depends on them; it runs one default touched-components check instead:
   visual, accessibility and RTL for only the components the change touches,
@@ -488,8 +492,9 @@ they are separately named.
   repository-wide guards: full lint and the UI lane's copyright,
   package-exports, CLI API type, token-docs, Lab readiness and knowledge-schema
   checks. It runs no docsite build or tests, no full typecheck, no
-  Build-package tests, and no visual, accessibility, RTL, interaction or
-  touched-components suite, and an agent lane's push defers
+  Build-package tests, no interaction proofs, no touched-components check,
+  and no visual, accessibility or RTL suite unless a maintainer's label runs
+  one (FR12), and an agent lane's push defers
   nothing (FR20). The required `build`, `test` and `docsite-test` contexts
   report success with the notice "Lab-only: Lab tests + Storybook build",
   never a skip. A change to any other path is mixed and runs CI as for any
@@ -559,7 +564,7 @@ The nightly perf lane is the one scheduled measurement outside them (FR18).
 | FR22     | `main-validation-workflow.test.mjs` over the Main workflow and its commit resolver; `vitest-shard-sequencer.test.mjs` over the recorded Node times | six UI and six Node legs; dispatch without a commit, with a commit in main's history, with a commit outside it and with a malformed one; a re-check from the workflow token and from a person, and one that names `sha`; a `sha` before the size records, and one of only spaces; four and six Node legs over the recorded suite, a file with no recorded time, a project other than `node`                                                                                                                                                                                                                                  | a hold, a leg past the fifteen-minute budget, a commit outside main's history that validates, a person's dispatch or a person's `sha` run that cancels or replaces a validation of main, a `sha` lane that checks out another commit, or a `sha` run named for main's tip, or two of the slowest Node files in one leg, a file run by no leg or by two, or a split that depends on collection order fails |
 | FR23     | `release-check-shape.test.mjs`, `a11y-contract-shard.test.mjs` and the release-check workflow contract                                             | release-check and pull-request legs; a contract file longer than a leg's share, one it cannot name exactly, and a serial one; the recorded suite; a re-check from an admin, a maintainer and a writer, from another branch, with a short SHA and with an older commit; failed-only beside a passed, a running and a missing run                                                                                                                                                                                                                                                                                              | a narrower release-check, a held or over-budget leg, a test selected by no leg or by two, a re-check that a writer can start, that waits for main's running check, or that re-runs jobs of another commit fails                                                                                                                                                                                           |
 | FR24     | `ci-heavy-lanes.test.mjs` cadence cases                                                                                                            | release-check 170 and 176 minutes old; the unit lane hourly beside it; weekday 06:37 Pacific inside the window in standard and daylight time; the pre-cut check already started; the tip already checked; a weekend morning; before 06:30 and after 07:30                                                                                                                                                                                                                                                                                                                                                                    | a release-check starts inside the 175-minute window, the pre-cut check is skipped or starts twice, or it runs on a weekend                                                                                                                                                                                                                                                                                |
-| FR26     | `ci-lab-only-routing.test.mjs`, `change-scope.test.mjs` and `test-scope-action.test.mjs` Lab-only cases                                            | a Lab-only change, with and without a Changeset; Lab beside core, charts, a Storybook story, the docsite, the Sandbox, a workflow, the lockfile, root configuration, internal tooling or a spec record; a rename into or out of Lab; an incomplete list; a base classifier without the lane; each required context, its owners, the UI legs' Lab tests, the UI and Node guard tests, the repository guards, the Storybook build and Lab typecheck, the heavy suites, lint and an agent push                                                                                                                                  | a mixed change takes the Lab-only lane; a required context skips or fails, or passes without its notice; a Lab test, a guard test, a repository guard, the Lab typecheck or the Storybook build does not run; a heavy suite, the docsite or the full typecheck runs; lint is skipped                                                                                                                      |
+| FR26     | `ci-lab-only-routing.test.mjs`, `change-scope.test.mjs` and `test-scope-action.test.mjs` Lab-only cases                                            | a Lab-only change, with and without a Changeset; Lab beside core, charts, a Storybook story, the docsite, the Sandbox, a workflow, the lockfile, root configuration, internal tooling or a spec record; a rename into or out of Lab; an incomplete list; a base classifier without the lane; each required context, its owners, the UI legs' Lab tests, the UI and Node guard tests, the repository guards, the Storybook build and Lab typecheck, the heavy suites with and without a label, lint and an agent push                                                                                                         | a mixed change takes the Lab-only lane; a required context skips or fails, or passes without its notice; a Lab test, a guard test, a repository guard, the Lab typecheck or the Storybook build does not run; an unlabelled heavy suite, the docsite or the full typecheck runs, or a label's suite cannot audit Lab; lint is skipped                                                                     |
 
 ## Decision log
 

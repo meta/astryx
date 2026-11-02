@@ -2574,7 +2574,7 @@ jobs:
         env:
           FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
           SCOPED: ${{ github.event_name == 'pull_request' && steps.scope.outputs.full_suite == 'false' }}
-          SPECIALIZED: ${{ steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.tooling_only == 'true' || steps.scope.outputs.lab_only == 'true' }}
+          SPECIALIZED: ${{ steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.tooling_only == 'true' }}
         run: |
           if [ "$SPECIALIZED" = true ]; then
             printf 'has_stable_visual=false\nbroad_stable_visual=false\n' >> "$GITHUB_OUTPUT"
@@ -2684,7 +2684,7 @@ jobs:
         env:
           FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
           SCOPED: ${{ github.event_name == 'pull_request' && steps.scope.outputs.full_suite == 'false' }}
-          SPECIALIZED: ${{ steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.tooling_only == 'true' || steps.scope.outputs.lab_only == 'true' }}
+          SPECIALIZED: ${{ steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.docsite_only == 'true' || steps.scope.outputs.tooling_only == 'true' }}
         run: |
           if [ "$SPECIALIZED" = true ]; then
             printf 'has_stable_visual=false\nbroad_stable_visual=false\n' >> "$GITHUB_OUTPUT"
