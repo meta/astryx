@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] `Toast`: a toast updated through `uniqueID` (`collisionBehavior: 'overwrite'`) now updates in place, so focus on its controls stays put instead of dropping to the page. If the update removes the focused control, or a dismissed toast leaves only toasts with no controls, focus returns to where it was before entering the toasts.
+[fix] `Toast`: a toast updated through `uniqueID` (`collisionBehavior: 'overwrite'`) now updates in place, so focus on its controls stays put instead of dropping to the page. If the update removes the focused control, focus moves to a control in the toasts (such as a dismiss button) or, with none, back to where it was before entering the toasts. Dismissing a focused toast when only toasts without controls remain also returns focus there. An update that makes a toast auto-hide keeps its timer held while focus is inside it.
 
 @cixzhang @duytbp

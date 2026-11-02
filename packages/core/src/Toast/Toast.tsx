@@ -232,34 +232,27 @@ export function ToastSurface({
     }, remainingRef.current);
   }, [isAutoHide]);
 
-  const pauseTimer = useCallback(
-    (source: PauseSource) => {
-      if (!isAutoHide) {
-        return;
-      }
-      const sources = pauseSourcesRef.current;
-      const wasRunning = sources.size === 0;
-      sources.add(source);
-      if (!wasRunning) {
-        return;
-      }
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-      if (startTimeRef.current != null) {
-        const elapsed = Date.now() - startTimeRef.current;
-        remainingRef.current = Math.max(remainingRef.current - elapsed, 1000);
-      }
-    },
-    [isAutoHide],
-  );
+  // Holds are tracked whatever isAutoHide is: an overwrite can turn a toast
+  // that does not auto-hide into one that does while a hold is in place.
+  const pauseTimer = useCallback((source: PauseSource) => {
+    const sources = pauseSourcesRef.current;
+    const wasRunning = sources.size === 0;
+    sources.add(source);
+    if (!wasRunning) {
+      return;
+    }
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    if (startTimeRef.current != null) {
+      const elapsed = Date.now() - startTimeRef.current;
+      remainingRef.current = Math.max(remainingRef.current - elapsed, 1000);
+    }
+  }, []);
 
   const resumeTimer = useCallback(
     (source: PauseSource) => {
-      if (!isAutoHide) {
-        return;
-      }
       const sources = pauseSourcesRef.current;
       if (!sources.delete(source)) {
         return;
@@ -277,7 +270,7 @@ export function ToastSurface({
       }
       startTimer();
     },
-    [isAutoHide, startTimer],
+    [startTimer],
   );
 
   useEffect(() => {

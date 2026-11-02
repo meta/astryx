@@ -28,6 +28,11 @@ import * as stylex from '@stylexjs/stylex';
 import {spacingVars, durationVars, easeVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import {getNodeText} from '../utils/getNodeText';
+import {
+  moveFocusLeftBehind,
+  noteFocusWithin,
+  type FocusWithin,
+} from '../utils/focusReturn';
 import {INTERACTIVE_SELECTORS} from '../hooks/useClickableContainer';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
@@ -366,7 +371,11 @@ export function ToastViewport({
   const pendingFocusRef = useRef<string | 'restore' | null>(null);
   // The id of a toast whose overwrite updated a row that held focus. If the
   // update removed the focused control, the commit hands focus off.
-  const overwriteFocusIdRef = useRef<string | null>(null);
+  const overwriteFocusRef = useRef<{id: string; note: FocusWithin} | null>(
+    null,
+  );
+  // Where focus was inside a toast whose dismissal hands focus off.
+  const dismissFocusNoteRef = useRef<FocusWithin | null>(null);
 
   // Collect a focusable control within a toast node, if any.
   // Reuses the canonical INTERACTIVE_SELECTORS list (native controls plus
@@ -454,14 +463,15 @@ export function ToastViewport({
         ? {...entry, rowKey: overwritten.rowKey ?? overwritten.id}
         : entry;
       if (keepsRow) {
-        const row = viewportRef.current?.querySelector<HTMLElement>(
-          `[data-toast-id="${overwritten.id}"]`,
+        // If the update removes the focused control, the commit hands focus
+        // off as a dismissal does.
+        const note = noteFocusWithin(
+          viewportRef.current?.querySelector<HTMLElement>(
+            `[data-toast-id="${overwritten.id}"]`,
+          ),
         );
-        const active = document.activeElement;
-        if (row != null && active instanceof Node && row.contains(active)) {
-          // If the update removes the focused control, the commit hands focus
-          // off as a dismissal does.
-          overwriteFocusIdRef.current = placed.id;
+        if (note != null) {
+          overwriteFocusRef.current = {id: placed.id, note};
         }
       }
       const projected = overwritten
@@ -535,14 +545,23 @@ export function ToastViewport({
     // focused before the user entered the viewport) rather than <body>.
     const el = viewportRef.current;
     const active = document.activeElement;
-    const dismissedNode =
-      el?.querySelector<HTMLElement>(`[data-toast-id="${id}"]`) ?? null;
+    // A toast an overwrite replaced in place no longer owns its row: the
+    // replacement does, so dismissing the replaced toast leaves the row, and
+    // focus in it, to the replacement.
+    const rowKey = entry.rowKey ?? entry.id;
+    const isReplacedInPlace =
+      !toastsRef.current.some(t => t.id === id) &&
+      toastsRef.current.some(t => t.rowKey === rowKey);
+    const dismissedNode = isReplacedInPlace
+      ? null
+      : (el?.querySelector<HTMLElement>(`[data-toast-id="${id}"]`) ?? null);
     if (
       dismissedNode &&
       active instanceof Node &&
       dismissedNode.contains(active)
     ) {
       focusHandoffIdRef.current = id;
+      dismissFocusNoteRef.current = noteFocusWithin(dismissedNode);
       // Pick the toast to receive focus while the DOM is still intact: the
       // nearest one after it, then before it, that shows once it is gone
       // (FR10), else restore. The list may already run ahead of the render
@@ -614,7 +633,7 @@ export function ToastViewport({
   // shows (newest first), else back to the element focused before focus
   // entered the viewport, so a handoff never drops focus to <body>.
   const handOffFocus = useCallback(
-    (targetId: string | null) => {
+    (note: FocusWithin | null, targetId: string | null) => {
       const el = viewportRef.current;
       const rowFor = (id: string) =>
         el?.querySelector<HTMLElement>(`[data-toast-id="${id}"]`) ?? null;
@@ -626,19 +645,20 @@ export function ToastViewport({
         targetId == null
           ? []
           : [targetId, ...shownIds.filter(id => id !== targetId)];
+      let target: HTMLElement | null = null;
       for (const id of candidates) {
-        const control = getFocusable(rowFor(id));
-        if (control != null) {
-          control.focus();
-          return;
+        target = getFocusable(rowFor(id));
+        if (target != null) {
+          break;
         }
       }
       const prev = prevFocusRef.current;
-      prevFocusRef.current = null;
-      if (prev && prev.isConnected) {
-        prev.focus();
-      } else if (el) {
-        el.focus();
+      const isReturning = target == null && prev != null && prev.isConnected;
+      if (target == null) {
+        target = isReturning ? prev : el;
+      }
+      if (moveFocusLeftBehind(note, target) && isReturning) {
+        prevFocusRef.current = null;
       }
     },
     [getFocusable],
@@ -659,22 +679,20 @@ export function ToastViewport({
     }
     focusHandoffIdRef.current = null;
     pendingFocusRef.current = null;
-    handOffFocus(target === 'restore' ? null : target);
+    const note = dismissFocusNoteRef.current;
+    dismissFocusNoteRef.current = null;
+    handOffFocus(note, target === 'restore' ? null : target);
   }, [toasts, handOffFocus]);
 
   // After an overwrite updated a row that held focus: focus stays on the same
   // control, or, if the update removed it, moves as a dismissal hands it off.
   useLayoutEffect(() => {
-    const id = overwriteFocusIdRef.current;
-    if (id == null) {
+    const overwrite = overwriteFocusRef.current;
+    if (overwrite == null) {
       return;
     }
-    overwriteFocusIdRef.current = null;
-    const active = document.activeElement;
-    if (active != null && active !== document.body) {
-      return;
-    }
-    handOffFocus(id);
+    overwriteFocusRef.current = null;
+    handOffFocus(overwrite.note, overwrite.id);
   }, [toasts, handOffFocus]);
 
   const findByUniqueID = useCallback((uid: string) => {

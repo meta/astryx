@@ -603,7 +603,7 @@ describe('ToastViewport keyboard reach + focus', () => {
     expect(document.activeElement).toBe(dismiss);
   });
 
-  it('moves focus to the neighbour when a control inside a toast raises its repeat and dismisses it', () => {
+  it('keeps focus in the replacement when a control inside a toast raises its repeat and dismisses it', () => {
     function OfflineFlow() {
       const toast = useToast();
       const dismissOfflineRef = useRef<(() => void) | null>(null);
@@ -662,12 +662,13 @@ describe('ToastViewport keyboard reach + focus', () => {
     act(() => {
       fireEvent.click(retry);
     });
-    // Toast.spec.md FR10: focus moves to a control in a remaining toast, the
-    // neighbour of the dismissed one, not to the hidden oldest toast or the
-    // region.
-    expect(
-      getToastWrapperByText('Bravo').contains(document.activeElement),
-    ).toBe(true);
+    // Toast.spec.md FR8: the repeat updates the card in place, so the pressed
+    // Retry stays focused in it; dismissing the replaced toast leaves the row
+    // to the replacement, and focus does not jump to a neighbour.
+    const replacement = getToastWrapperByText('Still offline');
+    expect(document.activeElement).toBe(retry);
+    expect(replacement.contains(retry)).toBe(true);
+    expect(screen.queryByText('Offline')).toBeNull();
   });
 
   it('moves focus into the replacement when a control inside the only toast raises its repeat and dismisses it', () => {
@@ -904,6 +905,57 @@ describe('ToastViewport keyboard reach + focus', () => {
     expect(within(viewport).getByText('Uploading 60%')).toBeInTheDocument();
     expect(cancel).toBeInTheDocument();
     expect(document.activeElement).toBe(cancel);
+  });
+
+  // FR2, FR8: an overwrite that turns the card into one that auto-hides keeps
+  // the timer held while focus is inside it.
+  it('keeps an overwritten toast held while focus is inside when it starts auto-hiding', () => {
+    vi.useFakeTimers();
+    const onHide = vi.fn();
+    try {
+      renderViewport(
+        <>
+          <ShowToastButton
+            options={{
+              body: 'Uploading',
+              uniqueID: 'upload',
+              isAutoHide: false,
+              endContent: <button type="button">Cancel upload</button>,
+            }}
+            triggerLabel="Start"
+          />
+          <ShowToastButton
+            options={{
+              body: 'Upload done',
+              uniqueID: 'upload',
+              autoHideDuration: 2000,
+              onHide,
+              endContent: <button type="button">Cancel upload</button>,
+            }}
+            triggerLabel="Finish"
+          />
+        </>,
+      );
+      act(() => {
+        fireEvent.click(screen.getByText('Start'));
+      });
+      const cancel = screen.getByRole('button', {name: 'Cancel upload'});
+      act(() => {
+        cancel.focus();
+      });
+
+      act(() => {
+        fireEvent.click(screen.getByText('Finish'));
+      });
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+
+      expect(onHide).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(cancel);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   // FR8, FR10: when the overwrite removes the focused control, focus moves as
