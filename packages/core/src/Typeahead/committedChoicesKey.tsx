@@ -20,6 +20,8 @@ import {createContext, use} from 'react';
 export type CommittedChoices = {
   /** Changes exactly when the committed values change. */
   key: string;
+  /** The committed values' ids: never offered as choices. */
+  ids: ReadonlySet<string>;
   /** No further value can be committed, so no list is offered. */
   isAtLimit: boolean;
 };

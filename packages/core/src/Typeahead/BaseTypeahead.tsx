@@ -1180,17 +1180,55 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     performBootstrap,
     popover,
   ]);
-  // The latest reload, read when the key changes, as an effect event.
+  // Until the reload answers, the shown rows drop every value just
+  // committed, so the list never offers a token (component:Tokenizer FR13).
+  // The highlight stays on its item when that item remains, and a list left
+  // with no rows closes (FR15).
+  const committedIds = committedChoices?.ids;
+  const dropCommittedRows = useCallback(() => {
+    if (committedIds == null || !isShowingRef.current) {
+      return;
+    }
+    const kept = results.filter(item => !committedIds.has(item.id));
+    if (kept.length === results.length) {
+      return;
+    }
+    const highlightedId = displayedResults[highlightedIndex]?.id;
+    const keptOrder = displayOrder(kept, queryEntryCount);
+    const keptIndex =
+      highlightedId == null
+        ? -1
+        : keptOrder.findIndex(item => item.id === highlightedId);
+    setResults(kept);
+    setHighlightedIndex(
+      keptIndex >= 0 ? keptIndex : keptOrder.length > 0 ? 0 : -1,
+    );
+    if (kept.length === 0) {
+      popover.hide();
+    }
+  }, [
+    committedIds,
+    results,
+    displayedResults,
+    highlightedIndex,
+    queryEntryCount,
+    popover,
+  ]);
+  // The latest handlers, read when the key changes, as effect events.
   const reloadForCommittedChoicesRef = useRef(reloadForCommittedChoices);
+  const dropCommittedRowsRef = useRef(dropCommittedRows);
   useIsomorphicLayoutEffect(() => {
     reloadForCommittedChoicesRef.current = reloadForCommittedChoices;
+    dropCommittedRowsRef.current = dropCommittedRows;
   });
   const reloadedKeyRef = useRef(committedChoicesKey);
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (reloadedKeyRef.current === committedChoicesKey) {
       return;
     }
     reloadedKeyRef.current = committedChoicesKey;
+    // Before paint, so a committed value is never painted as a choice.
+    dropCommittedRowsRef.current();
     // The reload is a source request, started after the commit like one a
     // keystroke starts.
     queueMicrotask(() => {

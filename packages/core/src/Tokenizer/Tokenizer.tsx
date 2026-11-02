@@ -1105,8 +1105,8 @@ export function Tokenizer<T extends SearchableItem>({
   // Tells an open list to reload when the committed values change, or to
   // close once they reach the limit (FR13, FR15).
   const committedChoices = useMemo(
-    () => ({key: selectedIdKey, isAtLimit: isAtMax}),
-    [selectedIdKey, isAtMax],
+    () => ({key: selectedIdKey, ids: selectedIds, isAtLimit: isAtMax}),
+    [selectedIdKey, selectedIds, isAtMax],
   );
 
   // Selected labels, lowercased, for the Create entry's duplicate check. The

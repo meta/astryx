@@ -1218,16 +1218,18 @@ describe('Tokenizer', () => {
     function Controlled({
       initial,
       maxEntries,
+      source = userSource,
     }: {
       initial: SearchableItem[];
       maxEntries?: number;
+      source?: SearchSource;
     }) {
       const [value, setValue] = useState(initial);
       return (
         <>
           <Tokenizer
             label="Members"
-            searchSource={userSource}
+            searchSource={source}
             value={value}
             onChange={setValue}
             hasEntriesOnFocus
@@ -1322,6 +1324,43 @@ describe('Tokenizer', () => {
 
       await waitFor(() => {
         expect(input).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
+    it('never shows a value set from outside while an async reload is pending', async () => {
+      const user = userEvent.setup();
+      const slowSource: SearchSource = {
+        search: async query =>
+          users.filter(u =>
+            u.label.toLowerCase().includes(query.toLowerCase()),
+          ),
+        bootstrap: async () => {
+          await new Promise(resolve => setTimeout(resolve, 200));
+          return users.slice(0, 3);
+        },
+      };
+      render(<Controlled initial={[users[0]]} source={slowSource} />);
+      const input = screen.getByRole('combobox');
+
+      await user.click(input);
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Charlie', hidden: true}),
+        ).toBeInTheDocument();
+      });
+      act(() => {
+        screen.getByRole('button', {name: 'Set Charlie'}).click();
+      });
+
+      // Before the reload answers, Charlie is a token and not a choice.
+      expect(
+        screen.queryByRole('option', {name: 'Charlie', hidden: true}),
+      ).not.toBeInTheDocument();
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Alice', hidden: true}),
+        ).toBeInTheDocument();
       });
     });
 

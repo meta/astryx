@@ -386,9 +386,12 @@ describe('BaseTypeahead', () => {
   // component:Tokenizer FR13, spec:AST-092 FR4: when the caller's committed
   // values change, an open list reloads from the source they now filter.
   describe('committed values change', () => {
-    const COMMITTED: Record<string, {key: string; isAtLimit: boolean}> = {
-      a: {key: 'a', isAtLimit: false},
-      b: {key: 'b', isAtLimit: false},
+    const COMMITTED: Record<
+      string,
+      {key: string; ids: ReadonlySet<string>; isAtLimit: boolean}
+    > = {
+      a: {key: 'a', ids: new Set(), isAtLimit: false},
+      b: {key: 'b', ids: new Set(), isAtLimit: false},
     };
     const renderField = (
       searchSource: SearchSource<SearchableItem>,
