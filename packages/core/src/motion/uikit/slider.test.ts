@@ -4,11 +4,11 @@
  * @file slider.test.ts
  * @input vitest, the slider domain of the UIKit constants table, the spring
  *   solver and the momentum projection, and samples of UIKit's own UISlider
- * @output Holds `slider` to UISlider's measured behavior (iOS 26.2
- *   simulator): the value per `valueChanged` against the
- *   tracking rule, the thumb's lift and drop against its per-frame width,
- *   and the release coast against the per-frame value after a lift
- * @position Testing; parity of the slider constants (law P4, unit layer).
+ * @output Holds `slider` to UISlider's measured behavior on the iOS 26.2
+ *   simulator. It checks the value per `valueChanged` against the tracking
+ *   rule. It checks the lift and drop against the thumb's per-frame width,
+ *   and the coast against the per-frame value after a lift
+ * @position Testing. Parity of the slider constants (law P4, unit layer).
  *   The browser layer comes with Slider's touch presentation, which reads
  *   this table.
  */
@@ -23,9 +23,9 @@ import {slider} from './slider';
 const TRACK = 300;
 
 /**
- * `valueChanged` during a 200 pt/s drag from 0.2: the finger's travel since
- * touch-down (pt) and the value UIKit reported for it (UIKit lab, iOS 26.2
- * simulator, Oct 23 2026). The pan began at 10.33 pt.
+ * `valueChanged` during a 200 pt/s drag from 0.2, from the UIKit lab on the
+ * iOS 26.2 simulator. Each sample is the finger's travel since touch-down
+ * (pt) and the value UIKit reported for it. The pan began at 10.33 pt.
  */
 const TRACKING = {
   startValue: 0.2,
@@ -138,14 +138,14 @@ describe('slider (UISlider) constants against UIKit', () => {
       to: lifted,
     });
     const liftErrors = LIFT.map(([ms, width]) => lift.value(ms / 1000) - width);
-    // The fit's rms over every frame is 0.31 pt; over these samples, 0.41.
+    // The fit's rms over every frame is 0.31 pt. Over these samples, 0.41.
     expect(rms(liftErrors)).toBeLessThan(0.5);
     const drop = solveSpring(toSpring(slider.dropSpring), {
       from: lifted,
       to: REST_WIDTH,
     });
     const dropErrors = DROP.map(([ms, width]) => drop.value(ms / 1000) - width);
-    // The best fit, 0.49 s, leaves 0.10 pt; the read 0.5 s, 0.20 pt.
+    // The best fit, 0.49 s, leaves 0.10 pt. The read 0.5 s, 0.20 pt.
     expect(rms(dropErrors)).toBeLessThan(0.25);
   });
 

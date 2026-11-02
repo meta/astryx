@@ -7,7 +7,7 @@
  *   Slider`, with its summary and its example
  * @position Test for Slider's public documentation: the comment above the
  *   component is its emitted declaration's description and the Storybook
- *   docs page's introduction, so a helper declared between the two takes it
+ *   docs page's introduction. So a helper declared between the two takes it
  */
 
 import {readFileSync} from 'node:fs';

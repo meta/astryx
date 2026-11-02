@@ -3,8 +3,8 @@
 /**
  * @file SliderGeometry.a11y.chromium.spec.ts
  * @input Built Slider stories in real Chromium, under LTR, RTL and mixed-direction regions, and vertical
- * @output Browser evidence that thumbs and fills sit where their values put them and never leave the control (padding on it included), that the value tooltip anchors to a box layout places at the value, and that a drag of a slider displaying no value lays out nothing per move
- * @position Slider geometry proof; jsdom computes neither container units nor translate, so placement is checked here
+ * @output Browser evidence that thumbs and fills sit where their values put them and never leave the control, padding included. The value tooltip anchors to a box that layout places at the value. A drag of a slider that displays no value lays out nothing per move
+ * @position Slider geometry proof. jsdom computes neither container units nor translate, so placement is checked here
  */
 
 import {expect, test, type Page} from '@playwright/test';
@@ -181,8 +181,8 @@ for (const region of REGIONS) {
   });
 }
 
-// Moving the thumbs and the fill is a translate in container units, so a
-// drag of a slider that displays no value lays out nothing per move; a
+// Moving the thumbs and the fill is a translate in container units. So a
+// drag of a slider that displays no value lays out nothing per move. A
 // value tooltip or text display still lays out as its text changes.
 interface VerticalGeometry {
   control: {top: number; bottom: number};
@@ -282,7 +282,7 @@ test('a drag lays out nothing per move when no value is displayed', async ({
   const y = box.y + box.height / 2;
   await page.mouse.move(x, y);
   await page.mouse.down();
-  // The press itself may restyle (pressed paint, focus); count the moves.
+  // The press itself may restyle (pressed paint, focus). Count the moves.
   await page.mouse.move(x + 2, y);
   await page.evaluate(
     async () =>
@@ -303,10 +303,11 @@ test('a drag lays out nothing per move when no value is displayed', async ({
 });
 
 /**
- * The value tooltip's position anchor, measured as layout places it (offsets,
- * which no transform or `translate` moves): CSS anchor positioning reads the
- * anchor's box, and not every engine follows a `translate` on it (Firefox
- * anchors to the untranslated box), so the anchor itself must sit at the value.
+ * The value tooltip's position anchor, measured as layout places it: by its
+ * offsets, which no transform or `translate` moves. CSS anchor positioning
+ * reads the anchor's box, and not every engine follows a `translate` on it.
+ * Firefox anchors to the untranslated box, so the anchor itself must sit at
+ * the value.
  */
 async function measureTooltipAnchor(page: Page) {
   return page.evaluate(() => {
@@ -404,7 +405,7 @@ test('the value tooltip of a vertical slider anchors where layout places the val
 });
 
 // The parts sit in the control's padding box (the track and the marks
-// always did), so inline padding on the control, from a theme rule or
+// always did). So inline padding on the control, from a theme rule or
 // `controlStyle`, moves nothing.
 test('padding on the control keeps the thumb on the track, the fill and the marks', async ({
   page,
@@ -441,9 +442,10 @@ test('padding on the control keeps the thumb on the track, the fill and the mark
   );
 });
 
-// Desktop keeps the pointer model: no touch targets, the control's own
-// touch-action and user-select, and none of the touch presentation's inline
-// styles (the gesture host sets those only under a finger, while it is down).
+// Desktop keeps the pointer model: no touch targets, and the control's own
+// touch-action and user-select. None of the touch presentation's inline
+// styles show. The gesture host sets those only under a finger, while it is
+// down.
 test('a desktop slider keeps its pointer styles: no touch targets, no inline touch styles', async ({
   page,
 }) => {
@@ -467,7 +469,7 @@ test('a desktop slider keeps its pointer styles: no touch targets, no inline tou
     }
     const computed = getComputedStyle(control);
     return {
-      hits: control.querySelectorAll('[data-slider-hit]').length,
+      hit: getComputedStyle(thumb, '::before').content,
       touchAction: computed.touchAction,
       userSelect: computed.userSelect,
       inline: [control, thumb].map(element =>
@@ -477,7 +479,7 @@ test('a desktop slider keeps its pointer styles: no touch targets, no inline tou
       ),
     };
   });
-  expect(styles.hits).toBe(0);
+  expect(styles.hit).toBe('none');
   expect(styles.touchAction).toBe('none');
   expect(styles.userSelect).toBe('none');
   expect(styles.inline.flat().filter(Boolean)).toEqual([]);

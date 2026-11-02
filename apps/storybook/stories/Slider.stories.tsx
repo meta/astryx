@@ -317,7 +317,7 @@ export const TouchTracking: Story = {
       },
     },
   },
-  render: () => {
+  render: args => {
     const [value, setValue] = useState(30);
     const [range, setRange] = useState<[number, number]>([40, 40]);
     const [ends, setEnds] = useState<string[]>([]);
@@ -334,6 +334,7 @@ export const TouchTracking: Story = {
           onChange={setValue}
           onChangeEnd={logEnd('Brightness')}
           valueDisplay="text"
+          max={args.max == null ? undefined : Number(args.max)}
         />
         <Slider
           label="Hours"

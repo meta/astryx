@@ -6,10 +6,10 @@
  * @output Checks that Slider reaches its touch layer (the controller, the
  *   gesture recognizers, the animator) only through sliderTouchController.ts,
  *   imported from one site
- * @position Test for the touch layer's module boundary: a build can swap that
- *   one module (a desktop build without the touch layer), which keeps touch
- *   code out of a fine-pointer bundle (`architecture:component-style-authoring`
- *   INV6)
+ * @position Test for the touch layer's module boundary. A build can swap
+ *   that one module for a desktop build without the touch layer. That keeps
+ *   touch code out of a fine-pointer bundle
+ *   (`architecture:component-style-authoring` INV6)
  */
 
 import {existsSync, readFileSync} from 'node:fs';

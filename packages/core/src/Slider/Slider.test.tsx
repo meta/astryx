@@ -120,9 +120,9 @@ describe('Slider', () => {
   });
 
   // The thumb and the fill are placed by their progress along the travel,
-  // written inline as custom properties; CSS turns it into a translate in
-  // the control's container units (jsdom computes neither, so the geometry
-  // itself is checked in a real browser).
+  // written inline as custom properties. CSS turns it into a translate in
+  // the control's container units. jsdom computes neither, so a real browser
+  // checks the geometry itself.
   const progressOf = (element: HTMLElement, name = '--_slider-progress') =>
     element.style.getPropertyValue(name);
 
@@ -1392,6 +1392,27 @@ describe('Slider', () => {
   });
 });
 
+describe('a press focuses the thumb it lands on', () => {
+  // Coincident range thumbs rely on it: a press that never moves leaves
+  // focus on the upper thumb, whatever pointer pressed it.
+  for (const pointerType of ['mouse', 'touch', 'pen'] as const) {
+    it(`for a ${pointerType}`, () => {
+      render(<Slider label="Volume" value={50} onChange={() => {}} />);
+      const thumb = screen.getByRole('slider');
+      expect(document.activeElement).not.toBe(thumb);
+      fireEvent.pointerDown(thumb, {
+        pointerId: 1,
+        pointerType,
+        button: 0,
+        isPrimary: true,
+        clientX: 100,
+        clientY: 10,
+      });
+      expect(document.activeElement).toBe(thumb);
+    });
+  }
+});
+
 describe('one pointer per drag', () => {
   // valueDisplay="none" keeps the thumb a direct child of the track, so the
   // mocked rect lands on it: 200 px wide, thumbs travel 10 px (0) to 190 px
@@ -1669,7 +1690,7 @@ describe('pressed state', () => {
       toJSON: () => {},
     });
 
-    // A mouse press on a thumb is the thumb's pan (spec:AST-094 FR43), so it
+    // A mouse press on a thumb is the thumb's pan (spec:AST-094 FR43). So it
     // is a real mouse press: the gesture host takes only a known pointer.
     fireEvent.pointerDown(end, {
       clientX: 100,
@@ -1764,10 +1785,10 @@ describe('coincident range thumbs', () => {
     });
   }
 
-  // A mouse press on a thumb is the thumb's pan (FR7), so these are real
-  // mouse presses: the gesture host takes only a known pointer. A drag starts
-  // once the pointer has moved 10 px, and the value then follows its further
-  // travel over the control's 200 px: 2 px a value.
+  // A mouse press on a thumb is the thumb's pan, so these are real mouse
+  // presses: the gesture host takes only a known pointer. A drag starts once
+  // the pointer has moved 10 px. The value then follows its further travel
+  // over the control's 200 px, 2 px a value.
   const mouse = (clientX: number, buttons = 1) => ({
     clientX,
     clientY: 10,
@@ -1887,8 +1908,8 @@ describe('coincident range thumbs', () => {
     expect(declaresPressedOverlay(end)).toBe(false);
     expect(document.activeElement).toBe(start);
 
-    // Back past the shared value, 60 px past the threshold the other way:
-    // the lower thumb stays at 50 and the upper one takes the drag to 80.
+    // Back past the shared value, 60 px past the threshold the other way.
+    // The lower thumb stays at 50, and the upper one takes the drag to 80.
     fireEvent.pointerMove(end, mouse(150));
     expect(onChange).toHaveBeenLastCalledWith([50, 80]);
     expect(declaresPressedOverlay(end)).toBe(true);
@@ -1919,8 +1940,9 @@ describe('coincident range thumbs', () => {
     const [start, upper] = screen.getAllByRole('slider');
     end = upper;
     onChange.mockClear();
-    // Pressed 2 px above it, the drag still waits for the first movement:
-    // 110 px toward the minimum is 100 px past the threshold, 50 values down.
+    // Pressed 2 px above it, the drag still waits for the first movement. A
+    // move of 110 px toward the minimum is 100 px past the threshold, 50
+    // values down.
     fireEvent.pointerDown(end, mouse(156));
     expect(onChange).not.toHaveBeenCalled();
     fireEvent.pointerMove(end, mouse(46));
@@ -1982,8 +2004,8 @@ describe('coincident range thumbs', () => {
     fireEvent.pointerDown(end, mouse(154));
     fireEvent.pointerMove(end, mouse(134));
     expect(onChange).toHaveBeenLastCalledWith([75, 80]);
-    // Back past the shared value to 38 px past the threshold the other way:
-    // the lower thumb stops at 80 and the upper one takes the drag to 99.
+    // Back past the shared value to 38 px past the threshold the other way.
+    // The lower thumb stops at 80, and the upper one takes the drag to 99.
     fireEvent.pointerMove(end, mouse(182));
     expect(onChange).toHaveBeenLastCalledWith([80, 99]);
     fireEvent.pointerUp(end, mouse(182, 0));

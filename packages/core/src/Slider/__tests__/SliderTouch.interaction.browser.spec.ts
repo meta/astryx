@@ -3,36 +3,14 @@
 /**
  * @file SliderTouch.interaction.browser.spec.ts
  * @input The built Slider stories ("Default", "Touch tracking", "In a
- *   scrolling list"), real touch input (Chromium CDP / WebKit's input
- *   command) and the interaction harness
- * @output Interaction and animation proofs for Slider's touch presentation
- *   (UISlider's tracking): a tap on the track sets the value on its lift
- *   (the thumb springs there; WCAG 2.5.7, a departure from UISlider), the thumb's
- *   48 px touch target takes a finger beside it and the thumb lifts 1.55×;
- *   the value follows the finger's travel past the 10 px threshold over the
- *   track's length; past an end the value waits for the finger to come back;
- *   a release coasts on UIKit's spring to 0.4 of the momentum projection
- *   (final value and presented curve against an independent spring), a slow
- *   release does not coast, a drag that rests before the lift still coasts
- *   on its last velocity, under Reduce Motion no lift and a release or tap
- *   cross-fades (design:reduced-motion), a
- *   finger landing on a coasting thumb stops it where it is, a held thumb
- *   selects no text, and a finger lifted outside stays at the lift value;
- *   `onChangeEnd`
- *   reports after the coast; coincident range thumbs; a vertical swipe from
- *   a thumb scrolls a list; RTL; the coast keeps moving through a blocked
- *   main thread (with its storyboard); no Layout per drag move and no Layout
- *   or Paint per coast frame.
- * @position Browser layer of Slider's touch presentation (useSliderTouch.ts);
- *   the unit layers are useSliderTouch.test.tsx and
- *   motion/uikit/slider.test.ts.
- *
- * The oracles come from the harness (`springStep`) and plain arithmetic fed
- * the UIKit constants (motion/uikit/slider.ts, measured on UISlider, iOS 26.2
- * simulator): the value moves by the pan's translation ÷ the track length;
- * the coast is a critically damped spring of response 0.4 s that starts with
- * the release velocity and ends at the lift value + 0.4 × v × 0.996 ÷ 0.004
- * ÷ 1000 (px of finger travel).
+ *   scrolling list"), real touch input and the interaction harness
+ * @output Proofs of Slider's touch presentation: the 48 px target, the lift,
+ *   the travel past 10 px, the ends and the coast. They cover a track tap on
+ *   its lift, a slow or resting release, a catch, Reduce Motion, coincident
+ *   thumbs, RTL and a list's vertical swipe. The coast keeps moving through
+ *   a blocked main thread, and a drag lays out nothing per move.
+ * @position Browser layer of Slider's touch presentation. The unit layers
+ *   are useSliderTouch.test.tsx and motion/uikit/slider.test.ts.
  */
 
 import {expect, test, type Locator, type Page} from '@playwright/test';
@@ -48,7 +26,6 @@ import {
   frames,
   holdAnimations,
   markElement,
-  merge,
   openStory,
   type Point,
   releaseAnimations,
@@ -63,7 +40,6 @@ import {
   traceRendering,
   trackMarker,
   waitForRest,
-  withFinger,
   withStorybook,
   writeEvidence,
 } from '@astryxdesign/interaction-harness';
@@ -85,9 +61,33 @@ const THUMB = 20;
 /** UISlider's touch target, px (`slider.thumbHitTarget`). */
 const HIT_TARGET = 48;
 /**
+ * A thumb's touch target, in client px: the `::before` the touch
+ * presentation draws around the thumb, or null where it draws none.
+ */
+async function touchTarget(thumb: Locator) {
+  return thumb.evaluate(element => {
+    const before = getComputedStyle(element, '::before');
+    if (before.content === 'none' || before.content === 'normal') {
+      return null;
+    }
+    // An absolute `::before` sits in the thumb's padding box.
+    const box = element.getBoundingClientRect();
+    const left = box.left + element.clientLeft;
+    const top = box.top + element.clientTop;
+    const px = (value: string) => parseFloat(value) || 0;
+    return {
+      left: left + px(before.left),
+      top: top + px(before.top),
+      right: left + element.clientWidth - px(before.right),
+      bottom: top + element.clientHeight - px(before.bottom),
+    };
+  });
+}
+
+/**
  * A point on a whole CSS pixel. WebKit reports touch and pointer coordinates
  * in whole pixels (a tap scripted at x 50.42 arrives at 50; Chromium keeps
- * the fraction), so a case that computes a value from where a tap lands taps
+ * the fraction). So a case that computes a value from where a tap lands taps
  * a whole pixel, the coordinate every engine delivers as scripted.
  */
 const onPixel = (point: {x: number; y: number}) => ({
@@ -134,16 +134,15 @@ async function openSlider(
       ? page.getByRole('slider').first()
       : page.getByRole('slider', {name});
   await expect(thumb).toBeVisible();
-  // The touch presentation renders the touch targets after hydration, under
-  // a coarse primary pointer (this phone emulation), on every engine.
-  await expect(thumb.locator('[data-slider-hit]')).toHaveCount(1);
+  // The touch presentation draws the touch targets after hydration, under a
+  // coarse primary pointer (this phone emulation), on every engine.
+  await expect.poll(async () => touchTarget(thumb)).not.toBeNull();
   const control = thumb.locator(
     'xpath=ancestor::*[contains(@class, "astryx-slider-control")][1]',
   );
-  // The touch presentation is live once its controller has attached: the
-  // gesture host then marks the track with the touch-action its tap needs
-  // (gestures/touchActionRule.ts's TOUCH_ACTION_ATTRIBUTE, under a rule any
-  // author rule outranks; spec:AST-094 FR18), and that is the value in force.
+  // The touch presentation is live once its controller has attached. The
+  // gesture host then marks the track with the touch-action its tap needs.
+  // Any author rule outranks that rule, and the marked value is in force.
   await expect
     .poll(async () =>
       control.evaluate(element =>
@@ -179,7 +178,7 @@ interface Leg {
 /**
  * One finger: press at `from`, move through `legs` at `hz`, lift. Returns
  * the script and the event index of each leg's last move (every frame
- * moves, so event indices follow frame indices; the press is event 0).
+ * moves. So event indices follow frame indices. The press is event 0).
  */
 function legs(
   from: Point,
@@ -236,13 +235,23 @@ async function playReading<T>(
 
 /**
  * The fill's mover. Only a coast animates it (a drag writes its styles and
- * the lift scales the thumb alone), so an animation inside it is the coast.
+ * the lift scales the thumb alone). So an animation inside it is the coast.
  */
 function fillOf(thumb: Locator): Locator {
   return thumb
     .locator('xpath=ancestor::*[contains(@class, "astryx-slider-control")][1]')
     .locator('[style*="--_slider-fill-end"]')
     .first();
+}
+
+/**
+ * UISlider's release coast, critically damped: where the thumb is `t` s after
+ * the lift, starting at `from` with `velocity` toward `to` (px, px/s).
+ */
+function coastAt(from: number, to: number, velocity: number, t: number) {
+  const omega = (2 * Math.PI) / UISLIDER.release.response;
+  const offset = from - to;
+  return to + (offset + (velocity + omega * offset) * t) * Math.exp(-omega * t);
 }
 
 /** WWDC18's projection, px of finger travel. */
@@ -273,9 +282,15 @@ test('a tap on the track sets the value when it lifts and the thumb springs ther
   );
   const start = await value();
   const at = await center();
-  const hit = await thumb.locator('[data-slider-hit]').boundingBox();
-  expect(hit?.width).toBeCloseTo(UISLIDER.hitTarget, 0);
-  expect(hit?.height).toBeCloseTo(UISLIDER.hitTarget, 0);
+  const hit = await touchTarget(thumb);
+  expect(hit == null ? 0 : hit.right - hit.left).toBeCloseTo(
+    UISLIDER.hitTarget,
+    0,
+  );
+  expect(hit == null ? 0 : hit.bottom - hit.top).toBeCloseTo(
+    UISLIDER.hitTarget,
+    0,
+  );
   // 20 px beside the thumb's center, inside its 48 px touch target: the
   // thumb takes the finger and lifts, and a tap there changes nothing.
   const beside = {x: at.x + 20, y: at.y};
@@ -292,9 +307,9 @@ test('a tap on the track sets the value when it lifts and the thumb springs ther
   expect(Number(scale)).toBeCloseTo(UISLIDER.liftScale, 2);
   await frames(page, 4);
   expect(await value()).toBe(start);
-  // Far on the track: nothing while the finger is down; on the lift the
-  // value is the tap's and the thumb springs there (WCAG 2.5.7: a drag is
-  // not the only pointer way; UISlider itself ignores the tap).
+  // Far on the track: nothing while the finger is down. On the lift the
+  // value is the tap's, and the thumb springs there. A drag is not the only
+  // pointer way (WCAG 2.5.7), though UISlider itself ignores the tap.
   const far = onPixel({x: at.x + length * 0.3, y: at.y});
   const [held] = await playReading(
     page,
@@ -401,9 +416,9 @@ test('a release coasts on UIKit’s spring to 0.4 of the momentum projection, th
   );
   // The release velocity is the script's 300 px/s only where the page gets
   // the script's timestamps. Injected touches carry their real dispatch
-  // times, so a scheduling gap of 40 ms or more before the lift reads as a
-  // resting finger, and the release filter's stillness reset (AST-100 FR2)
-  // rightly starts no coast.
+  // times. A scheduling gap of 40 ms or more before the lift then reads as a
+  // resting finger. The release filter's stillness reset rightly starts no
+  // coast then.
   test.skip(
     !driver.scriptedTimestamps,
     'the release velocity needs the scripted timestamps (README: engine limits)',
@@ -421,9 +436,10 @@ test('a release coasts on UIKit’s spring to 0.4 of the momentum projection, th
     value,
   );
   // The thumb runs two animations from the lift: the drop's scale and the
-  // coast's translate, which starts a few ms later (2–3 ms here, more under
-  // load). The harness counts sample times from the earliest held start, so
-  // the samples are taken at the coast's own times: its offset plus 0, 20, …
+  // coast's translate. The coast starts a few ms later, 2–3 ms here and more
+  // under load. The harness counts sample times from the earliest held
+  // start, so the samples are taken at the coast's own times: its offset
+  // plus 0, 20, …
   const coast = (await holdAnimations(page, thumb)).find(held =>
     held.keyframes.some(keyframe => 'translate' in keyframe),
   );
@@ -573,8 +589,8 @@ test('a slow release does not coast: the value stays where the finger left it', 
     {name: 'Brightness'},
   );
   const at = await center();
-  // Past the 10 px threshold, then the last moves at 6 px/s: the projection
-  // (0.4 × 0.0996 s × 6 px/s, about 0.24 px) is under half a step.
+  // Past the 10 px threshold, then the last moves at 6 px/s. The projection,
+  // 0.4 × 0.0996 s × 6 px/s or about 0.24 px, is under half a step.
   const quick = {x: at.x + 40, y: at.y};
   const {script, ends} = legs(
     at,
@@ -617,9 +633,9 @@ test('a drag that rests 40 ms before the lift does not coast: the release filter
   );
   const at = await center();
   // 60 px at 300 px/s, then 300 ms without a move. UIKit keeps the last
-  // motion through a silent rest (a 312 ms rest still coasted 12.56 pt);
-  // the one release filter every gesture shares reads zero once the finger
-  // has been still for its stillness interval (40 ms, AST-100 FR2), so the
+  // motion through a silent rest (a 312 ms rest still coasted 12.56 pt).
+  // The one release filter every gesture shares reads zero once the finger
+  // has been still for its stillness interval (40 ms, AST-100 FR2). So the
   // value stays where the finger left it.
   const {script, ends} = legs(
     at,
@@ -679,7 +695,7 @@ test('Reduce Motion: no lift; a release keeps coasting and a track tap sets the 
   expect(Math.max(...held.map(sample => sample.scale))).toBe(1);
   await frames(page, 6);
   // A flick's release: the momentum that continues the throw is direct
-  // movement, so the thumb keeps travelling frame by frame past the lift's
+  // movement. So the thumb keeps travelling frame by frame past the lift's
   // value, at full opacity (DR2).
   const from = await center();
   const script = flick(from, {velocity: {x: 400, y: 0}, durationMs: 100});
@@ -696,7 +712,7 @@ test('Reduce Motion: no lift; a release keeps coasting and a track tap sets the 
   expect(positions.size).toBeGreaterThan(4);
   expect(release[release.length - 1].value).toBeGreaterThan(release[0].value);
   await frames(page, 6);
-  // A tap on the track: an in-place value change, so the thumb lands on the
+  // A tap on the track: an in-place value change. So the thumb lands on the
   // tap's value at once, at full opacity, with no travel between (DR2).
   const control = thumb.locator(
     'xpath=ancestor::*[contains(@class, "astryx-slider-control")][1]',
@@ -721,8 +737,8 @@ test('Reduce Motion: no lift; a release keeps coasting and a track tap sets the 
     async () => watch(320),
   );
   expect(Math.min(...opacities(tapped))).toBe(1);
-  // At once: within two frames of the lift the value is the tap's, and the
-  // thumb never stands anywhere between its old place and its new one.
+  // At once: within two frames of the lift the value is the tap's. The thumb
+  // never stands anywhere between its old place and its new one.
   expect(tapped[1].value).toBe(expected);
   const landed = tapped[tapped.length - 1].x;
   expect(
@@ -739,8 +755,8 @@ test('range thumbs closer than their touch targets split the gap: neither thumb�
   await touchDriver(page);
   const lower = page.getByRole('slider', {name: 'Minimum value'});
   const upper = page.getByRole('slider', {name: 'Maximum value'});
-  await expect(lower.locator('[data-slider-hit]')).toHaveCount(1);
-  await expect(upper.locator('[data-slider-hit]')).toHaveCount(1);
+  await expect.poll(async () => touchTarget(lower)).not.toBeNull();
+  await expect.poll(async () => touchTarget(upper)).not.toBeNull();
   const control = lower.locator(
     'xpath=ancestor::*[contains(@class, "astryx-slider-control")][1]',
   );
@@ -770,11 +786,18 @@ test('range thumbs closer than their touch targets split the gap: neither thumb�
       bottom: box.y + box.height,
     };
   };
+  const targetOf = async (locator: Locator) => {
+    const target = await touchTarget(locator);
+    if (target == null) {
+      throw new Error('no touch target');
+    }
+    return target;
+  };
   const boxes = async () => ({
     lower: await rectOf(lower),
     upper: await rectOf(upper),
-    lowerHit: await rectOf(lower.locator('[data-slider-hit]')),
-    upperHit: await rectOf(upper.locator('[data-slider-hit]')),
+    lowerHit: await targetOf(lower),
+    upperHit: await targetOf(upper),
   });
   /** Which thumb a touch at (x, y) lands on. */
   const thumbAt = async (x: number, y: number) =>
@@ -794,9 +817,9 @@ test('range thumbs closer than their touch targets split the gap: neither thumb�
     Array.from(document.querySelectorAll('[role="slider"]')).indexOf(element),
   );
   // Present and painted first: both thumbs and both touch targets have
-  // boxes, and where the thumbs have room (centers at least a target apart)
-  // each target is UISlider's full 48 px square around its thumb, so the
-  // narrowed cases below measure targets that exist.
+  // boxes. Where the thumbs have room, with centers at least a target apart,
+  // each target is UISlider's full 48 px square. So the narrowed cases below
+  // measure targets that exist.
   await expect(lower).toBeVisible();
   await expect(upper).toBeVisible();
   await spread(Math.round(80 / pxPerStep));
@@ -833,7 +856,7 @@ test('range thumbs closer than their touch targets split the gap: neither thumb�
   const y = (b.lower.top + b.lower.bottom) / 2;
   expect(await thumbAt(b.lower.left + 3, y)).toBe(indexOfLower);
   // Thumbs 30 px apart (a 10 px gap, under the targets' 28 px of growth):
-  // each hit area stops at half the gap, so the two meet in the middle.
+  // each hit area stops at half the gap. So the two meet in the middle.
   await spread(Math.max(1, Math.round(30 / pxPerStep)));
   b = await boxes();
   const middle = (b.lower.right + b.upper.left) / 2;
@@ -848,54 +871,210 @@ test('range thumbs closer than their touch targets split the gap: neither thumb�
 test('a finger landing on a coasting thumb stops it where it is', async ({
   page,
 }) => {
-  const {driver, thumb, center, value, length} = await openSlider(
+  // A scale of a thousand values: a value is a third of a px. So the coast
+  // stays more than a value from its end for about 450 ms.
+  const range = 1000;
+  const {driver, thumb, control, center, value} = await openSlider(
     page,
     'core-slider--touch-tracking',
-    {name: 'Brightness'},
+    {name: 'Brightness', args: {max: String(range)}},
   );
   test.skip(
     !driver.scriptedTimestamps,
     'the coast target needs the scripted release velocity (README: engine limits)',
   );
+  expect(await thumb.getAttribute('aria-valuemin')).toBe('0');
+  expect(await thumb.getAttribute('aria-valuemax')).toBe(String(range));
+  // From the minimum, a fast throw: a coast over about 40% of the track,
+  // never clamped.
+  await thumb.focus();
+  await page.keyboard.press('Home');
+  await expect.poll(value).toBe(0);
+  // The track's length as the slider measures it when the throw begins: the
+  // story's value text beside the track takes width with each digit. So the
+  // track is longer at 0 than it was at the story's first value.
+  const length = await control.evaluate(element =>
+    parseFloat(getComputedStyle(element).width),
+  );
   const start = await value();
   const at = await center();
-  const velocity = 600;
+  const velocity = 1500;
   const throwScript = flick(at, {
     velocity: {x: velocity, y: 0},
-    durationMs: 100,
+    durationMs: 60,
   });
-  const liftValue = Math.round(
-    trackedValue(start, (velocity * 100) / 1000, length),
+  // Where to aim: the coast this throw makes on the track as it is now.
+  const aimLift = Math.round(
+    trackedValue(start, (velocity * 60) / 1000, length, range),
   );
-  const target = Math.round(
-    liftValue + (UISLIDER.projectionShare * project(velocity) * 100) / length,
+  const aimTarget = Math.round(
+    aimLift + (UISLIDER.projectionShare * project(velocity) * range) / length,
   );
-  // A second finger lands 48 ms after the lift, 18 px past where the drag
-  // left the thumb, about where the coast has carried it by then, in the same
-  // script: no round trip to the test sits between the lift and the catch, so
-  // a loaded runner cannot let the coast settle first, and the paced play
-  // keeps those 48 ms after a slow dispatch.
-  const liftAt = throwScript[throwScript.length - 1].t;
-  const thumbAtLift = at.x + ((liftValue - start) * length) / 100;
-  await driver.play(
-    merge(
-      throwScript,
-      withFinger(
-        tap({x: thumbAtLift + 18, y: at.y}, {holdMs: 200}),
-        1,
-        liftAt + 48,
-      ),
-    ),
-    {pacing: 'spacing'},
-  );
+  const thumbPxPerValue = (length - THUMB) / range;
+  const coastValue = (seconds: number) =>
+    coastAt(
+      aimLift * thumbPxPerValue,
+      aimTarget * thumbPxPerValue,
+      (velocity * (length - THUMB)) / length,
+      seconds,
+    ) / thumbPxPerValue;
+  // The page reads its own moments, just before the slider handles them: a
+  // capture listener on the window runs first. At the lift it reads the
+  // value and the track's length. At the catch it reads whether the catch
+  // landed on the thumb and whether the coast still ran. It also reads the
+  // thumb's translate and box in the frame the catch lands in, and the
+  // track's length then. The slider reads that frame in the same task.
+  await thumb.evaluate(element => {
+    type Marks = {
+      liftAt?: number;
+      liftValue?: number;
+      liftLength?: number;
+      catchAt?: number;
+      coasting?: boolean;
+      presentedPx?: number;
+      drawnCenter?: number;
+      trackLength?: number;
+      onThumb?: boolean;
+    };
+    const marks: Marks = {};
+    (window as unknown as {__sliderCatch: Marks}).__sliderCatch = marks;
+    const track = element.closest('.astryx-slider-control');
+    const fill = track?.querySelector('[style*="--_slider-fill-end"]');
+    let presses = 0;
+    window.addEventListener(
+      'pointerdown',
+      event => {
+        presses += 1;
+        if (presses === 2) {
+          marks.catchAt = performance.now();
+          marks.presentedPx = Math.abs(
+            parseFloat(getComputedStyle(element).translate) || 0,
+          );
+          const drawn = element.getBoundingClientRect();
+          marks.drawnCenter = drawn.left + drawn.width / 2;
+          marks.trackLength =
+            track == null ? 0 : parseFloat(getComputedStyle(track).width);
+          marks.onThumb = element.contains(event.target as Node);
+          marks.coasting =
+            fill
+              ?.getAnimations({subtree: true})
+              .some(animation => animation.playState === 'running') === true;
+        }
+      },
+      {capture: true, passive: true},
+    );
+    window.addEventListener(
+      'pointerup',
+      () => {
+        if (marks.liftAt != null) {
+          return;
+        }
+        marks.liftAt = performance.now();
+        marks.liftValue = Number(element.getAttribute('aria-valuenow'));
+        marks.liftLength =
+          track == null ? 0 : parseFloat(getComputedStyle(track).width);
+      },
+      {capture: true, passive: true},
+    );
+  });
+  // A finger lands 220 ms after the throw's lift has gone out, where the
+  // coast has carried the thumb by then. Its own play starts once the
+  // throw's has dispatched the lift. So a dispatch that stalls before the
+  // lift delays the catch with it rather than sending it right behind. There
+  // the thumb is within its 48 px target of that point from about 120 ms
+  // after the lift to the coast's end. So a catch the page handles up to
+  // about 100 ms early or 240 ms late still lands on it while the coast
+  // moves.
+  const catchMs = 220;
+  const aimX = at.x + (coastValue(catchMs / 1000) - start) * thumbPxPerValue;
+  await driver.play(throwScript);
+  await page.waitForTimeout(catchMs);
+  await driver.play(tap({x: aimX, y: at.y}, {holdMs: 200}));
   await page.waitForTimeout(700);
+  const marks = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __sliderCatch: {
+            liftAt?: number;
+            liftValue?: number;
+            liftLength?: number;
+            catchAt?: number;
+            coasting?: boolean;
+            presentedPx?: number;
+            drawnCenter?: number;
+            trackLength?: number;
+            onThumb?: boolean;
+          };
+        }
+      ).__sliderCatch,
+  );
+  const {liftAt, liftValue, liftLength} = marks;
+  const {catchAt, presentedPx, drawnCenter, trackLength} = marks;
+  if (
+    liftAt == null ||
+    liftValue == null ||
+    liftLength == null ||
+    catchAt == null ||
+    presentedPx == null ||
+    drawnCenter == null ||
+    trackLength == null
+  ) {
+    throw new Error(
+      `the page saw no lift or no catch: ${JSON.stringify(marks)}`,
+    );
+  }
+  // The value the catch's frame draws, on the track as it is then. The
+  // story's value text took a digit during the coast and narrowed the
+  // track, and the coast follows the track's own length.
+  const presented = presentedPx / ((trackLength - THUMB) / range);
+  // The coast's end, as the slider computes it at the lift: the value text
+  // took digits during the drag. So the track was shorter than at the start.
+  const target = Math.round(
+    liftValue +
+      (UISLIDER.projectionShare * project(velocity) * range) / liftLength,
+  );
+  expect(target).toBeLessThan(range);
+  // The catch landed on the thumb while the coast moved: a value or more past
+  // the lift and short of the coast's end. Otherwise this runner handed the
+  // page the catch too early or too late, and a stop could not be told from
+  // the coast.
+  expect(
+    marks.onThumb === true &&
+      marks.coasting === true &&
+      presented >= liftValue + 1 &&
+      presented <= target - 1,
+    `the page handled the catch ${(catchAt - liftAt).toFixed(0)} ms after the lift (${marks.onThumb === true ? 'on' : 'off'} the thumb, ${marks.coasting === true ? `the coast at ${presented.toFixed(2)} of ${liftValue} to ${target}` : 'no coast running'}): outside its moving window, the runner's timing, not the stop`,
+  ).toBe(true);
+  // The stop is where the catch's frame presents the thumb, to the nearest
+  // value. It never jumps to a value the coast's model read at another
+  // moment.
   const caught = await value();
-  expect(caught).toBeGreaterThan(liftValue);
-  expect(caught).toBeLessThan(target);
+  expect(
+    Math.abs(caught - presented),
+    `stopped at ${caught}, the catch's frame presents ${presented.toFixed(2)}`,
+  ).toBeLessThanOrEqual(0.5);
+  // And the thumb rests where it was drawn when the finger landed, to half a
+  // value step. The stop and the stylesheet's position follow the track's
+  // own length.
+  const rest = await thumb.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    const track = element
+      .closest('.astryx-slider-control')
+      ?.getBoundingClientRect();
+    return {
+      center: rect.left + rect.width / 2,
+      length: track?.width ?? 0,
+    };
+  });
+  expect(
+    Math.abs(rest.center - drawnCenter),
+    `rests at ${rest.center.toFixed(2)} px, drawn at ${drawnCenter.toFixed(2)} px when caught`,
+  ).toBeLessThanOrEqual((rest.length - THUMB) / range / 2);
   // The interrupted coast reports where it stopped, then the catching touch
-  // ends there too, and nothing moves on.
+  // ends there too, and nothing moves on (after the minimum Home set).
   await expect(page.getByTestId('slider-change-end')).toHaveText(
-    `Brightness ${caught}, Brightness ${caught}`,
+    `Brightness 0, Brightness ${caught}, Brightness ${caught}`,
   );
   expect(await thumb.evaluate(element => element.style.translate)).toBe('');
 });
@@ -908,17 +1087,16 @@ test('a finger held on a thumb or on the track starts no selection: the thumb’
     'core-slider--touch-tracking',
     {name: 'Brightness'},
   );
-  const hit = thumb.locator('[data-slider-hit]');
   const control = thumb.locator(
     'xpath=ancestor::*[contains(@class, "astryx-slider-control")][1]',
   );
-  // The thumb's pan brings the gesture host's selection lock (spec:AST-094
-  // FR41). Where iOS WebKit's touch-callout query holds, it writes
-  // `user-select: none` inline on the held element (an engine keeps the
-  // standard or the prefixed form in its CSSOM); elsewhere it cancels the
-  // `selectstart` a long press fires, with no style write.
+  // The thumb's pan brings the gesture host's selection lock. Where iOS
+  // WebKit's touch-callout query holds, it writes `user-select: none` inline
+  // on the held element. An engine keeps the standard or the prefixed form
+  // in its CSSOM. Elsewhere it cancels the `selectstart` a long press fires,
+  // with no style write.
   const refusesSelection = async () =>
-    hit.evaluate(node => {
+    thumb.evaluate(node => {
       if (CSS.supports('(-webkit-touch-callout: none)')) {
         const {style} = node as HTMLElement;
         return (
@@ -948,8 +1126,8 @@ test('a finger held on a thumb or on the track starts no selection: the thumb’
   if (box == null) {
     throw new Error('no control');
   }
-  // A finger held on the track does nothing, so the track's tap takes no
-  // lock (spec:AST-094 FR41); the control's own style keeps its text
+  // A finger held on the track does nothing. So the track's tap takes no
+  // lock (spec:AST-094 FR41). The control's own style keeps its text
   // unselectable, and the hold selects nothing.
   const onTrack = {x: box.x + box.width * 0.9, y: box.y + box.height / 2};
   const [held] = await playReading(
@@ -1012,7 +1190,7 @@ test('coincident range thumbs: the first movement picks the thumb that can follo
   const driver = await touchDriver(page);
   const low = page.getByRole('slider', {name: 'Minimum value'});
   const high = page.getByRole('slider', {name: 'Maximum value'});
-  await expect(high.locator('[data-slider-hit]')).toHaveCount(1);
+  await expect.poll(async () => touchTarget(high)).not.toBeNull();
   expect(await low.getAttribute('aria-valuenow')).toBe(
     await high.getAttribute('aria-valuenow'),
   );
@@ -1042,7 +1220,7 @@ test('a vertical swipe from a thumb scrolls the list; a horizontal one drags it'
   const thumb = page.getByRole('slider', {name: 'Channel 2'});
   // Present and painted first: the swipe below must leave this thumb's value.
   await expect(thumb).toBeVisible();
-  await expect(thumb.locator('[data-slider-hit]')).toHaveCount(1);
+  await expect.poll(async () => touchTarget(thumb)).not.toBeNull();
   const before = await thumb.getAttribute('aria-valuenow');
   const box = await thumb.boundingBox();
   if (box == null) {
@@ -1057,7 +1235,7 @@ test('a vertical swipe from a thumb scrolls the list; a horizontal one drags it'
   expect(await thumb.getAttribute('aria-valuenow')).toBe(before);
   // Let the list's own deceleration finish: a finger on a moving list
   // brakes it and the control does not track that touch. The list must come
-  // to rest (two reads 100 ms apart agree); if it never does, the test fails
+  // to rest (two reads 100 ms apart agree). If it never does, the test fails
   // here instead of dragging on a moving list.
   await expect
     .poll(
@@ -1124,43 +1302,38 @@ test(
       'core-slider--touch-tracking',
       {name: 'Brightness'},
     );
+    test.skip(
+      !driver.scriptedTimestamps,
+      'WebKit stamps an injected touch when it arrives, so a stalled dispatch bunches the throw, and its cast moves in 2 px steps (README: engine limits)',
+    );
     await markElement(thumb);
     // A compositor-only control in the same screencast: the coast is judged
     // against what this machine's compositor presented in the block.
     await startBusyControl(page);
     const cast = await startScreencast(page);
     const at = await center();
-    // Block mid-flight, once the coast itself runs (the harness's contract:
-    // an animation that has not started cannot be judged). The page waits
-    // from before the release, frame by frame, until the coast inside the
-    // fill (nothing else animates there: the lift scales the thumb alone) has
-    // run three frames, and blocks from that frame: no round trip to the test
-    // sits between the coast's start and the block.
+    // Block mid-flight, once the coast itself runs: the harness cannot judge
+    // an animation that has not started. The page waits from before the
+    // release, frame by frame, until the coast in the fill has run three
+    // frames. Nothing else animates there, since the lift scales the thumb
+    // alone. It blocks from that frame, so no round trip to the test sits
+    // between the coast's start and the block.
     const blocking = blockMainThread(page, 400, {
       during: fillOf(thumb),
       minProgressMs: 48,
     });
-    // A moderate iPhone flick, 900 px/s over 60 ms, paced by the script's own
-    // spacing: in WebKit the page reads the release velocity from when the
-    // moves arrive, and a burst behind a stalled dispatch reads as a far
-    // faster finger, whose coast reaches the end of the track before the
-    // block. A stall that reaches the stillness interval fails the run as
-    // `TouchPacingError`, the runner's fault, not the coast's.
-    await driver.play(flick(at, {velocity: {x: 900, y: 0}, durationMs: 60}), {
-      pacing: 'spacing',
-    });
+    // A moderate iPhone flick, 900 px/s over 60 ms, with the script's own
+    // timestamps.
+    await driver.play(flick(at, {velocity: {x: 900, y: 0}, durationMs: 60}));
     const block = await blocking;
     await page.waitForTimeout(150);
     const castFrames = await cast.stop();
     const tracked = await trackMarker(page, castFrames);
     const control = await trackMarker(page, castFrames, {rgb: CONTROL_RGB});
-    // Judged until two of the cast's own position steps from rest: 2 px in
-    // Chromium's PNG cast, 4 px in WebKit's JPEG cast, whose 4:2:0 chroma
-    // holds the marker's color in 2 px blocks. The tail's plateaus there are
-    // the cast's resolution, not a stall.
+    // Judged until 2 px from rest: two of the cast's 1 px position steps.
     const proof = busyWindowProof(tracked, block, {
       axis: 'x',
-      settledWithinSteps: 2,
+      settledWithin: 2,
       control,
     });
     await writeEvidence(
@@ -1249,7 +1422,7 @@ test('every touch screen gets the same touch model, whatever its engine: touch t
   expect(dragged).toBe(Math.round(trackedValue(start, -70, length)));
   await waitForRest(thumb);
   // A tap on the track sets the value when it lifts. (The control's width
-  // follows the value text beside it, so it is read now.)
+  // follows the value text beside it. So it is read now.)
   const box = await control.boundingBox();
   if (box == null) {
     throw new Error('no control');

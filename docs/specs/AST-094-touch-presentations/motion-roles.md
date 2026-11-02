@@ -16,6 +16,8 @@ Every motion role a registered table lists (`spec:AST-094` FR4, DEC-5): its kind
 | `springs.menuOpen`           | spring   | response 0.32 s, damping ratio 0.8  | `spec:AST-094` FR4 |
 | `springs.quickChange`        | spring   | duration 0.5 s, bounce 0.15         | `spec:AST-094` FR4 |
 | `springs.settle`             | spring   | duration 0.5 s, bounce 0            | `spec:AST-094` FR4 |
+| `springs.sliderDrop`         | spring   | response 0.5 s, damping ratio 0.7   | `component:Slider` |
+| `springs.sliderLift`         | spring   | response 0.215 s, damping ratio 0.6 | `component:Slider` |
 | `springs.sliderRelease`      | spring   | response 0.4 s, damping ratio 1     | `component:Slider` |
 | `springs.stateChange`        | spring   | response 0.55 s, damping ratio 1    | `spec:AST-094` FR4 |
 | `springs.subMenuBack`        | spring   | response 0.4 s, damping ratio 1     | `spec:AST-094` FR4 |

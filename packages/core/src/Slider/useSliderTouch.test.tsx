@@ -2,18 +2,13 @@
 
 /**
  * @file useSliderTouch.test.tsx
- * @input vitest, Testing Library, Slider under a coarse primary pointer
- *   (stubbed `matchMedia`), stubbed control geometry, synthetic touch
- *   events with timestamps, and fake timers for the release coast
+ * @input vitest, Testing Library, Slider under a stubbed coarse pointer,
+ *   stubbed geometry, timed touch events and fake timers
  * @output Holds Slider's touch presentation to UISlider's rules in jsdom:
- *   touch targets only under a finger, a tap on the track ignored while a
- *   mouse keeps jumping, the value from the finger's travel past the pan
- *   threshold over the track length (LTR, RTL, vertical), coincident range
- *   thumbs, a tap on the thumb, and the release coast reporting
- *   `onChangeEnd` once with the coasted value
- * @position Testing; the unit layer of useSliderTouch.ts. The browser layer
- *   is __tests__/SliderTouch.interaction.browser.spec.ts; the constants'
- *   parity is motion/uikit/slider.test.ts.
+ *   targets, track taps, travel (LTR, RTL, vertical), coincident thumbs,
+ *   the coast, and a cancel's single `onChangeEnd`
+ * @position Testing: the unit layer of useSliderTouch.ts. The browser layer
+ *   is __tests__/SliderTouch.interaction.browser.spec.ts.
  */
 
 import {
@@ -37,10 +32,18 @@ import {Slider} from './Slider';
 import {getGestureHost} from '../gestures/GestureHost';
 import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
 import {projectDistance} from '../motion/projection';
+import type * as HapticsModule from '../gestures/haptics';
 import {slider as UIKIT_SLIDER} from '../motion/uikit/slider';
 
 /** The control's stubbed layout: 300 px long at x = 0 (or y = 0). */
 const LENGTH = 300;
+
+// The end haptic is a spy: the browser's vibration is not observable here.
+const haptics = vi.hoisted(() => ({playHaptic: vi.fn()}));
+vi.mock('../gestures/haptics', async importOriginal => ({
+  ...(await importOriginal<typeof HapticsModule>()),
+  playHaptic: haptics.playHaptic,
+}));
 
 interface Contact {
   id: number;
@@ -155,11 +158,11 @@ function stubMatchMedia(coarse: boolean) {
 }
 
 /** Gives every slider control a 300 px layout box. */
-function stubControlGeometry(vertical = false) {
+function stubControlGeometry(vertical = false, length = LENGTH) {
   stubTouchAction();
   const rect = vertical
-    ? {left: 0, top: 0, right: 24, bottom: LENGTH, width: 24, height: LENGTH}
-    : {left: 0, top: 0, right: LENGTH, bottom: 24, width: LENGTH, height: 24};
+    ? {left: 0, top: 0, right: 24, bottom: length, width: 24, height: length}
+    : {left: 0, top: 0, right: length, bottom: 24, width: length, height: 24};
   const original = HTMLElement.prototype.getBoundingClientRect;
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
     function (this: HTMLElement) {
@@ -211,9 +214,8 @@ function Controlled({
 }
 
 /**
- * jsdom drops `touch-action` from styles: report what the gesture host sets
- * on a thumb's touch target (a pan along the travel leaves the browser the
- * cross axis).
+ * jsdom drops `touch-action` from styles, so report what the gesture host
+ * sets on a thumb. A pan along the travel leaves the browser the cross axis.
  */
 function stubTouchAction() {
   const original = window.getComputedStyle.bind(window);
@@ -235,12 +237,10 @@ function stubTouchAction() {
           },
         });
       }
-      if (!element.hasAttribute('data-slider-hit')) {
+      if (element.getAttribute('role') !== 'slider') {
         return style;
       }
-      const vertical =
-        element.closest('[role="slider"]')?.getAttribute('aria-orientation') ===
-        'vertical';
+      const vertical = element.getAttribute('aria-orientation') === 'vertical';
       const touchAction = vertical ? 'pan-x pinch-zoom' : 'pan-y pinch-zoom';
       return new Proxy(style, {
         get(target, key): string | number | object | null | undefined {
@@ -262,8 +262,11 @@ function stubTouchAction() {
   );
 }
 
-const hitOf = (thumb: HTMLElement) =>
-  thumb.querySelector('[data-slider-hit]') as HTMLElement;
+// A thumb takes a finger itself. Under a coarse primary pointer its
+// `::before` is the touch target, drawn from the insets it carries.
+const hitOf = (thumb: HTMLElement) => thumb;
+const drawsTouchTarget = (thumb: HTMLElement) =>
+  thumb.style.getPropertyValue('--_slider-hit-top') !== '';
 
 beforeEach(() => {
   vi.useFakeTimers({
@@ -301,18 +304,18 @@ async function renderTouch(ui: ReactElement): Promise<RenderResult> {
 }
 
 describe('Slider touch presentation (UISlider tracking)', () => {
-  it('renders the thumbs’ touch targets only under a coarse primary pointer', async () => {
+  it('draws the thumbs’ touch targets only under a coarse primary pointer, with no element of their own', async () => {
     stubMatchMedia(false);
     const {unmount} = await renderTouch(<Controlled initial={50} />);
-    expect(hitOf(screen.getByRole('slider'))).toBeNull();
+    const fine = screen.getByRole('slider');
+    expect(drawsTouchTarget(fine)).toBe(false);
+    const fineCount = fine.querySelectorAll('*').length;
     unmount();
     stubMatchMedia(true);
     await renderTouch(<Controlled initial={[20, 80]} />);
-    const thumbs = screen.getAllByRole('slider');
-    for (const thumb of thumbs) {
-      const hit = hitOf(thumb);
-      expect(hit).not.toBeNull();
-      expect(hit).toHaveAttribute('aria-hidden', 'true');
+    for (const thumb of screen.getAllByRole('slider')) {
+      expect(drawsTouchTarget(thumb)).toBe(true);
+      expect(thumb.querySelectorAll('*').length).toBe(fineCount);
     }
   });
 
@@ -324,7 +327,7 @@ describe('Slider touch presentation (UISlider tracking)', () => {
     stubControlGeometry();
     const onChange = vi.fn();
     await renderTouch(<Controlled initial={50} onChange={onChange} />);
-    expect(hitOf(screen.getByRole('slider'))).not.toBeNull();
+    expect(drawsTouchTarget(screen.getByRole('slider'))).toBe(true);
     const control = document.querySelector(
       '.astryx-slider-control',
     ) as HTMLElement;
@@ -411,7 +414,7 @@ describe('Slider touch presentation (UISlider tracking)', () => {
     stubControlGeometry();
     await renderTouch(<Controlled initial={[40, 40]} />);
     const [low, high] = screen.getAllByRole('slider');
-    // The thumb on top (the second) takes the finger; dragging toward min
+    // The thumb on top (the second) takes the finger. Dragging toward min
     // moves the first.
     dragThumb(hitOf(high), {x: 120, y: 12}, {dx: -40, lift: false});
     expect(low).toHaveAttribute('aria-valuenow', '30');
@@ -527,6 +530,45 @@ describe('Slider touch presentation (UISlider tracking)', () => {
     expect(screen.getByRole('slider')).toHaveAttribute('aria-valuenow', '86');
   });
 
+  it('plays no end haptic for a tap on the track that sets an end: only a drag and its coast play it', async () => {
+    stubMatchMedia(true);
+    stubControlGeometry();
+    haptics.playHaptic.mockClear();
+    const onChangeEnd = vi.fn();
+    await renderTouch(<Controlled initial={50} onChangeEnd={onChangeEnd} />);
+    const control = document.querySelector(
+      '.astryx-slider-control',
+    ) as HTMLElement;
+    const start = nextStart();
+    // A tap at the track's far end sets the maximum, as UISlider never does
+    // from a tap, so no haptic plays.
+    touch('touchstart', control, {id: 1, x: 299, y: 12}, start);
+    touch('touchend', control, {id: 1, x: 299, y: 12}, start + 80);
+    for (let frame = 0; frame < 100; frame++) {
+      await act(async () => {
+        vi.advanceTimersByTime(16);
+      });
+    }
+    expect(onChangeEnd).toHaveBeenLastCalledWith(100);
+    expect(haptics.playHaptic).not.toHaveBeenCalled();
+    // A drag from there into the minimum plays it once.
+    dragThumb(
+      hitOf(screen.getByRole('slider')),
+      {x: 290, y: 12},
+      {
+        dx: -300,
+        steps: 10,
+      },
+    );
+    for (let frame = 0; frame < 100; frame++) {
+      await act(async () => {
+        vi.advanceTimersByTime(16);
+      });
+    }
+    expect(onChangeEnd).toHaveBeenLastCalledWith(0);
+    expect(haptics.playHaptic).toHaveBeenCalledTimes(1);
+  });
+
   it('sets nothing from a touch on the track that moves away before lifting (a swipe)', async () => {
     stubMatchMedia(true);
     stubControlGeometry();
@@ -562,15 +604,15 @@ describe('Slider touch presentation (UISlider tracking)', () => {
       pen('pointermove', hit, 150 + 6 * i, 12, t + 16 * i);
     }
     expect(onChange).toHaveBeenLastCalledWith(67);
-    // A pen rests before it lifts, so nothing coasts.
+    // A pen rests before it lifts. So nothing coasts.
     pen('pointerup', hit, 210, 12, t + 400);
     for (let frame = 0; frame < 100; frame++) {
       await act(async () => {
         vi.advanceTimersByTime(16);
       });
     }
-    // A pen's tap on the track sets the value on its lift, frame by frame
-    // as a finger's does: (280 - 10) / (300 - 20) of the range.
+    // A pen's tap on the track sets the value on its lift, as a finger's
+    // does. The value is (280 - 10) / (300 - 20) of the range.
     const control = document.querySelector(
       '.astryx-slider-control',
     ) as HTMLElement;
@@ -628,50 +670,121 @@ describe('Slider touch presentation (UISlider tracking)', () => {
     expect(parseFloat(thumb.style.translate)).toBeCloseTo(0.67 * 280, 1);
   });
 
-  it('ends a touch silently when the slider unmounts or is disabled mid-drag', async () => {
+  it('moves no value on a collapsed track: a drag and its release on 0 px keep the value', async () => {
+    stubMatchMedia(true);
+    stubControlGeometry(false, 0);
+    const onChange = vi.fn();
+    await renderTouch(<Controlled initial={50} onChange={onChange} />);
+    const thumb = screen.getByRole('slider');
+    dragThumb(hitOf(thumb), {x: 0, y: 12}, {dx: 60, steps: 10});
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(onChange.mock.calls.filter(([value]) => value !== 50)).toEqual([]);
+    expect(thumb).toHaveAttribute('aria-valuenow', '50');
+    expect(thumb.style.translate).not.toContain('NaN');
+  });
+
+  it('follows the track through the page’s one shared ResizeObserver, not one per slider', async () => {
+    stubMatchMedia(true);
+    stubControlGeometry();
+    let created = 0;
+    class CountingObserver {
+      constructor() {
+        created += 1;
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', CountingObserver);
+    try {
+      await renderTouch(
+        <>
+          <Slider label="One" valueDisplay="none" value={20} />
+          <Slider label="Two" valueDisplay="none" value={80} />
+        </>,
+      );
+      expect(screen.getAllByRole('slider')).toHaveLength(2);
+      expect(created).toBe(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('ends a touch silently when the slider unmounts mid-drag', async () => {
     stubMatchMedia(true);
     stubControlGeometry();
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
-    for (const end of ['unmount', 'disable'] as const) {
-      const onChange = vi.fn();
-      const onChangeEnd = vi.fn();
-      const view = await renderTouch(
-        <Slider
-          label="Level"
-          valueDisplay="none"
-          value={50}
-          onChange={onChange}
-          onChangeEnd={onChangeEnd}
-        />,
-      );
-      dragThumb(
-        hitOf(screen.getByRole('slider')),
-        {x: 150, y: 12},
-        {
-          dx: 60,
-          lift: false,
-        },
-      );
-      expect(onChange).toHaveBeenCalled();
-      onChange.mockClear();
-      if (end === 'unmount') {
-        view.unmount();
-      } else {
-        view.rerender(
-          <Slider
-            label="Level"
-            valueDisplay="none"
-            value={50}
-            isDisabled
-            onChange={onChange}
-            onChangeEnd={onChangeEnd}
-          />,
-        );
-        view.unmount();
-      }
-      expect(onChange, end).not.toHaveBeenCalled();
-      expect(onChangeEnd, end).not.toHaveBeenCalled();
-    }
+    const onChange = vi.fn();
+    const onChangeEnd = vi.fn();
+    const view = await renderTouch(
+      <Slider
+        label="Level"
+        valueDisplay="none"
+        value={50}
+        onChange={onChange}
+        onChangeEnd={onChangeEnd}
+      />,
+    );
+    dragThumb(
+      hitOf(screen.getByRole('slider')),
+      {x: 150, y: 12},
+      {
+        dx: 60,
+        lift: false,
+      },
+    );
+    expect(onChange).toHaveBeenCalled();
+    onChange.mockClear();
+    view.unmount();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onChangeEnd).not.toHaveBeenCalled();
+    expect(
+      errors.mock.calls.filter(call => String(call[0]).includes('flushSync')),
+    ).toEqual([]);
+    errors.mockRestore();
+  });
+
+  it('cancels a drag when the slider is disabled mid-drag: onChangeEnd fires once, with the value the owner rendered', async () => {
+    stubMatchMedia(true);
+    stubControlGeometry();
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const onChange = vi.fn();
+    const onChangeEnd = vi.fn();
+    const slider = (isDisabled: boolean) => (
+      <Slider
+        label="Level"
+        valueDisplay="none"
+        value={50}
+        isDisabled={isDisabled}
+        onChange={onChange}
+        onChangeEnd={onChangeEnd}
+      />
+    );
+    const view = await renderTouch(slider(false));
+    const thumb = screen.getByRole('slider');
+    dragThumb(hitOf(thumb), {x: 150, y: 12}, {dx: 60, lift: false});
+    expect(onChange).toHaveBeenCalled();
+    onChange.mockClear();
+    view.rerender(slider(true));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // The owner kept 50, so the cancelled drag ends there.
+    expect(onChangeEnd).toHaveBeenCalledTimes(1);
+    expect(onChangeEnd).toHaveBeenCalledWith(50);
+    expect(onChange).not.toHaveBeenCalled();
+    // The finger's lift finds nothing left to end.
+    fireEvent.pointerUp(thumb, {pointerId: 1, pointerType: 'touch'});
+    view.unmount();
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(onChangeEnd).toHaveBeenCalledTimes(1);
     expect(
       errors.mock.calls.filter(call => String(call[0]).includes('flushSync')),
     ).toEqual([]);
@@ -711,7 +824,7 @@ describe('Slider touch presentation (UISlider tracking)', () => {
   it('a release coasts to 0.4 of the momentum projection, then onChangeEnd reports once', async () => {
     stubMatchMedia(true);
     stubControlGeometry();
-    // jsdom has no Web Animations: a running stand-in, so the coast lasts
+    // jsdom has no Web Animations: a running stand-in. So the coast lasts
     // its curve (the animator settles it on its own clock).
     Object.defineProperty(HTMLElement.prototype, 'animate', {
       configurable: true,
@@ -745,7 +858,7 @@ describe('Slider touch presentation (UISlider tracking)', () => {
     expect(target).toBeGreaterThan(liftValue);
     expect(onChangeEnd).not.toHaveBeenCalled();
     for (let i = 0; i < 120; i++) {
-      // Async, so the coast's completion (a promise) runs between frames.
+      // Async. So the coast's completion (a promise) runs between frames.
       await act(async () => {
         vi.advanceTimersByTime(16);
       });
@@ -782,8 +895,8 @@ describe('Slider touch presentation (UISlider tracking)', () => {
     );
     const thumb = screen.getByRole('slider');
     const hit = hitOf(thumb);
-    // 10 moves of 6 px, 16 ms apart, then the lift 16 ms later: 375 px/s at
-    // the lift, which a finger's release would coast on.
+    // Ten moves of 6 px, 16 ms apart, then the lift 16 ms later. That is
+    // 375 px/s at the lift, which a finger's release would coast on.
     const t = nextStart();
     pen('pointerdown', hit, 60, 12, t);
     for (let i = 1; i <= 10; i++) {

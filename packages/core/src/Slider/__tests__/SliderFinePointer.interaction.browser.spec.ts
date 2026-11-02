@@ -5,9 +5,9 @@
  *   not mobile: a fine primary pointer), driven by Playwright's mouse
  * @output Proofs that Slider's gestures attach for every pointer
  *   (`spec:AST-094` FR43): a mouse drag on a thumb pans, claiming after
- *   FR19's 10 px; each gesture element keeps one passive `pointerdown`
+ *   FR19's 10 px. Each gesture element keeps one passive `pointerdown`
  *   listener and the gesture host listens on the page only during a press
- *   (FR24); and the touch targets stay coarse-only.
+ *   (FR24). And the touch targets stay coarse-only.
  * @position Browser proof beside SliderTouch.interaction.browser.spec.ts,
  *   which drives a finger under phone emulation.
  */
@@ -41,8 +41,8 @@ interface Registration {
 }
 
 /**
- * Records every listener the page adds and removes, before its scripts run,
- * so the gesture host's listeners can be read off each element and off the
+ * Records every listener the page adds and removes, before its scripts run.
+ * Then the gesture host's listeners can be read off each element and the
  * document.
  */
 async function recordListeners(page: Page): Promise<void> {
@@ -132,7 +132,7 @@ async function pointerListenersOn(element: Locator): Promise<Registration[]> {
 /**
  * The passive pointer listeners live on the document and the window now (the
  * gesture host's; Storybook's own tools add others), each with its
- * registration's index, so one added during a press can be told from a
+ * registration's index. So one added during a press can be told from a
  * listener of the same type that was already there.
  */
 async function pageListeners(
@@ -203,9 +203,13 @@ test('under a fine pointer the thumb and the track each keep one passive pointer
   expect(await pointerListenersOn(control)).toEqual([
     {type: 'pointerdown', passive: true},
   ]);
-  // The 48 px touch target stays coarse-only (FR43).
-  await expect(page.locator('[data-slider-hit]')).toHaveCount(0);
-  // At rest the host adds nothing to the page; a press adds its page
+  // The 48 px touch target, the thumb's `::before`, stays coarse-only.
+  expect(
+    await thumb.evaluate(
+      element => getComputedStyle(element, '::before').content,
+    ),
+  ).toBe('none');
+  // At rest the host adds nothing to the page. A press adds its page
   // listeners, and the release removes them.
   const atRest = await pageListeners(page);
   const restIds = new Set(atRest.map(({id}) => id));
@@ -240,11 +244,11 @@ test('a mouse drag on a thumb pans: the value holds through the 10 px hysteresis
   const at = await center();
   await page.mouse.move(at.x, at.y);
   await page.mouse.down();
-  // Inside the hysteresis nothing claims the drag, so the value holds.
+  // Inside the hysteresis nothing claims the drag. So the value holds.
   await page.mouse.move(at.x + HYSTERESIS - 4, at.y, {steps: 3});
   expect(await value()).toBe(start);
   // Past it the value follows the travel beyond the claim, as UISlider's.
-  // The value renders after the move's frame, so the reads wait for it.
+  // The value renders after the move's frame. So the reads wait for it.
   for (const travel of [30, 60]) {
     await page.mouse.move(at.x + travel, at.y, {steps: 5});
     await expect
@@ -362,11 +366,11 @@ test('a mouse drag that starts off the travel still moves the thumb, by its trav
   const at = await center();
   await page.mouse.move(at.x, at.y);
   await page.mouse.down();
-  // The first 12 px run straight across the travel: a mouse's pan claims
-  // after the same 10 px in any direction, since a mouse has no page scroll
-  // to yield to.
+  // The first 12 px run straight across the travel. A mouse's pan claims
+  // after the same 10 px in any direction: a mouse has no page scroll to
+  // yield to.
   await page.mouse.move(at.x, at.y + 12, {steps: 3});
-  // Then 60 px along it: the threshold lies across the travel, so all 60
+  // Then 60 px along it: the threshold lies across the travel. So all 60
   // count.
   await page.mouse.move(at.x + 60, at.y + 12, {steps: 6});
   await expect.poll(value).toBe(Math.round(start + (60 * 100) / length));

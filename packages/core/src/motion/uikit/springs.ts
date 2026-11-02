@@ -456,15 +456,30 @@ export const BANNER_SPRING = {mass: 3, stiffness: 1000, damping: 500} as const;
 
 /**
  * UISlider's release: after a finger lifts, the thumb settles on this spring
- * toward 0.4 of the release's momentum projection (`component:Slider` FR7).
- * Critically damped, so it never overshoots a target ahead of it.
- * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
- *   iPhone 17 Pro, the `UIViewSpringAnimationBehavior` read at the lift
- *   (response 0.4, damping ratio 1), which the per-frame value of four
- *   releases fits (the UIKit slider table, motion/uikit/slider.ts),
- *   Oct 23 2026
+ * toward 0.4 of the release's momentum projection. It is critically damped,
+ * so it never overshoots a target ahead of it.
+ * @source measured: UIKit lab, iOS 26.2 simulator, iPhone 17 Pro. The
+ *   `UIViewSpringAnimationBehavior` at the lift reads response 0.4 and
+ *   damping ratio 1. Four releases fit it per frame (the UIKit slider
+ *   table). Oct 23 2026
  */
 export const SLIDER_RELEASE_SPRING = {response: 0.4, dampingRatio: 1} as const;
+
+/**
+ * UISlider's lift: a finger's touch-down scales the thumb up on this spring.
+ * @source measured: UIKit lab, iOS 26.2 simulator, iPhone 17 Pro. The
+ *   thumb's scale per frame after touch-down (the UIKit slider table).
+ *   Oct 23 2026
+ */
+export const SLIDER_LIFT_SPRING = {response: 0.215, dampingRatio: 0.6} as const;
+
+/**
+ * UISlider's drop: the lift's end scales the thumb back down on this spring.
+ * @source measured: UIKit lab, iOS 26.2 simulator, iPhone 17 Pro. The
+ *   thumb's scale per frame after the lift (the UIKit slider table).
+ *   Oct 23 2026
+ */
+export const SLIDER_DROP_SPRING = {response: 0.5, dampingRatio: 0.7} as const;
 
 /**
  * Every spring above, by row name: the table the existing readers use. A
@@ -507,13 +522,14 @@ export const springs = {
   keyboard: KEYBOARD_SPRING,
   banner: BANNER_SPRING,
   sliderRelease: SLIDER_RELEASE_SPRING,
+  sliderLift: SLIDER_LIFT_SPRING,
+  sliderDrop: SLIDER_DROP_SPRING,
 } as const;
 
 /**
- * The springs spec:AST-094 FR4 names, and the ones a component's own record
- * names, such as `component:Slider`'s `sliderRelease` (the generated motion
- * role table, DEC-5, lists each with its record): the only ones that are
- * motion roles.
+ * The only springs that are motion roles. The touch presentations' record
+ * names some, and a component's own record names others, such as Slider's
+ * three. The generated motion role table lists each with its record.
  * The registry takes these rows alone, so registering ships no other spring.
  */
 const SPRING_ROLES = {
@@ -533,6 +549,8 @@ const SPRING_ROLES = {
   contextMenuDismiss: CONTEXT_MENU_DISMISS_SPRING,
   contextMenuMorph: CONTEXT_MENU_MORPH_SPRING,
   sliderRelease: SLIDER_RELEASE_SPRING,
+  sliderLift: SLIDER_LIFT_SPRING,
+  sliderDrop: SLIDER_DROP_SPRING,
 };
 
 /**
