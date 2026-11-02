@@ -572,12 +572,12 @@ export const docsZh = {
         {
           name: 'justify',
           type: "'start' | 'center' | 'end' | 'between' | 'around' | 'evenly'",
-          description: 'hAlign 的别名。对应 CSS justify-content。',
+          description: 'hAlign 的别名。对应 CSS justify-content。同时设置 hAlign 时，以 hAlign 为准。',
         },
         {
           name: 'align',
           type: "'start' | 'center' | 'end' | 'stretch'",
-          description: 'vAlign 的别名。对应 CSS align-items。',
+          description: 'vAlign 的别名。对应 CSS align-items。同时设置 vAlign 时，以 vAlign 为准。',
         },
         {
           name: 'wrap',
@@ -738,8 +738,8 @@ export const docsDense = {
         height: "Height of container. Numbers=pixels, strings=as-is (e.g. '100%').",
         hAlign: 'Horizontal (main-axis) alignment.',
         vAlign: 'Vertical (cross-axis) alignment.',
-        justify: 'Main-axis alignment alias for hAlign. Mirrors CSS justify-content.',
-        align: 'Cross-axis alignment alias for vAlign. Mirrors CSS align-items.',
+        justify: 'Main-axis alignment alias for hAlign. Mirrors CSS justify-content. An explicit hAlign wins.',
+        align: 'Cross-axis alignment alias for vAlign. Mirrors CSS align-items. An explicit vAlign wins.',
         wrap: 'Flex wrap behavior.',
         as: 'HTML element to render as container.',
         children: 'Stack content.',

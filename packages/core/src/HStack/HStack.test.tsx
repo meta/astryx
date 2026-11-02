@@ -2,7 +2,7 @@
 
 /**
  * @file HStack.test.tsx
- * @input Uses vitest, @testing-library/react, HStack component
+ * @input Uses vitest, @testing-library/react, React, HStack and Stack components
  * @output Unit tests for HStack component behavior
  * @position Testing; validates HStack.tsx implementation
  *
@@ -63,7 +63,7 @@ describe('HStack', () => {
     expect(element).toHaveAttribute('data-wrap', 'wrap');
   });
 
-  it('sets the main axis with hAlign and the cross axis with vAlign', () => {
+  it('sets the main axis with hAlign and the cross axis with vAlign, as Stack does for a horizontal stack', () => {
     expect(classNameOf(<HStack hAlign="center" />)).toBe(
       classNameOf(<Stack direction="horizontal" justify="center" />),
     );

@@ -241,6 +241,7 @@ for (const item of cases) {
     for (const stack of observed.stacks) {
       const id = stack.auditCase ?? 'unknown';
       const {box, items} = stack;
+      check(stack.tagName === 'DIV', `${id}: renders ${stack.tagName}`);
       check(stack.hasTarget, `${id}: no astryx-stack target`);
       check(stack.dataDirection === 'horizontal', `${id}: data-direction`);
       check(stack.display === 'flex', `${id}: display ${stack.display}`);
