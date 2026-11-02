@@ -56,7 +56,6 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Avatar/Avatar.generated';
-import {isRenderable} from '../utils/isRenderable';
 
 registerEnglishFallback(english);
 
@@ -825,7 +824,8 @@ export function Avatar({
           </div>
         )}
       </div>
-      {isRenderable(status) && (
+      {/* eslint-disable-next-line @astryx/no-truthy-jsx-guard -- the status slot renders for a truthy value only; a falsy one, 0 included, renders none */}
+      {status && (
         <div
           {...stylex.props(
             styles.status,

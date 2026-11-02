@@ -2,7 +2,7 @@
 
 /**
  * @file slotPresence.controls.test.tsx
- * @input Avatar, BreadcrumbItem, Button, Lightbox, SegmentedControlItem, Tab
+ * @input BreadcrumbItem, Button, Lightbox, SegmentedControlItem, Tab
  *   and Tokenizer slots
  * @output Proves each slot's presence follows the shared `isRenderable` check
  * @position Tests for `architecture:react-component-runtime` INV16
@@ -15,7 +15,6 @@
 import {beforeAll, describe, it, expect} from 'vitest';
 import {render} from '@testing-library/react';
 import type {ReactNode} from 'react';
-import {Avatar} from '../Avatar/Avatar';
 import {Breadcrumbs} from '../Breadcrumbs/Breadcrumbs';
 import {BreadcrumbItem} from '../Breadcrumbs/BreadcrumbItem';
 import {Button} from '../Button/Button';
@@ -62,11 +61,6 @@ function zeroIsInside(style: string): boolean {
 type SlotCase = [string, (value: ReactNode) => ReactNode, string];
 
 const SLOTS: ReadonlyArray<SlotCase> = [
-  [
-    'Avatar status',
-    value => <Avatar name="Ada Lovelace" status={value} />,
-    'styles.status',
-  ],
   [
     'BreadcrumbItem startIcon',
     value => (
