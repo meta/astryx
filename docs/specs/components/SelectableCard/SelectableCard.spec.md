@@ -61,10 +61,12 @@ toggling, and the selection ring; the caller owns the selection state.
 - Released default preserved: `yes` until the next minor; then `no` for the
   caller `onClick` (FR2)
 - Compatibility class: no public prop, default, DOM, or styling output
-  changes; one behavior change staged as `[breaking]` for the next minor:
-  a click inside an open layer inside the card (e.g. a Tooltip or HoverCard
-  surface) stops at the layer root and no longer reaches the caller's
-  `onClick` (`architecture:layer-runtime` INV17). Not built.
+  changes; one behavior change staged as `[breaking]` for the next minor
+  (`CLN-0026`): a click inside an open layer inside the card (e.g. a Tooltip
+  or HoverCard surface) stops at the layer root and no longer reaches the
+  caller's `onClick` (`architecture:layer-runtime` INV17). Until then the
+  caller's `onClick` still runs for those clicks, during capture, so before
+  the layer's own handlers.
 - Controlled/uncontrolled behavior: controlled only; `isSelected` and
   `onChange` are required
 - Migration decision: at the next minor, a caller `onClick` handler that
@@ -72,14 +74,29 @@ toggling, and the selection ring; the caller owns the selection state.
 
 Consumer migration instructions belong in consumer docs and release notes.
 
+### CLN-0026 — A click inside an open layer no longer reaches SelectableCard's `onClick`
+
+| Field     | Value                                                                                                                                                                                |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| id        | `CLN-0026`                                                                                                                                                                           |
+| lifecycle | No deprecation: the staged `[breaking]` change for FR2 (`architecture:layer-runtime` INV17)                                                                                          |
+| delta     | Remove the card root's capture-phase handler that calls the caller's `onClick` for a click that starts inside an open layer within the card; that click then stops at the layer root |
+| rollback  | Restore the capture-phase handler from the final-patch baseline                                                                                                                      |
+| state     | `pending` — lands in a declared minor with its `[breaking]` Changeset                                                                                                                |
+
 ## Current-state impact
 
 - **Caller `onClick` still receives clicks inside an open layer (FR2).** A
-  click inside an open Tooltip or HoverCard surface inside the card reaches
-  the caller's `onClick`. At the next minor, staged as `[breaking]`, that
-  click stops at the layer root (`architecture:layer-runtime` INV17) and
-  callers move a handler that needs those presses to the layer content. Not
-  built.
+  click inside an open layer inside the card (a Tooltip or HoverCard surface)
+  reaches the caller's `onClick` from a capture-phase handler on the card
+  root, so before the layer's own handlers, because the layer boundary
+  (`architecture:layer-runtime` INV17) stops it before the bubble phase; its
+  `stopPropagation()` does not keep the press from the layer, its
+  `preventDefault()` cancels only the browser's default and not the controls
+  inside the layer, and a popover the caller writes without a layer root is
+  not a layer. It does not toggle. At the next minor, staged as `[breaking]` (`CLN-0026`),
+  that handler is removed and callers move a handler that needs those presses
+  to the layer content.
 - **Two focus indicators on nested controls (FR4, AR2).** The card draws its
   outline whenever any descendant has `:focus-visible`, so focusing a nested
   control shows the card outline and the control's own, where

@@ -4,7 +4,7 @@
  * @file DiffViewer.tsx
  * @input Uses React, StyleX, theme tokens, the shared CodeBlock tokenizer and
  *   syntax-theme slots (incl. the diff row slots), useScrollableArea,
- *   Token, Icon, VisuallyHidden, and the i18n translator
+ *   Token, Icon, Button, VisuallyHidden, and the i18n translator
  * @output Exports DiffViewer component, DiffViewerProps, DiffViewerViewMode,
  *   DiffViewerChangeIndicator, DiffViewerInlineHighlight
  * @position Lab implementation; read-only, syntax-highlighted file diff for
@@ -12,6 +12,8 @@
  *
  * Renders one DiffViewerFile: a file header (path, status, +/- counts, a
  * caller slot, optional disclosure) over its hunks in unified or split view.
+ * A hunk marked `isReplacedBlock` shows a labeled fold in place of its
+ * changed lines until the reader opens it.
  * Unified view is one table. Split view is two side-by-side panes (each an
  * ARIA table) whose rows share one grid's row tracks through `subgrid`, so a
  * row is as tall as its taller side while each pane scrolls sideways on its
@@ -62,6 +64,7 @@ import {
   useScrollableArea,
   type ScrollableElementProps,
 } from '@astryxdesign/core/hooks';
+import {Button} from '@astryxdesign/core/Button';
 import {useTranslator} from '@astryxdesign/core/i18n';
 import {Icon} from '@astryxdesign/core/Icon';
 import {
@@ -81,6 +84,7 @@ import {
 } from '@astryxdesign/core/theme/tokens.stylex';
 import {
   focusOutlineProps,
+  isRenderable,
   mergeProps,
   rtlStyles,
   themeProps,
@@ -314,13 +318,72 @@ interface LineCell {
   emphasis: readonly InlineRange[];
 }
 
+/** The control that folds a replaced block's changed lines. */
+interface ReplacedBlockFold {
+  hunkIndex: number;
+  /** Index of the hunk cell the fold row goes before. */
+  at: number;
+  /** Removed plus added lines in the block. */
+  changedLines: number;
+  isExpanded: boolean;
+}
+
+interface HunkCells {
+  cells: LineCell[];
+  fold: ReplacedBlockFold | null;
+}
+
+type FoldRow = {type: 'fold'; key: string; fold: ReplacedBlockFold};
+
 type UnifiedRow =
   | {type: 'hunk'; key: string; header: string}
-  | {type: 'line'; key: string; cell: LineCell};
+  | {type: 'line'; key: string; cell: LineCell}
+  | FoldRow;
 
 type SplitRow =
   | {type: 'hunk'; key: string; header: string}
-  | {type: 'pair'; key: string; old: LineCell | null; new: LineCell | null};
+  | {type: 'pair'; key: string; old: LineCell | null; new: LineCell | null}
+  | FoldRow;
+
+/**
+ * The caller's annotation for a line, or null when it renders nothing. An
+ * annotation row is drawn only for a note that renders, so
+ * `hasThread && <Thread />` adds no empty row.
+ */
+function lineAnnotation(
+  renderLineAnnotation: (ref: DiffViewerLineRef) => ReactNode,
+  ref: DiffViewerLineRef,
+): ReactNode {
+  const note = renderLineAnnotation(ref);
+  return isRenderable(note) ? note : null;
+}
+
+/**
+ * Replaced blocks with an annotation on one of their changed lines. Such a
+ * block starts open, so a review comment is never hidden behind the fold.
+ */
+function findAnnotatedBlocks(
+  file: DiffViewerFile,
+  renderLineAnnotation: ((ref: DiffViewerLineRef) => ReactNode) | undefined,
+): Set<number> {
+  const blocks = new Set<number>();
+  if (renderLineAnnotation == null) {
+    return blocks;
+  }
+  file.hunks.forEach((hunk, hunkIndex) => {
+    if (hunk.isReplacedBlock !== true) {
+      return;
+    }
+    const isAnnotated = hunk.lines.some(line => {
+      const ref = line.kind === 'context' ? null : lineRef(line, hunkIndex);
+      return ref != null && lineAnnotation(renderLineAnnotation, ref) != null;
+    });
+    if (isAnnotated) {
+      blocks.add(hunkIndex);
+    }
+  });
+  return blocks;
+}
 
 function lineRef(
   line: DiffViewerLine,
@@ -373,60 +436,113 @@ function addInlineEmphasis(
 }
 
 /**
- * Tokenize each hunk's old and new side as continuous text, so constructs
- * that span lines (block comments, template strings) keep their paint within
- * the hunk, then hand each line the tokens of the side it renders from.
+ * Tokenize a run of hunk lines with its old and new side each as continuous
+ * text, so constructs that span lines (block comments, template strings) keep
+ * their paint within the run, and give each line the tokens of the side it
+ * renders from.
+ */
+function tokenizeRun(
+  lines: readonly DiffViewerLine[],
+  language: string | CodeLanguage,
+): TokenLine[] {
+  if (language === 'plaintext') {
+    return lines.map(() => []);
+  }
+  const sideText = (kind: 'added' | 'removed') =>
+    lines
+      .filter(line => line.kind !== kind)
+      .map(line => line.content)
+      .join('\n');
+  const oldTokens = tokenize(sideText('added'), language);
+  const newTokens = tokenize(sideText('removed'), language);
+  let oldIndex = 0;
+  let newIndex = 0;
+  return lines.map(line => {
+    if (line.kind === 'removed') {
+      return oldTokens[oldIndex++] ?? [];
+    }
+    if (line.kind === 'added') {
+      return newTokens[newIndex++] ?? [];
+    }
+    oldIndex++;
+    return newTokens[newIndex++] ?? [];
+  });
+}
+
+/**
+ * Build each hunk's line cells. A folded replaced block keeps only the
+ * context around it, and its changed lines are not tokenized.
  */
 function buildCells(
   file: DiffViewerFile,
   language: string | CodeLanguage,
   inlineHighlight: DiffViewerInlineHighlight,
-): LineCell[][] {
+  expandedBlocks: ReadonlySet<number>,
+): HunkCells[] {
   return file.hunks.map((hunk, hunkIndex) => {
-    const oldLines = hunk.lines.filter(line => line.kind !== 'added');
-    const newLines = hunk.lines.filter(line => line.kind !== 'removed');
-    const highlight = language !== 'plaintext';
-    const oldTokens = highlight
-      ? tokenize(oldLines.map(line => line.content).join('\n'), language)
-      : [];
-    const newTokens = highlight
-      ? tokenize(newLines.map(line => line.content).join('\n'), language)
-      : [];
-    let oldIndex = 0;
-    let newIndex = 0;
     const cells: LineCell[] = [];
-    for (const line of hunk.lines) {
-      let tokens: TokenLine;
-      if (line.kind === 'removed') {
-        tokens = oldTokens[oldIndex++] ?? [];
-      } else if (line.kind === 'added') {
-        tokens = newTokens[newIndex++] ?? [];
-      } else {
-        oldIndex++;
-        tokens = newTokens[newIndex++] ?? [];
+    const addRun = (lines: readonly DiffViewerLine[]) => {
+      const tokens = tokenizeRun(lines, language);
+      lines.forEach((line, i) => {
+        const ref = lineRef(line, hunkIndex);
+        if (ref != null) {
+          cells.push({line, ref, tokens: tokens[i], emphasis: []});
+        }
+      });
+    };
+
+    const changeStart =
+      hunk.isReplacedBlock === true
+        ? hunk.lines.findIndex(line => line.kind !== 'context')
+        : -1;
+    if (changeStart === -1) {
+      addRun(hunk.lines);
+      if (inlineHighlight !== 'none') {
+        addInlineEmphasis(cells, inlineHighlight);
       }
-      const ref = lineRef(line, hunkIndex);
-      if (ref != null) {
-        cells.push({line, ref, tokens, emphasis: []});
-      }
+      return {cells, fold: null};
     }
-    if (inlineHighlight !== 'none') {
-      addInlineEmphasis(cells, inlineHighlight);
+
+    // A replaced block's removed and added lines are not edits of each
+    // other, so they get no inline highlight.
+    const isExpanded = expandedBlocks.has(hunkIndex);
+    const changedLines = hunk.lines.filter(
+      line => line.kind !== 'context',
+    ).length;
+    if (isExpanded) {
+      addRun(hunk.lines);
+      const at = cells.findIndex(cell => cell.line.kind !== 'context');
+      return {
+        cells,
+        fold: {hunkIndex, at, changedLines, isExpanded},
+      };
     }
-    return cells;
+    // Leading and trailing context are tokenized apart: the hidden lines
+    // between them can open or close a comment or a string.
+    addRun(hunk.lines.slice(0, changeStart));
+    const at = cells.length;
+    addRun(hunk.lines.slice(changeStart + changedLines));
+    return {cells, fold: {hunkIndex, at, changedLines, isExpanded}};
   });
 }
 
 function buildUnifiedRows(
   file: DiffViewerFile,
-  cells: LineCell[][],
+  cells: HunkCells[],
 ): UnifiedRow[] {
   const rows: UnifiedRow[] = [];
   file.hunks.forEach((hunk, h) => {
     rows.push({type: 'hunk', key: `h${h}`, header: hunk.header});
-    cells[h].forEach((cell, i) => {
+    const {cells: hunkCells, fold} = cells[h];
+    hunkCells.forEach((cell, i) => {
+      if (fold != null && fold.at === i) {
+        rows.push({type: 'fold', key: `h${h}f`, fold});
+      }
       rows.push({type: 'line', key: `h${h}l${i}`, cell});
     });
+    if (fold != null && fold.at === hunkCells.length) {
+      rows.push({type: 'fold', key: `h${h}f`, fold});
+    }
   });
   return rows;
 }
@@ -435,13 +551,17 @@ function buildUnifiedRows(
  * Pair each run of removed lines with the run of added lines that follows it,
  * row by row; context lines appear on both sides of one row.
  */
-function buildSplitRows(file: DiffViewerFile, cells: LineCell[][]): SplitRow[] {
+function buildSplitRows(file: DiffViewerFile, cells: HunkCells[]): SplitRow[] {
   const rows: SplitRow[] = [];
   file.hunks.forEach((hunk, h) => {
     rows.push({type: 'hunk', key: `h${h}`, header: hunk.header});
-    const hunkCells = cells[h];
+    const {cells: hunkCells, fold} = cells[h];
     let i = 0;
     while (i < hunkCells.length) {
+      // The fold sits where a run of changes starts or ends, never inside one.
+      if (fold != null && fold.at === i) {
+        rows.push({type: 'fold', key: `h${h}f`, fold});
+      }
       const cell = hunkCells[i];
       if (cell.line.kind === 'context') {
         rows.push({type: 'pair', key: `h${h}l${i}`, old: cell, new: cell});
@@ -465,6 +585,9 @@ function buildSplitRows(file: DiffViewerFile, cells: LineCell[][]): SplitRow[] {
           new: added[r] ?? null,
         });
       }
+    }
+    if (fold != null && fold.at === hunkCells.length) {
+      rows.push({type: 'fold', key: `h${h}f`, fold});
     }
   });
   return rows;
@@ -867,6 +990,25 @@ const styles = stylex.create({
     borderBlockStyle: 'solid',
     borderBlockColor: colorVars['--color-border'],
   },
+  fold: {
+    paddingBlock: spacingVars['--spacing-2'],
+    paddingInline: spacingVars['--spacing-3'],
+    textAlign: 'start',
+    backgroundColor: 'var(--color-syntax-diff-header)',
+    color: colorVars['--color-text-secondary'],
+    fontFamily: typographyVars['--font-family-body'],
+    fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
+    borderBlockWidth: borderVars['--border-width'],
+    borderBlockStyle: 'solid',
+    borderBlockColor: colorVars['--color-border'],
+  },
+  foldContent: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacingVars['--spacing-3'],
+  },
   // Unwrapped, the header text stays at the visible start while the code
   // scrolls.
   hunkTextSticky: {
@@ -1158,9 +1300,38 @@ export function DiffViewer({
     onCollapsedChange?.(next);
   };
 
+  // A replaced block starts folded unless one of its lines is annotated. The
+  // reader's toggles are kept per file; a new file starts over.
+  const [blockToggles, setBlockToggles] = useState<{
+    file: DiffViewerFile;
+    isExpanded: ReadonlyMap<number, boolean>;
+  } | null>(null);
+  const toggles = blockToggles?.file === file ? blockToggles.isExpanded : null;
+  const annotatedBlocks = findAnnotatedBlocks(file, renderLineAnnotation);
+  const isBlockExpanded = (hunkIndex: number) =>
+    toggles?.get(hunkIndex) ?? annotatedBlocks.has(hunkIndex);
+  const toggleBlock = (hunkIndex: number) => {
+    const next = new Map(toggles);
+    next.set(hunkIndex, !isBlockExpanded(hunkIndex));
+    setBlockToggles({file, isExpanded: next});
+  };
+  // A key of the open blocks keeps the set stable across renders, so the
+  // cells are built again only when a block opens or closes.
+  const expandedKey = file.hunks
+    .flatMap((hunk, hunkIndex) =>
+      hunk.isReplacedBlock === true && isBlockExpanded(hunkIndex)
+        ? [hunkIndex]
+        : [],
+    )
+    .join(',');
+  const expandedBlocks = useMemo(
+    () => new Set(expandedKey === '' ? [] : expandedKey.split(',').map(Number)),
+    [expandedKey],
+  );
+
   const cells = useMemo(
-    () => buildCells(file, language, inlineHighlight),
-    [file, language, inlineHighlight],
+    () => buildCells(file, language, inlineHighlight, expandedBlocks),
+    [file, language, inlineHighlight, expandedBlocks],
   );
   const unifiedRows = useMemo(
     () => (viewMode === 'unified' ? buildUnifiedRows(file, cells) : []),
@@ -1352,21 +1523,36 @@ export function DiffViewer({
     );
   };
 
+  const renderFold = (fold: ReplacedBlockFold) => (
+    <span
+      {...stylex.props(styles.foldContent, isPinned && styles.hunkTextSticky)}>
+      <span>
+        {t('@astryx.diffViewer.largeChange', {count: fold.changedLines})}
+      </span>
+      <Button
+        size="sm"
+        variant="secondary"
+        label={
+          fold.isExpanded
+            ? t('@astryx.diffViewer.hideFullDiff')
+            : t('@astryx.diffViewer.showFullDiff')
+        }
+        aria-expanded={fold.isExpanded}
+        onClick={() => toggleBlock(fold.hunkIndex)}
+      />
+    </span>
+  );
+
   const renderHunkText = (header: string) => (
     <span {...stylex.props(styles.ltr, isPinned && styles.hunkTextSticky)}>
       {header}
     </span>
   );
 
-  // `null`, `undefined` and booleans render nothing in React, so they draw no
-  // row either; that keeps `hasThread && <Thread />` from adding empty rows.
-  const annotationFor = (cell: LineCell | null): ReactNode => {
-    if (cell == null || renderLineAnnotation == null) {
-      return null;
-    }
-    const note = renderLineAnnotation(cell.ref);
-    return typeof note === 'boolean' ? null : note;
-  };
+  const annotationFor = (cell: LineCell | null): ReactNode =>
+    cell == null || renderLineAnnotation == null
+      ? null
+      : lineAnnotation(renderLineAnnotation, cell.ref);
 
   // Name every column so a screen reader moving across a row hears which
   // number is which (and, in split view, which side's code it is in).
@@ -1420,6 +1606,15 @@ export function DiffViewer({
                 <tr key={row.key}>
                   <td colSpan={columns} {...stylex.props(styles.hunk)}>
                     {renderHunkText(row.header)}
+                  </td>
+                </tr>
+              );
+            }
+            if (row.type === 'fold') {
+              return (
+                <tr key={row.key}>
+                  <td colSpan={columns} {...stylex.props(styles.fold)}>
+                    {renderFold(row.fold)}
                   </td>
                 </tr>
               );
@@ -1497,7 +1692,7 @@ export function DiffViewer({
 
   const renderSplit = () => {
     const items = splitRows.map(row =>
-      row.type === 'hunk'
+      row.type !== 'pair'
         ? {row, oldNote: null, newNote: null}
         : {
             row,
@@ -1511,7 +1706,7 @@ export function DiffViewer({
     const hasSizer = !isWrapped;
     const sizerText = hasSizer
       ? widestLine(
-          cells.flatMap(hunkCells => hunkCells.map(cell => cell.line.content)),
+          cells.flatMap(hunk => hunk.cells.map(cell => cell.line.content)),
         )
       : '';
     const rowCount =
@@ -1580,6 +1775,39 @@ export function DiffViewer({
                       {row.header}
                     </span>
                     <VisuallyHidden>{row.header}</VisuallyHidden>
+                  </>
+                )}
+              </div>
+            </div>,
+          );
+          continue;
+        }
+        if (row.type === 'fold') {
+          // Only the old side holds the control; the new side keeps its row
+          // as tall and gives its own table's readers the label.
+          rows.push(
+            <div key={row.key} role="row" {...stylex.props(styles.paneRow)}>
+              <div
+                role="cell"
+                {...stylex.props(
+                  styles.fold,
+                  styles.paneSpan,
+                  isWrapped && styles.codeWrapped,
+                )}>
+                {isOld ? (
+                  renderFold(row.fold)
+                ) : (
+                  <>
+                    <span
+                      aria-hidden="true"
+                      {...stylex.props(styles.invisible)}>
+                      {renderFold(row.fold)}
+                    </span>
+                    <VisuallyHidden>
+                      {t('@astryx.diffViewer.largeChange', {
+                        count: row.fold.changedLines,
+                      })}
+                    </VisuallyHidden>
                   </>
                 )}
               </div>
