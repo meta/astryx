@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope core/Chat core/Tooltip core/HoverCard core/utils ^apps/storybook/stories/FocusRingTextTriggers
+// @pr-a11y scope core/Chat core/Tooltip core/HoverCard ^packages/core/src/utils/focusOutline ^apps/storybook/stories/FocusRingTextTriggers
 
 /**
  * @file FocusRingTextTriggers.a11y.chromium.spec.ts
