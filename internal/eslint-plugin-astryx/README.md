@@ -293,13 +293,12 @@ It finds four kinds of text, in comments only, never in strings:
   of more than six prose lines that also cites a record or a claim. The block
   is reported once, as `spec quote`, beside its citations.
 
-These comments are not checked, because they stay: the copyright line; the file
-header lines `@input`, `@output`, `@position`, `@pr-a11y`, and `SYNC:`, with
-their continuation lines; lint, TypeScript, and other tool directives (with
-their `--` reasons); JSDoc on an exported declaration or a member of one; the
-comment before an Effect that names the system it syncs; and code samples
-(`@example` sections and fenced code). Adjacent line comments in one column are
-one block.
+Every comment is checked, public JSDoc, Effect notes, and file headers
+included. Only the lines a tool reads and code samples are skipped: lint,
+TypeScript, and other tool directives (with their `--` reasons); `@pr-a11y`
+routing lines and `SYNC:` blocks, with their continuation lines; the copyright
+line; and `@example` sections and fenced code. Adjacent line comments in one
+column are one block.
 
 When a citation is the file's only link to a record or a claim, link the file
 from a record first, then remove the citation: the source-comments rule says

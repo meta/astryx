@@ -14,14 +14,13 @@
  * `pnpm specs:for <path>` finds it; a citation in a comment goes stale and
  * duplicates that link. The rule reads comments only, never strings.
  *
- * These comments are not checked, because they stay as they are:
- *   - the copyright line;
- *   - the file header lines `@input`, `@output`, `@position`, `@pr-a11y`, and
- *     `SYNC:` reminders, with their continuation lines;
+ * Every comment is checked, public JSDoc and file headers included, except
+ * the lines a tool reads and code samples:
  *   - lint, TypeScript, and other tool directives;
- *   - JSDoc on an exported declaration or on a member of one;
- *   - the note before an Effect that names the system it syncs;
- *   - code samples: `@example` sections and fenced code.
+ *   - `@pr-a11y` routing lines and `SYNC:` blocks, with their continuation
+ *     lines;
+ *   - the copyright line;
+ *   - `@example` sections and fenced code.
  *
  * Options: `{baseline: {[repoRelativeFile]: string[]}, root: string}`. The
  * baseline lists, per file, each finding once per site that predates
@@ -34,8 +33,8 @@
  *   - A claim id is matched only with a known claim prefix (`FR`, `INV`,
  *     `DEC`, and the others in `CLAIM_PREFIXES`), so a one-letter claim such
  *     as `G3` is not found.
- *   - A quote block is found only by `MUST` or `SHALL` in capitals. A
- *     paraphrase of a record is not found.
+ *   - A quote block is found only by `MUST` or `SHALL` in capitals, or as a
+ *     long block that cites a record. A short paraphrase is not found.
  *   - A bare `#123` with 3, 6, or 8 digits can be a hex colour, so it is not
  *     found. `PR #123` and `issue #123` are found.
  */
@@ -114,11 +113,11 @@ const FINDERS = [
       'g',
     ),
   },
-  {kind: 'record', pattern: /(?<![\w/-])AST-\d+[a-z]?(?:\/[A-Z]+-?\d+)?\b/g},
+  {kind: 'record', pattern: /(?<![\w/#-])AST-\d+[a-z]?(?:\/[A-Z]+-?\d+)?\b/g},
   {
     kind: 'claim',
     pattern: new RegExp(
-      `(?<![\\w/-])(?:${CLAIM_PREFIXES.join('|')})-?\\d+[a-z]?\\b`,
+      `(?<![\\w/#-])(?:${CLAIM_PREFIXES.join('|')})-?\\d+[a-z]?\\b`,
       'g',
     ),
   },
@@ -156,64 +155,11 @@ const QUOTE_BLOCK_LINES = 6;
 const DIRECTIVE =
   /^(?:eslint\b|eslint-|global\s|globals\s|exported\s|@ts-|\/\s*<reference|prettier-ignore|istanbul\s|c8\s|v8\s|@vitest-environment|@jsx|#__PURE__|@__PURE__|@__NO_SIDE_EFFECTS__|webpack[A-Z]|@refresh|@license|@preserve)/;
 
-// A header tag line that a repository tool reads. Its continuation lines run
-// to the next tag, a blank line, or the end of the comment.
-const TOOL_TAG = /^(?:@input|@output|@position|@pr-a11y|SYNC:)/;
+// A line that a repository tool reads. Its continuation lines run to the next
+// tag, a blank line, or the end of the comment.
+const TOOL_TAG = /^(?:@pr-a11y|SYNC:)/;
 const ANY_TAG = /^@\w/;
 const COPYRIGHT = /^Copyright\b/;
-const EFFECT_HOOKS = new Set([
-  'useEffect',
-  'useLayoutEffect',
-  'useInsertionEffect',
-]);
-
-const DECLARATION_TYPES = new Set([
-  'FunctionDeclaration',
-  'ClassDeclaration',
-  'VariableDeclaration',
-  'TSInterfaceDeclaration',
-  'TSTypeAliasDeclaration',
-  'TSEnumDeclaration',
-  'TSDeclareFunction',
-]);
-
-const PRIVATE_SCOPE_TYPES = new Set([
-  'BlockStatement',
-  'StaticBlock',
-  'ArrowFunctionExpression',
-  'FunctionExpression',
-  'JSXElement',
-  'JSXFragment',
-]);
-
-/** Local names that `export {a, b as c}` and `export default a` export. */
-function exportedNames(program) {
-  const names = new Set();
-  for (const statement of program.body) {
-    if (statement.type === 'ExportNamedDeclaration' && !statement.source) {
-      for (const specifier of statement.specifiers) {
-        if (specifier.local.type === 'Identifier') {
-          names.add(specifier.local.name);
-        }
-      }
-    } else if (
-      statement.type === 'ExportDefaultDeclaration' &&
-      statement.declaration.type === 'Identifier'
-    ) {
-      names.add(statement.declaration.name);
-    }
-  }
-  return names;
-}
-
-function declaredNames(statement) {
-  if (statement.type === 'VariableDeclaration') {
-    return statement.declarations
-      .filter(declarator => declarator.id.type === 'Identifier')
-      .map(declarator => declarator.id.name);
-  }
-  return statement.id?.type === 'Identifier' ? [statement.id.name] : [];
-}
 
 /** The comment's lines, each with its text and its source index. */
 function commentLines(comment) {
@@ -280,6 +226,10 @@ const rule = {
         '`{{entry}}`: this comment quotes requirement text (MUST or SHALL). ' +
         'The record holds the requirement; the comment states only the reason ' +
         'the code needs, in short sentences.',
+      longQuote:
+        '`{{entry}}`: this long comment cites a record and restates it. The ' +
+        'record holds the requirement; the comment states only the reason the ' +
+        'code needs, in short sentences.',
     },
   },
   create(context) {
@@ -294,7 +244,7 @@ const rule = {
         loc: {
           start: sourceCode.getLocFromIndex(index),
           end: sourceCode.getLocFromIndex(
-            index + (messageId === 'quote' ? 0 : entry.length),
+            index + (entry === QUOTE_ENTRY ? 0 : entry.length),
           ),
         },
         messageId,
@@ -302,72 +252,11 @@ const rule = {
       });
     }
 
-    /** The outermost node that starts at the first token after `comment`. */
-    function documentedNode(comment) {
-      const token = sourceCode.getTokenAfter(comment, {includeComments: false});
-      if (token == null) {
-        return null;
-      }
-      let node = sourceCode.getNodeByRangeIndex(token.range[0]);
-      while (
-        node?.parent != null &&
-        node.parent.type !== 'Program' &&
-        node.parent.range[0] === token.range[0]
-      ) {
-        node = node.parent;
-      }
-      return node;
-    }
-
-    function isPublicJsdoc(comment, exported) {
-      if (comment.type !== 'Block' || !comment.value.startsWith('*')) {
-        return false;
-      }
-      let node = documentedNode(comment);
-      if (node == null || node.type === 'Program') {
-        return false;
-      }
-      while (node.parent != null && node.parent.type !== 'Program') {
-        if (PRIVATE_SCOPE_TYPES.has(node.parent.type)) {
-          return false;
-        }
-        node = node.parent;
-      }
-      if (
-        node.type === 'ExportNamedDeclaration' ||
-        node.type === 'ExportDefaultDeclaration' ||
-        node.type === 'TSModuleDeclaration'
-      ) {
-        return true;
-      }
-      return (
-        DECLARATION_TYPES.has(node.type) &&
-        declaredNames(node).some(name => exported.has(name))
-      );
-    }
-
-    /** The comment block ends just before an Effect and names what it syncs. */
-    function isEffectNote(block) {
-      const last = block[block.length - 1];
-      const node = documentedNode(last);
-      if (node?.type !== 'ExpressionStatement') {
-        return false;
-      }
-      const callee = node.expression.callee;
-      const name =
-        callee?.type === 'MemberExpression'
-          ? callee.property.name
-          : callee?.name;
-      return (
-        node.expression.type === 'CallExpression' &&
-        EFFECT_HOOKS.has(name) &&
-        block.some(comment => /\bsync/i.test(comment.value))
-      );
-    }
-
-    /** Lines a reader sees as prose: tool lines and code samples removed. */
-    // `state` carries over the comments of one block, so a `// SYNC:` line
-    // keeps its continuation lines.
+    /**
+     * Lines a reader sees as prose: tool lines and code samples removed.
+     * `state` carries over the comments of one block, so a `// SYNC:` line
+     * keeps its continuation lines.
+     */
     function proseLines(comment, state) {
       const lines = [];
       for (const line of commentLines(comment)) {
@@ -417,20 +306,15 @@ const rule = {
       return citesRecord;
     }
 
-    function checkBlock(block, exported) {
-      if (isEffectNote(block)) {
-        return;
-      }
+    function checkBlock(block) {
       let quoteIndex = null;
+      let quoteMessage = 'quote';
       let firstIndex = null;
       let lineCount = 0;
       let citesRecord = false;
       const state = {inToolTag: false, inExample: false, inFence: false};
       for (const comment of block) {
-        if (
-          DIRECTIVE.test(comment.value.trim()) ||
-          isPublicJsdoc(comment, exported)
-        ) {
+        if (DIRECTIVE.test(comment.value.trim())) {
           continue;
         }
         for (const line of proseLines(comment, state)) {
@@ -447,9 +331,10 @@ const rule = {
       }
       if (quoteIndex == null && citesRecord && lineCount > QUOTE_BLOCK_LINES) {
         quoteIndex = firstIndex;
+        quoteMessage = 'longQuote';
       }
       if (quoteIndex != null) {
-        report(QUOTE_ENTRY, 'quote', quoteIndex);
+        report(QUOTE_ENTRY, quoteMessage, quoteIndex);
       }
     }
 
@@ -477,10 +362,9 @@ const rule = {
     }
 
     return {
-      Program(program) {
-        const exported = exportedNames(program);
+      Program() {
         for (const block of blocks(sourceCode.getAllComments())) {
-          checkBlock(block, exported);
+          checkBlock(block);
         }
       },
     };

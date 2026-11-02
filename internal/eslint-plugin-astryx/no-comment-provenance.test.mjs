@@ -51,16 +51,14 @@ tester.run('no-comment-provenance', rule, {
       code: `const a = 'spec:AST-108 FR4 #9428 2026-10-31';`,
       filename: file,
     },
-    // ✅ The copyright line and the header lines a tool reads, with their
+    // ✅ The copyright line and the lines a tool reads, with their
     // continuation lines.
     {
       code: `// Copyright (c) Meta Platforms, Inc. and affiliates. 2026-01-01
 /**
- * @input spec:AST-030 props
- * @output the rendered button
- * @position Core primitive; the layout FR3 grid
- *   wraps it in architecture:layout cells.
+ * @input Button props
  * @pr-a11y spec:AST-030 FR12
+ *   component:Button
  * SYNC: Button.doc.mjs follows #1234
  */
 const a = 1;`,
@@ -82,35 +80,21 @@ const b: number = 'x';
 /* eslint-disable no-alert */`,
       filename: file,
     },
-    // ✅ JSDoc on exports and on their members, including @example bodies.
+    // ✅ The @example body of public JSDoc is a code sample.
     {
       code: `/**
- * A button (spec:AST-010 FR1). It MUST have a name.
+ * A button.
  * @example
- * <Button since="2026-10-31" />
+ * <Button since="2026-10-31" label="FR4" />
  */
-export function Button() { return null; }
-
-export interface ButtonProps {
-  /** The label. See component:Button FR4. */
-  label: string;
-}
-
-/** Local, exported below. Follows INV3. */
-const helper = () => 1;
-/** Exported as default. Follows INV4. */
-function Root() { return null; }
-export {helper};
-export default Root;`,
+export function Button() { return null; }`,
       filename: file,
     },
     // ✅ The Effect note names the system it syncs.
     {
       code: `function C() {
-  // Syncs the document title (architecture:react-component-runtime INV3).
+  // Syncs the document title with the open panel.
   useEffect(() => {}, []);
-  // Keeps the listener in sync with spec:AST-099.
-  React.useLayoutEffect(() => {}, []);
 }`,
       filename: file,
     },
@@ -133,7 +117,8 @@ export default Root;`,
     },
     // ✅ Hex colours, quoted dates, and lowercase must are not provenance.
     {
-      code: `// Fall back to #000 or #333333, as in "2026-10-31" or \`2026-01-02\`.
+      code: `// Fall back to #000, #333333, #DD1234, or #DEC123.
+// Dates look like "2026-10-31" or \`2026-01-02\`.
 // The caller must pass a label.
 const a = 1;`,
       filename: file,
@@ -226,11 +211,70 @@ const a = 1;`,
       code: longCitingBlock,
       filename: file,
       errors: [
-        {messageId: 'quote', data: {entry: QUOTE_ENTRY}, line: 2},
+        {messageId: 'longQuote', data: {entry: QUOTE_ENTRY}, line: 2},
         {messageId: 'record', data: {entry: 'spec:AST-108'}, line: 8},
       ],
     },
-    // ❌ JSDoc inside a function body is not public JSDoc.
+    // ❌ JSDoc on exports and on their members keeps no citations.
+    {
+      code: `/** Closes on select, as decided in #9123 (component:Menu FR7). */
+export function Menu() { return null; }
+
+export interface MenuProps {
+  /** The label. Added 2026-10-31. */
+  label: string;
+}
+
+/** Local, exported below. Follows INV3. */
+const helper = () => 1;
+export {helper};`,
+      filename: file,
+      errors: [
+        {messageId: 'reference', data: {entry: '#9123'}},
+        {messageId: 'record', data: {entry: 'component:Menu'}},
+        {messageId: 'claim', data: {entry: 'FR7'}},
+        {messageId: 'date', data: {entry: '2026-10-31'}},
+        {messageId: 'claim', data: {entry: 'INV3'}},
+      ],
+    },
+    // ❌ Public JSDoc keeps no quote blocks.
+    {
+      code: `export interface ButtonProps {
+  /** The label. It MUST be short. */
+  label: string;
+}`,
+      filename: file,
+      errors: [{messageId: 'quote', data: {entry: QUOTE_ENTRY}}],
+    },
+    // ❌ File header lines that no tool reads keep no citations.
+    {
+      code: `/**
+ * @file Button.tsx
+ * @position Core primitive; follows spec:AST-010 FR1.
+ */
+const a = 1;`,
+      filename: file,
+      errors: [
+        {messageId: 'record', data: {entry: 'spec:AST-010'}},
+        {messageId: 'claim', data: {entry: 'FR1'}},
+      ],
+    },
+    // ❌ The Effect note keeps no citations.
+    {
+      code: `function C() {
+  // Syncs the document title (architecture:react-component-runtime INV3).
+  useEffect(() => {}, []);
+}`,
+      filename: file,
+      errors: [
+        {
+          messageId: 'record',
+          data: {entry: 'architecture:react-component-runtime'},
+        },
+        {messageId: 'claim', data: {entry: 'INV3'}},
+      ],
+    },
+    // ❌ JSDoc inside a function body.
     {
       code: `export function C() {
   /** Follows INV3. */
