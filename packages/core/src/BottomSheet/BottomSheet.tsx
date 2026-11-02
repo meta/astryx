@@ -207,6 +207,10 @@ const styles = stylex.create({
       transitionTimingFunction: 'linear',
     },
   },
+  // A closing sheet that keeps focus takes no pointer input during its exit.
+  exitHoldingFocus: {
+    pointerEvents: 'none',
+  },
   positioner: {
     position: 'absolute',
     insetInline: 0,
@@ -445,10 +449,14 @@ function StandaloneBottomSheet({
   // `isOpen` restarts the flag during render, and the layout effect below
   // settles a close.
   const [isCloseSettled, setIsCloseSettled] = useState(false);
+  // Whether focus was inside the sheet when it closed. Such a sheet stays out
+  // of `inert` and `aria-hidden` until its exit ends and focus has left.
+  const [isExitFocusHeld, setIsExitFocusHeld] = useState(false);
   const [settledIsOpen, setSettledIsOpen] = useState(isOpen);
   if (settledIsOpen !== isOpen) {
     setSettledIsOpen(isOpen);
     setIsCloseSettled(false);
+    setIsExitFocusHeld(false);
   }
   const panelState: BottomSheetPanelState = isOpen
     ? {kind: 'open', entering: stackView.isReplacing}
@@ -576,9 +584,8 @@ function StandaloneBottomSheet({
   }, [hasScrim, shouldPresent, writeScrim]);
   useLayoutEffect(() => {
     if (!isOpen) {
-      // Read before the browser's focus fixup for the exiting sheet's
-      // `inert` runs (at the next rendering opportunity), so this is where
-      // focus was when the person closed the sheet.
+      // Where focus was when the person closed the sheet. The closing sheet
+      // is not inert yet, so focus has not moved.
       const dialog = dialogRef.current;
       hadFocusAtCloseRef.current =
         dialog != null && dialog.contains(dialog.ownerDocument.activeElement);
@@ -591,6 +598,8 @@ function StandaloneBottomSheet({
       // that was not paired as a replace is an exit from here on.
       // eslint-disable-next-line @eslint-react/set-state-in-effect -- settles the close once the registry has answered
       setIsCloseSettled(true);
+      // Read with the close, before the sheet can go inert.
+      setIsExitFocusHeld(hadFocusAtCloseRef.current);
     }
   }, [hasScrim, isOpen, shouldPresent]);
 
@@ -764,7 +773,14 @@ function StandaloneBottomSheet({
   // that contains no presented sheet is marked inert and hidden as well, so
   // the state is explicit; one that does contain the top sheet is left alone,
   // because inert on it would reach the top sheet too.
-  const isInert = isExiting || stackView.isBlocked;
+  // A sheet that closes with focus inside it is neither inert nor hidden
+  // until its exit ends: `inert` would drop that focus to the page, and
+  // `aria-hidden` would hide the focused control. Its exit ends by returning
+  // focus, and only then does the dialog close. Until the close settles, no
+  // closing sheet is inert, so the first commit of a close never hides focus.
+  const isExitHoldingFocus =
+    isExiting && !isReplaced && (!isCloseSettled || isExitFocusHeld);
+  const isInert = (isExiting && !isExitHoldingFocus) || stackView.isBlocked;
 
   return (
     <dialog
@@ -779,6 +795,7 @@ function StandaloneBottomSheet({
         hasScrim && styles.scrim,
         hasScrim && isEntrySettled && styles.scrimSettled,
         hasScrim && isExiting && styles.scrimClosing,
+        isExitHoldingFocus && styles.exitHoldingFocus,
         !hasScrim && styles.dialogNonModal,
       )}
       ref={dialogComposedRef}
