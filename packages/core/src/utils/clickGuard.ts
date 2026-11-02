@@ -4,37 +4,28 @@
  * @file clickGuard.ts
  * @input A document whose gesture already acted (a menu row's release, a
  *   touch a gesture recognizer claimed)
- * @output Exports armClickGuard (and its ClickGuardOptions),
- *   disarmClickGuard, isClickGuardArmed, withoutClickGuard and
- *   CLICK_GUARD_WINDOW_MS
+ * @output armClickGuard (and its ClickGuardOptions), disarmClickGuard,
+ *   isClickGuardArmed, withoutClickGuard and CLICK_GUARD_WINDOW_MS
  * @position The one guard for the browser's click after a gesture that
- *   already acted (useMenuPress FR5, `spec:AST-057` FR6), shared by the menu
- *   press model (hooks/useMenuPress.ts) and the gesture host
- *   (gestures/GestureHost.ts)
- *
- * Armed at a tracked release, it swallows the next click the browser
- * reports, on the window's capture phase through the input stream
- * (utils/inputStream.ts), so no framework sees it. It disarms on that click,
- * at the next `pointerdown` (a new gesture, whose click must act), or after
- * {@link CLICK_GUARD_WINDOW_MS}; disarmed, it lets every click pass. Its
- * click listener comes with an arm. Once the menu press model arms it, it
- * stays: installed once per document and armed per gesture, it keeps its
- * place ahead of any window listener the page adds later
- * (`module:DropdownMenu/useMenuPress` PR2, which `spec:AST-094` FR24 counts
- * once per page). Armed only by the gesture host, it goes when the guard
- * disarms: a release-armed swallower is press work (FR24).
- *
- * Some clicks always pass:
- * - a click whose `detail` is 0: a keyboard's, a screen reader's, or an
- *   activation the page dispatches;
- * - a click dispatched inside {@link withoutClickGuard}: a menu row's own
- *   activation, or a recognizer's replayed or retargeted click;
- * - the hidden haptic switch's click (gestures/haptics.ts), the tap's own
- *   feedback.
+ *   already acted, shared by hooks/useMenuPress.ts and gestures/GestureHost.ts
  *
  * SYNC: When modified, update clickGuard.test.ts, hooks/useMenuPress.ts and
  * gestures/GestureHost.ts.
  */
+
+// Armed at a tracked release, the guard swallows the next click on the
+// window's capture phase (utils/inputStream.ts), so no framework sees it. It
+// disarms on that click, at the next `pointerdown`, or after
+// {@link CLICK_GUARD_WINDOW_MS}. After the menu press model arms it, its click
+// listener stays, so it keeps its place ahead of window listeners that the
+// page adds later (AST-057, AST-094). An arm from the gesture host lasts only
+// while the guard is armed.
+//
+// Some clicks always pass:
+// - a click with `detail` 0: a keyboard's, a screen reader's, or one that the
+//   page dispatches;
+// - a click dispatched inside {@link withoutClickGuard};
+// - the hidden haptic switch's click (gestures/haptics.ts).
 
 import {isHapticSwitch} from '../privateAttributes/hapticSwitch.stylex';
 import {subscribeInput} from './inputStream';
@@ -50,8 +41,7 @@ export const CLICK_GUARD_WINDOW_MS = 400;
 export interface ClickGuardOptions {
   /**
    * The menu press model's arm: the window's click listener stays from then
-   * on (`module:DropdownMenu/useMenuPress` PR2). Any other arm keeps it only
-   * while the guard is armed (`spec:AST-094` FR24).
+   * on. Any other arm keeps it only while the guard is armed.
    * @default false
    */
   readonly staysInstalled?: boolean;
@@ -63,7 +53,7 @@ interface Guard {
 }
 
 const guards = new Map<Document, Guard>();
-/** The click listeners that stay, by window: the menu press model's (PR2). */
+/** The click listeners that stay, by window: the menu press model's. */
 const stayingClickListeners = new WeakMap<Window, () => void>();
 let unguardedDepth = 0;
 
