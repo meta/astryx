@@ -126,11 +126,11 @@ export interface WheelPageStall {
 }
 
 /**
- * How soon after the page's wheel listeners finish one step the next must
+ * How soon after the page's input listeners finish one event the next must
  * reach the page for the page to have held it back: one frame, with a few ms
- * for the dispatch itself.
+ * for the dispatch itself. The wheel and the touch paths both read it.
  */
-const HELD_BACK_MS = 20;
+export const HELD_BACK_MS = 20;
 
 /**
  * When each received step of a burst reached the page, ms on the page clock:
