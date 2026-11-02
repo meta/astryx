@@ -8,6 +8,12 @@
  *   dismissal callback, enabled state, and interactive-descendant policy
  * @output Returns the Toast card root ref and touch/pen gesture bindings
  * @position Internal Toast gesture unit; attached to the Toast card root
+ *
+ * A release toward the edge dismisses when it travelled past
+ * max(40% of the card's height, 48 px), or when it was a flick: faster than
+ * 1.2 px/ms on average, at any travel, timed by the input events themselves.
+ * Without that, a one-line toast (40% of which is below the 48 px floor)
+ * could only be dragged away, never flicked.
  */
 
 import {useCallback, useEffect, useRef} from 'react';
@@ -15,7 +21,9 @@ import type {PointerEvent as ReactPointerEvent, RefObject} from 'react';
 
 const DRAG_PROMOTION_SLOP = 8;
 const SWIPE_DISMISS_RATIO = 0.4;
-const FLICK_MIN_DISTANCE = 48;
+/** The dismiss distance of a card too short for its height ratio to reach it. */
+const SWIPE_DISMISS_MIN_DISTANCE = 48;
+/** Average speed, px/ms, at which a release dismisses whatever its travel. */
 const FLICK_VELOCITY = 1.2;
 const VERTICAL_INTENT_RATIO = 1.2;
 const SWIPE_EXIT_DISTANCE = '120%';
@@ -29,6 +37,12 @@ interface GesturePoint {
   pointerId: number;
   clientX: number;
   clientY: number;
+  /**
+   * The input event's `timeStamp`. Browsers deliver moves on the next frame,
+   * so the time a handler runs can trail the finger by a frame or two; the
+   * event's own time is when the finger was there.
+   */
+  time: number;
 }
 
 interface GestureState {
@@ -132,14 +146,14 @@ export function useToastGesture({
         pointerId: point.pointerId,
         startX: point.clientX,
         startY: point.clientY,
-        startTime: Date.now(),
+        startTime: point.time,
         direction,
         intent: 'pending',
         pausedTimer,
         surfaceSize,
         dismissThreshold: Math.max(
           surfaceSize * SWIPE_DISMISS_RATIO,
-          FLICK_MIN_DISTANCE,
+          SWIPE_DISMISS_MIN_DISTANCE,
         ),
       };
       return true;
@@ -229,11 +243,12 @@ export function useToastGesture({
         0,
         (point.clientY - state.startY) * state.direction,
       );
-      const elapsed = Math.max(1, Date.now() - state.startTime);
+      const elapsed = Math.max(1, point.time - state.startTime);
+      // A flick needs no minimum travel of its own: the swipe already had to
+      // pass the slop toward the edge to begin.
       const isDismissed =
         state.intent === 'vertical' &&
-        (travel >= state.dismissThreshold ||
-          (travel >= FLICK_MIN_DISTANCE && travel / elapsed > FLICK_VELOCITY));
+        (travel >= state.dismissThreshold || travel / elapsed > FLICK_VELOCITY);
 
       gestureRef.current = null;
       root.style.removeProperty('transition-duration');
@@ -270,6 +285,7 @@ export function useToastGesture({
             pointerId: event.pointerId,
             clientX: event.clientX,
             clientY: event.clientY,
+            time: event.timeStamp,
           },
           event.target,
         )
@@ -291,6 +307,7 @@ export function useToastGesture({
           pointerId: event.pointerId,
           clientX: event.clientX,
           clientY: event.clientY,
+          time: event.timeStamp,
         },
         () => event.preventDefault(),
         () => rootRef.current?.releasePointerCapture?.(event.pointerId),
@@ -310,6 +327,7 @@ export function useToastGesture({
         pointerId: event.pointerId,
         clientX: event.clientX,
         clientY: event.clientY,
+        time: event.timeStamp,
       });
     },
     [endGesture],
@@ -333,11 +351,12 @@ export function useToastGesture({
     if (!root || !enabled) {
       return;
     }
-    const point = (touch: Touch): GesturePoint => ({
+    const point = (touch: Touch, event: TouchEvent): GesturePoint => ({
       source: 'touch',
       pointerId: touch.identifier,
       clientX: touch.clientX,
       clientY: touch.clientY,
+      time: event.timeStamp,
     });
     const changedTouch = (event: TouchEvent) => {
       const state = gestureRef.current;
@@ -358,7 +377,7 @@ export function useToastGesture({
       }
       const touch = event.changedTouches[0];
       if (touch != null) {
-        beginGesture(point(touch), event.target);
+        beginGesture(point(touch, event), event.target);
       }
     };
     const handleTouchMove = (event: TouchEvent) => {
@@ -368,7 +387,7 @@ export function useToastGesture({
       }
       const touch = changedTouch(event);
       if (touch) {
-        moveGesture(point(touch), () => {
+        moveGesture(point(touch, event), () => {
           if (event.cancelable) {
             event.preventDefault();
           }
@@ -382,7 +401,7 @@ export function useToastGesture({
       }
       const touch = changedTouch(event);
       if (touch) {
-        endGesture(point(touch));
+        endGesture(point(touch, event));
       } else if (event.touches.length === 0) {
         resetGesture(true);
       }

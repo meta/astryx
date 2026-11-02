@@ -1434,37 +1434,238 @@ describe('Toast swipe dismissal', () => {
     }
   });
 
+  // A one-line toast is 56 px tall: 40% of it is below the 48 px distance
+  // floor, so a short swipe on it can only be dismissed as a flick.
+  function mockClock(start = 1_000) {
+    let time = start;
+    const spy = vi.spyOn(Date, 'now').mockImplementation(() => time);
+    return {
+      advance(ms: number) {
+        time += ms;
+      },
+      restore() {
+        spy.mockRestore();
+      },
+    };
+  }
+
+  it('dismisses a quick pen flick on a one-line toast', () => {
+    const clock = mockClock();
+    try {
+      const {visualToast, onHide} = renderSwipeToast(
+        SWIPE_TOAST,
+        'bottomEnd',
+        'Swipe toast',
+        56,
+      );
+
+      act(() => {
+        fireEvent.pointerDown(visualToast, {
+          pointerId: 9,
+          pointerType: 'pen',
+          button: 0,
+          clientX: 0,
+          clientY: 0,
+        });
+      });
+      clock.advance(30);
+      act(() => {
+        fireEvent.pointerMove(visualToast, {
+          pointerId: 9,
+          pointerType: 'pen',
+          clientX: 0,
+          clientY: 40,
+        });
+        fireEvent.pointerUp(visualToast, {
+          pointerId: 9,
+          pointerType: 'pen',
+          clientX: 0,
+          clientY: 40,
+        });
+      });
+
+      expect(onHide).toHaveBeenCalledWith('manual');
+      expect(onHide).toHaveBeenCalledTimes(1);
+    } finally {
+      clock.restore();
+    }
+  });
+
+  it('dismisses a quick touch flick on a one-line toast at the top', () => {
+    const clock = mockClock();
+    try {
+      const {visualToast, onHide} = renderSwipeToast(
+        SWIPE_TOAST,
+        'topEnd',
+        'Swipe toast',
+        56,
+      );
+      const touchEvent = (
+        type: 'touchstart' | 'touchmove' | 'touchend',
+        clientY: number,
+      ) => {
+        const event = new Event(type, {bubbles: true, cancelable: true});
+        const touch = {identifier: 32, clientX: 10, clientY};
+        Object.defineProperty(event, 'touches', {
+          value: type === 'touchend' ? [] : [touch],
+        });
+        Object.defineProperty(event, 'changedTouches', {value: [touch]});
+        visualToast.dispatchEvent(event);
+        return event;
+      };
+
+      act(() => {
+        touchEvent('touchstart', 100);
+      });
+      clock.advance(15);
+      let move: Event;
+      act(() => {
+        move = touchEvent('touchmove', 80);
+      });
+      clock.advance(15);
+      act(() => {
+        touchEvent('touchmove', 60);
+        touchEvent('touchend', 60);
+      });
+
+      expect(move!.defaultPrevented).toBe(true);
+      expect(onHide).toHaveBeenCalledWith('manual');
+      expect(onHide).toHaveBeenCalledTimes(1);
+    } finally {
+      clock.restore();
+    }
+  });
+
+  it('times a flick by its input events, not by when the handlers run', () => {
+    // Browsers deliver moves on the next frame, so handlers can run well
+    // after the finger moved: here the whole 40 px flick took 30 ms, but its
+    // moves and lift are only handled 60 ms after the touch landed.
+    const clock = mockClock();
+    try {
+      const {visualToast, onHide} = renderSwipeToast(
+        SWIPE_TOAST,
+        'topEnd',
+        'Swipe toast',
+        56,
+      );
+      const touchEvent = (
+        type: 'touchstart' | 'touchmove' | 'touchend',
+        clientY: number,
+      ) => {
+        const event = new Event(type, {bubbles: true, cancelable: true});
+        const touch = {identifier: 33, clientX: 10, clientY};
+        Object.defineProperty(event, 'touches', {
+          value: type === 'touchend' ? [] : [touch],
+        });
+        Object.defineProperty(event, 'changedTouches', {value: [touch]});
+        return event;
+      };
+
+      act(() => {
+        visualToast.dispatchEvent(touchEvent('touchstart', 100));
+      });
+      clock.advance(15);
+      const firstMove = touchEvent('touchmove', 80);
+      clock.advance(15);
+      const secondMove = touchEvent('touchmove', 60);
+      const lift = touchEvent('touchend', 60);
+      clock.advance(30);
+      act(() => {
+        visualToast.dispatchEvent(firstMove);
+        visualToast.dispatchEvent(secondMove);
+        visualToast.dispatchEvent(lift);
+      });
+
+      expect(onHide).toHaveBeenCalledWith('manual');
+    } finally {
+      clock.restore();
+    }
+  });
+
+  it('snaps back after a slow short drag on a one-line toast', () => {
+    const clock = mockClock();
+    try {
+      const {visualToast, onHide} = renderSwipeToast(
+        SWIPE_TOAST,
+        'bottomEnd',
+        'Swipe toast',
+        56,
+      );
+
+      act(() => {
+        fireEvent.pointerDown(visualToast, {
+          pointerId: 10,
+          pointerType: 'pen',
+          button: 0,
+          clientX: 0,
+          clientY: 0,
+        });
+      });
+      clock.advance(400);
+      act(() => {
+        fireEvent.pointerMove(visualToast, {
+          pointerId: 10,
+          pointerType: 'pen',
+          clientX: 0,
+          clientY: 40,
+        });
+        fireEvent.pointerUp(visualToast, {
+          pointerId: 10,
+          pointerType: 'pen',
+          clientX: 0,
+          clientY: 40,
+        });
+      });
+
+      expect(onHide).not.toHaveBeenCalled();
+      expect(visualToast.style.getPropertyValue('--_toast-swipe-y')).toBe('');
+    } finally {
+      clock.restore();
+    }
+  });
+
   it('snaps back without dismissing after a short drag', () => {
-    const {visualToast, onHide} = renderSwipeToast();
+    // A slow drag: 24 px over 400 ms is far below flick speed.
+    const clock = mockClock();
+    try {
+      const {visualToast, onHide} = renderSwipeToast();
 
-    act(() => {
-      fireEvent.pointerDown(visualToast, {
-        pointerId: 7,
-        pointerType: 'pen',
-        button: 0,
-        clientX: 0,
-        clientY: 0,
+      act(() => {
+        fireEvent.pointerDown(visualToast, {
+          pointerId: 7,
+          pointerType: 'pen',
+          button: 0,
+          clientX: 0,
+          clientY: 0,
+        });
       });
-      fireEvent.pointerMove(visualToast, {
-        pointerId: 7,
-        pointerType: 'pen',
-        clientX: 0,
-        clientY: 24,
+      clock.advance(400);
+      act(() => {
+        fireEvent.pointerMove(visualToast, {
+          pointerId: 7,
+          pointerType: 'pen',
+          clientX: 0,
+          clientY: 24,
+        });
+        fireEvent.pointerUp(visualToast, {
+          pointerId: 7,
+          pointerType: 'pen',
+          clientX: 0,
+          clientY: 24,
+        });
       });
-      fireEvent.pointerUp(visualToast, {
-        pointerId: 7,
-        pointerType: 'pen',
-        clientX: 0,
-        clientY: 24,
-      });
-    });
 
-    expect(onHide).not.toHaveBeenCalled();
-    expect(visualToast.style.getPropertyValue('--_toast-swipe-y')).toBe('');
-    expect(visualToast.style.getPropertyValue('--_toast-swipe-opacity')).toBe(
-      '',
-    );
-    expect(visualToast.style.getPropertyValue('--_toast-swipe-scale')).toBe('');
+      expect(onHide).not.toHaveBeenCalled();
+      expect(visualToast.style.getPropertyValue('--_toast-swipe-y')).toBe('');
+      expect(visualToast.style.getPropertyValue('--_toast-swipe-opacity')).toBe(
+        '',
+      );
+      expect(visualToast.style.getPropertyValue('--_toast-swipe-scale')).toBe(
+        '',
+      );
+    } finally {
+      clock.restore();
+    }
   });
 
   it('fades and subtly scales only after accepted vertical edge swipe intent', () => {
