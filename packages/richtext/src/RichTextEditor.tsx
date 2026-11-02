@@ -77,6 +77,7 @@ import {TablePlugin} from '@lexical/react/LexicalTablePlugin';
 import {HorizontalRuleExtension} from '@lexical/extension';
 import {TextSemanticsExtension} from './textSemantics';
 import {TableColumnFloorPlugin} from './TableColumnFloorPlugin';
+import {CodeBackspacePlugin} from './CodeBackspacePlugin';
 import {CodeBlockHeaderPlugin} from './CodeBlockHeaderPlugin';
 import {CodeSyntaxPlugin} from './CodeSyntaxPlugin';
 import {MarkdownExtensionsPlugin} from './MarkdownExtensionsPlugin';
@@ -722,6 +723,9 @@ export const RichTextEditor = function RichTextEditor({
               <TableColumnFloorPlugin />
               <CodeBlockHeaderPlugin codeLanguages={codeLanguages} />
               <CodeSyntaxPlugin codeLanguages={codeLanguages} />
+              {/* Backspace at the very start of a code block makes it a
+                  paragraph, instead of merging it into the block above. */}
+              <CodeBackspacePlugin />
               {markdownExtensions != null && markdownExtensions.length > 0 ? (
                 <MarkdownExtensionsPlugin
                   extensions={markdownExtensions}
