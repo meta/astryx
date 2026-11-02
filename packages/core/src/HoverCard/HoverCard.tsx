@@ -194,7 +194,8 @@ export interface HoverCardProps extends Pick<
   /**
    * Whether to show hover indication (dashed underline) on a text trigger.
    * An element trigger keeps its own styling, so this has no effect on it.
-   * - `'auto'`: Show when children is a single string or number
+   * - `'auto'`: Show when children is text: strings and numbers, such as
+   *   `Edited {when}`, with holes such as `false` and `null` ignored
    * - `true`: Show on a text trigger
    * - `false`: Never show
    *
