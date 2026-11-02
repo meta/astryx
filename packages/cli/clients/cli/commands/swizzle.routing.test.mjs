@@ -9,6 +9,8 @@
  * integration cases, a configured integration package (astryx.config.mjs +
  * astryx.integration.mjs + a `components` dir) — all under node_modules so the
  * config/manifest loaders resolve normally.
+ * Shared integration directories keep their flat copy boundary; core's recursive
+ * copy must not start including unrelated integration subtrees.
  */
 
 import {describe, it, expect, beforeEach, afterEach} from 'vitest';
@@ -161,6 +163,26 @@ describe('swizzle — core feedback routing via config', () => {
 });
 
 describe('swizzle — integration-owned components', () => {
+  it('preserves the flat copy boundary when integration components share a directory', async () => {
+    buildFakeCore(project);
+    writeProjectPackageJson(project);
+    const {compDir} = buildIntegration(project, {componentName: 'Alpha'});
+    fs.writeFileSync(path.join(compDir, 'Beta.tsx'), 'export const Beta = () => null;');
+    fs.writeFileSync(path.join(compDir, 'Beta.doc.mjs'), "export const docs = {name: 'Beta'};");
+    fs.mkdirSync(path.join(compDir, 'unrelated'));
+    fs.writeFileSync(path.join(compDir, 'unrelated/Other.tsx'), 'export const Other = () => null;');
+    const outDir = path.join(project, 'components/astryx/Alpha');
+    fs.mkdirSync(path.join(outDir, 'unrelated'), {recursive: true});
+    fs.writeFileSync(path.join(outDir, 'unrelated/Other.tsx'), '// consumer edit');
+
+    const result = await runCli(['--json', 'swizzle', 'Alpha'], project);
+    expect(result.code).toBe(0);
+    const env = JSON.parse(result.stdout);
+    // Sibling top-level files were already copied before recursive core support.
+    expect(env.data.files).toEqual(['Alpha.tsx', 'Beta.tsx', 'sibling.ts']);
+    expect(fs.readFileSync(path.join(outDir, 'unrelated/Other.tsx'), 'utf8')).toBe('// consumer edit');
+  });
+
   it('copies the component dir (excluding test/doc), rewrites escaping imports to the owner package, routes feedback to the integration issuesUrl', async () => {
     buildFakeCore(project);
     writeProjectPackageJson(project);

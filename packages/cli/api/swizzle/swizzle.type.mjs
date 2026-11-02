@@ -34,7 +34,7 @@
  * @property {string} data.package Owner package the component source was copied from.
  * @property {string} data.outputDir
  * @property {number} data.filesCopied
- * @property {string[]} data.files
+ * @property {string[]} data.files Copied file paths relative to `data.outputDir` (POSIX separators; nested subdirectories preserved, e.g. `plugins/selection/index.ts`).
  * @property {boolean} data.usesStyleX Whether any copied file uses StyleX (requires build-time setup).
  * @property {SwizzleFeedback} [data.feedback]
  */

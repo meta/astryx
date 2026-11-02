@@ -99,6 +99,31 @@ describe('rewriteImports', () => {
       `import { focusOutlineProps } from '@astryxdesign/core/utils/focusOutline.stylex';`,
     );
   });
+
+  it('depth: keeps an ../ chain that resolves inside the component tree', () => {
+    // A file two levels below the component root (e.g.
+    // Table/plugins/selection/x.tsx) importing '../../types' targets the
+    // component's own copied root — it must stay relative.
+    const input = `import type { TablePlugin } from '../../types';`;
+    expect(rewriteImports(input, '@astryxdesign/core', 2)).toBe(input);
+  });
+
+  it('depth: rewrites only the ../ chains that escape the component root', () => {
+    const input = [
+      `import { Icon } from '../../../Icon';`,
+      `import { colorVars } from '../../../theme/tokens.stylex';`,
+      `import type { TablePlugin } from '../../types';`,
+      `import { helper } from './helper';`,
+    ].join('\n');
+    expect(rewriteImports(input, '@astryxdesign/core', 2)).toBe(
+      [
+        `import { Icon } from '@astryxdesign/core/Icon';`,
+        `import { colorVars } from '@astryxdesign/core/theme/tokens.stylex';`,
+        `import type { TablePlugin } from '../../types';`,
+        `import { helper } from './helper';`,
+      ].join('\n'),
+    );
+  });
 });
 
 describe('swizzle() API', () => {
