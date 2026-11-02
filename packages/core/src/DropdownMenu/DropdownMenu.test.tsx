@@ -19,7 +19,14 @@ import {
   afterEach,
 } from 'vitest';
 import {readFileSync} from 'node:fs';
-import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+  within,
+} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {createRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
@@ -3222,6 +3229,50 @@ describe('DropdownMenu custom trigger', () => {
       button: 0,
     });
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('a custom trigger names the bottom sheet after itself', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        presentation="bottom-sheet"
+        renderTrigger={props => (
+          <button type="button" {...props}>
+            Create
+          </button>
+        )}
+        items={[{label: 'Contact'}, {label: 'Invoice'}]}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: 'Create'}));
+    const sheet = await screen.findByRole('dialog', {name: 'Create'});
+    expect(
+      within(sheet).getByRole('heading', {level: 3, name: 'Create'}),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('dialog', {name: 'Menu'}),
+    ).not.toBeInTheDocument();
+  });
+
+  it("the caller's aria-label names a custom trigger's bottom sheet", async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu
+        aria-label="Create new"
+        presentation="bottom-sheet"
+        renderTrigger={props => (
+          <button type="button" {...props}>
+            +
+          </button>
+        )}
+        items={[{label: 'Contact'}, {label: 'Invoice'}]}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: '+'}));
+    const sheet = await screen.findByRole('dialog', {name: 'Create new'});
+    expect(
+      within(sheet).getByRole('heading', {level: 3, name: 'Create new'}),
+    ).toBeInTheDocument();
   });
 
   it('warns when both button and trigger are given in the bottom-sheet presentation too', () => {
