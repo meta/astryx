@@ -633,7 +633,7 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
   // nothing is committed, neither text shows: the result surface keeps the
   // Empty container's size with no message, so the dialog does not jump, and
   // the Input's Loading spinner is the indicator (component:CommandPalette
-  // FR1, FR3).
+  // FR1 and its Pending search state row).
   const hasQuery = optimisticSearch !== '';
   const showEmptyBootstrap = !hasQuery && optimisticResults.length === 0;
   const showEmptySearch =
