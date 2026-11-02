@@ -118,9 +118,11 @@ jobs:
     name: Flag review signals
     runs-on: ubuntu-slim
     # Per PR (run-scoped for backfill-all). Only this job cancels: a cancelled
-    # spec-owner reconcile could leave its head without a terminal status.
+    # spec-owner reconcile could leave its head without a terminal status. An
+    # owner-command run is run-scoped too, so a comment never cancels a pull
+    # request event's run (which may be the only writer of a new head's gate).
     concurrency:
-      group: review-signal-${{ github.event.pull_request.number || github.event.issue.number || github.event.inputs.pr || github.run_id }}
+      group: review-signal-${{ github.event_name == 'issue_comment' && format('command-{0}', github.run_id) || github.event.pull_request.number || github.event.inputs.pr || github.run_id }}
       cancel-in-progress: true
     permissions:
       pull-requests: write
@@ -166,6 +168,21 @@ jobs:
             const DESIGN = process.env.DESIGN_LABEL;
             const COMMUNITY = process.env.COMMUNITY_LABEL;
 
+            // Owner handles from a repository variable. An empty or unset
+            // list throws: it is a configuration error, never "no owners"
+            // (see flagOne).
+            function parseHandles(text) {
+              return ((text || '').match(/@?[A-Za-z0-9-]+/g) || [])
+                .map((h) => h.replace(/^@/, '').toLowerCase());
+            }
+            function ownersFromVar(name) {
+              const handles = parseHandles(process.env[name]);
+              if (!handles.length) {
+                throw new Error(`Owner variable ${name} is empty or unset — refusing to bucket authors from an empty list.`);
+              }
+              return handles;
+            }
+
             // Resolve which PR(s) to flag. On a PR event we get the payload PR.
             // On manual dispatch we take the `pr` input (one PR), or re-flag
             // every open PR when it's blank (backfill / mass recovery).
@@ -209,9 +226,7 @@ jobs:
               // may never reach the gate. Anyone else's command changes
               // nothing here.
               const commenter = (context.payload.comment?.user?.login || '').toLowerCase();
-              const engineers = ((process.env.ENG_OWNERS || '').match(/@?[A-Za-z0-9-]+/g) || [])
-                .map((handle) => handle.replace(/^@/, '').toLowerCase());
-              if (!engineers.includes(commenter)) {
+              if (!ownersFromVar('ENG_OWNERS').includes(commenter)) {
                 core.info(`@${commenter} is not an engineering owner; the code half is unchanged.`);
                 return;
               }
@@ -280,17 +295,6 @@ jobs:
             // per-PR try/catch then skips this PR, LEAVES ITS GATE UNTOUCHED
             // (never a false success), and fails the run visibly. An unreadable
             // owner list is never "no owners".
-            function parseHandles(text) {
-              return ((text || '').match(/@?[A-Za-z0-9-]+/g) || [])
-                .map((h) => h.replace(/^@/, '').toLowerCase());
-            }
-            function ownersFromVar(name) {
-              const handles = parseHandles(process.env[name]);
-              if (!handles.length) {
-                throw new Error(`Owner variable ${name} is empty or unset — refusing to bucket authors from an empty list.`);
-              }
-              return handles;
-            }
             const engOwners = ownersFromVar('ENG_OWNERS');
             const designOwners = ownersFromVar('DESIGN_OWNERS');
             const authorIsEng = engOwners.includes(author);

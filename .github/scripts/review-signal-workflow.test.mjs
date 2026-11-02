@@ -45,6 +45,7 @@ async function runSignal({
   batch = '',
   draft = false,
   commenter = 'engineer',
+  engOwners = '@engineer',
   commentBody = `/approve-spec ${HEAD}`,
   // The spec-owner job's decision for a PR that changes no spec record.
   specStatuses = [
@@ -172,7 +173,7 @@ async function runSignal({
     {
       env: {
         ...parsed.env,
-        ENG_OWNERS: '@engineer',
+        ENG_OWNERS: engOwners,
         DESIGN_OWNERS: '@designer',
         REVIEW_APP: reviewApp,
       },
@@ -382,6 +383,21 @@ describe("an engineering owner's owner command re-evaluates the code half (spec:
     for (const mutation of Object.values(h.mutations)) {
       expect(mutation).not.toHaveBeenCalled();
     }
+  });
+
+  it('fails closed when the engineering owner list is unset, never a silent no-op', async () => {
+    await expect(
+      runSignal({eventName: 'issue_comment', engOwners: '', reviews: approved}),
+    ).rejects.toThrow(/Owner variable ENG_OWNERS is empty or unset/);
+  });
+
+  it("never cancels a pull request event's run: a command run has its own group", () => {
+    const group = parsed.jobs.flag.concurrency.group;
+    expect(group).toContain(
+      "github.event_name == 'issue_comment' && format('command-{0}', github.run_id)",
+    );
+    expect(group).not.toContain('github.event.issue.number');
+    expect(parsed.jobs.flag.concurrency['cancel-in-progress']).toBe(true);
   });
 
   it('starts no runner for a comment that is not an owner command, and runs no pull-request code', () => {
