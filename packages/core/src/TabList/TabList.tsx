@@ -442,6 +442,7 @@ export function TabList({
   // the first enabled stop when none is tabbable.
   const {listRef, handleKeyDown, handleFocus} = useListFocus<HTMLElement>({
     itemSelector: TAB_STOP_SELECTOR,
+    boundarySelector: '.astryx-tab-list, [popover]',
     orientation: isTabList ? 'horizontal' : 'both',
     hasRovingTabIndex: true,
   });

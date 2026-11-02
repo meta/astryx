@@ -946,6 +946,49 @@ describe('TabMenu keyboard navigation (roving tabindex)', () => {
     expect(analytics).toHaveFocus();
   });
 
+  it('still navigates when the tablist is inside a popover', async () => {
+    const user = userEvent.setup();
+    render(
+      <div popover="manual">
+        <TabList value="home" onChange={() => {}} role="tablist">
+          <Tab value="home" label="Home" panelId="home-panel" />
+          <Tab value="settings" label="Settings" panelId="settings-panel" />
+        </TabList>
+      </div>,
+    );
+
+    screen.getByRole('tab', {name: 'Home', hidden: true}).focus();
+    await user.keyboard('{ArrowRight}');
+    expect(
+      screen.getByRole('tab', {name: 'Settings', hidden: true}),
+    ).toHaveFocus();
+  });
+
+  it('leaves horizontal arrows to the open menu', async () => {
+    const user = userEvent.setup();
+    render(
+      <TabList value="home" onChange={() => {}}>
+        <Tab value="home" label="Home" />
+        <TabMenu label="More" options={menuOptions} />
+      </TabList>,
+    );
+
+    const trigger = screen.getByRole('button', {name: 'More'});
+    await user.click(trigger);
+    const item = screen.getByRole('menuitemradio', {
+      name: 'Reports',
+      hidden: true,
+    });
+    item.focus();
+
+    fireEvent.keyDown(item, {key: 'ArrowRight'});
+    expect(item).toHaveFocus();
+
+    fireEvent.keyDown(item, {key: 'ArrowLeft'});
+    expect(item).toHaveFocus();
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
   it('moves the roving tab stop with arrow navigation', async () => {
     const user = userEvent.setup();
     render(
