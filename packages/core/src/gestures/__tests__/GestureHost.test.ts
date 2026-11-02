@@ -5413,6 +5413,278 @@ describe('every pointer where the primary pointer is fine (spec:AST-094 FR19, FR
   });
 });
 
+describe('a mouse or pen drag and the page selection (spec:AST-094 FR41)', () => {
+  function fineHost(): GestureHost {
+    return new GestureHost(document, {
+      clock,
+      isPrimaryPointerCoarse: () => false,
+    });
+  }
+
+  /** Select all of `node`, as the page or a drag would. */
+  function select(node: Node): Selection {
+    const selection = window.getSelection() as Selection;
+    selection.removeAllRanges();
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    selection.addRange(range);
+    return selection;
+  }
+
+  /**
+   * Every point lands on a character of `text`, as an engine's caret query
+   * over text answers (jsdom has none); the returned function undoes it.
+   */
+  function textUnderEveryPoint(text: Text): () => void {
+    Object.defineProperty(document, 'caretRangeFromPoint', {
+      configurable: true,
+      value: () => {
+        const range = document.createRange();
+        range.setStart(text, 1);
+        range.collapse(true);
+        return range;
+      },
+    });
+    const rects = Object.getOwnPropertyDescriptor(
+      Range.prototype,
+      'getClientRects',
+    );
+    Object.defineProperty(Range.prototype, 'getClientRects', {
+      configurable: true,
+      value: () => [{left: 0, right: 1000, top: 0, bottom: 1000}],
+    });
+    return () => {
+      delete (document as {caretRangeFromPoint?: unknown}).caretRangeFromPoint;
+      if (rects == null) {
+        delete (Range.prototype as {getClientRects?: unknown}).getClientRects;
+      } else {
+        Object.defineProperty(Range.prototype, 'getClientRects', rects);
+      }
+    };
+  }
+
+  /**
+   * A press at the first of `xs` and moves through the rest, 16 ms apart, or
+   * only moves when `isPressed`; returns the last event's time.
+   */
+  function drag(
+    target: EventTarget,
+    pointerType: 'mouse' | 'pen',
+    start: number,
+    xs: ReadonlyArray<number>,
+    isPressed = false,
+  ): number {
+    let time = start;
+    for (const [index, x] of xs.entries()) {
+      time += 16;
+      pointer(
+        index === 0 && !isPressed ? 'pointerdown' : 'pointermove',
+        target,
+        {
+          pointerType,
+          x,
+          y: 10,
+          buttons: 1,
+          time,
+        },
+      );
+    }
+    return time;
+  }
+
+  it('takes no new selection once a mouse or a pen pan claims: a selection its drag started goes, and its element refuses one until the lift', async () => {
+    const {box} = mount('<div id="box">Some text a drag would select</div>');
+    const fine = fineHost();
+    const pan = new PanGestureRecognizer({direction: 'horizontal'});
+    detachers.push(fine.attach(box, pan));
+    const selection = window.getSelection() as Selection;
+    let time = 0;
+    for (const pointerType of ['mouse', 'pen'] as const) {
+      selection.removeAllRanges();
+      time = drag(box, pointerType, time + 1000, [10]);
+      // The drag selects text before the pan claims at 10 px.
+      select(box);
+      time = drag(box, pointerType, time, [30, 50], true);
+      expect(['began', 'changed']).toContain(pan.state);
+      expect(selection.rangeCount).toBe(0);
+      expect(box.style.getPropertyValue('user-select')).toBe('none');
+      const start = new Event('selectstart', {bubbles: true, cancelable: true});
+      box.dispatchEvent(start);
+      expect(start.defaultPrevented).toBe(true);
+      pointer('pointerup', box, {pointerType, x: 50, y: 10, time: time + 16});
+      // The document's hold ends a task after the lift: wait for it, so no
+      // hold outlives the press.
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(box.style.getPropertyValue('user-select')).toBe('');
+    }
+  });
+
+  it("never clears the page's existing selection: a claimed drag puts back what its press collapsed, what it selected, and what WebKit extends, through the lift", async () => {
+    const {text, box} = mount(
+      '<p id="text">Text the page selected</p><div id="box">Pan</div>',
+    );
+    const fine = fineHost();
+    const pan = new PanGestureRecognizer({direction: 'horizontal'});
+    detachers.push(fine.attach(box, pan));
+    let time = 0;
+    for (const pointerType of ['mouse', 'pen'] as const) {
+      const selection = select(text);
+      time = drag(box, pointerType, time + 1000, [10]);
+      // The press's own mousedown collapses the page's selection, and the
+      // drag starts its own before the pan claims.
+      selection.collapseToStart();
+      select(box);
+      time = drag(box, pointerType, time, [30, 50], true);
+      expect(['began', 'changed']).toContain(pan.state);
+      expect(selection.toString()).toBe('Text the page selected');
+      // WebKit extends the drag's selection over the page without a
+      // selectstart.
+      select(box);
+      document.dispatchEvent(new Event('selectionchange'));
+      expect(selection.toString()).toBe('Text the page selected');
+      pointer('pointerup', box, {pointerType, x: 50, y: 10, time: time + 16});
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(selection.toString()).toBe('Text the page selected');
+    }
+  });
+
+  it('does not claim a mouse or a pen drag that starts on selectable text: the pan fails and the browser selects, while a tap on text still recognizes at the lift', async () => {
+    const {box, label} = mount(
+      '<div id="box">Card text a drag selects</div><div id="label">A label</div>',
+    );
+    const undo = textUnderEveryPoint(box.firstChild as Text);
+    try {
+      const fine = fineHost();
+      const pan = new PanGestureRecognizer({direction: 'horizontal'});
+      const panStates: string[] = [];
+      pan.addTransitionListener((_current, _from, to) => panStates.push(to));
+      const tap = new TapGestureRecognizer();
+      const tapStates: string[] = [];
+      tap.addTransitionListener((_current, _from, to) => tapStates.push(to));
+      detachers.push(fine.attach(box, pan), fine.attach(label, tap));
+      let time = 0;
+      for (const pointerType of ['mouse', 'pen'] as const) {
+        time = drag(box, pointerType, time + 1000, [10, 30, 50, 70]);
+        expect(['began', 'changed']).not.toContain(pan.state);
+        // No hold: the browser's selection runs.
+        expect(box.style.getPropertyValue('user-select')).toBe('');
+        const start = new Event('selectstart', {
+          bubbles: true,
+          cancelable: true,
+        });
+        box.dispatchEvent(start);
+        expect(start.defaultPrevented).toBe(false);
+        pointer('pointerup', box, {pointerType, x: 70, y: 10, time: time + 16});
+        time += 1000;
+        pointer('pointerdown', label, {
+          pointerType,
+          x: 10,
+          y: 10,
+          buttons: 1,
+          time,
+        });
+        pointer('pointerup', label, {
+          pointerType,
+          x: 10,
+          y: 10,
+          time: time + 80,
+        });
+      }
+      expect(panStates).not.toContain('began');
+      expect(tapStates.filter(state => state === 'ended')).toHaveLength(2);
+    } finally {
+      undo();
+    }
+  });
+
+  it("still claims a press a group claims at its own pointerdown on selectable text: it has not moved, so it is no drag, and the page's selection stays", async () => {
+    const {text, group, copy} = mount(
+      '<p id="text">Text the page selected</p><div id="group"><button id="copy">Copy</button></div>',
+    );
+    const undo = textUnderEveryPoint(copy.firstChild as Text);
+    try {
+      const fine = fineHost();
+      // The action-group adapter's recognizer: a long press with no minimum
+      // duration and no movement limit, which claims at the pointerdown.
+      const press = new LongPressGestureRecognizer({
+        minimumPressDuration: 0,
+        allowableMovement: Number.POSITIVE_INFINITY,
+      });
+      detachers.push(fine.attach(group, press, {actionGroup: true}));
+      let time = 0;
+      for (const pointerType of ['mouse', 'pen'] as const) {
+        const selection = select(text);
+        time += 1000;
+        pointer('pointerdown', copy, {
+          pointerType,
+          x: 10,
+          y: 10,
+          buttons: 1,
+          time,
+        });
+        expect(press.state).toBe('began');
+        expect(selection.toString()).toBe('Text the page selected');
+        pointer('pointerup', copy, {
+          pointerType,
+          x: 10,
+          y: 10,
+          time: time + 80,
+        });
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(selection.toString()).toBe('Text the page selected');
+      }
+    } finally {
+      undo();
+    }
+  });
+
+  for (const ending of ['pointercancel', 'blur', 'detach'] as const) {
+    it(`ends a claimed drag's document-wide hold at once when it ends in a ${ending}: no mouseup or click follows a cancel`, () => {
+      const {box, outside} = mount(
+        '<p id="outside">Text outside the pan</p><div id="box">Pan</div>',
+      );
+      const fine = fineHost();
+      const pan = new PanGestureRecognizer({direction: 'horizontal'});
+      const detach = fine.attach(box, pan);
+      detachers.push(detach);
+      const time = drag(box, 'mouse', 0, [10, 30, 50]);
+      expect(['began', 'changed']).toContain(pan.state);
+      if (ending === 'pointercancel') {
+        pointer('pointercancel', document.body, {
+          pointerType: 'mouse',
+          x: 50,
+          y: 10,
+          time: time + 16,
+        });
+      } else if (ending === 'blur') {
+        window.dispatchEvent(new Event('blur'));
+      } else {
+        detach();
+      }
+      const later = new Event('selectstart', {bubbles: true, cancelable: true});
+      outside.dispatchEvent(later);
+      expect(later.defaultPrevented).toBe(false);
+    });
+  }
+
+  it("leaves a mouse click's selection alone: a tap claims only at its lift", () => {
+    const {box} = mount('<div id="box">Some selected text</div>');
+    const fine = fineHost();
+    detachers.push(fine.attach(box, new TapGestureRecognizer()));
+    const selection = select(box);
+    pointer('pointerdown', box, {
+      pointerType: 'mouse',
+      x: 10,
+      y: 10,
+      buttons: 1,
+      time: 0,
+    });
+    pointer('pointerup', box, {pointerType: 'mouse', x: 10, y: 10, time: 80});
+    expect(selection.rangeCount).toBe(1);
+    expect(box.style.getPropertyValue('user-select')).toBe('');
+  });
+});
+
 describe('nothing left after the last detach (spec:AST-094 FR21, FR24)', () => {
   /** Listeners added and not removed since the case began: target and type. */
   let open: Map<string, string>;
@@ -5543,6 +5815,9 @@ describe('nothing left after the last detach (spec:AST-094 FR21, FR24)', () => {
     'registry',
     'pendingCallerReads',
     'lockedBy',
+    'pressSelections',
+    'selectingContacts',
+    'dragHolds',
     'retargeted',
     'touchIds',
     'cancelledFingers',

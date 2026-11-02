@@ -1711,6 +1711,109 @@ test.describe('under a fine primary pointer (spec:AST-094 FR43, FR24)', () => {
 test.describe('where the primary pointer is fine', () => {
   test.use({hasTouch: false, isMobile: false});
 
+  /**
+   * A page with text above a card a pan takes, the card's own text on its
+   * first line only, and text below; the pan's transitions land on
+   * `window.__panStates`. Returns the card's box and its text's.
+   */
+  async function cardPage(page: Page) {
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, PanGestureRecognizer} = window.__api;
+      document.body.style.font = '16px sans-serif';
+      document.body.innerHTML =
+        '<h1 id="heading">A story heading with words</h1><p>A description with several words in it.</p><div id="card" style="margin-top: 24px; width: 320px; height: 120px; background: #ccd"><span id="cardText">Card text a drag selects</span></div><p>Text below the card, with words.</p>';
+      const pan = new PanGestureRecognizer();
+      const states: string[] = [];
+      (window as unknown as {__panStates: string[]}).__panStates = states;
+      pan.addTransitionListener((_current, _from, to) => states.push(to));
+      host.attach(document.getElementById('card') as HTMLElement, pan);
+    });
+    const card = await page.locator('#card').boundingBox();
+    const text = await page.locator('#cardText').boundingBox();
+    if (card == null || text == null) {
+      throw new Error('no box for #card');
+    }
+    return {card, text};
+  }
+
+  /**
+   * The page's selection once `selectionchange`, dispatched as its own
+   * task, has run: as the next frame paints it.
+   */
+  async function paintedSelection(page: Page): Promise<string> {
+    return page.evaluate(
+      async () =>
+        new Promise<string>(resolve => {
+          requestAnimationFrame(() =>
+            resolve(String(window.getSelection() ?? '').trim()),
+          );
+        }),
+    );
+  }
+
+  test("a mouse drag a pan claimed takes no new selection though it carries over text, and the page's existing selection survives it (spec:AST-094 FR41)", async ({
+    page,
+  }) => {
+    const {card} = await cardPage(page);
+    // From the card's lower half, below its text, past the pan's start and
+    // up over the text above the card.
+    const drag = async () => {
+      const x = card.x + 40;
+      const y = card.y + card.height * 0.75;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x + 30, y - 10, {steps: 4});
+      await page.mouse.move(x + 60, card.y - 80, {steps: 12});
+      const during = await paintedSelection(page);
+      await page.mouse.up();
+      return {during, after: await paintedSelection(page)};
+    };
+    const fresh = await drag();
+    const kept = await page.evaluate(() => {
+      window
+        .getSelection()
+        ?.selectAllChildren(document.getElementById('heading') as HTMLElement);
+      return String(window.getSelection() ?? '').trim();
+    });
+    expect(kept).toBe('A story heading with words');
+    const overKept = await drag();
+    const states = await page.evaluate(
+      () => (window as unknown as {__panStates: string[]}).__panStates,
+    );
+    expect({
+      fresh,
+      overKept,
+      began: states.filter(state => state === 'began').length,
+    }).toEqual({
+      fresh: {during: '', after: ''},
+      overKept: {during: kept, after: kept},
+      began: 2,
+    });
+  });
+
+  test('a mouse drag that starts on selectable text selects it, and the pan under it never claims the drag (spec:AST-094 FR41)', async ({
+    page,
+  }) => {
+    const {text} = await cardPage(page);
+    const y = text.y + text.height / 2;
+    await page.mouse.move(text.x + 2, y);
+    await page.mouse.down();
+    await page.mouse.move(text.x + text.width * 0.6, y, {steps: 10});
+    await page.mouse.up();
+    const selected = await paintedSelection(page);
+    const states = await page.evaluate(
+      () => (window as unknown as {__panStates: string[]}).__panStates,
+    );
+    expect(selected.length).toBeGreaterThan(3);
+    expect('Card text a drag selects'.includes(selected)).toBe(true);
+    expect(states).not.toContain('began');
+  });
+
   test("the host registers no page touch listener while idle and warns for nothing, though the page attaches recognizers: an element keeps only a claiming recognizer's blocking touchmove; a mouse drag pans (spec:AST-094 FR43, FR24, FR19)", async ({
     page,
   }) => {
