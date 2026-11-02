@@ -12,7 +12,7 @@
  *   (`*.interaction.browser.spec.ts`, run by `pnpm test:interaction`)
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Locator, type Page} from '@playwright/test';
 import {
   openStory,
   touchDriver,
@@ -95,9 +95,18 @@ test.describe('with a mouse', () => {
           ).click();
         }),
     );
-    // Today's smooth scroll: the offsets pass through the month in between.
-    expect(offsets[offsets.length - 1]).not.toBe(before);
-    expect(new Set(offsets).size).toBeGreaterThan(3);
+    // Today's smooth scroll travels: at least one frame shows the scroller
+    // between the two months. This counts positions, not frames. In WebKit's CI
+    // container each frame of this scroll takes 67 to 83 ms. So its 220 to 258
+    // ms show two or three frames in between, and a slower frame leaves two.
+    const end = offsets[offsets.length - 1];
+    expect(end).not.toBe(before);
+    expect(
+      offsets.filter(
+        left => Math.min(before, end) < left && left < Math.max(before, end),
+      ),
+      `the offsets each frame showed: ${offsets.join(', ')}`,
+    ).not.toHaveLength(0);
   });
 
   test('under Reduced Motion an arrow changes the month at once', async ({
@@ -136,6 +145,52 @@ test.describe('with a mouse', () => {
   });
 });
 
+/**
+ * Records, as each is created, the animations made on `target`: what each
+ * animates, its keyframes' opacity, and its duration in ms. Read at creation, a
+ * dip is read on a loaded machine too. There, frames come too far apart to show
+ * a 200 ms dip's darkest frame.
+ */
+async function recordCreatedRuns(target: Locator): Promise<void> {
+  await target.evaluate(element => {
+    const runs: CreatedRun[] = [];
+    (window as unknown as {createdRuns: CreatedRun[]}).createdRuns = runs;
+    const original = Element.prototype.animate;
+    Element.prototype.animate = function (
+      this: Element,
+      ...args: Parameters<Element['animate']>
+    ) {
+      const animation = original.apply(this, args);
+      if (this === element) {
+        const effect = animation.effect as KeyframeEffect;
+        const frames = effect.getKeyframes();
+        runs.push({
+          properties: [
+            ...new Set(
+              frames.flatMap(frame =>
+                Object.keys(frame).filter(
+                  key =>
+                    ![
+                      'offset',
+                      'easing',
+                      'composite',
+                      'computedOffset',
+                    ].includes(key),
+                ),
+              ),
+            ),
+          ],
+          opacities: frames.map(frame => Number(frame.opacity)),
+          duration: Number(effect.getTiming().duration),
+        });
+      }
+      return animation;
+    };
+  });
+}
+
+type CreatedRun = {properties: string[]; opacities: number[]; duration: number};
+
 test('on a touch screen, under Reduced Motion an arrow dips the calendar and changes the month without travel', async ({
   page,
 }) => {
@@ -143,19 +198,15 @@ test('on a touch screen, under Reduced Motion an arrow dips the calendar and cha
   expect(
     await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
   ).toBe(true);
-  // Every frame's opacity and scroll offset, with the page's clock, from the
-  // tap on.
+  // The dip is read as it is created; the page's frames record where the
+  // scroller stands, from the tap until the dip is over.
+  await recordCreatedRuns(viewport);
   await viewport.evaluate(element => {
-    const log: [number, number, number][] = [];
-    (window as unknown as {dip: typeof log}).dip = log;
-    const t0 = performance.now();
+    const w = window as unknown as {offsets: number[]; offsetsDone?: boolean};
+    w.offsets = [];
     const tick = () => {
-      log.push([
-        performance.now() - t0,
-        Number(getComputedStyle(element).opacity),
-        element.scrollLeft,
-      ]);
-      if (performance.now() - t0 < 800) {
+      w.offsets.push(element.scrollLeft);
+      if (w.offsetsDone !== true) {
         requestAnimationFrame(tick);
       }
     };
@@ -163,30 +214,48 @@ test('on a touch screen, under Reduced Motion an arrow dips the calendar and cha
   });
   const before = await viewport.evaluate(element => element.scrollLeft);
   await page.getByRole('button', {name: 'Next month'}).tap();
-  await page.waitForFunction(
-    () => {
-      const log = (window as unknown as {dip?: unknown[]}).dip;
-      const last = log?.[log.length - 1] as [number] | undefined;
-      return last != null && last[0] >= 800;
-    },
-    undefined,
-    {timeout: 10_000},
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        () =>
+          (window as unknown as {createdRuns: CreatedRun[]}).createdRuns.length,
+      ),
+    )
+    .toBeGreaterThan(0);
+  // The dip is over, however long a loaded machine takes to end it.
+  await expect
+    .poll(async () =>
+      viewport.evaluate(element => element.getAnimations().length),
+    )
+    .toBe(0);
+  // design:reduced-motion DR2: one opacity dip, dark at its middle and back
+  // at its end, in at most the cross-fade's 200 ms.
+  const runs = await page.evaluate(
+    () => (window as unknown as {createdRuns: CreatedRun[]}).createdRuns,
   );
-  const log = await page.evaluate(
-    () => (window as unknown as {dip: [number, number, number][]}).dip,
-  );
-  const offsets = [...new Set(log.map(([, , left]) => left))];
-  const after = log[log.length - 1][2];
-  // design:reduced-motion DR2: the month changes with no travel, one jump
-  // from the old offset to the new one, at the dip's darkest point, and the
-  // scroller stays there.
+  expect(runs).toHaveLength(1);
+  const [dip] = runs;
+  expect(dip.properties).toEqual(['opacity']);
+  expect(dip.opacities[0]).toBe(1);
+  expect(dip.opacities[dip.opacities.length - 1]).toBe(1);
+  expect(Math.min(...dip.opacities)).toBeLessThan(0.5);
+  expect(dip.duration).toBeLessThanOrEqual(200);
+  // The month changes with no travel: one jump from the old offset to the
+  // new one, and the scroller stays there.
+  const after = await viewport.evaluate(element => element.scrollLeft);
   expect(after).not.toBe(before);
-  expect(offsets.every(left => left === before || left === after)).toBe(true);
-  const dimmed = log.filter(([, opacity]) => opacity < 0.99);
-  expect(dimmed.length).toBeGreaterThan(0);
-  expect(Math.min(...log.map(([, opacity]) => opacity))).toBeLessThan(0.5);
-  // The dip lasts at most the cross-fade's 200 ms, a frame either side.
-  const span = dimmed[dimmed.length - 1][0] - dimmed[0][0];
-  expect(span).toBeLessThanOrEqual(200 + 2 * 17);
-  expect(log[log.length - 1][1]).toBe(1);
+  const offsets = await page.evaluate(() => {
+    const w = window as unknown as {offsets: number[]; offsetsDone?: boolean};
+    w.offsetsDone = true;
+    return w.offsets;
+  });
+  expect(
+    offsets.every(left => left === before || left === after),
+    `the offsets each frame showed: ${offsets.join(', ')}`,
+  ).toBe(true);
+  expect(
+    await viewport.evaluate(element =>
+      Number(getComputedStyle(element).opacity),
+    ),
+  ).toBe(1);
 });
