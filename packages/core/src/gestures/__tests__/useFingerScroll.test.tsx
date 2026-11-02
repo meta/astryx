@@ -6,13 +6,15 @@
  *   document's gesture host
  * @output A finger's scroll reads true until the scroller's scrollend; a
  *   scroll with no finger down reads false; the page's own scroll through
- *   the document; the watch follows the ref's node and ends on unmount
+ *   the document; the watch follows the ref's node and ends on unmount, and
+ *   lets go of a node it stops following
  * @position Unit tests of packages/core/src/gestures/useFingerScroll.ts
  */
 
 import {render} from '@testing-library/react';
 import {useRef} from 'react';
 import {afterEach, beforeEach, describe, expect, it} from 'vitest';
+import {isFingerScroll} from '../fingerScroll';
 import {getGestureHost} from '../GestureHost';
 import {useFingerScroll} from '../useFingerScroll';
 import {coarsePrimaryPointer} from './pointerQuery';
@@ -39,6 +41,34 @@ function List({other = false}: {other?: boolean}) {
       <p data-testid="row">row</p>
     </div>
   );
+}
+
+/** A scroller the test keeps in the page while the hook moves off it. */
+function scroller(): {element: HTMLElement; row: HTMLElement} {
+  const element = document.createElement('div');
+  const row = document.createElement('p');
+  element.append(row);
+  document.body.append(element);
+  return {element, row};
+}
+
+/** A finger scrolling `element` from `row`, left resting. */
+function fingerScroll(element: Element, row: Element): void {
+  touch('touchstart', row, true);
+  element.dispatchEvent(new Event('scroll'));
+}
+
+/** The finger lifted and the scroll ended. */
+function lift(element: Element, row: Element): void {
+  touch('touchend', row, false);
+  element.dispatchEvent(new Event('scrollend'));
+}
+
+const followed: {current: Element | null} = {current: null};
+
+function Follower() {
+  read = useFingerScroll(followed);
+  return null;
 }
 
 function Page() {
@@ -118,5 +148,40 @@ describe('useFingerScroll', () => {
     const reader = read;
     unmount();
     expect(reader()).toBe(false);
+  });
+
+  it('lets go of the node it stops following, and of its last one at unmount', () => {
+    const first = scroller();
+    const second = scroller();
+    const host = getGestureHost(document);
+    try {
+      followed.current = first.element;
+      const {rerender, unmount} = render(<Follower />);
+      fingerScroll(first.element, first.row);
+      expect(read()).toBe(true);
+      lift(first.element, first.row);
+
+      followed.current = second.element;
+      rerender(<Follower />);
+      // The first scroller is no longer watched: its finger scroll counts
+      // for nothing.
+      fingerScroll(first.element, first.row);
+      expect(isFingerScroll(host, first.element)).toBe(false);
+      lift(first.element, first.row);
+      fingerScroll(second.element, second.row);
+      expect(read()).toBe(true);
+      lift(second.element, second.row);
+
+      const reader = read;
+      unmount();
+      fingerScroll(second.element, second.row);
+      expect(isFingerScroll(host, second.element)).toBe(false);
+      expect(reader()).toBe(false);
+      lift(second.element, second.row);
+    } finally {
+      followed.current = null;
+      first.element.remove();
+      second.element.remove();
+    }
   });
 });
