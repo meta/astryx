@@ -147,8 +147,26 @@ describe('Lab-only lane (spec:AST-030 FR26)', () => {
     );
   });
 
-  it('builds Storybook as on any pull request', () => {
-    for (const s of steps('build-storybook')) {
+  it('builds Storybook as on any pull request, then typechecks Lab and its stories', () => {
+    // A Lab type error that landed would fail every later pull request's
+    // typecheck, so the Lab package and the stories are checked against the
+    // packages this job built.
+    const typecheck = step(
+      'build-storybook',
+      'Lab-only: typecheck Lab and its stories',
+    );
+    // Spelled out beside the lane, as every build command in this job is.
+    expect(typecheck.if).toBe(
+      `steps.scope.outputs.spec_only != 'true' && ${LAB_TRUE}`,
+    );
+    expect(typecheck.run).toBe(
+      'pnpm -F @astryxdesign/lab -F @astryxdesign/storybook typecheck',
+    );
+    const all = steps('build-storybook');
+    expect(all.indexOf(typecheck)).toBeGreaterThan(
+      all.findIndex(s => s.name === 'Build packages and Storybook'),
+    );
+    for (const s of all.filter(s => s !== typecheck)) {
       expect(String(s.if ?? ''), s.name ?? s.uses ?? s.run).not.toContain(
         'lab_only',
       );

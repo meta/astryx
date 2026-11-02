@@ -1368,6 +1368,14 @@ jobs:
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         run: node .github/scripts/build-packages-and-storybook.mjs
 
+      # A Lab-only change skips the typecheck job (spec:AST-030 FR26), so the
+      # Lab package and the Storybook stories that import it are typechecked
+      # here, against the packages this job just built: a type error that
+      # landed would fail every later pull request's typecheck.
+      - name: 'Lab-only: typecheck Lab and its stories'
+        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.lab_only == 'true'
+        run: pnpm -F @astryxdesign/lab -F @astryxdesign/storybook typecheck
+
       - name: Verify package exports
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         run: node scripts/verify-exports.mjs
@@ -1698,7 +1706,7 @@ jobs:
       - name: 'Lab-only: Lab tests + Storybook build'
         if: needs.build-storybook.outputs.lab_only == 'true'
         run: |
-          echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. Typecheck is not required for a change only to the Lab package; the Storybook build ran (spec:AST-030 FR26)."
+          echo "::notice title=Lab-only::Lab-only: Lab tests + Storybook build. The Storybook build job built the packages and typechecked Lab and its stories (spec:AST-030 FR26)."
 
       - name: Assert parallel builds succeeded
         run: |

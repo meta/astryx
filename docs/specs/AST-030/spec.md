@@ -481,11 +481,13 @@ they are separately named.
 - **FR26 — A Lab-only pull request runs the Lab tests and the Storybook
   build.** A pull request whose every changed path is in the Lab package
   (`packages/lab/`), beside any Changesets, runs the Lab package's tests on the
-  UI legs, the Storybook build, and the repository-wide guards: full lint and
-  the UI lane's copyright, package-exports, CLI API type, token-docs, Lab
-  readiness and knowledge-schema checks. It runs no docsite build or tests, no
-  typecheck, no Node or Build-package tests, and no visual, accessibility, RTL,
-  interaction or touched-components suite, and an agent lane's push defers
+  UI legs, the Storybook build, a typecheck of the Lab package and the
+  Storybook stories against the packages that build made, and the
+  repository-wide guards: full lint and the UI lane's copyright,
+  package-exports, CLI API type, token-docs, Lab readiness and knowledge-schema
+  checks. It runs no docsite build or tests, no full typecheck, no Node or
+  Build-package tests, and no visual, accessibility, RTL, interaction or
+  touched-components suite, and an agent lane's push defers
   nothing (FR20). The required `build`, `test` and `docsite-test` contexts
   report success with the notice "Lab-only: Lab tests + Storybook build",
   never a skip. A change to any other path is mixed and runs CI as for any
@@ -943,30 +945,32 @@ keeping it hourly (the run is the largest share of main's runner use).
 **Reference:** `spec:AST-030/DEC-21`
 **Decider:** `cixzhang`, `2026-11-01`
 
-The Lab package is unpublished (`private` in the workspace), so no released
-user can be affected by a Lab change, and its changes merge without the spec
-gates. The
+The Lab package is published only to npm's `canary` dist-tag, never as a
+stable release, so no user of a stable release can be affected by a Lab
+change, and its changes merge without the spec gates. The
 decider's words: "Lab can just merge since its not shipped"; "Lab could
 likely skip a lot of CI"; "LAb-only updates at least. Maybe it only runs the
 lab tests"; "Theymight need storybook". A Lab-only pull request therefore
 runs the Lab tests and the Storybook build, which holds Lab's stories and the
 pull request's preview.
 
-The repository-wide guards are a small addition to those words. They read the
-whole repository on every pull request, so a Lab change that broke one would
-turn every later pull request red until `main` was repaired; they cost about
-three minutes of small jobs per Lab-only run.
+The repository-wide guards and the Lab typecheck are a small addition to
+those words. The guards read the whole repository on every pull request, and
+the full typecheck checks Lab's tests, docs and stories, so a Lab change that
+broke one would turn every later pull request red until `main` was repaired.
+They cost about five minutes of small jobs and steps per Lab-only run.
 
 The docsite, the Sandbox and the CLI import Lab, and their checks do not run on
 a Lab-only pull request. A Lab change that breaks the docsite or Sandbox build
 shows as a failing preview deployment on its own pull request and on `main`'s
 production deployment; one that breaks the docsite or CLI tests fails the next
-pull request that runs them and `main`'s hourly full unit run (FR21). That is
-the accepted cost: about one pull-request run in a hundred is Lab-only, and
-each skips most of a full run's work.
+pull request that runs them and `main`'s hourly full unit run (FR21). A Lab
+break that lands also reaches the `canary` dist-tag until the next push to
+`main` replaces it. That is the accepted cost: about one pull-request run in a
+hundred is Lab-only, and each skips most of a full run's work.
 
 Rejected: keeping full CI for Lab (it spends shipped-surface checks on a
-package no released user receives); Lab tests alone, without the
+package no stable release includes); Lab tests alone, without the
 repository-wide guards (a landed guard break blocks everyone else's pull
 requests); counting Lab stories under `apps/storybook/stories/` as Lab-only
 (they share the visual surface, and a path cannot tell a Lab story from a core

@@ -181,7 +181,8 @@ describe('Node-tooling CI routing', () => {
         candidate.with?.path === '.test-scope' ||
         candidate.name === 'Skip heavy work for a specialized lane' ||
         candidate.name === 'Skip typechecks for a specialized lane' ||
-        candidate.name === 'Lab-only: Lab tests + Storybook build'
+        candidate.name === 'Lab-only: Lab tests + Storybook build' ||
+        candidate.name === 'Lab-only: typecheck Lab and its stories'
       ) {
         continue;
       }
