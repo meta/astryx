@@ -780,6 +780,45 @@ describe('HoverCard', () => {
       );
     });
 
+    // The auto hover cue (FR8) is a class on the text trigger; a single
+    // string's trigger is the reference.
+    function cueClassOf(
+      children: ComponentProps<typeof HoverCard>['children'],
+    ) {
+      const {unmount} = render(
+        <HoverCard content={<span>Card</span>}>{children}</HoverCard>,
+      );
+      const className = (
+        document.querySelector('span[tabindex="0"]') as HTMLElement
+      ).className;
+      unmount();
+      return className;
+    }
+
+    it('gives several text children the same hover cue as one string', () => {
+      const when = 'today';
+      const single = cueClassOf('Edited today');
+      // JSX passes `Edited {when}` as this array.
+      expect(cueClassOf(['Edited ', when])).toBe(single);
+      const {unmount} = render(
+        <HoverCard content={<span>Card</span>} hasHoverIndication={false}>
+          Edited today
+        </HoverCard>,
+      );
+      expect(
+        (document.querySelector('span[tabindex="0"]') as HTMLElement).className,
+      ).not.toBe(single);
+      unmount();
+    });
+
+    it('keeps the hover cue when holes render nothing', () => {
+      const isDraft = false;
+      const single = cueClassOf('Edited today');
+      expect(cueClassOf(['Edited ', isDraft && 'draft', null, 'today'])).toBe(
+        single,
+      );
+    });
+
     it('still attaches to the first element when one is present', () => {
       render(
         <HoverCard label="History" content={<span>Card</span>}>
