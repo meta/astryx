@@ -8,12 +8,13 @@
  *   option-id resolver for the owning listbox
  * @output Exports useHighlightedOptionScroll: keeps the highlighted option
  *   scrolled into view for keyboard navigation while hover-driven highlights
- *   never scroll
+ *   never scroll; the hover callback it returns is stable
  * @position Internal hook; used by useCombobox, useMultiCombobox,
  *   BaseTypeahead, and DateTimeInput — the owners of combobox highlight state
  */
 
 import {useCallback, useEffect, useRef} from 'react';
+import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 
 interface UseHighlightedOptionScrollOptions {
   isOpen: boolean;
@@ -43,15 +44,21 @@ export function useHighlightedOptionScroll({
   itemCount,
 }: UseHighlightedOptionScrollOptions): (index: number) => void {
   const hoverHighlightRef = useRef(false);
+  // Read at the hover, after the commit, so the callback stays the same
+  // function while the highlight moves: owners pass it to memoized rows.
+  const highlightedIndexRef = useRef(highlightedIndex);
+  useIsomorphicLayoutEffect(() => {
+    highlightedIndexRef.current = highlightedIndex;
+  });
 
   const highlightFromHover = useCallback(
     (index: number) => {
-      if (index !== highlightedIndex) {
+      if (index !== highlightedIndexRef.current) {
         hoverHighlightRef.current = true;
       }
       setHighlightedIndex(index);
     },
-    [highlightedIndex, setHighlightedIndex],
+    [setHighlightedIndex],
   );
 
   useEffect(() => {
