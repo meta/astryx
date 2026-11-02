@@ -6,7 +6,8 @@
  *   loading, the pointer or focus reached the Search button, or the palette
  *   opened.
  * @output At most one warm-up request to the search API (app/api/search) per
- *   tab every few minutes, and while it runs, a promise queries wait on.
+ *   tab every few minutes, and while it runs, a promise that settles when it
+ *   answers (runningSearchWarmup).
  * @position Called by SharedTopNav.tsx.
  *
  * The site's search runs the CLI's `search()` on the server (spec:AST-033
@@ -18,10 +19,11 @@
  * client navigation) so hovering or reopening Search never sends a request
  * each time.
  *
- * A query sent while the warm-up is still running would not join it: the
- * host starts a second server for it, which starts cold too. So a query
- * waits for a running warm-up (searchServerReady) and then reaches the server
- * the warm-up started.
+ * A query sent while the warm-up is still running may not join it: the host
+ * can start a second server for it, which starts cold too. The search source
+ * (lib/cliSearchSource.ts) sends the query at once, so a cached answer is not
+ * held back, and sends it again when the warm-up answers first, so an
+ * uncached one reaches the warmed server.
  */
 
 /** The request that loads the search server without running a query. */
@@ -34,13 +36,6 @@ export const SEARCH_WARMUP_URL = '/api/search?warm=1';
 export const SEARCH_WARMUP_INTERVAL_MS = 4 * 60 * 1000;
 
 const STORAGE_KEY = 'astryx-docsite:search-warmed-at';
-
-/**
- * The longest a query waits for a running warm-up before it is sent anyway:
- * longer than a cold start, so a slow warm-up never holds results back for
- * good.
- */
-export const SEARCH_WARMUP_WAIT_MS = 12 * 1000;
 
 /** The last warm-up in this tab when sessionStorage is unavailable. */
 let lastWarmedAt = Number.NEGATIVE_INFINITY;
@@ -108,34 +103,9 @@ export function warmSearch(
   return true;
 }
 
-/**
- * Resolve once no warm-up from this page is running, after at most
- * SEARCH_WARMUP_WAIT_MS, or when `signal` aborts (rejecting with its reason).
- * Resolves at once when nothing is running.
- */
-export function searchServerReady(signal?: AbortSignal): Promise<void> {
-  const warmup = running;
-  if (warmup == null) {
-    return Promise.resolve();
-  }
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(done, SEARCH_WARMUP_WAIT_MS);
-    function onAbort() {
-      clearTimeout(timer);
-      reject(signal?.reason);
-    }
-    function done() {
-      clearTimeout(timer);
-      signal?.removeEventListener('abort', onAbort);
-      resolve();
-    }
-    if (signal?.aborted) {
-      onAbort();
-      return;
-    }
-    signal?.addEventListener('abort', onAbort, {once: true});
-    warmup.then(done);
-  });
+/** The warm-up this page sent, until it answers (never rejects); otherwise null. */
+export function runningSearchWarmup(): Promise<void> | null {
+  return running;
 }
 
 /** Forget the last warm-up. For tests. */

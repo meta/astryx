@@ -4,7 +4,8 @@
  * @file The search panel's source: each query goes to the site's search API
  * (app/api/search/route.ts), which runs `astryx search`, and its results come
  * back in the CLI's order. A query typed while the search server is still
- * being warmed waits for that warm-up instead of starting a second server.
+ * being warmed is sent again if the warm-up answers first, so it reaches the
+ * warmed server instead of waiting on a second cold one.
  * @position Consumed by SearchPalette.tsx.
  *
  * Items carry no `group`, since CommandPalette orders grouped items by group
@@ -13,7 +14,7 @@
 
 import type {SearchSource, SearchableItem} from '@astryxdesign/core/Typeahead';
 import type {SiteSearchResult} from './cliSearchTypes';
-import {searchServerReady} from './searchWarmup';
+import {runningSearchWarmup} from './searchWarmup';
 
 export interface CliSearchItem extends SearchableItem<SiteSearchResult> {
   id: string;
@@ -83,21 +84,65 @@ const DEBOUNCE_MS = 120;
 /**
  * A SearchSource that answers with `astryx search`, through the site's API.
  * @param fetchSearch - Fetches one query's response; the site passes `fetch`.
- * @param serverReady - Resolves when a query can be sent: after a running
- *   warm-up (lib/searchWarmup.ts), so the query reaches the server it started.
+ * @param runningWarmup - The page's running warm-up (lib/searchWarmup.ts), or
+ *   null.
  */
 export function createCliSearchSource(
   fetchSearch: (url: string, init: RequestInit) => Promise<Response> = (
     url,
     init,
   ) => fetch(url, init),
-  serverReady: (signal: AbortSignal) => Promise<void> = searchServerReady,
+  runningWarmup: () => Promise<void> | null = runningSearchWarmup,
 ): SearchSource<CliSearchItem> & {
   item(id: string): CliSearchItem | undefined;
 } {
   // The items of the newest answer, by id, for the panel's selection.
   let shown = new Map<string, CliSearchItem>();
   let inFlight: AbortController | null = null;
+
+  /**
+   * Fetch one query at once, so an answer the edge cache holds is never held
+   * back. If the page's warm-up answers while that request is still waiting,
+   * the request may be starting a second cold server: send it again, to the
+   * server the warm-up started, and take whichever answers first.
+   */
+  async function sendQuery(url: string, signal: AbortSignal) {
+    const warmup = runningWarmup();
+    if (warmup == null) {
+      return fetchSearch(url, {signal});
+    }
+    // Each attempt has its own controller, which the query's signal aborts
+    // (also while the winner's body is read, as a single request's would be).
+    const attempts: AbortController[] = [];
+    const attempt = (): Promise<{response: Response; index: number}> => {
+      const attemptController = new AbortController();
+      const index = attempts.push(attemptController) - 1;
+      const followQuery = () => attemptController.abort(signal.reason);
+      signal.addEventListener('abort', followQuery, {once: true});
+      return fetchSearch(url, {signal: attemptController.signal}).then(
+        response => ({response, index}),
+      );
+    };
+    let winner = -1;
+    try {
+      const first = attempt();
+      const outcome = await Promise.race([
+        first,
+        warmup.then(() => 'warmed' as const),
+      ]);
+      const won =
+        outcome === 'warmed' ? await Promise.any([first, attempt()]) : outcome;
+      winner = won.index;
+      return won.response;
+    } finally {
+      // Stop the request that lost; never the one whose answer is read.
+      attempts.forEach((controller, index) => {
+        if (index !== winner) {
+          controller.abort();
+        }
+      });
+    }
+  }
 
   return {
     bootstrap() {
@@ -118,10 +163,9 @@ export function createCliSearchSource(
             reject(controller.signal.reason);
           });
         });
-        await serverReady(controller.signal);
-        const response = await fetchSearch(
+        const response = await sendQuery(
           `/api/search?q=${encodeURIComponent(query)}`,
-          {signal: controller.signal},
+          controller.signal,
         );
         if (!response.ok) {
           throw new Error(`search: HTTP ${response.status}`);
