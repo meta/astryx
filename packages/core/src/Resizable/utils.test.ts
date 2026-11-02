@@ -3,10 +3,10 @@
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {describe, expect, it} from 'vitest';
-// The package root is imported here, while the file is collected, rather than
-// inside the test that checks it: loading every module of core takes about
-// 15 s of transform on an idle machine, which inside a test ran against the
-// test timeout and failed on a loaded one. No timeout bounds collection.
+// The package root loads here, while the file is collected, not inside the
+// test that checks it. Loading every Core module takes about 15 s of transform
+// on an idle machine. Inside a test, that load ran against the test timeout
+// and failed on a loaded machine. No timeout bounds collection.
 import * as root from '@astryxdesign/core';
 import * as resizableUtils from '@astryxdesign/core/Resizable/utils';
 import {pixel as tablePixel} from '../Table/utils';
