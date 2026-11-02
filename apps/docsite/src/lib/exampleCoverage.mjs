@@ -14,16 +14,22 @@
  * unpaired label is a NAME mismatch, not proof the component has no demos —
  * blocks attach to a page via exampleFor regardless of name.
  *
+ * It also lists each public hook (a hook in a committed API report) that has
+ * no hook doc, or no block that names it in exampleFor/alsoExampleFor. It
+ * cannot tell whether a block really demonstrates its hook; review checks that.
+ *
  * REPORTS, NEVER GATES. Core does not require doc examples to have paired
  * blocks, and integration packages are intentionally no stricter (owner
  * decision, 2026-09-30). Whether example↔block pairing should gate CI is an
  * open repo-wide decision; until then tests print this inventory for CI-log
  * visibility only.
  *
- * @input Authored component docs (src/X/X.doc.mjs) and template descriptors
- *   (the package's declared templates root, e.g. packages/lab/blocks)
- * @output Per-component pairing of example labels to block names, plus
- *   structural findings (missing same-stem sources, descriptor load failures)
+ * @input Authored component docs (src/X/X.doc.mjs), template descriptors
+ *   (the package's declared templates root, e.g. packages/lab/blocks), and
+ *   committed API reports (packages/X/api-report.md)
+ * @output Per-component pairing of example labels to block names, structural
+ *   findings (missing same-stem sources, descriptor load failures), and
+ *   per-hook doc and example-block coverage
  * @position Shared by docsite reporting tests; no generator consumes this.
  */
 
@@ -205,6 +211,22 @@ export async function inventoryPackageExamples({repoRoot, srcDir, blocksDir}) {
 }
 
 /**
+ * Loaded blocks that name `target` in `exampleFor` or `alsoExampleFor`.
+ *
+ * @param {AuthoredBlock[]} blocks
+ * @param {string} target component or hook name
+ * @returns {AuthoredBlock[]}
+ */
+function blocksAttributedTo(blocks, target) {
+  return blocks.filter(
+    block =>
+      block.type === 'block' &&
+      block.loadError == null &&
+      (block.exampleFor === target || block.alsoExampleFor.includes(target)),
+  );
+}
+
+/**
  * @typedef {object} ComponentCoverage
  * @property {string} component
  * @property {string[]} labels
@@ -226,13 +248,7 @@ export async function inventoryPackageExamples({repoRoot, srcDir, blocksDir}) {
  */
 export function pairExampleCoverage(components, blocks) {
   return components.map(component => {
-    const attributed = blocks.filter(
-      block =>
-        block.type === 'block' &&
-        block.loadError == null &&
-        (block.exampleFor === component.name ||
-          block.alsoExampleFor.includes(component.name)),
-    );
+    const attributed = blocksAttributedTo(blocks, component.name);
     const pairedNames = attributed.map(block => block.name);
     const nameSet = new Set(pairedNames);
     return {
@@ -290,6 +306,118 @@ export function formatCoverageReport(packageName, coverage, blocks) {
   for (const block of broken) {
     lines.push(
       `  ! ${block.file}: ${block.loadError ?? 'missing same-stem .tsx source'}`,
+    );
+  }
+  return lines.join('\n');
+}
+
+/**
+ * Hook names that an API report lists in its Hooks sections. An overloaded
+ * hook has one line per overload, and an entry point that re-exports a hook
+ * lists it again, so names are deduplicated.
+ *
+ * @param {string} reportText content of a committed api-report.md
+ * @returns {string[]} sorted unique hook names
+ */
+export function readReportedHooks(reportText) {
+  /** @type {Set<string>} */
+  const hooks = new Set();
+  let inHooksSection = false;
+  for (const line of reportText.split('\n')) {
+    if (line.startsWith('#')) {
+      inHooksSection = line === '### Hooks';
+      continue;
+    }
+    const match = inHooksSection ? /^hook (\w+)/.exec(line) : null;
+    if (match != null) hooks.add(match[1]);
+  }
+  return [...hooks].sort();
+}
+
+/**
+ * Names of the authored hook docs under one component-doc root. A hook doc
+ * uses the same test as the docsite generator: a `use` name, `params`, or
+ * `returns`. It can be a whole doc file or an entry in a doc's `components`.
+ *
+ * @param {string} srcDir absolute component-doc root (may not exist)
+ * @returns {Promise<Set<string>>}
+ */
+export async function inventoryHookDocNames(srcDir) {
+  /** @type {Set<string>} */
+  const names = new Set();
+  for (const file of walk(
+    srcDir,
+    name => name.endsWith('.doc.mjs'),
+    SRC_SKIP_DIRS,
+  )) {
+    try {
+      const {docs} = await import(pathToFileURL(file).href);
+      const entries = [
+        docs,
+        ...(Array.isArray(docs?.components) ? docs.components : []),
+      ];
+      for (const entry of entries) {
+        const isNameOnlyReference =
+          entry !== docs && Object.keys(entry ?? {}).length === 1;
+        if (entry == null || isNameOnlyReference) continue;
+        const isHookDoc =
+          entry.name?.startsWith('use') ||
+          Array.isArray(entry.params) ||
+          Array.isArray(entry.returns);
+        if (isHookDoc) names.add(entry.name);
+      }
+    } catch {
+      // A doc that does not load is reported by the docsite generator.
+    }
+  }
+  return names;
+}
+
+/**
+ * @typedef {object} HookCoverage
+ * @property {string} hook
+ * @property {boolean} hasDoc
+ * @property {string[]} exampleBlocks names of blocks that name the hook
+ */
+
+/**
+ * @param {string[]} hooks public hook names
+ * @param {Set<string>} hookDocNames
+ * @param {AuthoredBlock[]} blocks
+ * @returns {HookCoverage[]}
+ */
+export function pairHookExampleCoverage(hooks, hookDocNames, blocks) {
+  return hooks.map(hook => ({
+    hook,
+    hasDoc: hookDocNames.has(hook),
+    exampleBlocks: blocksAttributedTo(blocks, hook).map(block => block.name),
+  }));
+}
+
+/**
+ * Human-readable hook coverage for one package, for CI-log visibility.
+ *
+ * @param {string} packageName
+ * @param {HookCoverage[]} coverage
+ * @returns {string}
+ */
+export function formatHookCoverageReport(packageName, coverage) {
+  const withoutDoc = coverage.filter(entry => !entry.hasDoc);
+  const withoutExample = coverage.filter(
+    entry => entry.exampleBlocks.length === 0,
+  );
+  const lines = [
+    `hook example coverage — ${packageName}`,
+    `  ${coverage.length} public hook(s); ${withoutDoc.length} without a hook doc; ${withoutExample.length} without a block naming them in exampleFor/alsoExampleFor`,
+  ];
+  if (withoutDoc.length > 0) {
+    lines.push(
+      `  - no hook doc: ${withoutDoc.map(entry => entry.hook).join(', ')}`,
+    );
+  }
+  if (withoutExample.length > 0) {
+    lines.push(
+      `  - no example block: ${withoutExample.map(entry => entry.hook).join(', ')}`,
     );
   }
   return lines.join('\n');
