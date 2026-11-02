@@ -128,7 +128,7 @@ const PIP_LAYOUTS: Record<string, ReadonlyArray<readonly [number, number]>> = {
 const COURT_HEADDRESS: Record<string, string> = {
   K: 'M2 15 L3.5 4 L8 9 L12 1.5 L16 9 L20.5 4 L22 15 Z',
   Q: 'M3 15 L4 6 L9 10.5 L12 4 L15 10.5 L20 6 L21 15 Z',
-  J: 'M3 15 C4 8 9 4.5 14 4.5 C18 4.5 21 7 21.5 9.5 L16 9.5 L17 15 Z',
+  J: 'M2 15 L4 9 C6 4 18 4 20 9 L22 15 Z M11 4.5 C12 1.5 15 0.5 18 1 C16 2 14 3.5 13 5 Z',
 };
 
 export interface PlayingCardContentsProps {
@@ -415,7 +415,8 @@ const styles = stylex.create({
     gap: spacingVars['--spacing-3'],
   },
   hint: {
-    maxInlineSize: '32ch',
+    maxInlineSize: '40ch',
     textAlign: 'center',
+    textWrap: 'balance',
   },
 });
