@@ -64,12 +64,18 @@ describe('replaceDemoContent', () => {
 
   it('returns source that never names the module unchanged', () => {
     const source = `${CARD}export default () => <Card />;\n`;
-    expect(replaceDemoContent(source)).toEqual({source, demoContentReplaced: 0});
+    expect(replaceDemoContent(source)).toEqual({
+      source,
+      demoContentReplaced: 0,
+    });
   });
 
   it('leaves a comment that mentions the module as written', () => {
     const source = `// Demo content comes from ${DEMO_CONTENT_MODULE}.\nexport const x = 1;\n`;
-    expect(replaceDemoContent(source)).toEqual({source, demoContentReplaced: 0});
+    expect(replaceDemoContent(source)).toEqual({
+      source,
+      demoContentReplaced: 0,
+    });
   });
 
   it.each([

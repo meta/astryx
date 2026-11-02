@@ -493,7 +493,8 @@ export function replaceDemoContent(source) {
     if (
       node.type === 'TemplateLiteral' &&
       node.quasis.some(
-        /** @param {any} q */ q => q.value.cooked?.includes(DEMO_CONTENT_MODULE),
+        /** @param {any} q */ q =>
+          q.value.cooked?.includes(DEMO_CONTENT_MODULE),
       )
     ) {
       throw unsafeDemoContent('it is used outside a static import');
