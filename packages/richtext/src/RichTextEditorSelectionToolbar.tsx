@@ -15,12 +15,11 @@
  * @position @astryxdesign/richtext. Rendered in RichTextEditor's `plugins`
  *   slot. It renders into the positioned element that holds the content
  *   editable, a sibling of the editable text as LinkCard is, never inside
- *   it, and overlays the document without reflowing it (spec:AST-061 FR9,
- *   DEC-2). Base props pass through to the core Toolbar it renders as Toolbar
- *   places them, as RichTextEditorToolbar's do (spec:AST-061/DEC-8). Under a
- *   coarse pointer it docks to the bottom of the visual viewport by default,
- *   and `presentation` keeps either surface on every device
- *   (architecture:public-component-api INV16).
+ *   it, and overlays the document without reflowing it. Base props pass
+ *   through to the core Toolbar it renders as Toolbar places them, as
+ *   RichTextEditorToolbar's do. Under a coarse pointer it docks to the bottom
+ *   of the visual viewport by default, and `presentation` keeps either
+ *   surface on every device.
  *
  * SYNC: When modified, update:
  * - /packages/richtext/src/index.ts (exports)
