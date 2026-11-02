@@ -201,8 +201,9 @@ public struct Button: View {
     if #available(iOS 26, *), let tint = systemBarTint {
       // The elevation paints beneath the system's capsule (FR11). Disabled,
       // the whole control dims and takes no touch, so the style shows no
-      // press response, while it keeps its focus stop (FR6, FR11).
-      control.buttonStyle(.glassProminent).tint(tint)
+      // press response, while it keeps its focus stop (FR6, FR11). The bar
+      // draws the capsule itself, so its tint dims as well.
+      control.buttonStyle(.glassProminent).tint(isDisabled ? tint.opacity(0.5) : tint)
         .astryxShadow(shadow, in: Capsule())
         .opacity(isDisabled ? 0.5 : 1)
         .allowsHitTesting(!isDisabled)
