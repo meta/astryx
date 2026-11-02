@@ -18,11 +18,12 @@
 //   package from its build sees its source change only through those.
 //
 // - With `--spec-readers --changed <ref>`: instead, the tests that read a
-//   changed spec record (`docs/specs/`). A spec-only pull request runs no other
+//   changed record (spec, component, family, design or theme spec record;
+//   a renamed one under both names). A spec-only pull request runs no other
 //   Vitest test, so these are the ones its change can break
-//   (spec:AST-030 FR2).
+//   (spec:AST-030 FR2). `--project ui|node` keeps one Vitest project's.
 //
-// Usage: node .github/scripts/fs-guard-tests.mjs [--spec-readers] [--changed <ref>]
+// Usage: node .github/scripts/fs-guard-tests.mjs [--spec-readers [--project ui|node]] [--changed <ref>]
 //   (newline-separated paths)
 
 import {execFileSync} from 'node:child_process';
@@ -186,11 +187,25 @@ export function scopedExtraTests(files, read, changedFiles = []) {
   return files.filter(file => guards.has(file));
 }
 
-const SPEC_ROOT = 'docs/specs/';
-/** A path literal into the spec tree, relative (`../…/docs/specs/…`) or from the root. */
-const SPEC_LITERAL = /(['"`])((?:\.\.?\/)*docs\/specs(?:\/[^'"`\n]*)?)\1/g;
-/** `path.join(root, 'docs', 'specs', …)` and the like: the whole tree. */
-const SPEC_SEGMENTS = /(['"])docs\1\s*,\s*(['"])specs\2/;
+/**
+ * The roots of the records a spec-only change may touch (change-scope.cjs's
+ * spec records): spec and component records, family and design contracts,
+ * and theme package specs.
+ */
+const RECORD_ROOTS = [
+  'docs/specs/',
+  'docs/families/',
+  'docs/design/',
+  'packages/themes/',
+];
+/** A path literal into a record root, relative (`../…/docs/specs/…`) or from the root. */
+const RECORD_LITERAL =
+  /(['"`])((?:\.\.?\/)*(?:docs\/(?:specs|families|design)|packages\/themes)(?:\/[^'"`\n]*)?)\1/g;
+/** `path.join(root, 'docs', 'specs', …)` and the like: the whole root. */
+const RECORD_SEGMENTS =
+  /(['"])(docs|packages)\1\s*,\s*(['"])(specs|families|design|themes)\3/g;
+const RECORD_PATH =
+  /^(?:docs\/(?:specs|families|design)\/|packages\/themes\/[^/]+\/[^/]+\.spec\.md$)/;
 
 /** The source without block comments and whole-line `//` comments, where prose names records. */
 function code(source) {
@@ -198,30 +213,66 @@ function code(source) {
 }
 
 /**
- * The spec-tree paths a file names in its code, as repository paths: an
- * exact record, a directory, or a prefix where a template computes the rest
- * (`docs/specs/${id}/spec.md` names the whole tree).
+ * The record paths a file names in its code, as repository paths: an exact
+ * record, a directory, or a prefix where a template computes the rest
+ * (`docs/specs/${id}/spec.md` names the whole spec tree).
  */
-function specPathsIn(file, source) {
+function recordPathsIn(file, source) {
   const body = code(source);
   const paths = new Set();
-  for (const [, , literal] of body.matchAll(SPEC_LITERAL)) {
+  // Theme packages hold sources as well as their spec, and many tests read
+  // those sources; a file reads theme specs only if it also names a
+  // `.spec.md`.
+  const namesSpecFile = /\.spec\.md['"`]/.test(body);
+  const counts = root => root !== 'packages/themes/' || namesSpecFile;
+  for (const [, , literal] of body.matchAll(RECORD_LITERAL)) {
     const fixed = literal.split('${')[0];
     const joined = fixed.startsWith('.')
       ? path.posix.normalize(path.posix.join(path.posix.dirname(file), fixed))
       : fixed;
-    if (joined === 'docs/specs' || joined.startsWith(SPEC_ROOT))
-      paths.add(joined.length < SPEC_ROOT.length ? SPEC_ROOT : joined);
+    const root = RECORD_ROOTS.find(
+      prefix => joined === prefix.slice(0, -1) || joined.startsWith(prefix),
+    );
+    if (root && counts(root))
+      paths.add(joined.length < root.length ? root : joined);
   }
-  if (SPEC_SEGMENTS.test(body)) paths.add(SPEC_ROOT);
+  for (const [, , first, , second] of body.matchAll(RECORD_SEGMENTS)) {
+    const root = `${first}/${second}/`;
+    if (RECORD_ROOTS.includes(root) && counts(root)) paths.add(root);
+  }
   return paths;
 }
 
 /**
- * The tests that read a spec record: the import closure (relative imports
- * followed, as for the guards above) reads files and names a spec-tree path in
- * its code. With `changedFiles`, only those whose named paths cover a changed
- * record: the record itself, a directory above it, or a computed prefix.
+ * The directories whose tests the Vitest `ui` project collects, read from
+ * vitest.config.ts so the two cannot drift; every other test belongs to the
+ * `node` project. Throws when the config's `ui` include list has another
+ * shape, so a config change fails the lister instead of misrouting tests.
+ *
+ * @param {string} config the source of vitest.config.ts
+ * @returns {string[]} directory prefixes, each ending in `/`
+ */
+export function uiTestRoots(config) {
+  const block = /name:\s*'ui'[\s\S]*?include:\s*\[([\s\S]*?)\]/.exec(config);
+  if (!block) throw new Error('vitest.config.ts: no ui project include list');
+  const roots = [...block[1].matchAll(/'([^']+)'/g)].map(([, glob]) => {
+    const match = /^(.+\/)\*\*\/\*\.test\.\{ts,tsx,mjs\}$/.exec(glob);
+    if (!match)
+      throw new Error(`vitest.config.ts: unexpected ui include ${glob}`);
+    return match[1];
+  });
+  if (roots.length === 0)
+    throw new Error('vitest.config.ts: empty ui project include list');
+  return roots;
+}
+
+/**
+ * The tests that read a record a spec-only change may touch: the import
+ * closure (relative imports followed, as for the guards above) reads files
+ * and names a record path in its code. With `changedFiles`, only those whose
+ * named paths cover a changed record: the record itself, a directory above
+ * it, or a computed prefix. A renamed record counts under both names, so the
+ * caller passes the change's paths without rename detection.
  *
  * @param {string[]} files tracked repository paths
  * @param {(file: string) => string} read
@@ -242,7 +293,7 @@ export function specReaderTests(files, read, changedFiles = null) {
       source = '';
     }
     result.reads = READS_FILES.test(source);
-    for (const named of specPathsIn(file, source)) result.paths.add(named);
+    for (const named of recordPathsIn(file, source)) result.paths.add(named);
     for (const [, raw] of source.matchAll(SPECIFIER)) {
       if (!raw.startsWith('.')) continue;
       const target = resolve(file, raw, tracked);
@@ -258,7 +309,7 @@ export function specReaderTests(files, read, changedFiles = null) {
   const changedSpecs =
     changedFiles == null
       ? null
-      : changedFiles.filter(file => file.startsWith(SPEC_ROOT));
+      : changedFiles.filter(file => RECORD_PATH.test(file));
   return files.filter(file => {
     if (!TEST_FILE.test(file)) return false;
     const {reads, paths} = visit(file, new Set());
@@ -281,20 +332,47 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   })
     .split('\0')
     .filter(Boolean);
+  const specReaders = process.argv.includes('--spec-readers');
   const changedFlag = process.argv.indexOf('--changed');
   const changedFiles =
     changedFlag === -1
       ? []
       : execFileSync(
           'git',
-          ['diff', '--name-only', '-z', process.argv[changedFlag + 1], 'HEAD'],
+          [
+            'diff',
+            '--name-only',
+            '-z',
+            // A renamed record counts under its old name too: a test that
+            // reads the old path is the one the rename breaks.
+            ...(specReaders ? ['--no-renames'] : []),
+            process.argv[changedFlag + 1],
+            'HEAD',
+          ],
           {encoding: 'utf8', maxBuffer: 64 * 1024 * 1024},
         )
           .split('\0')
           .filter(Boolean);
   const read = file => fs.readFileSync(file, 'utf8');
-  const tests = process.argv.includes('--spec-readers')
-    ? specReaderTests(files, read, changedFlag === -1 ? null : changedFiles)
-    : scopedExtraTests(files, read, changedFiles);
+  let tests;
+  if (specReaders) {
+    tests = specReaderTests(
+      files,
+      read,
+      changedFlag === -1 ? null : changedFiles,
+    );
+    // `--project ui|node`: only that Vitest project's tests.
+    const projectFlag = process.argv.indexOf('--project');
+    if (projectFlag !== -1) {
+      const project = process.argv[projectFlag + 1];
+      if (project !== 'ui' && project !== 'node')
+        throw new Error(`--project must be ui or node, not ${project}`);
+      const roots = uiTestRoots(read('vitest.config.ts'));
+      const inUi = test => roots.some(root => test.startsWith(root));
+      tests = tests.filter(test => inUi(test) === (project === 'ui'));
+    }
+  } else {
+    tests = scopedExtraTests(files, read, changedFiles);
+  }
   process.stdout.write(tests.length > 0 ? `${tests.join('\n')}\n` : '');
 }
