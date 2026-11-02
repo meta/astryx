@@ -652,11 +652,7 @@ describe('DiffViewer', () => {
 
     it('folds the changed lines behind a labeled control', () => {
       const {container} = render(<DiffViewer file={REPLACED} />);
-      expect(
-        screen.getByText(
-          'Large change: 6 lines. Too large to compare line by line.',
-        ),
-      ).toBeTruthy();
+      expect(screen.getByText('Large change: 6 lines')).toBeTruthy();
       const button = screen.getByRole('button', {name: 'Show full diff'});
       expect(button.getAttribute('aria-expanded')).toBe('false');
       // The hunk header, the leading context, the fold, the trailing context.
@@ -712,7 +708,7 @@ describe('DiffViewer', () => {
         const rows = paneRows(container, side);
         // The hunk header, the leading context, the fold, the trailing context.
         expect(rows).toHaveLength(4);
-        expect(rows[2].textContent).toContain('Large change: 6 lines.');
+        expect(rows[2].textContent).toContain('Large change: 6 lines');
       }
       await user.click(screen.getByRole('button', {name: 'Show full diff'}));
       expect(paneRows(container, 'old')).toHaveLength(4 + LINE_COUNT);
