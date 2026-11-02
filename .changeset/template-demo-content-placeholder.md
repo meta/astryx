@@ -1,0 +1,7 @@
+---
+'@astryxdesign/cli': patch
+---
+
+[feat] When a template imports Astryx's docs-only demo content, `astryx template <name> <path>`, `astryx template <name>`, `astryx template <name> --skeleton`, and `astryx component <Name> --showcase` replace each demo-content element with a marked `<Text>Card content</Text>` placeholder and remove the demo-content import, so the code they hand out never imports a module that only Astryx's own previews have. The placeholder uses the file's own Astryx `Text` import when that import is in scope, and otherwise imports `Text`, under an alias when the file already uses that name. `template.copy` and `template.show` gain `demoContentReplaced` (0 when the template carried none), their text output says how many elements became placeholders, and the `components` that `template.show` and `template.skeleton` list are the components of the returned source. No shipped template uses demo content yet, so every current template is copied, shown, and outlined exactly as before. The docsite's shadcn install of a block or page applies the same replacement and also replaces demo media, each with a marked placeholder: a placeholder image for an image and a `data:,placeholder-video-add-your-own` source for a video. The item's description says how many references and elements were replaced. The adjacent `.astryx/<item>.json` receipt keeps its current shape, so every released `astryx upgrade` still reads it.
+
+@cixzhang

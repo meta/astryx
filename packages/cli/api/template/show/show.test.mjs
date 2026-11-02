@@ -52,10 +52,11 @@ describe('template.show', () => {
     let reported = 0;
     for (const match of templates) {
       const raw = read(match.filePath);
-      const {source, demoMediaReplaced} = templateShow(match).data;
-      if (source === raw) expect(demoMediaReplaced, match.dirName).toBe(0);
-      else expect(demoMediaReplaced, match.dirName).toBeGreaterThan(0);
-      reported += demoMediaReplaced;
+      const {source, demoMediaReplaced, demoContentReplaced} = templateShow(match).data;
+      const replaced = demoMediaReplaced + demoContentReplaced;
+      if (source === raw) expect(replaced, match.dirName).toBe(0);
+      else expect(replaced, match.dirName).toBeGreaterThan(0);
+      reported += replaced;
     }
     expect(reported).toBeGreaterThan(0);
   }, SLOW);
