@@ -2,6 +2,7 @@
 
 /**
  * @file formatters.ts
+ * @input Values, a provider locale, and for dates an optional calendar
  * @output Built-in locale-aware tick, value, and list format utilities
  * @position Utility; consumed by Chart and ChartAxis
  *
@@ -12,7 +13,7 @@
  * across the full magnitude range (K/M/B/T and beyond).
  */
 
-import type {Locale} from '@astryxdesign/core/i18n';
+import type {CalendarSystem, Locale} from '@astryxdesign/core/i18n';
 
 /** Lazily cache one formatter per locale, including the legacy host default. */
 function byLocale<T>(
@@ -45,23 +46,31 @@ const getPercentFormat = byLocale(
     }),
 );
 
-const getShortDateFormat = byLocale(
-  locale =>
-    new Intl.DateTimeFormat(locale, {
-      month: 'short',
-      day: 'numeric',
-      calendar: 'gregory',
-    }),
-);
+/** One date formatter per locale and calendar. */
+function byLocaleAndCalendar(
+  options: Intl.DateTimeFormatOptions,
+): (locale: Locale, calendar: CalendarSystem) => Intl.DateTimeFormat {
+  const cache = new Map<string, Intl.DateTimeFormat>();
+  return (locale, calendar) => {
+    const key = `${calendar} ${locale}`;
+    let format = cache.get(key);
+    if (format === undefined) {
+      format = new Intl.DateTimeFormat(locale, {...options, calendar});
+      cache.set(key, format);
+    }
+    return format;
+  };
+}
 
-const getMonthYearFormat = byLocale(
-  locale =>
-    new Intl.DateTimeFormat(locale, {
-      month: 'short',
-      year: 'numeric',
-      calendar: 'gregory',
-    }),
-);
+const getShortDateFormat = byLocaleAndCalendar({
+  month: 'short',
+  day: 'numeric',
+});
+
+const getMonthYearFormat = byLocaleAndCalendar({
+  month: 'short',
+  year: 'numeric',
+});
 
 const getListFormat = byLocale(
   locale => new Intl.ListFormat(locale, {style: 'long', type: 'conjunction'}),
@@ -179,20 +188,36 @@ function toDate(value: unknown): Date {
   return new Date(NaN);
 }
 
-/** Date formatter — short date (e.g. "Jan 5", "Mar 12"). */
-export function shortDate(value: unknown, locale: Locale): string {
+/**
+ * Date formatter — short date (e.g. "Jan 5", "Mar 12"), in `calendar`. The
+ * calendar defaults to Gregorian; pass the application's calendar to match
+ * the date components.
+ */
+export function shortDate(
+  value: unknown,
+  locale: Locale,
+  calendar: CalendarSystem = 'gregory',
+): string {
   const d = toDate(value);
   if (Number.isNaN(d.getTime())) {
     return String(value);
   }
-  return getShortDateFormat(locale).format(d);
+  return getShortDateFormat(locale, calendar).format(d);
 }
 
-/** Date formatter — month/year (e.g. "Jan 2024", "Mar 2025"). */
-export function monthYear(value: unknown, locale: Locale): string {
+/**
+ * Date formatter — month/year (e.g. "Jan 2024", "Mar 2025"), in `calendar`.
+ * The calendar defaults to Gregorian; pass the application's calendar to
+ * match the date components.
+ */
+export function monthYear(
+  value: unknown,
+  locale: Locale,
+  calendar: CalendarSystem = 'gregory',
+): string {
   const d = toDate(value);
   if (Number.isNaN(d.getTime())) {
     return String(value);
   }
-  return getMonthYearFormat(locale).format(d);
+  return getMonthYearFormat(locale, calendar).format(d);
 }

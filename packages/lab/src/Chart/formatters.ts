@@ -2,12 +2,13 @@
 
 /**
  * @file formatters.ts
- * @input Tick values and optional BCP 47 locale tags
+ * @input Tick values, optional BCP 47 locale tags, and for dates an optional
+ *   calendar
  * @output Built-in tick format utilities for common data types
  * @position Utility; consumed by ChartAxis via tickFormat prop
  */
 
-import type {Locale} from '@astryxdesign/core/i18n';
+import type {CalendarSystem, Locale} from '@astryxdesign/core/i18n';
 
 /**
  * Compact number formatter (e.g. 1200 → "1.2K", 1500000 → "1.5M")
@@ -79,9 +80,14 @@ export function percent(value: unknown): string {
 }
 
 /**
- * Date formatter — short date (e.g. "Jan 5", "Mar 12")
+ * Date formatter — short date (e.g. "Jan 5", "Mar 12"), in `calendar`
+ * (Gregorian by default)
  */
-export function shortDate(value: unknown, locale: Locale = 'en'): string {
+export function shortDate(
+  value: unknown,
+  locale: Locale = 'en',
+  calendar: CalendarSystem = 'gregory',
+): string {
   const d = value instanceof Date ? value : new Date(Number(value));
   if (isNaN(d.getTime())) {
     return String(value);
@@ -89,14 +95,19 @@ export function shortDate(value: unknown, locale: Locale = 'en'): string {
   return new Intl.DateTimeFormat(locale, {
     month: 'short',
     day: 'numeric',
-    calendar: 'gregory',
+    calendar,
   }).format(d);
 }
 
 /**
- * Date formatter — month/year (e.g. "Jan 2024", "Mar 2025")
+ * Date formatter — month/year (e.g. "Jan 2024", "Mar 2025"), in `calendar`
+ * (Gregorian by default)
  */
-export function monthYear(value: unknown, locale: Locale = 'en'): string {
+export function monthYear(
+  value: unknown,
+  locale: Locale = 'en',
+  calendar: CalendarSystem = 'gregory',
+): string {
   const d = value instanceof Date ? value : new Date(Number(value));
   if (isNaN(d.getTime())) {
     return String(value);
@@ -104,6 +115,6 @@ export function monthYear(value: unknown, locale: Locale = 'en'): string {
   return new Intl.DateTimeFormat(locale, {
     month: 'short',
     year: 'numeric',
-    calendar: 'gregory',
+    calendar,
   }).format(d);
 }

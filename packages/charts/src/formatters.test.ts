@@ -86,6 +86,47 @@ describe('chart formatters', () => {
     );
   });
 
+  it.each([
+    {calendar: 'persian', locale: 'en', year: '1405'},
+    {calendar: 'persian', locale: 'fa', year: '۱۴۰۵'},
+    {calendar: 'hebrew', locale: 'en', year: '5787'},
+    {calendar: 'hebrew', locale: 'he', year: '5787'},
+    {calendar: 'buddhist', locale: 'en', year: '2569'},
+    {calendar: 'buddhist', locale: 'th', year: '2569'},
+  ] as const)(
+    'formats dates in an explicit $calendar calendar under $locale',
+    ({calendar, locale, year}) => {
+      const value = '2026-10-30';
+      const date = new Date(2026, 9, 30);
+      expect(shortDate(value, locale, calendar)).toBe(
+        new Intl.DateTimeFormat(locale, {
+          month: 'short',
+          day: 'numeric',
+          calendar,
+        }).format(date),
+      );
+      const label = monthYear(value, locale, calendar);
+      expect(label).toBe(
+        new Intl.DateTimeFormat(locale, {
+          month: 'short',
+          year: 'numeric',
+          calendar,
+        }).format(date),
+      );
+      expect(label).toContain(year);
+      expect(label).not.toContain('2026');
+    },
+  );
+
+  it('keeps one cached formatter per locale and calendar', () => {
+    const value = '2026-10-30';
+    expect(monthYear(value, 'en', 'persian')).not.toBe(
+      monthYear(value, 'en', 'gregory'),
+    );
+    expect(monthYear(value, 'en')).toBe(monthYear(value, 'en', 'gregory'));
+    expect(monthYear(value, 'en')).toContain('2026');
+  });
+
   it('passes through non-finite and unparseable values', () => {
     expect(compactNumber(Infinity, 'en-US')).toBe('Infinity');
     expect(percent('not-a-number', 'en-US')).toBe('not-a-number');

@@ -23,6 +23,36 @@ describe('Chart date formatters', () => {
     );
   });
 
+  it.each([
+    {calendar: 'persian', locale: 'en', year: '1405'},
+    {calendar: 'persian', locale: 'fa', year: '۱۴۰۵'},
+    {calendar: 'hebrew', locale: 'en', year: '5787'},
+    {calendar: 'hebrew', locale: 'he', year: '5787'},
+    {calendar: 'buddhist', locale: 'en', year: '2569'},
+    {calendar: 'buddhist', locale: 'th', year: '2569'},
+  ] as const)(
+    'formats dates in an explicit $calendar calendar under $locale',
+    ({calendar, locale, year}) => {
+      const day = new Date(2026, 9, 30, 12);
+      expect(shortDate(day, locale, calendar)).toBe(
+        new Intl.DateTimeFormat(locale, {
+          month: 'short',
+          day: 'numeric',
+          calendar,
+        }).format(day),
+      );
+      const label = monthYear(day, locale, calendar);
+      expect(label).toBe(
+        new Intl.DateTimeFormat(locale, {
+          month: 'short',
+          year: 'numeric',
+          calendar,
+        }).format(day),
+      );
+      expect(label).toContain(year);
+    },
+  );
+
   it('uses an explicit locale for unabridged currency values', () => {
     expect(currency('€', 'de-DE')(12.5)).toBe(
       `€${(12.5).toLocaleString('de-DE')}`,
