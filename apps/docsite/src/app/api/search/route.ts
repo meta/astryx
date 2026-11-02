@@ -14,7 +14,8 @@
  *
  * GET /api/search?warm=1 answers 204 after loading the CLI's search in this
  * server, so a reader's first query does not wait for a cold start
- * (lib/searchWarmup.ts sends it before the first keystroke).
+ * (lib/searchWarmup.ts sends it before the first keystroke). A server gathers
+ * the CLI's catalog once, however many requests arrive while it starts.
  */
 
 import {search} from '@astryxdesign/cli/api';
@@ -50,12 +51,31 @@ const MAX_QUERY = 200;
 /** The query a warm-up runs: any query loads the CLI and gathers its catalog. */
 const WARMUP_QUERY = 'button';
 
+/** This server's one gather of the CLI's catalog, while it runs or once done. */
+let ready: Promise<unknown> | undefined;
+
+/**
+ * Gather the catalog once per server. The CLI reuses a finished gather, but
+ * queries that arrive while one runs (a warm-up and the keystrokes typed during
+ * a cold start) would each start their own and slow one another down; they
+ * wait for this one instead. A failed gather is tried again by the next call.
+ */
+function searchReady(): Promise<unknown> {
+  ready ??= search(WARMUP_QUERY, {cwd: process.cwd(), limit: 1}).catch(
+    error => {
+      ready = undefined;
+      throw error;
+    },
+  );
+  return ready;
+}
+
 export async function GET(request: Request): Promise<Response> {
   const params = new URL(request.url).searchParams;
   if (params.has('warm')) {
     // Gather now, in this server, so the reader's first query only ranks.
     // Never cached: a cached answer would not reach, and so not warm, a server.
-    await search(WARMUP_QUERY, {cwd: process.cwd(), limit: 1});
+    await searchReady();
     return new Response(null, {
       status: 204,
       headers: {'Cache-Control': 'no-store'},
@@ -68,6 +88,9 @@ export async function GET(request: Request): Promise<Response> {
       {status: 400},
     );
   }
+  await searchReady().catch(() => {
+    // The query's own search below reports the failure.
+  });
   // When this build leaves out an integration, ask for every match, drop
   // that integration's, then count and cut to the panel's 20; otherwise this
   // is exactly `astryx search <query>`.
