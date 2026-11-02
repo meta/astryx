@@ -55,17 +55,23 @@ function clockOf(e: React.TouchEvent): EventClock | null {
 
 /**
  * An event's time on its window's clock. jsdom stamps events with
- * `Date.now()`, so such a stamp's age is read on that clock: a test that
- * freezes or moves the system time keeps the press's timing.
+ * `Date.now()`. The hook reads the age of such a stamp on that clock, so a
+ * frozen system time keeps the hold's length. A stamp nearer `Date.now()` than
+ * the window's clock is that kind of stamp.
  */
 function timeOn(
   clock: EventClock | null,
   timeStamp: number | undefined,
 ): number | undefined {
-  if (timeStamp == null || !Number.isFinite(timeStamp)) {
+  // A stamp of 0 means the event carries no time, so the hold falls back to
+  // the full delay on the page's timer.
+  if (timeStamp == null || !Number.isFinite(timeStamp) || timeStamp <= 0) {
     return undefined;
   }
-  if (timeStamp > 1e12 && clock != null) {
+  if (
+    clock != null &&
+    Math.abs(Date.now() - timeStamp) < Math.abs(clock.now() - timeStamp)
+  ) {
     return clock.now() - (Date.now() - timeStamp);
   }
   return timeStamp;

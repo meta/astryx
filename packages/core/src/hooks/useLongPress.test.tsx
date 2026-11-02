@@ -399,6 +399,50 @@ describe('useLongPress on the events\u2019 clock (spec:AST-094 FR16)', () => {
     expect(onLongPress).not.toHaveBeenCalled();
   });
 
+  it('keeps a tap a tap in a test that freezes the date at 0 and leaves the window clock real', () => {
+    vi.setSystemTime(0);
+    // The window's clock is not faked: it reads a few seconds into the run
+    // and does not move with the fake timers.
+    const page = {performance: {now: () => 5000}};
+    const onLongPress = vi.fn();
+    const {result} = renderHook(() => useLongPress({onLongPress}));
+    act(() => {
+      result.current.onTouchStart(
+        stamped(page as unknown as ReturnType<typeof windowClock>, Date.now(), [
+          {clientX: 0, clientY: 0},
+        ]),
+      );
+      vi.advanceTimersByTime(100);
+      result.current.onTouchEnd(
+        stamped(page as unknown as ReturnType<typeof windowClock>, Date.now()),
+      );
+      vi.advanceTimersByTime(1000);
+    });
+    expect(onLongPress).not.toHaveBeenCalled();
+  });
+
+  it('waits the full delay for a touch that carries no time (a stamp of 0)', () => {
+    const page = windowClock(10_000);
+    const onLongPress = vi.fn();
+    const {result} = renderHook(() => useLongPress({onLongPress}));
+    act(() => {
+      result.current.onTouchStart(stamped(page, 0, [{clientX: 0, clientY: 0}]));
+      vi.advanceTimersByTime(100);
+      result.current.onTouchEnd(stamped(page, 0));
+      vi.advanceTimersByTime(1000);
+    });
+    expect(onLongPress).not.toHaveBeenCalled();
+    act(() => {
+      result.current.onTouchStart(stamped(page, 0, [{clientX: 0, clientY: 0}]));
+      vi.advanceTimersByTime(499);
+    });
+    expect(onLongPress).not.toHaveBeenCalled();
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(onLongPress).toHaveBeenCalledTimes(1);
+  });
+
   it('never waits longer than the delay when a touch is stamped ahead of its clock', () => {
     const page = windowClock(1000);
     const onLongPress = vi.fn();
