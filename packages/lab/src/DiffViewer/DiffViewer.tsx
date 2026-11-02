@@ -344,7 +344,36 @@ type SplitRow =
   | {type: 'pair'; key: string; old: LineCell | null; new: LineCell | null}
   | FoldRow;
 
-const NO_EXPANDED_BLOCKS: ReadonlySet<number> = new Set();
+/**
+ * Replaced blocks with an annotation on one of their changed lines. Such a
+ * block starts open, so a review comment is never hidden behind the fold.
+ */
+function findAnnotatedBlocks(
+  file: DiffViewerFile,
+  renderLineAnnotation: ((ref: DiffViewerLineRef) => ReactNode) | undefined,
+): Set<number> {
+  const blocks = new Set<number>();
+  if (renderLineAnnotation == null) {
+    return blocks;
+  }
+  file.hunks.forEach((hunk, hunkIndex) => {
+    if (hunk.isReplacedBlock !== true) {
+      return;
+    }
+    const isAnnotated = hunk.lines.some(line => {
+      const ref = line.kind === 'context' ? null : lineRef(line, hunkIndex);
+      if (ref == null) {
+        return false;
+      }
+      const note = renderLineAnnotation(ref);
+      return note != null && typeof note !== 'boolean';
+    });
+    if (isAnnotated) {
+      blocks.add(hunkIndex);
+    }
+  });
+  return blocks;
+}
 
 function lineRef(
   line: DiffViewerLine,
@@ -1261,20 +1290,34 @@ export function DiffViewer({
     onCollapsedChange?.(next);
   };
 
-  // A new file starts with every replaced block folded.
-  const [expandedState, setExpandedState] = useState<{
+  // A replaced block starts folded unless one of its lines is annotated. The
+  // reader's toggles are kept per file; a new file starts over.
+  const [blockToggles, setBlockToggles] = useState<{
     file: DiffViewerFile;
-    hunks: ReadonlySet<number>;
+    isExpanded: ReadonlyMap<number, boolean>;
   } | null>(null);
-  const expandedBlocks =
-    expandedState?.file === file ? expandedState.hunks : NO_EXPANDED_BLOCKS;
+  const toggles = blockToggles?.file === file ? blockToggles.isExpanded : null;
+  const annotatedBlocks = findAnnotatedBlocks(file, renderLineAnnotation);
+  const isBlockExpanded = (hunkIndex: number) =>
+    toggles?.get(hunkIndex) ?? annotatedBlocks.has(hunkIndex);
   const toggleBlock = (hunkIndex: number) => {
-    const next = new Set(expandedBlocks);
-    if (!next.delete(hunkIndex)) {
-      next.add(hunkIndex);
-    }
-    setExpandedState({file, hunks: next});
+    const next = new Map(toggles);
+    next.set(hunkIndex, !isBlockExpanded(hunkIndex));
+    setBlockToggles({file, isExpanded: next});
   };
+  // A key of the open blocks keeps the set stable across renders, so the
+  // cells are built again only when a block opens or closes.
+  const expandedKey = file.hunks
+    .flatMap((hunk, hunkIndex) =>
+      hunk.isReplacedBlock === true && isBlockExpanded(hunkIndex)
+        ? [hunkIndex]
+        : [],
+    )
+    .join(',');
+  const expandedBlocks = useMemo(
+    () => new Set(expandedKey === '' ? [] : expandedKey.split(',').map(Number)),
+    [expandedKey],
+  );
 
   const cells = useMemo(
     () => buildCells(file, language, inlineHighlight, expandedBlocks),

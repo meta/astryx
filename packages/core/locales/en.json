@@ -609,7 +609,7 @@
   },
   "@astryx.diffViewer.largeChange": {
     "defaultMessage": "Large change: {count, plural, one {# line} other {# lines}}",
-    "description": "Label of a folded block in a lab DiffViewer. The change was too large to compare line by line, so the block shows its old lines as removed and its new lines as added, folded until the reader opens it. `{count}` is the number of removed plus added lines in the block. Keep it short: it shares one row with the Show full diff button."
+    "description": "Label of a folded block in a lab DiffViewer. The change was too large to compare line by line, so the block shows its old lines as removed and its new lines as added, folded until the reader opens it. `{count}` is the number of removed plus added lines in the block; some can be the same on both sides, because the block was not compared. Keep it short: it shares one row with the Show full diff button."
   },
   "@astryx.diffViewer.showFullDiff": {
     "defaultMessage": "Show full diff",

@@ -723,6 +723,26 @@ describe('DiffViewer', () => {
       expect(screen.getByRole('button', {name: 'Show full diff'})).toBeTruthy();
     });
 
+    it('opens a block that holds an annotated line, and can still fold it', async () => {
+      const user = userEvent.setup();
+      const {container} = render(
+        <DiffViewer
+          file={REPLACED}
+          renderLineAnnotation={ref =>
+            ref.side === 'old' && ref.lineNumber === 3 ? (
+              <span>Why was this removed?</span>
+            ) : null
+          }
+        />,
+      );
+      expect(screen.getByText('Why was this removed?')).toBeTruthy();
+      const hide = screen.getByRole('button', {name: 'Hide full diff'});
+      expect(hide.getAttribute('aria-expanded')).toBe('true');
+      await user.click(hide);
+      expect(screen.queryByText('Why was this removed?')).toBeNull();
+      expect(container.querySelector('[data-diff="removed"]')).toBeNull();
+    });
+
     it('shows no fold for an ordinary diff', () => {
       render(<DiffViewer file={FILE} />);
       expect(screen.queryByRole('button', {name: 'Show full diff'})).toBeNull();
