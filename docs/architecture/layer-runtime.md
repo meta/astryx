@@ -299,13 +299,13 @@ during a press so native light dismissal does not mistake them for outside
 interaction. Their click action is cancelled as an invoker toggle so the control
 can perform its own action without closing the layer.
 
-A text input cannot be an invoker, so BaseTypeahead's list, which its text field
-owns, is a manual popover. A press that starts and ends on the field's input or
+A text input cannot be an invoker, so BaseTypeahead's list and DateTimeInput's
+time list, which their text fields own, are manual popovers. A press that starts and ends on the field's input or
 its buttons, or in the list, is inside, judged across open shadow roots; a press
 that starts and ends anywhere else closes the list, a scroll or pinch that
 starts outside does not, and Escape stays on the shared stack. Implementation
-gap: DateTimeInput's time list, DateInput's calendar and ChatComposerInput's
-trigger menu are still auto popovers with native light dismiss, so a press in
+gap: DateInput's calendar and ChatComposerInput's trigger menu are still auto
+popovers with native light dismiss, so a press in
 their own text input closes them.
 
 ### Current dismissal plumbing
@@ -332,7 +332,8 @@ Outside interaction is not coordinated by the shared stack. Current paths are
 independent:
 
 - auto popovers use native light dismiss;
-- BaseTypeahead's list, a manual popover, uses Layer's outside-press watch,
+- BaseTypeahead's list and DateTimeInput's time list, manual popovers, use
+  Layer's outside-press watch,
   which closes on a press that starts and ends outside the field and the list
   and forgets a cancelled press (a scroll);
 - native dialogs handle backdrop clicks locally;
@@ -651,7 +652,7 @@ staged as `[breaking]` (`spec:AST-017` FR32).
 - `Layer/useTouchTrigger.ts` owns touch trigger classification and the current
   touch-only outside listener for Tooltip/HoverCard.
 - `Layer/outsidePress.ts` owns the outside-press watch for a text field's
-  manual layer, used by BaseTypeahead.
+  manual layer, used by BaseTypeahead and DateTimeInput.
 - `DropdownMenuContext` and `DropdownMenuSubMenu` own the current local
   menu-cascade parent-close chain.
 - Dialog families own native modal/backdrop presentation and their local channel
