@@ -41,7 +41,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Date components show the Gregorian calendar unless you choose another one. Pass `calendar` to `<InternationalizationProvider>` to set it for a subtree. A locale with an explicit `-u-ca-` keyword, such as `th-TH-u-ca-buddhist`, selects its calendar too. A locale on its own never changes the calendar: `fa-IR` shows Gregorian dates in Persian until you pass `calendar="persian"`.',
+          text: '`Calendar` shows the Gregorian calendar unless you choose another one. Pass `calendar` to `<InternationalizationProvider>` to set it for a subtree. A locale with an explicit `-u-ca-` keyword, such as `th-TH-u-ca-buddhist`, selects its calendar too. A locale on its own never changes the calendar: `fa-IR` shows Gregorian dates in Persian until you pass `calendar="persian"`.',
         },
         {
           type: 'code',
@@ -57,11 +57,11 @@ import {Calendar} from '@astryxdesign/core/Calendar';
         },
         {
           type: 'prose',
-          text: 'Calendar and language are independent: `locale="en" calendar="hebrew"` shows Hebrew dates in English. A date component also takes its own `calendar`, which wins over the provider. Use it when one screen shows two calendars side by side.',
+          text: 'Calendar and language are independent: `locale="en" calendar="hebrew"` shows Hebrew dates in English. `Calendar` also takes its own `calendar`, which wins over the provider. Use it when one screen shows two calendars side by side.',
         },
         {
           type: 'prose',
-          text: 'Values never change with the calendar. `value`, `defaultValue`, `onChange`, `min`, `max`, and form submission stay Gregorian ISO dates (`YYYY-MM-DD`) in every calendar, so your data, server code, and existing handlers keep working.',
+          text: 'Values never change with the calendar. `value`, `defaultValue`, `onChange`, `min`, and `max` stay Gregorian ISO dates (`YYYY-MM-DD`) in every calendar, so your data, server code, and existing handlers keep working.',
         },
       ],
     },
@@ -118,11 +118,11 @@ if (typeof globalThis.Temporal === 'undefined') {
         },
         {
           type: 'prose',
-          text: 'If you render on the server, load it there too. A component resolves its calendar during render, so a server without `Temporal` renders Gregorian dates, and a browser with it renders Persian ones: hydration then fails. When both have `Temporal`, or both lack it, they render the same markup.',
+          text: 'If you render on the server, load it there too. `Calendar` resolves its calendar during render, so a server without `Temporal` renders Gregorian dates, and a browser with it renders Persian ones: hydration then fails. When both have `Temporal`, or both lack it, they render the same markup.',
         },
         {
           type: 'prose',
-          text: 'Without `Temporal`, a calendar that needs it shows Gregorian dates and warns once in development, on the server and in the browser. The Gregorian-aligned calendars (`buddhist`, `roc`, `japanese`) work everywhere without it.',
+          text: 'Without a `Temporal` that supports it, a calendar that needs one shows Gregorian dates and warns once in development, on the server and in the browser. The Gregorian-aligned calendars (`buddhist`, `roc`, `japanese`) work everywhere without it.',
         },
       ],
     },
@@ -139,12 +139,12 @@ if (typeof globalThis.Temporal === 'undefined') {
           items: [
             'Native `Temporal` in Chrome, Edge, Firefox, and Node.js 26 agrees with official observatory data from 1900 through 2100.',
             "A polyfill reads the platform's `Intl` data instead. Under a polyfill, Node.js 24 starts nine Chinese and four Korean months in that range one day apart from the native result: Chinese New Year 2027 is February 6 with native `Temporal` and February 7 under the polyfill. Safari uses the same kind of `Intl` data, so expect the same differences there.",
-            'Each environment agrees with itself: what a person sees and picks is consistent in their browser. Only two different runtimes can disagree.',
+            'Within one browser, the day numbers a person sees, the dates a screen reader announces, and the value they pick agree. Only two different runtimes can disagree.',
           ],
         },
         {
           type: 'prose',
-          text: 'If your server and browsers must agree exactly on these dates, compare them in the runtimes you support. Do not install a polyfill over a native `Temporal`: that makes native environments less accurate, not more consistent.',
+          text: 'If you render on the server, a server and a browser that use different implementations can disagree on one of these month starts. The browser then renders that month differently from the server markup, and React renders that part again on the client during hydration. When identical server and browser markup for these calendars matters more than matching official data, load the same `Temporal` implementation on both sides. Otherwise, do not install a polyfill over a native `Temporal`: that makes native environments less accurate.',
         },
       ],
     },
