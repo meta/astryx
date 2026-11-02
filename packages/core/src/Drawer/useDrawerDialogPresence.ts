@@ -5,7 +5,7 @@
 /**
  * @file useDrawerDialogPresence.ts
  * @input Controlled open state, modal mode, dialog ref, and rendered-state setter
- * @output Coordinates native top-layer presence, exit timing, focus restoration, and unmount cleanup
+ * @output Coordinates native top-layer presence, exit timing, focus restoration, and unmount cleanup, including focus return after removal while open
  * @position Drawer-internal hook; consumed only by Drawer.tsx
  *
  * The drawer has two independent notions of presence:
@@ -32,6 +32,7 @@ import {
   type SetStateAction,
 } from 'react';
 import {flushSync} from 'react-dom';
+import {isFocusLost} from '../utils/focusReturn';
 
 /** Slack past the computed transition before the backstop gives up waiting. */
 const EXIT_BACKSTOP_BUFFER_MS = 50;
@@ -180,13 +181,35 @@ export function useDrawerDialogPresence({
     return () => {
       if (dialog && isDrawerHostOpen(dialog, isModal)) {
         if (hideDrawerHost(dialog, isModal)) {
-          // No focus restore on this path — the drawer is being torn down, so
-          // the owed synthetic close fires immediately (still exactly once).
+          // The drawer is being torn down, so the owed synthetic close fires
+          // immediately (still exactly once).
           dispatchDialogClose(dialog);
         }
+        returnFocusAfterRemoval(dialog, triggerElementRef.current);
       }
     };
   }, [dialogRef, isModal]);
+}
+
+/**
+ * A drawer that unmounts while open never runs the close path. Removing it
+ * drops the focus inside it to the page. Focus goes back to the trigger only
+ * when it would otherwise be lost. The check waits for the commit to finish:
+ * StrictMode's simulated unmount and a hidden Activity keep the drawer in the
+ * document, so they are not a removal.
+ */
+function returnFocusAfterRemoval(
+  dialog: HTMLDialogElement,
+  trigger: HTMLElement | null,
+): void {
+  if (trigger == null) {
+    return;
+  }
+  queueMicrotask(() => {
+    if (!dialog.isConnected && trigger.isConnected && isFocusLost(dialog)) {
+      trigger.focus();
+    }
+  });
 }
 
 /**
