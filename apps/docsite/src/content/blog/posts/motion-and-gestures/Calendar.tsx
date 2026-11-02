@@ -41,6 +41,8 @@ const SLOT = 10;
 const SLOT_COUNT = (END_HOUR - START_HOUR) * 4;
 const BODY_HEIGHT = SLOT_COUNT * SLOT;
 const GUTTER = 40;
+/** Releases slower than this, in px/s, land on the slot the outline shows. */
+const PROJECTION_SPEED = 400;
 
 interface CalendarEventData {
   id: string;
@@ -105,6 +107,8 @@ const INITIAL_EVENTS: CalendarEventData[] = [
     color: 'teal',
   },
 ];
+
+let eventLayer = 1;
 
 function formatTime(minutes: number): string {
   return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`;
@@ -334,6 +338,8 @@ function CalendarEvent({
     let origin = {x: 0, y: 0};
     return attachPan(body, {
       onPress: () => {
+        // The event last touched paints above the events it overlaps.
+        element.style.zIndex = String(++eventLayer);
         element.setAttribute('data-lifted', '');
         void placementRef.current?.to({scale: 1.03}, {spring: springs.lift});
       },
@@ -390,12 +396,15 @@ function CalendarEvent({
         if (placement == null) {
           return;
         }
-        // The release speed nudges the slot, so a flick lands a step further.
+        // A flick lands a step further. A slow release lands where the
+        // outline showed.
+        const isFlick = Math.hypot(state.vx, state.vy) > PROJECTION_SPEED;
+        const projection = isFlick ? 0.1 : 0;
         const slot = state.isCancelled
           ? {day: e.day, start: e.start}
           : nearestSlot(
-              placement.value.x + state.vx * 0.1,
-              placement.value.y + state.vy * 0.1,
+              placement.value.x + state.vx * projection,
+              placement.value.y + state.vy * projection,
               d,
               g,
             );
@@ -442,6 +451,9 @@ function CalendarEvent({
     }
     if (keyEvent.key === 'Enter' || keyEvent.key === ' ') {
       keyEvent.preventDefault();
+      if (elementRef.current != null) {
+        elementRef.current.style.zIndex = String(++eventLayer);
+      }
       setKeyboardOrigin({day: event.day, start: event.start});
       say('Picked up. Arrow keys move it, Enter drops it, Escape cancels.');
     }
