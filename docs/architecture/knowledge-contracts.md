@@ -112,10 +112,11 @@ follows only links that records and files declare:
 - path fields: `applies_to`, `verified_by`, and `path-applicability:v1` patterns;
 - names: family `members`, design `components`, and `affects_consumer_docs` ids
   naming the path's component or consumer-doc topic;
-- citations: a system-spec number such as `AST-030` written in the file's
-  prose, such as a Markdown document. The lookup also reads a number in a
-  source comment, but INV29 removes those comments, so no record relies on one
-  as its link to a source file;
+- citations: a system-spec number such as `AST-030`, or a claim such as
+  `AST-108 FR4`, written in the file's prose, such as a Markdown document. The
+  lookup also reads one in a source comment, but INV29 moves each such link
+  into a record before the comment is removed, so a record does not rely on a
+  source comment as its link to a file;
 - inheritance: the references a linked record relies on.
 
 A current record may cite a previous human decision. When the new case is within
@@ -351,14 +352,19 @@ Every record is either:
   date, or quotes or cites a knowledge record. The record links the code, so
   `pnpm specs:for <path>` finds the governing record, and a component's
   `{Name}.spec.md` holds its record ids. When a comment's citation is a file's
-  only link to a record or claim, that record first links the file through
-  `applies_to`, `verified_by`, or a `path-applicability:v1` pattern, and only
-  then is the comment removed, so `pnpm specs:for <path>` lists the same
-  records and cited claims before and after. Comments follow the ASD-STE100
-  Simplified Technical English style: at most 20 words in an instruction and
-  25 in a description, one topic per sentence, active voice, present tense,
-  simple words with one meaning each, and no idioms or filler. These comments
-  stay:
+  only link to a record or claim, a record links the file first, and only then
+  is the comment removed, so `pnpm specs:for <path>` lists the same records and
+  cited claims before and after. A whole-record citation, such as `AST-108`,
+  becomes an `applies_to`, `verified_by`, or `path-applicability:v1` link in
+  the cited record. Those links reach the whole record, so they cannot keep a
+  cited claim, such as `AST-108 FR4`. A claim-scoped reference in the file's
+  own component, module, or theme record keeps it, in the reference field for
+  the cited record's kind, such as `system_specs: [spec:AST-108/FR4]` in the
+  `Spinner` record for `Spinner.tsx`. Until a record holds one of these links,
+  the citation stays. Comments follow the ASD-STE100 Simplified Technical
+  English style: at most 20 words in an instruction and 25 in a description,
+  one topic per sentence, active voice, present tense, simple words with one
+  meaning each, and no idioms or filler. These comments stay:
   - the copyright line;
   - the file header: `@input`, `@output`, `@position`, and `SYNC:` reminders,
     in about 12 lines at most, with no prose that repeats the main JSDoc;
@@ -366,7 +372,10 @@ Every record is either:
     `@example` fences;
   - the note on each Effect that names the external system it synchronizes
     (`architecture:react-component-runtime` INV3);
-  - lint and TypeScript directives.
+  - directives a tool reads: lint and TypeScript directives, the `@pr-a11y`
+    routing lines in the header comments of browser accessibility spec files
+    that `spec:AST-030` FR12 reads, and any other comment line a repository
+    tool parses.
 
 Example. This comment breaks INV29. It cites a record, packs several topics
 into long sentences, and restates the `finalFocusRef` line below it:
@@ -1218,7 +1227,7 @@ needs its own spec location.
 | INV22–INV24          | Contributor/reviewer evidence inventory; public-link and byte verification; retained remote refs; unchanged fixture/baseline/media paths                                                                                                                                                                                                                                                                                                   | Disposable captures enter the source tree, cleanup loses a referenced image, a temporary branch is called durable, or storage changes overwrite an owner's proof or retention contract                                                                                                                                                                                                                                             |
 | INV25, INV26, DEC-12 | `scripts/specs-for-file.test.mjs`, `scripts/check-knowledge.test.mjs`, and `pnpm check:knowledge`                                                                                                                                                                                                                                                                                                                                          | A current record is reached by no tracked non-record path, a lookup infers a link from a name, a pattern matches nothing or the whole repository, or a pattern match widens a claim or outranks a narrower owner                                                                                                                                                                                                                   |
 | INV27, DEC-13        | `scripts/check-knowledge.test.mjs`, `.github/scripts/change-scope.test.mjs`, and `pnpm check:knowledge`                                                                                                                                                                                                                                                                                                                                    | A `*.spec.md` file or a Markdown file under a `specs` directory without valid record frontmatter, outside its kind's location, or following a package-local template passes                                                                                                                                                                                                                                                        |
-| INV29                | Baselined lint over comments in package source (not built): record ids, pull request and issue numbers, date stamps, and long quote blocks fail in new comments, and existing sites are baselined. Review reports narration and file headers past about 12 lines as non-blocking findings. Cleanup lands in per-area pull requests with no behavior change, each with a `pnpm specs:for` comparison of every touched file before and after | A new comment cites a record, pull request, issue, or date, quotes a record, or narrates the code; a header grows past about 12 lines, with no lint failure or review finding; or removing a comment drops a record or cited claim from a file's `pnpm specs:for` result because that comment was the file's only link to it                                                                                                       |
+| INV29                | Baselined lint over comments in package source (not built): record ids, pull request and issue numbers, date stamps, and long quote blocks fail in new comments, and existing sites are baselined. Review reports narration and file headers past about 12 lines as non-blocking findings. Cleanup lands in per-area pull requests with no behavior change, each with a `pnpm specs:for` comparison of every touched file before and after | A new comment cites a record, pull request, issue, or date, quotes a record, or narrates the code; a header grows past about 12 lines, with no lint failure or review finding; removing a comment drops a record or cited claim from a file's `pnpm specs:for` result because that comment was the file's only link to it; or cleanup removes or rewrites a directive a tool reads, such as a `@pr-a11y` line                      |
 | DEC-15               | `.github/scripts/knowledge-paths.test.mjs`, `.github/scripts/change-scope.test.mjs`, `scripts/check-knowledge.test.mjs`, `scripts/specs-for-file.test.mjs`, and `pnpm check:knowledge`                                                                                                                                                                                                                                                     | A component or module record outside `docs/specs/components/<ComponentRoot>/`, a `*.spec.md` left in a component package's source tree or beside a Swift view, a record matched to the wrong package when two share a root, a record whose component root no registered package's source tree has, a platform record whose id or `platform_of` does not match its path, or a platform record change that skips the spec-owner gate |
 
 Evidence placement is enforced by contributors and reviewers. The local
