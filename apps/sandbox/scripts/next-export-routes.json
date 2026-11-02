@@ -780,10 +780,12 @@
     "/templates/table-tree/",
     "/templates/table/",
     "/templates/theme-showcase/",
+    "/templates/useCollatorHookUsage/",
     "/templates/useContainerRevealHookUsage/",
     "/templates/useKeyboardHintHookUsage/",
     "/templates/useStreamingTextHookUsage/",
     "/templates/useThemeHookUsage/",
+    "/templates/useToastHookUsage/",
     "/templates/work-item-detail/",
     "/themes/",
     "/tools/"

@@ -3,26 +3,7 @@
   "packages/core/src/Breadcrumbs/BreadcrumbItem.tsx": ["startIcon"],
   "packages/core/src/Button/Button.tsx": ["endContent", "icon"],
   "packages/core/src/Lightbox/Lightbox.tsx": ["currentItem.caption"],
-  "packages/core/src/NavMenu/NavHeadingMenuItem.tsx": ["description"],
   "packages/core/src/SegmentedControl/SegmentedControlItem.tsx": ["icon"],
   "packages/core/src/TabList/Tab.tsx": ["displayIcon", "endContent"],
-  "packages/core/src/Tokenizer/Tokenizer.tsx": ["startIcon", "startIcon"],
-  "packages/core/src/TopNav/TopNav.tsx": [
-    "endContent",
-    "heading",
-    "heading",
-    "mobileContent",
-    "mobileContent",
-    "resolvedStartContent"
-  ],
-  "packages/core/src/TopNav/TopNavHeading.tsx": [
-    "headerEndContent",
-    "logo",
-    "logo",
-    "logo",
-    "logo",
-    "logo"
-  ],
-  "packages/core/src/TopNav/TopNavMegaMenuItem.tsx": ["icon", "icon"],
-  "packages/core/src/TopNav/TopNavMenu.tsx": ["item.icon"]
+  "packages/core/src/Tokenizer/Tokenizer.tsx": ["startIcon", "startIcon"]
 }
