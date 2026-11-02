@@ -33,6 +33,7 @@ import React, {
 import * as stylex from '@stylexjs/stylex';
 import {useBusyIndicatorLane} from './busyIndicatorLane';
 import {useTrailingKeyDown} from './trailingKeyDown';
+import {useCommittedChoices} from './committedChoicesKey';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {usePopover} from '../Popover/usePopover';
 import {useAnnounce} from '../hooks/useAnnounce';
@@ -600,6 +601,36 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     () => displayOrder(results, queryEntryCount),
     [results, queryEntryCount],
   );
+  // Committed values (Tokenizer's tokens) leave the shown rows in the same
+  // render that commits them, before any reload answers, so a list never
+  // offers a token (component:Tokenizer FR13). The highlight stays on its item
+  // when that item remains. The previous key is remembered in state, like
+  // `sourceOfState` below.
+  const committedChoices = useCommittedChoices();
+  const committedChoicesKey = committedChoices?.key;
+  const isAtCommitLimit = committedChoices?.isAtLimit === true;
+  const [committedKeyOfState, setCommittedKeyOfState] =
+    useState(committedChoicesKey);
+  if (committedKeyOfState !== committedChoicesKey) {
+    setCommittedKeyOfState(committedChoicesKey);
+    const committedIds = committedChoices?.ids;
+    const kept =
+      committedIds == null
+        ? results
+        : results.filter(item => !committedIds.has(item.id));
+    if (kept.length !== results.length) {
+      const highlightedId = displayedResults[highlightedIndex]?.id;
+      const keptOrder = displayOrder(kept, queryEntryCount);
+      const keptIndex =
+        highlightedId == null
+          ? -1
+          : keptOrder.findIndex(item => item.id === highlightedId);
+      setResults(kept);
+      setHighlightedIndex(
+        keptIndex >= 0 ? keptIndex : keptOrder.length > 0 ? 0 : -1,
+      );
+    }
+  }
   // The popup's listbox, measured when a later list arrives so the appended
   // rows scroll instead of moving the shown rows or flipping the popup to
   // the other side of the field (spec:AST-092 FR6).
@@ -784,6 +815,11 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     }
   }, [searchSource]);
 
+  // True from the moment the list is asked to open until it closes, including
+  // a show deferred past the active click, so committed values that change in
+  // the same event that opened the list still reload it.
+  const isShowingRef = useRef(false);
+
   // Layer for dropdown. The list is a manual popover (see usePopover below):
   // while it is open, a press on the combobox itself (its input or its
   // buttons) or in the list is inside, and a press anywhere else closes it
@@ -794,6 +830,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // own light dismiss.
   const outsidePress = useOutsidePress();
   const handleLayerShow = useCallback(() => {
+    isShowingRef.current = true;
     onOpenChange?.(true);
     const anchorEl = anchorRef?.current ?? fallbackAnchorRef.current;
     if (anchorEl == null) {
@@ -817,6 +854,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   }, [onOpenChange, anchorRef, outsidePress]);
 
   const handleLayerHide = useCallback(() => {
+    isShowingRef.current = false;
     outsidePress.stop();
     onOpenChange?.(false);
     setHighlightedIndex(-1);
@@ -870,6 +908,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     if (isDisabledRef.current) {
       return;
     }
+    isShowingRef.current = true;
     if (pointerActiveRef.current) {
       document.addEventListener(
         'click',
@@ -1089,9 +1128,23 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       setHighlightedIndex(nextHighlightedIndex);
       if (bootstrapResults.length > 0) {
         showLayer();
+      } else if (committedChoices != null) {
+        // A Tokenizer list left with no eligible choice (its focus entries
+        // all committed, or the request failed) closes rather than staying
+        // open and empty (component:Tokenizer FR15). A plain Typeahead
+        // provides no committed choices and keeps its current behavior.
+        popover.hide();
       }
     },
-    [highlightedIndex, maxMenuItems, results.length, showLayer, replaceResults],
+    [
+      highlightedIndex,
+      maxMenuItems,
+      results.length,
+      showLayer,
+      replaceResults,
+      popover,
+      committedChoices,
+    ],
   );
 
   // Perform bootstrap
@@ -1101,8 +1154,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     try {
       bootstrapResult = searchSource.bootstrap();
     } catch {
+      // A failed request offers nothing: an open list closes (FR15).
+      applyBootstrapResults([], gen);
       if (searchGenRef.current === gen) {
-        replaceResults([]);
         setLoading(false);
       }
       return;
@@ -1118,15 +1172,90 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     try {
       applyBootstrapResults(await bootstrapResult, gen);
     } catch {
-      if (searchGenRef.current === gen) {
-        replaceResults([]);
-      }
+      applyBootstrapResults([], gen);
     } finally {
       if (searchGenRef.current === gen) {
         setLoading(false);
       }
     }
-  }, [searchSource, applyBootstrapResults, setLoading, replaceResults]);
+  }, [searchSource, applyBootstrapResults, setLoading]);
+
+  // A list shown before the caller's committed values changed is no longer
+  // current (component:Tokenizer FR13, spec:AST-092 FR4). While the list is
+  // open, it reloads the same query, its typed text or the focus list, from
+  // the source those values now filter. A closed list stays closed; opening it
+  // loads that source.
+  // Decided from the state at the moment the committed values change, with
+  // no remembered outcome (the state table in the pull request):
+  // - at the limit: close, whatever the query (FR15);
+  // - a closed list with no search waiting: stays closed, and opening it
+  //   loads the current source;
+  // - typed text: search it again, also replacing a search still waiting
+  //   for its debounce; an empty answer shows the empty-search message;
+  // - a focus list the commit emptied (no row left, no load waiting): close
+  //   (FR15); with rows left, or a load waiting: load the focus list again;
+  //   an empty or failed answer closes (FR15);
+  // - a focus list with focus entries off: close.
+  const reloadForCommittedChoices = useCallback(() => {
+    // A search waiting for its debounce would use the source from before the
+    // commit, so the reload replaces it.
+    const hadPendingSearch = searchTimeoutRef.current != null;
+    if (searchTimeoutRef.current != null) {
+      clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
+    }
+    if (isDisabled || !isMountedRef.current) {
+      return;
+    }
+    if (isAtCommitLimit) {
+      popover.hide();
+      return;
+    }
+    if (!isShowingRef.current && !hadPendingSearch) {
+      return;
+    }
+    if (query.length > 0) {
+      if (!isBelowMinQueryLength(query, minQueryLength)) {
+        void performSearch(query);
+      }
+      return;
+    }
+    if (!hasEntriesOnFocus || (results.length === 0 && !hadPendingSearch)) {
+      popover.hide();
+      return;
+    }
+    void performBootstrap();
+  }, [
+    isDisabled,
+    isAtCommitLimit,
+    query,
+    minQueryLength,
+    hasEntriesOnFocus,
+    results.length,
+    performSearch,
+    performBootstrap,
+    popover,
+  ]);
+  // The latest reload, read when the key changes, as an effect event.
+  const reloadForCommittedChoicesRef = useRef(reloadForCommittedChoices);
+  useIsomorphicLayoutEffect(() => {
+    reloadForCommittedChoicesRef.current = reloadForCommittedChoices;
+  });
+  const reloadedKeyRef = useRef(committedChoicesKey);
+  useIsomorphicLayoutEffect(() => {
+    if (reloadedKeyRef.current === committedChoicesKey) {
+      return;
+    }
+    reloadedKeyRef.current = committedChoicesKey;
+    // The reload is a source request, started after the commit like one a
+    // keystroke starts. Queued from a layout effect, it runs before paint, so
+    // a list the commit emptied closes without showing empty.
+    queueMicrotask(() => {
+      if (reloadedKeyRef.current === committedChoicesKey) {
+        reloadForCommittedChoicesRef.current();
+      }
+    });
+  }, [committedChoicesKey]);
 
   // Handle query change
   const handleQueryChange = useCallback(
@@ -1182,7 +1311,10 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       if (debounceMs <= 0) {
         triggerSearch();
       } else {
-        searchTimeoutRef.current = setTimeout(triggerSearch, debounceMs);
+        searchTimeoutRef.current = setTimeout(() => {
+          searchTimeoutRef.current = null;
+          triggerSearch();
+        }, debounceMs);
       }
     },
     [

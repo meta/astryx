@@ -22,9 +22,7 @@ interface UseHighlightedOptionScrollOptions {
   getOptionId: (index: number) => string;
   /**
    * Current option count, when the list can change while open (filtered or
-   * min/max-clamped lists). A count change re-runs the scroll, matching the
-   * list-length dependency the per-component effects carried before this hook
-   * existed.
+   * min/max-clamped lists). A count change runs the scroll again.
    */
   itemCount?: number;
 }
@@ -33,7 +31,7 @@ interface UseHighlightedOptionScrollOptions {
  * Keep the highlighted option visible during keyboard navigation — but not for
  * hover highlights. Hover must highlight only: scrollIntoView moves the next
  * option under the stationary pointer, whose mouseenter re-highlights and
- * scrolls again — a runaway auto-scroll loop with no user input (#6077).
+ * scrolls again — a runaway auto-scroll loop with no user input.
  * Keyboard paths call the raw setter directly and keep their scrolling; hover
  * paths call the returned callback.
  */

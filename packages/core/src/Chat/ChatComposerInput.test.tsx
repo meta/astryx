@@ -1534,6 +1534,79 @@ describe('ChatComposerInput', () => {
       fireEvent.input(editable);
     }
 
+    it('keeps the trigger menu open on a press in the editor or the menu, closes it on a press elsewhere', async () => {
+      render(
+        <>
+          <ChatComposerInput
+            triggers={[
+              createMentionTrigger({searchSource: createStaticSource(USERS)}),
+            ]}
+            debounceMs={0}
+          />
+          <button type="button">Elsewhere</button>
+        </>,
+      );
+      const editable = screen.getByRole('combobox');
+      editable.focus();
+      typeAtEnd(editable, '@c');
+      await waitFor(() => {
+        expect(editable).toHaveAttribute('aria-expanded', 'true');
+      });
+      const listbox = screen.getByRole('listbox', {hidden: true});
+      // A text editor cannot be an invoker, so native light dismiss would
+      // close the menu on this press; the menu is a manual popover.
+      expect(listbox.closest('[popover]')).toHaveAttribute('popover', 'manual');
+
+      const pressOn = (target: Element) => {
+        fireEvent.pointerDown(target);
+        fireEvent.pointerUp(target);
+      };
+      pressOn(editable);
+      expect(editable).toHaveAttribute('aria-expanded', 'true');
+      pressOn(listbox);
+      expect(editable).toHaveAttribute('aria-expanded', 'true');
+
+      pressOn(screen.getByRole('button', {name: 'Elsewhere'}));
+      await waitFor(() => {
+        expect(editable).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
+    it('closes the trigger menu when a click in the editor moves the caret out of the query, and Enter then sends the draft', async () => {
+      const onSubmit = vi.fn();
+      render(
+        <ChatComposerInput
+          triggers={[
+            createMentionTrigger({searchSource: createStaticSource(USERS)}),
+          ]}
+          debounceMs={0}
+          onSubmit={onSubmit}
+        />,
+      );
+      const editable = screen.getByRole('combobox');
+      editable.focus();
+      typeAtEnd(editable, 'hello @c');
+      await waitFor(() => {
+        expect(editable).toHaveAttribute('aria-expanded', 'true');
+      });
+      // The click puts the caret between "he" and "llo".
+      const text = editable.firstChild as Text;
+      fireEvent.pointerDown(editable);
+      const range = document.createRange();
+      range.setStart(text, 2);
+      range.collapse(true);
+      const selection = window.getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+      fireEvent.pointerUp(editable);
+      fireEvent.click(editable);
+      await waitFor(() => {
+        expect(editable).toHaveAttribute('aria-expanded', 'false');
+      });
+      fireEvent.keyDown(editable, {key: 'Enter'});
+      expect(onSubmit).toHaveBeenCalledWith('hello @c');
+    });
+
     it('Enter while a newer trigger search is pending sends the typed text, picks no row, and no menu reopens after the send', async () => {
       const onSubmit = vi.fn();
       let resolveSlow: (items: SearchableItem[]) => void = () => {};
