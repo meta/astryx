@@ -650,6 +650,9 @@ function PointerDateField({
   // anywhere else closes it (architecture:layer-runtime,
   // component:BaseTypeahead FR12's rule).
   const fieldElementRef = useRef<HTMLDivElement | null>(null);
+  // Set just before a close that focus already left the field for (the
+  // input's blur), so onHide does not pull focus back to the input.
+  const isFocusMovingAwayRef = useRef(false);
   const outsidePress = useOutsidePress();
   const popover = usePopover({
     hasLightDismiss: false,
@@ -687,7 +690,9 @@ function PointerDateField({
     // already landed there; reclaiming it would fight their click.
     onHide: () => {
       outsidePress.stop();
-      if (isFocusDetached()) {
+      const isFocusMovingAway = isFocusMovingAwayRef.current;
+      isFocusMovingAwayRef.current = false;
+      if (!isFocusMovingAway && isFocusDetached()) {
         inputRef.current?.focus();
       }
     },
@@ -843,10 +848,14 @@ function PointerDateField({
       if (!popover.isOpen || !(next instanceof Node)) {
         return;
       }
-      const layer = next.ownerDocument?.getElementById(popover.id);
-      if (fieldElementRef.current?.contains(next) || layer?.contains(next)) {
+      // The calendar may be hosted outside the field, including inside a
+      // shadow root, so it is found from the focus target itself.
+      const isInCalendar =
+        next instanceof Element && next.closest('[popover]')?.id === popover.id;
+      if (fieldElementRef.current?.contains(next) || isInCalendar) {
         return;
       }
+      isFocusMovingAwayRef.current = true;
       popover.hide();
     },
     [commitPendingInput, popover],

@@ -493,6 +493,8 @@ describe('DateInput', () => {
       await waitFor(() => {
         expect(start).toHaveAttribute('aria-expanded', 'false');
       });
+      // The close keeps focus where the person moved it.
+      expect(document.activeElement).toBe(end);
     });
 
     it('keeps the calendar open on a press on its label', () => {
