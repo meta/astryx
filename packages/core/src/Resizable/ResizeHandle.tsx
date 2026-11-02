@@ -497,17 +497,22 @@ export function ResizeHandle({
     }
   }, [direction, regionDirection]);
 
-  // --- Cleanup on unmount ---
+  // --- Cleanup on unmount, or when the `resizable` prop goes ---
 
   // Removing the grab zone releases its captured pointer and its listeners.
-  // The body's cursor and user-select overrides are not on the element, so
-  // they are released here. The region outlives this handle and still has to
-  // hear that its gesture is over.
+  // A `resizable` prop that goes away takes the grab zone's handlers too. The
+  // body's cursor and user-select overrides are not on the element, so they
+  // are released here. The region outlives this handle and still has to hear
+  // that its gesture is over.
+  const hasRegion = resizable != null;
   useEffect(() => {
+    if (!hasRegion) {
+      return;
+    }
     return () => {
       legacyGesture.interrupt();
     };
-  }, [legacyGesture]);
+  }, [hasRegion, legacyGesture]);
 
   // --- ARIA ---
   // When collapsed the panel's real size (0) sits below aria-valuemin, which
