@@ -630,8 +630,10 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
   // committed query (`search`, which still holds the previous query while a
   // transition is pending): it stays mounted across keystrokes after a query
   // settled empty, so it never flashes. While the first query is pending and
-  // nothing is committed, neither text shows; the Input's Loading spinner is
-  // the indicator (component:CommandPalette FR3, spec:AST-092 FR5).
+  // nothing is committed, neither text shows: the result surface keeps the
+  // Empty container's size with no message, so the dialog does not jump, and
+  // the Input's Loading spinner is the indicator (component:CommandPalette
+  // FR1, FR3).
   const hasQuery = optimisticSearch !== '';
   const showEmptyBootstrap = !hasQuery && optimisticResults.length === 0;
   const showEmptySearch =
@@ -655,7 +657,11 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
       </CommandPaletteEmpty>
     );
   } else if (optimisticResults.length === 0) {
-    listContent = null;
+    // A no-break space gives the empty container one line of height; it is
+    // hidden from assistive technology, which hears the busy start instead.
+    listContent = (
+      <CommandPaletteEmpty aria-hidden="true">{'\u00a0'}</CommandPaletteEmpty>
+    );
   } else {
     listContent = (
       <ItemRenderer

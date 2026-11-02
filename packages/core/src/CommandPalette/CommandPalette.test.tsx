@@ -415,6 +415,12 @@ describe('CommandPalette', () => {
     expect(screen.queryByText('No results')).toBeNull();
     // The Input's spinner is decorative (spec:AST-086 FR8): find it by class.
     expect(document.querySelector('.astryx-spinner')).not.toBeNull();
+    // The result surface keeps the Empty container (so the dialog keeps its
+    // height), hidden from assistive technology and with no message.
+    const placeholder = document.querySelector('.astryx-command-palette-empty');
+    expect(placeholder).not.toBeNull();
+    expect(placeholder).toHaveAttribute('aria-hidden', 'true');
+    expect(placeholder?.textContent?.trim()).toBe('');
 
     resolvers[0]([]);
     await waitFor(() =>
