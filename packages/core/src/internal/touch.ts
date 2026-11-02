@@ -3,11 +3,11 @@
 /**
  * @file touch.ts
  * @input The gesture core: the arena, the recognizers, and their geometry;
- *   the pan, the motion engine and math, and the touch-presentation and
- *   direction helpers that Lab components read
+ *   the pan, the motion engine and math, and the touch-presentation,
+ *   direction and hit-area helpers that Lab components read
  * @output `@astryxdesign/core/internal/touch`: the gesture core's primitives
- *   and the motion, touch-presentation and direction modules for Lab
- *   components, re-exported by name
+ *   and the motion, touch-presentation, direction and hit-area modules for
+ *   Lab components, re-exported by name
  * @position An internal entry reserved for Astryx's own packages:
  *   undocumented, outside the public API and its compatibility promise
  *   (spec:AST-017 FR21), versioned in lockstep with Core, and allowed only in
@@ -80,3 +80,10 @@ export {isRtlElement} from '../hooks/isRtlElement';
 export {UIKIT_GESTURES} from '../motion/uikit/gestures';
 export {useTouchPresentation} from '../utils/touchPresentation';
 export {TOUCH_QUERY} from '../utils/touchQueries';
+
+// Lab's PageControl also reads an element's shared animator, the Reduce
+// Motion cross-fade, and the touch hit area's hook and layer.
+export {animatorFor} from '../motion/animator';
+export {reducedMotionFade} from '../motion/reducedMotion';
+export {useTouchHitArea} from '../utils/touchHitArea';
+export {touchHitAreaStyles} from '../utils/touchHitArea.stylex';

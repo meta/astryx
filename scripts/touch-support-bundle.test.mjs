@@ -114,7 +114,9 @@ function exportsOf(entry) {
  * refresh pull reads the pan, its hook, the motion engine, its motion math and
  * companion curves, the scroll view's spring and the motion-role parsers.
  * Other Lab components read the UIKit gesture table, the touch presentation
- * and its query, and an element's direction.
+ * and its query, and an element's direction. PageControl also reads an
+ * element's shared animator, the Reduce Motion cross-fade, and the touch hit
+ * area's hook and layer.
  */
 const LAB_ONLY_NAMES = [
   'PanGestureRecognizer',
@@ -132,6 +134,10 @@ const LAB_ONLY_NAMES = [
   'UIKIT_GESTURES',
   'useTouchPresentation',
   'TOUCH_QUERY',
+  'animatorFor',
+  'reducedMotionFade',
+  'useTouchHitArea',
+  'touchHitAreaStyles',
 ];
 
 /** The inputs matching `pattern` that put bytes in `bytes`. */

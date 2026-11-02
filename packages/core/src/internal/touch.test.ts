@@ -84,6 +84,28 @@ describe('internal/touch', () => {
     }
   });
 
+  it("re-exports by name what Lab's PageControl also reads", async () => {
+    const entry: Record<string, unknown> = await import('./touch');
+    const animator = await import('../motion/animator');
+    const reduced = await import('../motion/reducedMotion');
+    const hitArea = await import('../utils/touchHitArea');
+    const hitAreaStyles = await import('../utils/touchHitArea.stylex');
+    expect(entry.animatorFor).toBe(animator.animatorFor);
+    expect(entry.reducedMotionFade).toBe(reduced.reducedMotionFade);
+    expect(entry.useTouchHitArea).toBe(hitArea.useTouchHitArea);
+    expect(entry.touchHitAreaStyles).toBe(hitAreaStyles.touchHitAreaStyles);
+    // An identity check passes when both sides are undefined, so each name
+    // must also be defined.
+    for (const name of [
+      'animatorFor',
+      'reducedMotionFade',
+      'useTouchHitArea',
+    ]) {
+      expect(typeof entry[name], name).toBe('function');
+    }
+    expect(entry.touchHitAreaStyles).toBeDefined();
+  });
+
   it('attaches no window or document listeners when it loads', async () => {
     vi.resetModules();
     const onWindow = vi.spyOn(window, 'addEventListener');
