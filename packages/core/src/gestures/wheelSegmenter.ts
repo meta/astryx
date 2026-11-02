@@ -5,16 +5,8 @@
  * @input A wheel stream's deltas along one axis, with their event times
  * @output Exports WheelSegmenter: splits the stream into gestures and reads
  *   a trackpad's lift (the onset of momentum)
- * @position Read by GestureHost.ts's wheel input (`spec:AST-094` FR43): the
- *   web reports no trackpad contact or phase, so both are inferred.
- *
- * A trackpad gesture has a finger phase (deltas while the fingers move,
- * possibly with pauses when they move slowly) and, after a fling, a momentum
- * phase (deltas at frame rate that shrink smoothly). The lift is read as the
- * start of a run of shrinking deltas that has lost a fifth of its size. In
- * the finger phase, a pause of `idleMs` ends the gesture. In the momentum
- * phase, a reversal, a jump up against the decay, or a pause of 50 ms starts
- * a new gesture: momentum never pauses, reverses or grows.
+ * @position Read by GestureHost.ts's wheel input: the web reports no
+ *   trackpad contact or phase, so both are inferred.
  */
 
 export type WheelBoundary = 'first' | 'idle' | 'reversal' | 'jump' | 'gap';
@@ -39,6 +31,16 @@ const LIFT_RUN = 4;
 /** And how much of its size the run has lost by then. */
 const LIFT_DECAY = 0.8;
 
+/**
+ * A trackpad gesture has a finger phase and, after a fling, a momentum phase.
+ * In the finger phase, deltas come while the fingers move, with pauses when
+ * they move slowly. In the momentum phase, deltas come at frame rate and
+ * shrink smoothly. The lift is the start of a run of shrinking deltas that
+ * has lost a fifth of its size. In the finger phase, a pause of `idleMs`
+ * ends the gesture. In the momentum phase, a reversal, a jump up against the
+ * decay, or a pause of 50 ms starts a new gesture. Momentum never pauses,
+ * reverses or grows.
+ */
 export class WheelSegmenter {
   gesture = 0;
   phase: WheelPhase = 'finger';

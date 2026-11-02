@@ -486,9 +486,10 @@ its own scroll owner and the page included, as its finger's rule reads them
 reads every scroller past it. A ctrl-wheel (a trackpad
 pinch, or Control and a mouse wheel) drives a pinch, whose scale follows
 `exp(-deltaY / 100)`; a pinch takes it by default and ends 100 ms after its
-last wheel. While the fingers move, a trackpad scroll a pan follows ends
-180 ms after its last wheel vertically and 220 ms horizontally, as a slow
-drag pauses between wheels (DEC-24). A gesture's release is never stamped
+last wheel. While the fingers move, a trackpad scroll ends 180 ms after its
+last wheel vertically and 220 ms horizontally, whoever keeps it (a pan, a
+scroller under the pointer, or the page), as a slow drag pauses between
+wheels (DEC-24). A gesture's release is never stamped
 later than an input that ends it sooner (FR16).
 
 The web reports no trackpad contact or phase either, so one splitter reads
@@ -506,8 +507,9 @@ against the decay, or a 50 ms pause starts a new gesture. A finger, mouse or
 pen that comes down ends it, and a wheel claim keeps the page's text
 selection. A gesture a
 recognizer took is latched to it, as a browser latches a scroller: while it
-lasts, a document `wheel` listener routes every step to it wherever it lands,
-so a pan whose element moves from under a still pointer keeps the gesture.
+lasts, the host hears every step first, through the shared input stream's
+window-capture listener, wherever it lands, so a pan whose element moves from
+under a still pointer keeps the gesture.
 
 ## Time
 

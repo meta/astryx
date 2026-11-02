@@ -192,7 +192,7 @@ interface Registration {
   hasTouchEndListener: boolean;
   /** Whether the element carries the host's shared blocking touchmove handler. */
   hasTouchMoveListener: boolean;
-  /** Whether the element carries the host's wheel handler (FR43). */
+  /** Whether the element carries the host's wheel handler. */
   hasWheelListener: boolean;
   /** Inline values the host replaced, to restore on detach. */
   readonly savedStyle: Map<string, string>;
@@ -400,20 +400,19 @@ function landedOn(
 }
 
 /**
- * How long after its last event a pinch or a mouse wheel's notches end, ms:
- * the web reports no wheel phases, so a quiet wheel is a lifted one
- * (`spec:AST-094` FR43).
+ * How long after its last event a pinch or a mouse wheel's notches end, ms.
+ * The web reports no wheel phases, so a quiet wheel is a lifted one.
  */
 const WHEEL_END_MS = 100;
 /**
  * How long after its last event a vertical trackpad scroll ends, ms (a
- * sheet's pull), whoever keeps it: a slow drag's stream pauses longer than
- * WHEEL_END_MS between events (`spec:AST-094` FR43, DEC-24).
+ * sheet's pull), whoever keeps it. A slow drag's stream pauses longer than
+ * WHEEL_END_MS between events.
  */
 const WHEEL_FOLLOW_END_V_MS = 180;
 /**
  * The same horizontally, ms (a pager's or a row's swipe), whose slow
- * swipes pause longer still (`spec:AST-094` FR43, DEC-24).
+ * swipes pause longer still.
  */
 const WHEEL_FOLLOW_END_MS = 220;
 /** A line-mode wheel's line, px, as the platforms scroll it. */
@@ -435,9 +434,9 @@ interface WheelGesture {
   /** The latest wheel's time. */
   last: number;
   /**
-   * How long after its last wheel it ends, ms: a trackpad pan stream's pause
-   * bound for its axis, whoever keeps it, and 100 ms for a pinch or a mouse
-   * wheel's notches.
+   * How long after its last wheel it ends, ms. A trackpad pan stream waits
+   * out its axis's pause bound, whoever keeps it. A pinch or a mouse wheel's
+   * notches wait 100 ms.
    */
   readonly endMs: number;
   timer: unknown;
@@ -452,8 +451,9 @@ interface WheelFollow {
   /** The fingers lifted: the momentum after them never moves the pan. */
   lifted: boolean;
   /**
-   * Shrinking deltas held until the splitter decides: the fingers' when
-   * larger ones follow, the start of momentum when it reads the lift.
+   * Shrinking deltas held until the splitter decides. They are the fingers'
+   * when larger ones follow, and the start of momentum when it reads the
+   * lift.
    */
   heldX: number;
   heldY: number;
@@ -471,10 +471,10 @@ interface WheelFollow {
 }
 
 /**
- * How long after its last wheel a wheel gesture ends, ms (`spec:AST-094`
- * FR43): a trackpad's two-finger scroll waits out a slow drag's pauses for
- * its axis, whoever keeps the stream, while a pinch and a mouse wheel's
- * notches end 100 ms after their last wheel.
+ * How long after its last wheel a wheel gesture ends, ms. A trackpad's
+ * two-finger scroll waits out a slow drag's pauses for its axis, whoever
+ * keeps the stream. A pinch and a mouse wheel's notches end 100 ms after
+ * their last wheel.
  */
 function wheelEndMs(
   kind: 'pan' | 'pinch',
@@ -488,9 +488,9 @@ function wheelEndMs(
 }
 
 /**
- * A provisional lead `debt` (what a followed pan shows past the fingers'
- * travel, or short of it) after a move of `moved`: half the move is
- * absorbed, so the pan keeps moving the way the fingers do.
+ * A provisional lead `debt` after a move of `moved`. The debt is what a
+ * followed pan shows past the fingers' travel, or short of it. Half the move
+ * is absorbed, so the pan keeps moving the way the fingers do.
  */
 function absorbedDebt(debt: number, moved: number): number {
   return Math.sign(debt) * Math.max(0, Math.abs(debt) - Math.abs(moved) / 2);
@@ -528,15 +528,17 @@ function wheelPixels(
 
 /**
  * The web's best reading of what scrolled: a mouse wheel's notches
- * (`discrete`) or a trackpad's scroll (`continuous`). What it cannot tell
+ * (`discrete`) or a trackpad's scroll (`continuous`). Input it cannot tell
  * apart counts as a mouse wheel's, which a pan that takes only a trackpad's
- * scroll leaves to the page. A mouse wheel's: a line- or page-mode delta; a
- * scroll with Shift held (Shift+wheel); a pixel delta a hair off a whole pixel
- * (a mouse wheel on Windows); a scroll
- * that carries no legacy `wheelDelta` (an engine that sends none); a delta
- * that is not a third of its legacy `wheelDelta`; or a 120 tick over a 40 px
- * delta. A trackpad's precise deltas, a third of their legacy `wheelDelta`
- * (Chromium and WebKit), are a trackpad's.
+ * scroll leaves to the page. These read as a mouse wheel's:
+ * - a line- or page-mode delta;
+ * - a scroll with Shift held (Shift+wheel);
+ * - a pixel delta a hair off a whole pixel (a mouse wheel on Windows);
+ * - a scroll with no legacy `wheelDelta` (an engine that sends none);
+ * - a delta that is not a third of its legacy `wheelDelta`;
+ * - a 120 tick over a 40 px delta.
+ * A trackpad's precise deltas, a third of their legacy `wheelDelta` in
+ * Chromium and WebKit, read as a trackpad's.
  */
 function scrollTypeOf(wheel: WheelEvent): ScrollType {
   if (wheel.deltaMode !== 0 || wheel.shiftKey) {
@@ -578,7 +580,7 @@ function scrollTypeOf(wheel: WheelEvent): ScrollType {
     : 'continuous';
 }
 
-/** Whether a recognizer is a scroll-edge pan (`spec:AST-094` FR19). */
+/** Whether a recognizer is a scroll-edge pan. */
 function isScrollEdgePan(recognizer: GestureRecognizer): boolean {
   return (recognizer as {scrollEdge?: boolean}).scrollEdge === true;
 }
@@ -758,10 +760,9 @@ export class GestureHost {
    */
   private fingerTargets: ReadonlyArray<Node> = [];
   private nextId = 1;
-  /** The wheel gesture in progress (FR43). */
+  /** The wheel gesture in progress. */
   private wheel: WheelGesture | null = null;
-  /** Whether the document routes every wheel to the live wheel gesture. */
-  /** The wheel latch's subscription to the shared input stream, while a gesture is latched. */
+  /** The wheel latch's input-stream subscription, while a gesture is latched. */
   private stopWheelLatch: (() => void) | null = null;
   /** Splits the wheel stream into gestures and reads a trackpad's lift. */
   private readonly segmenter = new WheelSegmenter();
@@ -894,7 +895,7 @@ export class GestureHost {
         !this.wheelHasTaker(wheel)
       ) {
         // At its last wheel: a later stamp would move the arena's clock past
-        // the next input's own time (FR16).
+        // the next input's own time.
         this.endWheel(wheel.last);
       }
       this.refresh(element, registration);
@@ -1385,13 +1386,13 @@ export class GestureHost {
       element.removeEventListener('touchmove', this.onBlockingTouchMove);
       registration.hasTouchMoveListener = false;
     }
-    // Wheel and trackpad input, only where an enabled recognizer takes it
-    // (FR43): a non-passive wheel listener makes the browser's scrolling over
-    // the element wait for the main thread.
+    // Wheel and trackpad input, only where an enabled recognizer takes it. A
+    // non-passive wheel listener makes the browser's scrolling over the
+    // element wait for the main thread.
     const needsWheel = registration.recognizers.some(
       recognizer =>
         recognizer.isEnabled &&
-        // A watcher never takes the wheel: the page keeps it (FR20, DEC-7).
+        // A watcher never takes the wheel: the page keeps it.
         recognizer.claimsTouches &&
         recognizer.allowedScrollTypes.size > 0 &&
         // A wheel drives a pan or a pinch only.
@@ -1826,8 +1827,7 @@ export class GestureHost {
    * Whether an enabled participant could claim a touch or cancel a lift: a
    * consumer, or a recognizer that claims touches and takes a finger or a
    * pen. With only watchers, or only scroll-only recognizers
-   * (`allowedPointerTypes: []`), the host's listeners are all passive
-   * (`spec:AST-094` FR20, FR24).
+   * (`allowedPointerTypes: []`), the host's listeners are all passive.
    */
   private hasClaimer(): boolean {
     for (const registration of this.registry.values()) {
@@ -2112,19 +2112,19 @@ export class GestureHost {
   }
 
   /**
-   * Wheel and trackpad input (`spec:AST-094` FR43). A wheel gesture drives
-   * the recognizers that allow its scroll type as a contact moving with the
-   * content: a pan's along its own axis, after every scroller between the
-   * pointer and the pan's element can no longer scroll that way, as decided
-   * at the gesture's first wheel; a pinch's (a ctrl-wheel, as a trackpad
-   * pinches) as two contacts whose span follows exp(-deltaY / 100). A wheel
-   * the page keeps is never prevented; one a recognizer takes always is. It
-   * ends `WHEEL_END_MS` after its last wheel, at that wheel's time, so its
-   * release keeps its velocity. A gesture a recognizer took is latched to it,
-   * as a browser latches a scroller: while it lasts, the document hands this
-   * every wheel first, wherever it lands, so a pan whose element moves from
-   * under a still pointer keeps it (FR24: a page listener only during a
-   * gesture).
+   * Wheel and trackpad input. A wheel gesture drives the recognizers that
+   * allow its scroll type, as a contact that moves with the content. A pan
+   * takes it along its own axis, once no scroller between the pointer and
+   * the pan's element can scroll that way. The gesture's first wheel decides
+   * this. A pinch takes a ctrl-wheel, as a trackpad pinches, as two contacts
+   * whose span follows exp(-deltaY / 100). A wheel the page keeps is never
+   * prevented, and a wheel a recognizer takes always is. A gesture ends its
+   * end window after its last wheel (wheelEndMs), at that wheel's time, so
+   * its release keeps its velocity. A gesture a recognizer took is latched
+   * to it, as a browser latches a scroller. While the gesture lasts, the
+   * shared input stream hands this every wheel first, wherever it lands. So
+   * a pan whose element moves from under a still pointer keeps the gesture.
+   * The page listener exists only during a gesture.
    */
   private readonly onWheel = (event: Event): void => {
     const wheel = event as WheelEvent;
@@ -2149,10 +2149,10 @@ export class GestureHost {
       !this.wheelHasTaker(gesture)
     ) {
       // Every recognizer that took it has left (detached, disabled or
-      // cancelled): the rest of the gesture is the page's. A followed pan's
-      // own lift does not count: its momentum stays latched and prevented
-      // until the splitter's next gesture or the end timer, and moves
-      // nothing (FR43). The release is stamped at its last wheel (FR16).
+      // cancelled), so the rest of the gesture is the page's. A followed
+      // pan's own lift does not count. Its momentum stays latched and
+      // prevented until the splitter's next gesture or the end timer, and
+      // moves nothing. The release is stamped at its last wheel.
       this.endWheel(gesture.last);
       const left = wheelPixels(wheel, this.doc.defaultView);
       gesture = {
@@ -2175,9 +2175,9 @@ export class GestureHost {
     }
     const {dx, dy} = wheelPixels(wheel, this.doc.defaultView);
     const horizontal = Math.abs(dx) > Math.abs(dy);
-    // The splitter reads a pan's stream only: a ctrl-wheel pinch has no
+    // The splitter reads a pan's stream only. A ctrl-wheel pinch has no
     // fingers' phase or momentum to tell apart, and ends 100 ms after its
-    // last wheel (FR43).
+    // last wheel.
     let seg: WheelSegment | null = null;
     if (kind === 'pan') {
       seg = this.segmenter.push(
@@ -2206,7 +2206,7 @@ export class GestureHost {
     if (gesture.timer != null) {
       this.clock.clearTimeout(gesture.timer);
     }
-    // A trackpad scroll waits out a slow drag's pauses (DEC-24), whoever
+    // A trackpad scroll waits out a slow drag's pauses, whoever
     // keeps it; a pinch or a mouse wheel's notches 100 ms.
     gesture.timer = this.clock.setTimeout(() => {
       this.segmenter.end();
@@ -2223,9 +2223,9 @@ export class GestureHost {
       }
       if (this.wheelSegment?.liftNow === true) {
         // Momentum began: the fingers lifted before the held deltas. The pan
-        // keeps the travel it showed through the undecided stretch and lets
+        // keeps the travel it showed through the undecided stretch. It lets
         // go here, still moving at the fingers' speed, so its release carries
-        // on from it; the rest of the momentum never moves the pan.
+        // on from it. The rest of the momentum never moves the pan.
         this.followProvisionally(gesture, f, time);
         f.lifted = true;
         this.arena.ended([
@@ -2241,10 +2241,9 @@ export class GestureHost {
         this.followProvisionally(gesture, f, time);
         return;
       }
-      // The fingers' own delta; the held ones were theirs too. What the pan
-      // shows ahead of their travel, or behind it, is absorbed by their moves
-      // half a move at a time, so it never steps back and ends on their
-      // travel.
+      // The fingers' own delta; the held ones were theirs too. Their moves
+      // absorb what the pan shows ahead of their travel, or behind it, half a
+      // move at a time. So the pan never steps back, and ends on their travel.
       const beforeX = f.trueX - f.heldX;
       const beforeY = f.trueY - f.heldY;
       const debtX = absorbedDebt(gesture.x - beforeX, dx);
@@ -2283,9 +2282,9 @@ export class GestureHost {
   };
 
   /**
-   * Through the splitter's undecided stretch, a followed pan moves on from
-   * where it was shown at the fingers' last move at their last speed, never
-   * past what that speed projects for the time since.
+   * Move a followed pan through the splitter's undecided stretch. It moves on
+   * from where it was shown at the fingers' last move, at their last speed.
+   * It never passes what that speed projects for the time since.
    */
   private followProvisionally(
     gesture: WheelGesture,
@@ -2355,7 +2354,7 @@ export class GestureHost {
       }
       for (const recognizer of this.registry.get(node)?.recognizers ?? []) {
         // A pan follows a trackpad, never a mouse wheel's notches, which
-        // scroll what is under the pointer (spec:AST-094 FR43, DEC-24).
+        // scroll what is under the pointer.
         if (
           !recognizer.isEnabled ||
           !recognizer.claimsTouches ||
@@ -2369,7 +2368,7 @@ export class GestureHost {
           kind === 'pan' &&
           (!panTakesMove(recognizer, -dx, -dy) ||
             this.scrollerTakes(target, node, dx, dy, isHorizontal) ||
-            // A scroll-edge pan only past every scroller's edge (FR19).
+            // A scroll-edge pan only past every scroller's edge.
             (isScrollEdgePan(recognizer) && scroll.canScroll(-dx, -dy)))
         ) {
           continue;
@@ -2414,7 +2413,7 @@ export class GestureHost {
           })),
     );
     // Every recognizer it was offered to may decline it (its own
-    // shouldReceiveTouch): then nobody took the wheel, and it scrolls the
+    // shouldReceiveTouch). Then nobody took the wheel, and it scrolls the
     // page from its first step, as with no gesture system.
     if (ids.every(id => this.arena.participantsOf(id).length === 0)) {
       this.arena.cancelled(ids, time);
@@ -2425,8 +2424,8 @@ export class GestureHost {
 
   /**
    * Whether a scroller between `target` and `boundary` (both included)
-   * scrolls this wheel now, by the edge test a finger's probe uses
-   * (canElementScroll), along the wheel's major axis.
+   * scrolls this wheel now, along the wheel's major axis. It uses the edge
+   * test a finger's probe uses (canElementScroll).
    */
   private scrollerTakes(
     target: unknown,
@@ -2480,10 +2479,10 @@ export class GestureHost {
   }
 
   /**
-   * Route every wheel on the page to the live wheel gesture, from its claim:
-   * through the shared input stream's capture listener on the window, before
-   * any document listener (architecture:react-component-runtime INV13), and
-   * non-passive only while it is subscribed.
+   * Route every wheel on the page to the live wheel gesture, from its claim.
+   * The route is the shared input stream's capture listener on the window,
+   * which runs before any document listener. It is non-passive only while it
+   * is subscribed.
    */
   private latchWheel(): void {
     const view = this.doc.defaultView;
@@ -2495,11 +2494,12 @@ export class GestureHost {
   }
 
   /**
-   * End the wheel gesture in progress. On its own timer it ends its end
-   * window after its last wheel; a taker leaving (a detach, a disable)
-   * passes that last wheel's time, and an input that ends it sooner (a
-   * press, the next gesture's first wheel) its own time. Both are on the wheels' time base (eventTime), never the
-   * host's clock, which need not share it.
+   * End the wheel gesture in progress. On its own timer, it ends its end
+   * window after its last wheel. A taker that leaves (a detach, a disable)
+   * passes that last wheel's time. An input that ends it sooner (a press,
+   * the next gesture's first wheel) passes its own time. Both times are on
+   * the wheels' time base (eventTime), never the host's clock, which need
+   * not share it.
    */
   private endWheel(endTime?: number): void {
     const gesture = this.wheel;
@@ -2515,8 +2515,8 @@ export class GestureHost {
     if (gesture.ids.length === 0 || gesture.follow?.lifted) {
       return;
     }
-    // Fingers that stop without a lift end on their travel where it runs
-    // ahead of what the pan shows; what the undecided stretch showed past it
+    // Fingers that stop without a lift end on their travel, where it runs
+    // ahead of what the pan shows. What the undecided stretch showed past it
     // stays, as a step back would show.
     if (gesture.follow != null) {
       const f = gesture.follow;
@@ -2529,11 +2529,11 @@ export class GestureHost {
       }
     }
     // A trackpad scroll whose fingers stop releases still, past the
-    // velocity's stillness interval, and a pinch 100 ms after its last wheel
-    // (`spec:AST-094` FR43, DEC-24); a lift released the pan already. Never
-    // later than the input that ends it (a press, the next gesture's first
-    // wheel): the arena's clock only moves forward, so a later stamp would
-    // move that input's times too (FR16).
+    // velocity's stillness interval. A pinch releases 100 ms after its last
+    // wheel, and a lift released the pan already. The release is never later
+    // than the input that ends it (a press, the next gesture's first wheel).
+    // The arena's clock only moves forward, so a later stamp would move that
+    // input's times too.
     const end = gesture.last + gesture.endMs;
     const time =
       endTime == null ? end : Math.max(gesture.last, Math.min(end, endTime));

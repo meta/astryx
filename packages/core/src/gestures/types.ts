@@ -25,7 +25,7 @@ export type PointerKind = 'touch' | 'mouse' | 'pen';
  * Scroll input a recognizer can take, as UIKit's `UIScrollTypeMask`: a
  * trackpad's two-finger scroll or pinch (`continuous`), or a mouse wheel's
  * notches (`discrete`). A pan takes only a trackpad's; a pinch takes a
- * ctrl-wheel of either (`spec:AST-094` FR43, DEC-24).
+ * ctrl-wheel of either.
  */
 export type ScrollType = 'continuous' | 'discrete';
 
@@ -114,7 +114,7 @@ export interface TouchBeganInput extends TouchInput {
   readonly pointerType: PointerKind;
   readonly target: unknown;
   readonly scroll?: NativeScrollProbe | null;
-  /** Set for a wheel's or a trackpad's scroll input (FR43). */
+  /** Set for a wheel's or a trackpad's scroll input. */
   readonly scrollType?: ScrollType;
 }
 

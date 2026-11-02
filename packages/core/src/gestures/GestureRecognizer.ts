@@ -85,10 +85,9 @@ export interface GestureRecognizerOptions<R = GestureRecognizer> {
   /**
    * Scroll input this recognizer takes, as UIKit's `allowedScrollTypesMask`.
    * A pan follows a trackpad's two-finger scroll (`continuous`), never a
-   * mouse wheel's notches, as a contact moving with the content, along its
-   * own axis and after the scrollers under the pointer; a pinch takes a
-   * ctrl-wheel of either, as a trackpad pinches (`spec:AST-094` FR43,
-   * DEC-24).
+   * mouse wheel's notches. It moves as a contact with the content, along its
+   * own axis, after the scrollers under the pointer. A pinch takes a
+   * ctrl-wheel of either, as a trackpad pinches.
    * @default none; a pinch takes both, the screen-edge pan none whatever a
    *   caller passes
    */

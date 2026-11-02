@@ -218,10 +218,10 @@ function canMoveX(
 
 /**
  * Whether `element` itself scrolls natively now for a finger moving by
- * (dx, dy), by the probe's own test of each scroller: overflow that scrolls
- * on that axis, room past the edge tolerance, and a position short of the
- * end it moves toward, a right-to-left range included. A wheel moves the
- * content the other way: pass its deltas negated.
+ * (dx, dy). It uses the probe's own test of each scroller: overflow that
+ * scrolls on that axis, and room past the edge tolerance. The position must
+ * also be short of the end it moves toward, a right-to-left range included.
+ * A wheel moves the content the other way, so pass its deltas negated.
  */
 export function canElementScroll(
   element: Element,
