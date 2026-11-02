@@ -54,7 +54,7 @@ export const docs = {
           name: 'children',
           type: 'ReactNode',
           description:
-            'The trigger. A single string or number is wrapped in a focusable inline span. Text that reaches HoverCard in several pieces, such as `Edited {when}`, gets no trigger, so pass one string or wrap it in an element. With element children, HoverCard wires the first element, so that element does not need to accept a ref.',
+            'The trigger. A single string or number is wrapped in a focusable inline span. Text that reaches HoverCard in several pieces, such as `Edited {when}`, gets no trigger, so pass one string, such as a template literal, or wrap it in a focusable element. With element children, HoverCard wires the first element, so that element does not need to accept a ref.',
         },
         {
           name: 'content',
@@ -266,7 +266,7 @@ export const docsZh = {
           name: 'children',
           type: 'ReactNode',
           description:
-            '触发元素。单个字符串或数字会被包裹在可聚焦的内联 span 中。分成多段到达的文本（例如 `Edited {when}`）不会得到触发器，请传入单个字符串或用元素包裹。传入元素时，HoverCard 连接第一个元素，因此该元素无需接受 ref。',
+            '触发元素。单个字符串或数字会被包裹在可聚焦的内联 span 中。分成多段到达的文本（例如 `Edited {when}`）不会得到触发器，请传入单个字符串（例如模板字符串）或用可聚焦元素包裹。传入元素时，HoverCard 连接第一个元素，因此该元素无需接受 ref。',
         },
         {
           name: 'content',
@@ -474,7 +474,7 @@ export const docsDense = {
         'Component wrapper for hover card overlay; richer overlay triggered on hover/focus.',
       propDescriptions: {
         children:
-          'Trigger. A single string/number is wrapped in a focusable inline span; text in several pieces (`Edited {when}`) gets no trigger. With elements, the first element is wired (no ref needed).',
+          'Trigger. A single string/number is wrapped in a focusable inline span; text in several pieces (`Edited {when}`) gets no trigger; pass one string or a focusable element. With elements, the first element is wired (no ref needed).',
         content: 'Hover card content.',
         placement:
           "Position relative to anchor element. Logical: start/end follow the popover's inherited direction (RTL mirrors).",

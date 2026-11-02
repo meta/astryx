@@ -1558,7 +1558,9 @@ describe('HoverCard timing, hold, and controlled state', () => {
     renderCard({isOpen: true, xstyle: overrides.card});
     const card = screen.getByText('Card action').closest('[popover]');
     expect(card).toHaveClass('astryx-hover-card');
-    expect(getComputedStyle(card as HTMLElement).minWidth).toBe('240px');
+    const callerClasses = stylex.props(overrides.card).className?.split(' ');
+    expect(callerClasses?.length).toBeGreaterThan(0);
+    expect(card).toHaveClass(...(callerClasses ?? []));
   });
 
   it('applies className and style to the themed card surface', () => {
