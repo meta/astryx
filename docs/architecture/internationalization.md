@@ -58,11 +58,12 @@ deciding_specs: []
 {
   "scope": "global",
   "triggers": {
-    "accessibility": ["INV1", "INV1a", "INV7"],
+    "accessibility": ["INV1", "INV1a", "INV3a", "INV7"],
     "behavior": [
       "INV1",
       "INV1a",
       "INV3",
+      "INV3a",
       "INV4",
       "INV5",
       "INV7",
@@ -73,7 +74,7 @@ deciding_specs: []
     ],
     "compatibility": ["INV2", "INV9", "INV10"],
     "layout": ["INV11", "INV12"],
-    "public-api": ["INV1", "INV1a", "INV2", "INV7", "INV9", "INV10"],
+    "public-api": ["INV1", "INV1a", "INV2", "INV3a", "INV7", "INV9", "INV10"],
     "react-runtime": ["INV3", "INV4", "INV11", "INV12", "INV13"]
   }
 }
@@ -191,6 +192,21 @@ for all 30 shipped locales plus `pseudo`.
 - **INV3 — No provider is deterministic English.** Components used outside a
   provider resolve Astryx strings from the shipped English catalog, expose locale
   `en`, direction `ltr`, and do not read the browser or host locale implicitly.
+- **INV3a — Factories take an option for each string they announce or show.**
+  A public non-React factory (`architecture:public-component-api` INV22) that
+  announces or shows Astryx text (a live-region announcement, an `aria-*` or
+  `title` value, or a visible label) takes an option for each such string. A
+  factory with one string takes a flat optional string option for it, such as
+  `createResizable`'s `collapsedLabel` (a caller-supplied accessible name that
+  already exists as its own option, such as `label`, stays flat and does not
+  count toward the factory's strings); a factory with more than one groups
+  them under one optional `labels` object, each key optional. An absent option
+  or key falls back to the catalog message, translated when the factory's
+  React wrapper runs under a provider and English without one; a given string
+  replaces that message, including over a provider's translation. No factory
+  takes a translator: translation comes only from a provider. The rule covers
+  INV22 factories. Per-message options are the factory mechanism; the
+  external-runtime adapter (INV14) stays a separate, broader decision.
 - **INV4 — Runtime locale changes are live.** Re-rendering the provider with a new
   locale, messages, overrides, or direction updates consumers in that subtree.
   Astryx does not persist or select the application's locale.
@@ -402,6 +418,7 @@ callers remain conformance work and do not relax INV1a, INV8, INV9, or INV10.
 | INV1, INV1a, INV7  | hardcoded-string lint, catalog tests, component translation tests with a non-English provider                                                                                                                                                                                                                                                                                                                                                                                                                                   | Astryx-owned text bypasses the catalog, an announcement or count is assembled from fragments or a hand-rolled plural, or non-string output reaches visible/AT attributes                                                                                                                |
 | INV2, INV13, INV14 | export drift checks, public i18n tests, compatibility review                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | A parallel/replacement runtime lands without migration, or client hooks claim server behavior                                                                                                                                                                                           |
 | INV3–INV5          | resolver and provider rerender tests                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | no-provider output depends on the host, locale swaps stay stale, fallback order changes, or malformed-locale behavior is described as graceful                                                                                                                                          |
+| INV3a              | factory unit tests: a flat option or `labels` key replaces its message, including under a provider, and outside a provider its absence announces or shows shipped English; wrapper tests: under a non-English provider its absence gives the translation. Evidence gap: no factory test covers a flat option or `labels` key yet                                                                                                                                                                                                | a factory announces or shows Astryx text that no option or `labels` key can replace, groups more than one string outside one `labels` object, takes a translator, ignores a given string, or gives something other than the catalog message when it is absent                           |
 | INV6               | `check:i18n-catalog`, key-format lint, and focused mutation tests                                                                                                                                                                                                                                                                                                                                                                                                                                                               | stale/malformed keys, malformed ICU, or source/translation runtime-contract drift passes CI                                                                                                                                                                                             |
 | INV15              | generator tests, `check:i18n-runtime`, package-export drift check, provider/resolver runtime-catalog tests                                                                                                                                                                                                                                                                                                                                                                                                                      | a generated module carries descriptions or is committed, a malformed entry projects instead of failing, a rich export path changes, or a `RuntimeCatalog` input is rejected or leaks a non-rich context shape                                                                           |
 | INV16              | build-plugin unit and real-build tests                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | a rich or generated locale import fails to resolve through the standard plugin                                                                                                                                                                                                          |

@@ -138,7 +138,7 @@ jobs:
         timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 16 || 13 }}
         with:
           phase: room
-          peak: ${{ github.event_name == 'workflow_dispatch' && 37 || 16 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 16 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 15 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 8 || 2 }}
@@ -176,7 +176,7 @@ jobs:
           started: ${{ needs.room.outputs.started }}
           looks: ${{ needs.room.outputs.looks }}
           next: ${{ needs.room.outputs.next }}
-          peak: ${{ github.event_name == 'workflow_dispatch' && 37 || 16 }}
+          peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 16 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
           max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 15 || 12 }}
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 8 || 2 }}
@@ -544,6 +544,12 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+    # Placeholder docs-prompt origins: the build and its browser contracts
+    # exercise the configured prompt. Deployed values live only in the
+    # deployment environment, never in this repository.
+    env:
+      NEXT_PUBLIC_INTERNAL_DOCS_ORIGIN: https://docs.example.test
+      NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN: https://probe.example.test
     steps:
       - name: Require a branch in this repository or the ci:run label
         if: ${{ github.event_name == 'pull_request' && !(github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')) }}
@@ -951,17 +957,20 @@ jobs:
   # the registry: with the Node unit tests, and in docsite-test for a
   # docsite-only change.
   test-registry-e2e:
-    name: test-registry-e2e (${{ matrix.leg }})
+    name: test-registry-e2e (${{ matrix.leg }}, ${{ matrix.mode }})
     needs: [admission]
     if: github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'
     # The preview and hidden production registries are generated and verified
-    # independently, so each gets its own leg (~9 minutes in one job).
-    # release-check joins them: the job result is success only when both
-    # passed.
+    # independently, and each installs and compiles every item twice, as a
+    # TypeScript and as a JavaScript consumer. One leg per registry and mode:
+    # the preview's two modes in one job took 8-12 minutes on the same 1,036
+    # items and passed the 15-minute limit once. release-check joins the legs:
+    # the job result is success only when all four passed.
     strategy:
       fail-fast: false
       matrix:
         leg: [preview, production]
+        mode: [typescript, javascript]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -974,8 +983,9 @@ jobs:
       - name: Build registry package exports
         run: pnpm build
 
+      # The registry-wide checks run once, in the TypeScript leg.
       - name: Verify hidden production registry contract
-        if: matrix.leg == 'production'
+        if: matrix.leg == 'production' && matrix.mode == 'typescript'
         run: node internal/shadcn-registry/verify-production-gate.mjs
 
       - name: Generate and validate the complete preview registry
@@ -986,7 +996,7 @@ jobs:
 
       - name: Install and build every preview registry item
         if: matrix.leg == 'preview'
-        run: node internal/shadcn-registry/verify-full-catalog.mjs
+        run: node internal/shadcn-registry/verify-full-catalog.mjs --mode ${{ matrix.mode }}
 
       - name: Generate the hidden production registry
         if: matrix.leg == 'production'
@@ -995,7 +1005,7 @@ jobs:
         run: node apps/docsite/scripts/generate-data.mjs
 
       - name: Verify hidden production discovery surfaces
-        if: matrix.leg == 'production'
+        if: matrix.leg == 'production' && matrix.mode == 'typescript'
         env:
           ASTRYX_VERIFY_HIDDEN_PRODUCTION: '1'
           NEXT_PUBLIC_DOCS_TARGET: latest
@@ -1005,7 +1015,7 @@ jobs:
         if: matrix.leg == 'production'
         env:
           ASTRYX_SHADCN_USE_PUBLISHED_PACKAGES: '1'
-        run: node internal/shadcn-registry/verify-full-catalog.mjs
+        run: node internal/shadcn-registry/verify-full-catalog.mjs --mode ${{ matrix.mode }}
 
   # Historical required check name. The Vitest lanes, the Build test owner,
   # native Swift and the interaction proofs (Chromium and WebKit) always

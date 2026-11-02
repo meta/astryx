@@ -80,6 +80,21 @@ describe('docsite-test', () => {
     );
   });
 
+  it('builds and tests the docs prompt with placeholder origins only', () => {
+    // One job-level value reaches the build and the browser contracts alike.
+    expect(owner.env).toEqual({
+      NEXT_PUBLIC_INTERNAL_DOCS_ORIGIN: 'https://docs.example.test',
+      NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN: 'https://probe.example.test',
+    });
+    for (const s of owner.steps) {
+      expect(s.env?.NEXT_PUBLIC_INTERNAL_DOCS_ORIGIN, s.name).toBeUndefined();
+      expect(
+        s.env?.NEXT_PUBLIC_DOCS_ACCESS_CHECK_ORIGIN,
+        s.name,
+      ).toBeUndefined();
+    }
+  });
+
   it.each([0, 1])(
     'the start step records exit %i from the data tests under bash -e',
     async code => {

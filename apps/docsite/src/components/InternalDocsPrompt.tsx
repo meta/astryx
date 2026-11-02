@@ -3,7 +3,8 @@
 'use client';
 
 /**
- * @input Build target, exact-origin reachability, and the current docs view
+ * @input Build target, configured docs origin, exact-origin reachability, and
+ *   the current docs view
  * @output The internal-docs banner after reachability, otherwise the public Canary banner
  * @position Root-owned detection; banner content lives in the page shell
  */
@@ -31,7 +32,13 @@ export function InternalDocsReachabilityProvider({
   );
 }
 
-export function internalDocsHref(pathname: string, search: string): string {
+export function internalDocsHref(
+  pathname: string,
+  search: string,
+): string | undefined {
+  if (!INTERNAL_DOCS_ORIGIN) {
+    return undefined;
+  }
   // Shared route families use the same topic/name/slug semantics. Public-only
   // pages (blog, community, changelog, preview) have no same-path counterpart.
   const hasCounterpart =

@@ -22,9 +22,8 @@ import {
   plainDateSetFirstOfMonth,
   plainDateAddMonths,
   plainDateAddDays,
-  plainDateFormat,
-  DATE_FORMAT_MONTH_YEAR,
 } from '../../utils/plainDate';
+import {plainDateFormatStandaloneMonthYear} from '../../utils/plainDate';
 import {useLocale} from '../../i18n';
 
 /**
@@ -135,14 +134,14 @@ export function useCalendarNavigation(
   }, [baseMonth, numberOfMonths]);
 
   // Format month header
-  const monthYearLabel = useMemo(() => {
-    if (numberOfMonths === 1) {
-      return plainDateFormat(visibleMonths[0], DATE_FORMAT_MONTH_YEAR, locale);
-    }
-    return visibleMonths
-      .map(m => plainDateFormat(m, DATE_FORMAT_MONTH_YEAR, locale))
-      .join(' – ');
-  }, [visibleMonths, numberOfMonths, locale]);
+  // Each month is its own stand-alone label (Calendar FR1).
+  const monthYearLabel = useMemo(
+    () =>
+      visibleMonths
+        .map(m => plainDateFormatStandaloneMonthYear(m, locale))
+        .join(' – '),
+    [visibleMonths, locale],
+  );
 
   // Navigate to previous/next month
   const navigateMonth = useCallback(

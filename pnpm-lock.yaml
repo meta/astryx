@@ -113,6 +113,9 @@ importers:
       cldr-dates-full:
         specifier: ^48.2.0
         version: 48.2.0(cldr-numbers-full@48.2.0(cldr-core@48.2.0))
+      cldr-misc-full:
+        specifier: ^48.2.0
+        version: 48.2.0(cldr-core@48.2.0)
       dom-accessibility-api:
         specifier: ^0.6.3
         version: 0.6.3
@@ -4416,6 +4419,11 @@ packages:
     resolution: {integrity: sha512-zMrKvjMO414HDftLr6vKH1fNQHakFNe+F1h4S0eg+zmL4WRi9pI41fxB3UrTJDY42MEM87jCuAw/qlqCgYKcAQ==}
     peerDependencies:
       cldr-numbers-full: 48.2.0
+
+  cldr-misc-full@48.2.0:
+    resolution: {integrity: sha512-dSc2Tr53dQcUGwsTinamEeoP2YXOhQrIZ+SyeuUrv4MzJOSjT/Q0qkSmX11ZwfcTbYSkIqbrgALQLhAm1yf5fA==}
+    peerDependencies:
+      cldr-core: 48.2.0
 
   cldr-numbers-full@48.2.0:
     resolution: {integrity: sha512-0EQ+UkVDsyXOlxnWnL1RIENVZFqCnb04D1Yrku0obnOyttbuZz8tHmUd5c5AEvhGS/Gg2zI4fTaCm51LSGITog==}
@@ -10391,6 +10399,10 @@ snapshots:
   cldr-dates-full@48.2.0(cldr-numbers-full@48.2.0(cldr-core@48.2.0)):
     dependencies:
       cldr-numbers-full: 48.2.0(cldr-core@48.2.0)
+
+  cldr-misc-full@48.2.0(cldr-core@48.2.0):
+    dependencies:
+      cldr-core: 48.2.0
 
   cldr-numbers-full@48.2.0(cldr-core@48.2.0):
     dependencies:
