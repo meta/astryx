@@ -51,7 +51,10 @@
 # appearance-only Core runtime changes.
 #
 # Uses pull_request_target so it can label / request reviewers / disable
-# auto-merge on fork PRs. It reads the PR file list, diff text, and changed Core
+# auto-merge on fork PRs. An engineering owner's owner command
+# (`/approve-spec`, `/revoke-spec`, an issue_comment in the base context) also
+# runs it, so the command re-evaluates the code half on a fork PR whose review
+# event GitHub held for approval. It reads the PR file list, diff text, and changed Core
 # base/head source bytes as inert API data. The approval helper comes from the
 # trusted workflow SHA; the visual classifier comes from the PR base ref. It reads
 # eng/design owner lists from repository VARIABLES (vars.ENGOWNERS /
@@ -69,8 +72,10 @@ on:
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   pull_request_review:
     types: [submitted, dismissed]
-  # Owner commands for the spec-owner job. The job-level filter skips every
-  # other comment before a runner starts.
+  # Owner commands for the spec-owner job, which also run the flag job so the
+  # command re-evaluates both halves of the gate (a fork's review event can be
+  # held for approval). The job-level filters skip every other comment before a
+  # runner starts.
   issue_comment:
     types: [created]
   # Manual re-trigger. The App only auto-runs on the PR events above, so if it
@@ -106,12 +111,16 @@ jobs:
     if: >-
       github.event_name == 'pull_request_target'
       || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'issue_comment'
+          && github.event.issue.pull_request != null
+          && (startsWith(github.event.comment.body, '/approve-spec')
+              || startsWith(github.event.comment.body, '/revoke-spec')))
     name: Flag review signals
     runs-on: ubuntu-slim
     # Per PR (run-scoped for backfill-all). Only this job cancels: a cancelled
     # spec-owner reconcile could leave its head without a terminal status.
     concurrency:
-      group: review-signal-${{ github.event.pull_request.number || github.event.inputs.pr || github.run_id }}
+      group: review-signal-${{ github.event.pull_request.number || github.event.issue.number || github.event.inputs.pr || github.run_id }}
       cancel-in-progress: true
     permissions:
       pull-requests: write
@@ -193,6 +202,23 @@ jobs:
                     `${open.length} open PR(s); ${open.length - ready.length} draft(s) skipped.`,
                 );
               }
+            } else if (context.eventName === 'issue_comment') {
+              // An engineering owner's owner command re-evaluates the code
+              // half from the PR's reviews: GitHub can hold a fork's
+              // pull_request_review run for approval, so the approval alone
+              // may never reach the gate. Anyone else's command changes
+              // nothing here.
+              const commenter = (context.payload.comment?.user?.login || '').toLowerCase();
+              const engineers = ((process.env.ENG_OWNERS || '').match(/@?[A-Za-z0-9-]+/g) || [])
+                .map((handle) => handle.replace(/^@/, '').toLowerCase());
+              if (!engineers.includes(commenter)) {
+                core.info(`@${commenter} is not an engineering owner; the code half is unchanged.`);
+                return;
+              }
+              const { data } = await github.rest.pulls.get({
+                owner, repo, pull_number: context.payload.issue.number,
+              });
+              prs = [data];
             } else {
               prs = [context.payload.pull_request];
             }
