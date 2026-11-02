@@ -129,7 +129,7 @@ describe('PowerSearch date values in the provider calendar', () => {
         screen.getByText(formatDateAbsoluteCompact(UNIX_SECONDS, 'en')),
       ).toBeInTheDocument();
       expect(warn).toHaveBeenCalledWith(
-        expect.stringContaining('needs Temporal'),
+        expect.stringContaining('needs a Temporal that supports it'),
       );
     });
 

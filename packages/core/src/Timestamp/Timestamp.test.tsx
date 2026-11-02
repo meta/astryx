@@ -1903,7 +1903,7 @@ describe('Timestamp calendar systems', () => {
         formatInstant(INSTANT, 'date_long', 'en'),
       );
       expect(warn).toHaveBeenCalledWith(
-        expect.stringContaining('needs Temporal'),
+        expect.stringContaining('needs a Temporal that supports it'),
       );
     });
 
