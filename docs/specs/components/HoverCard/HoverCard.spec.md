@@ -63,7 +63,10 @@ Consumer usage lives in `HoverCard.doc.mjs`.
 - Released default preserved: yes. `touchTrigger` keeps its released values
   and its default `auto`. A disabled control is not an action, so its reason
   opens on a tap (FR5); that restoration ships on its own as a patch `[fix]`
-- Compatibility class: no public prop, default, DOM, or styling change
+- Compatibility class: no public prop, default, or styling change. Text
+  written around an expression, such as `Edited {when}`, now renders the
+  focusable trigger span with the text hover cue, as a single string does; this
+  ships as a patch `[fix]`
 - Controlled/uncontrolled behavior: uncontrolled by default; `isOpen` forces the
   state, and a controlled card reports close requests through
   `onOpenChange(false)` without closing itself (FR7)
@@ -229,12 +232,11 @@ Read from source, with no focused test yet:
 
 - FR3: restoring the trigger's own attributes on unmount.
 - FR7: `isOpen={true}` keeping the card open when focus leaves the trigger.
-- FR8: `hasHoverIndication={true}` and `{false}`.
+- FR8: `hasHoverIndication={true}`.
 
 Checked only in a browser, with no unit test:
 
 - FR1: the card's padding.
-- FR8: the default `hasHoverIndication` cue on a text trigger.
 
 ## Decision log
 
