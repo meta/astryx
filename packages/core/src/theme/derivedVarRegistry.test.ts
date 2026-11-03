@@ -119,6 +119,12 @@ const STRUCTURAL_VARS = new Set([
   '--_progress-bar-curve',
   '--_progress-bar-flip',
   '--_progress-bar-min',
+  // The reduced-motion pulse's duration, curve and floor, written inline from
+  // the progress table on the indeterminate fill. Runtime state, never
+  // authored by a theme.
+  '--_progress-bar-pulse',
+  '--_progress-bar-pulse-curve',
+  '--_progress-bar-pulse-floor',
 ]);
 
 /**
