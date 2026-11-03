@@ -222,6 +222,50 @@ describe('InfoTip press-to-pin (component:InfoTip FR2)', () => {
     expect(shows(TIP)).toBe(false);
   });
 
+  it('after a press on a preview that ends off the button, Enter and Space still pin and close it', () => {
+    vi.useFakeTimers();
+    render(<InfoTooltip />);
+    const trigger = screen.getByRole('button', {name: 'About billing'});
+    fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
+    fireEvent.mouseEnter(trigger);
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    // The press lifts outside the button, so no click follows.
+    fireEvent.pointerDown(trigger, {pointerType: 'mouse', button: 0});
+    fireEvent.pointerUp(document.body, {pointerType: 'mouse', button: 0});
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(trigger, {detail: 0});
+    expect(shows(TIP)).toBe(true);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(trigger, {detail: 0});
+    expect(shows(TIP)).toBe(false);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('a right or middle press on a preview does not hold it', () => {
+    vi.useFakeTimers();
+    render(<InfoTooltip />);
+    const trigger = screen.getByRole('button', {name: 'About billing'});
+    for (const button of [2, 1]) {
+      fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(trigger);
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      expect(shows(TIP)).toBe(true);
+      fireEvent.pointerDown(trigger, {pointerType: 'mouse', button});
+      fireEvent.pointerUp(trigger, {pointerType: 'mouse', button});
+      fireEvent.pointerLeave(trigger, {pointerType: 'mouse'});
+      fireEvent.mouseLeave(trigger);
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      expect(shows(TIP)).toBe(false);
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    }
+  });
+
   it('Escape closes a pinned tooltip', () => {
     render(<InfoTooltip />);
     const trigger = screen.getByRole('button', {name: 'About billing'});

@@ -19,7 +19,6 @@
 
 import {
   useCallback,
-  useRef,
   useState,
   type MouseEvent,
   type PointerEvent,
@@ -175,17 +174,18 @@ export function InfoTip({
   const tooltip = useTooltip({onShow: handleShow, onHide: handleHide});
   const mergedRef = useMergedRefs(ref, watchButtonHitArea, tooltip.ref);
 
-  // A mouse or pen press on a previewed tip keeps it in view: show() turns
-  // the preview into a hold before the hook's press handler runs, so the tip
-  // never blinks out between the press and its click. The click still pins.
-  const isHeldByPressRef = useRef(false);
+  // A primary mouse or pen press on a preview calls show() first. The hook's
+  // press-to-close then leaves it open. The click pins it.
   const handlePointerDownCapture = useCallback(
     (event: PointerEvent<HTMLButtonElement>) => {
-      isHeldByPressRef.current = false;
-      if (event.pointerType === 'touch' || isPinned || !isShown) {
+      if (
+        event.button !== 0 ||
+        event.pointerType === 'touch' ||
+        isPinned ||
+        !isShown
+      ) {
         return;
       }
-      isHeldByPressRef.current = true;
       tooltip.show();
     },
     [isPinned, isShown, tooltip],
@@ -202,11 +202,7 @@ export function InfoTip({
         tooltip.hide();
         return;
       }
-      // A hold the press already set needs no second show().
-      if (!isHeldByPressRef.current) {
-        tooltip.show();
-      }
-      isHeldByPressRef.current = false;
+      tooltip.show();
       setIsPinned(true);
     },
     [isPinned, tooltip],
