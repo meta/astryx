@@ -553,6 +553,18 @@ describe('Button', () => {
       expect(button).not.toHaveAttribute('aria-describedby');
     });
 
+    it('adds no description when a decorative Icon ends a repeated label', () => {
+      render(
+        <Button
+          label="Sort"
+          endContent={<Icon icon="close" />}
+          tooltip="Sort"
+        />,
+      );
+      const button = screen.getByRole('button', {name: 'Sort'});
+      expect(button).not.toHaveAttribute('aria-describedby');
+    });
+
     it('keeps the description when endContent adds to the name', () => {
       render(
         <Button
