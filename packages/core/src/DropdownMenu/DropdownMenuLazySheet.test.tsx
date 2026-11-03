@@ -68,9 +68,21 @@ if ('eager' in loaded) {
 const {DropdownMenu} = loaded.module;
 // The sheet modules' own code loads here too, once. `importActual` skips the
 // mocks above, so `requested` stays empty. The hold still decides when the
-// sheet arrives. The mocks' `importOriginal` then returns these modules.
-await vi.importActual('./MenuBottomSheet');
-await vi.importActual('./MenuBottomSheetActionList');
+// sheet arrives. The mocks' `importOriginal` then returns these modules. If one
+// sheet module imported the other, that import would wait on the hold forever.
+// So this load also fails the moment a sheet module is requested.
+const sheetCode = await Promise.race([
+  Promise.all([
+    vi.importActual('./MenuBottomSheet'),
+    vi.importActual('./MenuBottomSheetActionList'),
+  ]).then(() => ({})),
+  sheetLoad.firstRequest.then(name => ({eager: name})),
+]);
+if ('eager' in sheetCode) {
+  throw new Error(
+    `Loading the sheet's own code requested the held ${sheetCode.eager}: one sheet module imports the other.`,
+  );
+}
 
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = vi.fn(function (
