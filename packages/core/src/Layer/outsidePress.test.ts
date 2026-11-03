@@ -2,13 +2,14 @@
 
 /**
  * @file outsidePress.test.ts
- * @input isFocusInsideOwnedLayer and isPressInsideOwnedLayer
- * @output The shared focus-leave test: the field, the layer (by id, across
- *   shadow roots and through popovers nested in it) are inside; anything
- *   else and a null target are outside
+ * @input isFocusInsideOwnedLayer, isPressInsideOwnedLayer and
+ *   watchOutsidePress
+ * @output The shared focus-leave test, and the outside-press watch that
+ *   closes as a finger outside begins to pan, at a cancel or at a lift
  */
 
-import {afterEach, describe, expect, it} from 'vitest';
+import {fireEvent} from '@testing-library/react';
+import {afterEach, describe, expect, it, vi} from 'vitest';
 import {
   isFocusInsideOwnedLayer,
   isPressInsideOwnedLayer,
@@ -122,5 +123,105 @@ describe('outsideDismissalCount', () => {
     stop();
     owner.remove();
     outside.remove();
+  });
+});
+
+describe('watchOutsidePress, closing on a pan', () => {
+  afterEach(() => {
+    document.body.replaceChildren();
+  });
+
+  const touch = (pointerId: number, x = 0, y = 0) => ({
+    pointerType: 'touch',
+    pointerId,
+    clientX: x,
+    clientY: y,
+    composed: true,
+  });
+
+  function setup(root?: Node) {
+    const owner = document.createElement('div');
+    const layer = document.createElement('div');
+    const item = document.createElement('button');
+    layer.append(item);
+    const outside = document.createElement('button');
+    document.body.append(owner, outside);
+    (root ?? document.body).appendChild(layer);
+    const onOutside = vi.fn();
+    const stop = watchOutsidePress(
+      owner,
+      path => path.includes(layer),
+      onOutside,
+      {closesOnPan: true, pointerTypes: ['touch'], root},
+    );
+    return {item, outside, onOutside, stop};
+  }
+
+  it('closes as a press that starts outside pans past the pan threshold', () => {
+    const {outside, onOutside, stop} = setup();
+    fireEvent.pointerDown(outside, touch(1));
+    fireEvent.pointerMove(outside, touch(1, 0, 8));
+    expect(onOutside).not.toHaveBeenCalled();
+    fireEvent.pointerMove(outside, touch(1, 0, 30));
+    expect(onOutside).toHaveBeenCalledOnce();
+    fireEvent.pointerUp(outside, touch(1, 0, 30));
+    expect(onOutside).toHaveBeenCalledOnce();
+    stop();
+  });
+
+  it('measures the pan threshold on each axis, as a pan does: a diagonal drift under it on both axes does not close', () => {
+    const {outside, onOutside, stop} = setup();
+    fireEvent.pointerDown(outside, touch(1));
+    fireEvent.pointerMove(outside, touch(1, 8, 8));
+    expect(onOutside).not.toHaveBeenCalled();
+    fireEvent.pointerMove(outside, touch(1, 8, 30));
+    expect(onOutside).toHaveBeenCalledOnce();
+    stop();
+  });
+
+  it('begins the pan at the threshold itself, as a pan does: a finger outside that moves exactly 10 px closes', () => {
+    const {outside, onOutside, stop} = setup();
+    fireEvent.pointerDown(outside, touch(1));
+    fireEvent.pointerMove(outside, touch(1, 10, 0));
+    expect(onOutside).toHaveBeenCalledOnce();
+    stop();
+  });
+
+  it('closes when the browser takes the press, and at the lift of a tap', () => {
+    const {outside, onOutside, stop} = setup();
+    fireEvent.pointerDown(outside, touch(1));
+    fireEvent.pointerCancel(outside, touch(1));
+    expect(onOutside).toHaveBeenCalledOnce();
+    fireEvent.pointerDown(outside, touch(2));
+    fireEvent.pointerUp(outside, touch(2));
+    expect(onOutside).toHaveBeenCalledTimes(2);
+    stop();
+  });
+
+  it('lets a second finger wait for the first, and leaves a mouse alone', () => {
+    const {outside, onOutside, stop} = setup();
+    fireEvent.pointerDown(outside, {pointerType: 'mouse', pointerId: 9});
+    fireEvent.pointerUp(outside, {pointerType: 'mouse', pointerId: 9});
+    fireEvent.pointerDown(outside, touch(2));
+    fireEvent.pointerDown(outside, touch(3));
+    fireEvent.pointerUp(outside, touch(3));
+    expect(onOutside).not.toHaveBeenCalled();
+    fireEvent.pointerUp(outside, touch(2));
+    expect(onOutside).toHaveBeenCalledOnce();
+    stop();
+  });
+
+  it('counts a press inside the layer as inside, in a closed shadow root too', () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const shadow = host.attachShadow({mode: 'closed'});
+    const {item, onOutside, stop} = setup(shadow);
+    fireEvent.pointerDown(item, touch(1));
+    fireEvent.pointerUp(item, touch(1));
+    expect(onOutside).not.toHaveBeenCalled();
+    fireEvent.pointerDown(host, touch(2));
+    fireEvent.pointerUp(host, touch(2));
+    expect(onOutside).toHaveBeenCalledOnce();
+    stop();
   });
 });
