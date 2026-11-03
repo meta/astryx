@@ -83,16 +83,15 @@ import {
 import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {joinAriaIDs} from '../utils/inputAria';
 import {
-  DATE_FORMAT_LONG,
   plainDateFromISO,
   plainDateToday,
   type PlainDate,
 } from '../utils/plainDate';
 import {
   calendarDayOfMonth,
-  formatCalendarDate,
   formatCalendarMonthLabel,
 } from '../utils/calendarSystem';
+import {formatCalendarDateText} from '../utils/calendarDateParser';
 import {useCalendarSystem} from '../i18n/useCalendarSystem';
 import {
   MonthScroller,
@@ -657,7 +656,7 @@ export function TouchDateTimeField({
     if (selectedDate == null) {
       return '';
     }
-    return formatCalendarDate(calendar, selectedDate, DATE_FORMAT_LONG, locale);
+    return formatCalendarDateText(selectedDate, 'date_long', locale, calendar);
   }, [calendar, selectedDate, locale]);
 
   const timeDisplayValue = useMemo(() => {

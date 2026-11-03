@@ -313,19 +313,28 @@ describe('DateTimeInput surface in a calendar', () => {
     expect(messages[0]).toContain('DateTimeInput');
   });
 
-  it('writes the sheet date segment in the calendar', () => {
-    stubPointer('coarse');
-    render(
-      <DateTimeInput
-        label="When"
-        calendar="persian"
-        presentation="adaptive-bottom-sheet"
-        value={'2026-11-02T09:00' as ISODateTimeString}
-        onChange={() => {}}
-      />,
-    );
-    expect(document.querySelector('input[inputmode="none"]')).toHaveValue(
-      'Aban 11, 1405 AP',
-    );
-  });
+  it.each([
+    ['en', 'persian', 'Aban 11, 1405 AP'],
+    ['fa-IR', 'persian', '۱۱ آبان ۱۴۰۵ ه‍.ش.'],
+    ['th-TH', 'buddhist', '2 พฤศจิกายน พ.ศ. 2569'],
+  ] as const)(
+    'writes the sheet date segment in %s %s with its era',
+    (locale, calendar, text) => {
+      stubPointer('coarse');
+      render(
+        <InternationalizationProvider locale={locale}>
+          <DateTimeInput
+            label="When"
+            calendar={calendar}
+            presentation="adaptive-bottom-sheet"
+            value={'2026-11-02T09:00' as ISODateTimeString}
+            onChange={() => {}}
+          />
+        </InternationalizationProvider>,
+      );
+      expect(document.querySelector('input[inputmode="none"]')).toHaveValue(
+        text,
+      );
+    },
+  );
 });

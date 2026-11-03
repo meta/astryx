@@ -124,10 +124,8 @@ export function MonthYearWheels({
     return result;
   }, [monthModel, calendar, locale, minMonthIndex, maxMonthIndex]);
 
-  // A year that spans an era change names the era of the date the wheels
-  // show, as the iOS date wheels do, so its row changes as the month turns.
-  // Rows keep their size: the wheel columns share the width equally and every
-  // row is one fixed height, whatever its label.
+  // A year with an era change takes the era of the shown date, as iOS does.
+  // Its row text changes as the month turns. Each row keeps one fixed size.
   const yearOptions: WheelOption[] = useMemo(
     () =>
       years.map(({value, label, spansEras}) => ({
