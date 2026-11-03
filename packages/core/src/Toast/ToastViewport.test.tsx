@@ -614,7 +614,7 @@ describe('ToastViewport keyboard reach + focus', () => {
     expect(document.activeElement).toBe(dismiss);
   });
 
-  it('moves focus to the neighbour when a control inside a toast raises its repeat and dismisses it', () => {
+  it('keeps focus in the replacement when a control inside a toast raises its repeat and dismisses it', () => {
     function OfflineFlow() {
       const toast = useToast();
       const dismissOfflineRef = useRef<(() => void) | null>(null);
@@ -673,12 +673,13 @@ describe('ToastViewport keyboard reach + focus', () => {
     act(() => {
       fireEvent.click(retry);
     });
-    // Toast.spec.md FR10: focus moves to a control in a remaining toast, the
-    // neighbour of the dismissed one, not to the hidden oldest toast or the
-    // region.
-    expect(
-      getToastWrapperByText('Bravo').contains(document.activeElement),
-    ).toBe(true);
+    // Toast.spec.md FR8: the repeat updates the card in place, so the pressed
+    // Retry stays focused in it; dismissing the replaced toast leaves the row
+    // to the replacement, and focus does not jump to a neighbour.
+    const replacement = getToastWrapperByText('Still offline');
+    expect(document.activeElement).toBe(retry);
+    expect(replacement.contains(retry)).toBe(true);
+    expect(screen.queryByText('Offline')).toBeNull();
   });
 
   it('moves focus into the replacement when a control inside the only toast raises its repeat and dismisses it', () => {
@@ -880,6 +881,310 @@ describe('ToastViewport keyboard reach + focus', () => {
       completeExit(toastId);
     });
 
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  // FR8: an overwrite updates the card in place under the same key, so focus
+  // inside it stays on the same control.
+  it('keeps focus on a control inside a toast that an overwrite updates', () => {
+    const upload = (percent: number): ToastOptions => ({
+      body: `Uploading ${percent}%`,
+      uniqueID: 'upload',
+      collisionBehavior: 'overwrite',
+      isAutoHide: false,
+      endContent: <button type="button">Cancel upload</button>,
+    });
+    renderViewport(
+      <>
+        <ShowToastButton options={upload(10)} triggerLabel="Start" />
+        <ShowToastButton options={upload(60)} triggerLabel="Progress" />
+      </>,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Start'));
+    });
+    const cancel = screen.getByRole('button', {name: 'Cancel upload'});
+    act(() => {
+      cancel.focus();
+    });
+
+    act(() => {
+      fireEvent.click(screen.getByText('Progress'));
+    });
+
+    const viewport = screen.getByRole('region', {name: 'Notifications'});
+    expect(within(viewport).getByText('Uploading 60%')).toBeInTheDocument();
+    expect(cancel).toBeInTheDocument();
+    expect(document.activeElement).toBe(cancel);
+  });
+
+  // FR2, FR8: an overwrite that turns the card into one that auto-hides keeps
+  // the timer held while focus is inside it.
+  it('keeps an overwritten toast held while focus is inside when it starts auto-hiding', () => {
+    vi.useFakeTimers();
+    const onHide = vi.fn();
+    try {
+      renderViewport(
+        <>
+          <ShowToastButton
+            options={{
+              body: 'Uploading',
+              uniqueID: 'upload',
+              isAutoHide: false,
+              endContent: <button type="button">Cancel upload</button>,
+            }}
+            triggerLabel="Start"
+          />
+          <ShowToastButton
+            options={{
+              body: 'Upload done',
+              uniqueID: 'upload',
+              autoHideDuration: 2000,
+              onHide,
+              endContent: <button type="button">Cancel upload</button>,
+            }}
+            triggerLabel="Finish"
+          />
+        </>,
+      );
+      act(() => {
+        fireEvent.click(screen.getByText('Start'));
+      });
+      const cancel = screen.getByRole('button', {name: 'Cancel upload'});
+      act(() => {
+        cancel.focus();
+      });
+
+      act(() => {
+        fireEvent.click(screen.getByText('Finish'));
+      });
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+
+      expect(onHide).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(cancel);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // FR2: an update that removes the focused control drops its focus hold, so
+  // a control-free, auto-hiding replacement still hides on time.
+  it('auto-hides a control-free replacement after the update removes the focused control', () => {
+    vi.useFakeTimers();
+    const onHide = vi.fn();
+    try {
+      renderViewport(
+        <>
+          <ShowToastButton
+            options={{
+              body: 'Uploading',
+              uniqueID: 'upload',
+              isAutoHide: false,
+              endContent: <button type="button">Cancel upload</button>,
+            }}
+            triggerLabel="Start"
+          />
+          <ShowToastButton
+            options={{
+              body: 'Uploaded',
+              uniqueID: 'upload',
+              autoHideDuration: 2000,
+              renderContent: () => <span>Uploaded</span>,
+              onHide,
+            }}
+            triggerLabel="Finish"
+          />
+        </>,
+      );
+      const start = screen.getByText('Start');
+      act(() => {
+        start.focus();
+        fireEvent.click(start);
+      });
+      act(() => {
+        screen.getByRole('button', {name: 'Cancel upload'}).focus();
+      });
+
+      act(() => {
+        fireEvent.click(screen.getByText('Finish'));
+      });
+      act(() => {
+        vi.advanceTimersByTime(2500);
+      });
+
+      expect(onHide).toHaveBeenCalledWith('auto');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // FR2: a window hold taken while the toast auto-hid does not outlive the
+  // listeners an update that turns auto-hide off removes.
+  it('auto-hides again after an update turns auto-hide off and on across a window blur', () => {
+    vi.useFakeTimers();
+    const onHide = vi.fn();
+    try {
+      const status = (body: string, options: Partial<ToastOptions>) => ({
+        body,
+        uniqueID: 'network',
+        ...options,
+      });
+      renderViewport(
+        <>
+          <ShowToastButton
+            options={status('Syncing', {autoHideDuration: 2000})}
+            triggerLabel="Sync"
+          />
+          <ShowToastButton
+            options={status('Offline', {type: 'error'})}
+            triggerLabel="Lose network"
+          />
+          <ShowToastButton
+            options={status('Back online', {autoHideDuration: 2000, onHide})}
+            triggerLabel="Reconnect"
+          />
+        </>,
+      );
+      act(() => {
+        fireEvent.click(screen.getByText('Sync'));
+      });
+      act(() => {
+        fireEvent.blur(window);
+      });
+      act(() => {
+        fireEvent.click(screen.getByText('Lose network'));
+      });
+      act(() => {
+        fireEvent.focus(window);
+      });
+      act(() => {
+        fireEvent.click(screen.getByText('Reconnect'));
+      });
+      act(() => {
+        vi.advanceTimersByTime(2500);
+      });
+
+      expect(onHide).toHaveBeenCalledWith('auto');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // FR9: the viewport is the one announcement owner, so a card updated in
+  // place carries no live region of its own and is announced once.
+  it('announces an overwrite once, through the viewport only', () => {
+    const upload = (percent: number): ToastOptions => ({
+      body: `Uploading ${percent}%`,
+      uniqueID: 'upload',
+      isAutoHide: false,
+    });
+    renderViewport(
+      <>
+        <ShowToastButton options={upload(10)} triggerLabel="Start" />
+        <ShowToastButton options={upload(60)} triggerLabel="Progress" />
+      </>,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Start'));
+    });
+    act(() => {
+      fireEvent.click(screen.getByText('Progress'));
+    });
+
+    // The toast's text sits in no live region inside its row: only the
+    // viewport's own announcer speaks it.
+    const row = getToastWrapperByText('Uploading 60%');
+    const liveAncestor = within(row)
+      .getByText('Uploading 60%')
+      .closest('[aria-live], [role="status"], [role="alert"]');
+    expect(liveAncestor == null || !row.contains(liveAncestor)).toBe(true);
+  });
+
+  // FR8, FR10: when the overwrite removes the focused control, focus moves as
+  // FR10 hands it off, never to the page body.
+  it('hands focus off when an overwrite removes the focused control', () => {
+    renderViewport(
+      <>
+        <ShowToastButton
+          options={{
+            body: 'Uploading',
+            uniqueID: 'upload',
+            isAutoHide: false,
+            endContent: <button type="button">Cancel upload</button>,
+          }}
+          triggerLabel="Start"
+        />
+        <ShowToastButton
+          options={{
+            body: 'Uploaded',
+            uniqueID: 'upload',
+            isAutoHide: false,
+            renderContent: () => <span>Uploaded</span>,
+          }}
+          triggerLabel="Finish"
+        />
+      </>,
+    );
+    const start = screen.getByText('Start');
+    act(() => {
+      start.focus();
+      fireEvent.click(start);
+    });
+    act(() => {
+      screen.getByRole('button', {name: 'Cancel upload'}).focus();
+    });
+
+    act(() => {
+      fireEvent.click(screen.getByText('Finish'));
+    });
+
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).toBe(start);
+  });
+
+  // FR10: dismissing a focused toast beside a control-free one never drops
+  // focus to the page body; with no control to take it, the remembered
+  // element does.
+  it('restores the remembered element when only a control-free toast remains', () => {
+    renderViewport(
+      <>
+        <ShowToastButton
+          options={{
+            body: 'Synced',
+            isAutoHide: false,
+            renderContent: () => <span>Synced</span>,
+          }}
+          triggerLabel="Trigger quiet"
+        />
+        <ShowToastButton options={INFO_B} triggerLabel="Trigger B" />
+      </>,
+    );
+    act(() => {
+      fireEvent.click(screen.getByText('Trigger quiet'));
+    });
+    const trigger = screen.getByText('Trigger B');
+    act(() => {
+      trigger.focus();
+      fireEvent.click(trigger);
+    });
+    const dismiss = screen.getByRole('button', {name: 'Dismiss notification'});
+    act(() => {
+      dismiss.focus();
+    });
+    const toastId = dismiss
+      .closest('[data-toast-id]')!
+      .getAttribute('data-toast-id')!;
+
+    act(() => {
+      fireEvent.click(dismiss);
+    });
+    act(() => {
+      completeExit(toastId);
+    });
+
+    expect(document.activeElement).not.toBe(document.body);
     expect(document.activeElement).toBe(trigger);
   });
 
@@ -1127,13 +1432,10 @@ describe('Toast native motion contract', () => {
     expect(getComputedStyle(wrapper).pointerEvents).toBe('auto');
   });
 
-  it('settles a toast that replaced another through uniqueID', () => {
-    // An overwrite unmounts the replaced row and mounts a new one with a new
-    // id, so the new row runs its own entry transition and has to release the
-    // clip on its own. The replaced id is dropped at the same time: nothing
-    // dismisses it, so neither removeToast nor handleExited would ever prune
-    // it, and a viewport overwriting one uniqueID on a schedule would collect
-    // a dead id per update for as long as it lives.
+  it('updates a settled toast in place when an overwrite replaces it through uniqueID', () => {
+    // FR8: an overwrite keeps the replaced toast's row, so the card updates in
+    // place: the row stays settled (no second entry transition) and carries
+    // the new toast's id.
     render(
       <ToastViewport isTopLayer={false} position="bottomEnd" maxVisible={3}>
         <ShowToastButton
@@ -1163,19 +1465,12 @@ describe('Toast native motion contract', () => {
       fireEvent.click(screen.getByText('Show v2'));
     });
     const second = getToastWrapperByText('Changes saved');
-    // A different row, so the settled state of the one it replaced says
-    // nothing about it: it starts clipped.
+    expect(second).toBe(first);
     expect(second.getAttribute('data-toast-id')).not.toBe(firstId);
     expect(
       getComputedStyle(second.firstElementChild as HTMLElement).overflow,
-    ).toBe('hidden');
-
-    act(() => {
-      fireEvent.transitionEnd(second, {propertyName: 'grid-template-rows'});
-    });
-    expect(
-      getComputedStyle(second.firstElementChild as HTMLElement).overflow,
     ).toBe('visible');
+    expect(document.querySelectorAll('[data-toast-id]')).toHaveLength(1);
   });
 
   it('drops settled state when a toast is evicted and later resurfaces', () => {
@@ -2819,7 +3114,9 @@ describe('toast timer lifecycle (#3589)', () => {
       fireEvent.click(screen.getByText('Show held'));
     });
     const viewport = screen.getByRole('region', {name: 'Notifications'});
-    const card = within(viewport).getByText('Held').closest('[role="status"]');
+    // The row's wrapper holds the clip, which holds the card.
+    const card =
+      getToastWrapperByText('Held').firstElementChild?.firstElementChild;
     if (!(card instanceof HTMLElement)) {
       throw new Error('toast card not found');
     }

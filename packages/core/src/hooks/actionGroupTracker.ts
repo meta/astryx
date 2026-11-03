@@ -57,7 +57,8 @@ export interface ActionGroupTrackerOptions {
    * target past the group's ends commits the lift there wherever the finger
    * lifts.
    * @default the target whose rect, grown by `highlightExpansion`, holds the
-   *   point; none between or outside them
+   *   point, the one the press landed on where several do; none between or
+   *   outside them
    */
   resolveTarget?: (
     x: number,
@@ -83,8 +84,13 @@ export interface ActionGroupTracker {
   /**
    * A press began at viewport (x, y): read the actions' rects once and
    * highlight the one under it. An inert press is taken but tracks nothing.
+   * `landed` is the node the press landed on.
    */
-  begin(x: number, y: number, options?: {inert?: boolean}): void;
+  begin(
+    x: number,
+    y: number,
+    options?: {inert?: boolean; landed?: Node | null},
+  ): void;
   /** The finger moved to viewport (x, y). */
   move(x: number, y: number): void;
   /**
@@ -150,6 +156,7 @@ export function createActionGroupTracker(
   let actions: TrackedAction[] = [];
   let highlighted: HTMLElement | null = null;
   let beganOn: HTMLElement | null = null;
+  let landedOn: Node | null = null;
   let isTracking = false;
   let isInert = false;
   // The finger's last position: `remeasure` resolves it again.
@@ -241,6 +248,9 @@ export function createActionGroupTracker(
     if (resolveTarget != null) {
       return actions.length === 0 ? null : resolveTarget(x, y, actions);
     }
+    // Rects that share an edge, or that have no layout (a test renderer), can
+    // both hold the point: the one the press landed on wins.
+    let first: HTMLElement | null = null;
     for (const action of actions) {
       if (
         x >= action.left - margin &&
@@ -248,22 +258,26 @@ export function createActionGroupTracker(
         y >= action.top - margin &&
         y <= action.bottom + margin
       ) {
-        return action.element;
+        if (landedOn != null && action.element.contains(landedOn)) {
+          return action.element;
+        }
+        first ??= action.element;
       }
     }
-    return null;
+    return first;
   };
 
   const reset = () => {
     actions = [];
     highlighted = null;
     beganOn = null;
+    landedOn = null;
     isTracking = false;
     isInert = false;
   };
 
   return {
-    begin(x, y, {inert = false} = {}) {
+    begin(x, y, {inert = false, landed = null} = {}) {
       // A press can begin while another is tracked, when a second recognizer
       // takes over the finger (a trigger's held press, then the menu's): the
       // action the first one lit loses its paint.
@@ -276,6 +290,7 @@ export function createActionGroupTracker(
       highlighted = null;
       isTracking = true;
       isInert = inert;
+      landedOn = landed;
       lastX = x;
       lastY = y;
       getOptions().onMove?.(x, y);

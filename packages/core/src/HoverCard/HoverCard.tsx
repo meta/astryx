@@ -16,8 +16,15 @@
  * - /packages/cli/assets/templates/blocks/components/HoverCard/ (showcase blocks)
  */
 
-import {useCallback, useRef, type ReactElement, type ReactNode} from 'react';
+import {
+  useCallback,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import {isRenderable} from '../utils/isRenderable';
+import {observeMutations} from '../utils/sharedMutationObserver';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
 import {
@@ -149,9 +156,10 @@ export interface HoverCardProps extends Pick<
 
   /**
    * When to trigger on focus:
-   * - `auto`: Only if element is naturally focusable
-   * - `always`: Always attach focus listeners
-   * - `never`: Never attach focus listeners (for composite widgets)
+   * - `auto`: focus on the trigger itself, or within a trigger that is
+   *   focusable when focus arrives
+   * - `always`: focus on the trigger or anything inside it
+   * - `never`: never on focus (for composite widgets)
    *
    * @default 'auto'
    */
@@ -324,6 +332,28 @@ export function HoverCard({
     onHide: handleHide,
   });
 
+  // The wrapper's first element is the trigger, and it can be replaced after
+  // mount: by new children, or by a child component that swaps its own root
+  // without a render here. Syncs with the DOM: on a replacement the wiring
+  // below re-runs, so the old element is released before the new one is wired.
+  const [triggerReplacements, setTriggerReplacements] = useState(0);
+  const observedTriggerRef = useRef<Element | null>(null);
+  useIsomorphicLayoutEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (textOnly || wrapper == null) {
+      return;
+    }
+    observedTriggerRef.current = wrapper.firstElementChild;
+    return observeMutations(wrapper, {childList: true}, () => {
+      const trigger = wrapper.firstElementChild;
+      if (trigger === observedTriggerRef.current) {
+        return;
+      }
+      observedTriggerRef.current = trigger;
+      setTriggerReplacements(count => count + 1);
+    });
+  }, [textOnly]);
+
   // For element children with display:contents, attach ref to first child
   useIsomorphicLayoutEffect(() => {
     if (textOnly) {
@@ -428,6 +458,7 @@ export function HoverCard({
     hoverCard.id,
     hoverCard.isOpen,
     hoverCard.describedBy,
+    triggerReplacements,
   ]);
 
   // While closed, useLayer leaves only an inert <template> marker at this JSX

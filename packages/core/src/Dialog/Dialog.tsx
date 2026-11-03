@@ -81,7 +81,10 @@ import {themeProps} from '../utils/themeProps';
 import type {DialogVariantMap} from './index';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
-import {focusForLastInput, isFocusLost} from '../utils/focusReturn';
+import {
+  focusForLastInput,
+  prepareFocusReturnOnRemoval,
+} from '../utils/focusReturn';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -653,39 +656,15 @@ export function Dialog({
   }, [isOpen, isInline]);
 
   // A dialog that unmounts while open (rendered only while open, or removed
-  // with the rest of a view) never runs the close branch above, and removing a
-  // <dialog> does not run the browser's own focus return. Focus left inside
-  // it, or dropped to the body by the removal, goes back to the opener.
+  // with the rest of a view) never runs the close branch above. Focus the
+  // removal lost goes back to the opener.
   useEffect(() => {
-    if (isInline) {
+    const dialog = dialogRef.current;
+    if (isInline || dialog == null) {
       return;
     }
-    const dialog = dialogRef.current;
-    // Read now: a removed iframe's document has no window, so its frame
-    // element can no longer be found once the dialog is gone.
-    const host = dialog?.ownerDocument.defaultView?.frameElement ?? null;
-    return () => {
-      const trigger = triggerElementRef.current;
-      if (dialog == null || trigger == null) {
-        return;
-      }
-      // Checked once the commit has finished: StrictMode's simulated unmount
-      // leaves the dialog in the document, and only a real removal returns
-      // focus.
-      queueMicrotask(() => {
-        if (dialog.isConnected || !trigger.isConnected) {
-          return;
-        }
-        // isFocusLost reads the dialog's own document. For a dialog in an
-        // iframe, the document that hosts the frame must also have lost focus
-        // or keep it on that frame, wherever the opener is: a control the
-        // user pressed outside the frame to remove the dialog, or the frame
-        // itself, keeps its focus.
-        if (isFocusLost(dialog) && (host == null || isFocusLost(host))) {
-          focusForLastInput(trigger);
-        }
-      });
-    };
+    const returnFocusOnRemoval = prepareFocusReturnOnRemoval(dialog);
+    return () => returnFocusOnRemoval(triggerElementRef.current);
   }, [isInline]);
 
   // Host app-global surfaces (toasts) inside this modal while it is open, so

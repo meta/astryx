@@ -241,6 +241,39 @@ function trackPopoverState() {
 }
 
 describe('ToastViewport modal hosting', () => {
+  // spec:AST-086 FR10: an open modal hides the body-level channel, so while
+  // the viewport is hosted in one each card announces itself; outside a modal
+  // the cards carry no live region and the viewport's channel announces once.
+  it('gives each card its own live region only while a modal hosts the viewport', () => {
+    render(
+      <ToastViewport>
+        <ToastButton />
+        <DialogFixture label="Edit">
+          <ToastButton label="Show toast from dialog" />
+        </DialogFixture>
+      </ToastViewport>,
+    );
+    // The live region the toast's own text sits in, inside its row.
+    const liveRegionOf = (text: string) => {
+      const node = screen.getByText(text);
+      const row = node.closest('[data-toast-id]');
+      const region = node.closest(
+        '[aria-live], [role="status"], [role="alert"]',
+      );
+      return region != null && row?.contains(region) ? region : null;
+    };
+
+    fireEvent.click(screen.getByRole('button', {name: 'Show toast'}));
+    expect(liveRegionOf('Saved')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', {name: 'Toggle Edit'}));
+    expect(getDialog('Edit').contains(getViewport())).toBe(true);
+    expect(liveRegionOf('Saved')).toHaveAttribute('aria-live', 'polite');
+
+    fireEvent.click(screen.getByRole('button', {name: 'Close Edit'}));
+    expect(liveRegionOf('Saved')).toBeNull();
+  });
+
   it('moves into an open Dialog and back when it closes, keeping the toast', () => {
     const {container} = render(
       <ToastViewport>
@@ -534,10 +567,10 @@ describe('ToastViewport above a BottomSheet', () => {
     expect(viewport.closest('dialog')).toBe(getDialog('Filters'));
 
     fireEvent.click(screen.getByRole('button', {name: 'Close Filters'}));
-    // The sheet stays an open modal through its exit animation, but inert and
-    // hidden; toasts must not go down with it.
+    // The sheet stays an open dialog through its exit animation, no longer
+    // modal and taking no presses; toasts must not go down with it.
     expect(getDialog('Filters')).toHaveAttribute('open');
-    expect(getDialog('Filters')).toHaveAttribute('inert');
+    expect(getDialog('Filters')).not.toHaveAttribute('aria-modal');
     expect(viewport.closest('dialog')).toBe(getDialog('Edit'));
     expect(viewport.closest('[inert], [aria-hidden="true"]')).toBeNull();
   });

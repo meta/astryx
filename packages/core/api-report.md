@@ -1166,11 +1166,12 @@ component FieldLabel(props: FieldLabelProps)
   prop ref?: React.Ref<HTMLLabelElement>
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
-component FieldStatus @deprecated
+component FieldStatus(props: FieldStatusProps)
+  overload (props: FieldStatusProps & { variant: 'tooltip' }) => React.JSX.Element @deprecated
   prop message: string
   prop ref?: React.Ref<HTMLDivElement>
   prop type: InputStatusType
-  prop variant: FieldStatusVariant = 'attached'
+  prop variant?: FieldStatusVariant = 'attached'
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component FileInput(props: FileInputProps)
@@ -1809,6 +1810,7 @@ component PowerSearch(props: PowerSearchProps)
   prop config: PowerSearchConfig
   prop disabledMessage?: string
   prop endContent?: React.ReactNode
+  prop experimental?: { presentation?: 'popover' | 'bottom-sheet' | 'adaptive' } @experimental
   prop filters: ReadonlyArray<PowerSearchFilter>
   prop handleRef?: React.Ref<PowerSearchHandle>
   prop hasAutoFocus?: boolean = false
@@ -2608,6 +2610,7 @@ component Token(props: TokenProps)
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component Tokenizer(props: TokenizerProps)
+  overload <T extends SearchableItem>(props: Omit<TokenizerProps<T>, 'ref' | 'experimental'> & { experimental: NonNullable<TokenizerProps<T>['experimental']>; ref?: React.Ref<HTMLInputElement | HTMLButtonElement> }) => React.JSX.Element @experimental
   prop containerClassName?: string
   prop containerStyle?: CSSProperties
   prop containerXstyle?: StyleXStyles
@@ -2619,6 +2622,7 @@ component Tokenizer(props: TokenizerProps)
   prop disabledMessage?: string
   prop emptySearchText?: ReactNode = 'No results found'
   prop endContent?: ReactNode
+  prop experimental?: { presentation?: 'popover' | 'bottom-sheet' | 'adaptive' } @experimental
   prop handleRef?: React.Ref<TokenizerHandle>
   prop hasAutoFocus?: boolean = false
   prop hasClear?: boolean = false
@@ -2854,6 +2858,7 @@ component VisuallyHidden(props: VisuallyHiddenProps)
 
 ```text
 hook useAnimatedLayout: ({…}: UseAnimatedLayoutOptions) => AnimatedLayout
+hook useAnimator: (ref: RefObject<HTMLElement | null>) => AnimatorHandle
 hook useAnnounce: ({…}?: UseAnnounceOptions) => AnnounceFn
 hook useAppShellMobile: () => AppShellMobileContextValue
 hook useAvatarGroup: () => AvatarGroupContextValue | null
@@ -2977,6 +2982,7 @@ function compactDefinition: (points?: Readonly<Pick<WidthBreakpoints, 'md'>>) =>
 function compareTime: (a: ISOTimeString | undefined, b: ISOTimeString | undefined) => number
 function composeEventHandlers: <E extends SyntheticEvent>(...handlers: (((event: E) => void) | undefined)[]) => (event: E) => void
 function container: ({…}: ContainerOptions) => readonly [Readonly<{ readonly boxSizing: stylex.StyleXClassNameFor<"boxSizing", "border-box">; readonly paddingInlineStart: stylex.StyleXClassNameFor<"paddingIn … #72b9b91f
+function createAnimator: (element: HTMLElement) => Animator
 function createCodeLanguage: ({…}: CreateCodeLanguageOptions) => CodeLanguage
 function createISOTimeString: (value: string) => ISOTimeString | null
 function createIncrementalState: <MathEnabled extends boolean = false>() => IncrementalState<MathEnabled>
@@ -3497,6 +3503,27 @@ const typographyVars: stylex.VarGroup<Readonly<{ readonly '--font-family-body': 
 interface AlertDialogProps extends BaseProps<HTMLDialogElement> (props of AlertDialog)
 interface AnimatedLayout
   [AREA]: () => Element | null
+interface Animator extends AnimatorHandle
+  animate: (target: AnimatorValues, options?: AnimatorAnimateOptions) => Promise<void>
+  decay: (velocity: AnimatorDecayVelocity) => Promise<void>
+  destroy: () => void
+  get: () => AnimatorSnapshot
+  getVelocity: () => AnimatorSnapshot
+  set: (values: AnimatorValues) => void
+  stop: () => void
+interface AnimatorAnimateOptions
+  velocity?: AnimatorValues
+type AnimatorChannel = 'x' | 'y' | 'scale' | 'rotate' | 'opacity'
+type AnimatorDecayVelocity = AnimatorValues
+interface AnimatorHandle
+  animate: (target: AnimatorValues, options?: AnimatorAnimateOptions) => Promise<void>
+  decay: (velocity: AnimatorDecayVelocity) => Promise<void>
+  get: () => AnimatorSnapshot
+  getVelocity: () => AnimatorSnapshot
+  set: (values: AnimatorValues) => void
+  stop: () => void
+type AnimatorSnapshot = Readonly<Record<AnimatorChannel, number>>
+type AnimatorValues = Partial<Record<AnimatorChannel, number>>
 type AnnounceFn = (message: string, politeness?: AnnouncePoliteness) => void
 type AnnouncePoliteness = 'polite' | 'assertive'
 type AppShellBreakpoint = WidthBreakpointName | 'none'
@@ -4277,13 +4304,7 @@ interface FieldStatusInput
   messageID?: string
   type: FieldStatusType
 type FieldStatusPlacement = keyof FieldStatusVariantMap | 'tooltip'
-interface FieldStatusProps extends BaseProps<HTMLDivElement>
-  message: string
-  ref?: React.Ref<HTMLDivElement>
-  type: InputStatusType
-  variant?: FieldStatusVariant = 'attached'
-  xstyle?: StyleXStyles
-  inherits AriaAttributes, DOMAttributes, HTMLAttributes
+interface FieldStatusProps extends BaseProps<HTMLDivElement> (props of FieldStatus)
 type FieldStatusType = 'warning' | 'error' | 'success'
 type FieldStatusVariant = keyof FieldStatusVariantMap
 interface FieldStatusVariantMap
@@ -5667,10 +5688,12 @@ interface TooltipProps (props of Tooltip)
 interface TooltipReturn
   anchorId: string
   describedBy: string
+  hide: () => void
   interactionRef: RefCallback<HTMLElement>
   positionRef: RefCallback<HTMLElement>
   ref: RefCallback<HTMLElement>
   renderTooltip: (children: ReactNode, props?: Omit<ContextRenderProps, 'positioning'>) => ReactNode
+  show: () => void
 type TooltipTouchTrigger = LayerTouchTrigger
 interface TopNavHeadingProps extends BaseProps<HTMLElement> (props of TopNavHeading)
 interface TopNavItemProps extends BaseProps<HTMLAnchorElement> (props of TopNavItem)
@@ -9101,6 +9124,7 @@ hasTextSelection (.)
 isMenuPressActivation (.)
 menuPressStep (.)
 useAnimatedLayout (.)
+useAnimator (.)
 useAnnounce (.)
 useClickableContainer (.)
 useClipboard (.)

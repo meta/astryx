@@ -2583,7 +2583,9 @@ describe('MultiSelector', () => {
 
         rerender(selector(true));
 
-        await waitFor(() => expect(dialog).toHaveAttribute('inert'));
+        // The sheet closes with focus inside it, so it stays out of inert
+        // through its exit (component:BottomSheet FR9).
+        await waitFor(() => expect(dialog).not.toHaveAttribute('aria-modal'));
         fireEvent.transitionEnd(panel!, {propertyName: 'transform'});
         const readOnlyTrigger = screen.getByRole('combobox', {name: 'Fruit'});
         await waitFor(() => expect(readOnlyTrigger).toHaveFocus());
@@ -3607,6 +3609,44 @@ describe('MultiSelector popup theme target', () => {
     expect(trigger.parentElement).toHaveClass(
       stylex.props(selectorPresentationStyles.pointerRestoredFocus).className!,
     );
+  });
+});
+
+describe('MultiSelector built-in trigger focus on close', () => {
+  it('with the built-in trigger, a light dismiss onto another field leaves focus there, and Escape returns it to the trigger', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <MultiSelector
+          label="Labels"
+          options={['Bug', 'Feature', 'Docs']}
+          value={[]}
+          onChange={() => {}}
+        />
+        <input aria-label="Notes" />
+      </>,
+    );
+    const trigger = screen.getByRole('combobox', {name: 'Labels'});
+    await user.click(trigger);
+    await user.keyboard('{Escape}');
+    expect(trigger).toHaveFocus();
+
+    await user.click(trigger);
+    const notes = screen.getByRole('textbox', {name: 'Notes'});
+    act(() => {
+      notes.focus();
+    });
+    const popover = document.querySelector('[popover]') as HTMLElement;
+    act(() => {
+      popover.dispatchEvent(
+        Object.assign(new Event('toggle'), {
+          oldState: 'open',
+          newState: 'closed',
+        }),
+      );
+    });
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(notes).toHaveFocus();
   });
 });
 
