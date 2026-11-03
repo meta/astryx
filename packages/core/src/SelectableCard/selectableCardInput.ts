@@ -20,10 +20,8 @@ export interface SelectableCardInput {
   readonly type: 'checkbox' | 'radio';
   /** The input's `name`. Radios that share it form one native group. */
   readonly name: string;
-  /** The input's `value`, which a form submits when the card is selected. */
+  /** The input's `value`. A checkbox card submits it when it is selected. */
   readonly value: string;
-  /** Whether the whole group is disabled. */
-  readonly isGroupDisabled: boolean;
 }
 
 /** Without a provider, a card renders its own checkbox. */

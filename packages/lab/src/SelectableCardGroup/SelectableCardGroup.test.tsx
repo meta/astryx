@@ -175,10 +175,14 @@ describe('SelectableCardGroup', () => {
     expect([...new FormData(form).entries()]).toEqual([['plan', 'Pro']]);
   });
 
-  it("a card disabled on its own stays in its group's form, so the group is one tab stop", () => {
-    render(
+  it('a chosen card disabled on its own submits nothing, and the group keeps one form owner', () => {
+    const {container} = render(
       <form>
-        <SelectableCardGroup label="Plan" value="Pro" onChange={() => {}}>
+        <SelectableCardGroup
+          label="Plan"
+          htmlName="plan"
+          value="Team"
+          onChange={() => {}}>
           {PLANS.map(plan => (
             <SelectableCardGroupItem
               key={plan}
@@ -191,9 +195,15 @@ describe('SelectableCardGroup', () => {
         </SelectableCardGroup>
       </form>,
     );
-    for (const radio of screen.getAllByRole('radio')) {
-      expect(radio).not.toHaveAttribute('form');
+    const form = container.querySelector('form');
+    if (form == null) {
+      throw new Error('no form');
     }
+    expect([...new FormData(form).entries()]).toEqual([]);
+    const owners = new Set(
+      screen.getAllByRole('radio').map(r => r.getAttribute('form')),
+    );
+    expect([...owners]).toEqual(['']);
   });
 
   it("keeps the caller's aria-labelledby and aria-describedby beside its own", () => {

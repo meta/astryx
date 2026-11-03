@@ -10,13 +10,6 @@
  * @output Exports SelectableCardGroup, SelectableCardGroupItem and their props
  * @position Lab: a set of selectable cards with the semantics of its selection
  *
- * A single-choice set is a radio group: role="radiogroup", named by its label,
- * holding cards whose inputs are native radios sharing one name. The browser
- * then makes the set one tab stop, moves and selects with the arrow keys, and
- * speaks the position ("2 of 3"). A multiple-choice set is a named group of
- * checkboxes, each its own tab stop. The cards keep SelectableCard's look,
- * press and selection mark.
- *
  * SYNC: When modified, update these files to stay in sync:
  * - ./SelectableCardGroup.doc.mjs (props, usage)
  * - ./index.ts (exports)
@@ -40,6 +33,7 @@ import {
 } from '@astryxdesign/core/SelectableCard';
 import {
   SelectableCardInputContext,
+  joinAriaIDs,
   useFieldInputStyling,
   type SelectableCardInput,
 } from '@astryxdesign/core/internal/selectable-card';
@@ -139,12 +133,6 @@ const SelectableCardGroupContext = createContext<GroupContextValue | null>(
   null,
 );
 
-/** Space-separated ids, or undefined when there are none. */
-function joinIds(...ids: (string | undefined)[]): string | undefined {
-  const joined = ids.filter(id => id != null && id !== '').join(' ');
-  return joined === '' ? undefined : joined;
-}
-
 // =============================================================================
 // Components
 // =============================================================================
@@ -201,9 +189,8 @@ export function SelectableCardGroup(props: SelectableCardGroupProps) {
     'aria-labelledby'?: string;
     'aria-describedby'?: string;
   };
-  // The caller's own ids join the group's label and description.
-  const labelledBy = joinIds(labelID, callerLabelledBy);
-  const describedBy = joinIds(
+  const labelledBy = joinAriaIDs(labelID, callerLabelledBy);
+  const describedBy = joinAriaIDs(
     description ? descriptionID : undefined,
     callerDescribedBy,
   );
@@ -295,7 +282,6 @@ export function SelectableCardGroupItem({
             type: group.inputType,
             name: group.name,
             value,
-            isGroupDisabled: group.isDisabled,
           },
     [group, value],
   );
@@ -304,14 +290,21 @@ export function SelectableCardGroupItem({
       'SelectableCardGroupItem must be rendered inside a SelectableCardGroup.',
     );
   }
+  const isSelected = group.isSelected(value);
+  const isCardDisabled = group.isDisabled || isDisabled === true;
   return (
     <SelectableCardInputContext value={input}>
       <SelectableCard
         {...props}
-        isSelected={group.isSelected(value)}
-        isDisabled={group.isDisabled || isDisabled}
-        onChange={isSelected => group.change(value, isSelected)}
+        isSelected={isSelected}
+        isDisabled={isCardDisabled}
+        onChange={nextSelected => group.change(value, nextSelected)}
       />
+      {/* The radio cards stay out of the form, so the chosen, enabled card
+          submits the group's value here. */}
+      {group.inputType === 'radio' && isSelected && !isCardDisabled ? (
+        <input type="hidden" name={group.name} value={value} />
+      ) : null}
     </SelectableCardInputContext>
   );
 }

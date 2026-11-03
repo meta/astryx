@@ -120,8 +120,8 @@ describe('SelectableCard as a group radio', () => {
     const radio = screen.getByRole('radio');
     expect(radio).toHaveAttribute('aria-disabled', 'true');
     expect(radio).not.toBeDisabled();
-    // It keeps its siblings' form owner, so the group stays one tab stop.
-    expect(radio).not.toHaveAttribute('form');
+    // Every radio card leaves the form, so the group stays one tab stop.
+    expect(radio).toHaveAttribute('form', '');
     fireEvent.click(screen.getByText('Team'));
     fireEvent.keyDown(radio, {key: 'Enter'});
     expect(onChange).not.toHaveBeenCalled();

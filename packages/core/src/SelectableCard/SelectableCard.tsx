@@ -437,9 +437,8 @@ export function SelectableCard({
     [isDisabled, requestChange],
   );
 
-  // The focusable control is a native checkbox or radio, which reacts to
-  // Space but ignores Enter. Add Enter as an extra key; Space keeps its native
-  // handling, so we deliberately do not handle Space here (would double).
+  // A native checkbox or radio reacts to Space but not to Enter. This handler
+  // adds Enter. Space is not handled here, because it would act twice.
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLInputElement>) => {
       if (isImeKeyEvent(event.nativeEvent)) {
@@ -545,13 +544,12 @@ export function SelectableCard({
         type={isRadio ? 'radio' : 'checkbox'}
         name={groupInput?.name}
         value={groupInput?.value}
-        // A disabled card submits nothing, so it leaves the form. A radio
-        // that is disabled on its own stays in the form: leaving it would
-        // split it from its group and make it an extra tab stop.
+        // Radios group by name and form owner, so every radio card leaves
+        // the form together and the group stays one tab stop. The group
+        // submits its choice itself. A disabled checkbox card submits
+        // nothing, so it leaves the form too.
         form={
-          groupInput != null &&
-          isDisabled &&
-          (groupInput.type === 'checkbox' || groupInput.isGroupDisabled)
+          groupInput != null && (groupInput.type === 'radio' || isDisabled)
             ? ''
             : undefined
         }
