@@ -466,6 +466,8 @@ describe('Drawer', () => {
           Content
         </Drawer>,
       );
+      fireEvent.pointerDown(screen.getByRole('dialog'));
+      fireEvent.pointerUp(screen.getByRole('dialog'));
       fireEvent.click(screen.getByRole('dialog'));
       expect(handleClick).toHaveBeenCalledTimes(1);
       expect(handleOpenChange).toHaveBeenCalledWith(false);
@@ -568,8 +570,40 @@ describe('Drawer', () => {
           Content
         </Drawer>,
       );
+      fireEvent.pointerDown(screen.getByRole('dialog'));
+      fireEvent.pointerUp(screen.getByRole('dialog'));
       fireEvent.click(screen.getByRole('dialog'));
       expect(handleOpenChange).toHaveBeenCalledWith(false);
+    });
+
+    it("forwards the caller's pointer handlers when a child prevents default", () => {
+      const onPointerDown = vi.fn();
+      const onPointerUp = vi.fn();
+      const onPointerCancel = vi.fn();
+      render(
+        <Drawer
+          isOpen
+          onOpenChange={() => {}}
+          label="Details"
+          onPointerDown={onPointerDown}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerCancel}>
+          <button
+            type="button"
+            onPointerDown={event => event.preventDefault()}
+            onPointerUp={event => event.preventDefault()}
+            onPointerCancel={event => event.preventDefault()}>
+            Clear
+          </button>
+        </Drawer>,
+      );
+      const child = screen.getByRole('button', {name: 'Clear'});
+      fireEvent.pointerDown(child);
+      fireEvent.pointerUp(child);
+      fireEvent.pointerCancel(child);
+      expect(onPointerDown).toHaveBeenCalledTimes(1);
+      expect(onPointerUp).toHaveBeenCalledTimes(1);
+      expect(onPointerCancel).toHaveBeenCalledTimes(1);
     });
 
     it('does not close when drawer content is clicked', () => {
@@ -888,6 +922,8 @@ describe('Drawer', () => {
       );
       const dialog = screen.getByRole('dialog');
       fireEvent.keyDown(dialog, {key: 'Escape'});
+      fireEvent.pointerDown(dialog);
+      fireEvent.pointerUp(dialog);
       fireEvent.click(dialog);
       expect(handleOpenChange).toHaveBeenCalledTimes(2);
       expect(handleOpenChange).toHaveBeenNthCalledWith(1, false);
