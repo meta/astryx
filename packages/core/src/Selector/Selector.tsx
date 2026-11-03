@@ -20,6 +20,7 @@
  */
 
 import React, {
+  memo,
   use,
   useCallback,
   useEffect,
@@ -37,6 +38,7 @@ import {useTooltip} from '../Tooltip';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {useIndicator} from '../Indicator';
 import type {IndicatorPosition} from '../Indicator';
+import type {IndicatorComponent, IndicatorMap} from '../Indicator/types';
 import type {IconName} from '../Icon';
 import {
   Field,
@@ -66,13 +68,8 @@ import {
   borderVars,
 } from '../theme/tokens.stylex';
 import type {SelectorOptionType, SelectorOptionData} from './types';
-import {
-  isOptionData,
-  isDivider,
-  isSection,
-  normalizeOption,
-  getSelectableOptions,
-} from './utils';
+import {isOptionData, isDivider, isSection, normalizeOption} from './utils';
+import {getSelectableOptionEntries} from './selectableOptionEntries';
 import {useCombobox, useSelectedItemOffset} from './hooks';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
@@ -917,6 +914,108 @@ function DefaultOption({option}: {option: SelectorOptionData}) {
   );
 }
 
+interface SelectorOptionRowProps {
+  item: SelectorOptionData;
+  flatIndex: number;
+  id: string;
+  isHighlighted: boolean;
+  isSelected: boolean;
+  size: SelectorSize;
+  indicatorPosition: IndicatorPosition;
+  renderOption: ((option: SelectorOptionData) => ReactNode) | undefined;
+  SelectionMark: IndicatorComponent<IndicatorMap['check']>;
+  onSelect: (item: SelectorOptionData) => void;
+  onHover: (item: SelectorOptionData, flatIndex: number) => void;
+}
+
+/**
+ * Keep each prop stable across renders that do not change this row. A new
+ * `onSelect` or `renderOption` re-renders every row.
+ */
+const SelectorOptionRow = memo(function SelectorOptionRow({
+  item,
+  flatIndex,
+  id,
+  isHighlighted,
+  isSelected,
+  size,
+  indicatorPosition,
+  renderOption,
+  SelectionMark,
+  onSelect,
+  onHover,
+}: SelectorOptionRowProps) {
+  /*
+   * Rendered UNCONDITIONALLY, with the state passed down: the default
+   * check draws nothing when unchecked, but a theme that replaces the
+   * `check` indicator with a radio needs the unselected state to draw
+   * its empty circle. `{isSelected && …}` would make that impossible.
+   *
+   * `selector-check` stays the stable target for the mark's position
+   * in the row; the indicator owns what the mark looks like.
+   */
+  const mark = (
+    <span {...stylex.props(styles.itemMarkColumn)}>
+      <SelectionMark
+        state={isSelected ? 'checked' : 'unchecked'}
+        size="sm"
+        isDisabled={item.disabled ?? false}
+        {...themeProps('selector-check')}
+      />
+    </span>
+  );
+
+  const optionContent = (
+    <span {...stylex.props(styles.itemContent)}>
+      {renderOption ? renderOption(item) : <DefaultOption option={item} />}
+    </span>
+  );
+
+  return (
+    <div
+      id={id}
+      role="option"
+      aria-selected={isSelected}
+      aria-disabled={item.disabled}
+      onClick={() => onSelect(item)}
+      onMouseEnter={() => onHover(item, flatIndex)}
+      {...mergeProps(
+        // Stable theme target on the option row itself, mirroring
+        // `multi-selector-option`: it carries the row's size and runtime
+        // state so a theme can express "selected option at large" or
+        // restyle a given row density without structural selectors. The
+        // row's padding is split across a base and a per-size override (the
+        // default `md` trims the block axis), so `size` is what a theme
+        // needs to reach it. Named `-option-row` because `selector-option`
+        // is the public SelectorOption content primitive, not this row.
+        themeProps('selector-option-row', {
+          size,
+          selected: isSelected ? 'selected' : null,
+          disabled: item.disabled ? 'disabled' : null,
+        }),
+        stylex.props(
+          styles.item,
+          itemSizeStyles[size],
+          isHighlighted && styles.itemHighlighted,
+          isSelected && styles.itemSelected,
+          item.disabled && styles.itemDisabled,
+        ),
+      )}>
+      {indicatorPosition === 'start' ? (
+        <>
+          {mark}
+          {optionContent}
+        </>
+      ) : (
+        <>
+          {optionContent}
+          {mark}
+        </>
+      )}
+    </div>
+  );
+});
+
 // Case-insensitive substring match for a single option. The one predicate used
 // by both the flat filter (count + keyboard nav) and the grouped renderer, so
 // what is shown while searching stays in lockstep with the announced count.
@@ -1118,9 +1217,18 @@ export function Selector<T extends SelectorOptionType>(
       : ariaLabelledBy;
 
   // Flatten options for keyboard navigation
-  const selectableItems = useMemo(
-    () => getSelectableOptions(options),
+  const selectableEntries = useMemo(
+    () => getSelectableOptionEntries(options),
     [options],
+  );
+  const selectableItems = useMemo(
+    () => selectableEntries.map(entry => entry.item),
+    [selectableEntries],
+  );
+  // Rows need the same item object on every render, or their memo fails.
+  const normalizedOf = useMemo(
+    () => new Map(selectableEntries.map(entry => [entry.source, entry.item])),
+    [selectableEntries],
   );
 
   // `action` is declared on the shared option type for `MultiSelector`;
@@ -1613,84 +1721,22 @@ export function Selector<T extends SelectorOptionType>(
 
   // Render an individual item
   const renderItem = useCallback(
-    (item: SelectorOptionData, flatIndex: number) => {
-      const isHighlighted = flatIndex === highlightedIndex;
-      const isSelected = item.value === normalizedValue;
-
-      /*
-       * Rendered UNCONDITIONALLY, with the state passed down: the default
-       * check draws nothing when unchecked, but a theme that replaces the
-       * `check` indicator with a radio needs the unselected state to draw
-       * its empty circle. `{isSelected && …}` would make that impossible.
-       *
-       * `selector-check` stays the stable target for the mark's position
-       * in the row; the indicator owns what the mark looks like.
-       */
-      const mark = (
-        <span {...stylex.props(styles.itemMarkColumn)}>
-          <SelectionMark
-            state={isSelected ? 'checked' : 'unchecked'}
-            size="sm"
-            isDisabled={item.disabled ?? false}
-            {...themeProps('selector-check')}
-          />
-        </span>
-      );
-
-      const optionContent = (
-        <span {...stylex.props(styles.itemContent)}>
-          {renderOption ? renderOption(item) : <DefaultOption option={item} />}
-        </span>
-      );
-
-      const content =
-        indicatorPosition === 'start' ? (
-          <>
-            {mark}
-            {optionContent}
-          </>
-        ) : (
-          <>
-            {optionContent}
-            {mark}
-          </>
-        );
-
-      return (
-        <div
-          key={item.value}
-          id={getItemId(flatIndex)}
-          role="option"
-          aria-selected={isSelected}
-          aria-disabled={item.disabled}
-          onClick={() => onItemSelect(item)}
-          onMouseEnter={() => onItemMouseEnter(item, flatIndex)}
-          {...mergeProps(
-            // Stable theme target on the option row itself, mirroring
-            // `multi-selector-option`: it carries the row's size and runtime
-            // state so a theme can express "selected option at large" or
-            // restyle a given row density without structural selectors. The
-            // row's padding is split across a base and a per-size override (the
-            // default `md` trims the block axis), so `size` is what a theme
-            // needs to reach it. Named `-option-row` because `selector-option`
-            // is the public SelectorOption content primitive, not this row.
-            themeProps('selector-option-row', {
-              size,
-              selected: isSelected ? 'selected' : null,
-              disabled: item.disabled ? 'disabled' : null,
-            }),
-            stylex.props(
-              styles.item,
-              itemSizeStyles[size],
-              isHighlighted && styles.itemHighlighted,
-              isSelected && styles.itemSelected,
-              item.disabled && styles.itemDisabled,
-            ),
-          )}>
-          {content}
-        </div>
-      );
-    },
+    (item: SelectorOptionData, flatIndex: number) => (
+      <SelectorOptionRow
+        key={item.value}
+        item={item}
+        flatIndex={flatIndex}
+        id={getItemId(flatIndex)}
+        isHighlighted={flatIndex === highlightedIndex}
+        isSelected={item.value === normalizedValue}
+        size={size}
+        indicatorPosition={indicatorPosition}
+        renderOption={renderOption}
+        SelectionMark={SelectionMark}
+        onSelect={onItemSelect}
+        onHover={onItemMouseEnter}
+      />
+    ),
     [
       renderOption,
       indicatorPosition,
@@ -1757,7 +1803,7 @@ export function Selector<T extends SelectorOptionType>(
       } else if (isSection(option)) {
         const sectionItems: ReactNode[] = [];
         for (const opt of option.options) {
-          const normalized = normalizeOption(opt);
+          const normalized = normalizedOf.get(opt) ?? normalizeOption(opt);
           if (isSearching && !optionMatchesQuery(normalized, searchQuery)) {
             continue;
           }
@@ -1790,7 +1836,7 @@ export function Selector<T extends SelectorOptionType>(
           </div>,
         );
       } else if (isOptionData(option)) {
-        const normalized = normalizeOption(option);
+        const normalized = normalizedOf.get(option) ?? normalizeOption(option);
         if (isSearching && !optionMatchesQuery(normalized, searchQuery)) {
           continue;
         }
@@ -1802,6 +1848,7 @@ export function Selector<T extends SelectorOptionType>(
     return elements;
   }, [
     options,
+    normalizedOf,
     renderItem,
     hasSearch,
     searchQuery,

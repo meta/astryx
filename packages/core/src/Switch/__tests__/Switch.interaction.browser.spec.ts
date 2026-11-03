@@ -54,7 +54,7 @@ import {
   type TouchDriver,
 } from '@astryxdesign/interaction-harness';
 import {press} from '../../motion/uikit/timing';
-import {BROWSER_CLICK_WAIT_MS} from '../switchTouch';
+import {BROWSER_CLICK_WAIT_MS} from '../../utils/browserClickWait';
 import {CLICK_GUARD_WINDOW_MS} from '../../utils/clickGuard';
 
 const storybook = withStorybook(test);

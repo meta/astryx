@@ -150,14 +150,13 @@ describe('DropdownMenu touch sheet loaded on demand', () => {
     });
     expect(screen.queryByRole('button', {name: 'Edit project'})).toBeNull();
 
-    // The sheet's modules arrive, and React renders what they let through.
+    // The sheet's modules arrive.
     await act(async () => {
       sheetLoad.release();
-      await Promise.all([
-        import('./MenuBottomSheet'),
-        import('./MenuBottomSheetActionList'),
-      ]);
     });
+    // React renders the rows when the dropdown's own loads settle. On a busy
+    // machine that can be after this act, so wait for the rows themselves.
+    const action = await screen.findByRole('button', {name: 'Edit project'});
 
     // The dropdown focuses the first row a frame after the rows appear. The
     // frame this awaits runs after that one.
@@ -166,6 +165,6 @@ describe('DropdownMenu touch sheet loaded on demand', () => {
         requestAnimationFrame(() => resolve());
       });
     });
-    expect(screen.getByRole('button', {name: 'Edit project'})).toHaveFocus();
+    expect(action).toHaveFocus();
   });
 });

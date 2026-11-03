@@ -6,9 +6,9 @@
  *   primary pointer), driven by a real mouse.
  * @output Browser proofs that Switch's gestures work for a mouse and a pen
  *   (`spec:AST-094` FR43): a drag flips it by the flip rule (Switch FR15), a
- *   press slid off and released outside leaves it alone (the
- *   reversible-toggle exception is a finger's), a click toggles once, a right
- *   click does nothing, and the switch keeps its desktop presentation (FR13).
+ *   press released outside the tracking bounds leaves it alone, flipped or
+ *   not (WCAG 2.5.2), a click toggles once, a right click does nothing, and
+ *   the switch keeps its desktop presentation (FR13).
  *   The pen is the harness's real engine pen (Chromium only).
  * @position Beside Switch.interaction.browser.spec.ts, which proves the
  *   touch presentation under a finger.
@@ -21,7 +21,7 @@ import {
   webInputDriver,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
-import {BROWSER_CLICK_WAIT_MS} from '../switchTouch';
+import {BROWSER_CLICK_WAIT_MS} from '../../utils/browserClickWait';
 
 const storybook = withStorybook(test);
 
@@ -121,6 +121,14 @@ async function afterTwoFrames(page: Page): Promise<void> {
   });
 }
 
+/**
+ * How far to go vertically for a release outside the switch's tracking
+ * bounds. It goes toward the side of the 320 px viewport with more room.
+ */
+function awayY(y: number): number {
+  return y < 160 ? 120 : -120;
+}
+
 /** A mouse drag through `points`, pressed at the first and released at the last. */
 async function mouseDrag(
   page: Page,
@@ -137,14 +145,15 @@ async function mouseDrag(
 }
 
 test.describe('Switch under a mouse (spec:AST-094 FR43)', () => {
-  test('a drag past the flip distance flips the switch, and the release commits it off the switch too (Switch FR15)', async ({
+  test('a drag past the flip distance flips the switch, and a release just off it, inside its tracking bounds, commits it (Switch FR15)', async ({
     browser,
   }) => {
     const sw = await openMouseSwitch(browser);
     try {
       const {x, y} = sw.center;
-      // Past the flip, then on past the switch onto its label: the browser
-      // sends the input no click for a release that far.
+      // Past the flip, then past the switch onto its label, still inside its
+      // box grown by the 70 px tracking expansion. The browser sends the
+      // input no click for a release that far.
       await mouseDrag(sw.page, [
         {x, y},
         {x: x + FLIP_DISTANCE + 6, y},
@@ -167,6 +176,26 @@ test.describe('Switch under a mouse (spec:AST-094 FR43)', () => {
         {x, y},
         {x: x + FLIP_DISTANCE + 6, y},
         {x: x - 4, y},
+      ]);
+      expect(await sw.isChecked()).toBe(false);
+      expect(await sw.changes()).toBe(0);
+    } finally {
+      await sw.close();
+    }
+  });
+
+  test('a drag past the flip distance that slides off and is released away from the switch commits nothing: the press can be taken back (Switch FR15, WCAG 2.5.2)', async ({
+    browser,
+  }) => {
+    const sw = await openMouseSwitch(browser);
+    try {
+      const {x, y} = sw.center;
+      // Past the flip, then 200 px away, outside the tracking bounds, as the
+      // accessibility contract's aborted press does.
+      await mouseDrag(sw.page, [
+        {x, y},
+        {x: x + FLIP_DISTANCE + 6, y},
+        {x: x + 200, y: y + awayY(y)},
       ]);
       expect(await sw.isChecked()).toBe(false);
       expect(await sw.changes()).toBe(0);
@@ -325,7 +354,7 @@ test.describe('Switch under a mouse (spec:AST-094 FR43)', () => {
     }
   });
 
-  test('a pen drag past the flip distance flips the switch, and the release commits it off the switch too (Switch FR15)', async ({
+  test('a pen drag past the flip distance flips the switch, and a release just off it, inside its tracking bounds, commits it (Switch FR15)', async ({
     browser,
   }) => {
     const sw = await openMouseSwitch(browser);
@@ -344,6 +373,29 @@ test.describe('Switch under a mouse (spec:AST-094 FR43)', () => {
       await afterClickWait(sw.page);
       expect(await sw.isChecked()).toBe(true);
       expect(await sw.changes()).toBe(1);
+    } finally {
+      await sw.close();
+    }
+  });
+
+  test('a pen drag past the flip distance that slides off and is released away from the switch commits nothing, as a mouse’s (Switch FR15, WCAG 2.5.2)', async ({
+    browser,
+  }) => {
+    const sw = await openMouseSwitch(browser);
+    try {
+      const driver = await webInputDriver(sw.page);
+      test.skip(!driver.pens, PEN_SKIP);
+      const {x, y} = sw.center;
+      await driver.pen([
+        {x, y, t: 0},
+        {x: x + 10, y, t: 60},
+        {x: x + FLIP_DISTANCE + 6, y, t: 120},
+        {x: x + 100, y, t: 180},
+        {x: x + 200, y: y + awayY(y), t: 240},
+      ]);
+      await afterClickWait(sw.page);
+      expect(await sw.isChecked()).toBe(false);
+      expect(await sw.changes()).toBe(0);
     } finally {
       await sw.close();
     }

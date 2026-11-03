@@ -6,6 +6,8 @@
  * @file useTooltip.tsx
  * @input Uses useLayer, usePressPin, React hooks
  * @output Exports useTooltip hook with stable trigger refs for hover/focus/tap tooltips
+ *   and imperative show() and hide() for an app-built toggle trigger,
+ *   and the module-only useTooltipWithTriggerBehavior that InfoTip's press-to-pin uses
  * @position Layer hook; builds on useLayer for tooltip behavior
  *
  * SYNC: When modified, update:
@@ -16,9 +18,11 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
   type ReactNode,
   type RefCallback,
 } from 'react';
+import {createTriggerFocusGate} from '../utils/triggerFocus';
 import * as stylex from '@stylexjs/stylex';
 import {
   useLayerInternal,
@@ -31,7 +35,7 @@ import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {registerLayerSurface} from '../Layer/layerSurfacePress';
-import {usePressPin} from '../Layer/usePressPin';
+import {usePressPin, type LayerTriggerBehavior} from '../Layer/usePressPin';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {themeProps} from '../utils/themeProps';
 import {
@@ -83,14 +87,6 @@ export type TooltipFocusTrigger = 'auto' | 'always' | 'never';
  */
 export type TooltipTouchTrigger = LayerTouchTrigger;
 
-/**
- * How the trigger opens the tooltip. `adaptive`, the default, previews it on
- * hover and focus, and a tap opens it unless the trigger acts. `hover`
- * previews it on hover and focus, and no touch or pen tap opens it. `toggle`
- * pins it on a click, tap, Enter, or Space on a button trigger.
- */
-export type TooltipTriggerBehavior = 'adaptive' | 'hover' | 'toggle';
-
 export interface TooltipOptions {
   /**
    * Position placement relative to anchor
@@ -135,31 +131,9 @@ export interface TooltipOptions {
    * - `tap`: tap always opens the tooltip, even on a trigger that acts
    * - `none`: touch never opens the tooltip
    *
-   * It decides only under `triggerBehavior="adaptive"`, the default.
-   *
    * @default 'auto'
    */
   touchTrigger?: TooltipTouchTrigger;
-
-  /**
-   * How the trigger opens the tooltip:
-   * - `adaptive` (the default): hover and focus preview it. A tap opens it
-   *   unless the trigger performs an action of its own. While `touchTrigger`
-   *   remains, it decides those taps.
-   * - `hover`: hover and focus preview it; no touch or pen tap opens it.
-   * - `toggle`: on a button trigger, a click, a tap, Enter, or Space pins the
-   *   tooltip open, and the same press closes it. Hover and keyboard focus
-   *   still preview it. A pinned tooltip stays until Escape, a second press,
-   *   a press outside, or focus leaving. Astryx clickable rows and cards
-   *   ignore the pinning press, except an Item row on a trigger that is not
-   *   a native button. The `Tooltip` component also stops it at a child
-   *   trigger. A hook caller stops a plain `onClick` ancestor itself. The
-   *   trigger reports `aria-expanded` and `aria-controls`, and the tooltip's
-   *   text is announced once when it pins. `touchTrigger` is ignored.
-   *
-   * @default 'adaptive'
-   */
-  triggerBehavior?: TooltipTriggerBehavior;
 
   /**
    * Whether the tooltip is enabled.
@@ -245,29 +219,25 @@ export interface TooltipReturn {
     children: ReactNode,
     props?: Omit<ContextRenderProps, 'positioning'>,
   ) => ReactNode;
-}
 
-/**
- * Check if an element is naturally focusable
- */
-function isFocusable(element: HTMLElement): boolean {
-  // Elements with explicit tabindex
-  if (element.hasAttribute('tabindex')) {
-    return element.tabIndex >= 0;
-  }
+  /**
+   * Opens the tooltip now and keeps it open until `hide()`, Escape, a press
+   * outside, or focus leaving its trigger, as a pinned tooltip does. Its text
+   * is announced once. Reports through `onShow`. Under a controlled `isOpen`,
+   * it calls `onShow` and does not change `isOpen`. Does nothing while
+   * `isEnabled` is false.
+   *
+   * Use `show()` and `hide()` to build a toggle-style trigger: your own button
+   * calls them, sets `aria-describedby` and `aria-controls` to `describedBy`
+   * and `aria-expanded` (true while shown), and keeps its own accessible name.
+   */
+  show: () => void;
 
-  // Naturally focusable elements
-  const focusableTags = ['A', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA'];
-  if (focusableTags.includes(element.tagName)) {
-    return !(element as HTMLButtonElement).disabled;
-  }
-
-  // Elements with contenteditable
-  if (element.isContentEditable) {
-    return true;
-  }
-
-  return false;
+  /**
+   * Closes the tooltip now. Reports through `onHide`. Under a controlled
+   * `isOpen`, it calls `onHide` and does not change `isOpen`.
+   */
+  hide: () => void;
 }
 
 /**
@@ -296,6 +266,42 @@ function isFocusable(element: HTMLElement): boolean {
  */
 
 export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
+  // The option is fixed to `adaptive`, so an options object that carries it at
+  // runtime cannot reach the press-to-pin path.
+  return useTooltipWithTriggerBehavior({
+    ...options,
+    triggerBehavior: 'adaptive',
+  });
+}
+
+/**
+ * Module-only options for `useTooltipWithTriggerBehavior`. Not exported from
+ * the package.
+ */
+export interface TooltipWithTriggerBehaviorOptions extends TooltipOptions {
+  /**
+   * How the trigger opens the tooltip:
+   * - `adaptive` (the default): hover and focus preview it. `touchTrigger`
+   *   decides taps.
+   * - `toggle`: on a button trigger, a click, a tap, Enter, or Space pins the
+   *   tooltip open, and the same press closes it. Hover and keyboard focus
+   *   still preview it. A pinned tooltip stays until Escape, a second press,
+   *   a press outside, or focus leaving. The trigger reports `aria-expanded`
+   *   and `aria-controls`, and the tooltip's text is announced once when it
+   *   pins. `touchTrigger` is ignored. InfoTip uses it.
+   *
+   * @default 'adaptive'
+   */
+  triggerBehavior?: LayerTriggerBehavior;
+}
+
+/**
+ * `useTooltip` with a trigger behavior. Module-only: InfoTip's press-to-pin
+ * goes through it, and the package does not export it.
+ */
+export function useTooltipWithTriggerBehavior(
+  options: TooltipWithTriggerBehaviorOptions = {},
+): TooltipReturn {
   const {
     placement = 'above',
     alignment = 'center',
@@ -368,6 +374,9 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     isHeldOpen: isPressHeldOpen,
     attach: attachPressPin,
     unpin: unpinPress,
+    hold: holdPress,
+    release: releasePress,
+    isAppHeld,
     isPinShown,
     touch: {
       isTouchPointerRef,
@@ -478,32 +487,13 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     [isTouchPointerRef, layerId, scheduleHide],
   );
 
-  // Under `auto`, whether focus counts is decided when it arrives, not when
-  // the listeners attach: a roving-tabindex member that was `tabindex="-1"`
-  // then can be the tab stop now. A trigger that receives focus is focusable
-  // by definition; focus inside it counts only while the trigger is
-  // focusable too, so a plain wrapper still ignores its children's focus.
-  const isFocusForTrigger = useCallback(
-    (e: Event): boolean => {
-      if (focusTrigger === 'always') {
-        return true;
-      }
-      const triggerEl = e.currentTarget as HTMLElement | null;
-      return (
-        triggerEl != null && (e.target === triggerEl || isFocusable(triggerEl))
-      );
-    },
-    [focusTrigger],
-  );
-
-  // Whether the trigger's current focus counted when it arrived, so its blur
-  // hides the tooltip even if the trigger has since left the tab order.
-  const focusCountedRef = useRef(false);
+  // Under `auto`, whether focus counts is decided when it arrives, and a
+  // focus that counted still hides on blur (utils/triggerFocus.ts).
+  const [focusGate] = useState(createTriggerFocusGate);
 
   const handleFocusIn = useCallback(
     (e: Event) => {
-      focusCountedRef.current = isFocusForTrigger(e);
-      if (!isEnabled || !focusCountedRef.current) {
+      if (!focusGate.focusIn(e, focusTrigger) || !isEnabled) {
         return;
       }
       // A tap focuses the trigger it activates, and `:focus-visible` does not
@@ -524,8 +514,9 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       showLayer();
     },
     [
+      focusGate,
+      focusTrigger,
       isEnabled,
-      isFocusForTrigger,
       isTouchInteraction,
       clearTimeouts,
       showLayer,
@@ -537,13 +528,12 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // which a held tooltip skips.
   const handleFocusOut = useCallback(
     (e: Event) => {
-      if (!focusCountedRef.current && !isFocusForTrigger(e)) {
+      if (!focusGate.focusOut(e, focusTrigger)) {
         return;
       }
-      focusCountedRef.current = false;
       scheduleHide();
     },
-    [isFocusForTrigger, scheduleHide],
+    [focusGate, focusTrigger, scheduleHide],
   );
 
   // Pressing the trigger hides its own tooltip: once the control is activated
@@ -555,9 +545,10 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // tooltip at all), so the touch path answers it first.
   const handlePointerDown = useCallback(
     (event: PointerEvent) => {
-      // A press on a toggle trigger pins or closes through its click. It
-      // neither hides the preview here nor waits for a tap verdict.
-      if (isToggleTrigger(triggerRef.current)) {
+      // A toggle trigger's press pins or closes through its click. The app's
+      // hide() closes a held tooltip. Neither path hides here or waits for a
+      // tap verdict.
+      if (isToggleTrigger(triggerRef.current) || isAppHeld()) {
         return;
       }
       if (handleTouchPointerDown(event)) {
@@ -569,7 +560,14 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       clearTimeouts();
       hideLayer();
     },
-    [isToggleTrigger, handleTouchPointerDown, isOpen, clearTimeouts, hideLayer],
+    [
+      isToggleTrigger,
+      isAppHeld,
+      handleTouchPointerDown,
+      isOpen,
+      clearTimeouts,
+      hideLayer,
+    ],
   );
 
   // Interaction ref that handles event listeners only
@@ -602,7 +600,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         el.addEventListener('pointerdown', handlePointerDown);
 
         // Focus listeners unless focus never opens the tooltip; `auto` decides
-        // per event (isFocusForTrigger).
+        // per event (utils/triggerFocus.ts).
         if (focusTrigger !== 'never') {
           el.addEventListener('focusin', handleFocusIn);
           el.addEventListener('focusout', handleFocusOut);
@@ -658,9 +656,11 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       showLayer();
     } else {
       clearTimeouts();
+      // A pin or app hold ends when the consumer closes the tooltip.
+      unpinPress();
       hideLayer();
     }
-  }, [isOpen, clearTimeouts, showLayer, hideLayer]);
+  }, [isOpen, clearTimeouts, showLayer, hideLayer, unpinPress]);
 
   // Dismiss on Escape (WCAG 1.4.13 — dismissible) through the shared layer
   // stack. A visible tip is the top-most layer, so it takes the press and
@@ -756,6 +756,16 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     ],
   );
 
+  const show = useCallback(() => {
+    clearTimeouts();
+    holdPress();
+  }, [clearTimeouts, holdPress]);
+
+  const hide = useCallback(() => {
+    clearTimeouts();
+    releasePress();
+  }, [clearTimeouts, releasePress]);
+
   return {
     ref,
     positionRef: layerRef,
@@ -763,5 +773,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     anchorId: layerAnchorId,
     describedBy: layerId,
     renderTooltip,
+    show,
+    hide,
   };
 }

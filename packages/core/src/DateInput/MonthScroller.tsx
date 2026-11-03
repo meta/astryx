@@ -38,6 +38,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {useCalendarDays} from '../Calendar';
 import {useDirection, useLocale} from '../i18n';
@@ -62,7 +63,11 @@ import {
   plainDateToISO,
   DATE_FORMAT_WITH_WEEKDAY,
 } from '../utils';
-import {reducedMotionFade} from '../motion/reducedMotion';
+import {
+  playReducedMotionDip,
+  reducedMotionFade,
+  type ReducedMotionDip,
+} from '../motion/reducedMotion';
 import {dateInputTouchSizes, dateInputTouchGeometry} from './tokens.stylex';
 import {useOwnScrollGesture} from './useOwnScrollGesture';
 import {useScrollSettle} from './useScrollSettle';
@@ -434,17 +439,12 @@ export function MonthScroller({
 
   // The Reduced Motion dip of a step on a touch screen, owned here so a
   // second step or the unmount clears it.
-  const dipRef = useRef<{animation: Animation; timer: number} | null>(null);
+  const dipRef = useRef<ReducedMotionDip | null>(null);
   const stopDip = useCallback(() => {
-    const dip = dipRef.current;
-    if (dip != null) {
-      window.clearTimeout(dip.timer);
-      dip.animation.cancel();
-      dipRef.current = null;
-    }
+    dipRef.current?.cancel();
+    dipRef.current = null;
   }, []);
-  // Synchronizes with the dip's timer and animation: neither outlives the
-  // scroller.
+  // Synchronizes with the dip's animations: they do not outlive the scroller.
   useEffect(() => stopDip, [stopDip]);
 
   const scrollToMonth = useCallback(
@@ -505,18 +505,14 @@ export function MonthScroller({
           land();
           return;
         }
-        // A second step within the dip has replaced the first (above): only
-        // its scroll lands, at its own dip's middle.
-        dipRef.current = {
-          animation: scroller.animate(
-            [{opacity: 1}, {opacity: 0}, {opacity: 1}],
-            {duration: fade.duration, easing: fade.easing},
-          ),
-          timer: window.setTimeout(() => {
-            dipRef.current = null;
-            land();
-          }, fade.duration / 2),
-        };
+        // A newer step replaces this one: only its scroll lands.
+        dipRef.current = playReducedMotionDip(scroller, fade, () => {
+          dipRef.current = null;
+          // The fade-in starts as soon as this returns. So render now: the
+          // scroll lands in the layout effect, before the fade-in.
+          // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the month must change before the dip's fade-in starts
+          flushSync(land);
+        });
         return;
       }
       steeredRowRef.current = row;

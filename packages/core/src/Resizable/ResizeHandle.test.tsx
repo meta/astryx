@@ -948,6 +948,18 @@ describe('ResizeHandle', () => {
     expect(document.body.style.userSelect).toBe('');
   });
 
+  it('releases body styles and tells the region the gesture is over when its resizable prop goes away mid-drag', () => {
+    const resizable = {...makeResizable(), _onResizeCancel: vi.fn()};
+    const view = render(<ResizeHandle resizable={resizable} label="Resize" />);
+    fireEvent.pointerDown(getHitArea(), {pointerId: 1, clientX: 0, clientY: 0});
+    expect(document.body.style.cursor).not.toBe('');
+    view.rerender(<ResizeHandle label="Resize" />);
+    expect(document.body.style.cursor).toBe('');
+    expect(document.body.style.userSelect).toBe('');
+    expect(resizable._onResizeCancel).toHaveBeenCalledTimes(1);
+    expect(resizable._onResizeEnd).not.toHaveBeenCalled();
+  });
+
   // --- Persistence ---
 
   it.each([
@@ -1095,64 +1107,88 @@ describe('ResizeHandle', () => {
     gcsSpy.mockRestore();
   });
 
-  // --- Hit-area geometry (grab zone tracks the visible pill) ---
+  // --- Hit-area geometry (the grab zone stays on the Handle) ---
 
-  it('anchors the biased grab zone with the pill offset and a dir-flipped centering shift', () => {
-    // For an off-center pill the hit area must reuse the pill's physical offset
-    // construction (anchored at insetInlineStart:0) rather than a divider-
-    // relative 50% anchor + percentage bias, so the two stay aligned in LTR and
-    // RTL. The half-width-difference centering shift (6.5px) is inline, so it
-    // flips physical sign under RTL: `- 6.5px` (LTR) vs `+ 6.5px` (RTL). See the
-    // Playwright measurement (hitArea.center === pill.center, 0px offset in both
-    // directions) for the geometric proof; here we lock the transform shape.
-    render(<Harness handleProps={{pillPlacement: 'start'}} />);
-    const hitArea = getSeparator().firstElementChild as HTMLElement;
-    expect(hitArea.className).toContain('hitAreaOffsetX');
-    const style = hitArea.getAttribute('style') ?? '';
-    // LTR (default) branch subtracts the centering shift; RTL branch adds it.
-    expect(style).toContain('- 6.5px');
-    expect(style).toContain('+ 6.5px');
-  });
+  // `pillPlacement` places only the pill: the grab zone sits centred on the
+  // Handle, through the direction-symmetric rtlStyles.centerInline helper on
+  // the inline axis (component:Resizable FR1). The browser proof
+  // (grabZone.interaction.browser.spec.ts) measures the geometry.
+  it.each(['auto', 'start', 'center', 'end'] as const)(
+    'centres the grab zone on the Handle with pillPlacement="%s"',
+    pillPlacement => {
+      render(<Harness handleProps={{pillPlacement}} />);
+      const hitArea = getSeparator().firstElementChild as HTMLElement;
+      expect(hitArea.className).toContain('centerInline');
+      // centerInline's own centring, and no offset toward the pill.
+      expect(hitArea.getAttribute('style') ?? '').toContain(
+        'translate(-50%, 0px)',
+      );
+      expect(hitArea.getAttribute('style') ?? '').not.toContain('6.5px');
+    },
+  );
 
-  it('centers the grab zone on the divider when the pill is centered (no bias)', () => {
-    render(<Harness handleProps={{pillPlacement: 'center'}} />);
-    const hitArea = getSeparator().firstElementChild as HTMLElement;
-    // Centered via the shared rtlStyles.centerInline helper (direction-symmetric
-    // left+translateX), not a biased offset.
-    expect(hitArea.className).toContain('centerInline');
-    expect(hitArea.className).not.toContain('hitAreaOffsetX');
-  });
+  it.each(['auto', 'start', 'center', 'end'] as const)(
+    'centres a vertical grab zone on the Handle with pillPlacement="%s"',
+    pillPlacement => {
+      render(
+        <Harness
+          config={{defaultSize: 200, direction: 'vertical'}}
+          handleProps={{direction: 'vertical', pillPlacement}}
+        />,
+      );
+      const hitArea = getSeparator().firstElementChild as HTMLElement;
+      expect(hitArea.className).toContain('hitAreaCenteredY');
+      expect(hitArea.getAttribute('style') ?? '').not.toContain('translate');
+    },
+  );
 
-  // The grab zone is stretched along the handle by its 0/0 insets, so anything
-  // that moves it across the handle displaces the whole zone off the divider —
-  // a percentage does it by half the handle's length, so the taller the panel
-  // the larger the dead region, and nothing about it is visible on screen.
-  it.each([
-    ['horizontal' as const, 'translateX'],
-    ['vertical' as const, 'translateY'],
-  ])('offsets the %s grab zone along the pill axis only', (direction, axis) => {
-    render(
+  // On a pane shorter than the zone, the zone reaches at most half the pane.
+  // Grown targets stop at half the gap in the same way. A collapsed pane keeps
+  // the whole zone, which reopens it.
+  it('limits the grab zone to the length of a short pane, and not while it is collapsed', () => {
+    const view = render(
       <Harness
-        config={{
-          defaultSize: 200,
-          minSize: 100,
-          maxSize: 400,
-          direction,
-        }}
-        handleProps={{direction, pillPlacement: 'start'}}
+        config={{defaultSize: 12, minSize: 6, collapsible: true}}
+        handleProps={{}}
       />,
     );
-    const hitArea = getSeparator().firstElementChild as HTMLElement;
-    const translates = (hitArea.getAttribute('style') ?? '')
-      .split(';')
-      .map(decl => decl.split(/:(.*)/s)[1]?.trim() ?? '')
-      .filter(value => value.startsWith('translate'));
+    const hitArea = () => getSeparator().firstElementChild as HTMLElement;
+    expect(hitArea().getAttribute('style') ?? '').toContain('12px');
+    fireEvent.keyDown(getSeparator(), {key: 'Enter'});
+    expect(getSeparator()).toHaveAttribute('aria-valuetext', 'Collapsed');
+    expect(hitArea().getAttribute('style') ?? '').not.toContain('min(');
+    view.unmount();
+  });
 
-    // Both the LTR and RTL declarations of the horizontal offset.
-    expect(translates.length).toBeGreaterThan(0);
-    for (const translate of translates) {
-      expect(translate.startsWith(`${axis}(`)).toBe(true);
-    }
+  // A pane at 0px that is not collapsed has no length to protect. It keeps
+  // the whole zone, so a drag can reopen it.
+  it.each(['inline', 'overlay'] as const)(
+    'keeps the whole grab zone on a pane at 0px that is not collapsed (%s)',
+    position => {
+      render(
+        <Harness
+          config={{defaultSize: 0, minSize: 0}}
+          handleProps={{position}}
+        />,
+      );
+      expect(getSeparator()).not.toHaveAttribute('aria-valuetext');
+      const hitArea = getSeparator().firstElementChild as HTMLElement;
+      expect(hitArea.getAttribute('style') ?? '').not.toContain('min(');
+      expect(getSeparator().className).not.toContain('OnShortPane');
+    },
+  );
+
+  it('starts a drag from the Grip pill as from the Grab zone', () => {
+    const resizable = makeResizable();
+    render(<ResizeHandle resizable={resizable} label="Resize" />);
+    const pill = getSeparator().querySelector('.astryx-resize-handle-pill');
+    expect(pill).not.toBeNull();
+    fireEvent.pointerDown(pill as Element, {
+      pointerId: 1,
+      clientX: 0,
+      button: 0,
+    });
+    expect(resizable._onResizeStart).toHaveBeenCalledTimes(1);
   });
 
   // --- Prop composition (ordering choice: handler sits after {...props}) ---
