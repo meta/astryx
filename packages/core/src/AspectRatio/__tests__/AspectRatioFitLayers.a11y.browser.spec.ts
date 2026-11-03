@@ -62,6 +62,13 @@ test.afterAll(async () => {
  * local source and any extra class.
  */
 async function captureStory(page: Page, fit: Fit, mediaClass: string) {
+  // The story's placeholder images come from a remote host. The test measures
+  // only its own inline image, so remote requests are refused: a slow host
+  // must not hold the page's load, which page.setContent below waits for.
+  await page.route(
+    url => !url.href.startsWith(storybook.origin),
+    async route => route.abort(),
+  );
   await page.goto(
     `${storybook.origin}/iframe.html?id=core-aspectratio--fit-modes&viewMode=story`,
   );
