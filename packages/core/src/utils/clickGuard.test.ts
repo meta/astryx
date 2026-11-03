@@ -70,6 +70,13 @@ function claimedTap(target: HTMLElement) {
   }
 }
 
+/** A `touchend` at `target`, as a browser fires it after the touch's `pointerup`. */
+function touchEnd(target: EventTarget, cancelable = true): Event {
+  const event = new Event('touchend', {bubbles: true, cancelable});
+  target.dispatchEvent(event);
+  return event;
+}
+
 function button(): HTMLButtonElement {
   const element = document.createElement('button');
   document.body.append(element);
@@ -268,5 +275,54 @@ describe('clickGuard', () => {
     } finally {
       restorePointer();
     }
+  });
+
+  it("armed at a finger's release, cancels that touch's touchend and disarms: no click follows it", () => {
+    const target = button();
+    armClickGuard(document, {staysInstalled: true, cancelsTouchEnd: true});
+    expect(touchEnd(target).defaultPrevented).toBe(true);
+    expect(isClickGuardArmed(document)).toBe(false);
+    // The next touch's touchend, and a click with no press behind it, are the page's.
+    expect(touchEnd(target).defaultPrevented).toBe(false);
+    expect(click(target).defaultPrevented).toBe(false);
+  });
+
+  it('leaves an uncancelable touchend alone, and stays armed for a click that may follow it', () => {
+    const target = button();
+    armClickGuard(document, {cancelsTouchEnd: true});
+    expect(touchEnd(target, false).defaultPrevented).toBe(false);
+    expect(isClickGuardArmed(document)).toBe(true);
+    // Only that touch's touchend is its: a later one is the page's.
+    expect(touchEnd(target).defaultPrevented).toBe(false);
+    expect(click(target).defaultPrevented).toBe(true);
+  });
+
+  it('cancels no touchend on any other arm', () => {
+    const target = button();
+    armClickGuard(document, {staysInstalled: true});
+    expect(touchEnd(target).defaultPrevented).toBe(false);
+    armClickGuard(document, {takesLateMouse: true});
+    expect(touchEnd(target).defaultPrevented).toBe(false);
+    expect(isClickGuardArmed(document)).toBe(true);
+  });
+
+  it('hears touchend only while armed with it, and drops it at the next pointerdown and after its window', () => {
+    vi.useFakeTimers();
+    const target = button();
+    const add = vi.spyOn(window, 'addEventListener');
+    const remove = vi.spyOn(window, 'removeEventListener');
+    const touchEnds = (spy: typeof add) =>
+      spy.mock.calls.map(call => call[0]).filter(type => type === 'touchend');
+    armClickGuard(document);
+    expect(touchEnds(add)).toEqual([]);
+    armClickGuard(document, {cancelsTouchEnd: true});
+    expect(touchEnds(add)).toEqual(['touchend']);
+    target.dispatchEvent(new Event('pointerdown', {bubbles: true}));
+    expect(touchEnds(remove)).toEqual(['touchend']);
+    expect(touchEnd(target).defaultPrevented).toBe(false);
+    armClickGuard(document, {cancelsTouchEnd: true});
+    vi.advanceTimersByTime(CLICK_GUARD_WINDOW_MS);
+    expect(isClickGuardArmed(document)).toBe(false);
+    expect(touchEnds(remove)).toEqual(['touchend', 'touchend']);
   });
 });
