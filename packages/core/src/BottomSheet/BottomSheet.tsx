@@ -75,6 +75,7 @@ import {
 import {useDevWarning} from '../hooks/useDevWarning';
 import {useScrollLock} from '../hooks/useScrollLock';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {observeMutations} from '../utils/sharedMutationObserver';
 import {mergeProps} from '../utils/mergeProps';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
@@ -739,15 +740,18 @@ function StandaloneBottomSheet({
     };
     const onFocusOut = () => queueMicrotask(releaseIfFocusLeft);
     dialog.addEventListener('focusout', onFocusOut);
-    const observer = new MutationObserver(releaseIfFocusLeft);
-    observer.observe(dialog, {
-      childList: true,
-      subtree: true,
-      attributeFilter: ['disabled', 'hidden', 'inert'],
-    });
+    const unobserve = observeMutations(
+      dialog,
+      {
+        childList: true,
+        subtree: true,
+        attributeFilter: ['disabled', 'hidden', 'inert'],
+      },
+      releaseIfFocusLeft,
+    );
     return () => {
       dialog.removeEventListener('focusout', onFocusOut);
-      observer.disconnect();
+      unobserve();
     };
   }, []);
   const dialogComposedRef = useMergedRefs(dialogRef, modalityRef, exitFocusRef);
