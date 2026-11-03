@@ -185,3 +185,117 @@ describe("WheelSegmenter's merges: one stall's wheels, not frames", () => {
     expect(isBunched(1000 / 60)).toBe(false);
   });
 });
+
+/** A fling: a trackpad's deltas growing as the fingers speed up. */
+const FLING = [8, 16, 24, 30, 32];
+
+/** The fling's momentum: `count` steps shrinking 5 % a frame from 30. */
+function momentum(count: number): number[] {
+  return Array.from({length: count}, (_, frame) => 30 * 0.95 ** frame);
+}
+
+describe("WheelSegmenter's reading of a stall's merge: no jump, no lift", () => {
+  it.each(STREAMS)(
+    "keeps a fling's momentum one gesture, and reads new fingers as a jump, at %s",
+    (_name, hz, stamp, jitter) => {
+      const segmenter = new WheelSegmenter();
+      const glide = momentum(60);
+      // New fingers: three times the momentum's last step, twice.
+      const sizes = [...FLING, ...glide, glide[59] * 3, glide[59] * 3];
+      const times = frames(hz, sizes.length, stamp, jitter);
+      const seen = sizes.map((size, index) =>
+        segmenter.push(times[index], size, 180),
+      );
+      const lift = seen.findIndex(segment => segment.liftNow);
+      expect(lift).toBeGreaterThanOrEqual(0);
+      const glided = seen.slice(lift, FLING.length + glide.length);
+      expect(glided.filter(segment => segment.boundary != null)).toEqual([]);
+      expect(seen.slice(-2).map(segment => segment.boundary)).toContain('jump');
+    },
+  );
+
+  it.each(STREAMS)(
+    "reads a momentum wheel 1 ms after the one before as one stall's merge of two steps, not a jump, at %s",
+    (_name, hz, stamp, jitter) => {
+      const segmenter = new WheelSegmenter();
+      const sizes = [...FLING, ...momentum(10)];
+      const times = frames(hz, sizes.length + 2, stamp, jitter);
+      sizes.forEach((size, index) => {
+        segmenter.push(times[index], size, 180);
+      });
+      // A stalled page receives the next two steps as one wheel.
+      const step = 30 * 0.95 ** 10;
+      const last = times[sizes.length - 1];
+      const merged = segmenter.push(last + 1, step + step * 0.95, 180);
+      const next = segmenter.push(times[sizes.length + 1], step * 0.9, 180);
+      expect([
+        merged.boundary,
+        merged.phase,
+        next.boundary,
+        next.phase,
+      ]).toEqual([null, 'momentum', null, 'momentum']);
+    },
+  );
+
+  it('still starts a new gesture at a jump up against the decay right after a merged momentum wheel', () => {
+    const segmenter = new WheelSegmenter();
+    feed(segmenter, [10, 10, 10, 10, 9.5, 9, 8.5, 8, 7.5]);
+    segmenter.push(144, 3, 180);
+    segmenter.push(145, 2.8 + 2.6, 180);
+    // New fingers: 5 px against the merged wheel's last step is a jump.
+    const fingers = segmenter.push(161, 5, 180);
+    expect({boundary: fingers.boundary, gesture: fingers.gesture}).toEqual({
+      boundary: 'jump',
+      gesture: 2,
+    });
+  });
+
+  it('reads no lift from the steps after a merged finger wheel', () => {
+    const segmenter = new WheelSegmenter();
+    // The fingers move 4 px every 16 ms, and one step shrinks. The page then
+    // receives the next two steps as one wheel 1 ms later. Steps of about
+    // 4 px follow, shrinking a little.
+    const times = [0, 16, 32, 48, 64, 80, 81, 97, 113, 129, 145, 161];
+    const sizes = [4, 4, 4, 4, 4, 3.9, 8, 4.2, 4.1, 4, 3.9, 3.8];
+    const seen = times.map((time, index) =>
+      segmenter.push(time, sizes[index], 180),
+    );
+    expect({
+      lift: seen.some(segment => segment.liftNow),
+      afterMerge: seen[7].decaying,
+    }).toEqual({lift: false, afterMerge: false});
+  });
+});
+
+describe('WheelSegmenter: a slowing drag with a merged wheel', () => {
+  it("reads a slowing drag's lift at the same frame whether or not a stall merged two of its steps", () => {
+    // Steady 10 px steps every 16 ms, then a drag slowing 1 % a frame.
+    const sizes = [10, 10, 10, 10];
+    for (let frame = 1; frame <= 30; frame++) {
+      sizes.push(10 * 0.99 ** frame);
+    }
+    const times = sizes.map((_, index) => index * 16);
+    const liftTime = (merge: number | null) => {
+      const segmenter = new WheelSegmenter();
+      for (let index = 0; index < sizes.length; index++) {
+        let size = sizes[index];
+        let time = times[index];
+        if (index === merge) {
+          // A stalled page receives this step and the next as one wheel,
+          // 1 ms after the one before.
+          size += sizes[index + 1];
+          time = times[index - 1] + 1;
+        } else if (merge != null && index === merge + 1) {
+          continue;
+        }
+        if (segmenter.push(time, size, 180).liftNow) {
+          return times[index];
+        }
+      }
+      return null;
+    };
+    const control = liftTime(null);
+    expect(control).not.toBeNull();
+    expect(liftTime(10)).toBe(control);
+  });
+});
