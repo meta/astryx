@@ -295,6 +295,7 @@ component ButtonGroup(props: ButtonGroupProps)
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component Calendar(props: CalendarProps)
+  prop calendar?: CalendarSystem
   prop dateConstraints?: ReadonlyArray<(date: Date) => boolean>
   prop defaultValue?: ISODateString
   prop focusDate?: ISODateString

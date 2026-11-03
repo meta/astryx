@@ -4,9 +4,11 @@
 
 /**
  * @file useCalendarDays.ts
- * @input Uses React useMemo, useLocale, PlainDate utilities, generated CLDR weekday data
- * @output Exports useCalendarDays hook for generating calendar day grids
- * @position Calendar-specific hook; used by Calendar
+ * @input Uses React useMemo, useLocale, PlainDate and calendar-system
+ *   utilities, generated CLDR weekday data
+ * @output Exports useCalendarDays (a Gregorian month) and useCalendarMonthDays
+ *   (a month of any calendar system) for generating calendar day grids
+ * @position Calendar-specific hooks; useCalendarMonthDays is used by Calendar
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Calendar/hooks/index.ts
@@ -23,6 +25,11 @@ import {
 } from '../../utils/plainDate';
 import {useLocale} from '../../i18n';
 import {getWeekdayHeaderNames} from '../getWeekdayHeaderNames';
+import {
+  type CalendarMonth,
+  type CalendarSystem,
+  calendarDayOfMonth,
+} from '../../utils/calendarSystem';
 
 /**
  * Represents a single day in the calendar grid.
@@ -86,65 +93,107 @@ export function useCalendarDays(
   options: UseCalendarDaysOptions,
 ): UseCalendarDaysReturn {
   const {year, month, weekStartsOn = 0, hasVariableRowCount = false} = options;
+  const days = useMemo(
+    () =>
+      layOutMonthDays({
+        first: {year, month, day: 1},
+        length: getDaysInMonth(year, month),
+        weekStartsOn,
+        hasVariableRowCount,
+        dayNumberOf: pd => pd.day,
+      }),
+    [year, month, weekStartsOn, hasVariableRowCount],
+  );
+  return useMonthGrid(days, weekStartsOn);
+}
+
+/** Configuration for the day grid of one month of a calendar system. */
+export interface UseCalendarMonthDaysOptions {
+  /** The month to lay out, located by its Gregorian days. */
+  month: CalendarMonth;
+  /** The calendar system the month belongs to; it numbers the days. */
+  calendar: CalendarSystem;
+  /** First day of week (0=Sunday through 6=Saturday) */
+  weekStartsOn?: DayOfWeek;
+  /** Use variable rows per month vs. fixed 6-row grid */
+  hasVariableRowCount?: boolean;
+}
+
+/**
+ * The day grid of one month of any calendar system. Each day keeps its
+ * Gregorian date; `dayNumber` is its day of the calendar month. Internal to
+ * Calendar.
+ */
+export function useCalendarMonthDays(
+  options: UseCalendarMonthDaysOptions,
+): UseCalendarDaysReturn {
+  const {
+    month,
+    calendar,
+    weekStartsOn = 0,
+    hasVariableRowCount = false,
+  } = options;
+  const days = useMemo(
+    () =>
+      layOutMonthDays({
+        first: month.start,
+        length: month.length,
+        weekStartsOn,
+        hasVariableRowCount,
+        dayNumberOf: (pd, offset) =>
+          offset >= 0 && offset < month.length
+            ? offset + 1
+            : calendarDayOfMonth(calendar, pd),
+      }),
+    [month, calendar, weekStartsOn, hasVariableRowCount],
+  );
+  return useMonthGrid(days, weekStartsOn);
+}
+
+interface MonthLayout {
+  first: PlainDate;
+  length: number;
+  weekStartsOn: DayOfWeek;
+  hasVariableRowCount: boolean;
+  /** The day number of a grid day, given its offset from the month's first day. */
+  dayNumberOf: (pd: PlainDate, offset: number) => number;
+}
+
+function layOutMonthDays(layout: MonthLayout): CalendarDay[] {
+  const {first, length, weekStartsOn, hasVariableRowCount, dayNumberOf} =
+    layout;
+  let startingDayOfWeek = plainDateDayOfWeek(first) - weekStartsOn;
+  if (startingDayOfWeek < 0) {
+    startingDayOfWeek += 7;
+  }
+  const totalRows = hasVariableRowCount
+    ? Math.ceil((length + startingDayOfWeek) / 7)
+    : 6;
+  const result: CalendarDay[] = [];
+  for (let i = 0; i < totalRows * 7; i++) {
+    const offset = i - startingDayOfWeek;
+    const pd = plainDateAddDays(first, offset);
+    result.push({
+      date: pd,
+      iso: plainDateToISO(pd),
+      isOutside: offset < 0 || offset >= length,
+      dayNumber: dayNumberOf(pd, offset),
+    });
+  }
+  return result;
+}
+
+function useMonthGrid(
+  days: CalendarDay[],
+  weekStartsOn: DayOfWeek,
+): UseCalendarDaysReturn {
   const locale = useLocale();
-
-  // Calculate grid structure
-  const gridInfo = useMemo(() => {
-    const totalDaysInMonth = getDaysInMonth(year, month);
-
-    // Calculate starting offset based on weekStartsOn
-    let startingDayOfWeek =
-      plainDateDayOfWeek({year, month, day: 1}) - weekStartsOn;
-    if (startingDayOfWeek < 0) {
-      startingDayOfWeek += 7;
-    }
-
-    // Calculate total cells
-    const totalDays = totalDaysInMonth + startingDayOfWeek;
-    const totalRows = hasVariableRowCount ? Math.ceil(totalDays / 7) : 6;
-    const totalCells = totalRows * 7;
-
-    return {
-      daysInMonth: totalDaysInMonth,
-      startingDayOfWeek,
-      totalCells,
-    };
-  }, [year, month, weekStartsOn, hasVariableRowCount]);
 
   const dayNames = useMemo(
     () => getWeekdayHeaderNames(locale, weekStartsOn),
     [locale, weekStartsOn],
   );
 
-  // Generate days array
-  const days = useMemo(() => {
-    const {
-      daysInMonth: totalDaysInMonth,
-      startingDayOfWeek,
-      totalCells,
-    } = gridInfo;
-    const firstOfMonth: PlainDate = {year, month, day: 1};
-    const result: CalendarDay[] = [];
-
-    for (let i = 0; i < totalCells; i++) {
-      const dayOffset = i - startingDayOfWeek + 1;
-      const isOutside = dayOffset < 1 || dayOffset > totalDaysInMonth;
-      const pd: PlainDate = isOutside
-        ? plainDateAddDays(firstOfMonth, dayOffset - 1)
-        : {year, month, day: dayOffset};
-
-      result.push({
-        date: pd,
-        iso: plainDateToISO(pd),
-        isOutside,
-        dayNumber: pd.day,
-      });
-    }
-
-    return result;
-  }, [year, month, gridInfo]);
-
-  // Group days into weeks
   const weeks = useMemo(() => {
     const result: CalendarDay[][] = [];
     for (let i = 0; i < days.length; i += 7) {
@@ -153,10 +202,5 @@ export function useCalendarDays(
     return result;
   }, [days]);
 
-  return {
-    days,
-    weeks,
-    dayNames,
-    totalCells: gridInfo.totalCells,
-  };
+  return {days, weeks, dayNames, totalCells: days.length};
 }

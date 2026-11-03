@@ -2,18 +2,19 @@
 
 /**
  * @file calendarSystem.test.tsx
- * @input InternationalizationProvider, useCalendarSystem
+ * @input InternationalizationProvider, useCalendarSystem, Calendar
  * @output Tests for calendar resolution and the fallback without Temporal
  * @position Runs without a Temporal polyfill, as an application that loads
  *   none does; the Gregorian-aligned calendars need no Temporal.
  */
 
 import {afterAll, afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
-import {render} from '@testing-library/react';
+import {render, screen} from '@testing-library/react';
 import {use} from 'react';
 import {InternationalizationProvider} from '../InternationalizationProvider';
 import {InternationalizationContext} from '../InternationalizationContext';
 import {useCalendarSystem} from '../useCalendarSystem';
+import {Calendar} from '../../Calendar/Calendar';
 import {
   CALENDAR_SYSTEMS,
   type CalendarSystem,
@@ -192,4 +193,23 @@ describe('without Temporal', () => {
       expect(warn).not.toHaveBeenCalled();
     },
   );
+
+  it('renders a Persian Calendar as a Gregorian month', () => {
+    silenceWarnings();
+    render(<Calendar calendar="persian" focusDate="2026-10-30" />);
+    expect(
+      screen.getByRole('grid', {name: 'October 2026'}),
+    ).toBeInTheDocument();
+  });
+
+  it('renders a Buddhist Calendar with Buddhist years', () => {
+    render(
+      <InternationalizationProvider locale="en" calendar="buddhist">
+        <Calendar focusDate="2026-10-30" />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByRole('grid').getAttribute('aria-label')).toContain(
+      '2569',
+    );
+  });
 });

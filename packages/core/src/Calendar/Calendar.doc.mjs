@@ -169,13 +169,15 @@ export const docs = {
     {
       name: 'hasWeekNumbers',
       type: 'boolean',
-      description: 'Show ISO week numbers.',
+      description:
+        'Show ISO 8601 week numbers. They are ISO 8601 week numbers in every calendar system.',
       default: 'false',
     },
     {
       name: 'hasVariableRowCount',
       type: 'boolean',
-      description: 'Variable vs fixed 6-row grid.',
+      description:
+        'Give each month only the rows it needs. The default fixed 6-row grid keeps the same height from month to month; a variable row count trades that fixed height for a more compact grid.',
       default: 'false',
     },
     {
@@ -184,6 +186,13 @@ export const docs = {
       description:
         'First day of week. Accepts a number (0=Sunday) or a three-letter day name (e.g. "mon").',
       default: '0',
+    },
+    {
+      name: 'calendar',
+      type: "'gregory' | 'iso8601' | 'buddhist' | 'roc' | 'japanese' | 'persian' | 'indian' | 'hebrew' | 'chinese' | 'dangi' | 'coptic' | 'ethiopic' | 'ethioaa' | 'islamic-civil' | 'islamic-tbla' | 'islamic-umalqura'",
+      description:
+        "Calendar system the grid shows, such as 'persian', 'hebrew', or 'islamic-umalqura'. It sets the months, their names, and month and year navigation. value, min, max, focusDate, and every callback stay Gregorian ISO dates. Calendars other than gregory, iso8601, buddhist, roc, and japanese need Temporal; where the runtime lacks it, load a polyfill such as temporal-polyfill/full/global on the server and in the browser, or the grid shows Gregorian months. Chinese and Korean month starts come from the runtime's Temporal, and some polyfills start a few months one day apart from native Temporal; when you render on the server, load the same Temporal implementation on the server and in the browser.",
+      default: 'the InternationalizationProvider calendar, else gregory',
     },
   ],
   theming: {
@@ -311,13 +320,14 @@ export const docsZh = {
     {
       name: 'hasWeekNumbers',
       type: 'boolean',
-      description: '显示 ISO 周数。',
+      description: '显示 ISO 8601 周数。在任何历法中都是 ISO 8601 周数。',
       default: 'false',
     },
     {
       name: 'hasVariableRowCount',
       type: 'boolean',
-      description: '可变行数与固定 6 行网格。',
+      description:
+        '每个月只显示所需的行数。默认的固定 6 行网格使每个月高度相同；可变行数以固定高度换取更紧凑的网格。',
       default: 'false',
     },
     {
@@ -326,6 +336,13 @@ export const docsZh = {
       description:
         '每周起始日。可为数字（0=周日）或三字母星期缩写（如 "mon"）。',
       default: '0',
+    },
+    {
+      name: 'calendar',
+      type: "'gregory' | 'iso8601' | 'buddhist' | 'roc' | 'japanese' | 'persian' | 'indian' | 'hebrew' | 'chinese' | 'dangi' | 'coptic' | 'ethiopic' | 'ethioaa' | 'islamic-civil' | 'islamic-tbla' | 'islamic-umalqura'",
+      description:
+        "网格显示的历法，如 'persian'、'hebrew' 或 'islamic-umalqura'。它决定月份、月份名称以及按月和按年的导航。value、min、max、focusDate 和所有回调仍为公历 ISO 日期。gregory、iso8601、buddhist、roc 和 japanese 以外的历法需要 Temporal；运行环境没有 Temporal 时，请在服务端和浏览器中加载 polyfill（如 temporal-polyfill/full/global），否则网格显示公历月份。农历（chinese）和韩国历（dangi）的月初取自运行环境的 Temporal，部分 polyfill 与原生 Temporal 有少数月份的月初相差一天；服务端渲染时，请在服务端和浏览器中加载同一种 Temporal 实现。",
+      default: 'InternationalizationProvider 的历法，否则为 gregory',
     },
   ],
   theming: {
@@ -400,8 +417,11 @@ export const docsDense = {
     onFocusDateChange: 'navigation callback',
     handleRef: 'imperative navigation handle',
     hasOutsideDays: 'show days from adjacent months',
-    hasWeekNumbers: 'show ISO week numbers',
-    hasVariableRowCount: 'variable vs fixed 6-row grid',
+    hasWeekNumbers: 'show ISO 8601 week numbers, in every calendar system',
+    hasVariableRowCount:
+      'only the rows each month needs; trades the fixed 6-row height for a compact grid',
     weekStartsOn: 'first day of week (0=Sunday, or name e.g. "mon")',
+    calendar:
+      'calendar system shown (default: provider calendar, else gregory); values stay Gregorian ISO; non-Gregorian-aligned calendars need Temporal',
   },
 };

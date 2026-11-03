@@ -275,17 +275,17 @@ for all 30 shipped locales plus `pseudo`.
   The charts `currency()` helper does not yet conform: an omitted locale follows
   the host default. That is a known conformance gap, not a recorded default;
   making it deterministic is a separate compatibility change.
-- **INV10 — The application selects the calendar; values stay Gregorian.** The
-  provider resolves its calendar from its `calendar` prop, and otherwise the
-  Gregorian calendar (`spec:AST-111` FR2). Astryx date components show Gregorian
-  dates. Locale changes language, numbering, and field order; a locale never
-  selects the calendar, neither by its default calendar nor by a `-u-ca-`
-  keyword. `PlainDate` values, constraints, and machine formats stay Gregorian
-  ISO in every calendar. The runtime's `Temporal` owns the arithmetic of every
-  calendar whose months are not Gregorian; where it is missing, a date component
-  that resolves such a calendar shows Gregorian dates (`spec:AST-111` FR5).
-  Shared built-in date formatters pin the Gregorian calendar unless an Astryx
-  call site passes the resolved calendar. The low-level `plainDateFormat`
+- **INV10 — The application selects the calendar; values stay Gregorian.** A
+  date component shows the calendar that it resolves from its own `calendar`
+  prop or the provider's `calendar` prop, and otherwise the Gregorian calendar
+  (`spec:AST-111` FR2). Locale changes language, numbering, and field order; a
+  locale never selects the calendar, neither by its default calendar nor by a
+  `-u-ca-` keyword. `PlainDate` values, constraints, and machine formats stay
+  Gregorian ISO in every calendar. The runtime's `Temporal` owns the arithmetic
+  of every calendar whose months are not Gregorian; where it is missing, a date
+  component that resolves such a calendar shows Gregorian dates (`spec:AST-111`
+  FR5). Shared built-in date formatters pin the Gregorian calendar unless an
+  Astryx call site passes the resolved calendar. The low-level `plainDateFormat`
   display-calendar override remains a supported explicit caller choice.
 - **INV11 — Rendered direction comes from the DOM.** The provider exposes a
   semantic direction default, but Astryx layout, mirroring, and interaction SHOULD

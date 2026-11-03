@@ -6,9 +6,9 @@
  * @output Calendar months located by their Gregorian days, month and year
  *   steps, dates from calendar fields, availability of each calendar, and
  *   calendar labels and digits
- * @position Shared date utility; read by the i18n calendar resolution. Values
- *   stay Gregorian PlainDates. Temporal owns the arithmetic of every calendar
- *   whose months are not Gregorian.
+ * @position Shared date utility; read by the i18n calendar resolution and by
+ *   Calendar. Values stay Gregorian PlainDates. Temporal owns the arithmetic of
+ *   every calendar whose months are not Gregorian.
  */
 
 import type {Locale} from '../i18n/types';
