@@ -35,6 +35,7 @@ import {
   GUIDE_NAMESPACE_PAGES,
   GUIDE_PAGE_NAMESPACES,
   ROOT_PAGE_ALIASES,
+  applySidebarParents,
   movedGuideRedirects,
   mergeFlatTopics,
   namespacePage,
@@ -2008,6 +2009,7 @@ async function generateDocsRegistry() {
     }
     docTopics.push(page);
   }
+  applySidebarParents(docTopics);
   const docsTreeRoutes = [...new Set(tree.routes)].sort();
   const docRedirects = Object.fromEntries(
     Object.entries({...merged.redirects, ...tree.redirects}).sort(([a], [b]) =>

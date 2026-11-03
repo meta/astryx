@@ -12,8 +12,8 @@
  *   (`docs(topic, section, options)` from `@astryxdesign/cli/api`) and the
  *   flat topics the site already built.
  * @output Doc pages ({topic, title, description, category, sections, and
- *   `parent` for a nested namespace's page}) and redirects from each guide's
- *   own slug to its section on the full page.
+ *   the sidebar `parent` of a page shown under another}) and redirects from
+ *   each guide's own slug to its section on the full page.
  * @position Used by generate-data.mjs; tested on its own with a fake reader.
  */
 
@@ -38,13 +38,23 @@ export const GUIDE_NAMESPACE_PAGES = new Map();
 
 /**
  * Nested namespaces that have a page of their own instead of a part of their
- * root namespace's page. The root page leaves each one out, and each one is a
- * full page at its route's slug, with `parent` set to the root page's slug so
- * the sidebar shows it under that page.
+ * root namespace's page, by root. The root page leaves each one out, and each
+ * one is a full page at its route's slug, with `parent` set to the root page's
+ * slug so the sidebar shows it under that page.
  * @type {Map<string, string[]>}
  */
-export const NESTED_NAMESPACE_PAGES = new Map([
-  ['internationalization', ['internationalization/calendars']],
+export const NESTED_NAMESPACE_PAGES = new Map();
+
+/**
+ * Pages the sidebar shows under another page, child slug to parent slug. The
+ * child keeps its URL and moves into its parent's sidebar group. A nested
+ * namespace's page (NESTED_NAMESPACE_PAGES) has its root page as parent with
+ * no entry here.
+ * @type {Map<string, string>}
+ */
+export const SIDEBAR_PARENTS = new Map([
+  ['cli-experimental-icon-set-files', 'icons'],
+  ['styling', 'styling-overview'],
 ]);
 
 /**
@@ -298,19 +308,24 @@ export async function namespacePage(readDocs, route, options = {}) {
 }
 
 /**
- * The pages of a root namespace: its own page without the nested namespaces
- * NESTED_NAMESPACE_PAGES names, and one page for each of those, marked with
+ * The pages of a root namespace: its own page without its nested namespaces
+ * that have a page of their own, and one page for each of those, marked with
  * the root page as its `parent`. A namespace with no guide below it has no
  * page.
  * @param {(topic?: string, section?: string, options?: object) => Promise<any>} readDocs
  * @param {string} root
- * @param {{aliases?: string[]}} [options] older slugs of the root page
+ * @param {{aliases?: string[], nested?: string[]}} [options] older slugs of
+ *   the root page, and the nested namespaces with a page of their own
+ *   (NESTED_NAMESPACE_PAGES by default)
  * @returns {Promise<{root: {page: object, redirects: Record<string, string>} | null, nested: Array<{page: object, redirects: Record<string, string>}>}>}
  */
 export async function rootNamespacePages(readDocs, root, options = {}) {
-  const nestedRoutes = NESTED_NAMESPACE_PAGES.get(root) ?? [];
+  const {
+    aliases = [],
+    nested: nestedRoutes = NESTED_NAMESPACE_PAGES.get(root) ?? [],
+  } = options;
   const rootPage = await namespacePage(readDocs, root, {
-    aliases: options.aliases ?? [],
+    aliases,
     except: nestedRoutes,
   });
   const nested = [];
@@ -321,6 +336,35 @@ export async function rootNamespacePages(readDocs, root, options = {}) {
     nested.push(page);
   }
   return {root: rootPage, nested};
+}
+
+/**
+ * Set the sidebar `parent` of each page that SIDEBAR_PARENTS names. Nesting is
+ * one level deep, so a parent cannot have a parent of its own.
+ * @param {Array<{topic: string, parent?: string}>} pages
+ * @param {Map<string, string>} [parents]
+ * @throws when an entry names a page that does not exist, or nests deeper
+ *   than one level
+ */
+export function applySidebarParents(pages, parents = SIDEBAR_PARENTS) {
+  const bySlug = new Map(pages.map(page => [page.topic, page]));
+  for (const [child, parent] of parents) {
+    const page = bySlug.get(child);
+    if (!page || !bySlug.has(parent) || child === parent) {
+      throw new Error(
+        `docs: sidebar parent "${child}" -> "${parent}" needs two different pages.`,
+      );
+    }
+    page.parent = parent;
+  }
+  for (const page of pages) {
+    if (page.parent && bySlug.get(page.parent)?.parent) {
+      throw new Error(
+        `docs: "${page.topic}" is under "${page.parent}", which is itself under another page.`,
+      );
+    }
+  }
+  return pages;
 }
 
 /**

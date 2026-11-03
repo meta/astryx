@@ -2,6 +2,8 @@
 
 import {describe, expect, it} from 'vitest';
 import {
+  SIDEBAR_PARENTS,
+  applySidebarParents,
   mergeFlatTopics,
   namespaceCategory,
   namespacePage,
@@ -215,21 +217,16 @@ describe('a nested namespace with a page of its own', () => {
     title,
     sections: [section(title)],
   });
-  const calendars = {
-    route: 'internationalization/calendars',
+  const extras = {
+    route: 'kit/extras',
     kind: 'namespace',
-    title: 'Calendars',
-    summary: 'Show dates in other calendars.',
-    content: [{type: 'prose', text: 'Values stay ISO dates.'}],
+    title: 'Extras',
+    summary: 'Extra parts for the kit.',
+    content: [{type: 'prose', text: 'Extras fit every kit.'}],
     slots: [
       {
         name: 'guides',
-        children: [
-          guideNode(
-            'internationalization/calendars/calendar-systems',
-            'Choose a calendar',
-          ),
-        ],
+        children: [guideNode('kit/extras/fit', 'Fit an extra')],
       },
     ],
   };
@@ -238,66 +235,61 @@ describe('a nested namespace with a page of its own', () => {
     _section?: string,
     options: {depth?: number | 'all'} = {},
   ) => {
-    if (route === 'internationalization' && options.depth === 'all') {
+    if (route === 'kit' && options.depth === 'all') {
       return {
         type: 'docs.node',
         data: {
-          route: 'internationalization',
+          route: 'kit',
           kind: 'namespace',
-          title: 'Internationalization',
-          summary: 'Locales and calendars.',
+          title: 'Kit',
+          summary: 'Build the kit.',
           content: [],
           slots: [
             {
               name: 'guides',
-              children: [
-                guideNode('internationalization/i18n-quick-start', 'Start'),
-                calendars,
-              ],
+              children: [guideNode('kit/start', 'Start'), extras],
             },
           ],
         },
       };
     }
-    if (route === 'internationalization/calendars' && options.depth === 'all') {
-      return {type: 'docs.node', data: calendars};
+    if (route === 'kit/extras' && options.depth === 'all') {
+      return {type: 'docs.node', data: extras};
     }
     return {type: 'docs.detail', data: {category: 'guide', sections: []}};
   };
+  const pages = () =>
+    rootNamespacePages(reader, 'kit', {nested: ['kit/extras']});
 
   it('leaves the nested namespace off its root page', async () => {
-    const {root} = await rootNamespacePages(reader, 'internationalization');
+    const {root} = await pages();
     const page = root?.page as {
       topic: string;
       sections: Array<{title: string}>;
     };
-    expect(page.topic).toBe('internationalization');
+    expect(page.topic).toBe('kit');
     expect(page.sections.map(s => s.title)).toEqual(['Start']);
-    expect(root?.redirects).toEqual({
-      'internationalization-i18n-quick-start':
-        '/docs/internationalization#start',
-    });
+    expect(root?.redirects).toEqual({'kit-start': '/docs/kit#start'});
   });
 
   it('gives it a full page at its slug, under its root page', async () => {
-    const {nested} = await rootNamespacePages(reader, 'internationalization');
+    const {nested} = await pages();
     expect(nested).toHaveLength(1);
-    const [calendarsPage] = nested;
-    expect(calendarsPage.page).toMatchObject({
-      topic: 'internationalization-calendars',
-      title: 'Calendars',
-      description: 'Show dates in other calendars.',
+    const [extrasPage] = nested;
+    expect(extrasPage.page).toMatchObject({
+      topic: 'kit-extras',
+      title: 'Extras',
+      description: 'Extra parts for the kit.',
       category: 'guide',
-      parent: 'internationalization',
+      parent: 'kit',
     });
-    const page = calendarsPage.page as {sections: Array<{title: string}>};
+    const page = extrasPage.page as {sections: Array<{title: string}>};
     expect(page.sections.map(s => s.title)).toEqual([
       'Overview',
-      'Choose a calendar',
+      'Fit an extra',
     ]);
-    expect(calendarsPage.redirects).toEqual({
-      'internationalization-calendars-calendar-systems':
-        '/docs/internationalization-calendars#choose-a-calendar',
+    expect(extrasPage.redirects).toEqual({
+      'kit-extras-fit': '/docs/kit-extras#fit-an-extra',
     });
   });
 
@@ -318,24 +310,54 @@ describe('a nested namespace with a page of its own', () => {
   });
 });
 
-describe('the docs registry', () => {
-  it('shows Calendars on its own page under Internationalization', () => {
-    const calendarsPage = docTopics.find(
-      topic => topic.topic === 'internationalization-calendars',
+describe('sidebar parents', () => {
+  const pageAt = (topic: string, parent?: string) => ({
+    topic,
+    ...(parent ? {parent} : {}),
+  });
+
+  it('puts each named page under its parent and leaves the rest alone', () => {
+    const pages = applySidebarParents(
+      [pageAt('icons'), pageAt('icon-files'), pageAt('kit-extras', 'kit')],
+      new Map([['icon-files', 'icons']]),
     );
-    expect(calendarsPage).toMatchObject({
-      title: 'Calendars',
-      category: 'guide',
-      parent: 'internationalization',
-    });
-    const i18n = docTopics.find(
-      topic => topic.topic === 'internationalization',
+    expect(pages).toEqual([
+      pageAt('icons'),
+      pageAt('icon-files', 'icons'),
+      pageAt('kit-extras', 'kit'),
+    ]);
+  });
+
+  it('fails the build on a missing page, a page under itself, or a second level', () => {
+    expect(() =>
+      applySidebarParents([pageAt('icons')], new Map([['gone', 'icons']])),
+    ).toThrow(/gone/);
+    expect(() =>
+      applySidebarParents([pageAt('icons')], new Map([['icons', 'gone']])),
+    ).toThrow(/gone/);
+    expect(() =>
+      applySidebarParents([pageAt('icons')], new Map([['icons', 'icons']])),
+    ).toThrow(/two different pages/);
+    expect(() =>
+      applySidebarParents(
+        [pageAt('a'), pageAt('b', 'a'), pageAt('c')],
+        new Map([['c', 'b']]),
+      ),
+    ).toThrow(/itself under another page/);
+  });
+
+  it('places the site pages it names, at unchanged URLs', () => {
+    for (const [child, parent] of SIDEBAR_PARENTS) {
+      expect(docTopics.find(topic => topic.topic === child)?.parent).toBe(
+        parent,
+      );
+      expect(docTopics.some(topic => topic.topic === parent)).toBe(true);
+      expect(docRedirects).not.toHaveProperty(child);
+    }
+    expect(SIDEBAR_PARENTS.get('cli-experimental-icon-set-files')).toBe(
+      'icons',
     );
-    expect(i18n?.parent).toBeUndefined();
-    expect(
-      docRedirects['internationalization-calendars-calendar-systems'],
-    ).toMatch(/^\/docs\/internationalization-calendars#/);
-    expect(docRedirects).not.toHaveProperty('internationalization-calendars');
+    expect(SIDEBAR_PARENTS.get('styling')).toBe('styling-overview');
   });
 });
 
