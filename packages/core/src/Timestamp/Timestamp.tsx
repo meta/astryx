@@ -36,7 +36,7 @@ import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {formatInstant, formatZoneName} from './formatInstant';
 import {formatRelativeTime} from './formatRelativeTime';
-import {formatTooltipLines} from './tooltipEntries';
+import {formatTooltipLines, resolveTimezoneID} from './tooltipEntries';
 import type {
   TimestampTooltipEntry,
   TimestampTooltipLine,
@@ -98,6 +98,16 @@ export interface TimestampProps extends BaseProps<HTMLTimeElement> {
    * @default 'auto'
    */
   format?: TimestampFormat;
+  /**
+   * IANA time zone the absolute formats render in, such as `'UTC'` or
+   * `'America/Los_Angeles'`. Omit (or pass `'local'`) for the viewer's own
+   * zone. An explicit zone renders identically on the server and the client,
+   * so it is the way to show an absolute time without a hydration mismatch;
+   * without it the server markup depends on the server's zone. Relative
+   * formats name no instant and ignore it. An unknown identifier warns once
+   * in development and falls back to the viewer's zone.
+   */
+  timeZone?: string;
   /**
    * Threshold in seconds for 'auto' format to switch from relative to date_time.
    * @default 604800 (7 days)
@@ -280,6 +290,7 @@ function isRelativeFormat(
 export function Timestamp({
   value,
   format = 'auto',
+  timeZone: timeZoneProp,
   autoThreshold = DEFAULT_AUTO_THRESHOLD,
   hasTooltip = true,
   tooltipEntries,
@@ -349,6 +360,12 @@ export function Timestamp({
   // Format the display text in the viewer's own zone; only the tooltip names
   // others. The one exception is the pre-hydration placeholder, written in
   // UTC with its label so every zone produces the same markup.
+  //
+  // An explicit `timeZone` overrides both: the named zone renders identically
+  // on the server and the client, so absolute output no longer depends on the
+  // server's zone. The placeholder uses it too — server and hydration both
+  // compute from props alone.
+  const timeZone = resolveTimezoneID(timeZoneProp, 'timeZone');
   const displayText = !isValidDate
     ? ''
     : effectiveFormat === 'relative'
@@ -360,12 +377,12 @@ export function Timestamp({
               date,
               effectiveFormat,
               locale,
-              // The placeholder before hydration is Gregorian and in UTC, with
-              // its zone. The server and the client then write the same text,
-              // with or without Temporal.
-              isClockPending
+              // The pre-hydration placeholder is written in UTC, labelled, so
+              // the server and the hydrating client produce the same text in
+              // every time zone.
+              isClockPending && timeZone === undefined
                 ? {timeZone: 'UTC', isTimezoneShown: true}
-                : {isTimezoneShown, calendar},
+                : {timeZone, isTimezoneShown},
             )
           : '';
 
@@ -374,12 +391,12 @@ export function Timestamp({
   // out in full: abbreviations like "PST" or "GMT+2" are unexpanded
   // abbreviations to a screen-reader user (WCAG 3.1.4).
   const fullAbsoluteText = isValidDate
-    ? formatInstant(date, 'full', locale, {calendar})
+    ? formatInstant(date, 'full', locale, {timeZone})
     : '';
   const ariaLabelText = isValidDate
     ? formatInstant(date, 'full', locale, {
+        timeZone,
         timeZoneNameStyle: 'long',
-        calendar,
       })
     : '';
 

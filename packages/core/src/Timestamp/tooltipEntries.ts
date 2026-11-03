@@ -115,13 +115,16 @@ const LOCAL_ZONE_ALIAS = 'local';
 const warnedTimezoneIDs = new Set<string>();
 
 /**
- * Resolves an entry's zone to something safe to hand to `Intl`.
+ * Resolves a zone to something safe to hand to `Intl`.
  *
  * Returns `undefined` for the viewer's own zone, which is also what `Intl`
  * treats as "use the host zone" — so the local path never constructs a
  * formatter with an explicit `timeZone` and cannot drift from today's output.
  */
-function resolveTimezoneID(timezoneID: string | undefined): string | undefined {
+export function resolveTimezoneID(
+  timezoneID: string | undefined,
+  context: string = 'tooltipEntries',
+): string | undefined {
   if (
     timezoneID === undefined ||
     timezoneID.toLowerCase() === LOCAL_ZONE_ALIAS
@@ -142,7 +145,7 @@ function resolveTimezoneID(timezoneID: string | undefined): string | undefined {
       warnedTimezoneIDs.add(timezoneID);
       devWarn(
         'Timestamp',
-        `unknown time zone ${JSON.stringify(timezoneID)} in tooltipEntries. Falling back to the viewer's time zone.`,
+        `unknown time zone ${JSON.stringify(timezoneID)} in ${context}. Falling back to the viewer's time zone.`,
       );
     }
     return undefined;

@@ -1791,6 +1791,103 @@ describe('Timestamp server rendering', () => {
       host.remove();
     }
   });
+
+  it('renders an explicit time zone identically whatever the host zone', () => {
+    // Oct 15 in UTC, Oct 14 in Los Angeles: without the prop the host zone
+    // decides which day renders.
+    const element = (
+      <Timestamp
+        value={1665792474000}
+        format="date"
+        timeZone="UTC"
+        hasTooltip={false}
+      />
+    );
+    process.env.TZ = 'UTC';
+    const utc = renderToString(element);
+    expect(utc).toContain('Oct 15, 2022');
+    process.env.TZ = 'America/Los_Angeles';
+    expect(renderToString(element)).toBe(utc);
+    process.env.TZ = 'Asia/Tokyo';
+    expect(renderToString(element)).toBe(utc);
+  });
+
+  it('shifts the reading into the named zone', () => {
+    process.env.TZ = 'UTC';
+    const {rerender} = render(
+      <Timestamp
+        value={1665792474000}
+        format="date"
+        timeZone="America/Los_Angeles"
+        hasTooltip={false}
+      />,
+    );
+    expect(screen.getByText('Oct 14, 2022')).toBeInTheDocument();
+    rerender(
+      <Timestamp
+        value={1665792474000}
+        format="date"
+        timeZone="Asia/Tokyo"
+        hasTooltip={false}
+      />,
+    );
+    expect(screen.getByText('Oct 15, 2022')).toBeInTheDocument();
+  });
+
+  it('hydrates explicit-zone server markup from another host zone without a mismatch', () => {
+    const element = (
+      <Timestamp
+        value={1665792474000}
+        format="date_time"
+        timeZone="UTC"
+        hasTooltip={false}
+      />
+    );
+    process.env.TZ = 'UTC';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    host.innerHTML = renderToString(element);
+
+    process.env.TZ = 'America/Los_Angeles';
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let root: Root | undefined;
+    try {
+      act(() => {
+        root = hydrateRoot(host, element, {
+          onRecoverableError: error => {
+            throw error;
+          },
+        });
+      });
+      expect(host.textContent).toContain('Oct 15, 2022');
+      expect(errors).not.toHaveBeenCalled();
+    } finally {
+      errors.mockRestore();
+      act(() => root?.unmount());
+      host.remove();
+    }
+  });
+
+  it('falls back to the viewer zone on an unknown time zone', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      process.env.TZ = 'UTC';
+      render(
+        <Timestamp
+          value={1665792474000}
+          format="date"
+          timeZone="Never/Whence"
+          hasTooltip={false}
+        />,
+      );
+      expect(screen.getByText('Oct 15, 2022')).toBeInTheDocument();
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('Never/Whence'),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });
 
 describe('Timestamp calendar systems', () => {
