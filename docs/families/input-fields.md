@@ -46,7 +46,13 @@ architecture:
     architecture:public-component-api,
   ]
 contributing: []
-deciding_specs: [spec:AST-001/DEC-1, spec:AST-001/DEC-2, spec:AST-002/DEC-1]
+deciding_specs:
+  [
+    spec:AST-001/DEC-1,
+    spec:AST-001/DEC-2,
+    spec:AST-002/DEC-1,
+    spec:AST-099/DEC-5,
+  ]
 ---
 
 # Input field family contract
@@ -249,6 +255,19 @@ another implementation helper.
   `component:TextInput` FR16 admits the keyboard props only on TextInput and
   TextArea, where a caller sets `enterKeyHint="search"` for a search field.
 
+- **FR13 — A member that brings up the keyboard stays above it.** When the
+  on-screen keyboard opens, a member's focused text-entry field stays visible
+  above it, wherever the member renders: in the page, a sheet, a bottom bar, or
+  a fixed toolbar. This covers TextInput, TextArea, NumberInput, the typed
+  fields of DateInput, DateTimeInput, and TimeInput, the inputs of Typeahead
+  and Tokenizer, and the search row of Selector and MultiSelector. It is
+  internal behavior with no prop or other public API: the member decides it in
+  its focus handling and reads the keyboard module, as `spec:AST-099` FR9
+  requires, which owns the full list of covered fields, including those of
+  PowerSearch, CommandPalette, and ChatComposer. A member whose field brings up
+  no keyboard, such as DateRangeInput, FileInput, ComplexSelector, or a touch
+  picker field with no input mode, is outside it.
+
 ## Allowed component variation
 
 - **AV1 — Native versus composed control.** Text fields may use native inputs;
@@ -388,6 +407,9 @@ DEC-6 does not require unrelated components to add a new floor.
   styling passed through a product wrapper's own props or spread; FR10's type
   error surfaces those callsites.
 
+- **On-screen keyboard (FR13):** no member meets FR13 on current main. No
+  member has keyboard focus handling, and the keyboard module does not exist
+  yet; `spec:AST-099` lists each gap.
 - **Verification coverage:** current unit tests prove composition, semantics, and
   individual state behavior, but do not yet provide the complete real-browser
   inline-size/end-overlap matrix below. This current record names those
@@ -412,6 +434,7 @@ The exhaustive coverage obligation follows the membership and adoption tables.
 | FR10     | A type test over every Field-composed component's props that fails if one accepts root `xstyle`, `className`, or `style`; per-component render tests for every base prop, `container*`, and `control*` prop and for both development warnings                                                                            | every Field-composed component standalone, in horizontal-label FormLayout, and inside InputGroup where admitted                   | A component type-checks with root styling, a base prop lands off the primary semantic control, `container*` lands off the Field box or on the control box, `control*` lands off the control box, or a warning is missing |
 | FR11     | `InputClearButton.test.tsx` tooltip and accessible-name assertions, plus real-Chromium hover captures                                                                                                                                                                                                                    | a long field label; a locale override; light and dark                                                                             | The tooltip repeats the field label, or the accessible name loses the field label                                                                                                                                        |
 | FR12     | `Typeahead.test.tsx`, `BaseTypeahead.test.tsx`, `Tokenizer.test.tsx`, `Selector.test.tsx`, and `MultiSelector.test.tsx` cases for both attributes, with Enter keeping its member-owned effect; `SearchKeyboard.interaction.browser.spec.ts` on a touch-emulated phone, where the search input a tap focuses carries both | Typeahead; Tokenizer; Selector and MultiSelector search row; a phone viewport with touch emulation                                | A missing attribute, or an Enter whose effect changes with the label, fails                                                                                                                                              |
+| FR13     | TBD (gap): the per-field keyboard focus tests and simulator evidence `spec:AST-099` FR9 names                                                                                                                                                                                                                            | each member FR13 covers, in the page, a sheet, and a fixed host                                                                   | A focused field left under the keyboard, or a public prop for the behavior                                                                                                                                               |
 
 ## Decision links
 
