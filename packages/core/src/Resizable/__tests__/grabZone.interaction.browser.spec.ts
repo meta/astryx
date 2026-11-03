@@ -257,7 +257,16 @@ for (const [dir, pillPlacement] of [
     ).toBe(true);
     const x = pillBox.x + pillBox.width / 2;
     const y = pillBox.y + pillBox.height / 2;
-    await page.mouse.move(x, y, {steps: 4});
+    // Rest in the gap between the zone and the pill, longer than any hover
+    // grace, before reaching the pill.
+    const gapX =
+      pillBox.x >= zoneBox.x + zoneBox.width
+        ? (zoneBox.x + zoneBox.width + pillBox.x) / 2
+        : (pillBox.x + pillBox.width + zoneBox.x) / 2;
+    await page.mouse.move(gapX, y);
+    await page.waitForTimeout(300);
+    await expect(pill).toHaveCSS('opacity', '1');
+    await page.mouse.move(x, y);
     await expect(pill).toHaveCSS('opacity', '1');
     const before = await handle.getAttribute('aria-valuenow');
     await page.mouse.down();
