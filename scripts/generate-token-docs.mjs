@@ -258,7 +258,7 @@ const groups = [
     exportName: 'durationDefaults',
     title: 'Duration Tokens',
     description:
-      'Motion duration primitives. Three bands: fast (micro-interactions), medium (entrance/exit), slow (continuous). Min/max variants derive from base × ratio.',
+      "Motion duration primitives. Three bands: fast (micro-interactions), medium (entrance/exit), slow (continuous). Min/max variants derive from base × ratio. Of a theme's two `motion` knobs, `tempo` (0.75–1.5) scales every duration here; `character` leaves durations alone. A duration scale beats `tempo` for the bands it sets, and explicit `tokens` beat both. `tempo` leaves these unscaled: finger tracking, momentum, the rubber band, the on-screen keyboard, the press's onset delay, cancel distance and tap flash, hover-intent delays, gesture thresholds, Spinner's and Skeleton's loops, and the 200 ms Reduce Motion cap.",
     headers: ['Token', 'Value'],
     formatRow: (name, value) => [name, value],
   },
@@ -267,7 +267,8 @@ const groups = [
     previewType: 'easing-curve',
     exportName: 'easeDefaults',
     title: 'Easing Tokens',
-    description: 'Easing curves for animations and transitions.',
+    description:
+      "Easing curves for animations and transitions. Of a theme's two `motion` knobs, `character` sets `--ease-entrance` and `--ease-move`: `crisp` decelerates without overshoot, `expressive` overshoots slightly, and at `standard` both equal `--ease-standard`; `--ease-exit` keeps its own curve at every character. `tempo` leaves curves alone. A duration scale's own fields win over the knobs, and explicit `tokens` win over everything. No curve here shapes motion that follows a finger or the system (dragging, momentum, the rubber band, the on-screen keyboard), and the press's clocks, hover-intent delays and gesture thresholds keep their timing whatever the character.",
     headers: ['Token', 'Value'],
     formatRow: (name, value) => [name, value],
   },

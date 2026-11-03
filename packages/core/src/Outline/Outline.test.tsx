@@ -525,8 +525,10 @@ describe('Outline keyboard navigation', () => {
     render(<Outline items={items} onNavigateEnd={onNavigateEnd} />);
     await user.click(screen.getByRole('link', {name: 'Installation'}));
 
-    // Arrow keys inside the outline move focus; they are prevented, so they do
-    // not scroll the page and must not cancel the in-flight navigation.
+    // Following the link focuses the section; return to the outline. Arrow
+    // keys inside it move focus; they are prevented, so they do not scroll
+    // the page and must not cancel the in-flight navigation.
+    screen.getByRole('link', {name: 'Installation'}).focus();
     await user.keyboard('{ArrowDown}');
     expect(onNavigateEnd).not.toHaveBeenCalled();
 
@@ -568,6 +570,69 @@ describe('Outline navigate callbacks', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
+  });
+
+  it('moves focus to the chosen section, so the next Tab continues there (WCAG 2.4.3)', async () => {
+    const user = userEvent.setup();
+    const cleanup = mountHeadings();
+    const install = document.getElementById('install')!;
+    const focus = vi.spyOn(install, 'focus');
+    render(<Outline items={items} />);
+
+    await user.click(screen.getByRole('link', {name: 'Installation'}));
+    expect(install).toHaveFocus();
+    // Focusing must not fight Outline's own scroll.
+    expect(focus).toHaveBeenCalledWith({preventScroll: true});
+    // A heading is made programmatically focusable only, never a Tab stop.
+    expect(install).toHaveAttribute('tabindex', '-1');
+
+    // A target that already sets its own tabindex keeps it.
+    install.blur();
+    install.setAttribute('tabindex', '0');
+    await user.click(screen.getByRole('link', {name: 'Installation'}));
+    expect(install).toHaveFocus();
+    expect(install).toHaveAttribute('tabindex', '0');
+
+    cleanup();
+  });
+
+  it("keeps a target's own tabindex when it cannot take focus", async () => {
+    const user = userEvent.setup();
+    const cleanup = mountHeadings(['intro', 'api']);
+    // A target with its own tab stop that refuses focus right now, as a
+    // hidden panel does in a browser. The test DOM focuses hidden elements,
+    // so the refusal is simulated.
+    const panel = document.createElement('div');
+    panel.id = 'install';
+    panel.setAttribute('tabindex', '0');
+    vi.spyOn(panel, 'focus').mockImplementation(() => {});
+    document.body.appendChild(panel);
+    render(<Outline items={items} />);
+
+    await user.click(screen.getByRole('link', {name: 'Installation'}));
+    expect(panel).toHaveAttribute('tabindex', '0');
+
+    panel.remove();
+    cleanup();
+  });
+
+  it('focuses a target that is already focusable without taking it out of the Tab order', async () => {
+    const user = userEvent.setup();
+    const cleanup = mountHeadings(['intro', 'api']);
+    // The "install" item points at a link, which is focusable on its own.
+    const link = document.createElement('a');
+    link.id = 'install';
+    link.href = '#install-details';
+    link.textContent = 'Install details';
+    document.body.appendChild(link);
+    render(<Outline items={items} />);
+
+    await user.click(screen.getByRole('link', {name: 'Installation'}));
+    expect(link).toHaveFocus();
+    expect(link).not.toHaveAttribute('tabindex');
+
+    link.remove();
+    cleanup();
   });
 
   it('fires onNavigateStart on click and onNavigateEnd when the scroll settles', async () => {

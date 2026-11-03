@@ -6,7 +6,8 @@
  *   static server over a built Storybook
  * @output `phone` (the touch-phone browser context every interaction proof
  *   runs in), `withStorybook` (serve the built Storybook for a spec file), and
- *   `openStory` (load one story and wait until it has rendered).
+ *   `openStory` (load one story, with Storybook's highlight module off, and
+ *   wait until it has rendered).
  * @position Stories are the reproduction path, as for every other browser
  *   check in this repository: a scenario used for verification is checked in,
  *   not built in a one-off page.
@@ -59,13 +60,47 @@ export function withStorybook(test: TestType<any, any>): () => string {
   };
 }
 
-/** Loads a story in the page and waits for its first render, its fonts and two frames. */
+/** Pages whose Storybook highlight module `openStory` turned off. */
+const highlightOff = new WeakSet<Page>();
+
+export interface OpenStoryOptions {
+  /**
+   * Keeps Storybook's highlight module on. It is off by default: when on, it
+   * observes `#storybook-root` and, on every insertion, reads the computed
+   * style of every element on the page inside the inserting task, so a proof
+   * would measure Storybook as well as the component.
+   */
+  readonly storybookHighlight?: boolean;
+}
+
+/**
+ * Loads a story in the page and waits for its first render, its fonts and two
+ * frames. Storybook's highlight module is off (see `OpenStoryOptions`), and
+ * that is checked: its root element must be absent once the story renders.
+ */
 export async function openStory(
   page: Page,
   origin: string,
   storyId: string,
   args?: Readonly<Record<string, string>>,
+  {storybookHighlight = false}: OpenStoryOptions = {},
 ): Promise<void> {
+  if (storybookHighlight) {
+    if (highlightOff.has(page)) {
+      throw new Error(
+        "openStory: this page already turned Storybook's highlight module off; open the story in a new page to keep it on",
+      );
+    }
+  } else if (!highlightOff.has(page)) {
+    highlightOff.add(page);
+    // Storybook's highlight module returns at once when this is set before
+    // its preview runs.
+    await page.addInitScript(() => {
+      (
+        globalThis as unknown as {__STORYBOOK_HIGHLIGHT_INITIALIZED?: boolean}
+      ).__STORYBOOK_HIGHLIGHT_INITIALIZED = true;
+    });
+  }
   const params = new URLSearchParams({id: storyId, viewMode: 'story'});
   if (args != null) {
     params.set(
@@ -86,6 +121,14 @@ export async function openStory(
       requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
     );
   });
+  if (
+    !storybookHighlight &&
+    (await page.locator('#storybook-highlights-root').count()) > 0
+  ) {
+    throw new Error(
+      "openStory: Storybook's highlight module is on (#storybook-highlights-root exists), so every insertion would also read the style of every element on the page; this Storybook may no longer read __STORYBOOK_HIGHLIGHT_INITIALIZED",
+    );
+  }
 }
 
 /** Resolves after `count` animation frames have been presented in the page. */
@@ -119,7 +162,7 @@ const TIMER_GATE = `(() => {
   const realInterval = window.setInterval.bind(window);
   const realFrame = window.requestAnimationFrame.bind(window);
   const realCancelFrame = window.cancelAnimationFrame.bind(window);
-  const gate = {frozen: false, queue: [], frame: realFrame};
+  const gate = {frozen: false, queue: [], frame: realFrame, timeout: realTimeout};
   window.__harnessTimerGate = gate;
   const drop = key => { gate.queue = gate.queue.filter(entry => entry.key !== key); };
   window.setTimeout = (fn, ms, ...args) => {

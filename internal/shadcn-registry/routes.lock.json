@@ -466,6 +466,13 @@
       "aliases": []
     },
     {
+      "name": "component-info-tip",
+      "path": "components/info-tip",
+      "aliases": [
+        "components/lab/info-tip"
+      ]
+    },
+    {
       "name": "component-input-group",
       "path": "components/input-group",
       "aliases": []
@@ -598,11 +605,6 @@
     {
       "name": "component-lab-emoji-picker",
       "path": "components/lab/emoji-picker",
-      "aliases": []
-    },
-    {
-      "name": "component-lab-info-tip",
-      "path": "components/lab/info-tip",
       "aliases": []
     },
     {
@@ -3645,6 +3647,16 @@
       "aliases": []
     },
     {
+      "name": "example-use-collator-locale-aware-name-sort",
+      "path": "examples/use-collator/locale-aware-name-sort",
+      "aliases": []
+    },
+    {
+      "name": "example-use-combobox-assign-to-field",
+      "path": "examples/use-combobox/assign-to-field",
+      "aliases": []
+    },
+    {
       "name": "example-use-container-reveal-reveal-on-hover-row-actions",
       "path": "examples/use-container-reveal/reveal-on-hover-row-actions",
       "aliases": []
@@ -3665,8 +3677,18 @@
       "aliases": []
     },
     {
+      "name": "example-use-list-focus-recent-files",
+      "path": "examples/use-list-focus/recent-files",
+      "aliases": []
+    },
+    {
       "name": "example-use-popover-quick-actions",
       "path": "examples/use-popover/quick-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-use-press-feedback-pressable-card",
+      "path": "examples/use-press-feedback/pressable-card",
       "aliases": []
     },
     {
@@ -3725,6 +3747,16 @@
       "aliases": []
     },
     {
+      "name": "example-use-toast-settings-saved",
+      "path": "examples/use-toast/settings-saved",
+      "aliases": []
+    },
+    {
+      "name": "example-use-translator-load-more-footer",
+      "path": "examples/use-translator/load-more-footer",
+      "aliases": []
+    },
+    {
       "name": "example-v-stack-basic",
       "path": "examples/v-stack/basic",
       "aliases": []
@@ -3742,6 +3774,11 @@
     {
       "name": "example-visually-hidden-supplementary-context",
       "path": "examples/visually-hidden/supplementary-context",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-animated-layout",
+      "path": "hooks/use-animated-layout",
       "aliases": []
     },
     {

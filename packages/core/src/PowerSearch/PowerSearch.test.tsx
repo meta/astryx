@@ -9,7 +9,7 @@
  * SYNC: When PowerSearch.tsx changes, update tests to match
  */
 
-import {useState} from 'react';
+import {StrictMode, useState} from 'react';
 import {describe, it, expect, vi, beforeAll, afterAll, afterEach} from 'vitest';
 import {
   render,
@@ -250,6 +250,32 @@ describe('PowerSearch', () => {
     expect(screen.getByText('Open')).toBeInTheDocument();
   });
 
+  it('a read-only field removes no filter, by control or by Backspace', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <PowerSearch
+        config={config}
+        filters={[
+          {
+            field: 'title',
+            operator: 'contains',
+            value: {type: 'string', value: 'login'},
+          },
+        ]}
+        onChange={onChange}
+        isReadOnly
+      />,
+    );
+    expect(
+      screen.queryByRole('button', {name: 'Clear all'}),
+    ).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('button', {name: /^Remove /})).toHaveLength(0);
+    await user.click(screen.getByRole('combobox', {name: 'Search'}));
+    await user.keyboard('{Backspace}');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   describe('token value truncation (#4759)', () => {
     it('truncates token values by characters, not code units', () => {
       const truncConfig: PowerSearchConfig = {
@@ -437,7 +463,7 @@ describe('PowerSearch', () => {
       expect((input as HTMLInputElement).value).toBe('');
     });
 
-    it('keeps the input natively disabled when disabled without a reason', () => {
+    it("keeps the input's tab stop when disabled without a reason", () => {
       render(
         <PowerSearch
           config={config}
@@ -446,7 +472,9 @@ describe('PowerSearch', () => {
           isDisabled
         />,
       );
-      expect(screen.getByRole('combobox')).toBeDisabled();
+      const input = screen.getByRole('combobox');
+      expect(input).not.toBeDisabled();
+      expect(input).toHaveAttribute('aria-disabled', 'true');
     });
   });
 
@@ -473,6 +501,61 @@ describe('PowerSearch', () => {
       );
       await waitFor(() => {
         expect(politeRegion()).toHaveTextContent('5 results');
+      });
+    });
+
+    it('announces Clear all in its own words, "All filters removed" (component:PowerSearch; Tokenizer AR7)', async () => {
+      const onChange = vi.fn();
+      render(
+        <PowerSearch
+          config={config}
+          filters={[
+            {
+              field: 'status',
+              operator: 'is',
+              value: {type: 'enum', value: 'open'},
+            },
+          ]}
+          onChange={onChange}
+        />,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Clear all'}));
+      expect(onChange).toHaveBeenCalledWith([], 'remove', 0);
+      await waitFor(() => {
+        expect(politeRegion()).toHaveTextContent('All filters removed');
+      });
+      // Not the Tokenizer's own words.
+      expect(politeRegion()).not.toHaveTextContent('All items removed');
+    });
+
+    it('does not announce the result count present on mount under StrictMode, only a later change', async () => {
+      // StrictMode replays the mount effects: a mounted-flag guard is reset by
+      // the replay and speaks the initial count unprompted; comparing against
+      // the last announced text does not.
+      const {rerender} = render(
+        <StrictMode>
+          <PowerSearch
+            config={config}
+            filters={[]}
+            onChange={() => {}}
+            resultCount={12}
+          />
+        </StrictMode>,
+      );
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(politeRegion()?.textContent ?? '').toBe('');
+      rerender(
+        <StrictMode>
+          <PowerSearch
+            config={config}
+            filters={[]}
+            onChange={() => {}}
+            resultCount={1}
+          />
+        </StrictMode>,
+      );
+      await waitFor(() => {
+        expect(politeRegion()).toHaveTextContent('1 result');
       });
     });
 

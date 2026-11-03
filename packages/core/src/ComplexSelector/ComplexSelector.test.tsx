@@ -14,6 +14,8 @@ import {beforeEach, describe, expect, it, vi} from 'vitest';
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Button} from '../Button/Button';
+import * as stylex from '@stylexjs/stylex';
+import {focusVars} from '../theme/tokens.stylex';
 import {ComplexSelector, type ComplexSelectorHandle} from './ComplexSelector';
 
 const originalMatches = HTMLElement.prototype.matches;
@@ -755,6 +757,43 @@ describe('ComplexSelector trigger semantics', () => {
     expect(trigger).toHaveAttribute('aria-labelledby', 'trip-heading');
   });
 
+  // WCAG 2.5.3 Label in Name (axe `label-content-name-mismatch`) applies to
+  // controls named from their content. A button named by `aria-labelledby`
+  // while showing the chosen value failed it, and hid the value from the
+  // accessibility tree. As a combobox the label is the name and the text it
+  // shows is the value, as on `Selector`.
+  it('names the trigger by its label and shows the chosen value as its content', () => {
+    render(
+      <ComplexSelector
+        label="Supplier"
+        value="1"
+        onChange={() => {}}
+        triggerLabel="Acme Ltd">
+        {() => <p>Choose a supplier</p>}
+      </ComplexSelector>,
+    );
+    // A combobox takes no name from its content, so the value is not in the
+    // name and Label in Name has nothing to compare it with.
+    expect(screen.queryByRole('button', {name: /Supplier/})).toBeNull();
+    const trigger = screen.getByRole('combobox', {name: 'Supplier'});
+    expect(trigger).toHaveTextContent('Acme Ltd');
+    expect(trigger).toHaveAccessibleName('Supplier');
+  });
+
+  it('keeps the field label as the name when the trigger shows the placeholder', () => {
+    render(
+      <ComplexSelector
+        label="Supplier"
+        value=""
+        onChange={() => {}}
+        placeholder="Choose a supplier">
+        {() => <p>Pick one</p>}
+      </ComplexSelector>,
+    );
+    const trigger = screen.getByRole('combobox', {name: 'Supplier'});
+    expect(trigger).toHaveTextContent('Choose a supplier');
+  });
+
   it('spreads the combobox role, required, and disabled state onto a caller control', async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();
@@ -1018,6 +1057,115 @@ describe('ComplexSelector onOpenChange', () => {
       expect(
         container.querySelector('.astryx-field-status'),
       ).not.toBeInTheDocument();
+    });
+
+    // family:input-fields FR8: tooltip placement keeps the message reachable.
+    it('puts the tooltip-placement message in a focusable info-tip that describes the trigger', async () => {
+      const user = userEvent.setup();
+      render(
+        <ComplexSelector
+          label="Filter"
+          value={[]}
+          status={{type: 'error', message: 'Required'}}
+          statusVariant="tooltip">
+          {() => <button type="button">Apply</button>}
+        </ComplexSelector>,
+      );
+      const trigger = screen.getByRole('combobox', {name: 'Filter'});
+      const tip = screen.getByRole('button', {name: 'Error details'});
+      // Every id the trigger points at exists, and the status message is
+      // among them.
+      const ids = trigger.getAttribute('aria-describedby')?.split(' ') ?? [];
+      expect(ids.length).toBeGreaterThan(0);
+      for (const id of ids) {
+        expect(document.getElementById(id)).not.toBeNull();
+      }
+      expect(trigger).toHaveAccessibleDescription('Required');
+
+      // Focusing the info-tip reveals the message without opening the popup.
+      await user.tab();
+      await user.tab();
+      expect(tip).toHaveFocus();
+      expect(tip).toHaveAccessibleDescription('Required');
+      await user.click(tip);
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    // architecture:interaction-modality INV3: the info-tip rings itself, so
+    // the control box rings only for the trigger, not for any focused child.
+    it('rings the control box for the trigger only, not for the info-tip', () => {
+      render(
+        <ComplexSelector
+          label="Filter"
+          value={[]}
+          status={{type: 'error', message: 'Required'}}
+          statusVariant="tooltip">
+          {() => <button type="button">Apply</button>}
+        </ComplexSelector>,
+      );
+      const box = screen.getByRole('combobox', {name: 'Filter'}).parentElement!;
+      // The same declarations as the shared any-descendant ring, with null
+      // defaults so only its `:has(:focus-visible)` atoms are compared (the
+      // default atoms are shared with the combobox-only ring).
+      /* eslint-disable @astryx/focus-outline-shared -- a test oracle that
+         mirrors the shared ring's conditional atoms; it paints nothing. */
+      const anyDescendantRing = stylex.create({
+        ring: {
+          outlineWidth: {
+            default: null,
+            ':has(:focus-visible)': focusVars['--focus-outline-width'],
+          },
+          outlineStyle: {
+            default: null,
+            ':has(:focus-visible)': focusVars['--focus-outline-style'],
+          },
+        },
+      });
+      /* eslint-enable @astryx/focus-outline-shared */
+      const anyFocusAtoms = stylex
+        .props(anyDescendantRing.ring)
+        .className!.split(' ')
+        .filter(name => name.includes('x') && !name.includes('__'));
+      expect(anyFocusAtoms.length).toBeGreaterThan(0);
+      for (const name of anyFocusAtoms) {
+        expect(box).not.toHaveClass(name);
+      }
+    });
+
+    it('opens no popup when the info-tip message bubble is pressed', async () => {
+      const user = userEvent.setup();
+      render(
+        <ComplexSelector
+          label="Filter"
+          value={[]}
+          status={{type: 'error', message: 'Required'}}
+          statusVariant="tooltip">
+          {() => <button type="button">Apply</button>}
+        </ComplexSelector>,
+      );
+      const trigger = screen.getByRole('combobox', {name: 'Filter'});
+      const tip = screen.getByRole('button', {name: 'Error details'});
+      act(() => {
+        tip.focus();
+      });
+      const bubble = await screen.findByRole('tooltip', {hidden: true});
+      await user.click(bubble);
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('keeps the attached message box and adds no info-tip', () => {
+      render(
+        <ComplexSelector
+          label="Filter"
+          value={[]}
+          status={{type: 'error', message: 'Required'}}>
+          {() => <button type="button">Apply</button>}
+        </ComplexSelector>,
+      );
+      expect(screen.queryByRole('button', {name: 'Error details'})).toBeNull();
+      expect(
+        screen.getByRole('combobox', {name: 'Filter'}),
+      ).toHaveAccessibleDescription('Required');
     });
   });
 });

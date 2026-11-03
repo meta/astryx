@@ -2,8 +2,9 @@
 
 /**
  * @file useAnnounceRenderedText.adopters.test.tsx
- * @input Every core component that announces its own rendered content, with
- *   the shared own-content module replaced by a recorder
+ * @input Every core component that announces its own rendered content,
+ *   Tooltip's pin included, with the shared own-content module replaced by a
+ *   recorder
  * @output architecture:react-component-runtime INV10 test: each adopter hands
  *   its own-content announcement to the shared module and announces none of it
  *   itself
@@ -13,7 +14,9 @@
  * still announced its own content would be holding an Effect, observer, timer
  * or listener of its own for it, which INV10 rules out. The registry check at
  * the end keeps this list in step with every file that imports the module, so
- * a new adopter cannot skip the test.
+ * a new adopter cannot skip the test. The sheet case loads Tokenizer's
+ * on-demand sheet module before it opens the sheet, so its wait covers the
+ * open, not the module's load.
  */
 
 import fs from 'node:fs';
@@ -62,7 +65,10 @@ const {Selector} = await import('../Selector');
 const {MultiSelector} = await import('../MultiSelector');
 const {CommandPalette} = await import('../CommandPalette');
 const {BaseTypeahead} = await import('../Typeahead/BaseTypeahead');
+const {TokenizerWithPresentation} =
+  await import('../internal/tokenizer-presentation');
 const {createStaticSource} = await import('../Typeahead/createStaticSource');
+const {Tooltip} = await import('../Tooltip');
 
 const source = createStaticSource([{id: 'apple', label: 'Apple'}]);
 
@@ -159,6 +165,45 @@ const ADOPTERS: Record<string, () => Promise<void>> = {
     );
     fireEvent.change(screen.getByRole('combobox'), {target: {value: 'zzz'}});
     await expectDelegated('No results found');
+  },
+  'Tooltip/useTooltip.tsx': async () => {
+    // A tooltip a press pinned says its own text (component:Tooltip FR10).
+    render(
+      <Tooltip
+        content="Billed on the first of each month"
+        triggerBehavior="toggle">
+        <button type="button">About billing</button>
+      </Tooltip>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'About billing'}));
+    await expectDelegated('Billed on the first of each month');
+  },
+  'Tokenizer/TokenizerBottomSheet.tsx': async () => {
+    // The sheet's own content is a caller's `emptySearchText` element; the
+    // default EmptyState announces itself.
+    //
+    // Tokenizer loads the sheet on demand (Tokenizer.tsx's
+    // loadTokenizerBottomSheet). Loading the module is not what this case
+    // checks, so it waits for it first, and the one-second wait for the
+    // sheet's search field below covers only the open: on a busy machine the
+    // module's load alone outlasts it.
+    await import('../Tokenizer/TokenizerBottomSheet');
+    render(
+      <TokenizerWithPresentation
+        label="Tags"
+        searchSource={source}
+        value={[]}
+        onChange={() => {}}
+        debounceMs={0}
+        emptySearchText={<em>Nothing called that</em>}
+        experimental={{presentation: 'bottom-sheet'}}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Tags'}));
+    fireEvent.change(await screen.findByLabelText('Search Tags'), {
+      target: {value: 'zzz'},
+    });
+    await expectDelegated('Nothing called that');
   },
 };
 

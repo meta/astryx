@@ -94,9 +94,9 @@ describe('the public ledger contract', () => {
   it('uses the one wiki file and branch shared by every write path', () => {
     expect(TEMPLATE_LEDGER_FILENAME).toBe('template-scores.json');
     expect(TEMPLATE_LEDGER_URL).toBe(
-      'https://raw.githubusercontent.com/wiki/facebook/astryx/template-scores.json',
+      'https://raw.githubusercontent.com/wiki/meta/astryx/template-scores.json',
     );
-    expect(WIKI_REMOTE).toBe('https://github.com/facebook/astryx.wiki.git');
+    expect(WIKI_REMOTE).toBe('https://github.com/meta/astryx.wiki.git');
     expect(WIKI_BRANCH).toBe('master');
     expect(ensureWikiClone).toBeTypeOf('function');
   });

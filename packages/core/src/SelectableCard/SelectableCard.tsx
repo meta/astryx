@@ -44,6 +44,7 @@ import {mergeProps} from '../utils';
 import {Card} from '../Card/Card';
 import type {CardVariant} from '../Card/Card';
 import {useClickableContainer} from '../hooks/useClickableContainer';
+import {closestLayerRoot} from '../privateAttributes/layerRoot.stylex';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
@@ -324,6 +325,44 @@ export interface SelectableCardProps extends Omit<BaseProps, 'onChange'> {
 // =============================================================================
 
 /**
+ * Call a caller's click handler during capture, before the layer's own
+ * handlers, without letting it change what those handlers see. Its
+ * stopPropagation() would keep the press from the control inside the layer,
+ * so it does nothing here. Its preventDefault() would mark the event handled
+ * for those controls (a Button skips its clickAction), so it is applied to
+ * the native event only after the press has bubbled to the document, where it
+ * still cancels the browser's default action.
+ */
+function callBeforeLayerHandlers(
+  handler: (event: MouseEvent<HTMLElement>) => void,
+  event: MouseEvent<HTMLElement>,
+): void {
+  const {stopPropagation, preventDefault} = event;
+  let isDefaultPreventedByCaller = false;
+  event.stopPropagation = () => {};
+  event.preventDefault = () => {
+    isDefaultPreventedByCaller = true;
+  };
+  try {
+    handler(event);
+  } finally {
+    event.stopPropagation = stopPropagation;
+    event.preventDefault = preventDefault;
+  }
+  if (isDefaultPreventedByCaller) {
+    const nativeEvent = event.nativeEvent;
+    const doc = event.currentTarget.ownerDocument;
+    const cancelDefault = (bubbled: Event) => {
+      doc.removeEventListener(nativeEvent.type, cancelDefault);
+      if (bubbled === nativeEvent) {
+        nativeEvent.preventDefault();
+      }
+    };
+    doc.addEventListener(nativeEvent.type, cancelDefault);
+  }
+}
+
+/**
  * A card that toggles between selected and unselected states.
  *
  * Composes Card for visual styling and adds selection state with
@@ -415,6 +454,24 @@ export function SelectableCard({
       }
     : onClick;
 
+  // Until the next minor, a click inside an open layer within the card still
+  // reaches the caller's onClick. The layer root stops that click before the
+  // bubble phase, so it is delivered here, during capture. It never toggles.
+  // Remove at the next minor, when that click stops reaching onClick.
+  const handleLayerClickCapture = onClickProp
+    ? (e: MouseEvent<HTMLElement>) => {
+        const target = e.target;
+        if (!(target instanceof Element)) {
+          return;
+        }
+        const layerRoot = closestLayerRoot(target);
+        if (layerRoot == null || layerRoot.contains(e.currentTarget)) {
+          return;
+        }
+        callBeforeLayerHandlers(onClickProp, e);
+      }
+    : undefined;
+
   const composedOnMouseUp = onMouseUpProp
     ? (e: MouseEvent<HTMLElement>) => {
         onMouseUp(e);
@@ -455,7 +512,15 @@ export function SelectableCard({
       }
       onClick={!isDisabled ? composedOnClick : undefined}
       onMouseUp={!isDisabled ? composedOnMouseUp : undefined}
-      {...props}>
+      {...props}
+      onClickCapture={
+        !isDisabled && handleLayerClickCapture
+          ? (e: MouseEvent<HTMLDivElement>) => {
+              handleLayerClickCapture(e);
+              props.onClickCapture?.(e);
+            }
+          : props.onClickCapture
+      }>
       <input
         ref={interactiveRef}
         type="checkbox"

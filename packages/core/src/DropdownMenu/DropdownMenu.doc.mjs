@@ -158,7 +158,7 @@ export const docs = {
       {
         name: '--_dropdown-menu-radius',
         description: 'Border radius of the menu popup',
-        default: 'var(--radius-element)',
+        default: 'var(--radius-container)',
         private: true,
       },
       {
@@ -180,7 +180,7 @@ export const docs = {
       name: 'button',
       type: 'DropdownMenuButtonProps',
       description:
-        'Props for the trigger button (Button props except onClick). Mutually exclusive with `trigger`.',
+        'Props for the trigger button (Button props except onClick). Mutually exclusive with `renderTrigger`.',
       default: "{ label: 'Menu' }",
     },
     {

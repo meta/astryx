@@ -9,6 +9,7 @@
  * SYNC: When Slider.tsx changes, update tests to match new behavior
  */
 
+import {InternationalizationProvider} from '../i18n';
 import {useState} from 'react';
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {render, screen, act, fireEvent, waitFor} from '@testing-library/react';
@@ -59,6 +60,15 @@ beforeEach(() => {
   };
 });
 
+/** A thumb's control (the track container), where the pointer handlers live. */
+function controlOf(thumb: HTMLElement): HTMLElement {
+  const control = thumb.closest<HTMLElement>('.astryx-slider-control');
+  if (control == null) {
+    throw new Error('no slider control');
+  }
+  return control;
+}
+
 describe('Slider', () => {
   // --- Aria labels ---
 
@@ -73,6 +83,24 @@ describe('Slider', () => {
     const sliders = screen.getAllByRole('slider');
     expect(sliders[0]).toHaveAccessibleName('Minimum value');
     expect(sliders[1]).toHaveAccessibleName('Maximum value');
+  });
+
+  it('translates the range thumb names under another locale', () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        overrides={{
+          fr: {
+            '@astryx.slider.minimumThumb': 'Valeur minimale',
+            '@astryx.slider.maximumThumb': 'Valeur maximale',
+          },
+        }}>
+        <Slider label="Prix" value={[20, 80] as [number, number]} />
+      </InternationalizationProvider>,
+    );
+    const sliders = screen.getAllByRole('slider');
+    expect(sliders[0]).toHaveAccessibleName('Valeur minimale');
+    expect(sliders[1]).toHaveAccessibleName('Valeur maximale');
   });
 
   it('sets aria-valuetext with formatValue', () => {
@@ -91,44 +119,38 @@ describe('Slider', () => {
     expect(slider).toHaveAttribute('aria-valuenow', '72');
   });
 
+  // The thumb and the fill are placed by their progress along the travel,
+  // written inline as custom properties. CSS turns it into a translate in
+  // the control's container units. jsdom computes neither, so a real browser
+  // checks the geometry itself.
+  const progressOf = (element: HTMLElement, name = '--_slider-progress') =>
+    element.style.getPropertyValue(name);
+
   it.each([
-    {value: 150, expectedValue: 100, expectedPosition: 'calc(100% - 10px)'},
-    {value: -50, expectedValue: 0, expectedPosition: 'calc(0% + 10px)'},
+    {value: 150, expectedValue: 100, expectedProgress: '1'},
+    {value: -50, expectedValue: 0, expectedProgress: '0'},
   ])(
     'clamps a controlled value of $value to $expectedValue',
-    ({value, expectedValue, expectedPosition}) => {
+    ({value, expectedValue, expectedProgress}) => {
       render(<Slider label="Volume" value={value} min={0} max={100} />);
       const slider = screen.getByRole('slider');
       expect(slider).toHaveAttribute('aria-valuenow', String(expectedValue));
-      // Thumb positions via the logical `inset-inline-start` so it mirrors
-      // under RTL (see RTL Phase 4), offset by half a thumb so the extremes
-      // stay inside the component box.
-      expect(slider).toHaveStyle({insetInlineStart: expectedPosition});
-    },
-  );
-
-  // Regression: #5050 — at min/max the thumb centred on the container edge,
-  // so half of it (10px of a 20px thumb) hung outside the component.
-  it.each([
-    {value: 0, position: 'calc(0% + 10px)'},
-    {value: 50, position: 'calc(50% + 0px)'},
-    {value: 100, position: 'calc(100% - 10px)'},
-  ])(
-    'insets the thumb at value $value so it stays in bounds',
-    ({value, position}) => {
-      render(<Slider label="Volume" value={value} min={0} max={100} />);
-      expect(screen.getByRole('slider')).toHaveStyle({
-        insetInlineStart: position,
-      });
+      expect(progressOf(slider)).toBe(expectedProgress);
     },
   );
 
   it.each([
-    {value: 0, position: 'calc(0% + 10px)'},
-    {value: 100, position: 'calc(100% - 10px)'},
+    {value: 0, progress: '0'},
+    {value: 25, progress: '0.25'},
+    {value: 100, progress: '1'},
   ])(
-    'insets a vertical thumb at value $value so it stays in bounds',
-    ({value, position}) => {
+    'places the thumb by its progress at value $value, horizontal and vertical',
+    ({value, progress}) => {
+      const {unmount} = render(
+        <Slider label="Volume" value={value} min={0} max={100} />,
+      );
+      expect(progressOf(screen.getByRole('slider'))).toBe(progress);
+      unmount();
       render(
         <Slider
           label="Volume"
@@ -138,9 +160,36 @@ describe('Slider', () => {
           orientation="vertical"
         />,
       );
-      expect(screen.getByRole('slider')).toHaveStyle({bottom: position});
+      expect(progressOf(screen.getByRole('slider'))).toBe(progress);
     },
   );
+
+  it('places a range fill between the two thumbs and a single fill from the start', () => {
+    const {container, rerender} = render(
+      <Slider label="Volume" value={40} min={0} max={200} />,
+    );
+    const fills = () =>
+      Array.from(
+        container.querySelectorAll<HTMLElement>('[aria-hidden="true"] [style]'),
+      ).filter(element => progressOf(element, '--_slider-fill-end') !== '');
+    expect(fills().length).toBeGreaterThan(0);
+    for (const fill of fills()) {
+      expect(progressOf(fill, '--_slider-fill-start')).toBe('0');
+      expect(progressOf(fill, '--_slider-fill-end')).toBe('0.2');
+    }
+    rerender(
+      <Slider
+        label="Volume"
+        value={[50, 150] as [number, number]}
+        min={0}
+        max={200}
+      />,
+    );
+    for (const fill of fills()) {
+      expect(progressOf(fill, '--_slider-fill-start')).toBe('0.25');
+      expect(progressOf(fill, '--_slider-fill-end')).toBe('0.75');
+    }
+  });
 
   it('reflects orientation and disabled state on the interactive control target', () => {
     render(
@@ -152,7 +201,7 @@ describe('Slider', () => {
         isDisabled
       />,
     );
-    const control = screen.getByRole('slider').parentElement;
+    const control = controlOf(screen.getByRole('slider'));
     expect(control).not.toBeNull();
     expect(control).toHaveClass('astryx-slider-control');
     expect(control).toHaveAttribute('data-orientation', 'vertical');
@@ -337,6 +386,18 @@ describe('Slider', () => {
     expect(slider).not.toHaveAttribute('aria-required');
   });
 
+  it('conveys required state under FormLayout defaultOptionality="required" unless isOptional (FormLayout FR5)', () => {
+    render(
+      <FormLayout defaultOptionality="required">
+        <Slider label="Volume" value={50} />
+        <Slider label="Balance" value={50} isOptional />
+      </FormLayout>,
+    );
+    const [volume, balance] = screen.getAllByRole('slider');
+    expect(volume).toHaveAccessibleDescription(/Required/);
+    expect(balance).not.toHaveAccessibleDescription(/Required/);
+  });
+
   it('conveys required state on both thumbs of a range slider', () => {
     render(
       <Slider
@@ -402,7 +463,7 @@ describe('Slider', () => {
       />,
     );
     const slider = screen.getByRole('slider');
-    const trackContainer = slider.parentElement!;
+    const trackContainer = controlOf(slider);
 
     trackContainer.getBoundingClientRect = () => ({
       left: 0,
@@ -633,7 +694,7 @@ describe('Slider', () => {
       />,
     );
     const slider = screen.getByRole('slider');
-    const trackContainer = slider.parentElement!;
+    const trackContainer = controlOf(slider);
 
     trackContainer.getBoundingClientRect = () => ({
       left: 0,
@@ -666,7 +727,7 @@ describe('Slider', () => {
       <Slider label="Volume" value={50} min={0} max={100} onChange={vi.fn()} />,
     );
     const slider = screen.getByRole('slider');
-    const trackContainer = slider.parentElement!;
+    const trackContainer = controlOf(slider);
 
     trackContainer.getBoundingClientRect = () => ({
       left: 0,
@@ -707,7 +768,7 @@ describe('Slider', () => {
         onChange={handleChange}
       />,
     );
-    const track = screen.getByRole('slider').parentElement!;
+    const track = controlOf(screen.getByRole('slider'));
     track.getBoundingClientRect = () => ({
       left: 0,
       top: 0,
@@ -739,7 +800,7 @@ describe('Slider', () => {
         onChange={handleChange}
       />,
     );
-    const track = screen.getByRole('slider').parentElement!;
+    const track = controlOf(screen.getByRole('slider'));
     track.getBoundingClientRect = () => ({
       left: 0,
       top: 0,
@@ -786,7 +847,7 @@ describe('Slider', () => {
       />,
     );
     const thumb = screen.getByRole('slider');
-    const track = thumb.parentElement!;
+    const track = controlOf(thumb);
     const realGetComputedStyle = window.getComputedStyle;
     const gcsSpy = vi
       .spyOn(window, 'getComputedStyle')
@@ -824,7 +885,7 @@ describe('Slider', () => {
       />,
     );
     const thumb = screen.getByRole('slider');
-    const track = thumb.parentElement!;
+    const track = controlOf(thumb);
     const realGetComputedStyle = window.getComputedStyle;
     const gcsSpy = vi
       .spyOn(window, 'getComputedStyle')
@@ -1004,7 +1065,7 @@ describe('Slider', () => {
     const h = {hidden: true} as const;
 
     function getTrack(): HTMLElement {
-      return screen.getByRole('slider').parentElement!;
+      return controlOf(screen.getByRole('slider'));
     }
 
     it('shows the reason tooltip on hover when disabled with a reason', async () => {
@@ -1171,7 +1232,7 @@ describe('Slider', () => {
 
     // The track has no layout in jsdom; pointer maths needs a real rect.
     const grabTrack = (thumb: HTMLElement) => {
-      const track = thumb.parentElement!;
+      const track = controlOf(thumb);
       track.getBoundingClientRect = () => ({
         left: 0,
         top: 0,
@@ -1331,6 +1392,27 @@ describe('Slider', () => {
   });
 });
 
+describe('a press focuses the thumb it lands on', () => {
+  // Coincident range thumbs rely on it: a press that never moves leaves
+  // focus on the upper thumb, whatever pointer pressed it.
+  for (const pointerType of ['mouse', 'touch', 'pen'] as const) {
+    it(`for a ${pointerType}`, () => {
+      render(<Slider label="Volume" value={50} onChange={() => {}} />);
+      const thumb = screen.getByRole('slider');
+      expect(document.activeElement).not.toBe(thumb);
+      fireEvent.pointerDown(thumb, {
+        pointerId: 1,
+        pointerType,
+        button: 0,
+        isPrimary: true,
+        clientX: 100,
+        clientY: 10,
+      });
+      expect(document.activeElement).toBe(thumb);
+    });
+  }
+});
+
 describe('one pointer per drag', () => {
   // valueDisplay="none" keeps the thumb a direct child of the track, so the
   // mocked rect lands on it: 200 px wide, thumbs travel 10 px (0) to 190 px
@@ -1357,7 +1439,7 @@ describe('one pointer per drag', () => {
   }
 
   function trackOf(thumb: HTMLElement): HTMLElement {
-    const track = thumb.parentElement!;
+    const track = controlOf(thumb);
     track.getBoundingClientRect = () => ({
       left: 0,
       top: 0,
@@ -1508,7 +1590,7 @@ describe('pressed state', () => {
       <Slider label="Volume" value={50} min={0} max={100} onChange={vi.fn()} />,
     );
     const thumb = screen.getByRole('slider');
-    const trackContainer = thumb.parentElement!;
+    const trackContainer = controlOf(thumb);
     trackContainer.getBoundingClientRect = () => ({
       left: 0,
       top: 0,
@@ -1608,10 +1690,16 @@ describe('pressed state', () => {
       toJSON: () => {},
     });
 
+    // A mouse press on a thumb is the thumb's pan (spec:AST-094 FR43). So it
+    // is a real mouse press: the gesture host takes only a known pointer.
     fireEvent.pointerDown(end, {
       clientX: 100,
       clientY: 10,
       pointerId: 1,
+      pointerType: 'mouse',
+      isPrimary: true,
+      button: 0,
+      buttons: 1,
     });
     expect(declaresPressedOverlay(end)).toBe(true);
     expect(declaresPressedOverlay(start)).toBe(false);
@@ -1620,11 +1708,420 @@ describe('pressed state', () => {
   it('does not press a disabled slider', () => {
     render(<Slider label="Volume" value={50} isDisabled onChange={vi.fn()} />);
     const thumb = screen.getByRole('slider');
-    fireEvent.pointerDown(thumb.parentElement!, {
+    fireEvent.pointerDown(controlOf(thumb), {
       clientX: 20,
       clientY: 10,
       pointerId: 1,
     });
     expect(declaresPressedOverlay(thumb)).toBe(false);
+  });
+
+  it('takes only a primary click: a right click or a macOS ctrl-click on the track neither moves the value nor presses (spec:AST-094 FR43)', () => {
+    const handleChange = vi.fn();
+    render(<Slider label="Volume" value={50} onChange={handleChange} />);
+    const thumb = screen.getByRole('slider');
+    const track = controlOf(thumb);
+    track.getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 20,
+      width: 200,
+      height: 20,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    });
+    const press = (
+      pointerId: number,
+      init: {button: number; ctrlKey?: boolean},
+    ) => {
+      fireEvent.pointerDown(track, {
+        clientX: 20,
+        clientY: 10,
+        pointerId,
+        pointerType: 'mouse',
+        isPrimary: true,
+        ...init,
+      });
+      fireEvent.pointerUp(track, {clientX: 20, clientY: 10, pointerId});
+    };
+    // A right click is the context request, not a press.
+    press(1, {button: 2});
+    expect(handleChange).not.toHaveBeenCalled();
+    expect(declaresPressedOverlay(thumb)).toBe(false);
+    // So is a ctrl-click on macOS.
+    const platform = vi
+      .spyOn(navigator, 'platform', 'get')
+      .mockReturnValue('MacIntel');
+    try {
+      press(2, {button: 0, ctrlKey: true});
+      expect(handleChange).not.toHaveBeenCalled();
+      expect(declaresPressedOverlay(thumb)).toBe(false);
+    } finally {
+      platform.mockRestore();
+    }
+    // A primary click there still sets the value, toward the click.
+    press(3, {button: 0});
+    expect(handleChange).toHaveBeenCalledTimes(1);
+    expect(handleChange.mock.calls[0][0]).toBeLessThan(50);
+  });
+});
+
+describe('coincident range thumbs', () => {
+  // A 200 px control: the thumbs travel from 10 px (value 0) to 190 px
+  // (value 100), so value = (x - 10) / 1.8.
+  function mockGroupRect() {
+    screen.getByRole('group').getBoundingClientRect = () => ({
+      left: 0,
+      top: 0,
+      right: 200,
+      bottom: 20,
+      width: 200,
+      height: 20,
+      x: 0,
+      y: 0,
+      toJSON: () => {},
+    });
+  }
+
+  // A mouse press on a thumb is the thumb's pan, so these are real mouse
+  // presses: the gesture host takes only a known pointer. A drag starts once
+  // the pointer has moved 10 px. The value then follows its further travel
+  // over the control's 200 px, 2 px a value.
+  const mouse = (clientX: number, buttons = 1) => ({
+    clientX,
+    clientY: 10,
+    pointerId: 1,
+    pointerType: 'mouse',
+    isPrimary: true,
+    button: 0,
+    buttons,
+  });
+
+  function ControlledRange({
+    initial,
+    onChange,
+  }: {
+    initial: [number, number];
+    onChange: (value: [number, number]) => void;
+  }) {
+    const [value, setValue] = useState<[number, number]>(initial);
+    return (
+      <Slider
+        label="Price"
+        value={value}
+        min={0}
+        max={100}
+        onChange={(next: [number, number]) => {
+          onChange(next);
+          setValue(next);
+        }}
+      />
+    );
+  }
+
+  it('drags the lower thumb when a drag from two thumbs at the maximum goes toward the minimum', () => {
+    const onChange = vi.fn();
+    render(<ControlledRange initial={[100, 100]} onChange={onChange} />);
+    mockGroupRect();
+    const [start, end] = screen.getAllByRole('slider');
+
+    // The press lands on the upper thumb, the one painted on top. 110 px
+    // toward the minimum is 100 px past the threshold: 50 values.
+    fireEvent.pointerDown(end, mouse(190));
+    fireEvent.pointerMove(end, mouse(80));
+
+    expect(onChange).toHaveBeenLastCalledWith([50, 100]);
+    expect(start).toHaveAttribute('aria-valuenow', '50');
+    expect(end).toHaveAttribute('aria-valuenow', '100');
+  });
+
+  it('leaves the press and focus on the upper thumb, drawn on top, when a press on the shared thumbs never moves', () => {
+    const onChange = vi.fn();
+    render(<ControlledRange initial={[50, 50]} onChange={onChange} />);
+    mockGroupRect();
+    const [start, end] = screen.getAllByRole('slider');
+    // Both thumbs share a stacking level, so the later one in the document,
+    // the upper thumb, is drawn over the lower one and takes the press.
+    expect(
+      start.compareDocumentPosition(end) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    fireEvent.pointerDown(end, mouse(100));
+    expect(declaresPressedOverlay(end)).toBe(true);
+    expect(declaresPressedOverlay(start)).toBe(false);
+    fireEvent.pointerUp(end, mouse(100, 0));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(start).toHaveAttribute('aria-valuenow', '50');
+    expect(end).toHaveAttribute('aria-valuenow', '50');
+    expect(document.activeElement).toBe(end);
+  });
+
+  it('holds a press on the mark label of the shared value on the upper thumb, as a press on the thumbs does', () => {
+    function MarkedRange() {
+      const [value, setValue] = useState<[number, number]>([50, 50]);
+      return (
+        <Slider
+          label="Price"
+          value={value}
+          min={0}
+          max={100}
+          marks={[{value: 50, label: '50%'}]}
+          onChange={setValue}
+        />
+      );
+    }
+    render(<MarkedRange />);
+    mockGroupRect();
+    const [start, end] = screen.getAllByRole('slider');
+    const label = screen
+      .getByText('50%')
+      .closest<HTMLElement>('[data-mark-value]')!;
+    // The label sits at the shared value, so nothing says which way the
+    // drag goes yet: the upper thumb, drawn over the lower one, holds the
+    // press, as it does for a press on the thumbs.
+    fireEvent.pointerDown(label, {clientX: 100, clientY: 10, pointerId: 1});
+    expect(declaresPressedOverlay(end)).toBe(true);
+    expect(declaresPressedOverlay(start)).toBe(false);
+    expect(document.activeElement).toBe(end);
+    fireEvent.pointerUp(label, {clientX: 100, clientY: 10, pointerId: 1});
+    expect(start).toHaveAttribute('aria-valuenow', '50');
+    expect(end).toHaveAttribute('aria-valuenow', '50');
+    expect(document.activeElement).toBe(end);
+  });
+
+  it('hands the drag, its focus and its pressed paint to the thumb the first movement picks', () => {
+    const onChange = vi.fn();
+    render(<ControlledRange initial={[50, 50]} onChange={onChange} />);
+    mockGroupRect();
+    const [start, end] = screen.getAllByRole('slider');
+
+    fireEvent.pointerDown(end, mouse(100));
+    expect(declaresPressedOverlay(end)).toBe(true);
+    expect(onChange).not.toHaveBeenCalled();
+
+    // 50 px toward the minimum is 40 px past the threshold, 20 values down,
+    // which only the lower thumb can follow.
+    fireEvent.pointerMove(end, mouse(50));
+    expect(onChange).toHaveBeenLastCalledWith([30, 50]);
+    expect(declaresPressedOverlay(start)).toBe(true);
+    expect(declaresPressedOverlay(end)).toBe(false);
+    expect(document.activeElement).toBe(start);
+
+    // Back past the shared value, 60 px past the threshold the other way.
+    // The lower thumb stays at 50, and the upper one takes the drag to 80.
+    fireEvent.pointerMove(end, mouse(150));
+    expect(onChange).toHaveBeenLastCalledWith([50, 80]);
+    expect(declaresPressedOverlay(end)).toBe(true);
+    expect(declaresPressedOverlay(start)).toBe(false);
+    expect(document.activeElement).toBe(end);
+    fireEvent.pointerUp(end, mouse(150, 0));
+    expect(declaresPressedOverlay(end)).toBe(false);
+  });
+
+  it('commits a press beside the shared value to no thumb until the pointer moves', () => {
+    const onChange = vi.fn();
+    const {unmount} = render(
+      <ControlledRange initial={[80, 80]} onChange={onChange} />,
+    );
+    mockGroupRect();
+    let [, end] = screen.getAllByRole('slider');
+    // Pressed 2 px below the shared value (154 px), nothing moves; 30 px
+    // toward the maximum is 20 px past the threshold, 10 values up.
+    fireEvent.pointerDown(end, mouse(152));
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.pointerMove(end, mouse(182));
+    expect(onChange).toHaveBeenLastCalledWith([80, 90]);
+    fireEvent.pointerUp(end, mouse(182, 0));
+    unmount();
+
+    render(<ControlledRange initial={[80, 80]} onChange={onChange} />);
+    mockGroupRect();
+    const [start, upper] = screen.getAllByRole('slider');
+    end = upper;
+    onChange.mockClear();
+    // Pressed 2 px above it, the drag still waits for the first movement. A
+    // move of 110 px toward the minimum is 100 px past the threshold, 50
+    // values down.
+    fireEvent.pointerDown(end, mouse(156));
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.pointerMove(end, mouse(46));
+    expect(onChange).toHaveBeenLastCalledWith([30, 80]);
+    expect(start).toHaveAttribute('aria-valuenow', '30');
+  });
+
+  it('picks the thumb by the mirrored direction under RTL', () => {
+    const onChange = vi.fn();
+    const realGetComputedStyle = window.getComputedStyle;
+    // Under RTL the inline start is the right edge: value = (190 - x) / 1.8.
+    const asRtl = () => {
+      const group = screen.getByRole('group');
+      return vi
+        .spyOn(window, 'getComputedStyle')
+        .mockImplementation((el: Element, pseudo?: string | null) =>
+          el === group
+            ? ({direction: 'rtl'} as CSSStyleDeclaration)
+            : realGetComputedStyle(el, pseudo ?? undefined),
+        );
+    };
+    const {unmount} = render(
+      <ControlledRange initial={[50, 50]} onChange={onChange} />,
+    );
+    mockGroupRect();
+    let spy = asRtl();
+    let [, end] = screen.getAllByRole('slider');
+    // Leftward is toward the maximum: the upper thumb follows.
+    // Right to left the value grows leftward: 70 px left is 60 px past the
+    // threshold, 30 values up, which the upper thumb takes.
+    fireEvent.pointerDown(end, mouse(100));
+    fireEvent.pointerMove(end, mouse(30));
+    expect(onChange).toHaveBeenLastCalledWith([50, 80]);
+    fireEvent.pointerUp(end, mouse(30, 0));
+    spy.mockRestore();
+    unmount();
+
+    // Rightward is toward the minimum: the lower thumb follows.
+    render(<ControlledRange initial={[50, 50]} onChange={onChange} />);
+    mockGroupRect();
+    spy = asRtl();
+    const [start, upper] = screen.getAllByRole('slider');
+    end = upper;
+    // 70 px right is 30 values down: the lower thumb takes it, and focus.
+    fireEvent.pointerDown(end, mouse(100));
+    fireEvent.pointerMove(end, mouse(170));
+    expect(onChange).toHaveBeenLastCalledWith([20, 50]);
+    expect(document.activeElement).toBe(start);
+    spy.mockRestore();
+  });
+
+  it('hands a drag from coincident thumbs to the other thumb once the pointer passes their value the other way', () => {
+    const onChange = vi.fn();
+    render(<ControlledRange initial={[80, 80]} onChange={onChange} />);
+    mockGroupRect();
+    const [, end] = screen.getAllByRole('slider');
+    // 20 px toward the minimum, 10 past the threshold, picks the lower
+    // thumb: 5 values down.
+    fireEvent.pointerDown(end, mouse(154));
+    fireEvent.pointerMove(end, mouse(134));
+    expect(onChange).toHaveBeenLastCalledWith([75, 80]);
+    // Back past the shared value to 38 px past the threshold the other way.
+    // The lower thumb stops at 80, and the upper one takes the drag to 99.
+    fireEvent.pointerMove(end, mouse(182));
+    expect(onChange).toHaveBeenLastCalledWith([80, 99]);
+    fireEvent.pointerUp(end, mouse(182, 0));
+  });
+
+  it('measures the first movement from a press on a mark label against the press, not the mark', () => {
+    const onChange = vi.fn();
+    function MarkedRange() {
+      const [value, setValue] = useState<[number, number]>([50, 50]);
+      return (
+        <Slider
+          label="Price"
+          value={value}
+          min={0}
+          max={100}
+          marks={[{value: 50, label: '50%'}]}
+          onChange={(next: [number, number]) => {
+            onChange(next);
+            setValue(next);
+          }}
+        />
+      );
+    }
+    render(<MarkedRange />);
+    mockGroupRect();
+    const label = screen
+      .getByText('50%')
+      .closest<HTMLElement>('[data-mark-value]')!;
+    // A press on the label right of its mark (52), dragged toward the
+    // minimum: the lower thumb follows, as it does on main.
+    fireEvent.pointerDown(label, {clientX: 104, clientY: 10, pointerId: 1});
+    fireEvent.pointerMove(label, {clientX: 103, clientY: 10, pointerId: 1});
+    fireEvent.pointerMove(label, {clientX: 46, clientY: 10, pointerId: 1});
+    expect(onChange).toHaveBeenLastCalledWith([20, 50]);
+    fireEvent.pointerUp(label, {clientX: 46, clientY: 10, pointerId: 1});
+  });
+
+  it('keeps a drag that began with a track press beside coincident thumbs on the thumb it moved', () => {
+    const onChange = vi.fn();
+    render(<ControlledRange initial={[50, 50]} onChange={onChange} />);
+    mockGroupRect();
+    const track = screen.getByRole('group');
+    // A track press below the shared value takes the lower thumb there; the
+    // drag on to the maximum stops it against the upper thumb, as the same
+    // drag from separate thumbs does. Only a drag that began on the shared
+    // thumbs hands itself over.
+    fireEvent.pointerDown(track, {clientX: 46, clientY: 10, pointerId: 1});
+    expect(onChange).toHaveBeenLastCalledWith([20, 50]);
+    fireEvent.pointerMove(track, {clientX: 154, clientY: 10, pointerId: 1});
+    expect(onChange).toHaveBeenLastCalledWith([50, 50]);
+    fireEvent.pointerUp(track, {clientX: 154, clientY: 10, pointerId: 1});
+  });
+
+  it('closes the value tooltip of the thumb a drag was handed away from', () => {
+    render(<ControlledRange initial={[50, 50]} onChange={vi.fn()} />);
+    mockGroupRect();
+    const [start, end] = screen.getAllByRole('slider');
+    const tipOf = (thumb: HTMLElement) =>
+      document.getElementById(
+        (thumb.getAttribute('aria-describedby') ?? '')
+          .split(' ')
+          .find(
+            id =>
+              document.getElementById(id)?.getAttribute('role') === 'tooltip',
+          ) ?? '',
+      );
+    fireEvent.pointerDown(end, mouse(100));
+    fireEvent.pointerMove(end, mouse(64));
+    fireEvent.pointerUp(end, mouse(64, 0));
+    expect(document.activeElement).toBe(start);
+    expect(tipOf(end)).not.toHaveAttribute('popover-open');
+  });
+
+  it('moves the upper thumb for a track press above the shared value', () => {
+    const onChange = vi.fn();
+    render(<ControlledRange initial={[50, 50]} onChange={onChange} />);
+    mockGroupRect();
+    const [, end] = screen.getAllByRole('slider');
+
+    fireEvent.pointerDown(screen.getByRole('group'), {
+      clientX: 154,
+      clientY: 10,
+      pointerId: 1,
+    });
+
+    expect(onChange).toHaveBeenLastCalledWith([50, 80]);
+    expect(declaresPressedOverlay(end)).toBe(true);
+    expect(document.activeElement).toBe(end);
+  });
+
+  it('moves the lower thumb for a track press below the shared value', () => {
+    const onChange = vi.fn();
+    render(<ControlledRange initial={[50, 50]} onChange={onChange} />);
+    mockGroupRect();
+    const [start] = screen.getAllByRole('slider');
+
+    fireEvent.pointerDown(screen.getByRole('group'), {
+      clientX: 46,
+      clientY: 10,
+      pointerId: 1,
+    });
+
+    expect(onChange).toHaveBeenLastCalledWith([20, 50]);
+    expect(document.activeElement).toBe(start);
+  });
+
+  it('still drags the upper thumb from two thumbs at the minimum toward the maximum', () => {
+    const onChange = vi.fn();
+    render(<ControlledRange initial={[0, 0]} onChange={onChange} />);
+    mockGroupRect();
+    const [, end] = screen.getAllByRole('slider');
+
+    // 110 px toward the maximum is 100 px past the threshold: 50 values.
+    fireEvent.pointerDown(end, mouse(10));
+    fireEvent.pointerMove(end, mouse(120));
+
+    expect(onChange).toHaveBeenLastCalledWith([0, 50]);
   });
 });

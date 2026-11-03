@@ -7,21 +7,19 @@
  * @input Uses React effects and refs supplied by BottomSheet
  * @output Exports internal useMobileKeyboard hook
  * @position Internal to BottomSheet; not exported from the core entry point
- *
- * Gives a fully expanded, explicitly Tall sheet a keyboard-aware internal
- * scroll range while leaving the sheet itself stationary. Shorter detents and
- * other heights opt out entirely. Starting Tall-sheet travel or closing the
- * sheet blurs the field and dismisses the keyboard.
- *
- * Every route into a field also has to reach it without the browser revealing
- * it for us. On iOS that reveal scrolls the DOCUMENT, and a fixed sheet travels
- * with it, so the whole page lurches. The reveal is attached to the focus
- * operation, which is where it can be refused: take the focus transition over
- * on the capture-phase blur, deliver it with preventScroll, and bring the
- * control into view with the sheet's own scroller afterwards. Every route in —
- * a tap, the keyboard's Next, Tab, a programmatic focus() — passes through that
- * one transition.
  */
+
+// A fully expanded, explicitly Tall sheet gets a keyboard-aware internal
+// scroll range, and the sheet itself stays still. Other detents and heights
+// opt out. Tall-sheet travel or a close blurs the field and dismisses the
+// keyboard.
+//
+// On iOS the browser reveals a focused field by scrolling the document, and
+// a fixed sheet moves with it, so the page lurches. The reveal belongs to the
+// focus operation, so refuse it there: take over the focus change on the
+// capture-phase blur, focus with preventScroll, and then scroll the control
+// into view in the sheet's own scroller. A tap, the keyboard's Next, Tab and
+// focus() all pass through that one change.
 
 import {useEffect, useRef, type RefObject} from 'react';
 
@@ -175,12 +173,19 @@ export function useMobileKeyboard({
     }
 
     let keyboardGeometry: KeyboardGeometry | null = null;
+    let keyboardObstructionTop: number | null = null;
+    let bodyScrollTopAtKeyboard: number | null = null;
     let documentScrollAtKeyboard: {x: number; y: number} | null = null;
     const ownsFocusTransitions = isIOSWebKit();
 
     const clearKeyboardLayout = () => {
       body.style.setProperty(MOBILE_KEYBOARD_INSET_VAR, '0px');
+      if (bodyScrollTopAtKeyboard != null) {
+        body.scrollTop = bodyScrollTopAtKeyboard;
+      }
       keyboardGeometry = null;
+      keyboardObstructionTop = null;
+      bodyScrollTopAtKeyboard = null;
       documentScrollAtKeyboard = null;
       hasKeyboardLayoutRef.current = false;
       retainKeyboardLayoutRef.current = false;
@@ -292,13 +297,28 @@ export function useMobileKeyboard({
     };
 
     const revealFocusedControl = () => {
+      const obstructionTop = getObstructionTop();
       const activeElement = document.activeElement;
-      if (
-        !isFullyExpandedRef.current ||
-        !(activeElement instanceof HTMLElement) ||
-        !body.contains(activeElement) ||
-        !isTextEntryControl(activeElement)
-      ) {
+      const focusedControl =
+        activeElement instanceof HTMLElement &&
+        body.contains(activeElement) &&
+        isTextEntryControl(activeElement)
+          ? activeElement
+          : null;
+      // The keyboard may close while the text field remains focused (for
+      // example, a downward keyboard dismissal gesture on iOS). Run the full
+      // cleanup path so the temporary spacer and the body scroll it enabled
+      // are both restored. Then reveal the still-focused control against the
+      // recovered sheet, because it may not be the field that opened the
+      // keyboard and therefore may sit outside the restored scroll position.
+      if (hasKeyboardLayoutRef.current && isVisualViewportRecovered()) {
+        clearKeyboardLayout();
+        if (isFullyExpandedRef.current && focusedControl) {
+          scrollControlIntoSafeArea(focusedControl, false);
+        }
+        return;
+      }
+      if (!isFullyExpandedRef.current || focusedControl == null) {
         if (retainKeyboardLayoutRef.current && keyboardGeometry) {
           applyKeyboardGeometry(keyboardGeometry);
           return;
@@ -307,10 +327,25 @@ export function useMobileKeyboard({
         return;
       }
 
+      // An interactively dismissed iOS keyboard can leave the accessory bar
+      // visible, so the visual viewport grows without reaching full height.
+      // Restore the pre-keyboard body position as soon as that recovery starts;
+      // the ordinary safe-area pass below may still scroll a low focused field
+      // just enough for whatever obstruction remains. Advance the remembered
+      // obstruction so later content mutations do not repeat this recovery.
+      if (
+        hasKeyboardLayoutRef.current &&
+        keyboardObstructionTop != null &&
+        obstructionTop > keyboardObstructionTop + 0.5 &&
+        bodyScrollTopAtKeyboard != null
+      ) {
+        body.scrollTop = bodyScrollTopAtKeyboard;
+        keyboardObstructionTop = obstructionTop;
+      }
+
       retainKeyboardLayoutRef.current = false;
 
       const measuredBodyRect = body.getBoundingClientRect();
-      const obstructionTop = getObstructionTop();
       const overlap = Math.max(0, measuredBodyRect.bottom - obstructionTop);
       // The extra clearance leaves room for mobile suggestion UI, but only
       // while the visual viewport actually overlaps the sheet. With no
@@ -327,8 +362,12 @@ export function useMobileKeyboard({
       // the position handleDocumentScroll returns to. Captured on the
       // transition only — a reveal that runs after the browser has already
       // scrolled would otherwise record the shifted position as correct.
-      if (isPageScrollLocked && overlap > 0 && !hasKeyboardLayoutRef.current) {
-        documentScrollAtKeyboard = {x: window.scrollX, y: window.scrollY};
+      if (overlap > 0 && !hasKeyboardLayoutRef.current) {
+        keyboardObstructionTop = obstructionTop;
+        bodyScrollTopAtKeyboard = body.scrollTop;
+        if (isPageScrollLocked) {
+          documentScrollAtKeyboard = {x: window.scrollX, y: window.scrollY};
+        }
       }
       hasKeyboardLayoutRef.current = overlap > 0;
 
@@ -338,7 +377,7 @@ export function useMobileKeyboard({
           : 0;
       body.style.setProperty(MOBILE_KEYBOARD_INSET_VAR, `${inset}px`);
 
-      scrollControlIntoSafeArea(activeElement, overlap > 0);
+      scrollControlIntoSafeArea(focusedControl, overlap > 0);
     };
 
     let animationFrame = 0;
