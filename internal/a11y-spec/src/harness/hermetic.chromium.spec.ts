@@ -90,3 +90,18 @@ test('a context the spec makes from the browser has the same rule', async ({
     await context.close();
   }
 });
+
+test('a page the spec opens with browser.newPage has the same rule', async ({
+  browser,
+}) => {
+  const page = await browser.newPage();
+  try {
+    expect(await loadAndObserve(page)).toEqual({
+      photoWidth: 400,
+      localStatus: 200,
+      stylesheetError: BLOCKED,
+    });
+  } finally {
+    await page.close();
+  }
+});

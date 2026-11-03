@@ -16,7 +16,7 @@ interface RequestFacts {
 
 interface Routable {
   route(
-    url: string,
+    url: RegExp,
     handler: (route: import('@playwright/test').Route) => Promise<void>,
   ): Promise<unknown>;
 }

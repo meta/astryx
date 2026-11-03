@@ -398,6 +398,13 @@ npx playwright install chromium
 pnpm test:a11y-contract
 ```
 
+Every browser spec imports `test` from `@astryxdesign/a11y-spec/playwright`.
+Its contexts answer remote images with a local stand-in and block other remote
+requests; the loopback host passes. The rule covers every context made from
+the test's `browser`. A spec that launches its own browser
+(`chromium.launch()`) must call `keepRequestsLocal(context)` on each context
+it makes, before the first navigation.
+
 ## What this package does not claim
 
 It does not report what an assistive technology says. Speech, braille,

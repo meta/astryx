@@ -25,6 +25,10 @@ const IMAGE_PATH = /\.(?:avif|bmp|gif|ico|jpe?g|png|svg|webp)$/i;
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
+// Playwright matches a route pattern in the browser process. Loopback
+// requests then go on without a round trip to the test process.
+const NOT_LOOPBACK = /^https?:\/\/(?!(?:localhost|127\.0\.0\.1|\[::1\])[:/])/;
+
 /**
  * The URL when it goes to a remote host: an http(s) host other than the story
  * origin and the loopback host. Otherwise null. A `data:` or `blob:` URL
@@ -92,7 +96,7 @@ async function routeRemoteImages(
   storyOrigin,
   {abortOther = false} = {},
 ) {
-  await target.route('**/*', async route => {
+  await target.route(NOT_LOOPBACK, async route => {
     const request = route.request();
     const facts = {url: request.url(), resourceType: request.resourceType()};
     if (isRemoteImage(facts, storyOrigin)) {
