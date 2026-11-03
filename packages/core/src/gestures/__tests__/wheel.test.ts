@@ -735,6 +735,50 @@ describe('wheel and trackpad input (spec:AST-094 FR43)', () => {
     expect(Math.abs(released.stopped.scroll)).toBe(0);
   });
 
+  it('never lets momentum move a trackpad pan when a stalled page merges two momentum wheels into one, 1 ms after the one before (spec:AST-094 FR43)', () => {
+    const {smooth} = mount('<div id="smooth"></div>');
+    const pan = new PanGestureRecognizer({
+      direction: 'vertical',
+      allowedScrollTypes: ['continuous'],
+    });
+    const states: string[] = [];
+    pan.addTransitionListener((_current, _from, to) => {
+      if (to !== 'changed') {
+        states.push(to);
+      }
+    });
+    detachers.push(host.attach(smooth, pan));
+    // A fling, then momentum that shrinks 7 % a frame. The page stalls and
+    // receives two momentum steps as one wheel, 1 ms after the one before.
+    const stream: [number, number][] = [];
+    let time = 500;
+    for (const dy of [8, 8, 8, 8, 7.6, 7.2, 6.8, 6.4, 6, 5.6]) {
+      stream.push([dy, time]);
+      time += 16;
+    }
+    let dy = 5.2;
+    for (let i = 0; i < 6; i++) {
+      stream.push([dy, time]);
+      dy *= 0.93;
+      time += 16;
+    }
+    const before = time - 16;
+    stream.push([dy + dy * 0.93, before + 1]);
+    dy *= 0.93 * 0.93;
+    time = before + 17;
+    for (let i = 0; i < 8; i++) {
+      stream.push([dy, time]);
+      dy *= 0.93;
+      time += 16;
+    }
+    for (const [delta, at] of stream) {
+      wheel(smooth, {trackpad: true, dy: delta, time: at});
+    }
+    clock.runDue(time + 400);
+    // The pan let go at the lift; the merged wheel starts no gesture it takes.
+    expect(states).toEqual(['began', 'ended', 'possible']);
+  });
+
   it("releases a trackpad scroll whose fingers stop still whatever the host's clock reads: the release is stamped on the wheels' own times", () => {
     // The host schedules a gesture's end on its clock, while the arena reads
     // the wheels' own timestamps, which need not share the clock's base: a
@@ -1381,6 +1425,34 @@ describe("a trackpad scroll through the splitter's undecided stretch (spec:AST-0
       expect(ended).toHaveLength(1);
       expect(ended[0].x).toBeCloseTo(-52, 6);
       expect(ended[0].velocity).toBeCloseTo(-625, 6);
+    },
+  );
+
+  it.each([
+    ['grow back to their size', [4.2, 4.1, 4, 3.9, 3.8]],
+    ['go on shrinking', [3.95, 3.9, 3.85, 3.8, 3.75]],
+  ])(
+    "ends a trackpad drag on the fingers' travel, still, when a stalled page merges two steps right after a shrinking one, and the steps after it %s",
+    (_after, tail) => {
+      const {box, seen} = followed();
+      // The fingers move 4 px every 16 ms, and one step shrinks. The page
+      // then receives the next two steps as one wheel 1 ms later. Five more
+      // steps follow, and the fingers stop.
+      const times = [0, 16, 32, 48, 64, 80, 81, 97, 113, 129, 145, 161];
+      const deltas = [4, 4, 4, 4, 4, 3.9, 8, ...tail];
+      deltas.forEach((dx, i) => {
+        wheel(box, {trackpad: true, dx, time: times[i]});
+      });
+      clock.runDue(times[times.length - 1] + 500);
+      const ended = seen.filter(entry => entry.state === 'ended');
+      expect(ended).toHaveLength(1);
+      // Nothing lifted, so the release is still. The pan reaches the
+      // fingers' travel, less its 10 px of hysteresis, and stays less than
+      // one of their steps ahead of it.
+      const travel = deltas.reduce((sum, dx) => sum + dx, 0) - 10;
+      expect(ended[0].velocity).toBe(0);
+      expect(ended[0].x).toBeLessThanOrEqual(-travel);
+      expect(ended[0].x).toBeGreaterThan(-travel - 4.2);
     },
   );
 

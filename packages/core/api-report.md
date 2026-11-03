@@ -1325,6 +1325,13 @@ component IconButton(props: IconButtonProps)
   prop width?: SizeValue
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
+component InfoTip(props: InfoTipProps)
+  prop content: ReactNode
+  prop label?: string = A translated "More information"
+  prop ref?: Ref<HTMLButtonElement>
+  prop size?: InfoTipSize = 'sm'
+  prop xstyle?: StyleXStyles
+  inherits HTMLAttributes
 component InputClearButton(props: InputClearButtonProps)
   prop iconClassName?: string
   prop label: string
@@ -4483,6 +4490,8 @@ type IndicatorRegistrySource = DefinedTheme | string | null | undefined
 type IndicatorSize = 'sm' | 'md'
 type IndicatorState<F extends IndicatorFamily = IndicatorFamily> = IndicatorFamilyMap[F]
 type InferData<D extends ReadonlyArray<FieldDefinition>> = { [F in D[number] as F['key']]: FieldTypeToJS[F['type']] }
+interface InfoTipProps extends Pick<BaseProps, 'xstyle' | 'className' | 'style'> (props of InfoTip)
+type InfoTipSize = IconSize
 type InlineNode<Extension extends MarkdownExtensionNode = never> = { type: 'text'; content: string } | { type: 'bold'; children: InlineNode<Extension>[] } | { type: 'italic'; children: InlineNode<Extension>[] } | { type: 'strik … #7f5046d1
 type InlineNodeWithMath<Extension extends MarkdownExtensionNode = never> = { type: 'text'; content: string } | { type: 'bold'; children: InlineNodeWithMath<Extension>[] } | { type: 'italic'; children: InlineNodeWithMath<Extension>[] }  … #7144a813
 interface InputARIA
@@ -7159,6 +7168,16 @@ useIndicator (.)
 
 ```text
 indicatorScope (.)
+```
+
+## `./InfoTip`
+
+### Also exported from an earlier entry point
+
+```text
+InfoTip (.)
+InfoTipProps (.)
+InfoTipSize (.)
 ```
 
 ## `./InputGroup`

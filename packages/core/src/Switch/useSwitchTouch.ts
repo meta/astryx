@@ -615,10 +615,14 @@ export class SwitchTouchController {
           this.endPressListeners(BROWSER_CLICK_WAIT_MS);
           return;
         }
-        if (this.drag?.flip.didFlip !== true && touch.pointerType !== 'touch') {
-          // A mouse or a pen slid off and released outside, with no flip:
-          // the switch is left alone, as the native checkbox is. Only a
-          // finger's press slid off toggles.
+        if (
+          touch.pointerType !== 'touch' &&
+          (event === 'touchUpOutside' || this.drag?.flip.didFlip !== true)
+        ) {
+          // A mouse or a pen released outside the tracking bounds, flipped or
+          // not, leaves the switch alone, as the native checkbox does. So the
+          // press can be taken back (WCAG 2.5.2). Only a finger's press slid
+          // off toggles.
           this.released = true;
           this.abandon(time);
           this.endPressListeners(0);
