@@ -5969,7 +5969,7 @@ interface UseMenuPressOptions
   hitTest?: (x: number, y: number) => Element | null
   isEnabled?: boolean = true
   itemSelector: string
-  longPressDelayMs?: number = 500
+  longPressDelayMs?: number
   menuRef: RefObject<HTMLElement | null>
   onActivate?: (row: HTMLElement, release: PointerEvent) => void
   onDismiss?: () => void

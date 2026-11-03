@@ -49,7 +49,7 @@ export const docs = {
       name: 'options.onTriggerPress',
       type: '(pointerType: MenuPressPointerType) => boolean',
       description:
-        'A mouse pressed the trigger, or a finger rested on it for the long-press delay: open the menu under the held pointer and return whether it opened. Return false when the press closed an open menu instead.',
+        'A mouse pressed the trigger, or a finger opened it: as it pressed, on a touch screen with no longPressDelayMs given, or else once it had rested for that delay. Open the menu under the held pointer and return whether it opened. Return false when the press closed an open menu instead.',
     },
     {
       name: 'options.onHighlight',
@@ -67,7 +67,7 @@ export const docs = {
       name: 'options.onDismiss',
       type: '() => void',
       description:
-        'A MOUSE was released outside the menu with nothing acting: close it. A finger released outside leaves the menu open, so this is never called then.',
+        'Close the menu: a MOUSE was released outside it with nothing acting. A finger released outside leaves the menu open, so this is never called then.',
     },
     {
       name: 'options.getScroller',
@@ -79,8 +79,7 @@ export const docs = {
       name: 'options.longPressDelayMs',
       type: 'number',
       description:
-        'How long a finger must rest on the trigger before the menu opens under it.',
-      default: '500',
+        "How long a finger must rest on the trigger before the menu opens under it. Unset, a finger on every device opens the menu as it presses, or after 150 ms inside a scroll view. Set, it is that wait everywhere. A tap released sooner opens the menu through the trigger's click.",
     },
     {
       name: 'options.isEnabled',
@@ -100,7 +99,7 @@ export const docs = {
       name: 'triggerProps',
       type: '{onPointerDown; onContextMenu}',
       description:
-        'Spread onto the trigger: a mouse press opens the menu at once; a finger held for the delay opens it with the finger still down.',
+        'Spread onto the trigger: a mouse press opens the menu at once. A finger opens it with the finger still down: as it presses on a touch screen with no longPressDelayMs given (inside a scroll view, once the 150 ms content-touch delay passes with no scroll), or else once it is held for that delay.',
     },
     {
       name: 'isTriggerClickFromPress',
@@ -117,7 +116,7 @@ export const docs = {
   ],
   usage: {
     description:
-      'The press model of macOS and iOS menus, for any pointer: the row under the pointer when it is RELEASED is the row that acts, the highlight follows the pointer while it is held, a mouse opens the menu on press and can drag straight into it, and a finger held on the trigger opens it with the finger still down. The pointer is tracked at document level by pointerId, so a finger that slid off the row it landed on is still followed; the click the browser reports at the end of a touch, aimed at the row where the touch began, is swallowed so nothing acts twice. DropdownMenu, ContextMenu, DropdownMenuSubMenu, Selector and the menu bottom sheet already mount it; reach for it directly only when building a menu-like surface of your own.',
+      'The press model of macOS and iOS menus, for any pointer: the row under the pointer when it is RELEASED is the row that acts, the highlight follows the pointer while it is held, a mouse opens the menu on press and can drag straight into it, and a finger opens it with the finger still down: as it presses on a touch screen with no delay given, picking a row only after moving 10 px, or else once it is held for the delay. The pointer is tracked at document level by pointerId, so a finger that slid off the row it landed on is still followed; the click the browser reports at the end of a touch, aimed at the row where the touch began, is swallowed so nothing acts twice. DropdownMenu, ContextMenu, DropdownMenuSubMenu, Selector and the menu bottom sheet already mount it; reach for it directly only when building a menu-like surface of your own.',
     bestPractices: [
       {
         guidance: true,
@@ -155,34 +154,37 @@ export const docs = {
 /** @type {import('@astryxdesign/cli/authoring').HookTranslationDoc} */
 export const docsDense = {
   description:
-    'macOS/iOS menu press model for any pointer: the row under the RELEASE acts, the highlight follows a held pointer, a mouse opens on press and drags in, a held finger opens with the finger down. Document-level pointerId tracking; the browser stray click after a touch is swallowed. Already mounted by DropdownMenu / ContextMenu / DropdownMenuSubMenu / Selector / menu bottom sheet.',
+    'macOS/iOS menu press model for any pointer: the row under the RELEASE acts, the highlight follows a held pointer, a mouse opens on press and drags in, a finger opens with the finger down (on press on a touch screen with no delay given, else after its hold). Document-level pointerId tracking; the browser stray click after a touch is swallowed. Already mounted by DropdownMenu / ContextMenu / DropdownMenuSubMenu / Selector / menu bottom sheet.',
   paramDescriptions: {
     options: 'config.',
     'options.menuRef': 'menu / listbox root.',
     'options.itemSelector': 'selector for ENABLED rows; anything else clears.',
     'options.triggerRef': 'the control that opens the menu.',
     'options.onTriggerPress':
-      'mouse press / held finger on trigger: open, return whether it opened (false = the press closed it).',
+      'mouse press / finger on trigger (on press on a touch screen with no delay given, else held): open, return whether it opened (false = the press closed it).',
     'options.onHighlight':
       'move highlight (null clears); default = focus w/ preventScroll (not :focus-visible after a pointer press), menu root when no row.',
     'options.onActivate':
       'act on row under release; default = dispatch click w/ release button + modifiers.',
-    'options.onDismiss': 'MOUSE released outside: close. Finger: never called.',
+    'options.onDismiss':
+      'close: a MOUSE released outside; a finger released outside: not called.',
     'options.getScroller':
       'element to edge-autoscroll while tracking; default = menu root if it overflows.',
-    'options.longPressDelayMs': 'finger hold before open, ms.',
+    'options.longPressDelayMs':
+      'finger hold before open, ms; unset: a finger opens on press on every device (150 ms in a scroller).',
     'options.isEnabled': 'false = inert.',
   },
   returnDescriptions: {
     menuProps: 'spread on menu root (claims presses, marks the root).',
-    triggerProps: 'spread on trigger (press-open, held-finger open).',
+    triggerProps:
+      'spread on trigger (mouse press-opens; finger opens on press on a touch screen with no delay given, else held).',
     isTriggerClickFromPress:
       'true = the trigger click belongs to the press that already opened / closed; ignore it.',
     cancel: 'end the gesture w/o acting.',
   },
   usage: {
     description:
-      'Release decides; highlight follows the pointer; mouse press-opens; held finger opens. Use directly only for a menu-like surface of your own.',
+      'Release decides; highlight follows the pointer; mouse press-opens; a finger opens on press (touch screen, no delay given) or after its hold. Use directly only for a menu-like surface of your own.',
     bestPractices: [
       {
         guidance: true,

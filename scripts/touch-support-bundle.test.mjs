@@ -146,6 +146,19 @@ const GESTURE_USERS = new Set([
   'SegmentedControl',
   // DateTimeInput: through the SegmentedControl its touch field renders.
   'DateTimeInput',
+  // The menu press model's touch scroll-view probe: DropdownMenu passes it to
+  // the trigger half, and MoreMenu renders a DropdownMenu. The public
+  // useMenuPress passes it too: with no `longPressDelayMs` it takes the touch
+  // model. The nav, breadcrumb and tab menus take that hook, as a customer
+  // would.
+  'hooks: useMenuPress',
+  'Breadcrumbs',
+  'DropdownMenu',
+  'MoreMenu',
+  'NavMenu',
+  'SideNav',
+  'TabList',
+  'TopNav',
 ]);
 
 /** Public imports that carry no gesture code, whatever the list above says. */
