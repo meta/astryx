@@ -594,3 +594,168 @@ describe('Lab-only change scope (spec:AST-030 FR26)', () => {
     expect(classifyChanges([]).labOnly).toBe(false);
   });
 });
+
+describe('Lab entry files (spec:AST-030 FR26)', () => {
+  const {
+    isLabEntryChange,
+    labRouteSlug,
+    ROUTES_LOCK,
+    OFFICIAL_PACKAGES,
+  } = require('./change-scope.cjs');
+  const names = new Set(['CommentPin']);
+  const route = lines => `@@ -556,6 +556,11 @@\n${lines.join('\n')}`;
+  const ownRoute = [
+    '+    {',
+    '+      "name": "component-lab-comment-pin",',
+    '+      "path": "components/lab/comment-pin",',
+    '+      "aliases": []',
+    '+    },',
+  ];
+  const routes = patch => ({
+    change: {filename: ROUTES_LOCK, status: 'M'},
+    patches: {[ROUTES_LOCK]: patch},
+  });
+  const entry = ({change, patches}, base = null) =>
+    isLabEntryChange(change, {names, patches, officialPackagesBase: base});
+
+  it('accepts a carried component route', () => {
+    expect(entry(routes(route(ownRoute)))).toBe(true);
+  });
+
+  it('refuses a renamed route lock, even with the right lines', () => {
+    expect(
+      entry({
+        change: {
+          filename: ROUTES_LOCK,
+          previous_filename: 'packages/lab/routes.lock.json',
+          status: 'R100',
+        },
+        patches: {[ROUTES_LOCK]: route(ownRoute)},
+      }),
+    ).toBe(false);
+  });
+
+  it("refuses a route item named for another component, though its path is the carried one's", () => {
+    const lines = ownRoute.map(line =>
+      line.replace('component-lab-comment-pin', 'component-lab-drawer'),
+    );
+    expect(entry(routes(route(lines)))).toBe(false);
+  });
+
+  it("refuses a route path for another component, though its name is the carried one's", () => {
+    const lines = ownRoute.map(line =>
+      line.replace('components/lab/comment-pin', 'components/lab/drawer'),
+    );
+    expect(entry(routes(route(lines)))).toBe(false);
+  });
+
+  it('refuses an alias outside the Lab components, and a Lab alias for another component', () => {
+    const withAlias = alias => [
+      '+    {',
+      '+      "name": "component-lab-comment-pin",',
+      '+      "path": "components/lab/comment-pin",',
+      '+      "aliases": [',
+      `+        "${alias}"`,
+      '+      ]',
+      '+    },',
+    ];
+    expect(entry(routes(route(withAlias('components/lab/comment-pin'))))).toBe(
+      true,
+    );
+    expect(entry(routes(route(withAlias('components/comment-pin'))))).toBe(
+      false,
+    );
+    expect(entry(routes(route(withAlias('components/lab/drawer'))))).toBe(
+      false,
+    );
+    // A new component has no old route to alias, so only a Lab path counts,
+    // even one under the component's own example prefix.
+    expect(
+      entry(routes(route(withAlias('examples/comment-pin/old-name')))),
+    ).toBe(false);
+  });
+
+  const base = [
+    '{',
+    '  "packages": [',
+    '    {',
+    '      "package": "@astryxdesign/charts",',
+    '      "contributions": [',
+    '        {',
+    '          "kind": "component",',
+    '          "name": "Chart"',
+    '        }',
+    '      ]',
+    '    },',
+    '    {',
+    '      "package": "@astryxdesign/lab",',
+    '      "contributions": [',
+    '        {',
+    '          "kind": "component",',
+    '          "name": "ChartArea"',
+    '        }',
+    '      ]',
+    '    }',
+    '  ]',
+    '}',
+  ].join('\n');
+  const discovery = (added, at = 15) => ({
+    change: {filename: OFFICIAL_PACKAGES, status: 'M'},
+    patches: {
+      [OFFICIAL_PACKAGES]: `@@ -${at},2 +${at},${2 + added.length} @@\n${added.join('\n')}`,
+    },
+  });
+  const ownEntry = [
+    '+        {',
+    '+          "kind": "component",',
+    '+          "name": "CommentPin"',
+    '+        },',
+  ];
+
+  it("accepts a carried component's entry inside Lab's part of the base", () => {
+    expect(entry(discovery(ownEntry), base)).toBe(true);
+  });
+
+  it('refuses an entry for a component the change does not carry', () => {
+    expect(
+      entry(
+        discovery(ownEntry.map(line => line.replace('CommentPin', 'Drawer'))),
+        base,
+      ),
+    ).toBe(false);
+  });
+
+  it("refuses the discovery list when the base's copy is missing", () => {
+    expect(entry(discovery(ownEntry), null)).toBe(false);
+  });
+
+  it('refuses a line that is not a component entry', () => {
+    expect(
+      entry(
+        discovery(ownEntry.map(line => line.replace('"component"', '"hook"'))),
+        base,
+      ),
+    ).toBe(false);
+  });
+
+  it("refuses an edit outside Lab's part of the base", () => {
+    expect(entry(discovery(ownEntry, 6), base)).toBe(false);
+  });
+
+  it('derives the same route slug as the registry for every Lab folder', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const {slugifyRegistryName} =
+      await import('../../apps/docsite/src/lib/shadcnRegistry.mjs');
+    const root = path.resolve(import.meta.dirname, '../..');
+    const folders = fs
+      .readdirSync(path.join(root, 'packages/lab/src'), {withFileTypes: true})
+      .filter(entry => entry.isDirectory() && /^[A-Z]/.test(entry.name))
+      .map(entry => entry.name);
+    expect(folders.length).toBeGreaterThan(0);
+    for (const name of [...folders, 'SVGIcon', 'ThreeDBar', 'CommentPin']) {
+      expect(labRouteSlug(name), name).toBe(slugifyRegistryName(name));
+    }
+    expect(labRouteSlug('SVGIcon')).toBe('svg-icon');
+  });
+});

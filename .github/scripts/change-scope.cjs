@@ -42,8 +42,16 @@ const LAB_STORY =
   /^apps\/storybook\/stories\/([A-Z][A-Za-z0-9]*)\.stories\.tsx$/;
 const LAB_COMPONENT_DIR = /^packages\/lab\/src\/([A-Z][A-Za-z0-9]*)\//;
 
-function kebab(name) {
-  return name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+// The registry's route slug for a component name. It mirrors
+// slugifyRegistryName in apps/docsite/src/lib/shadcnRegistry.mjs (a test pins
+// the two equal): the trusted classifier loads no docsite module.
+function labRouteSlug(name) {
+  return String(name)
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
 }
 
 // The changed lines of a unified diff, without the file headers.
@@ -154,7 +162,7 @@ function isLabEntryChange(change, {names, patches, officialPackagesBase}) {
     change.previous_filename != null
   )
     return false;
-  const slugs = new Set([...names].map(kebab));
+  const slugs = new Set([...names].map(labRouteSlug));
   if (change.filename === ROUTES_LOCK)
     return routesLockNamesLabOnly(patch, slugs);
   if (change.filename === OFFICIAL_PACKAGES)
@@ -541,5 +549,6 @@ module.exports = {
   isSharedInfraPath,
   isLabEntryChange,
   isSpecRecordPath,
+  labRouteSlug,
   parseNameStatus,
 };
