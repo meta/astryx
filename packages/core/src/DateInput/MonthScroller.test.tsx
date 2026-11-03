@@ -55,7 +55,8 @@ describe('MonthScroller under Reduced Motion on a touch screen', () => {
     const fake = fakeAnimate();
     Element.prototype.animate = fake.animate;
     animations = fake.animations;
-    scrollTo.mockClear();
+    // mockReset, not mockClear: a test's implementation must not outlive it.
+    scrollTo.mockReset();
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -96,6 +97,28 @@ describe('MonthScroller under Reduced Motion on a touch screen', () => {
     expect(scrollTo).not.toHaveBeenCalled();
     await endFadeOut();
     expect(scrollTo).toHaveBeenCalledTimes(1);
+  });
+
+  it('lands a step to another month before its fade-in starts', async () => {
+    // The fade-in starts as soon as the landing returns. A month that only
+    // scheduled its scroll then would change fully visible on a busy page.
+    const {handleRef} = renderScroller();
+    const order: string[] = [];
+    scrollTo.mockImplementation(() => {
+      order.push('scroll');
+    });
+    const fake = fakeAnimate();
+    Element.prototype.animate = function (
+      this: Element,
+      ...args: Parameters<Element['animate']>
+    ) {
+      order.push('animate');
+      return fake.animate.apply(this, args);
+    };
+    act(() => handleRef.current?.scrollToMonth(10));
+    expect(order).toEqual(['animate']);
+    await act(async () => fake.animations[0].finish());
+    expect(order).toEqual(['animate', 'scroll', 'animate']);
   });
 
   it('lands a step only when its fade-out ends, however late its frame comes', async () => {
