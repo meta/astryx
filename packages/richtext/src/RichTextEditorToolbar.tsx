@@ -700,14 +700,21 @@ export function RichTextEditorToolbar({
       const linkAttributes = hasNewTabLinks
         ? {target: '_blank', rel: 'noopener noreferrer'}
         : {};
-      // With a collapsed selection there is no text to link, so the entered
-      // URL goes in at the caret as the link's text. This runs before the
-      // toggle command: LinkPlugin handles that command for every selection,
-      // and at a caret it would link the whole text node around it.
+      // With a collapsed selection outside a link there is no text to link,
+      // so the entered URL goes in at the caret as the link's text. This runs
+      // before the toggle command: LinkPlugin handles that command for every
+      // selection, and at a caret it would link the whole text node around
+      // it. A caret inside a link keeps the toggle command, which updates
+      // that link.
       let isInsertedAtCaret = false;
       editor.update(() => {
         const selection = $getSelection();
-        if ($isRangeSelection(selection) && selection.isCollapsed()) {
+        if (!$isRangeSelection(selection) || !selection.isCollapsed()) {
+          return;
+        }
+        const node = selection.anchor.getNode();
+        const isInLink = $isLinkNode(node) || $isLinkNode(node.getParent());
+        if (!isInLink) {
           const linkNode = $createLinkNode(url, linkAttributes);
           linkNode.append($createTextNode(trimmed));
           selection.insertNodes([linkNode]);

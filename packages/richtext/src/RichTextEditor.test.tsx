@@ -13,6 +13,7 @@
  * SYNC: When the editor components change, update these tests to match.
  */
 
+import {$createLinkNode} from '@lexical/link';
 import {describe, it, expect, vi, beforeAll, afterAll} from 'vitest';
 import {
   render,
@@ -1831,6 +1832,50 @@ describe('RichTextEditorToolbar — links', () => {
           'hello ',
           'link:https://example.com/:example.com',
           'world',
+        ]),
+      );
+    });
+
+    it('updates the link around a caret instead of splitting it', async () => {
+      let editor!: LexicalEditor;
+      render(
+        <RichTextEditor
+          label="Notes"
+          toolbar={<RichTextEditorToolbar />}
+          plugins={<CaptureEditor onReady={e => (editor = e)} />}
+        />,
+      );
+      await waitFor(() => expect(editor).toBeDefined());
+      editor.update(() => {
+        const root = $getRoot();
+        root.clear();
+        const paragraph = $createParagraphNode();
+        const link = $createLinkNode('https://old.example/');
+        const linkText = $createTextNode('docs');
+        link.append(linkText);
+        paragraph.append($createTextNode('see '), link);
+        root.append(paragraph);
+        linkText.select(2, 2);
+      });
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toEqual([
+          'see ',
+          'link:https://old.example/:docs',
+        ]),
+      );
+
+      fireEvent.click(screen.getByRole('button', {name: 'Link'}));
+      expect(
+        await screen.findByRole('dialog', {name: 'Edit link', ...h}),
+      ).toBeInTheDocument();
+      const url = screen.getByRole('textbox', {name: 'URL', ...h});
+      fireEvent.change(url, {target: {value: 'https://new.example/'}});
+      fireEvent.click(screen.getByRole('button', {name: 'Update link', ...h}));
+
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toEqual([
+          'see ',
+          'link:https://new.example/:docs',
         ]),
       );
     });
