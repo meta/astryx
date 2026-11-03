@@ -111,8 +111,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   lifecycle.
 - ResizeHandle's separator semantics, pointer and keyboard interaction, and
   its `resize-handle` target.
-- The default Grip pill and its `resize-handle-pill` target, plus the aligned
-  invisible Grab zone.
+- The default Grip pill and its `resize-handle-pill` target, plus the
+  invisible Grab zone centred on the Handle.
 
 **Does not own / non-goals**
 
