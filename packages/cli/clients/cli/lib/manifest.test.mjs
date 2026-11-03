@@ -18,10 +18,23 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
-import {describe, it, expect} from 'vitest';
+import {afterAll, beforeAll, describe, it, expect} from 'vitest';
 import {program, JSON_SUPPORTED} from '../index.mjs';
 import {buildManifest} from './manifest.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+
+/**
+ * Every temporary folder these tests make lives here, removed once they
+ * finish. It is made in beforeAll, not when the module loads: Vitest skips
+ * both hooks when a run filters out every test here.
+ */
+let TEMP_ROOT = '';
+beforeAll(() => {
+  TEMP_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-manifest-test-'));
+});
+afterAll(() => {
+  fs.rmSync(TEMP_ROOT, {recursive: true, force: true});
+});
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -144,7 +157,7 @@ describe('manifest: drift guards', () => {
   });
 
   it('lists upgrade.registry, which `upgrade --registry --json` emits', async () => {
-    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-manifest-'));
+    const cwd = fs.mkdtempSync(path.join(TEMP_ROOT, 'astryx-manifest-'));
     fs.writeFileSync(path.join(cwd, 'package.json'), '{"name":"app","version":"1.0.0"}');
     const {status, stdout} = await runCli(['--json', 'upgrade', '--registry'], {cwd});
     expect(status).toBe(0);
@@ -153,7 +166,7 @@ describe('manifest: drift guards', () => {
   });
 
   it('lists theme.list for theme add, which lists themes when given no slug', async () => {
-    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-manifest-'));
+    const cwd = fs.mkdtempSync(path.join(TEMP_ROOT, 'astryx-manifest-'));
     fs.writeFileSync(path.join(cwd, 'package.json'), '{"name":"app","version":"1.0.0"}');
     const {status, stdout} = await runCli(['--json', 'theme', 'add'], {cwd});
     expect(status).toBe(0);

@@ -63,6 +63,69 @@ function expectResponsiveProbeClasses(
 }
 
 describe('DateTimeInput', () => {
+  it('Enter on a busy field does not submit the form', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <DateTimeInput
+          label="Starts"
+          value={'2026-01-12T09:00' as ISODateTimeString}
+          onChange={() => {}}
+          isLoading
+        />
+        <button type="submit">Save</button>
+      </form>,
+    );
+    screen.getAllByRole('combobox')[0].focus();
+    await user.keyboard('{Enter}');
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('Enter on a disabled field does not submit the form', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <DateTimeInput
+          label="Starts"
+          value={'2026-01-12T09:00' as ISODateTimeString}
+          onChange={() => {}}
+          isDisabled
+        />
+        <button type="submit">Save</button>
+      </form>,
+    );
+    screen.getAllByRole('combobox')[0].focus();
+    await user.keyboard('{Enter}');
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('Enter in the date segment submits the form when nothing is typed, and commits typed text without submitting', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    const onChange = vi.fn();
+    render(
+      <form onSubmit={onSubmit}>
+        <DateTimeInput
+          label="Starts"
+          value={'2026-01-12T09:00' as ISODateTimeString}
+          onChange={onChange}
+        />
+        <button type="submit">Save</button>
+      </form>,
+    );
+    const dateInput = screen.getAllByRole('combobox')[0];
+    dateInput.focus();
+    await user.keyboard('{Enter}');
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    await user.clear(dateInput);
+    await user.type(dateInput, '2026-02-03');
+    await user.keyboard('{Enter}');
+    expect(onChange).toHaveBeenLastCalledWith('2026-02-03T09:00');
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
   it('renders with label', () => {
     render(<DateTimeInput label="Meeting time" onChange={() => {}} />);
     expect(screen.getByLabelText('Meeting time')).toBeInTheDocument();

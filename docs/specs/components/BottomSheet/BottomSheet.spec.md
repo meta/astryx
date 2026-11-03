@@ -218,8 +218,9 @@ remain documented in `BottomSheet.doc.mjs`.
   open-layer allowance of `spec:AST-017` FR60, DEC-29). An open sheet's frame
   has these elements, each with one job:
   - the dialog carries the sheet's dialog role, modality and the top layer
-    when the sheet is modal, and holds the panel at the block end with its
-    own grid; a covered sheet's recede (FR6) is this element's transform;
+    when the sheet is modal, and hosts the panel at the bottom edge, so a
+    percentage `height` is a share of the viewport; a covered sheet's recede
+    (FR6) is this element's transform;
   - the panel paints the `bottom-sheet` target;
   - the grabber bar is the drag handle, and its `::before` draws the handle;
   - the body is the scroll area;

@@ -822,6 +822,9 @@ describe('MobilePowerSearch Filters sheet', () => {
     const confirmation = screen.getByRole('alertdialog', {
       name: 'Clear all filters?',
     });
+    // A scrim press starts and ends on the dialog itself.
+    fireEvent.pointerDown(confirmation);
+    fireEvent.pointerUp(confirmation);
     fireEvent.click(confirmation);
     expect(
       screen.queryByRole('alertdialog', {name: 'Clear all filters?'}),

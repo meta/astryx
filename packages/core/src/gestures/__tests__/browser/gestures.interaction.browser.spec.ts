@@ -8,7 +8,8 @@
  * @output Browser proof of the negotiation the unit tests cannot see:
  *   touch-action per element, touchmove cancelled exactly while a recognizer
  *   owns the finger, native scrolling untouched otherwise, click suppression
- *   with no ghost click, a drag that began as a scroll staying the browser's, pinch-zoom
+ *   with no ghost click or late mouse event, a drag that began as a scroll
+ *   staying the browser's, pinch-zoom
  *   left to the browser, a second finger that never breaks the first,
  *   timing taken from event timestamps under a blocked main thread, gestures
  *   for every pointer with nothing listening while idle where the primary
@@ -1051,6 +1052,70 @@ test('a tap recognizer replaces the click: no ghost click, no compatibility mous
   );
 });
 
+test("a tap a recognizer claims keeps its late mouse events from the page until their click: WebKit sends them after a held tap's cancelled touchend (spec:AST-094 FR21)", async ({
+  page,
+  browserName,
+}) => {
+  const driver = await open(page, browserName);
+  await page.evaluate(() => {
+    const late = window as unknown as {
+      __late: string[];
+      __lateSent: boolean;
+      __sendLate: () => void;
+    };
+    late.__late = [];
+    late.__lateSent = false;
+    for (const type of ['mousedown', 'mouseup', 'click']) {
+      document.body.addEventListener(type, event =>
+        late.__late.push(`${type}:${(event as MouseEvent).detail}`),
+      );
+    }
+    const tapper = document.getElementById('tapper') as HTMLElement;
+    late.__sendLate = () => {
+      for (const type of ['mousedown', 'mouseup', 'click']) {
+        tapper.dispatchEvent(
+          new MouseEvent(type, {bubbles: true, cancelable: true, detail: 1}),
+        );
+      }
+    };
+    // Neither engine here sends a held tap's late compatibility events, so
+    // the page sends them just after the tap's touchend, as iOS WebKit does.
+    window.addEventListener(
+      'touchend',
+      () =>
+        setTimeout(() => {
+          late.__sendLate();
+          late.__lateSent = true;
+        }, 0),
+      {once: true},
+    );
+  });
+  await driver.tap(await center(page, 'tapper'));
+  expect(states(await log(page), 'tap')).toEqual(['ended', 'possible']);
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        () => (window as unknown as {__lateSent: boolean}).__lateSent,
+      ),
+    )
+    .toBe(true);
+  expect(
+    await page.evaluate(() => (window as unknown as {__late: string[]}).__late),
+  ).toEqual([]);
+  // That click spent the guard: the next ones reach the page.
+  expect(
+    await page.evaluate(() => {
+      const late = window as unknown as {
+        __late: string[];
+        __sendLate: () => void;
+      };
+      late.__late.length = 0;
+      late.__sendLate();
+      return [...late.__late];
+    }),
+  ).toEqual(['mousedown:1', 'mouseup:1', 'click:1']);
+});
+
 test('a keyboard activation inside the click window after a claimed drag still clicks: the swallower passes a click whose detail is 0 (FR21)', async ({
   page,
   browserName,
@@ -1997,6 +2062,365 @@ test.describe('where the primary pointer is fine', () => {
     expect(
       Math.max(...pinch.map(entry => Number(entry.split(':')[2]))),
     ).toBeGreaterThan(1);
+  });
+
+  /**
+   * A page has text above a card that a pan takes, the card's own text on its
+   * first line only, and text below. The pan's transitions land on
+   * `window.__panStates`. Returns the card's box and its text's.
+   */
+  async function cardPage(page: Page) {
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, PanGestureRecognizer} = window.__api;
+      document.body.style.font = '16px sans-serif';
+      document.body.innerHTML =
+        '<h1 id="heading">A story heading with words</h1><p>A description with several words in it.</p><div id="card" style="margin-top: 24px; width: 320px; height: 120px; background: #ccd"><span id="cardText">Card text a drag selects</span></div><p>Text below the card, with words.</p>';
+      const pan = new PanGestureRecognizer();
+      const states: string[] = [];
+      (window as unknown as {__panStates: string[]}).__panStates = states;
+      pan.addTransitionListener((_current, _from, to) => states.push(to));
+      host.attach(document.getElementById('card') as HTMLElement, pan);
+    });
+    const card = await page.locator('#card').boundingBox();
+    const text = await page.locator('#cardText').boundingBox();
+    if (card == null || text == null) {
+      throw new Error('no box for #card');
+    }
+    return {card, text};
+  }
+
+  /**
+   * The page's selection once `selectionchange`, dispatched as its own
+   * task, has run: as the next frame paints it.
+   */
+  async function paintedSelection(page: Page): Promise<string> {
+    return page.evaluate(
+      async () =>
+        new Promise<string>(resolve => {
+          requestAnimationFrame(() =>
+            resolve(String(window.getSelection() ?? '').trim()),
+          );
+        }),
+    );
+  }
+
+  test("a mouse drag a pan claimed takes no new selection though it carries over text, and the page's existing selection survives it (spec:AST-094 FR41)", async ({
+    page,
+  }) => {
+    const {card} = await cardPage(page);
+    // From the card's lower half, below its text, past the pan's start and
+    // up over the text above the card.
+    const drag = async () => {
+      const x = card.x + 40;
+      const y = card.y + card.height * 0.75;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x + 30, y - 10, {steps: 4});
+      await page.mouse.move(x + 60, card.y - 80, {steps: 12});
+      const during = await paintedSelection(page);
+      await page.mouse.up();
+      return {during, after: await paintedSelection(page)};
+    };
+    const fresh = await drag();
+    const kept = await page.evaluate(() => {
+      window
+        .getSelection()
+        ?.selectAllChildren(document.getElementById('heading') as HTMLElement);
+      return String(window.getSelection() ?? '').trim();
+    });
+    expect(kept).toBe('A story heading with words');
+    const overKept = await drag();
+    const states = await page.evaluate(
+      () => (window as unknown as {__panStates: string[]}).__panStates,
+    );
+    expect({
+      fresh,
+      overKept,
+      began: states.filter(state => state === 'began').length,
+    }).toEqual({
+      fresh: {during: '', after: ''},
+      overKept: {during: kept, after: kept},
+      began: 2,
+    });
+  });
+
+  test('a mouse drag that starts on selectable text selects it, and the pan under it never claims the drag (spec:AST-094 FR41)', async ({
+    page,
+  }) => {
+    const {text} = await cardPage(page);
+    const y = text.y + text.height / 2;
+    await page.mouse.move(text.x + 2, y);
+    await page.mouse.down();
+    await page.mouse.move(text.x + text.width * 0.6, y, {steps: 10});
+    await page.mouse.up();
+    const selected = await paintedSelection(page);
+    const states = await page.evaluate(
+      () => (window as unknown as {__panStates: string[]}).__panStates,
+    );
+    expect(selected.length).toBeGreaterThan(3);
+    expect('Card text a drag selects'.includes(selected)).toBe(true);
+    expect(states).not.toContain('began');
+  });
+
+  test("after a pen press a group claims at its own pointerdown, in a row whose long press opens a menu, a mouse drag selects the page's text again (spec:AST-094 FR41)", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(browserName === 'webkit', 'no pen input in WebKit’s driver');
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, LongPressGestureRecognizer} = window.__api;
+      document.body.style.font = '16px sans-serif';
+      document.body.innerHTML =
+        '<p id="para">A paragraph a later mouse drag selects.</p><div id="row" style="width: 320px; padding: 12px; background: #ccd"><div id="group"><button id="copy" style="width: 120px; height: 40px">Copy</button></div></div>';
+      // The row's context-menu long press brings a selection lock; the
+      // action group's press claims at its own pointerdown.
+      host.attach(
+        document.getElementById('row') as HTMLElement,
+        new LongPressGestureRecognizer({name: 'menu'}),
+      );
+      host.attach(
+        document.getElementById('group') as HTMLElement,
+        new LongPressGestureRecognizer({
+          minimumPressDuration: 0,
+          allowableMovement: Number.POSITIVE_INFINITY,
+        }),
+        {actionGroup: true},
+      );
+    });
+    const copy = await page.locator('#copy').boundingBox();
+    const para = await page.locator('#para').boundingBox();
+    if (copy == null || para == null) {
+      throw new Error('no box for #copy or #para');
+    }
+    const cdp = await page.context().newCDPSession(page);
+    for (const type of ['mousePressed', 'mouseReleased'] as const) {
+      await cdp.send('Input.dispatchMouseEvent', {
+        type,
+        x: copy.x + 20,
+        y: copy.y + 20,
+        button: 'left',
+        buttons: type === 'mousePressed' ? 1 : 0,
+        clickCount: 1,
+        pointerType: 'pen',
+      });
+    }
+    // A task after the lift, the hold has ended: a real mouse drag over the
+    // paragraph selects it.
+    await page.evaluate(
+      async () =>
+        new Promise<void>(resolve => {
+          setTimeout(resolve, 0);
+        }),
+    );
+    const y = para.y + para.height / 2;
+    await page.mouse.move(para.x + 2, y);
+    await page.mouse.down();
+    await page.mouse.move(para.x + para.width * 0.6, y, {steps: 10});
+    await page.mouse.up();
+    const selected = await paintedSelection(page);
+    expect(selected.length).toBeGreaterThan(3);
+    expect('A paragraph a later mouse drag selects.'.includes(selected)).toBe(
+      true,
+    );
+  });
+
+  test("a mouse drag that starts on a native button's label inside a pan pans: the engine starts no selection there (spec:AST-094 FR41)", async ({
+    page,
+  }) => {
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, PanGestureRecognizer} = window.__api;
+      document.body.style.font = '16px sans-serif';
+      document.body.innerHTML =
+        '<div id="card" style="width: 320px; height: 120px; padding: 16px; background: #ccd"><button id="next" style="font: inherit; padding: 8px 16px">Next page</button></div>';
+      const pan = new PanGestureRecognizer({direction: 'horizontal'});
+      const states: string[] = [];
+      (window as unknown as {__panStates: string[]}).__panStates = states;
+      pan.addTransitionListener((_current, _from, to) => states.push(to));
+      host.attach(document.getElementById('card') as HTMLElement, pan);
+    });
+    const label = await page.locator('#next').boundingBox();
+    if (label == null) {
+      throw new Error('no box for #next');
+    }
+    const y = label.y + label.height / 2;
+    await page.mouse.move(label.x + label.width / 2, y);
+    await page.mouse.down();
+    await page.mouse.move(label.x + label.width / 2 + 60, y, {steps: 10});
+    await page.mouse.up();
+    const selected = await paintedSelection(page);
+    const states = await page.evaluate(
+      () => (window as unknown as {__panStates: string[]}).__panStates,
+    );
+    expect({began: states.includes('began'), selected}).toEqual({
+      began: true,
+      selected: '',
+    });
+  });
+
+  test('a mouse drag that starts on text inside an open shadow root in a pan selects it, and the pan never begins (spec:AST-094 FR41)', async ({
+    page,
+  }) => {
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, PanGestureRecognizer} = window.__api;
+      document.body.innerHTML =
+        '<div id="card" style="width: 360px; padding: 16px; background: #ccd"><x-words id="words"></x-words></div>';
+      const words = document.getElementById('words') as HTMLElement;
+      words.attachShadow({mode: 'open'}).innerHTML =
+        '<p style="margin: 0; font: 20px sans-serif">Shadow words to select</p>';
+      const pan = new PanGestureRecognizer({direction: 'horizontal'});
+      const states: string[] = [];
+      (window as unknown as {__panStates: string[]}).__panStates = states;
+      pan.addTransitionListener((_current, _from, to) => states.push(to));
+      host.attach(document.getElementById('card') as HTMLElement, pan);
+    });
+    const words = await page.locator('#words').boundingBox();
+    if (words == null) {
+      throw new Error('no box for #words');
+    }
+    const y = words.y + words.height / 2;
+    await page.mouse.move(words.x + 4, y);
+    await page.mouse.down();
+    await page.mouse.move(words.x + 150, y, {steps: 10});
+    await page.mouse.up();
+    const selected = await paintedSelection(page);
+    const states = await page.evaluate(
+      () => (window as unknown as {__panStates: string[]}).__panStates,
+    );
+    expect({began: states.includes('began'), selected}).toEqual({
+      began: false,
+      selected: expect.stringMatching(/^Shadow/),
+    });
+  });
+
+  test('a selection inside an open shadow root survives a claimed mouse drag on a pan elsewhere (spec:AST-094 FR41)', async ({
+    page,
+  }) => {
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, PanGestureRecognizer} = window.__api;
+      document.body.innerHTML =
+        '<x-words id="words"></x-words><div id="card" style="width: 320px; height: 120px; margin-top: 24px; background: #ccd"></div>';
+      const words = document.getElementById('words') as HTMLElement;
+      words.attachShadow({mode: 'open'}).innerHTML =
+        '<p style="margin: 0; font: 20px sans-serif">Shadow words to keep</p>';
+      const pan = new PanGestureRecognizer({direction: 'horizontal'});
+      const states: string[] = [];
+      (window as unknown as {__panStates: string[]}).__panStates = states;
+      pan.addTransitionListener((_current, _from, to) => states.push(to));
+      host.attach(document.getElementById('card') as HTMLElement, pan);
+    });
+    const words = await page.locator('#words').boundingBox();
+    const card = await page.locator('#card').boundingBox();
+    if (words == null || card == null) {
+      throw new Error('no box for #words or #card');
+    }
+    const y = words.y + words.height / 2;
+    await page.mouse.move(words.x + 2, y);
+    await page.mouse.down();
+    await page.mouse.move(words.x + 160, y, {steps: 8});
+    await page.mouse.up();
+    const before = await paintedSelection(page);
+    expect(before).toMatch(/^Shadow/);
+    await page.mouse.move(card.x + 40, card.y + 60);
+    await page.mouse.down();
+    await page.mouse.move(card.x + 160, card.y + 60, {steps: 10});
+    await page.mouse.up();
+    const states = await page.evaluate(
+      () => (window as unknown as {__panStates: string[]}).__panStates,
+    );
+    expect({
+      began: states.includes('began'),
+      after: await paintedSelection(page),
+    }).toEqual({began: true, after: before});
+  });
+
+  test("a render that shortens the kept selection's text during a claimed drag throws nothing, and the page selects again after the release (spec:AST-094 FR41)", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto('about:blank');
+    await page.setContent(
+      '<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body></body>',
+    );
+    await page.addScriptTag({content: bareBundle});
+    await page.evaluate(() => {
+      const {host, PanGestureRecognizer} = window.__api;
+      document.body.innerHTML =
+        '<p id="words" style="margin: 0; font: 20px sans-serif">Hello world text</p><div id="card" style="width: 320px; height: 120px; margin: 24px 0; background: #ccd"></div><p id="other" style="margin: 0; font: 20px sans-serif">Other words to select</p>';
+      const words = (document.getElementById('words') as HTMLElement)
+        .firstChild as Text;
+      const pan = new PanGestureRecognizer({direction: 'horizontal'});
+      const states: string[] = [];
+      (window as unknown as {__panStates: string[]}).__panStates = states;
+      pan.addTransitionListener((_current, _from, to) => {
+        states.push(to);
+        // A render during the drag shortens the selected text.
+        if (to === 'changed' && words.data !== 'Hi') {
+          words.data = 'Hi';
+        }
+      });
+      host.attach(document.getElementById('card') as HTMLElement, pan);
+      const range = document.createRange();
+      range.setStart(words, 6);
+      range.setEnd(words, 16);
+      window.getSelection()?.addRange(range);
+    });
+    expect(await paintedSelection(page)).toBe('world text');
+    const card = await page.locator('#card').boundingBox();
+    const other = await page.locator('#other').boundingBox();
+    if (card == null || other == null) {
+      throw new Error('no box for #card or #other');
+    }
+    await page.mouse.move(card.x + 40, card.y + 60);
+    await page.mouse.down();
+    await page.mouse.move(card.x + 160, card.y + 60, {steps: 10});
+    await page.mouse.up();
+    // The hold ends a task after the lift.
+    await page.evaluate(
+      async () => new Promise(resolve => setTimeout(resolve, 50)),
+    );
+    const y = other.y + other.height / 2;
+    await page.mouse.move(other.x + 2, y);
+    await page.mouse.down();
+    await page.mouse.move(other.x + 120, y, {steps: 8});
+    await page.mouse.up();
+    const states = await page.evaluate(
+      () => (window as unknown as {__panStates: string[]}).__panStates,
+    );
+    expect({
+      began: states.includes('began'),
+      errors,
+      selected: await paintedSelection(page),
+    }).toEqual({
+      began: true,
+      errors: [],
+      selected: expect.stringMatching(/^Other/),
+    });
   });
 
   test("the host registers no page touch listener while idle and warns for nothing, though the page attaches recognizers: an element keeps only a claiming recognizer's blocking touchmove; a mouse drag pans (spec:AST-094 FR43, FR24, FR19)", async ({

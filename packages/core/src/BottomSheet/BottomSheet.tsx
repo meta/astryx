@@ -148,12 +148,17 @@ const styles = stylex.create({
   },
   // An open standalone dialog positions its panel: the panel sits at its
   // block end, centred, with no wrapper. A tap beside a narrower panel lands
-  // on the dialog, which light dismiss reads. The stack's recede applies to
-  // this dialog too, so a covered sheet shrinks and lifts as one.
+  // on the dialog, which light dismiss reads. A flex row, not a grid: WebKit
+  // lays a grid host out again on each render inside the sheet, which makes
+  // each update slower. Not a column: WebKit then drops the content's
+  // block-end padding from the scroll range. In a row the panel's height is
+  // its own cross size, so a sheet taller than the viewport runs past the top
+  // edge, as in a grid. The stack's recede applies to this dialog too, so a
+  // covered sheet shrinks and lifts as one.
   dialogPanelHost: {
-    display: 'grid',
-    alignContent: 'end',
-    justifyItems: 'center',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'flex-end',
   },
   // A non-modal sheet is in the top layer as a manual popover, so it has no
   // page z-index (AST-027). Below the Popover API floor, `show()` leaves it
