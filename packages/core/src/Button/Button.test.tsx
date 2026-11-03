@@ -21,6 +21,7 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Button} from './Button';
+import {Icon} from '../Icon/Icon';
 import * as stylex from '@stylexjs/stylex';
 import {
   hasPressedArm,
@@ -488,6 +489,101 @@ describe('Button', () => {
   it('passes type=submit', () => {
     render(<Button label="Submit" type="submit" />);
     expect(screen.getByRole('button')).toHaveAttribute('type', 'submit');
+  });
+
+  describe('tooltip as description (FR12)', () => {
+    it('describes the button by a tooltip that adds to its name', () => {
+      render(<Button label="Save" tooltip="Save your changes" />);
+      const button = screen.getByRole('button', {name: 'Save'});
+      expect(button).toHaveAccessibleDescription('Save your changes');
+    });
+
+    it('adds no description when the tooltip repeats the visible name', () => {
+      render(<Button label="Close" tooltip=" Close " />);
+      const button = screen.getByRole('button', {name: 'Close'});
+      expect(button).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('adds no description when an icon-only tooltip repeats its label', () => {
+      render(
+        <Button
+          label="Close"
+          tooltip="Close"
+          icon={<span>x</span>}
+          isIconOnly
+        />,
+      );
+      const button = screen.getByRole('button', {name: 'Close'});
+      expect(button).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('keeps a caller description when the tooltip repeats the name', () => {
+      render(
+        <>
+          <span id="hint">Closes the panel</span>
+          <Button label="Close" tooltip="Close" aria-describedby="hint" />
+        </>,
+      );
+      const button = screen.getByRole('button', {name: 'Close'});
+      expect(button).toHaveAttribute('aria-describedby', 'hint');
+    });
+
+    it('keeps the description when aria-labelledby names the button', () => {
+      render(
+        <>
+          <span id="close-name">Close the editor</span>
+          <Button
+            label="Close"
+            tooltip="Close"
+            icon={<span>x</span>}
+            isIconOnly
+            aria-labelledby="close-name"
+          />
+        </>,
+      );
+      const button = screen.getByRole('button', {name: 'Close the editor'});
+      expect(button).toHaveAccessibleDescription('Close');
+    });
+
+    it('adds no description when a decorative Icon sits beside a repeated label', () => {
+      render(
+        <Button label="Edit" icon={<Icon icon="close" />} tooltip="Edit" />,
+      );
+      const button = screen.getByRole('button', {name: 'Edit'});
+      expect(button).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('adds no description when a decorative Icon ends a repeated label', () => {
+      render(
+        <Button
+          label="Sort"
+          endContent={<Icon icon="close" />}
+          tooltip="Sort"
+        />,
+      );
+      const button = screen.getByRole('button', {name: 'Sort'});
+      expect(button).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('keeps the description when endContent adds to the name', () => {
+      render(
+        <Button
+          label="Messages"
+          tooltip="Messages"
+          endContent={<span>3</span>}
+        />,
+      );
+      const button = screen.getByRole('button', {name: 'Messages 3'});
+      expect(button).toHaveAccessibleDescription('Messages');
+    });
+
+    it('compares with a caller aria-label, not the visible text', () => {
+      render(
+        <Button label="Clear" aria-label="Clear Search" tooltip="Clear" />,
+      );
+      const button = screen.getByRole('button', {name: 'Clear Search'});
+      expect(button).toHaveAccessibleDescription('Clear');
+    });
   });
 
   it('uses aria-disabled instead of disabled when tooltip is present and button is disabled', () => {

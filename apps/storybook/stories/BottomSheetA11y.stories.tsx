@@ -2,8 +2,9 @@
 
 /**
  * @file BottomSheetA11y.stories.tsx
- * @input A hug-height BottomSheet with overflowing content placed directly in
- *   its content box, as plain text and as block children
+ * @input BottomSheet with overflowing content placed directly in its content
+ *   box. The hug height shows it as plain text and as blocks; a budget height
+ *   shows it as blocks.
  * @output One checked-in story per case for the browser accessibility lane;
  *   excluded from the visual matrix
  * @position Browser fixtures for BottomSheetScrollEnd.a11y.browser.spec.ts:
@@ -66,4 +67,10 @@ export const HugDirectText: Story = {
 
 export const HugDirectBlocks: Story = {
   render: () => <DirectContentSheet height="hug">{blocks}</DirectContentSheet>,
+};
+
+export const CappedDirectBlocks: Story = {
+  render: () => (
+    <DirectContentSheet height="capped">{blocks}</DirectContentSheet>
+  ),
 };

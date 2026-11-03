@@ -13,7 +13,7 @@
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {motionRoleOf} from '../motion/roles';
-import {createAnimator, type Animator} from '../motion/animator';
+import {createMotionAnimator, type Animator} from '../motion/animator';
 import {solveSpring, toSpring} from '../motion/spring';
 import {cubicBezier} from '../motion/bezier';
 import {segmentedControl, springs} from '../motion/uikit';
@@ -105,12 +105,12 @@ function setup(selected: string, {coarse = true}: {coarse?: boolean} = {}) {
   document.head.append(style);
   document.body.append(track);
   // A finger by default: Reduced Motion fades (design:reduced-motion DR2).
-  const animator: Animator = createAnimator(null, {
+  const animator: Animator = createMotionAnimator(null, {
     now: () => clock,
     pseudoElement: '::before',
   });
   // The ::after: the lifted lens's shadow, or the surface fading out.
-  const afterAnimator: Animator = createAnimator(null, {
+  const afterAnimator: Animator = createMotionAnimator(null, {
     now: () => clock,
     pseudoElement: '::after',
     initial: {opacity: 0},

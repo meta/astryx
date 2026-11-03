@@ -19,6 +19,7 @@ roles through `resolveMotion`.
 | `uikit/scroll.ts`                                | UIScrollView: deceleration rates, rubber band, bounce-back spring, `delaysContentTouches`, scroll to top.                                                            |
 | `uikit/timing.ts`                                | Non-spring clocks and curves: press highlight, Core Animation's named curves, keyboard, Reduced Motion cross-fade.                                                   |
 | `uikit/paging.ts`                                | A paging UIScrollView: the integrator that settles a release on its page, the page rule, the catch, `setContentOffset(animated:)`.                                   |
+| `uikit/alert.ts`                                 | UIAlertController: how a finger is tracked across the actions (highlight onset and bounds).                                                                          |
 | `uikit/navigation.ts`                            | UINavigationController: push velocity, parallax, dimming, transition clock, interactive pop finish rule.                                                             |
 | `uikit/progressBar.ts`                           | UIProgressView's fill: the whole-track duration and curve, its minimum length and empty alpha; the reduced-motion pulse (three roles).                               |
 | `uikit/gestures.ts`                              | Gesture recognizer thresholds, the velocity filter and haptic stand-ins, as `{value, unit}` entries (sources in JSDoc).                                              |
@@ -37,6 +38,7 @@ roles through `resolveMotion`.
 | `resolveSnapPoint.ts`                            | Release policy: the snap point a release lands on (flick, back-out cancel, step limit), on `selectSnapPoint`. Internal.                                              |
 | `bezier.ts`                                      | Cubic-bézier timing functions (Core Animation's named curves).                                                                                                       |
 | `animator.ts`                                    | Compositor animator: springs, coasts and any closed-form curve compiled to Web Animations, read back analytically.                                                   |
+| `progress.ts`                                    | A spring's progress, one curve mapped from another (companions, clamped ranges), the velocity that continues a motion.                                               |
 | `presentation.ts`                                | Where each moving element is drawn relative to where the engine hit-tests it, reported by the animator while translate runs; read by the gesture host at touch-down. |
 | `reducedMotionPlan.ts`                           | The animator's Reduce Motion planner: what one call becomes, a cross-fade whose travel lands while transparent or at once.                                           |
 | `__tests__/animator.interaction.browser.spec.ts` | Browser proofs on the interaction harness (Chromium and WebKit): busy main thread, end state through a block, no Layout / Paint, seeked curves, a dialog's backdrop. |
@@ -64,7 +66,7 @@ the timings that decide who gets a touch are not roles.
 ## Animator
 
 ```
-import {createAnimator} from '../motion/animator';
+import {createMotionAnimator} from '../motion/animator';
 import {coast} from '../motion/coast';
 import {solveSpringTowardRamp, toSpring} from '../motion/spring';
 import {resolveMotion} from '../motion/resolveMotion';
@@ -73,7 +75,7 @@ import {registerSpringsTable, springs} from '../motion/uikit';
 // Once, so the springs are registered as their roles:
 registerSpringsTable();
 
-const animator = createAnimator(sheet);
+const animator = createMotionAnimator(sheet);
 // The animator plays a motion role (spec:AST-094 FR4), its table value, as the
 // per-role tables stay internal (DEC-15); math on a spring reads the role with
 // resolveMotion.
@@ -138,8 +140,10 @@ await handle.finished; // true if it ran to the end, false if interrupted
   presented call's second frame) runs on over two frames, the start moves to
   the call's first read after it, with every call of that task. Everything
   the call starts shares that start
-  (`handle.started`); a retarget keeps an explicit one, and `{at}` puts
-  several animators on one clock. `{start: 'commit'}` lets the browser date
+  (`handle.started`); a retarget of a curve that still moves keeps an
+  explicit one, while one on a tail that already shows as at rest (within two
+  sample tolerances of its target, and slower than one a frame) counts as a
+  call from rest. `{at}` puts several animators on one clock. `{start: 'commit'}` lets the browser date
   a retarget too; `{start: 'presented'}` waits two frames, until the
   element at rest has been presented. `handle.curve(property)` is the curve
   a call plays, for a companion to follow. `{additive: true}` retargets the
@@ -168,7 +172,7 @@ await handle.finished; // true if it ran to the end, false if interrupted
 - `animatorFor(element)` returns the one animator for an element, so code
   that animates it from several places (a swipe on x, a removal on y)
   composes in one `translate` track.
-- `createAnimator(dialog, {pseudoElement: '::backdrop'})` drives a
+- `createMotionAnimator(dialog, {pseudoElement: '::backdrop'})` drives a
   pseudo-element; with no inline style to hold it, a static filling animation
   holds its end value until the next animation replaces it, while the
   pseudo-element exists. A dialog's `::backdrop` is made again each time the

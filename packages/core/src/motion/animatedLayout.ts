@@ -89,7 +89,8 @@ import {
   wrapText,
 } from './transientCopy';
 import {isSpring} from './roleValue';
-import {solveSpring, toSpring, type SpringDescription} from './spring';
+import {progressCurve} from './progress';
+import type {SpringDescription} from './spring';
 import {registerSpringsTable, SETTLE_SPRING} from './uikit/springs';
 import {reducedMotionCrossFade} from './uikit/timing';
 
@@ -142,11 +143,11 @@ function settleSpring(): SpringDescription {
 }
 
 function springProgress(description: SpringDescription): SpringProgress {
-  const curve = solveSpring(toSpring(description), {from: 1, to: 0});
-  const durationMs = Math.max(1, curve.settleTime(0.001) * 1000);
+  const curve = progressCurve(description, {epsilon: 0.001});
+  const durationMs = Math.max(1, curve.duration * 1000);
   return {
     durationMs,
-    remaining: t => (t >= durationMs ? 0 : curve.value(t / 1000)),
+    remaining: t => (t >= durationMs ? 0 : 1 - curve.at(t / 1000)),
   };
 }
 

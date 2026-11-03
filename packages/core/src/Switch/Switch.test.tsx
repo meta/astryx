@@ -25,7 +25,7 @@
 import {StrictMode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {render, screen, fireEvent, waitFor} from '@testing-library/react';
+import {act, render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Switch} from './Switch';
 import {
@@ -97,6 +97,94 @@ describe('Switch', () => {
       />,
     );
     expect(screen.getByRole('switch')).toBeInTheDocument();
+  });
+
+  it('toggles nothing for a pen press that a window blur cancels, at its later lift or its click (spec:AST-094 FR44)', async () => {
+    const onChange = vi.fn();
+    render(<Switch label="Wi-Fi" value={false} onChange={onChange} />);
+    const input = screen.getByRole('switch');
+    const pen = (type: 'pointerdown' | 'pointerup', time: number) => {
+      const event = new Event(type, {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      });
+      Object.defineProperties(event, {
+        pointerId: {value: 7},
+        pointerType: {value: 'pen'},
+        isPrimary: {value: true},
+        clientX: {value: 10},
+        clientY: {value: 10},
+        button: {value: 0},
+        buttons: {value: type === 'pointerup' ? 0 : 1},
+        timeStamp: {value: time},
+      });
+      act(() => {
+        input.dispatchEvent(event);
+      });
+    };
+    pen('pointerdown', 1000);
+    act(() => {
+      window.dispatchEvent(new Event('blur'));
+    });
+    // The microtask after the blur, where an armed press's page listeners go.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    pen('pointerup', 1080);
+    // The pen's own click: a pointer's, detail 1.
+    fireEvent.click(input, {detail: 1});
+    expect(onChange).not.toHaveBeenCalled();
+    expect(input).not.toBeChecked();
+  });
+
+  it('toggles nothing for a pen press that a window blur cancels under a coarse primary pointer too (spec:AST-094 FR44)', () => {
+    const original = window.matchMedia;
+    window.matchMedia = (query: string) => ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    });
+    try {
+      const onChange = vi.fn();
+      render(<Switch label="Wi-Fi" value={false} onChange={onChange} />);
+      const input = screen.getByRole('switch');
+      const pen = (type: 'pointerdown' | 'pointerup', time: number) => {
+        const event = new Event(type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+        });
+        Object.defineProperties(event, {
+          pointerId: {value: 7},
+          pointerType: {value: 'pen'},
+          isPrimary: {value: true},
+          clientX: {value: 10},
+          clientY: {value: 10},
+          button: {value: 0},
+          buttons: {value: type === 'pointerup' ? 0 : 1},
+          timeStamp: {value: time},
+        });
+        act(() => {
+          input.dispatchEvent(event);
+        });
+      };
+      pen('pointerdown', 1000);
+      act(() => {
+        window.dispatchEvent(new Event('blur'));
+      });
+      pen('pointerup', 1080);
+      fireEvent.click(input, {detail: 1});
+      expect(onChange).not.toHaveBeenCalled();
+      expect(input).not.toBeChecked();
+    } finally {
+      window.matchMedia = original;
+    }
   });
 
   it('calls onChange with new checked state when clicked', async () => {

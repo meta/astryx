@@ -138,6 +138,13 @@ function filesUnder(dir, pattern) {
  * that reaches it, with a comment naming the gesture.
  */
 const GESTURE_USERS = new Set([
+  // AlertDialog: its actions' press, tracked across both for every pointer.
+  'AlertDialog',
+  // Through AlertDialog: Tokenizer's bottom sheet confirms with an alert, and
+  // PowerSearch and Table's filtering render a Tokenizer.
+  'PowerSearch',
+  'Table',
+  'Tokenizer',
   // Slider's thumb.
   'Slider',
   // Switch: its press tracking and its drag, for every pointer.
@@ -146,6 +153,28 @@ const GESTURE_USERS = new Set([
   'SegmentedControl',
   // DateTimeInput: through the SegmentedControl its touch field renders.
   'DateTimeInput',
+  // useScrollLock's page hold, and the imports that reach it.
+  'hooks: useScrollLock',
+  'AppShell',
+  'BottomSheet',
+  'CommandPalette',
+  'ContextMenu',
+  'DateInput',
+  'Dialog',
+  'Drawer',
+  'DropdownMenu',
+  'Layer',
+  'Lightbox',
+  'Markdown',
+  'MobileNav',
+  'MoreMenu',
+  'MultiSelector',
+  'Pagination',
+  'Popover',
+  'Selector',
+  'SideNav',
+  'TimeInput',
+  'TopNav',
 ]);
 
 /** Public imports that carry no gesture code, whatever the list above says. */
