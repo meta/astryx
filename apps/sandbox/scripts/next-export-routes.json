@@ -786,6 +786,7 @@
     "/templates/useCollatorHookUsage/",
     "/templates/useComboboxHookUsage/",
     "/templates/useContainerRevealHookUsage/",
+    "/templates/useFocusTrapHookUsage/",
     "/templates/useGridFocusHookUsage/",
     "/templates/useKeyboardHintHookUsage/",
     "/templates/useListFocusHookUsage/",

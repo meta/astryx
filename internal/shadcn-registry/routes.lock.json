@@ -3672,6 +3672,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-focus-trap-quick-edit-panel",
+      "path": "examples/use-focus-trap/quick-edit-panel",
+      "aliases": []
+    },
+    {
       "name": "example-use-grid-focus-color-swatch-grid",
       "path": "examples/use-grid-focus/color-swatch-grid",
       "aliases": []
