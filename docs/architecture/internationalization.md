@@ -19,6 +19,7 @@ applies_to:
     scripts/i18n-english-fallback.mjs,
     packages/build/src/vite.ts,
     packages/core/src/utils/plainDate.ts,
+    packages/core/src/utils/calendarSystem.ts,
     packages/core/src/utils/dateParser.ts,
     packages/core/src/PowerSearch/formatFilterValue.ts,
     packages/core/src/Timestamp/tooltipEntries.ts,
@@ -36,6 +37,8 @@ verified_by:
     packages/core/src/i18n/__tests__/useDirection.test.tsx,
     packages/core/src/i18n/__tests__/getLocaleDirection.test.ts,
     packages/core/src/i18n/__tests__/useCollator.test.tsx,
+    packages/core/src/i18n/__tests__/calendarSystem.test.tsx,
+    packages/core/src/utils/calendarSystem.test.ts,
     packages/core/src/i18n/useTranslator.test.tsx,
     packages/core/src/i18n/__tests__/englishFallback.test.ts,
     scripts/i18n-english-fallback.test.mjs,
@@ -122,7 +125,7 @@ Component and module contracts own which content is Astryx-authored versus
 caller-authored, the semantic role of a content prop, local formatting inputs,
 state-dependent behavior, and the evidence that proves those local outcomes.
 Shared string ownership, helper boundaries, deterministic locale defaults, and
-Gregorian calendar requirements remain here. `component:InternationalizationProvider`
+calendar requirements remain here. `component:InternationalizationProvider`
 owns the provider's local API and precedence contract, not a second set of rules
 for every component.
 
@@ -272,15 +275,18 @@ for all 30 shipped locales plus `pseudo`.
   The charts `currency()` helper does not yet conform: an omitted locale follows
   the host default. That is a known conformance gap, not a recorded default;
   making it deterministic is a separate compatibility change.
-- **INV10 — Default date and calendar semantics are Gregorian.** Locale changes
-  language, numbering, and field order; it MUST NOT silently select a different
-  calendar for built-in Astryx date displays or date-component behavior. Shared
-  built-in date formatters pin the Gregorian calendar instead of inheriting the
-  locale's default calendar. `PlainDate` parsing, arithmetic, constraints, grids,
-  and navigation remain Gregorian. The existing low-level `plainDateFormat`
-  display-calendar override remains a supported explicit caller choice; it does
-  not establish alternative-calendar component semantics or permission to switch
-  a built-in format merely because its locale has a different default calendar.
+- **INV10 — The application selects the calendar; values stay Gregorian.** The
+  provider resolves its calendar from its `calendar` prop or an explicit
+  `-u-ca-` keyword in its locale, and otherwise the Gregorian calendar
+  (`spec:AST-111` FR2). Astryx date components show Gregorian dates.
+  Locale changes language, numbering, and field order; a locale's default
+  calendar never applies. `PlainDate` values, constraints, and machine formats
+  stay Gregorian ISO in every calendar. The runtime's `Temporal` owns the
+  arithmetic of every calendar whose months are not Gregorian; where it is
+  missing, those calendars resolve to Gregorian (`spec:AST-111` FR5). Shared
+  built-in date formatters pin the Gregorian calendar unless an Astryx call site
+  passes the resolved calendar. The low-level `plainDateFormat` display-calendar
+  override remains a supported explicit caller choice.
 - **INV11 — Rendered direction comes from the DOM.** The provider exposes a
   semantic direction default, but Astryx layout, mirroring, and interaction SHOULD
   resolve from the rendered region through CSS logical properties,
@@ -350,15 +356,16 @@ ownership, deterministic defaults, runtime-update behavior, and output type rema
 true.
 
 A new public provider or hook, application-catalog ownership, rich-message output,
-server translation runtime, implicit host-locale behavior, or non-Gregorian
-component semantics is a new human API or ownership decision. It cannot be
+server translation runtime, implicit host-locale behavior, or calendar
+semantics beyond `spec:AST-111` is a new human API or ownership decision. It cannot be
 inferred from an implementation pull request.
 
 ## Owning code
 
 - `packages/core/src/i18n/` — provider, context, public hooks, locale-direction
   derivation, catalog types, and lookup/formatting runtime.
-- `packages/core/src/utils/plainDate.ts`, `packages/core/src/utils/dateParser.ts`,
+- `packages/core/src/utils/plainDate.ts`, `packages/core/src/utils/calendarSystem.ts`,
+  `packages/core/src/utils/dateParser.ts`,
   `packages/core/src/Timestamp/formatInstant.ts`,
   `packages/core/src/Timestamp/formatRelativeTime.ts`,
   `packages/core/src/PowerSearch/formatFilterValue.ts`,
@@ -445,6 +452,6 @@ callers remain conformance work and do not relax INV1a, INV8, INV9, or INV10.
 | INV15              | generator tests, `check:i18n-runtime`, package-export drift check, provider/resolver runtime-catalog tests; per-module English resolution-parity test (every key each Core module names, in every shipped locale’s fallback path, its own map versus the whole catalog); import-cost check (component bundles carry only the English they name; public paths keep the whole catalog)                                                                                                                                            | a generated module carries descriptions or is committed, a malformed entry projects instead of failing, a rich export path changes, or a `RuntimeCatalog` input is rejected or leaks a non-rich context shape, a key a module names resolves differently from the whole catalog, a component bundle carries the whole catalog, or a public path stops resolving a shipped key |
 | INV16              | build-plugin unit and real-build tests                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | a rich or generated locale import fails to resolve through the standard plugin                                                                                                                                                                                                                                                                                                |
 | INV8, INV9         | raw-Intl-locale lint (module allowlist plus date-helper locale-argument check) and provider-locale regression tests, including a server/client render pair                                                                                                                                                                                                                                                                                                                                                                      | Astryx output follows the host locale, raw `Intl` appears outside a named formatter module, an owned call omits the locale argument, or server and client output differ for the same provider locale                                                                                                                                                                          |
-| INV10              | PlainDate and built-in date formatter tests, including locales with non-Gregorian defaults                                                                                                                                                                                                                                                                                                                                                                                                                                      | locale selects a non-Gregorian built-in date display, changes PlainDate calendar semantics, or loses the explicit low-level display override                                                                                                                                                                                                                                  |
+| INV10              | PlainDate and built-in date formatter tests, including locales with non-Gregorian defaults; calendar resolution and calendar-system tests (`calendarSystem.test.tsx`, `calendarSystem.test.ts`)                                                                                                                                                                                                                                                                                                                                 | a locale without `-u-ca-` selects a non-Gregorian calendar, a value or constraint leaves Gregorian ISO, a calendar that needs `Temporal` breaks where it is missing, or the explicit low-level display override is lost                                                                                                                                                       |
 | INV11, INV12       | direction helper/provider tests plus rendered RTL audit                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | component layout reads provider direction instead of the region, provider mutates DOM, or overrides stop composing                                                                                                                                                                                                                                                            |
 | INV17              | `typeaheadMatch.test.ts`, `useTypeahead` and `useTreeFocus` tests and type-to-select tests in Selector, MultiSelector, DropdownMenu and TreeList, one case each: a combining mark ("a" reaches "Ánh"); each stroked letter (đ, ł, ø, ħ, ŧ, ƀ); ı and İ ("i" and "ı" reach "Isparta" and "İzmir"); and a typed diacritic, stroked letter, ı or İ preferring the exact match ("đ" reaches "Đào" before "Dung", "ı" reaches "Isparta" before "İzmir", "İ" reaches "İzmir" before "Isparta"); under en, vi, pl, sv and tr providers | a plain letter misses a marked or stroked first letter in any locale, i or ı misses an İ or I label, a typed diacritic, stroked letter, ı or İ does not prefer the exact match, ı or İ pairs case the non-Turkish way, two paths disagree, or folding reaches sorting or displayed text                                                                                       |

@@ -107,6 +107,8 @@ const APPROVED_IMPLEMENTATION_FILES = [
   // Date formatting/parsing core.
   'packages/core/src/utils/plainDate.ts',
   'packages/core/src/utils/dateParser.ts',
+  // Calendar-system months and labels: day numbers in the locale's digits.
+  'packages/core/src/utils/calendarSystem.ts',
   // Timestamp's absolute/relative formatters and tooltip zone resolution (the
   // latter's fixed en-US locale only probes identifier validity).
   'packages/core/src/Timestamp/formatInstant.ts',

@@ -40,6 +40,7 @@ const RELATIVE_TIME_INFRA_FILE =
 const NUMBER_PARSER_INFRA_FILE =
   'packages/core/src/NumberInput/numberParser.ts';
 const TIME_FORMAT_INFRA_FILE = 'packages/core/src/utils/timeFormat.ts';
+const CALENDAR_SYSTEM_INFRA_FILE = 'packages/core/src/utils/calendarSystem.ts';
 const NUMBER_PARSER_TEST_ORACLE_FILE =
   'packages/core/src/NumberInput/numberParser.test.ts';
 const NUMBER_PARSER_DOCBLOCK_ORACLE_FILE =
@@ -147,6 +148,10 @@ tester.run('no-raw-intl-locale', rule, {
     {
       code: `new Intl.DateTimeFormat(locale, {hour: 'numeric'}).resolvedOptions();`,
       filename: TIME_FORMAT_INFRA_FILE,
+    },
+    {
+      code: `new Intl.NumberFormat(locale, {useGrouping: false}).format(day);`,
+      filename: CALENDAR_SYSTEM_INFRA_FILE,
     },
     // -- Named test-oracle files retain meaningful explicit-locale fixtures. --
     {
@@ -284,6 +289,16 @@ tester.run('no-raw-intl-locale', rule, {
       code: `new Intl.DateTimeFormat(undefined, {hour: 'numeric'});`,
       filename: TIME_FORMAT_INFRA_FILE,
       errors: [ambientIntlInImplementation],
+    },
+    {
+      code: `new Intl.NumberFormat(undefined, {useGrouping: false});`,
+      filename: CALENDAR_SYSTEM_INFRA_FILE,
+      errors: [ambientIntlInImplementation],
+    },
+    {
+      code: `const {NumberFormat} = Intl;`,
+      filename: CALENDAR_SYSTEM_INFRA_FILE,
+      errors: [rawIntlReference],
     },
     {
       code: `new Intl.RelativeTimeFormat();`,

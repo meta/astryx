@@ -374,8 +374,13 @@ export const DATE_FORMAT_MONTH_YEAR: Intl.DateTimeFormatOptions = {
 export function plainDateFormatStandaloneMonthYear(
   pd: PlainDate,
   locale: Locale,
+  calendar: Intl.DateTimeFormatOptions['calendar'] = 'gregory',
 ): string {
-  const label = plainDateFormat(pd, DATE_FORMAT_MONTH_YEAR, locale);
+  const label = plainDateFormat(
+    pd,
+    {...DATE_FORMAT_MONTH_YEAR, calendar},
+    locale,
+  );
   let language: string;
   try {
     language = new Intl.Locale(locale).language;

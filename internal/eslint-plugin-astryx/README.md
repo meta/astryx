@@ -69,6 +69,8 @@ Approved implementations:
 
 - `packages/core/src/utils/plainDate.ts`, `.../utils/dateParser.ts` — date
   formatting/parsing core
+- `packages/core/src/utils/calendarSystem.ts` — calendar-system months and
+  labels; writes day numbers in the locale's digits
 - `packages/core/src/Timestamp/formatInstant.ts`,
   `.../Timestamp/formatRelativeTime.ts`, `.../Timestamp/tooltipEntries.ts` —
   Timestamp absolute/relative formatting and its non-display time-zone validity
