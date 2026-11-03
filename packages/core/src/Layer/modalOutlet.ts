@@ -6,9 +6,10 @@
  * @file modalOutlet.ts
  * @input The open Dialog and scrim BottomSheet `<dialog>` elements
  * @output Exports useModalOutlet (a modal supplies its outlet),
- *   getActiveModalOutlet, subscribeModalOutlets (a global host follows the
- *   latest one), and notifyTopLayerEntry (a non-modal surface entered the
- *   top layer above the hosts)
+ *   getActiveModalOutlet and subscribeModalOutlets (a global host follows the
+ *   latest one). Also notifyTopLayerEntry (a surface entered the top layer
+ *   above the hosts). Also markModalOutletHost and isModalOutletHost: a
+ *   modal's input hold leaves a marked global host live
  * @position Private layer infrastructure; spec:AST-003 FR18
  *
  * A native modal makes everything outside it inert and paints over every
@@ -48,6 +49,9 @@ const outletGroups = new WeakMap<HTMLDialogElement, string>();
 export type ModalOutletChange = 'outlet' | 'entry';
 
 const listeners = new Set<(change: ModalOutletChange) => void>();
+
+// The global hosts that move into the latest open modal.
+const hosts = new WeakSet<Element>();
 
 function notify(change: ModalOutletChange): void {
   for (const listener of listeners) {
@@ -150,6 +154,23 @@ export function subscribeModalOutlets(
  */
 export function notifyTopLayerEntry(): void {
   notify('entry');
+}
+
+/**
+ * Mark `element` as a global host that moves into the latest open modal. A
+ * hold that makes the modal's content inert leaves the host live. Returns the
+ * function that removes the mark.
+ */
+export function markModalOutletHost(element: Element): () => void {
+  hosts.add(element);
+  return () => {
+    hosts.delete(element);
+  };
+}
+
+/** Whether `element` is a global host that moves into the latest open modal. */
+export function isModalOutletHost(element: Element): boolean {
+  return hosts.has(element);
 }
 
 /**

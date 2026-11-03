@@ -4,9 +4,11 @@
 
 /**
  * @file AlertDialog.tsx
- * @input Uses React, StyleX, Dialog, Layout, Heading, Text, Button, the
- *   action-group tracking (hooks/useActionGroupTracking) and the press-group
- *   marker (privateAttributes/pressGroupItem.stylex)
+ * @input Uses React, StyleX, Dialog, Layout, Heading, Text, Button and the
+ *   touch presentation resolver. Also the action-group tracking
+ *   (hooks/useActionGroupTracking), the press-group marker
+ *   (privateAttributes/pressGroupItem.stylex), its touch motion
+ *   (useAlertMotion) and the alert entries of the UIKit constants table
  * @output Exports AlertDialog component, AlertDialogProps type
  * @position Core implementation; consumed by index.ts, tested by AlertDialog.test.tsx
  *
@@ -15,6 +17,7 @@
  * - /packages/core/src/AlertDialog/AlertDialog.test.tsx (tests for new/changed behavior)
  * - /packages/core/src/AlertDialog/index.ts (exports if types change)
  * - /packages/core/src/AlertDialog/__tests__/AlertDialog.interaction.browser.spec.ts (touch tracking)
+ * - /packages/core/src/AlertDialog/__tests__/AlertDialog.motion.interaction.browser.spec.ts (touch motion)
  * - /apps/storybook/stories/AlertDialog.stories.tsx (storybook stories)
  * - /packages/cli/assets/templates/blocks/components/AlertDialog/ (showcase blocks)
  */
@@ -42,8 +45,12 @@ import {
 import english from '../i18n/generated-english/AlertDialog/AlertDialog.generated';
 import {useActionGroupTracking} from '../hooks/useActionGroupTracking';
 import {PressGroupContext} from '../hooks/pressGroupContext';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {alertController} from '../motion/uikit/alert';
 import {pressGroupItemProps} from '../privateAttributes/pressGroupItem.stylex';
+import {durationVars, easeVars} from '../theme/tokens.stylex';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
+import {useAlertMotion} from './useAlertMotion';
 
 registerEnglishFallback(english);
 
@@ -52,12 +59,70 @@ const ACTION_TRACKING_PROPS = pressGroupItemProps(SLIDING_POINTERS);
 
 const SMALL_SCREEN_QUERY = '(max-width: 640px)';
 
+// The start scale comes from useAlertMotion (SCALE_FROM_PROPERTY).
+const touchEnter = stylex.keyframes({
+  from: {opacity: 0, scale: 'var(--_alert-scale-from, 1.2)'},
+  to: {opacity: 1, scale: '1'},
+});
+const fadeIn = stylex.keyframes({from: {opacity: 0}, to: {opacity: 1}});
+const fadeOut = stylex.keyframes({from: {opacity: 1}, to: {opacity: 0}});
+
+/**
+ * The exit duration token, by default the standard dismissal duration. A
+ * theme's dialog exit switch does not change a touch exit.
+ */
+const EXIT_DURATION = `var(--duration-exit, ${durationVars['--duration-fast']})`;
+/** Under reduced motion the exit is at most the reduced cross-fade. */
+const REDUCED_EXIT_DURATION = `min(${EXIT_DURATION}, ${reducedMotionFadeConsts.duration})`;
+
 const styles = stylex.create({
   // The browser may pinch-zoom on the actions but never pans there. Chrome on
   // Android cancels a pointer it pans, which would cancel the group's press.
   // The gesture host keeps an author's narrower touch-action.
   trackingRow: {
     touchAction: 'pinch-zoom',
+  },
+  // Under a touch presentation the alert takes UIKit's look on the theme's
+  // dialog entrance. It plays Dialog's duration and curve from a 1.2 start,
+  // not Dialog's rise. Under reduced motion the alert and the dimming fade in
+  // over Dialog's reduced 200 ms. The dimming inherits the alert's own
+  // timing: a backdrop inherits from its dialog.
+  touchEntrance: {
+    animationName: {
+      default: touchEnter,
+      '@media (prefers-reduced-motion: reduce)': fadeIn,
+    },
+    '::backdrop': {
+      animationName: fadeIn,
+      animationDuration: 'inherit',
+      animationTimingFunction: 'inherit',
+      animationFillMode: 'backwards',
+    },
+  },
+  // Reopened while it fades out: back to rest at once, never from the start.
+  touchSettled: {
+    animationName: 'none',
+  },
+  // The touch look's exit: the alert and the dimming fade alone on the exit
+  // tokens, even while a theme leaves its dialog exit off. Under reduced
+  // motion the fade stays within the reduced cross-fade.
+  touchExit: {
+    animationName: fadeOut,
+    animationDuration: {
+      default: EXIT_DURATION,
+      '@media (prefers-reduced-motion: reduce)': REDUCED_EXIT_DURATION,
+    },
+    animationTimingFunction: {
+      default: easeVars['--ease-exit'],
+      '@media (prefers-reduced-motion: reduce)': reducedMotionFadeConsts.easing,
+    },
+    animationFillMode: 'forwards',
+    '::backdrop': {
+      animationName: fadeOut,
+      animationDuration: 'inherit',
+      animationTimingFunction: 'inherit',
+      animationFillMode: 'forwards',
+    },
   },
   action: {
     maxWidth: '100%',
@@ -130,7 +195,9 @@ export interface AlertDialogProps extends BaseProps<HTMLDialogElement> {
 
   /**
    * The width of the dialog.
-   * Numbers are treated as pixels, strings are used as-is.
+   * Numbers are treated as pixels, strings are used as-is. By default 400.
+   * On a phone (a compact window under a coarse primary pointer) it is iOS's
+   * alert width, 320, in every theme. A width set here wins there too.
    * @default 400
    */
   width?: number | string;
@@ -174,7 +241,7 @@ export function AlertDialog({
   actionVariant = 'destructive',
   isActionLoading,
   onAction,
-  width = 400,
+  width: widthProp,
   xstyle,
   className,
   style,
@@ -190,17 +257,23 @@ export function AlertDialog({
   // semantics without coupling action order to pointer or hover capability.
   const isSmallScreen = useMediaQuery(SMALL_SCREEN_QUERY);
 
-  const handleCancel = useCallback(() => {
-    onOpenChange(false);
-  }, [onOpenChange]);
-
+  const touch = useTouchPresentation();
+  const isTouch = touch.isTouch;
+  // On a phone the alert is iOS's 320 px wide in every theme, so its 1.2
+  // start stays on screen. A caller's width wins; elsewhere it stays 400.
+  const width =
+    widthProp ?? (isTouch && touch.isCompact ? alertController.width : 400);
+  const motion = useAlertMotion({
+    isOpen,
+    isEnabled: isTouch && isInline !== true,
+  });
   // Each action carries the press-group marker from its first render, so the
-  // tracker is its only painter.
+  // tracker is its only painter. Dialog holds a press during the entrance,
+  // and the exit's hold holds one while the alert leaves.
   const actionsRef = useRef<HTMLElement>(null);
   // Only under the touch presentation does a press slide across the
   // actions. A desktop press stays the native button's.
-  const {isTouch} = useTouchPresentation();
-  const isTracking = isOpen && isInline !== true && isTouch;
+  const isTracking = motion.isPresented && isInline !== true && isTouch;
   useActionGroupTracking(actionsRef, {
     // The actions row holds only the two buttons.
     itemSelector: 'button',
@@ -210,6 +283,23 @@ export function AlertDialog({
     pointerTypes: SLIDING_POINTERS,
     isEnabled: isTracking,
   });
+  // A leaving alert takes no input, as UIKit's does: the exit's hold makes its
+  // content inert. The dialog's own Escape, its cancel event, still reaches
+  // it, so Escape is dropped here until the alert is hidden. Dialog returns
+  // focus to the opener when the fade ends.
+  const {isLeaving} = motion;
+  const handleCancel = useCallback(() => {
+    onOpenChange(false);
+  }, [onOpenChange]);
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      if (!isLeaving) {
+        onOpenChange(next);
+      }
+    },
+    [isLeaving, onOpenChange],
+  );
+  const mergedRef = useMergedRefs(ref, motion.ref);
   const actionTrackingProps = isTracking ? ACTION_TRACKING_PROPS : undefined;
 
   const buttonActionStyle = [
@@ -246,10 +336,10 @@ export function AlertDialog({
   return (
     <Dialog
       {...rest}
-      ref={ref}
-      isOpen={isOpen}
+      ref={mergedRef}
+      isOpen={motion.isPresented}
       isInline={isInline}
-      onOpenChange={onOpenChange}
+      onOpenChange={handleOpenChange}
       width={width}
       purpose="form"
       // `alertdialog` is a modal role: it promises an interruption the user
@@ -261,7 +351,12 @@ export function AlertDialog({
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
       {...mergeProps(themeProps('alert-dialog'), {className, style})}
-      xstyle={xstyle}
+      xstyle={[
+        motion.look === 'entrance' && styles.touchEntrance,
+        motion.look === 'settled' && styles.touchSettled,
+        motion.look === 'exit' && styles.touchExit,
+        xstyle,
+      ]}
       data-testid={testId}>
       <Layout
         content={
