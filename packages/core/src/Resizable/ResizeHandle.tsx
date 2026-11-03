@@ -583,7 +583,7 @@ export function ResizeHandle({
   const isCollapsed = resizable?._isCollapsed ?? view?.isCollapsed ?? false;
   const effectiveSide = resolveEffectiveSide(
     pillPlacement,
-    view?.isReversed ?? isReversed,
+    isReversed || !!view?.isReversed,
     isCollapsed,
   );
   // An inline zone reaches at most half of the pane the Handle resizes. An
