@@ -6,15 +6,11 @@ import {useId, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Card} from '@astryxdesign/core/Card';
 import {
-  FieldStatus,
+  Field,
   inputStatusBorderStyles,
   inputWrapperStyles,
 } from '@astryxdesign/core/Field';
-import type {
-  FieldStatusVariant,
-  FieldStatusPlacement,
-  InputStatus,
-} from '@astryxdesign/core/Field';
+import type {FieldStatusPlacement, InputStatus} from '@astryxdesign/core/Field';
 import {useInputStatusIcon} from '@astryxdesign/core/hooks';
 import {VStack} from '@astryxdesign/core/Layout';
 import {
@@ -43,6 +39,7 @@ const styles = stylex.create({
 
 function CouponField({statusVariant}: {statusVariant: FieldStatusPlacement}) {
   const [code, setCode] = useState('SAVE10');
+  const inputId = useId();
   const messageId = useId();
 
   const status: InputStatus | undefined =
@@ -68,7 +65,12 @@ function CouponField({statusVariant}: {statusVariant: FieldStatusPlacement}) {
     undefined;
 
   return (
-    <VStack gap={1}>
+    <Field
+      label="Coupon code"
+      isLabelHidden
+      inputID={inputId}
+      status={status && {...status, messageID: messageId}}
+      statusVariant={statusVariant}>
       <div
         {...stylex.props(
           inputWrapperStyles.base,
@@ -76,8 +78,8 @@ function CouponField({statusVariant}: {statusVariant: FieldStatusPlacement}) {
           status && inputStatusBorderStyles[status.type],
         )}>
         <input
+          id={inputId}
           type="text"
-          aria-label="Coupon code"
           aria-invalid={status?.type === 'error' || undefined}
           aria-describedby={ariaDescribedBy}
           placeholder="Enter a coupon code"
@@ -87,15 +89,7 @@ function CouponField({statusVariant}: {statusVariant: FieldStatusPlacement}) {
         />
         {statusIcon}
       </div>
-      {hasMessageBox && status?.message ? (
-        <FieldStatus
-          id={messageId}
-          type={status.type}
-          message={status.message}
-          variant={statusVariant as FieldStatusVariant}
-        />
-      ) : null}
-    </VStack>
+    </Field>
   );
 }
 
