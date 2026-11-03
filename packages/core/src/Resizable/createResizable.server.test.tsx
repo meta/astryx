@@ -57,6 +57,27 @@ describe('createResizable on the server (spec:AST-107 FR6)', () => {
     expect(touched).toEqual([]);
   });
 
+  it("draws a ref-bound handle's own isReversed before a factory binds", async () => {
+    const {useResizable} = await import('./useResizable');
+    const {ResizeHandle} = await import('./ResizeHandle');
+    function Split({onHandle, onHook}: {onHandle: boolean; onHook: boolean}) {
+      const handleRef = useRef<HTMLDivElement>(null);
+      useResizable(handleRef, {defaultSize: 200, isReversed: onHook});
+      return createElement(ResizeHandle, {
+        ref: handleRef,
+        label: 'Sidebar width',
+        isReversed: onHandle,
+      });
+    }
+    const render = (onHandle: boolean, onHook: boolean) =>
+      renderToString(createElement(Split, {onHandle, onHook}));
+    // The pill sits on the side of the panel it resizes. Reversed by the
+    // handle or by the hook, it sits on the same side, and not on the side of
+    // an unreversed handle.
+    expect(render(true, false)).toBe(render(false, true));
+    expect(render(true, false)).not.toBe(render(false, false));
+  });
+
   it('renders the size the hook starts at, against the deterministic basis a percentage has with no window', async () => {
     const {useResizable} = await import('./useResizable');
     function Split({defaultSize}: {defaultSize: number | string}) {
