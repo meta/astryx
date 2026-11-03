@@ -69,6 +69,12 @@ so your theme's token overrides (`@layer astryx-theme`) win over it, as long
 as Core's `reset.css` (or a `@layer reset, astryx-base, astryx-theme;` line,
 if your app has its own reset) loads first.
 
+## Editing code blocks
+
+In a code block, Tab and Shift+Tab indent and outdent every line the selection
+touches, by the indent the block already uses (a tab, or its narrowest run of
+leading spaces). Press Escape, then Tab, to move focus out of the editor.
+
 ## Examples
 
 Interactive examples live in Storybook under **RichText/RichTextEditor**
