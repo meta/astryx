@@ -623,10 +623,12 @@ describe('review-signal review-app approval for write-access authors', () => {
   });
 });
 
-describe("a fork's review never depends on a held review run (spec:AST-030 FR15)", () => {
-  // GitHub can hold a fork's pull_request_review run for approval, and its API
-  // cannot approve that run. So every writer of the gate must also run on the
-  // owner command and on a dispatch, which GitHub does not hold.
+describe("a fork's held review run blocks nothing the owner command and a dispatch do not repeat (spec:AST-030 FR15)", () => {
+  // GitHub can hold a fork's pull_request_review run for approval, and its
+  // approve endpoint refuses that run. So every review-signal writer of the
+  // gate also runs on the owner command and on a dispatch, which GitHub does
+  // not hold, and review-clear's writer, which runs after a review run, is
+  // repeated by them.
   const writers = Object.entries(parsed.jobs).filter(
     ([, job]) => job.permissions?.statuses === 'write',
   );
@@ -675,12 +677,36 @@ describe("a fork's review never depends on a held review run (spec:AST-030 FR15)
     expect(parsed.jobs['review-anchor'].permissions).toEqual({});
   });
 
-  it('tells owners that a held review run never needs approving, and names the dispatch fallback', () => {
-    const gate = fs.readFileSync(
-      path.join(root, '.github/REVIEW_GATE.md'),
-      'utf8',
+  it("pins review-clear's writer, the only one that waits on a review run, to that run's completion", () => {
+    const clear = YAML.parse(
+      fs.readFileSync(
+        path.join(root, '.github/workflows/review-clear.yml'),
+        'utf8',
+      ),
     );
-    expect(gate).toContain('Nothing waits on the held review run');
+    expect(clear.on).toEqual({
+      workflow_run: {workflows: ['Review signal'], types: ['completed']},
+    });
+    const clearWriters = Object.entries(clear.jobs).filter(
+      ([, job]) => job.permissions?.statuses === 'write',
+    );
+    expect(clearWriters.map(([name]) => name)).toEqual(['clear']);
+    // It reconciles only after a review event's run, which the owner command
+    // (flag on issue_comment) and a dispatch (flag on workflow_dispatch) repeat
+    // from the same reviews.
+    expect(clear.jobs.clear.if).toBe(
+      "github.event.workflow_run.event == 'pull_request_review'",
+    );
+  });
+
+  it('tells owners that only the review-clear reconcile waits on a held review run, and names the dispatch fallback', () => {
+    // One line per sentence, whatever the guide's wrapping.
+    const gate = fs
+      .readFileSync(path.join(root, '.github/REVIEW_GATE.md'), 'utf8')
+      .replace(/\s+/g, ' ');
+    expect(gate).toContain(
+      'Only the review-clear reconcile waits on the held review run',
+    );
     expect(gate).toContain('run the "Review signal" workflow by hand');
   });
 });

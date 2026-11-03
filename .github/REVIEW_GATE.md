@@ -25,11 +25,13 @@ neutral yellow "waiting" signal, not a red failure).
   engineering owner who approves a fork pull request also posts
   `/approve-spec <full-sha>`: the command re-evaluates both halves of
   `review-required` from the current head, the code review included.
-  Nothing waits on the held review run, so it never needs approving (and
-  GitHub's API cannot approve it). If the command was not posted, an
-  engineering owner can run the "Review signal" workflow by hand with that
-  pull request's number, which reads the reviews and re-evaluates both halves
-  the same way.
+  Only the review-clear reconcile waits on the held review run (it runs when
+  that run completes), and the owner command and a dispatch repeat it, so the
+  held run never needs approving. GitHub's approve endpoint refuses such a run
+  anyway ("This run is not from a fork pull request or queued by the Actions
+  bot"). If the command was not posted, an engineering owner can run the
+  "Review signal" workflow by hand with that pull request's number, which reads
+  the reviews and re-evaluates both halves the same way.
 - **Write-access authors can also clear it with the review app.** When the PR
   author has write or admin permission on the repository (internal
   contributors, including designers and partners who are not owners), the
