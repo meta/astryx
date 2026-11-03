@@ -525,6 +525,17 @@ export interface RichTextEditorProps extends Omit<
    */
   hasHistory?: boolean;
   /**
+   * Whether tables may have merged cells.
+   *
+   * Off by default because GFM tables cannot express a merged cell, so a
+   * document that round-trips through Markdown loses the merge. Turn it on
+   * for a surface that stores Lexical state directly, where un-merging a
+   * table the author merged would be data loss.
+   *
+   * @default false
+   */
+  hasCellMerge?: boolean;
+  /**
    * Whether this editor's content comes from a collaborative binding rather
    * than from `defaultValue`.
    *
@@ -622,6 +633,7 @@ export const RichTextEditor = function RichTextEditor({
   tabEscapeHint: tabEscapeHintFromProps,
   maxLength,
   namespace = 'astryx-editor',
+  hasCellMerge = false,
   isCollaborative = false,
   hasHistory = !isCollaborative,
   xstyle,
@@ -808,10 +820,11 @@ export const RichTextEditor = function RichTextEditor({
               <LinkPlugin />
               {/* Tab keeps its editor meaning inside a table (indent, and
                   Escape then Tab to leave the editor); arrow keys move
-                  between cells. GFM tables have no merged cells or cell
-                  colors, and a wide table scrolls inside its own wrapper. */}
+                  between cells. Merged cells are off unless the surface asks
+                  for them, since GFM tables cannot carry a merge; cell colors
+                  likewise, and a wide table scrolls inside its own wrapper. */}
               <TablePlugin
-                hasCellMerge={false}
+                hasCellMerge={hasCellMerge}
                 hasCellBackgroundColor={false}
                 hasTabHandler={false}
                 hasHorizontalScroll
