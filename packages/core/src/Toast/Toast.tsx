@@ -308,6 +308,7 @@ export function ToastSurface({
     if (!isAutoHide) {
       return;
     }
+    const pauseSources = pauseSourcesRef.current;
     const pauseForWindow = () => pauseTimer('window');
     const resumeForWindow = () => resumeTimer('window');
     window.addEventListener('blur', pauseForWindow);
@@ -316,7 +317,7 @@ export function ToastSurface({
       window.removeEventListener('blur', pauseForWindow);
       window.removeEventListener('focus', resumeForWindow);
       // With the listeners gone, no focus event would clear the window hold.
-      pauseSourcesRef.current.delete('window');
+      pauseSources.delete('window');
     };
   }, [isAutoHide, pauseTimer, resumeTimer]);
 
