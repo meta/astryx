@@ -290,15 +290,28 @@ describe('build-css astryx.css', () => {
       // One clock, the one the controller removes the attribute on, and its
       // Reduce Motion arm, which a tempo never lengthens past it (FR4). A
       // press layer that fades on the compositor (Switch's) runs on it too.
+      // A card's touch release fades on the exit tokens instead, capped at
+      // that clock, and at its Reduce Motion arm under Reduce Motion.
       const releaseMs = await readReleaseMs();
+      const onExitTokens = value => value.includes('var(--duration-exit)');
       for (const reduced of [false, true]) {
-        const durations = durationsOf(reduced);
+        const durations = durationsOf(reduced).filter(
+          value => !onExitTokens(value),
+        );
         expect(durations.length).toBeGreaterThan(0);
         expect(durations.map(toMs), durations.join(' | ')).toEqual(
           durations.map(() => releaseMs),
         );
       }
       expect(durationsOf(true).every(value => /^min\(/.test(value))).toBe(true);
+      const capOf = value =>
+        value.match(/^min\(var\(--duration-exit\),\s*(.+)\)$/)?.[1];
+      for (const reduced of [false, true]) {
+        const exit = [...new Set(durationsOf(reduced).filter(onExitTokens))];
+        expect(exit, exit.join(' | ')).toHaveLength(1);
+        expect(toMs(capOf(exit[0]) ?? ''), exit[0]).toBe(releaseMs);
+        expect(/^min\(/.test(capOf(exit[0]) ?? ''), exit[0]).toBe(reduced);
+      }
       // The onset is instant: nothing animates on the on arm.
       const on = lines().filter(line =>
         line.includes('[data-astryx-press="on"]'),

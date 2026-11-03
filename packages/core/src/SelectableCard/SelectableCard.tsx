@@ -52,7 +52,10 @@ import {closestLayerRoot} from '../privateAttributes/layerRoot.stylex';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
-import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {
+  interactionOverlayStyles,
+  pressConsts,
+} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -71,7 +74,42 @@ const PRESSED_ON = '[data-astryx-press="on"]';
 /** Written by the press controller for the press's release. */
 const PRESSED_FADING = '[data-astryx-press="fading"]';
 
+/**
+ * The shared touch release, restated: the card's release style replaces the
+ * whole property, so a fine primary pointer keeps the overlay's clock and
+ * curve. SYNC: utils/interactionOverlay.stylex.ts PRESS_RELEASE_DURATION,
+ * PRESS_RELEASE_DURATION_REDUCED and RELEASE_EASE.
+ */
+const SHARED_RELEASE = `calc(${pressConsts.releaseMs}ms * min(var(--_astryx-motion-tempo, 1), 1.5))`;
+const SHARED_RELEASE_REDUCED = `min(${pressConsts.releaseMs}ms, calc(${pressConsts.releaseMs}ms * var(--_astryx-motion-tempo, 1)))`;
+const SHARED_RELEASE_EASE = 'cubic-bezier(0, 0, 0.2, 1)';
+
 const styles = stylex.create({
+  // Under a coarse primary pointer the press release fades on the exit
+  // tokens. The controller already shows the press on its first frame.
+  touchRelease: {
+    animationDuration: {
+      default: null,
+      [PRESSED_FADING]: {
+        default: SHARED_RELEASE,
+        '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+          SHARED_RELEASE_REDUCED,
+        // Cap the release at the shared press clock until that clock follows
+        // the exit tokens.
+        '@media (pointer: coarse)': {
+          default: `min(${durationVars['--duration-exit']}, ${SHARED_RELEASE})`,
+          '@media (prefers-reduced-motion: reduce)': `min(${durationVars['--duration-exit']}, ${SHARED_RELEASE_REDUCED})`,
+        },
+      },
+    },
+    animationTimingFunction: {
+      default: null,
+      [PRESSED_FADING]: {
+        default: SHARED_RELEASE_EASE,
+        '@media (pointer: coarse)': easeVars['--ease-exit'],
+      },
+    },
+  },
   interactive: {
     // Declared here, on the element that carries the `astryx-selectable-card`
     // target, so a theme has something to override — the ring for a variant
@@ -82,9 +120,26 @@ const styles = stylex.create({
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
-    transitionProperty: 'box-shadow, border-color',
-    transitionDuration: durationVars['--duration-fast'],
-    transitionTimingFunction: easeVars['--ease-standard'],
+    transitionProperty: {
+      default: 'box-shadow, border-color',
+      // Under reduced motion a selection's ring and border change at once.
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        'opacity',
+    },
+    transitionDuration: {
+      default: durationVars['--duration-fast'],
+      // Under reduced motion a fine pointer gets no transition. A touch
+      // screen's opacity fade, such as a disabled card's dimming, takes
+      // 200 ms at most.
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': `min(${durationVars['--duration-exit']}, 200ms)`,
+    },
+    transitionTimingFunction: {
+      default: easeVars['--ease-standard'],
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        easeVars['--ease-exit'],
+    },
   },
   // Hover and pressed overlay. Hover is guarded by @media (hover: hover) so
   // touch devices don't show a stuck hover state; the press has two arms,
@@ -130,9 +185,27 @@ const styles = stylex.create({
         default: 'background-color',
         [PRESSED_ON]: 'none',
         [PRESSED_FADING]: 'none',
+        // Under reduced motion a colour changes at once. Only opacity may
+        // still fade on a touch screen.
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+          'opacity',
       },
-      transitionDuration: durationVars['--duration-fast'],
-      transitionTimingFunction: easeVars['--ease-standard'],
+      transitionDuration: {
+        default: durationVars['--duration-fast'],
+        // Under reduced motion a fine pointer gets no transition. A touch
+        // screen's fade keeps the exit tokens, within 200 ms.
+        '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+          '0s',
+        // The 200 ms bound copies reducedMotionFadeConsts.duration. That
+        // module is internal, and a swizzled component imports only exported
+        // paths. reducedMotionValues.test.ts keeps the copies equal.
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': `min(${durationVars['--duration-exit']}, 200ms)`,
+      },
+      transitionTimingFunction: {
+        default: easeVars['--ease-standard'],
+        '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+          easeVars['--ease-exit'],
+      },
       // While the controller paints, the colour yields to the image: a
       // touchscreen beside a fine pointer still matches `:active` under a
       // finger, and the press would otherwise paint twice.
@@ -526,6 +599,7 @@ export function SelectableCard({
           // The touch press's strength and release, on the element the
           // controller writes to; the `::after` above paints off it.
           !isDisabled && interactionOverlayStyles.pressedAlpha,
+          !isDisabled && styles.touchRelease,
           isDisabled && styles.disabled,
           xstyleProp,
         ] as unknown as StyleXStyles
