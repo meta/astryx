@@ -8,23 +8,8 @@
  * @output Styled drag handle with WAI-ARIA separator role and keyboard support
  * @position Between resizable panels; consumed directly by builders
  *
- * The handle element is 1px wide (the divider line itself). A wider,
- * absolutely positioned hit area (the Grab zone) takes the pointer, centred
- * on the Handle whatever `pillPlacement` says. On a pane shorter than the
- * zone, it takes at most half the pane, so a short item keeps its own
- * targets. The Grip pill takes the pointer too while it is painted.
- * Pill grip indicator can sit on either side of the divider (or centered)
- * via pillPlacement. Default 'auto' places the pill on the panel side and
- * flips when the panel collapses to 0px so it stays accessible.
- *
- * While the panel is collapsed, aria-valuenow is clamped to aria-valuemin
- * (a value below the minimum is invalid per WCAG 4.1.2) and a localized
- * "Collapsed" aria-valuetext announces the real state.
- *
- * The handle's input (the pointer drag, the keys, the double-click) is
- * resizeGesture.ts. ResizeHandle forwards its React events to it, over the
- * region its `resizable` prop describes. A drag takes pointer capture on the
- * element it starts on, so moves over an embedded frame still arrive.
+ * A drag takes pointer capture on the element it starts on, so moves over an
+ * embedded frame still arrive.
  */
 
 import {useEffect, useRef, useState} from 'react';
@@ -63,10 +48,6 @@ import english from '../i18n/generated-english/Resizable/ResizeHandle.generated'
 registerEnglishFallback(english);
 
 type PillPlacement = 'start' | 'end' | 'center' | 'auto';
-
-// A pill beside an overlay Handle can sit outside the Grab zone. The hover
-// stays this long after the pointer leaves, so the pointer can cross to it.
-const PILL_HOVER_GRACE_MS = 150;
 
 function resolveEffectiveSide(
   pillPlacement: PillPlacement,
@@ -115,9 +96,6 @@ const styles = stylex.create({
     insetInlineEnd: 0,
     height: 'var(--resize-handle-hit-area, 16px)',
   },
-  // An overlay Handle takes at most half of its containing block, the pane it
-  // sits in. A short pane keeps half of itself for its own pointer targets. A
-  // collapsed pane keeps the full Handle, which reopens it.
   overlayHorizontalOnShortPane: {
     width: 'min(var(--resize-handle-hit-area, 16px), 50%)',
   },
@@ -244,13 +222,33 @@ const styles = stylex.create({
     pointerEvents: 'auto',
     backgroundColor: colorVars['--color-border-emphasized'],
   },
+  // A pill shown on hover can sit outside the Grab zone. This invisible
+  // extension spans the gap along the resize axis, so the pointer keeps the
+  // hover on its way to the pill. It takes the pointer only while the pill
+  // does.
+  pillBridgeHorizontal: {
+    '::before': {
+      content: '""',
+      position: 'absolute',
+      insetBlock: 0,
+      insetInline: `calc(-1 * ${spacingVars['--spacing-1']} - 1px)`,
+    },
+  },
+  pillBridgeVertical: {
+    '::before': {
+      content: '""',
+      position: 'absolute',
+      insetInline: 0,
+      insetBlock: `calc(-1 * ${spacingVars['--spacing-1']} - 1px)`,
+    },
+  },
 });
 
 // Dynamic styles — avoids inline style overrides.
 // Each axis gets its own function since StyleX requires static structure.
 const dynamicStyles = stylex.create({
   // An inline Handle's zone is centred on its line, so half of it reaches into
-  // the pane. On a pane shorter than the zone, that is at most half the pane.
+  // the pane.
   hitAreaLengthX: (pane: number) => ({
     width: `min(${spacingVars['--spacing-4']}, ${pane}px)`,
   }),
@@ -380,15 +378,6 @@ export function ResizeHandle({
   const label = labelFromProps ?? t('@astryx.resizable.handle.label');
   const handleRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
-  const hoverExitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (hoverExitRef.current != null) {
-        clearTimeout(hoverExitRef.current);
-      }
-    },
-    [],
-  );
   const [isFocused, setIsFocused] = useState(false);
   const isHorizontal = direction === 'horizontal';
   const isOverlay = positionMode === 'overlay';
@@ -555,19 +544,10 @@ export function ResizeHandle({
     onPointerUp: e => gesture?.pointerUp(e),
     onPointerCancel: e => gesture?.pointerCancel(e),
     onLostPointerCapture: e => gesture?.pointerCancel(e),
-    onPointerEnter: () => {
-      if (hoverExitRef.current != null) {
-        clearTimeout(hoverExitRef.current);
-        hoverExitRef.current = null;
-      }
-      setIsHovered(true);
-    },
+    onPointerEnter: () => setIsHovered(true),
     onPointerLeave: () => {
-      if (!isDragging && hoverExitRef.current == null) {
-        hoverExitRef.current = setTimeout(() => {
-          hoverExitRef.current = null;
-          setIsHovered(false);
-        }, PILL_HOVER_GRACE_MS);
+      if (!isDragging) {
+        setIsHovered(false);
       }
     },
   };
@@ -675,6 +655,11 @@ export function ResizeHandle({
                 ? styles.pillGrabHorizontal
                 : styles.pillGrabVertical,
               isAlwaysVisible ? styles.pillVisible : styles.pillHidden,
+              !isAlwaysVisible &&
+                effectiveSide !== 'center' &&
+                (isHorizontal
+                  ? styles.pillBridgeHorizontal
+                  : styles.pillBridgeVertical),
               isInteracting && !isDragging && styles.pillHover,
               isDragging && styles.pillActive,
               isDisabled && styles.disabled,
