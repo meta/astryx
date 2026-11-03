@@ -721,7 +721,25 @@ function StandaloneBottomSheet({
   );
 
   const {ref: modalityRef} = useInteractionModalityTracking();
-  const dialogComposedRef = useMergedRefs(dialogRef, modalityRef);
+  // Ends the exit hold once focus has left the sheet: moved elsewhere, or
+  // dropped to the page because the focused control was removed or disabled.
+  // A native listener, because React drops the `focusout` a browser sends
+  // while React removes the focused element. Read after the event, when the
+  // new focus is known. Outside a hold, releasing it changes nothing.
+  const exitFocusRef = useCallback((dialog: HTMLDialogElement | null) => {
+    if (dialog == null) {
+      return;
+    }
+    const onFocusOut = () =>
+      queueMicrotask(() => {
+        if (!dialog.contains(dialog.ownerDocument.activeElement)) {
+          setIsExitFocusHeld(false);
+        }
+      });
+    dialog.addEventListener('focusout', onFocusOut);
+    return () => dialog.removeEventListener('focusout', onFocusOut);
+  }, []);
+  const dialogComposedRef = useMergedRefs(dialogRef, modalityRef, exitFocusRef);
   useScrollLock(shouldPresent && hasScrim);
   useDevWarning(
     'BottomSheet',
@@ -801,28 +819,6 @@ function StandaloneBottomSheet({
   const isExitHoldingFocus =
     isExiting && !isReplaced && (!isCloseSettled || isExitFocusHeld);
   const isInert = (isExiting && !isExitHoldingFocus) || stackView.isBlocked;
-
-  // Ends the hold once focus has left the sheet: moved elsewhere, or dropped
-  // to the page because the focused control was removed or disabled. A native
-  // listener, because React drops the `focusout` a browser sends while React
-  // removes the focused element. Read after the event, when the new focus is
-  // known; also read once at the start, for focus that left first.
-  useLayoutEffect(() => {
-    const dialog = dialogRef.current;
-    if (!isExitHoldingFocus || dialog == null) {
-      return;
-    }
-    const doc = dialog.ownerDocument;
-    const releaseIfFocusLeft = () => {
-      if (!dialog.contains(doc.activeElement)) {
-        setIsExitFocusHeld(false);
-      }
-    };
-    releaseIfFocusLeft();
-    const onFocusOut = () => queueMicrotask(releaseIfFocusLeft);
-    dialog.addEventListener('focusout', onFocusOut);
-    return () => dialog.removeEventListener('focusout', onFocusOut);
-  }, [isExitHoldingFocus]);
 
   return (
     <dialog
