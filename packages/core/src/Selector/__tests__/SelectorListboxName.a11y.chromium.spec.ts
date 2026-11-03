@@ -40,7 +40,10 @@ async function listboxNames(
     `${storybook.origin}/iframe.html?id=core-selector--${story}&viewMode=story&args=presentation:${presentation};value:Banana`,
     {waitUntil: 'load'},
   );
-  const trigger = page.getByRole('combobox').first();
+  // The searchable trigger is a plain button until the list opens.
+  const trigger = page
+    .locator('[role="combobox"], button[aria-haspopup]')
+    .first();
   await expect(trigger).toContainText('Banana');
   await trigger.click();
   await expect(page.getByRole('listbox')).toBeVisible();
