@@ -5153,6 +5153,71 @@ describe('Selector press model', () => {
     expect(listbox).not.toHaveClass(hash(touchStyles.panYPinchZoom));
   });
 
+  it('a long list renders its scrolling touch-action from the first open, with no class swap after the open measure', async () => {
+    const user = userEvent.setup();
+    const many = Array.from({length: 249}, (_, i) => `Option ${i}`);
+    const touchStyles = stylex.create({
+      pinchZoom: {touchAction: 'pinch-zoom'},
+      panYPinchZoom: {touchAction: 'pan-y pinch-zoom'},
+    });
+    const hash = (style: stylex.StyleXStyles) =>
+      stylex.props(style).className!.split(' ').pop()!;
+    // A 249-row list overflows its 300 px box.
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get() {
+        return (this as HTMLElement).getAttribute('role') === 'listbox'
+          ? 7968
+          : 0;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+      configurable: true,
+      get() {
+        return (this as HTMLElement).getAttribute('role') === 'listbox'
+          ? 300
+          : 0;
+      },
+    });
+    try {
+      render(<Selector label="Country" options={many} onChange={() => {}} />);
+      const listbox = screen.getByRole('listbox', h);
+      // The class is already the scrolling one while closed, so the open
+      // never swaps it (a swap restyles every row a second time).
+      expect(listbox).toHaveClass(hash(touchStyles.panYPinchZoom));
+      const swaps: string[] = [];
+      const observer = new MutationObserver(() => {
+        if (listbox.classList.contains(hash(touchStyles.pinchZoom))) {
+          swaps.push(listbox.className);
+        }
+      });
+      observer.observe(listbox, {attributes: true, attributeFilter: ['class']});
+      await user.click(screen.getByRole('combobox'));
+      observer.disconnect();
+      expect(swaps).toEqual([]);
+      expect(listbox).toHaveClass(hash(touchStyles.panYPinchZoom));
+    } finally {
+      // jsdom defines both on Element.prototype; drop the overrides.
+      delete (HTMLElement.prototype as {scrollHeight?: number}).scrollHeight;
+      delete (HTMLElement.prototype as {clientHeight?: number}).clientHeight;
+    }
+  });
+
+  it('a list guessed long that fits after the open measure gets the fitting touch-action', async () => {
+    const user = userEvent.setup();
+    const many = Array.from({length: 20}, (_, i) => `Option ${i}`);
+    render(<Selector label="Country" options={many} onChange={() => {}} />);
+    await user.click(screen.getByRole('combobox'));
+    const touchStyles = stylex.create({
+      pinchZoom: {touchAction: 'pinch-zoom'},
+    });
+    // jsdom measures every element at 0 px, so the measure says it fits and
+    // corrects the guess.
+    expect(screen.getByRole('listbox', h)).toHaveClass(
+      stylex.props(touchStyles.pinchZoom).className!.split(' ').pop()!,
+    );
+  });
+
   it('marks the listbox as carrying the press model', async () => {
     const user = userEvent.setup();
     render(<Selector label="Fruit" options={OPTIONS} onChange={() => {}} />);
