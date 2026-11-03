@@ -1,15 +1,18 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file usePressPin.test.tsx
- * @input Uses vitest, @testing-library/react, Tooltip, usePressPin
- * @output Tests of Tooltip's press-to-pin path: a press pins and closes the
- *   layer, and a pin stays when the pointer leaves. Escape, a second press, a
- *   press outside, or focus leaving closes it. The trigger carries the toggle
- *   state, the press stops at the trigger, and a non-button trigger warns.
- * @position Unit tests beside usePressPin
+ * @file InfoTip.pin.test.tsx
+ * @input Uses vitest, @testing-library/react, InfoTip, Tooltip, HoverCard
+ * @output Tests of InfoTip's press-to-pin on useTooltip's show() and hide():
+ *   a press pins and closes the help, and a pin stays when the pointer
+ *   leaves. Escape, a second press, a press outside, or focus leaving closes
+ *   it. The button carries the toggle state, a press on a hover preview keeps
+ *   it shown, and the press stops at the button. Plus the touch trigger's
+ *   outside close for a trigger in another document.
+ * @position Unit tests beside InfoTip.tsx, useTooltip.tsx, useTooltipHold.ts
  *
- * SYNC: When usePressPin.ts or useTooltip.tsx change, update these cases.
+ * SYNC: When InfoTip.tsx, useTooltip.tsx or useTooltipHold.ts change, update
+ * these cases.
  */
 
 import {
@@ -23,20 +26,13 @@ import {
   afterEach,
 } from 'vitest';
 import {render, screen, fireEvent, act} from '@testing-library/react';
-import {
-  useRef,
-  useState,
-  type KeyboardEvent as ReactKeyboardEvent,
-  type ReactElement,
-  type ReactNode,
-} from 'react';
-import {Tooltip, TooltipWithTriggerBehavior} from '../Tooltip/Tooltip';
+import type {ReactElement} from 'react';
+import {InfoTip} from './InfoTip';
+import {Tooltip} from '../Tooltip/Tooltip';
 import {HoverCard} from '../HoverCard/HoverCard';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
 import {Dialog} from '../Dialog/Dialog';
 import {Item} from '../Item/Item';
-import {Table} from '../Table/Table';
-import {useTableRowExpansion} from '../Table/plugins/rowExpansion/useTableRowExpansion';
 import {announceMessage} from '../hooks/useAnnounce';
 import type * as UseAnnounceModule from '../hooks/useAnnounce';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
@@ -128,31 +124,42 @@ function click(element: HTMLElement) {
   fireEvent.click(element, {detail: 1});
 }
 
-function InfoTooltip({
-  children,
-  ...props
-}: {
-  children?: ReactNode;
-  isOpen?: boolean;
-  onOpenChange?: (isOpen: boolean) => void;
-}): ReactElement {
-  return (
-    <TooltipWithTriggerBehavior
-      content="Billed on the first of each month"
-      triggerBehavior="toggle"
-      {...props}>
-      {children ?? (
-        <button type="button" aria-label="About billing">
-          i
-        </button>
-      )}
-    </TooltipWithTriggerBehavior>
-  );
-}
-
 const TIP = 'Billed on the first of each month';
 
-describe('Tooltip press-to-pin (component:Tooltip FR9)', () => {
+function InfoTooltip(): ReactElement {
+  return <InfoTip content={TIP} label="About billing" />;
+}
+
+describe('InfoTip press-to-pin (component:InfoTip FR2)', () => {
+  it('renders its button with no wrapper; the rest is the layer’s own nodes', () => {
+    const {container} = render(<InfoTooltip />);
+    const trigger = screen.getByRole('button', {name: 'About billing'});
+    const [first, ...rest] = Array.from(container.children);
+    expect(first).toBe(trigger);
+    // The layer renders its surface and a placeholder template, and nothing
+    // wraps the button.
+    expect(
+      rest.map(node =>
+        node.hasAttribute('popover') ? 'layer' : node.tagName.toLowerCase(),
+      ),
+    ).toEqual(['template', 'layer']);
+  });
+
+  it('a pen tap pins it, and the next pen tap closes it', () => {
+    render(<InfoTooltip />);
+    const trigger = screen.getByRole('button', {name: 'About billing'});
+    const penTap = () => {
+      fireEvent.pointerDown(trigger, {pointerType: 'pen'});
+      fireEvent.pointerUp(trigger, {pointerType: 'pen'});
+      fireEvent.click(trigger, {detail: 1});
+    };
+    penTap();
+    expect(shows(TIP)).toBe(true);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    penTap();
+    expect(shows(TIP)).toBe(false);
+  });
+
   it('a click pins the tooltip open, and the same click closes it', () => {
     render(<InfoTooltip />);
     const trigger = screen.getByRole('button', {name: 'About billing'});
@@ -183,71 +190,36 @@ describe('Tooltip press-to-pin (component:Tooltip FR9)', () => {
     expect(shows(TIP)).toBe(false);
   });
 
-  it('Enter and Space on a role="button" trigger pin and close it', () => {
-    render(
-      <InfoTooltip>
-        <span role="button" tabIndex={0}>
-          About billing
-        </span>
-      </InfoTooltip>,
-    );
+  it('a keyboard press (Enter or Space: a click with no pointer) pins and closes it', () => {
+    render(<InfoTooltip />);
     const trigger = screen.getByRole('button', {name: 'About billing'});
-    fireEvent.keyDown(trigger, {key: 'Enter'});
+    fireEvent.click(trigger, {detail: 0});
     expect(shows(TIP)).toBe(true);
-    fireEvent.keyDown(trigger, {key: ' '});
-    fireEvent.keyUp(trigger, {key: ' '});
+    fireEvent.click(trigger, {detail: 0});
     expect(shows(TIP)).toBe(false);
   });
 
-  it('Space on a role="button" trigger presses it on keyup, as on a native button', () => {
-    render(
-      <InfoTooltip>
-        <span role="button" tabIndex={0}>
-          About billing
-        </span>
-      </InfoTooltip>,
-    );
+  it('a mouse press on a hover preview pins it without hiding it first', () => {
+    vi.useFakeTimers();
+    render(<InfoTooltip />);
     const trigger = screen.getByRole('button', {name: 'About billing'});
-    // The keydown scrolls nothing and pins nothing yet.
-    expect(fireEvent.keyDown(trigger, {key: ' '})).toBe(false);
+    fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
+    fireEvent.mouseEnter(trigger);
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(shows(TIP)).toBe(true);
+    vi.mocked(HTMLElement.prototype.hidePopover).mockClear();
+    fireEvent.pointerDown(trigger, {pointerType: 'mouse'});
+    expect(shows(TIP)).toBe(true);
+    fireEvent.pointerUp(trigger, {pointerType: 'mouse'});
+    fireEvent.click(trigger, {detail: 1});
+    expect(shows(TIP)).toBe(true);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(HTMLElement.prototype.hidePopover).not.toHaveBeenCalled();
+    click(trigger);
     expect(shows(TIP)).toBe(false);
-    fireEvent.keyUp(trigger, {key: ' '});
-    expect(shows(TIP)).toBe(true);
-    // A keyup with no keydown on the trigger presses nothing.
-    fireEvent.keyUp(trigger, {key: ' '});
-    expect(shows(TIP)).toBe(true);
   });
-
-  it.each(['keydown', 'keyup'] as const)(
-    'a role="button" trigger that clicks itself on Space %s pins once',
-    async timing => {
-      const clickOnSpace = (event: ReactKeyboardEvent<HTMLElement>) => {
-        if (event.key === ' ') {
-          event.currentTarget.click();
-        }
-      };
-      render(
-        <InfoTooltip>
-          <span
-            role="button"
-            tabIndex={0}
-            onKeyDown={timing === 'keydown' ? clickOnSpace : undefined}
-            onKeyUp={timing === 'keyup' ? clickOnSpace : undefined}>
-            About billing
-          </span>
-        </InfoTooltip>,
-      );
-      const trigger = screen.getByRole('button', {name: 'About billing'});
-      fireEvent.keyDown(trigger, {key: ' '});
-      // A browser dispatches the keyup in a later task.
-      await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 0));
-      });
-      fireEvent.keyUp(trigger, {key: ' '});
-      expect(shows(TIP)).toBe(true);
-      expect(trigger).toHaveAttribute('aria-expanded', 'true');
-    },
-  );
 
   it('Escape closes a pinned tooltip', () => {
     render(<InfoTooltip />);
@@ -327,157 +299,9 @@ describe('Tooltip press-to-pin (component:Tooltip FR9)', () => {
     expect(shows(TIP)).toBe(true);
     expect(trigger).toHaveAttribute('aria-expanded', 'true');
   });
-
-  it('a trigger behavior that turns to toggle after mount wires the trigger', () => {
-    const {rerender} = render(
-      <TooltipWithTriggerBehavior content={TIP}>
-        <button type="button" aria-label="About billing">
-          i
-        </button>
-      </TooltipWithTriggerBehavior>,
-    );
-    const trigger = screen.getByRole('button', {name: 'About billing'});
-    expect(trigger).not.toHaveAttribute('aria-expanded');
-    rerender(
-      <TooltipWithTriggerBehavior content={TIP} triggerBehavior="toggle">
-        <button type="button" aria-label="About billing">
-          i
-        </button>
-      </TooltipWithTriggerBehavior>,
-    );
-    expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    click(trigger);
-    expect(shows(TIP)).toBe(true);
-    expect(trigger).toHaveAttribute('aria-expanded', 'true');
-    rerender(
-      <Tooltip content={TIP}>
-        <button type="button" aria-label="About billing">
-          i
-        </button>
-      </Tooltip>,
-    );
-    expect(trigger).not.toHaveAttribute('aria-expanded');
-  });
-
-  it('with focusTrigger="never", focus moving to another control closes a pinned tooltip', () => {
-    render(
-      <>
-        <TooltipWithTriggerBehavior
-          content={TIP}
-          triggerBehavior="toggle"
-          focusTrigger="never">
-          <button type="button" aria-label="About billing">
-            i
-          </button>
-        </TooltipWithTriggerBehavior>
-        <button type="button">Next field</button>
-      </>,
-    );
-    const trigger = screen.getByRole('button', {name: 'About billing'});
-    act(() => {
-      trigger.focus();
-    });
-    click(trigger);
-    expect(shows(TIP)).toBe(true);
-    act(() => {
-      screen.getByRole('button', {name: 'Next field'}).focus();
-    });
-    expect(shows(TIP)).toBe(false);
-    expect(trigger).toHaveAttribute('aria-expanded', 'false');
-  });
-
-  it('a pinned tooltip whose trigger behavior turns to adaptive closes on leave again', () => {
-    vi.useFakeTimers();
-    const tip = (triggerBehavior?: 'toggle') => (
-      <TooltipWithTriggerBehavior
-        content={TIP}
-        triggerBehavior={triggerBehavior}>
-        <button type="button" aria-label="About billing">
-          i
-        </button>
-      </TooltipWithTriggerBehavior>
-    );
-    const {rerender} = render(tip('toggle'));
-    const trigger = screen.getByRole('button', {name: 'About billing'});
-    click(trigger);
-    expect(shows(TIP)).toBe(true);
-    rerender(tip());
-    fireEvent.mouseLeave(trigger);
-    act(() => {
-      vi.advanceTimersByTime(1000);
-    });
-    expect(shows(TIP)).toBe(false);
-  });
-
-  it('a controlled tooltip reports the toggled value and does not change itself (FR7)', () => {
-    const onOpenChange = vi.fn();
-    render(<InfoTooltip isOpen={false} onOpenChange={onOpenChange} />);
-    click(screen.getByRole('button', {name: 'About billing'}));
-    expect(onOpenChange).toHaveBeenCalledWith(true);
-    expect(shows(TIP)).toBe(false);
-  });
-
-  it('a trigger that is not a button warns and keeps tap-only opening', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    try {
-      render(
-        <InfoTooltip>
-          <span tabIndex={0}>Billing</span>
-        </InfoTooltip>,
-      );
-      expect(warn).toHaveBeenCalledWith(
-        expect.stringContaining('A press-to-pin tooltip'),
-      );
-      const trigger = screen.getByText('Billing');
-      click(trigger);
-      expect(shows(TIP)).toBe(false);
-      expect(trigger).not.toHaveAttribute('aria-expanded');
-      tap(trigger);
-      expect(shows(TIP)).toBe(true);
-    } finally {
-      warn.mockRestore();
-    }
-  });
-
-  it('warns once per trigger: at mount, and not again on re-render or re-attach', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    try {
-      const tip = (delay: number) => (
-        <TooltipWithTriggerBehavior
-          content={TIP}
-          triggerBehavior="toggle"
-          delay={delay}>
-          <span tabIndex={0}>Billing</span>
-        </TooltipWithTriggerBehavior>
-      );
-      const {rerender} = render(tip(200));
-      rerender(tip(300));
-      rerender(tip(400));
-      const calls = warn.mock.calls.filter(([message]) =>
-        String(message).includes('A press-to-pin tooltip'),
-      );
-      expect(calls).toHaveLength(1);
-    } finally {
-      warn.mockRestore();
-    }
-  });
 });
 
-describe('Tooltip without press-to-pin (component:Tooltip FR5)', () => {
-  it('a tap on an info-only trigger opens it, and no press pins it', () => {
-    render(
-      <Tooltip content={TIP}>
-        <span tabIndex={0}>Billing</span>
-      </Tooltip>,
-    );
-    const trigger = screen.getByText('Billing');
-    tap(trigger);
-    expect(shows(TIP)).toBe(true);
-    expect(trigger).not.toHaveAttribute('aria-expanded');
-  });
-});
-
-describe('Tooltip press-to-pin trigger state (component:Tooltip FR10)', () => {
+describe('InfoTip trigger state (component:InfoTip FR2)', () => {
   it('carries aria-expanded, true only while pinned, and aria-controls while it shows', () => {
     render(<InfoTooltip />);
     const trigger = screen.getByRole('button', {name: 'About billing'});
@@ -511,22 +335,6 @@ describe('Tooltip press-to-pin trigger state (component:Tooltip FR10)', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it("restores the trigger's own aria-expanded and aria-controls on cleanup", () => {
-    const {unmount} = render(
-      <InfoTooltip>
-        <button type="button" aria-expanded="false" aria-controls="menu-1">
-          Menu
-        </button>
-      </InfoTooltip>,
-    );
-    const trigger = screen.getByRole('button', {name: 'Menu'});
-    click(trigger);
-    expect(trigger).toHaveAttribute('aria-expanded', 'true');
-    unmount();
-    expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    expect(trigger).toHaveAttribute('aria-controls', 'menu-1');
-  });
-
   it('announces its text once when it pins, and nothing for a preview', () => {
     vi.useFakeTimers();
     render(<InfoTooltip />);
@@ -543,26 +351,20 @@ describe('Tooltip press-to-pin trigger state (component:Tooltip FR10)', () => {
   });
 });
 
-describe('a toggle press stops at its trigger', () => {
-  it('a clickable row around the trigger does not activate, and the trigger’s own onClick runs', () => {
+describe('an InfoTip press stops at its button', () => {
+  it('a clickable row around the button does not activate', () => {
     const onRow = vi.fn();
-    const onOwn = vi.fn();
     // The stop is React-only: page-level listeners still see each press.
     const onPage = vi.fn();
     document.addEventListener('click', onPage);
     render(
       <div onClick={onRow}>
-        <InfoTooltip>
-          <button type="button" aria-label="About billing" onClick={onOwn}>
-            i
-          </button>
-        </InfoTooltip>
+        <InfoTooltip />
       </div>,
     );
     const trigger = screen.getByRole('button', {name: 'About billing'});
     tap(trigger);
     expect(shows(TIP)).toBe(true);
-    expect(onOwn).toHaveBeenCalledTimes(1);
     expect(onRow).not.toHaveBeenCalled();
     click(trigger);
     expect(shows(TIP)).toBe(false);
@@ -599,133 +401,6 @@ describe('a toggle press stops at its trigger', () => {
     expect(onCard).not.toHaveBeenCalled();
   });
 
-  describe('with anchorRef (component:Tooltip FR9: the caller’s own handlers still receive the press)', () => {
-    function Anchored({
-      onOwn,
-      stopsOwnClick = false,
-    }: {
-      onOwn?: () => void;
-      stopsOwnClick?: boolean;
-    }) {
-      const ref = useRef<HTMLButtonElement>(null);
-      return (
-        <>
-          <button
-            ref={ref}
-            type="button"
-            aria-label="About billing"
-            onClick={event => {
-              onOwn?.();
-              if (stopsOwnClick) {
-                event.stopPropagation();
-              }
-            }}>
-            i
-          </button>
-          <TooltipWithTriggerBehavior
-            content={TIP}
-            anchorRef={ref}
-            triggerBehavior="toggle"
-          />
-        </>
-      );
-    }
-
-    it('an action anchor’s own onClick fires on a pinning press', () => {
-      const onOwn = vi.fn();
-      render(<Anchored onOwn={onOwn} />);
-      const trigger = screen.getByRole('button', {name: 'About billing'});
-      click(trigger);
-      expect(shows(TIP)).toBe(true);
-      expect(trigger).toHaveAttribute('aria-expanded', 'true');
-      expect(onOwn).toHaveBeenCalledTimes(1);
-      click(trigger);
-      expect(shows(TIP)).toBe(false);
-      expect(onOwn).toHaveBeenCalledTimes(2);
-    });
-
-    it('an Astryx ClickableCard around the anchor does not open', () => {
-      const onCard = vi.fn();
-      render(
-        <ClickableCard label="Billing" onClick={onCard}>
-          Billing
-          <Anchored />
-        </ClickableCard>,
-      );
-      click(screen.getByRole('button', {name: 'About billing'}));
-      expect(shows(TIP)).toBe(true);
-      expect(onCard).not.toHaveBeenCalled();
-    });
-
-    it('an Astryx Item row around the anchor does not activate', () => {
-      const onRow = vi.fn();
-      render(
-        <Item label="Billing" onClick={onRow} endContent={<Anchored />} />,
-      );
-      click(screen.getByRole('button', {name: 'About billing'}));
-      expect(shows(TIP)).toBe(true);
-      expect(onRow).not.toHaveBeenCalled();
-    });
-
-    it('an Astryx Table row that expands on click does not expand', () => {
-      function Rows() {
-        const [expanded, setExpanded] = useState(new Set<string>());
-        const expansion = useTableRowExpansion<{id: string; name: string}>({
-          expandedKeys: expanded,
-          onToggle: key =>
-            setExpanded(previous => {
-              const next = new Set(previous);
-              if (next.has(key)) {
-                next.delete(key);
-              } else {
-                next.add(key);
-              }
-              return next;
-            }),
-          getRowKey: item => item.id,
-          renderExpanded: item => <div data-testid="panel">{item.name}</div>,
-          hasRowClickExpansion: true,
-        });
-        return (
-          <Table
-            data={[{id: 'a', name: 'Ada'}]}
-            columns={[
-              {key: 'name', header: 'Name', renderCell: () => <Anchored />},
-            ]}
-            idKey="id"
-            plugins={{expansion}}
-          />
-        );
-      }
-      render(<Rows />);
-      click(screen.getByRole('button', {name: 'About billing'}));
-      expect(shows(TIP)).toBe(true);
-      expect(screen.queryByTestId('panel')).not.toBeInTheDocument();
-    });
-
-    it('a plain onClick row receives the press, unless the anchor’s own onClick stops it', () => {
-      const onRow = vi.fn();
-      const {unmount} = render(
-        <div onClick={onRow}>
-          <Anchored />
-        </div>,
-      );
-      click(screen.getByRole('button', {name: 'About billing'}));
-      expect(shows(TIP)).toBe(true);
-      expect(onRow).toHaveBeenCalledTimes(1);
-      unmount();
-      onRow.mockClear();
-      render(
-        <div onClick={onRow}>
-          <Anchored stopsOwnClick />
-        </div>,
-      );
-      click(screen.getByRole('button', {name: 'About billing'}));
-      expect(shows(TIP)).toBe(true);
-      expect(onRow).not.toHaveBeenCalled();
-    });
-  });
-
   it('inside an Item row, the row does not activate', () => {
     const onRow = vi.fn();
     render(
@@ -739,7 +414,7 @@ describe('a toggle press stops at its trigger', () => {
     expect(onRow).not.toHaveBeenCalled();
   });
 
-  it('without the toggle, a tap still reaches the row (released behavior)', () => {
+  it('a plain Tooltip trigger still passes a tap to the row (released behavior)', () => {
     const onRow = vi.fn();
     render(
       <div onClick={onRow}>

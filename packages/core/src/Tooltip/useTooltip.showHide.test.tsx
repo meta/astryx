@@ -8,9 +8,9 @@
  *   leaving still close it, it is announced once, and a controlled isOpen is
  *   not overridden
  * @position Testing; validates the app toggle path in useTooltip.tsx and
- *   usePressPin.ts
+ *   useTooltipHold.ts
  *
- * SYNC: When useTooltip.tsx or usePressPin.ts changes, update these tests.
+ * SYNC: When useTooltip.tsx or useTooltipHold.ts changes, update these tests.
  */
 
 import {

@@ -8,7 +8,7 @@
  * @output Exports useTouchTrigger hook, isActionTrigger, LayerTouchTrigger type,
  *   tapLandsOnDisabledControl, TOUCH_POINTER_TYPES and useTapStop (internal:
  *   not re-exported from index). Also useTouchTriggerInternal, with the
- *   outside dismissal's arm for the press pin (Core-internal).
+ *   outside dismissal's arm for useTooltip's hold (Core-internal).
  * @position Layer hook; shared touch behavior for useTooltip and useHoverCard
  *
  * SYNC: When modified, update:
@@ -283,8 +283,8 @@ export interface UseTouchTriggerReturn {
 }
 
 /**
- * useTouchTrigger's return plus the outside dismissal's arm, for Core's own
- * press pin (usePressPin). Not exported from the Layer entry point.
+ * useTouchTrigger's return plus the outside dismissal's arm, for useTooltip's
+ * hold (useTooltipHold). Not exported from the Layer entry point.
  *
  * @internal
  */
@@ -292,7 +292,7 @@ export interface UseTouchTriggerInternalReturn extends UseTouchTriggerReturn {
   /**
    * Arms the outside dismissal a tap-open gets: a press that lifts outside
    * the trigger and the layer, or a scroll that starts there, hides it. A
-   * press pin arms it too.
+   * hold arms it too.
    */
   armOutsideDismiss: () => void;
 }
@@ -328,8 +328,8 @@ export function useTouchTrigger(
 }
 
 /**
- * useTouchTrigger, plus the outside dismissal's arm that a press pin uses to
- * close on a press or scroll outside.
+ * useTouchTrigger, plus the outside dismissal's arm that useTooltip's hold
+ * uses to close on a press or scroll outside.
  *
  * @internal
  */
