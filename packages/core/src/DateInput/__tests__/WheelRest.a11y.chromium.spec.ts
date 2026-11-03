@@ -130,12 +130,6 @@ function expectAnimatedTurn(
   expect(between.length, record).toBeGreaterThan(0);
 }
 
-/** A frame the page drew: where the rows sit in the column, and its opacity. */
-interface RowFrame {
-  at: number;
-  opacity: number;
-}
-
 const selectedHour = (hours: Locator) =>
   hours.locator('[role="option"][aria-selected="true"]');
 
@@ -239,33 +233,11 @@ test('under reduced motion an arrow key step lands under its cross-fade, never a
           }
         };
         requestAnimationFrame(sample);
-      }
-    };
-    requestAnimationFrame(sample);
-  });
+      }),
+  );
   await sleep(50);
   await page.keyboard.press('ArrowDown');
-  await expect(selectedHour(hours)).toHaveText('11');
-  await expect(field).toHaveValue('11:00 AM');
-  // The record ends on a drawn frame with the rows moved and the column fully
-  // visible again. A loaded page may draw only a few frames before it.
-  await expect
-    .poll(async () =>
-      page.evaluate(() => {
-        const {seen} = (window as unknown as {stepFrames: {seen: RowFrame[]}})
-          .stepFrames;
-        const last = seen.at(-1);
-        return last != null && last.at !== seen[0].at && last.opacity === 1;
-      }),
-    )
-    .toBe(true);
-  const seen = await page.evaluate(() => {
-    const recorder = (
-      window as unknown as {stepFrames: {seen: RowFrame[]; isDone: boolean}}
-    ).stepFrames;
-    recorder.isDone = true;
-    return recorder.seen;
-  });
+  const seen = await frames;
 
   // The rows never move while they are fully visible: they land under the
   // dip (design:reduced-motion DR2), then fade back in on 11.
@@ -273,6 +245,9 @@ test('under reduced motion an arrow key step lands under its cross-fade, never a
   const moved = seen.find(frame => frame.at !== start);
   expect(moved, JSON.stringify(seen)).toBeDefined();
   expect(moved?.opacity, JSON.stringify(seen)).toBeLessThan(1);
+  expect(seen.at(-1)?.opacity).toBe(1);
+  await expect(selectedHour(hours)).toHaveText('11');
+  await expect(field).toHaveValue('11:00 AM');
 });
 
 test('a focused wheel under a finger shows its whole focus ring, and its rows still fade', async ({

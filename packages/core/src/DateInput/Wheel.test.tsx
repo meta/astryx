@@ -15,6 +15,7 @@
 import {useState} from 'react';
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
+import {fakeAnimate} from '../motion/__tests__/fakeWebAnimation';
 import {
   nearestEnabledIndex,
   ScrollWheel,
@@ -85,7 +86,7 @@ describe('Wheel — where it comes to rest', () => {
     });
     const onChange = vi.fn();
     const scrollTo = vi.fn();
-    const {rerender} = render(
+    const {rerender, unmount} = render(
       <Column label="Hour" options={HOURS} value={value} onChange={onChange} />,
     );
     const scroller = screen.getByRole('listbox', {name: 'Hour'});
@@ -222,16 +223,55 @@ describe('Wheel — where it comes to rest', () => {
       );
     });
 
-    it('cross-fades onto it after a touch: opacity only, 200 ms', () => {
+    it('cross-fades onto it after a touch: opacity only, 200 ms', async () => {
       // A touch screen whose primary pointer is fine (a laptop's): today's
       // column, and a touch release fades (DR2).
+      stubReducedMotion('fine');
+      const {scrollTo, stopOn} = renderWheel(10);
+      const scroller = screen.getByRole('listbox', {name: 'Hour'});
+      fireEvent.pointerDown(scroller, {pointerType: 'touch'});
+      const {animate, animations} = fakeAnimate();
+      scroller.animate = animate;
+      stopOn(7);
+      // Out, then back in after the rows land: opacity alone.
+      expect(animations).toHaveLength(1);
+      expect(animations[0].keyframes.map(frame => frame.opacity)).toEqual([
+        1, 0,
+      ]);
+      expect(scrollTo).not.toHaveBeenCalled();
+      await act(async () => animations[0].finish());
+      // The rows land at the dip's midpoint, with no travel.
+      expect(scrollTo).toHaveBeenCalledWith({top: 9 * ROW, behavior: 'auto'});
+      expect(animations).toHaveLength(2);
+      expect(animations[1].keyframes.map(frame => frame.opacity)).toEqual([
+        0, 1,
+      ]);
+      for (const {keyframes} of animations) {
+        for (const frame of keyframes) {
+          expect(
+            Object.keys(frame).filter(
+              key => key !== 'offset' && key !== 'easing',
+            ),
+          ).toEqual(['opacity']);
+        }
+      }
+      const total = animations.reduce(
+        (sum, {options}) => sum + Number(options.duration),
+        0,
+      );
+      expect(total).toBeLessThanOrEqual(200);
+    });
+
+    it('lands the rows only when the fade-out ends, however late its frame comes', async () => {
+      // design:reduced-motion DR2: a timer at the dip's middle could fire
+      // after the fade-in began, and the rows would move fully visible.
       stubReducedMotion('fine');
       vi.useFakeTimers();
       const {scrollTo, stopOn} = renderWheel(10);
       const scroller = screen.getByRole('listbox', {name: 'Hour'});
       fireEvent.pointerDown(scroller, {pointerType: 'touch'});
-      const animate = vi.fn();
-      scroller.animate = animate as HTMLElement['animate'];
+      const {animate, animations} = fakeAnimate();
+      scroller.animate = animate;
       stopOn(7);
       act(() => {
         vi.advanceTimersByTime(10_000);
@@ -267,11 +307,10 @@ describe('Wheel — where it comes to rest', () => {
       });
     }
 
-    it('lands an arrow key step on a coarse pointer under its cross-fade, not before', () => {
+    it('lands an arrow key step on a coarse pointer under its cross-fade, not before', async () => {
       // A finger gets the touch column (PickerWheel.test.tsx); today's
       // column keeps its dip for a coarse pointer wherever it is rendered.
       stubReducedMotion('coarse');
-      vi.useFakeTimers();
       const {onChange, scrollTo, rerender} = renderWheel(10, ScrollWheel);
       const scroller = screen.getByRole('listbox', {name: 'Hour'});
       const {animate, animations} = fakeAnimate();
@@ -302,7 +341,6 @@ describe('Wheel — where it comes to rest', () => {
       // A finger gets the touch column (PickerWheel.test.tsx); today's
       // column keeps its dip for a coarse pointer wherever it is rendered.
       stubReducedMotion('coarse');
-      vi.useFakeTimers();
       renderWheel(10, ScrollWheel);
       const scroller = screen.getByRole('listbox', {name: 'Hour'});
       const {animate, animations} = fakeAnimate();
@@ -323,9 +361,10 @@ describe('Wheel — where it comes to rest', () => {
     });
 
     it('lands nothing once unmounted within the fade-out', async () => {
-      stubReducedMotion('coarse');
+      stubReducedMotion('fine');
       const {scrollTo, stopOn, unmount} = renderWheel(10);
       const scroller = screen.getByRole('listbox', {name: 'Hour'});
+      fireEvent.pointerDown(scroller, {pointerType: 'touch'});
       const {animate, animations} = fakeAnimate();
       scroller.animate = animate;
       stopOn(7);
