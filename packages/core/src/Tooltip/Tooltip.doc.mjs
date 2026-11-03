@@ -105,7 +105,7 @@ export const docs = {
           name: 'touchTrigger',
           type: "'auto' | 'tap' | 'none'",
           description:
-            'What a tap does where there is no hover. auto opens on tap unless the trigger performs an action of its own (a button, link, or form control), whose tap belongs to the control; an aria-disabled control performs none, so a tap on it opens its reason. tap always opens; use it for an info icon rendered as a button, whose only job is to reveal the tooltip. none never opens on touch.',
+            'What a tap does where there is no hover. auto opens on tap unless the trigger performs an action of its own (a button, link, or form control), whose tap belongs to the control; an aria-disabled control performs none, so a tap on it opens its reason. tap always opens, for a button whose only job is to reveal the tooltip; for an info icon, use InfoTip. none never opens on touch.',
           default: "'auto'",
         },
         {
@@ -357,7 +357,7 @@ export const docsDense = {
         hideDelay: 'Hide delay in ms.',
         focusTrigger: 'Controls when focus events trigger tooltip.',
         touchTrigger:
-          'Tap behavior where there is no hover. auto = tap opens unless the trigger acts (button/link/control; an aria-disabled control does not act); tap = always opens (info icon rendered as a button); none = never on touch.',
+          'Tap behavior where there is no hover. auto = tap opens unless the trigger acts (button/link/control; an aria-disabled control does not act); tap = always opens (a button whose only job is the tooltip; for an info icon use InfoTip); none = never on touch.',
         isEnabled: 'Enables/disables tooltip triggers.',
         onOpenChange:
           'Callback when visibility changes; true=shown, false=hidden.',

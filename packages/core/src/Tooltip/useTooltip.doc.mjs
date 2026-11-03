@@ -45,7 +45,7 @@ export const docs = {
       name: 'touchTrigger',
       type: "'auto' | 'tap' | 'none'",
       description:
-        'What a tap does where there is no hover. auto opens on tap unless the trigger performs an action of its own (an aria-disabled control performs none); tap always opens (an info icon rendered as a button); none never opens on touch.',
+        'What a tap does where there is no hover. auto opens on tap unless the trigger performs an action of its own (an aria-disabled control performs none); tap always opens (a button whose only job is revealing the tooltip); none never opens on touch.',
       default: "'auto'",
     },
     {
