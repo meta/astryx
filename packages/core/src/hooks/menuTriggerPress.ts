@@ -13,8 +13,8 @@
  * @position Only a menu with a trigger reaches this module: DropdownMenu,
  *   MoreMenu and the public useMenuPress. A sub-menu, a context menu, a
  *   Selector's list and a sheet's action list never press a trigger. They do
- *   not bundle the long-press detectors. Only DropdownMenu passes the scroll
- *   probe, which only the touch model reads.
+ *   not bundle the long-press detectors. DropdownMenu and the public
+ *   useMenuPress pass the scroll probe. Only the touch model reads it.
  *
  * SYNC: When modified, update useMenuPress.ts and useMenuPress.test.tsx.
  */

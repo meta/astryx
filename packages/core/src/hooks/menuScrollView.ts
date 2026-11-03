@@ -5,8 +5,8 @@
  * @input The shared native-scroll probe
  * @output Exports isInScrollView, whether a menu trigger is in a scroll view
  * @position Internal to the menu press model; only its touch model reads it.
- *   DropdownMenu passes it to the trigger half, so a press under the pointer
- *   model does not bundle the probe.
+ *   DropdownMenu and the public useMenuPress pass it to the trigger half. A
+ *   menu that never presses a trigger does not bundle it.
  */
 
 import {createNativeScrollProbe} from '../gestures/nativeScroll';
