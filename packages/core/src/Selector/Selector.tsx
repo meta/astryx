@@ -1907,7 +1907,7 @@ export function Selector<T extends SelectorOptionType>(
         ref={attachListbox}
         id={listboxId}
         role="listbox"
-        aria-labelledby={triggerId}
+        aria-label={label}
         {...listboxPress.menuProps}
         {...stylex.props(
           styles.dropdown,
@@ -1927,17 +1927,10 @@ export function Selector<T extends SelectorOptionType>(
       id={listboxId}
       role="listbox"
       {...listboxPress.menuProps}
-      // The bottom sheet is a modal layer, so Chromium drops the trigger
-      // outside it from the accessibility tree and a reference to it yields
-      // no name. Name only this no-search sheet directly from the component's
-      // label; the searchable sheet and the popovers keep the trigger
-      // relationship.
-      aria-label={
-        surface.activePresentation === 'bottom-sheet' ? label : undefined
-      }
-      aria-labelledby={
-        surface.activePresentation === 'bottom-sheet' ? undefined : triggerId
-      }
+      // The trigger shows the value, so it cannot name the list.
+      // A modal sheet removes an outside label from the accessibility tree.
+      // The label element also holds the required marker and the tooltip.
+      aria-label={label}
       aria-activedescendant={
         surface.isOpen && highlightedIndex >= 0
           ? getItemId(highlightedIndex)

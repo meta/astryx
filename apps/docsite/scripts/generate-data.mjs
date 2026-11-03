@@ -78,6 +78,7 @@ import {
   collectPropTypeRefs,
 } from '../src/lib/typeDefinitions.mjs';
 import {generateShadcnRegistryForTarget} from './generate-shadcn-registry.mjs';
+import {createPublishedImportJudge} from './published-exports.mjs';
 import {
   blockRegistryIdentity,
   resolveShadcnRegistryOrigin,
@@ -2714,7 +2715,27 @@ async function main() {
     cliRoot: CLI_ROOT,
     dependencyTag: DOCSITE_TARGET === 'canary' ? 'canary' : null,
     externalDependencySpecs: registryExternalDependencySpecs(),
+    // Production installs the published packages, so an example that imports
+    // a name they lack waits for the release that adds it.
+    publishedImports:
+      DOCSITE_TARGET === 'latest'
+        ? createPublishedImportJudge(CONTENT_ROOT, packages)
+        : null,
   });
+  for (const skip of shadcnCounts.unpublishedImports) {
+    console.log(
+      `  ShadCN registry: not run until a release exports it: ${skip.block} ` +
+        `imports ${skip.names.join(', ')} from ${skip.specifier}, which ` +
+        `${skip.packageName}${skip.version ? ` ${skip.version}` : ''} does not export`,
+    );
+  }
+  for (const kept of shadcnCounts.unreadImports) {
+    console.log(
+      `  ShadCN registry: could not read what ${kept.specifier} exports in ` +
+        `${kept.packageName}${kept.version ? ` ${kept.version}` : ''}; ` +
+        `kept ${kept.block}`,
+    );
+  }
   checkShadcnRouteLock(shadcnCounts.contracts, {
     allowSubset: DOCSITE_TARGET === 'latest',
   });

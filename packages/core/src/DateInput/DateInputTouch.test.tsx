@@ -471,6 +471,25 @@ describe('DateInput — surface selection', () => {
     });
   });
 
+  it.each([
+    ['fa-IR', '۲۱'],
+    ['ar-EG', '٢١'],
+    ['en-US', '21'],
+  ])(
+    'shows month-pane day numbers in the locale digits in %s',
+    (locale, day) => {
+      renderAndOpen(
+        <InternationalizationProvider locale={locale}>
+          <Controlled initial="2026-03-21" />
+        </InternationalizationProvider>,
+      );
+      const march21 = document.querySelector(
+        'button[data-date="2026-03-21"]:not([data-outside])',
+      );
+      expect(march21).toHaveTextContent(new RegExp(`^${day}$`));
+    },
+  );
+
   it('forwards ref to the input on both surfaces', () => {
     const desktopRef = {current: null as HTMLInputElement | null};
     setViewport('desktop');

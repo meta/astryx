@@ -256,7 +256,9 @@ describe('the press reaches the surface the finger landed on', () => {
   it('paints a Space press on a tracked action where the primary pointer is fine: a tracked action takes no `:active` paint', () => {
     expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
     const button = pressable('button');
-    for (const [name, value] of Object.entries(pressGroupItemProps)) {
+    for (const [name, value] of Object.entries(
+      pressGroupItemProps(['touch', 'pen']),
+    )) {
       button.setAttribute(name, value);
     }
     rows[0].appendChild(button);
@@ -312,7 +314,9 @@ describe('an action group whose own tracker paints its actions', () => {
     const root = document.createElement('div');
     const actions = [pressable('button'), pressable('button')];
     for (const action of actions) {
-      for (const [name, value] of Object.entries(pressGroupItemProps)) {
+      for (const [name, value] of Object.entries(
+        pressGroupItemProps(['touch', 'pen']),
+      )) {
         action.setAttribute(name, value);
       }
       root.appendChild(action);
@@ -759,22 +763,33 @@ describe('a phone or tablet paints a mouse or Space press itself', () => {
     }
   });
 
-  function groupAction(row: HTMLElement): HTMLButtonElement {
+  function groupAction(
+    row: HTMLElement,
+    pointerTypes: ReadonlyArray<string> = ['touch', 'pen'],
+  ): HTMLButtonElement {
     const action = focusedButton(row);
-    for (const [name, value] of Object.entries(pressGroupItemProps)) {
+    for (const [name, value] of Object.entries(
+      pressGroupItemProps(pointerTypes),
+    )) {
       action.setAttribute(name, value);
     }
     return action;
   }
 
-  it("leaves a mouse press on an action its group tracks to the group's tracker", () => {
-    const action = groupAction(rows[1]);
+  it('leaves a mouse press to a tracker that follows a mouse: it paints its own action', () => {
+    const action = groupAction(rows[1], ['mouse', 'pen', 'touch']);
     press(action, 'pointerdown', 10, 100, 'mouse');
     expect(action.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
-    // The tracker's own paint is left alone through the release.
-    action.setAttribute(PRESSED_ATTRIBUTE, 'on');
     press(action, 'pointerup', 10, 100, 'mouse');
+    expect(action.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('paints a mouse press on an action whose tracker follows a finger and a pen only: that tracker takes no mouse press', () => {
+    const action = groupAction(rows[1]);
+    press(action, 'pointerdown', 10, 100, 'mouse');
     expect(action.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    press(action, 'pointerup', 10, 100, 'mouse');
+    expect(action.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
   });
 
   it('still paints a Space press on a focused action its group tracks: the group tracks pointers only', () => {

@@ -24,6 +24,11 @@ import ts from 'typescript';
 import {registryItemSchema, registrySchema} from 'shadcn/schema';
 import {stripCopyrightHeader} from '../../../packages/cli/foundation/text/copyright-header.mjs';
 import {
+  missingPublishedImport,
+  packageExportsSpecifier,
+  packageNameFromSpecifier,
+} from './published-exports.mjs';
+import {
   MARKED_VIDEO_PLACEHOLDER,
   replaceTemplateDemos,
 } from '../../../packages/cli/foundation/discovery/template-adapter.mjs';
@@ -59,34 +64,6 @@ class UnpublishedAstryxDependencyError extends Error {
     this.name = 'UnpublishedAstryxDependencyError';
     this.packageName = packageName;
   }
-}
-
-function packageNameFromSpecifier(specifier) {
-  if (specifier.startsWith('@')) {
-    return specifier.split('/').slice(0, 2).join('/');
-  }
-  return specifier.split('/')[0];
-}
-
-function packageExportsSpecifier(pkg, specifier) {
-  const packageExports = pkg.packageExports;
-  if (packageExports == null) return true;
-
-  const subpath = specifier.slice(pkg.name.length);
-  const exportKey = subpath ? `.${subpath}` : '.';
-  if (typeof packageExports === 'string' || Array.isArray(packageExports)) {
-    return exportKey === '.';
-  }
-  if (Object.hasOwn(packageExports, exportKey)) return true;
-
-  return Object.keys(packageExports).some(key => {
-    const wildcardIndex = key.indexOf('*');
-    if (wildcardIndex === -1) return false;
-    return (
-      exportKey.startsWith(key.slice(0, wildcardIndex)) &&
-      exportKey.endsWith(key.slice(wildcardIndex + 1))
-    );
-  });
 }
 
 function readImportSpecifiers(source, fileName) {
@@ -627,6 +604,7 @@ export function buildShadcnRegistry({
   dependencyTag = null,
   externalDependencySpecs = {},
   skipBlocksWithUnavailableComponents = false,
+  publishedImports = null,
 }) {
   const cliPackage = packages.find(pkg => pkg.name === '@astryxdesign/cli');
   const sourceVersion = dependencyTag ?? cliPackage?.version;
@@ -673,6 +651,8 @@ export function buildShadcnRegistry({
   const packageCatalog = new Map(packages.map(pkg => [pkg.name, pkg]));
   const blockItems = [];
   let skippedUnpublishedBlocks = 0;
+  const unpublishedImports = [];
+  const unreadImports = [];
   for (const block of blocks.map(withAuthoredSource)) {
     // A released subpath can still lack a named component added after the last
     // package release. Production blocks must satisfy both contracts: the
@@ -696,6 +676,37 @@ export function buildShadcnRegistry({
     if (unpublishedComponentImport) {
       skippedUnpublishedBlocks++;
       continue;
+    }
+    // A published subpath can also lack a name a later release adds there,
+    // such as a new function. The block returns once a release exports it.
+    const {missing, unread} =
+      publishedImports == null
+        ? {missing: null, unread: []}
+        : missingPublishedImport(block.source, publishedImports);
+    if (missing != null) {
+      const pkg = packageCatalog.get(
+        packageNameFromSpecifier(missing.specifier),
+      );
+      unpublishedImports.push({
+        block: block.dirName,
+        ...missing,
+        packageName: pkg?.name ?? packageNameFromSpecifier(missing.specifier),
+        version: pkg?.version ?? null,
+      });
+      skippedUnpublishedBlocks++;
+      continue;
+    }
+    // A block stays when its own packages' declarations cannot be read. The
+    // build names it, so a broken check does not read as a pass.
+    for (const specifier of unread) {
+      const pkg = packageCatalog.get(packageNameFromSpecifier(specifier));
+      if (pkg == null) continue;
+      unreadImports.push({
+        block: block.dirName,
+        specifier,
+        packageName: pkg.name,
+        version: pkg.version ?? null,
+      });
     }
     try {
       blockItems.push(
@@ -764,6 +775,8 @@ export function buildShadcnRegistry({
   return {
     registry,
     items,
+    unpublishedImports,
+    unreadImports,
     counts: {
       components: componentItems.filter(
         item => item.astryx.kind === 'component',
@@ -797,6 +810,8 @@ export function generateShadcnRegistryForTarget({target, outDir, ...options}) {
     outDir,
     ...options,
     skipBlocksWithUnavailableComponents: target === 'latest',
+    publishedImports:
+      target === 'latest' ? (options.publishedImports ?? null) : null,
   });
 }
 
@@ -810,6 +825,7 @@ export function generateShadcnRegistry({
   dependencyTag,
   externalDependencySpecs,
   skipBlocksWithUnavailableComponents,
+  publishedImports,
 }) {
   const result = buildShadcnRegistry({
     packages,
@@ -820,6 +836,7 @@ export function generateShadcnRegistry({
     dependencyTag,
     externalDependencySpecs,
     skipBlocksWithUnavailableComponents,
+    publishedImports,
   });
   fs.rmSync(outDir, {recursive: true, force: true});
   fs.mkdirSync(outDir, {recursive: true});
@@ -831,6 +848,8 @@ export function generateShadcnRegistry({
   }
   return {
     ...result.counts,
+    unpublishedImports: result.unpublishedImports,
+    unreadImports: result.unreadImports,
     itemNames: new Set(result.items.map(item => item.name)),
     itemPaths: new Set(result.items.map(item => item.astryx.path)),
     routes: result.items.flatMap(item => [
