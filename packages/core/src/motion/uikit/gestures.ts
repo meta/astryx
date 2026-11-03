@@ -253,8 +253,8 @@ export const UIKIT_PRESS = {
 
 /**
  * UIMenu presented by a button whose menu is its primary action: how far the
- * finger that opened it travels before it picks. The menu press model reads
- * it for every menu surface.
+ * finger that opened it travels before it picks. DropdownMenu's press model
+ * reads a copy in `hooks/menuPressValues.ts`.
  */
 export const UIKIT_MENU_PRESS = {
   /**
