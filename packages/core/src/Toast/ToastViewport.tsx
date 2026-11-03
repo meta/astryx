@@ -61,7 +61,13 @@ registerEnglishFallback(english);
 const SAFE_AREA_INLINE_START = `max(${spacingVars['--spacing-4']}, env(safe-area-inset-left, 0px))`;
 const SAFE_AREA_INLINE_END = `max(${spacingVars['--spacing-4']}, env(safe-area-inset-right, 0px))`;
 const SAFE_AREA_BLOCK_START = `max(${spacingVars['--spacing-4']}, env(safe-area-inset-top, 0px))`;
-const SAFE_AREA_BLOCK_END = `max(${spacingVars['--spacing-4']}, env(safe-area-inset-bottom, 0px))`;
+// On an iPhone, a downward swipe that starts in the bottom inset can pull the
+// whole screen down. Keep the toast clear of that inset.
+const SAFE_AREA_BLOCK_END = `calc(${spacingVars['--spacing-4']} + env(safe-area-inset-bottom, 0px))`;
+// Safari reports the inset only to a page with `viewport-fit=cover`. Under a
+// coarse pointer the gutter clears 34 px anyway: a Face ID iPhone's bottom
+// inset in portrait.
+const SAFE_AREA_BLOCK_END_TOUCH = `calc(${spacingVars['--spacing-4']} + max(env(safe-area-inset-bottom, 0px), 34px))`;
 const TOAST_EDGE_DRIFT = spacingVars['--spacing-2'];
 const TOAST_EDGE_DRIFT_NEGATIVE = `calc(-1 * ${TOAST_EDGE_DRIFT})`;
 
@@ -76,7 +82,10 @@ const styles = stylex.create({
     boxSizing: 'border-box',
     flexDirection: 'column',
     paddingBlockStart: SAFE_AREA_BLOCK_START,
-    paddingBlockEnd: SAFE_AREA_BLOCK_END,
+    paddingBlockEnd: {
+      default: SAFE_AREA_BLOCK_END,
+      '@media (pointer: coarse)': SAFE_AREA_BLOCK_END_TOUCH,
+    },
     paddingInlineStart: {
       default: SAFE_AREA_INLINE_START,
       ':is([dir="rtl"] *)': SAFE_AREA_INLINE_END,
