@@ -1919,22 +1919,35 @@ test.describe('where the primary pointer is fine', () => {
     });
   }
 
-  /** The pan's log entries after `deltas`, one wheel each, and a quiet 300 ms. */
+  /**
+   * The page's log after `deltas`, one wheel each, and a quiet 300 ms, with
+   * each wheel's time as the page received it.
+   */
   async function trackpadRun(page: Page, deltas: number[]) {
     const driver = await webInputDriver(page);
     test.skip(!driver.wheels, WHEEL_SKIP);
     const at = await center(page, 'card');
+    await page.evaluate(() => {
+      const times: number[] = [];
+      (window as unknown as {__wheelTimes: number[]}).__wheelTimes = times;
+      window.addEventListener('wheel', event => times.push(event.timeStamp), {
+        capture: true,
+        passive: true,
+      });
+    });
     for (const dx of deltas) {
       await driver.wheel({...at, dx});
     }
     await page.waitForTimeout(300);
-    const log = await page.evaluate(() =>
-      window.__wheelLog.filter(entry => entry.startsWith('pan:')),
+    const entries = await page.evaluate(() => window.__wheelLog);
+    const times = await page.evaluate(
+      () => (window as unknown as {__wheelTimes: number[]}).__wheelTimes,
     );
+    const log = entries.filter(entry => entry.startsWith('pan:'));
     const moves = log
       .filter(entry => /^pan:(changed|ended):/.test(entry))
       .map(entry => Number(entry.split(':')[2]));
-    return {log, moves};
+    return {entries, log, moves, times};
   }
 
   test("keeps a trackpad pan moving at the fingers' speed through the splitter's undecided stretch and lets it go at the lift still moving: no stall (spec:AST-094 FR43)", async ({
@@ -1944,11 +1957,29 @@ test.describe('where the primary pointer is fine', () => {
     test.skip(browserName === 'chromium', TRACKPAD_SKIP);
     await trackpadPanPage(page);
     // Four steady wheels, four shrinking ones (the lift is read at the
-    // fourth), then momentum.
-    const {log, moves} = await trackpadRun(
+    // fourth, wheel 7), then momentum.
+    const lift = 7;
+    const {entries, times} = await trackpadRun(
       page,
       [12, 12, 12, 12, 11, 10, 9, 8, 7, 6, 5, 4],
     );
+    // The splitter starts a new gesture at a momentum pause of 50 ms or more.
+    // A loaded page can deliver one, and the proof then judges the wheels
+    // before it. Each wheel logs itself after the host handled it. WebKit's
+    // injected wheels carry only real dispatch time, so a harness that cannot
+    // keep pace can still stall the finger phase and fail this proof.
+    const pause = times.findIndex(
+      (time, i) => i > lift && time - times[i - 1] >= 50,
+    );
+    const wheelAt = entries.flatMap((entry, i) =>
+      entry.startsWith('wheel:') ? [i] : [],
+    );
+    const stream =
+      pause < 0 ? entries : entries.slice(0, wheelAt[pause - 1] + 1);
+    const log = stream.filter(entry => entry.startsWith('pan:'));
+    const moves = log
+      .filter(entry => /^pan:(changed|ended):/.test(entry))
+      .map(entry => Number(entry.split(':')[2]));
     const ended = log.filter(entry => entry.startsWith('pan:ended:'));
     expect(ended).toHaveLength(1);
     // The fingers' travel at their last steady wheel is -38 (48 px past the
@@ -1960,17 +1991,27 @@ test.describe('where the primary pointer is fine', () => {
       }
     }
     expect(moves.at(-1)).toBeLessThan(-38 - 18);
-    // Let go still moving, and the momentum after it moved nothing.
-    expect(Math.abs(Number(ended[0].split(':')[3]))).toBeGreaterThan(100);
-    expect(
-      log.slice(log.indexOf(ended[0]) + 1).map(entry => entry.split(':')[1]),
-    ).toEqual(['possible']);
+    // Let go still moving, and the momentum after it moved nothing. A stall
+    // lets go near 0. The floor is a quarter of the fingers' speed as the page
+    // delivered their shrinking wheels, and at most 100 px/s.
+    const fingers =
+      ((11 + 10 + 9 + 8) / (times[lift] - times[lift - 4])) * 1000;
+    expect(Math.abs(Number(ended[0].split(':')[3]))).toBeGreaterThan(
+      Math.min(100, fingers / 4),
+    );
+    const after = log
+      .slice(log.indexOf(ended[0]) + 1)
+      .map(entry => entry.split(':')[1]);
+    if (pause < 0) {
+      expect(after).toEqual(['possible']);
+    } else {
+      expect(after.filter(state => state !== 'possible')).toEqual([]);
+    }
     // No wheel reached the page, the momentum after the lift included
     // (spec:AST-094 FR43).
-    const wheels = await page.evaluate(() =>
-      window.__wheelLog.filter(entry => entry.startsWith('wheel:')),
+    expect(stream.filter(entry => entry.startsWith('wheel:'))).toEqual(
+      Array.from({length: pause < 0 ? 12 : pause}, () => 'wheel:true'),
     );
-    expect(wheels).toEqual(Array.from({length: 12}, () => 'wheel:true'));
   });
 
   test('absorbs what the undecided stretch showed when the fingers carry on: never a step back, and the pan ends on their travel (spec:AST-094 FR43)', async ({
