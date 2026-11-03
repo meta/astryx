@@ -393,18 +393,45 @@ test('a wheel over a tooltip that fits still scrolls the page', async ({
   await page.mouse.move((s.left + s.right) / 2, (s.top + s.bottom) / 2, {
     steps: 4,
   });
+  // Read the tooltip as the page starts to move. The scroll then carries the
+  // trigger and the tooltip out from under the resting pointer, which is a
+  // leave, so the tooltip closes after its hover bridge (Tooltip FR3); how
+  // soon a check after the scroll runs is only the runner's speed.
+  await page.evaluate(sel => {
+    window.addEventListener(
+      'scroll',
+      () => {
+        const el = document.querySelector(sel);
+        const box = el?.getBoundingClientRect();
+        (window as unknown as {__atScroll: unknown}).__atScroll = {
+          open: box != null && box.width > 0 && box.height > 0,
+          scrollHeight: el?.scrollHeight ?? 0,
+          clientHeight: el?.clientHeight ?? 0,
+        };
+      },
+      {once: true},
+    );
+  }, TOOLTIP);
   const before = await page.evaluate(() => window.scrollY);
   await page.mouse.wheel(0, 300);
   await expect
     .poll(async () => page.evaluate(() => window.scrollY))
     .toBeGreaterThan(before);
-  // It has no scroll range of its own, and it is still open.
-  const metrics = await page.evaluate(sel => {
-    const el = document.querySelector(sel) as HTMLElement;
-    return {scrollHeight: el.scrollHeight, clientHeight: el.clientHeight};
-  }, TOOLTIP);
-  expect(metrics.scrollHeight).toBe(metrics.clientHeight);
-  await expect(page.getByRole('tooltip')).toBeVisible();
+  // The wheel left it open, and it has no scroll range of its own.
+  const atScroll = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __atScroll: {
+            open: boolean;
+            scrollHeight: number;
+            clientHeight: number;
+          };
+        }
+      ).__atScroll,
+  );
+  expect(atScroll.open).toBe(true);
+  expect(atScroll.scrollHeight).toBe(atScroll.clientHeight);
 });
 
 test('a horizontal wheel over a tall tooltip still scrolls a wide page', async ({

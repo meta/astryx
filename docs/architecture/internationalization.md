@@ -14,7 +14,9 @@ applies_to:
     packages/core/src/i18n/,
     packages/core/locales/,
     packages/core/src/i18n/generated-locales/,
+    packages/core/src/i18n/generated-english/,
     scripts/generate-i18n-runtime.mjs,
+    scripts/i18n-english-fallback.mjs,
     packages/build/src/vite.ts,
     packages/core/src/utils/plainDate.ts,
     packages/core/src/utils/dateParser.ts,
@@ -22,6 +24,7 @@ applies_to:
     packages/core/src/Timestamp/tooltipEntries.ts,
     packages/core/src/utils/characters.ts,
     packages/core/src/hooks/useStreamingText.ts,
+    packages/core/src/utils/typeaheadMatch.ts,
     internal/eslint-plugin-astryx/,
     scripts/check-i18n-catalog.mjs,
   ]
@@ -34,6 +37,8 @@ verified_by:
     packages/core/src/i18n/__tests__/getLocaleDirection.test.ts,
     packages/core/src/i18n/__tests__/useCollator.test.tsx,
     packages/core/src/i18n/useTranslator.test.tsx,
+    packages/core/src/i18n/__tests__/englishFallback.test.ts,
+    scripts/i18n-english-fallback.test.mjs,
     scripts/check-i18n-catalog.test.mjs,
     scripts/generate-i18n-runtime.test.mjs,
     packages/build/src/vite.test.ts,
@@ -42,6 +47,9 @@ verified_by:
     internal/eslint-plugin-astryx/no-raw-intl-locale.test.mjs,
     packages/core/src/PowerSearch/formatFilterValue.test.ts,
     packages/core/src/Timestamp/tooltipEntries.test.ts,
+    packages/core/src/utils/typeaheadMatch.test.ts,
+    packages/core/src/hooks/useTypeahead.test.tsx,
+    packages/core/src/hooks/useTreeFocus.test.tsx,
   ]
 deciding_specs: []
 ---
@@ -54,21 +62,23 @@ deciding_specs: []
 {
   "scope": "global",
   "triggers": {
-    "accessibility": ["INV1", "INV1a", "INV7"],
+    "accessibility": ["INV1", "INV1a", "INV3a", "INV7"],
     "behavior": [
       "INV1",
       "INV1a",
       "INV3",
+      "INV3a",
       "INV4",
       "INV5",
       "INV7",
       "INV8",
       "INV9",
-      "INV10"
+      "INV10",
+      "INV17"
     ],
     "compatibility": ["INV2", "INV9", "INV10"],
     "layout": ["INV11", "INV12"],
-    "public-api": ["INV1", "INV1a", "INV2", "INV7", "INV9", "INV10"],
+    "public-api": ["INV1", "INV1a", "INV2", "INV3a", "INV7", "INV9", "INV10"],
     "react-runtime": ["INV3", "INV4", "INV11", "INV12", "INV13"]
   }
 }
@@ -76,15 +86,15 @@ deciding_specs: []
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Governing contract      | `component:InternationalizationProvider` owns provider behavior. This record defines the intended internationalization contract and the implemented runtime-catalog delivery boundary; it does not certify every existing consumer's conformance.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| System behavior         | Astryx-owned strings resolve through per-locale overrides, supplied catalogs, then shipped English, walking exact → parent locale. Locale-sensitive operations (date, time, number, list, collation) receive the provider locale directly, with no catalog or override step; legacy pure helpers with an optional locale default deterministically to English, except the known `currency()` gap recorded under INV9. Without a provider the result is deterministic English. Authored catalogs are rich (`defaultMessage` + `description`); shipped runtime catalogs are generated string maps derived from them. Messages are ICU MessageFormat 1 strings. `PlainDate` stays Gregorian. Rendered direction comes from the DOM.                                                                            |
-| End-user impact         | People using a non-English locale see Astryx interface text, formats, and sort order in that locale wherever a translation exists and English otherwise; layout and mirroring follow the document direction they are reading in.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Builder impact          | Render one `InternationalizationProvider` and keep DOM `dir` aligned with it. Import a shipped locale from `@astryxdesign/core/locales/<tag>.generated.js` (string map) or `<tag>.json` (rich); both are accepted. Pass the provider locale to Astryx-owned `Intl` calls. Add Astryx strings to `en.json` with a description; never edit generated modules. No separate locale packages and no second Astryx runtime.                                                                                                                                                                                                                                                                                                                                                                                       |
-| Compatibility/readiness | Released provider, hooks, subpath, rich JSON exports, and the rich context shape are preserved; `RuntimeCatalog`, `ProviderMessagesByLocale`, and the `*.generated.js` exports are additive. A server/RSC translation runtime and an external-runtime adapter remain separate decisions (INV13, INV14).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Review checks           | Reject Astryx-owned text or announcements built from literals, concatenation, or hand-rolled plurals instead of a catalog message (INV1a); locale-sensitive `Intl` or prototype calls outside the named shared helpers, or a public date helper called without its provider-locale argument (INV8); a parallel or replacement runtime without a migration decision (INV2); implicit host-locale reads (INV3); non-string message output (INV7); a translation catalog that adds stale keys or changes an ICU contract (INV6); a hand-edited, committed, or description-carrying generated module, or a changed rich export path (INV15); locale silently changing `PlainDate` calendar semantics (INV10); render-time provider direction driving geometry (INV11); the provider mutating DOM `dir` (INV12). |
-| Governing rules         | No deciding system spec.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Area                    | Contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Governing contract      | `component:InternationalizationProvider` owns provider behavior. This record defines the intended internationalization contract and the implemented runtime-catalog delivery boundary; it does not certify every existing consumer's conformance.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| System behavior         | Astryx-owned strings resolve through per-locale overrides, supplied catalogs, then shipped English, walking exact → parent locale. Locale-sensitive operations (date, time, number, list, collation) receive the provider locale directly, with no catalog or override step; legacy pure helpers with an optional locale default deterministically to English, except the known `currency()` gap recorded under INV9. Without a provider the result is deterministic English. Authored catalogs are rich (`defaultMessage` + `description`); shipped runtime catalogs are generated string maps derived from them. Messages are ICU MessageFormat 1 strings. `PlainDate` stays Gregorian. Rendered direction comes from the DOM.                                                                                                                                                                                                   |
+| End-user impact         | People using a non-English locale see Astryx interface text, formats, and sort order in that locale wherever a translation exists and English otherwise; layout and mirroring follow the document direction they are reading in.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Builder impact          | Render one `InternationalizationProvider` and keep DOM `dir` aligned with it. Import a shipped locale from `@astryxdesign/core/locales/<tag>.generated.js` (string map) or `<tag>.json` (rich); both are accepted. Pass the provider locale to Astryx-owned `Intl` calls. Add Astryx strings to `en.json` with a description; never edit generated modules. No separate locale packages and no second Astryx runtime.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| Compatibility/readiness | Released provider, hooks, subpath, rich JSON exports, and the rich context shape are preserved; `RuntimeCatalog`, `ProviderMessagesByLocale`, and the `*.generated.js` exports are additive. A server/RSC translation runtime and an external-runtime adapter remain separate decisions (INV13, INV14). `useTypeahead` and `useTreeFocus` match through INV17's shared fold, which replaced their released plain "starts with" matching.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Review checks           | Reject Astryx-owned text or announcements built from literals, concatenation, or hand-rolled plurals instead of a catalog message (INV1a); locale-sensitive `Intl` or prototype calls outside the named shared helpers, or a public date helper called without its provider-locale argument (INV8); a parallel or replacement runtime without a migration decision (INV2); implicit host-locale reads (INV3); non-string message output (INV7); a translation catalog that adds stale keys or changes an ICU contract (INV6); a hand-edited, committed, or description-carrying generated module, or a changed rich export path (INV15); locale silently changing `PlainDate` calendar semantics (INV10); render-time provider direction driving geometry (INV11); the provider mutating DOM `dir` (INV12); type-to-select that misses a marked or stroked first letter, or a fold that reaches sorting or displayed text (INV17). |
+| Governing rules         | No deciding system spec.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 This table is a review projection; the body below is authoritative.
 
@@ -145,7 +155,10 @@ Astryx-owned string
   → provider-bound translator
   → exact locale
   → parent locale(s)
-  → shipped English fallback (generated English runtime catalog)
+  → shipped English fallback
+      → each Core module's derived English map for the keys it names
+        (packages/core/src/i18n/generated-english/, ignored; scripts/i18n-english-fallback.mjs)
+      → the whole generated English catalog on public paths that resolve any Astryx key
 
 Locale-sensitive formatting or comparison
   → active provider locale passed directly to the shared formatter
@@ -186,6 +199,21 @@ for all 30 shipped locales plus `pseudo`.
 - **INV3 — No provider is deterministic English.** Components used outside a
   provider resolve Astryx strings from the shipped English catalog, expose locale
   `en`, direction `ltr`, and do not read the browser or host locale implicitly.
+- **INV3a — Factories take an option for each string they announce or show.**
+  A public non-React factory (`architecture:public-component-api` INV22) that
+  announces or shows Astryx text (a live-region announcement, an `aria-*` or
+  `title` value, or a visible label) takes an option for each such string. A
+  factory with one string takes a flat optional string option for it, such as
+  `createResizable`'s `collapsedLabel` (a caller-supplied accessible name that
+  already exists as its own option, such as `label`, stays flat and does not
+  count toward the factory's strings); a factory with more than one groups
+  them under one optional `labels` object, each key optional. An absent option
+  or key falls back to the catalog message, translated when the factory's
+  React wrapper runs under a provider and English without one; a given string
+  replaces that message, including over a provider's translation. No factory
+  takes a translator: translation comes only from a provider. The rule covers
+  INV22 factories. Per-message options are the factory mechanism; the
+  external-runtime adapter (INV14) stays a separate, broader decision.
 - **INV4 — Runtime locale changes are live.** Re-rendering the provider with a new
   locale, messages, overrides, or direction updates consumers in that subtree.
   Astryx does not persist or select the application's locale.
@@ -285,14 +313,32 @@ for all 30 shipped locales plus `pseudo`.
   authored catalog changes, and an edit that lands during the initial generation
   queues another pass rather than being missed. A rich entry without a string
   `defaultMessage` fails generation; runtime maps carry no `description` or
-  other metadata. The built-in English fallback imports the generated English
-  module. Neither path, shape, nor export of the rich catalogs changes because
-  generated modules exist.
+  other metadata. The built-in English fallback reads English derived from the
+  generated English module: each Core module that names catalog keys registers
+  a derived map of exactly those keys, and public paths that resolve any Astryx
+  key register the whole module. Neither path, shape, nor export of the rich
+  catalogs changes because generated modules exist.
 - **INV16 — Standard build integration resolves both catalog forms.** The Astryx
   Vite plugin resolves `@astryxdesign/core/locales/<tag>.json` to the rich
   authored file and `@astryxdesign/core/locales/<tag>.generated.js` to the
   generated source module in source mode, so applications and the repository's
   own apps import either form the same way in development and production.
+- **INV17 — Type-to-select ignores marks.** Everywhere Core moves to an item
+  when a person types its first letters, the typed letters and each item's label
+  are compared after folding, the same way in every locale. That covers the
+  public `useTypeahead` and `useTreeFocus` hooks and every collection with
+  type-to-select, including Selector, MultiSelector, DropdownMenu, ContextMenu
+  and TreeList. Folding ignores case; removes the combining marks left by
+  canonical decomposition (U+0300–U+036F), in any script; maps exactly six Latin
+  letters with a stroke or bar to their base letter (đ→d, ł→l, ø→o, ħ→h, ŧ→t,
+  ƀ→b), in either case; and maps Turkish dotless ı and dotted İ to i. So "d"
+  reaches "Đào", "a" reaches "Ánh" and "Ä", "l" reaches "Łódź", and "i" or "ı"
+  reaches "Isparta" and "İzmir". When the typed letters include a diacritic, a
+  stroked letter, ı or İ, items that match them exactly come first; for that
+  preference case pairs the Turkish way, ı with I and İ with i, so "ı" over
+  "İzmir, Isparta" lands on Isparta and "İ" over "Isparta, İzmir" lands on
+  İzmir. INV17 does not change sorting, search filtering or displayed text. One
+  shared folding helper serves every path, so they all match the same way.
 
 ## Change coupling
 
@@ -317,6 +363,7 @@ inferred from an implementation pull request.
   `packages/core/src/Timestamp/formatRelativeTime.ts`,
   `packages/core/src/PowerSearch/formatFilterValue.ts`,
   `packages/core/src/NumberInput/numberParser.ts`,
+  `packages/core/src/utils/timeFormat.ts`,
   `packages/core/src/i18n/useCollator.ts`, `packages/charts/src/formatters.ts` —
   shared locale-sensitive formatters, parsers, and collation. Component consumers
   pass the provider locale; naming a module here does not approve a duplicate
@@ -331,6 +378,10 @@ inferred from an implementation pull request.
   `packages/core/src/hooks/useStreamingText.ts` — locale-independent grapheme
   segmentation; this does not admit locale-sensitive word/sentence segmentation
   without the provider-locale helper contract.
+- `packages/core/src/utils/typeaheadMatch.ts` — the shared fold that
+  type-to-select matching uses (INV17): it ignores marks and folds stroked
+  letters and dotless or dotted i, and changes no sorting, filtering, or
+  displayed text.
 - `packages/core/locales/en.json` — source key set, default English messages, and
   translator descriptions.
 - `packages/core/locales/*.json` — partial translated catalogs, rich shape, the
@@ -342,6 +393,15 @@ inferred from an implementation pull request.
 - `packages/core/src/i18n/generated-locales/*.generated.ts` — derived runtime
   catalogs, ignored by version control, published as
   `@astryxdesign/core/locales/*.generated.js`.
+- `scripts/i18n-english-fallback.mjs`,
+  `packages/core/src/i18n/englishFallback.ts`,
+  `packages/core/src/i18n/fullEnglishFallback.ts` — derive each Core module's
+  English map into `packages/core/src/i18n/generated-english/` (ignored,
+  internal, not exported), check that every module naming catalog keys
+  registers its own map, and name the public paths that register the whole
+  catalog: the public `useTranslator`, the public `InternationalizationContext`
+  export, and PowerSearch operator labels. No other Core module imports the
+  public `useTranslator` or the public context export.
 - `packages/core/package.json` `exports` — publishes both `./locales/*.json` and
   `./locales/*.generated.js`.
 - `packages/build/src/vite.ts` — resolves both catalog import forms in source
@@ -375,14 +435,16 @@ consumer or every edge case conforms. Helper admission defines responsibility;
 review and regression tests verify caller behavior. Missing evidence or violating
 callers remain conformance work and do not relax INV1a, INV8, INV9, or INV10.
 
-| Invariant          | Evidence                                                                                                                                                   | Failure signal                                                                                                                                                                                                |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| INV1, INV1a, INV7  | hardcoded-string lint, catalog tests, component translation tests with a non-English provider                                                              | Astryx-owned text bypasses the catalog, an announcement or count is assembled from fragments or a hand-rolled plural, or non-string output reaches visible/AT attributes                                      |
-| INV2, INV13, INV14 | export drift checks, public i18n tests, compatibility review                                                                                               | A parallel/replacement runtime lands without migration, or client hooks claim server behavior                                                                                                                 |
-| INV3–INV5          | resolver and provider rerender tests                                                                                                                       | no-provider output depends on the host, locale swaps stay stale, fallback order changes, or malformed-locale behavior is described as graceful                                                                |
-| INV6               | `check:i18n-catalog`, key-format lint, and focused mutation tests                                                                                          | stale/malformed keys, malformed ICU, or source/translation runtime-contract drift passes CI                                                                                                                   |
-| INV15              | generator tests, `check:i18n-runtime`, package-export drift check, provider/resolver runtime-catalog tests                                                 | a generated module carries descriptions or is committed, a malformed entry projects instead of failing, a rich export path changes, or a `RuntimeCatalog` input is rejected or leaks a non-rich context shape |
-| INV16              | build-plugin unit and real-build tests                                                                                                                     | a rich or generated locale import fails to resolve through the standard plugin                                                                                                                                |
-| INV8, INV9         | raw-Intl-locale lint (module allowlist plus date-helper locale-argument check) and provider-locale regression tests, including a server/client render pair | Astryx output follows the host locale, raw `Intl` appears outside a named formatter module, an owned call omits the locale argument, or server and client output differ for the same provider locale          |
-| INV10              | PlainDate and built-in date formatter tests, including locales with non-Gregorian defaults                                                                 | locale selects a non-Gregorian built-in date display, changes PlainDate calendar semantics, or loses the explicit low-level display override                                                                  |
-| INV11, INV12       | direction helper/provider tests plus rendered RTL audit                                                                                                    | component layout reads provider direction instead of the region, provider mutates DOM, or overrides stop composing                                                                                            |
+| Invariant          | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Failure signal                                                                                                                                                                                                                                                                                                                                                                |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INV1, INV1a, INV7  | hardcoded-string lint, catalog tests, component translation tests with a non-English provider                                                                                                                                                                                                                                                                                                                                                                                                                                   | Astryx-owned text bypasses the catalog, an announcement or count is assembled from fragments or a hand-rolled plural, or non-string output reaches visible/AT attributes                                                                                                                                                                                                      |
+| INV2, INV13, INV14 | export drift checks, public i18n tests, compatibility review                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | A parallel/replacement runtime lands without migration, or client hooks claim server behavior                                                                                                                                                                                                                                                                                 |
+| INV3–INV5          | resolver and provider rerender tests                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | no-provider output depends on the host, locale swaps stay stale, fallback order changes, or malformed-locale behavior is described as graceful                                                                                                                                                                                                                                |
+| INV3a              | factory unit tests: a flat option or `labels` key replaces its message, including under a provider, and outside a provider its absence announces or shows shipped English; wrapper tests: under a non-English provider its absence gives the translation. Evidence gap: no factory test covers a flat option or `labels` key yet                                                                                                                                                                                                | a factory announces or shows Astryx text that no option or `labels` key can replace, groups more than one string outside one `labels` object, takes a translator, ignores a given string, or gives something other than the catalog message when it is absent                                                                                                                 |
+| INV6               | `check:i18n-catalog`, key-format lint, and focused mutation tests                                                                                                                                                                                                                                                                                                                                                                                                                                                               | stale/malformed keys, malformed ICU, or source/translation runtime-contract drift passes CI                                                                                                                                                                                                                                                                                   |
+| INV15              | generator tests, `check:i18n-runtime`, package-export drift check, provider/resolver runtime-catalog tests; per-module English resolution-parity test (every key each Core module names, in every shipped locale’s fallback path, its own map versus the whole catalog); import-cost check (component bundles carry only the English they name; public paths keep the whole catalog)                                                                                                                                            | a generated module carries descriptions or is committed, a malformed entry projects instead of failing, a rich export path changes, or a `RuntimeCatalog` input is rejected or leaks a non-rich context shape, a key a module names resolves differently from the whole catalog, a component bundle carries the whole catalog, or a public path stops resolving a shipped key |
+| INV16              | build-plugin unit and real-build tests                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | a rich or generated locale import fails to resolve through the standard plugin                                                                                                                                                                                                                                                                                                |
+| INV8, INV9         | raw-Intl-locale lint (module allowlist plus date-helper locale-argument check) and provider-locale regression tests, including a server/client render pair                                                                                                                                                                                                                                                                                                                                                                      | Astryx output follows the host locale, raw `Intl` appears outside a named formatter module, an owned call omits the locale argument, or server and client output differ for the same provider locale                                                                                                                                                                          |
+| INV10              | PlainDate and built-in date formatter tests, including locales with non-Gregorian defaults                                                                                                                                                                                                                                                                                                                                                                                                                                      | locale selects a non-Gregorian built-in date display, changes PlainDate calendar semantics, or loses the explicit low-level display override                                                                                                                                                                                                                                  |
+| INV11, INV12       | direction helper/provider tests plus rendered RTL audit                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | component layout reads provider direction instead of the region, provider mutates DOM, or overrides stop composing                                                                                                                                                                                                                                                            |
+| INV17              | `typeaheadMatch.test.ts`, `useTypeahead` and `useTreeFocus` tests and type-to-select tests in Selector, MultiSelector, DropdownMenu and TreeList, one case each: a combining mark ("a" reaches "Ánh"); each stroked letter (đ, ł, ø, ħ, ŧ, ƀ); ı and İ ("i" and "ı" reach "Isparta" and "İzmir"); and a typed diacritic, stroked letter, ı or İ preferring the exact match ("đ" reaches "Đào" before "Dung", "ı" reaches "Isparta" before "İzmir", "İ" reaches "İzmir" before "Isparta"); under en, vi, pl, sv and tr providers | a plain letter misses a marked or stroked first letter in any locale, i or ı misses an İ or I label, a typed diacritic, stroked letter, ı or İ does not prefer the exact match, ı or İ pairs case the non-Turkish way, two paths disagree, or folding reaches sorting or displayed text                                                                                       |

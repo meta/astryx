@@ -202,7 +202,9 @@ export function CheckboxList({
   // Disabled-reason tooltip. Applies to the whole-group disabled state. Disabled
   // controls swallow pointer events, so the tooltip listeners attach to the
   // group container and the checkboxes stay perceivable via aria-disabled
-  // instead of the disabled attribute. Toggling is blocked in the item.
+  // instead of the disabled attribute. Toggling is blocked in the item. The
+  // reason describes the group and each checkbox (see
+  // CheckboxListContextValue.disabledMessageID).
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -240,7 +242,11 @@ export function CheckboxList({
       onChange: isCollectionMode ? handleChange : undefined,
       isDisabled,
       hasDisabledMessage: showsDisabledMessage,
+      disabledMessageID: showsDisabledMessage
+        ? disabledMessageTooltip.describedBy
+        : undefined,
       isReadOnly,
+      isInvalid: status?.type === 'error',
       loadingValues,
     }),
     [
@@ -249,7 +255,9 @@ export function CheckboxList({
       handleChange,
       isDisabled,
       showsDisabledMessage,
+      disabledMessageTooltip.describedBy,
       isReadOnly,
+      status?.type,
       loadingValues,
     ],
   );
@@ -292,6 +300,10 @@ export function CheckboxList({
             controlStyle,
           )}
           role="group"
+          // Screen readers announce the whole group as unavailable. Its dimmed
+          // label then labels a disabled control. An enabled list keeps a
+          // caller's own value.
+          aria-disabled={isDisabled || rest['aria-disabled']}
           // A caller aria-labelledby names the group together with its label.
           aria-labelledby={joinAriaIDs(labelID, ariaLabelledByProp)}
           aria-describedby={

@@ -134,10 +134,6 @@
         },
         {
           "kind": "component",
-          "name": "InfoTip"
-        },
-        {
-          "kind": "component",
           "name": "ListInput"
         },
         {

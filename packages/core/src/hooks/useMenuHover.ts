@@ -4,53 +4,43 @@
 
 /**
  * @file useMenuHover.ts
- * @input Uses React hooks, useListFocus, useMediaQuery
- * @output Exports useMenuHover hook
- * @position Internal hook; used by nav heading components, TopNavMenu,
- *           TopNavMegaMenu and DropdownMenuSubMenu
- *
- * Hover as a progressive enhancement over standard popover behavior: click
- * toggles, Escape and outside-click close, arrows navigate; on top of that,
- * mouseenter opens after a delay and mouseleave closes one that hover opened.
- *
- * Three behaviors here are not obvious and are load-bearing:
- *
- * 1. Hover→click guard (#3121). A hover-opened menu is already open under the
- *    cursor when the pointer arrives, so the click that naturally follows would
- *    toggle it shut. Within `clickGuardMs` a click instead confirms it: the menu
- *    pins and behaves like a click-open from then on.
- *
- * 2. Focus moves synchronously. `useLayer.show()` calls `showPopover()` in the
- *    same tick and the layer's children are always mounted, so items are
- *    focusable the moment `show()` returns — a `requestAnimationFrame` here
- *    lands after paint and races anything else moving focus. Hover-opens are the
- *    exception: the pointer is driving, so focus stays on the trigger. The hook
- *    always passes `skipAutoFocus` and owns focus itself, because the popover's
- *    auto-focus targets the first *tabbable* node while a menu wants its first
- *    item — under roving tabindex those are different elements.
- *
- * 3. Native light dismiss. A `popover="auto"` is dismissed by the browser on
- *    pointer interaction outside the panel, and a trigger outside the panel
- *    counts — before React's click handler runs. `popoverId` makes the trigger
- *    the panel's invoker, which exempts it. jsdom implements neither light
- *    dismiss nor invokers, so that wiring is only verifiable in a browser.
+ * @input React hooks, useListFocus, useMediaQuery
+ * @output useMenuHover hook
+ * @position Internal hook for nav heading components, TopNavMenu,
+ *   TopNavMegaMenu and DropdownMenuSubMenu
  */
+
+// Hover adds to the standard popover behavior. A click toggles, Escape and an
+// outside click close, and arrows navigate. Also, mouseenter opens after a
+// delay, and mouseleave closes a menu that hover opened.
+//
+// - A hover-opened menu is open when the click that follows arrives. Within
+//   `clickGuardMs`, that click pins the menu and does not close it.
+// - Focus moves synchronously. `useLayer.show()` shows the popover in the
+//   same tick, and the items are always mounted. A frame delay lands after
+//   paint and races other focus moves. A hover open keeps focus on the
+//   trigger.
+// - The hook passes `skipAutoFocus` and moves focus itself. Popover
+//   auto-focus goes to the first tabbable node, but under roving tabindex a
+//   menu wants its first item.
+// - The browser light-dismisses a `popover="auto"` on a pointer press
+//   outside the panel, also on the trigger. `popoverId` makes the trigger the
+//   panel's invoker, which exempts it. jsdom has neither feature, so only a
+//   browser can test this.
 
 import {useCallback, useEffect, useRef} from 'react';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {useListFocus} from './useListFocus';
 import {useMediaQuery} from './useMediaQuery';
+import {focusForLastInput} from '../utils/focusReturn';
 
 const DEFAULT_CLICK_GUARD_MS = 500;
 
 /**
- * How long after a close a mouseenter on the trigger is ignored.
- *
- * A panel positioned over its own trigger puts that trigger back under a
- * stationary pointer when it closes, and the browser fires a fresh mouseenter —
- * which reopened the menu the user had just dismissed. Time-bounded rather than
- * a one-shot flag, so a deliberate re-hover seconds later still opens; a real
- * mouseleave clears it early.
+ * How long after a close a mouseenter on the trigger is ignored. A panel over
+ * its own trigger puts the trigger back under a still pointer when it closes,
+ * and the browser fires a new mouseenter. A time limit, not a one-shot flag,
+ * lets a later re-hover open the menu. A real mouseleave clears it early.
  */
 const REOPEN_SUPPRESS_MS = 300;
 
@@ -250,10 +240,9 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
     const wasOpen = prevIsOpenRef.current;
     prevIsOpenRef.current = isOpen;
     if (wasOpen && !isOpen) {
-      // A hover-open scheduled before the close must not fire afterwards and
-      // reopen what just closed from elsewhere — e.g. the root menu's light
-      // dismiss closing a submenu flyout mid hover-intent (#6893). A fresh
-      // mouseenter still opens; only the stale timer is cancelled.
+      // Cancel a hover-open that was scheduled before the close. Otherwise it
+      // reopens a menu that closed from elsewhere, such as a submenu flyout
+      // that the root menu light-dismissed. A new mouseenter still opens.
       clearTimeouts();
       hoverModeRef.current = false;
       hoverOpenedAtRef.current = 0;
@@ -279,10 +268,27 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
     const menuHadFocus =
       menuRef.current?.contains(document.activeElement) ?? false;
     hide();
-    if (menuHadFocus) {
-      triggerElRef.current?.focus();
+    const trigger = triggerElRef.current;
+    if (menuHadFocus && trigger != null) {
+      // A pointer pick leaves no keyboard ring on the trigger. A keyboard pick
+      // keeps it.
+      focusForLastInput(trigger);
     }
   }, [hide, menuRef]);
+
+  // A menu placed in the content can own its own list keys (NavHeadingMenu
+  // runs useListFocus over the same `menuitem`s); a key it consumed must not
+  // move focus a second time here as it bubbles out (APG menu: one item per
+  // arrow press).
+  const handleContentKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+      handleListKeyDown(event);
+    },
+    [handleListKeyDown],
+  );
 
   useEffect(() => {
     escapeHandlerRef.current = () => {
@@ -344,9 +350,10 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
       }
       clearTimeouts();
 
-      // Enter/Space arrive as a click with detail 0, and always open. A keyboard
-      // user reaches the trigger of an open menu only because a hover-open left
-      // focus behind; closing there would stranded them outside a visible menu.
+      // Enter and Space arrive as a click with detail 0, and always open. A
+      // keyboard user reaches the trigger of an open menu only when a
+      // hover-open left focus there. A close would leave them outside a
+      // visible menu.
       const isKeyboardActivation = event != null && event.detail === 0;
       if (isKeyboardActivation) {
         closedAtRef.current = 0;
@@ -440,12 +447,9 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
           clearTimeout(hideTimerRef.current);
         }
         hideTimerRef.current = setTimeout(() => {
-          // A pointer that stopped mid-diagonal, aiming at a row, is still
-          // heading for the flyout: pausing is not leaving, and that pause
-          // is the exact moment the triangle exists to protect. Re-arm
-          // instead of closing underneath it. A pointer parked here holds
-          // the flyout open the same way a pointer parked on the row does;
-          // the first move outside the triangle ends it.
+          // A pointer that stops mid-diagonal is still heading for the
+          // flyout. Restart the delay, and do not close under it. The first
+          // move outside the triangle ends this.
           if (isTracking && lastPoint != null && isInside(lastPoint)) {
             scheduleHide();
             return;
@@ -531,7 +535,7 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
     contentProps: {
       onMouseEnter: handleContentMouseEnter,
       onMouseLeave: handleMouseLeave,
-      onKeyDown: handleListKeyDown,
+      onKeyDown: handleContentKeyDown,
     },
     menuRef,
     focusFirst,

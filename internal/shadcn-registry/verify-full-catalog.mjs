@@ -7,8 +7,11 @@
  *   ShadCN client in TypeScript and JavaScript modes, verifies exact written
  *   bytes and dependencies, then compiles every installed source file against
  *   current local exports or the exact published packages named by production.
+ *   ShadCN's own scratch directories stay inside each consumer, which is
+ *   removed afterwards.
  * @input A generated preview or hidden production registry under
- *   apps/docsite/public/shadcn.
+ *   apps/docsite/public/shadcn, and `--mode typescript|javascript` to verify
+ *   one consumer mode (both by default; CI runs each in its own leg).
  * @output A clean-consumer proof for every canonical item and alias route.
  * @position Required CI contract for the public ShadCN compatibility surface.
  */
@@ -32,6 +35,7 @@ import {
   parseRegistryReceipt,
   registryContentHash,
 } from '../../packages/cli/authoring/shadcn/receipt.mjs';
+import {DEMO_CONTENT_MODULE} from '../../packages/cli/foundation/discovery/template-adapter.mjs';
 import {expandWorkspaceDirs} from '../../scripts/lib/workspace-globs.mjs';
 import {registryNameForPath} from '../../apps/docsite/src/lib/shadcnRegistry.mjs';
 
@@ -54,6 +58,17 @@ const USE_PUBLISHED_PACKAGES =
   process.env.ASTRYX_SHADCN_USE_PUBLISHED_PACKAGES === '1';
 const MAX_COMMAND_OUTPUT = 16 * 1024 * 1024;
 const COPIED_KINDS = new Set(['showcase', 'example', 'block', 'page']);
+const MODES = {typescript: [true], javascript: [false], all: [true, false]};
+
+/** The consumer modes to verify, as `tsx` flags: `--mode <name>`, or both. */
+export function selectedModes(argv) {
+  const index = argv.indexOf('--mode');
+  const name = index === -1 ? 'all' : argv[index + 1];
+  if (!Object.hasOwn(MODES, name ?? '')) {
+    fail(`unknown --mode ${String(name)}; use typescript, javascript or all`);
+  }
+  return MODES[name];
+}
 
 function fail(message) {
   throw new Error(`ShadCN registry CI: ${message}`);
@@ -190,6 +205,14 @@ function verifyItemFileShape(item) {
     }
     if (receipt.schemaVersion !== 2) {
       fail(`${item.name} receipt is not schema version 2`);
+    }
+    if (
+      source.content.includes('/template-assets/') ||
+      source.content.includes(DEMO_CONTENT_MODULE)
+    ) {
+      fail(
+        `${item.name} installs demo media or demo content that a copy replaces`,
+      );
     }
     const expectedJavaScriptTarget = shadcnJavaScriptTarget(source.target);
     const javascript = receipt.files[0].variants.find(
@@ -449,13 +472,17 @@ function runShadcn(project, itemPaths) {
   if (!fs.existsSync(SHADCN_BIN)) {
     fail('the pinned ShadCN binary is not installed');
   }
+  // ShadCN leaves an empty temporary directory behind for every file it
+  // transforms: keep them inside the consumer, which main() removes.
+  const scratch = path.join(project, '.tmp');
+  fs.mkdirSync(scratch, {recursive: true});
   const result = spawnSync(
     SHADCN_BIN,
     ['add', ...itemPaths, '--yes', '--overwrite', '--silent'],
     {
       cwd: project,
       encoding: 'utf8',
-      env: {...process.env, CI: 'true'},
+      env: {...process.env, CI: 'true', TMPDIR: scratch},
       maxBuffer: MAX_COMMAND_OUTPUT,
       timeout: 10 * 60_000,
     },
@@ -624,11 +651,12 @@ async function compileSources(project, sources) {
 
 async function main() {
   const startedAt = Date.now();
+  const modes = selectedModes(process.argv.slice(2));
   const catalog = loadCatalog();
   const packageDirs = USE_PUBLISHED_PACKAGES ? null : localPackageDirs();
   const results = [];
 
-  for (const tsx of [true, false]) {
+  for (const tsx of modes) {
     const mode = tsx ? 'TypeScript' : 'JavaScript';
     const project = fs.mkdtempSync(
       path.join(os.tmpdir(), `astryx-shadcn-registry-${tsx ? 'tsx' : 'jsx'}-`),
@@ -666,7 +694,13 @@ async function main() {
   );
 }
 
-main().catch(error => {
-  console.error(error);
-  process.exitCode = 1;
-});
+// Run as a script; a test imports selectedModes without running it.
+if (
+  process.argv[1] &&
+  path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  main().catch(error => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

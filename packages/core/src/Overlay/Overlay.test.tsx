@@ -10,8 +10,8 @@
  * update tests to match new behavior
  */
 
-import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {render, screen, renderHook} from '@testing-library/react';
+import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {render, screen, renderHook, fireEvent} from '@testing-library/react';
 import {createRef} from 'react';
 import {Overlay} from './Overlay';
 import {useOverlay} from './useOverlay';
@@ -31,7 +31,7 @@ function getScrim(container: HTMLElement): HTMLElement {
  */
 function mockHoverNone(matches: boolean): () => void {
   const original = window.matchMedia;
-  window.matchMedia = ((query: string) => ({
+  window.matchMedia = (query: string) => ({
     matches: query.includes('hover: none') ? matches : false,
     media: query,
     onchange: null,
@@ -40,7 +40,7 @@ function mockHoverNone(matches: boolean): () => void {
     addEventListener: () => {},
     removeEventListener: () => {},
     dispatchEvent: () => false,
-  }));
+  });
   return () => {
     window.matchMedia = original;
   };
@@ -243,6 +243,74 @@ describe('Overlay', () => {
       );
       const root = container.firstElementChild as HTMLElement;
       expect(root.style.opacity).toBe('0.5');
+    });
+  });
+
+  describe('host attributes', () => {
+    // architecture:public-component-api INV5: host attributes reach the root
+    // element that owns the ref, the theme target and the styling props.
+    it('forwards data, ARIA and id attributes to the root div', () => {
+      const ref = createRef<HTMLDivElement>();
+      render(
+        <Overlay
+          ref={ref}
+          content={<span>c</span>}
+          id="hero-overlay"
+          data-testid="hero"
+          data-analytics-id="hero-card"
+          aria-describedby="hero-caption">
+          <div>b</div>
+        </Overlay>,
+      );
+      const root = screen.getByTestId('hero');
+      expect(root).toBe(ref.current);
+      expect(root).toHaveAttribute('data-analytics-id', 'hero-card');
+      expect(root).toHaveAttribute('id', 'hero-overlay');
+      expect(root).toHaveAttribute('aria-describedby', 'hero-caption');
+      expect(root).toHaveClass('astryx-overlay');
+    });
+
+    describe('on a touch device', () => {
+      let restore: () => void;
+      beforeEach(() => {
+        restore = mockHoverNone(true);
+      });
+      afterEach(() => restore());
+
+      it('runs a caller onClick and still toggles the hover overlay on tap', () => {
+        const onClick = vi.fn((event: {preventDefault: () => void}) => {
+          event.preventDefault();
+        });
+        const {container} = render(
+          <Overlay
+            showOn="hover"
+            content={<span>c</span>}
+            data-testid="hero"
+            onClick={onClick}>
+            <div>b</div>
+          </Overlay>,
+        );
+        expect(getScrim(container).hasAttribute('inert')).toBe(true);
+        fireEvent.click(screen.getByTestId('hero'));
+        expect(onClick).toHaveBeenCalledTimes(1);
+        // A caller preventDefault() does not cancel the built-in toggle.
+        expect(getScrim(container).hasAttribute('inert')).toBe(false);
+      });
+
+      it('runs a caller onMouseUp alongside the built-in handler', () => {
+        const onMouseUp = vi.fn();
+        render(
+          <Overlay
+            showOn="hover"
+            content={<span>c</span>}
+            data-testid="hero"
+            onMouseUp={onMouseUp}>
+            <div>b</div>
+          </Overlay>,
+        );
+        fireEvent.mouseUp(screen.getByTestId('hero'));
+        expect(onMouseUp).toHaveBeenCalledTimes(1);
+      });
     });
   });
 });

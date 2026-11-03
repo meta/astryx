@@ -4,6 +4,9 @@
  * @file Registry serializer contract tests.
  * @input Minimal component, block, page, and StyleX fixtures.
  * @output Regression coverage for schema, package boundaries, names, and output.
+ *   The stock-ShadCN cases leave nothing in the system temporary directory:
+ *   ShadCN's own scratch directories stay in each consumer project, and the
+ *   no-op package managers are removed after the file.
  * @position Node test lane for ShadCN compatibility.
  */
 
@@ -22,7 +25,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {promisify} from 'node:util';
-import {describe, expect, it} from 'vitest';
+import {afterAll, describe, expect, it} from 'vitest';
 import {reconcileRegistryCompositions} from '../../packages/cli/api/upgrade/registry/registry.mjs';
 import {
   createShadcnPrecompiledDeclaration,
@@ -32,6 +35,10 @@ import {
   parseRegistryReceipt,
   registryContentHash,
 } from '../../packages/cli/authoring/shadcn/receipt.mjs';
+import {
+  DEMO_CONTENT_MODULE,
+  MARKED_VIDEO_PLACEHOLDER,
+} from '../../packages/cli/foundation/discovery/template-adapter.mjs';
 import {
   buildShadcnRegistry,
   generateShadcnRegistry,
@@ -79,6 +86,17 @@ const SHADCN_ENV = {
   ...process.env,
   PATH: `${NOOP_PACKAGE_MANAGERS}${path.delimiter}${process.env.PATH ?? ''}`,
 };
+afterAll(() => {
+  rmSync(NOOP_PACKAGE_MANAGERS, {recursive: true, force: true});
+});
+
+// ShadCN leaves an empty temporary directory behind for every file it
+// transforms, so it gets a TMPDIR inside the project, which each test removes.
+function shadcnEnv(project) {
+  const scratch = path.join(project, '.tmp');
+  mkdirSync(scratch, {recursive: true});
+  return {...SHADCN_ENV, TMPDIR: scratch};
+}
 
 const packages = [
   {
@@ -618,7 +636,7 @@ describe('buildShadcnRegistry', () => {
       await execFileAsync(
         process.execPath,
         [SHADCN_ENTRY, 'add', itemPath, '--yes'],
-        {cwd: project, timeout: 30_000, env: SHADCN_ENV},
+        {cwd: project, timeout: 30_000, env: shadcnEnv(project)},
       );
 
       expect(
@@ -682,6 +700,158 @@ describe('buildShadcnRegistry', () => {
     }
   });
 
+  it('installs a block and a page as a copy writes them, with marked placeholders and a disclosing description', async () => {
+    const project = mkdtempSync(path.join(tmpdir(), 'astryx-shadcn-demo-'));
+    try {
+      writeConsumerProject(project);
+      const base = fixture();
+      const {items} = buildShadcnRegistry(
+        fixture({
+          packages: packages.map(pkg =>
+            pkg.name === '@astryxdesign/core'
+              ? {
+                  ...pkg,
+                  packageExports: {
+                    ...pkg.packageExports,
+                    './Card': './dist/Card/index.js',
+                    './Text': './dist/Text/index.js',
+                  },
+                }
+              : pkg,
+          ),
+          blocks: [
+            {
+              ...base.blocks[0],
+              componentsUsed: ['Card'],
+              source:
+                "import {Card} from '@astryxdesign/core/Card';\n" +
+                `import {PlayingCardContents} from '${DEMO_CONTENT_MODULE}';\n` +
+                'export default function ButtonShowcase() {\n' +
+                '  return (\n' +
+                '    <Card padding={4}>\n' +
+                '      <PlayingCardContents rank="Q" suit="hearts" />\n' +
+                '      <img src="/template-assets/hero.jpg" alt="" />\n' +
+                '      <video src="/template-assets/clip.mp4" />\n' +
+                '    </Card>\n' +
+                '  );\n' +
+                '}\n',
+            },
+          ],
+          templates: [
+            {
+              ...base.templates[0],
+              source:
+                "import {Card} from '@astryxdesign/core/Card';\n" +
+                'export default function Page() {\n' +
+                '  return <Card><img src="/template-assets/hero.jpg" alt="" /></Card>;\n' +
+                '}\n',
+            },
+          ],
+        }),
+      );
+      const block = items.find(
+        item => item.name === 'showcase-button-variants',
+      );
+      const page = items.find(item => item.name === 'template-dashboard');
+      for (const item of [block, page]) {
+        const copied = item.files[0].content;
+        expect(copied).not.toContain(DEMO_CONTENT_MODULE);
+        expect(copied).not.toContain('PlayingCardContents');
+        expect(copied).not.toContain('/template-assets/');
+        expect(copied).toContain('<img src="data:image/svg+xml,');
+      }
+      expect(block.files[0].content).toContain(
+        '<Card padding={4}>\n      <Text>Card content</Text>',
+      );
+      expect(block.files[0].content).toContain(
+        `<video src="${MARKED_VIDEO_PLACEHOLDER}" />`,
+      );
+      expect(block.description).toBe(
+        'Shows a primary button. Astryx replaced 2 demo media references and 1 demo content element with marked placeholders; put your own content there.',
+      );
+      expect(page.description).toBe(
+        'A metrics dashboard. Astryx replaced 1 demo media reference with marked placeholders; put your own content there.',
+      );
+      expect(block.dependencies).not.toContainEqual(
+        expect.stringContaining('demo-content'),
+      );
+
+      const itemPath = path.join(project, 'block.json');
+      writeFileSync(itemPath, JSON.stringify(block));
+      await execFileAsync(
+        process.execPath,
+        [SHADCN_ENTRY, 'add', itemPath, '--yes'],
+        {cwd: project, timeout: 30_000, env: shadcnEnv(project)},
+      );
+      const showcases = path.join(
+        project,
+        'src',
+        'components',
+        'astryx',
+        'showcases',
+      );
+      const installedSource = readFileSync(
+        path.join(showcases, 'ButtonShowcase.tsx'),
+        'utf8',
+      );
+      expect(installedSource).toBe(block.files[0].content);
+      // The released reader validates a version 2 receipt strictly, so an
+      // extra field would break `astryx upgrade` on an older CLI.
+      const installedReceipt = JSON.parse(
+        readFileSync(
+          path.join(showcases, '.astryx', 'showcase-button-variants.json'),
+          'utf8',
+        ),
+      );
+      expect(Object.keys(installedReceipt).sort()).toEqual([
+        'files',
+        'item',
+        'schemaVersion',
+        'source',
+      ]);
+      expect(parseRegistryReceipt(installedReceipt)).toMatchObject({
+        schemaVersion: 2,
+      });
+    } finally {
+      rmSync(project, {recursive: true, force: true});
+    }
+  });
+
+  it('installs an integration-package block from its authored file, so it discloses its replacements', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'astryx-shadcn-integration-'));
+    try {
+      const authoredSourcePath = path.join(dir, 'ButtonShowcase.tsx');
+      const source = src =>
+        `export default function ButtonShowcase() {\n  return <video src="${src}" />;\n}\n`;
+      writeFileSync(authoredSourcePath, source('/template-assets/clip.mp4'));
+      const [base] = fixture().blocks;
+      // `source` is `template show` output, so its video source is already empty.
+      const block = {...base, sourcePackage: '@astryxdesign/lab', source: source('')};
+      const {items} = buildShadcnRegistry(
+        fixture({blocks: [{...block, authoredSourcePath}]}),
+      );
+      const item = items.find(({name}) => name === 'showcase-button-variants');
+      expect(item.files[0].content).toContain(
+        `<video src="${MARKED_VIDEO_PLACEHOLDER}" />`,
+      );
+      expect(item.description).toBe(
+        'Shows a primary button. Astryx replaced 1 demo media reference with marked placeholders; put your own content there.',
+      );
+    } finally {
+      rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
+  it('leaves the description of an item with no demo content as written', () => {
+    const {items} = buildShadcnRegistry(fixture());
+    expect(
+      items.find(item => item.name === 'showcase-button-variants').description,
+    ).toBe('Shows a primary button.');
+    expect(
+      items.find(item => item.name === 'template-dashboard').description,
+    ).toBe('A metrics dashboard.');
+  });
+
   it('records the exact JavaScript bytes written by stock ShadCN', async () => {
     const project = mkdtempSync(path.join(tmpdir(), 'astryx-shadcn-js-'));
     try {
@@ -711,7 +881,7 @@ describe('buildShadcnRegistry', () => {
       await execFileAsync(
         process.execPath,
         [SHADCN_ENTRY, 'add', itemPath, '--yes'],
-        {cwd: project, timeout: 30_000, env: SHADCN_ENV},
+        {cwd: project, timeout: 30_000, env: shadcnEnv(project)},
       );
 
       const sourcePath = path.join(
@@ -792,7 +962,7 @@ describe('buildShadcnRegistry', () => {
       await execFileAsync(
         process.execPath,
         [SHADCN_ENTRY, 'add', itemPath, '--yes'],
-        {cwd: project, timeout: 30_000, env: SHADCN_ENV},
+        {cwd: project, timeout: 30_000, env: shadcnEnv(project)},
       );
       await new Promise((resolve, reject) => {
         server.once('error', reject);
@@ -941,7 +1111,7 @@ describe('buildShadcnRegistry', () => {
       await execFileAsync(
         process.execPath,
         [SHADCN_ENTRY, 'add', itemPath, '--yes'],
-        {cwd: project, timeout: 30_000, env: SHADCN_ENV},
+        {cwd: project, timeout: 30_000, env: shadcnEnv(project)},
       );
 
       expect(
@@ -1022,7 +1192,7 @@ describe('buildShadcnRegistry', () => {
           cwd: project,
           timeout: 30_000,
           env: {
-            ...SHADCN_ENV,
+            ...shadcnEnv(project),
             NO_PROXY: '127.0.0.1,localhost',
             no_proxy: '127.0.0.1,localhost',
           },

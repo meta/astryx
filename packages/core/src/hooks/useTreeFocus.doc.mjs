@@ -59,7 +59,7 @@ export const docs = {
     {
       name: 'options.typeahead',
       type: 'boolean',
-      description: 'Whether typeahead (jump to next item whose text starts with the typed characters) is enabled.',
+      description: 'Whether typeahead (jump to next item whose text starts with the typed characters, ignoring case, accents, the stroked letters đ ł ø ħ ŧ ƀ and Turkish ı/İ in every locale) is enabled.',
       default: 'true',
       required: false,
     },
@@ -119,7 +119,7 @@ export const docsDense = {
     'options.onActivate': 'called on Enter/Space activation. Return true when handled; else hook falls back to toggling expansion.',
     'options.onActiveChange': 'notified when focus moves to a treeitem. Use to move a single roving tab stop.',
     'options.hasRovingTabIndex': 'hook owns a single roving tab stop (stamps tabindex 0/-1, repairs on mount, moves w/ nav). Preserves an existing tabindex="0" seed. Attach handleFocus to sync after clicks.',
-    'options.typeahead': 'enable typeahead (jump to next item whose text starts with typed chars).',
+    'options.typeahead': 'enable typeahead (jump to next item whose text starts with typed chars, ignoring case, accents, stroked letters + Turkish ı/İ).',
   },
   returnDescriptions: {
     treeRef: 'ref to attach to tree container (role="tree").',

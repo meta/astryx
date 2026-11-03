@@ -45,6 +45,11 @@ import {registerTheme} from './themeRegistry';
 import {dataAttr} from '../naming';
 import {ThemeContext} from './useTheme';
 import {warnOnce} from '../utils/devWarning';
+import {REDUCED_MOTION_PROPERTY, resolveMotionKnobs} from './themeMotion';
+import {
+  reducedMotionMarkProps,
+  setRootReducedMotionMark,
+} from '../privateAttributes/reducedMotion.stylex';
 
 /**
  * Theme provider props
@@ -76,6 +81,11 @@ const wrapperStyles = stylex.create({
   system: {
     colorScheme: 'light dark',
   },
+  // The mark's custom property (REDUCED_MOTION_PROPERTY), which every element
+  // under the mark inherits.
+  reducedMotion: {
+    '--_astryx-reduced-motion': '1',
+  },
 });
 
 // =============================================================================
@@ -83,11 +93,15 @@ const wrapperStyles = stylex.create({
 // =============================================================================
 
 /**
- * Context to detect whether this Theme is nested inside another.
- * The root provider (no parent context) syncs data-theme to <html>.
- * @internal
+ * True below a Theme; the root Theme (no parent context) syncs data-theme
+ * to <html>. A detached React root that conceptually sits inside the app
+ * (useToast's fallback viewport) provides it as `true` itself, so a Theme
+ * rendered in toast content themes its subtree without claiming <html> as
+ * if it were the app's root Theme.
+ * @internal Not exported from the theme barrel; useToast imports it from
+ * './theme/Theme' directly.
  */
-const ThemeNestingContext = React.createContext(false);
+export const ThemeNestingContext = React.createContext(false);
 ThemeNestingContext.displayName = 'ThemeNestingContext';
 
 // =============================================================================
@@ -193,11 +207,16 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
  *
  * - 'light' | 'dark' → sets data-theme="light" | "dark"
  * - 'system' → removes data-theme (reset.css defaults to color-scheme: light dark)
+ *
+ * A theme that reduces motion for everyone also marks `<html>` with
+ * `data-astryx-reduced-motion` and its custom property, so layers portaled
+ * outside the wrapper reduce their motion too.
  */
 function useRootThemeSync(
   isNested: boolean,
   mode: ThemeMode,
   themeName: string,
+  reducesMotion: boolean,
 ): void {
   useIsomorphicLayoutEffect(() => {
     if (isNested) {
@@ -216,12 +235,20 @@ function useRootThemeSync(
 
     // Sync theme name so @scope rules reach portals/fallback viewports.
     document.documentElement.setAttribute(dataAttr('theme'), themeName);
+    setRootReducedMotionMark(document.documentElement, reducesMotion);
+    if (reducesMotion) {
+      document.documentElement.style.setProperty(REDUCED_MOTION_PROPERTY, '1');
+    } else {
+      document.documentElement.style.removeProperty(REDUCED_MOTION_PROPERTY);
+    }
 
     return () => {
       document.documentElement.removeAttribute('data-theme');
       document.documentElement.removeAttribute(dataAttr('theme'));
+      setRootReducedMotionMark(document.documentElement, false);
+      document.documentElement.style.removeProperty(REDUCED_MOTION_PROPERTY);
     };
-  }, [isNested, mode, themeName]);
+  }, [isNested, mode, themeName, reducesMotion]);
 }
 
 // =============================================================================
@@ -251,7 +278,11 @@ export function Theme({
   registerTheme(theme);
 
   useThemeStyleInjection(theme);
-  useRootThemeSync(isNested, mode, theme.name);
+  // resolveMotionKnobs resolves no public theme to 'always', so no theme
+  // marks its root.
+  const reducesMotion =
+    resolveMotionKnobs(theme.__axes?.motion).reducedMotion === 'always';
+  useRootThemeSync(isNested, mode, theme.name, reducesMotion);
 
   // Get color-scheme style
   const colorSchemeStyle =
@@ -268,8 +299,13 @@ export function Theme({
     <ThemeContext value={ctxValue}>
       <ThemeNestingContext value={true}>
         <div
-          {...stylex.props(wrapperStyles.base, colorSchemeStyle)}
+          {...stylex.props(
+            wrapperStyles.base,
+            colorSchemeStyle,
+            reducesMotion && wrapperStyles.reducedMotion,
+          )}
           data-astryx-theme={theme.name}
+          {...reducedMotionMarkProps(reducesMotion)}
           data-theme={mode === 'system' ? undefined : mode}>
           {children}
         </div>

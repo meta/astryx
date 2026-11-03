@@ -2,7 +2,7 @@
 
 /**
  * @file Codemod: Migrate Table tableProps to direct root props
- * @see https://github.com/facebook/astryx/issues/3679
+ * @see https://github.com/meta/astryx/issues/3679
  *
  * `tableProps` (typed HTMLAttributes<HTMLTableElement>, nesting HTML
  * attributes one level deep) is deprecated. As of v0.1.7, <Table> honors

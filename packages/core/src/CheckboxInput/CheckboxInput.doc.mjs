@@ -151,6 +151,15 @@ export const docs = {
       },
       {className: 'astryx-checkbox-label'},
     ],
+    vars: [
+      {
+        name: '--_indicator-press-image',
+        description:
+          "The row's touch press image, handed down to a first-party indicator that paints its own press. Set from the press paint only while the row itself is pressed; only this row declares it.",
+        default: 'none',
+        private: true,
+      },
+    ],
   },
   usage: {
     accessibility: [
@@ -389,6 +398,15 @@ export const docsZh = {
         states: ['checked', 'disabled'],
       },
       {className: 'astryx-checkbox-label'},
+    ],
+    vars: [
+      {
+        name: '--_indicator-press-image',
+        description:
+          '复选框行的触摸按下图像，传递给自行绘制按下效果的第一方指示器。仅在该行自身被按下时根据按下涂层设置，只有该行声明它。',
+        default: 'none',
+        private: true,
+      },
     ],
   },
 };

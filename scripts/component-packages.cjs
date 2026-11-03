@@ -239,6 +239,37 @@ function nestedPackageComponentNames(repoRoot, packageConfig) {
     .sort();
 }
 
+/**
+ * Documented, exported components that live outside PascalCase directories in
+ * a nested package (Core's `theme/` holds Theme, MediaTheme and SyntaxTheme;
+ * `i18n/` holds InternationalizationProvider), which
+ * `nestedPackageComponentNames` does not reach. Flat packages have none.
+ */
+function documentedComponentsOutsideComponentDirectories(
+  repoRoot,
+  packageConfig,
+) {
+  if (packageConfig.layout === 'flat') return [];
+  const sourceDir = path.join(repoRoot, packageConfig.src);
+  let entries;
+  try {
+    entries = fs.readdirSync(sourceDir, {withFileTypes: true});
+  } catch {
+    return [];
+  }
+  const exported = new Set(exportedComponentNames(sourceDir));
+  const names = new Set();
+  for (const entry of entries) {
+    if (!entry.isDirectory() || COMPONENT_NAME.test(entry.name)) continue;
+    for (const name of documentedComponentNames(
+      path.join(sourceDir, entry.name),
+    )) {
+      if (exported.has(name)) names.add(name);
+    }
+  }
+  return [...names].sort();
+}
+
 function packageHasPublicComponent(repoRoot, packageName, componentName) {
   const packageConfig = componentPackage(packageName);
   if (!packageConfig) return false;
@@ -255,6 +286,7 @@ module.exports = {
   componentExportsFromBarrel,
   componentPackage,
   documentedComponentNames,
+  documentedComponentsOutsideComponentDirectories,
   documentedNestedComponentNames,
   exportedComponentNames,
   flatPackageComponentNames,

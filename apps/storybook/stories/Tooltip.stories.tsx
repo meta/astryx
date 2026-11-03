@@ -155,6 +155,43 @@ export const WithHook: Story = {
   },
 };
 
+/**
+ * A toggle-style trigger built on `useTooltip`'s `show()` and `hide()`: the
+ * app's own button pins the tooltip on a press and closes it on the next one.
+ * Escape, a press outside, or focus leaving also close it. The button carries
+ * `aria-expanded` while the press holds it and `aria-controls` naming the
+ * tooltip. Hover and keyboard focus still preview it.
+ */
+export const CustomToggleTrigger: Story = {
+  render: function CustomToggleTriggerExample() {
+    const [isPinned, setIsPinned] = useState(false);
+    const tooltip = useTooltip({onHide: () => setIsPinned(false)});
+
+    return (
+      <div style={{padding: 100}}>
+        <Button
+          label="About billing"
+          variant="secondary"
+          ref={tooltip.ref}
+          aria-describedby={tooltip.describedBy}
+          aria-expanded={isPinned}
+          aria-controls={tooltip.describedBy}
+          onClick={() => {
+            if (isPinned) {
+              tooltip.hide();
+            } else {
+              tooltip.show();
+            }
+            setIsPinned(!isPinned);
+          }}>
+          ?
+        </Button>
+        {tooltip.renderTooltip('Billed monthly, on the first day')}
+      </div>
+    );
+  },
+};
+
 export const LongContent: Story = {
   args: {
     placement: 'above',

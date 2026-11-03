@@ -19,7 +19,7 @@
  * - Data-driven APIs (array of config objects)
  * - CSS-based solutions (grid, flexbox, :nth-child, etc.)
  *
- * @see https://github.com/facebook/astryx/wiki/API-Conventions
+ * @see https://github.com/meta/astryx/wiki/API-Conventions
  */
 
 // React.Children methods that introspect the children tree
@@ -39,7 +39,7 @@ const noReactIntrospectionRule = {
         'Ban React child introspection (Children.map, cloneElement, child.props, child.type)',
       category: 'Astryx Architecture',
       recommended: true,
-      url: 'https://github.com/facebook/astryx/wiki/API-Conventions',
+      url: 'https://github.com/meta/astryx/wiki/API-Conventions',
     },
     messages: {
       childrenMethod:

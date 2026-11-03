@@ -2,8 +2,9 @@
 
 /**
  * @file Tests for search's adapter: a long-running caller reuses the gathered
- * candidates while their inputs are unchanged (gatherCandidatesReused), and
- * gathers again when an input changes or for another folder or `type`.
+ * candidates while their inputs are unchanged (gatherCandidatesReused), shares
+ * a gather that is still running, and gathers again when an input changes or
+ * for another folder or `type`.
  *
  * Whether inputs changed is read-record's answer (tested in
  * read-record.test.mjs). Other tests running at the same time change shared
@@ -13,7 +14,7 @@
  * undo.
  */
 
-import {describe, it, expect, vi} from 'vitest';
+import {afterAll, beforeAll, describe, it, expect, vi} from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -30,10 +31,25 @@ const SLOW = 60_000;
 
 /** A folder with only a package.json: a docs search there reads the CLI's docs. */
 function scratchProject() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-gather-reuse-'));
+  const dir = fs.mkdtempSync(path.join(TEMP_ROOT, 'astryx-gather-reuse-'));
   fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"app"}');
   return dir;
 }
+
+/**
+ * Every temporary folder these tests make lives here, removed once they
+ * finish. It is made in beforeAll, not when the module loads: Vitest skips
+ * both hooks when a run filters out every test here.
+ */
+let TEMP_ROOT = '';
+beforeAll(() => {
+  TEMP_ROOT = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'astryx-search-adapter-test-'),
+  );
+});
+afterAll(() => {
+  fs.rmSync(TEMP_ROOT, {recursive: true, force: true});
+});
 
 describe('gatherCandidatesReused', () => {
   it(
@@ -48,6 +64,22 @@ describe('gatherCandidatesReused', () => {
       expect(JSON.parse(JSON.stringify(first))).toEqual(
         JSON.parse(JSON.stringify(await gatherCandidates({cwd, type: 'doc'}))),
       );
+    },
+    SLOW,
+  );
+
+  it(
+    'shares one gather between searches that start while it runs',
+    async () => {
+      const cwd = scratchProject();
+      const all = await Promise.all(
+        Array.from({length: 9}, () =>
+          gatherCandidatesReused({cwd, type: 'doc'}),
+        ),
+      );
+      // One gather: every search got the same candidates object.
+      for (const each of all) expect(each).toBe(all[0]);
+      expect(all[0].all.length).toBeGreaterThan(0);
     },
     SLOW,
   );

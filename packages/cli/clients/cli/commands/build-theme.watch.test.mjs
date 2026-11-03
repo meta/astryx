@@ -14,7 +14,15 @@
  * self-sufficient regardless of CI job ordering.
  */
 
-import {describe, it, expect, beforeAll, beforeEach, afterEach} from 'vitest';
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+} from 'vitest';
 import {execFileSync, spawn} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -265,18 +273,46 @@ describe('theme build --watch', () => {
       [CLI_BIN, 'theme', 'build', 'w1.mjs', 'w2.mjs', '--watch'],
       {cwd: tmpDir, env: {...process.env, FORCE_COLOR: '0'}},
     );
+    // Vitest runs this even when the test times out mid-wait, which skips the
+    // `finally` below, so the watcher never outlives the test.
+    onTestFinished(() => {
+      child.kill('SIGKILL');
+    });
     let stdout = '';
     child.stdout.on('data', d => (stdout += d.toString()));
     child.stderr.on('data', d => (stdout += d.toString()));
 
     try {
-      const built = await waitFor(
-        () =>
-          fs.existsSync(path.join(tmpDir, 'w1.css')) &&
-          fs.existsSync(path.join(tmpDir, 'w2.css')),
-      );
-      expect(built).toBe(true);
-      await waitFor(() => /Watching w1\.mjs, w2\.mjs/.test(stdout));
+      // The watcher prints its "Watching" line once every initial build has
+      // finished, and those builds run one after another, each in its own
+      // child process. Wait for that line instead of polling for the files
+      // under the 8 s deadline: on a loaded runner two builds can outlast it.
+      // If the line never comes, the test fails at its own time limit.
+      await new Promise((resolve, reject) => {
+        const check = () => {
+          if (/Watching w1\.mjs, w2\.mjs/.test(stdout)) {
+            stop();
+            resolve(undefined);
+          }
+        };
+        const exited = (/** @type {number | null} */ code) => {
+          stop();
+          reject(
+            new Error(`watch exited (${code}) before watching:\n${stdout}`),
+          );
+        };
+        const stop = () => {
+          child.stdout.off('data', check);
+          child.stderr.off('data', check);
+          child.off('exit', exited);
+        };
+        child.stdout.on('data', check);
+        child.stderr.on('data', check);
+        child.on('exit', exited);
+        check();
+      });
+      expect(fs.existsSync(path.join(tmpDir, 'w1.css'))).toBe(true);
+      expect(fs.existsSync(path.join(tmpDir, 'w2.css'))).toBe(true);
       const firstCssBefore = fs.readFileSync(
         path.join(tmpDir, 'w1.css'),
         'utf-8',

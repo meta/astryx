@@ -15,6 +15,7 @@ import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {act, render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {CodeBlock} from './CodeBlock';
+import {rtlStyles} from '../utils';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {dracula} from '../theme/syntax';
 import {InternationalizationProvider} from '../i18n';
@@ -212,9 +213,14 @@ describe('CodeBlock', () => {
     // Theme seam: a design system can restyle the copy control via this class
     // without turning the button off and re-implementing it.
     expect(copyButton).toHaveClass('astryx-code-block-copy-button');
-    // The button carries a visible "Copy code" hover/focus hint (tooltip),
-    // wired through aria-describedby — a bare <button> could not.
-    expect(copyButton).toHaveAttribute('aria-describedby');
+    // The button carries a visible "Copy code" hover/focus hint (tooltip). It
+    // repeats the name, so it adds no description (Button FR12).
+    expect(
+      screen
+        .getAllByRole('tooltip', {hidden: true})
+        .some(el => el.textContent === 'Copy code'),
+    ).toBe(true);
+    expect(copyButton).not.toHaveAttribute('aria-describedby');
   });
 
   it('keeps the copy button tooltip as "Copy code" after copying', async () => {
@@ -287,6 +293,35 @@ describe('CodeBlock', () => {
       ).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  // design:bidirectionality DR4: the collapsed disclosure chevron points
+  // toward the inline end, so it mirrors in RTL. jsdom does not apply the
+  // compiled StyleX CSS, so this pins the structure the mirror relies on: the
+  // chevron renders inside an element carrying the shared rtlStyles.mirror.
+  it('wraps the disclosure chevron in the shared RTL mirror', () => {
+    const {className: mirrorClassName} = stylex.props(rtlStyles.mirror);
+    const mirrorClasses = mirrorClassName?.split(' ') ?? [];
+    expect(mirrorClasses.length).toBeGreaterThan(0);
+    render(
+      <div dir="rtl">
+        <CodeBlock
+          code={LONG_CODE}
+          language="javascript"
+          title="example"
+          isCollapsible
+        />
+      </div>,
+    );
+    const header = screen
+      .getAllByRole('button')
+      .find(el => el.hasAttribute('aria-expanded'));
+    const chevron = header?.querySelector('.astryx-icon');
+    expect(chevron).not.toBeNull();
+    const wrapper = chevron?.parentElement;
+    for (const className of mirrorClasses) {
+      expect(wrapper).toHaveClass(className);
     }
   });
 

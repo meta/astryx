@@ -24,7 +24,7 @@
  *   that guard so new editable surfaces can't reintroduce the bug silently.
  *
  * @see packages/core/src/utils/ime.ts (isImeKeyEvent)
- * @see https://github.com/facebook/astryx/issues/4892
+ * @see https://github.com/meta/astryx/issues/4892
  *
  * SEVERITY: shipped at `warn` in BOTH tiers (see index.js). Selector and
  *   MultiSelector currently violate it and are fixed in a separate stream; a
@@ -352,7 +352,7 @@ const rule = {
         'arrow/Page/Home/End keys — otherwise CJK composition keystrokes misfire.',
       category: 'Best Practices',
       recommended: true,
-      url: 'https://github.com/facebook/astryx/issues/4892',
+      url: 'https://github.com/meta/astryx/issues/4892',
     },
     messages: {
       unguardedImeKeydown:

@@ -4,7 +4,7 @@
 
 /**
  * @file FieldLabel.tsx
- * @input Uses React, Icon, IconType, useTranslator, FormLayoutContext
+ * @input Uses React, Icon, IconType, useComponentTranslator, FormLayoutContext
  * @output Exports FieldLabel component, FieldLabelProps
  * @position Core label implementation; used by Field, CheckboxInput, Switch
  *
@@ -19,7 +19,7 @@
 import {use, useMemo, useRef, type ReactNode, type RefObject} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 
 import {
   colorVars,
@@ -28,12 +28,20 @@ import {
   typographyVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
-import {Icon, renderIconSlot, type IconType} from '../Icon';
-import {Tooltip} from '../Tooltip';
-import {useTranslator} from '../i18n';
+import {Icon, renderIconSlot} from '../Icon/Icon';
+import type {IconType} from '../Icon';
+import {Tooltip} from '../Tooltip/Tooltip';
+import {useTapStop} from '../Layer/useTouchTrigger';
 import {themeProps} from '../utils/themeProps';
-import {useInputContainer} from '../hooks';
+import {useInputContainer} from '../hooks/useInputContainer';
 import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Field/FieldLabel.generated';
+
+registerEnglishFallback(english);
 
 const styles = stylex.create({
   // The label and its description read as a single block, with no space
@@ -211,7 +219,7 @@ export function FieldLabel({
   ref,
   ...rest
 }: FieldLabelProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {defaultOptionality} = use(FormLayoutContext);
 
   // A form-level `defaultOptionality` means "only the exception is marked": a
@@ -255,6 +263,12 @@ export function FieldLabel({
   // a ref-shaped object, since FieldLabel points at the control by id rather
   // than holding a ref to it.
   const descriptionRef = useRef<HTMLSpanElement>(null);
+  // A tap on the info icon asks for the help, so it stops there: it does not
+  // go on to activate the label's control, as a press anywhere else on the
+  // label would (focus the field, toggle a switch). A mouse click on the icon
+  // keeps that native activation, and hover shows the help.
+  const {onPointerDown: handleIconPointerDown, onClick: handleIconClick} =
+    useTapStop('click');
   const controlRef = useMemo<RefObject<HTMLElement | null>>(
     () => ({
       get current() {
@@ -284,8 +298,17 @@ export function FieldLabel({
         </span>
       )}
       {labelTooltip && (
-        <Tooltip content={labelTooltip} placement="above">
-          <Icon icon="info" size="sm" color="inherit" />
+        // The icon's one job is to reveal the help, so a tap on it opens or
+        // closes the help (`touchTrigger="tap"`), although it sits inside a
+        // `<label>`.
+        <Tooltip content={labelTooltip} placement="above" touchTrigger="tap">
+          <Icon
+            icon="info"
+            size="sm"
+            color="inherit"
+            onPointerDown={handleIconPointerDown}
+            onClick={handleIconClick}
+          />
         </Tooltip>
       )}
     </>
