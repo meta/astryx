@@ -251,10 +251,12 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 - **OQ1 — Is a snap paging page one item or one view?** FR7 makes a page one
   item: the same stops as native snap, so a flick on a three-up carousel moves
-  one item. The alternative makes a page one view, as a UIKit paging scroll
-  view does: a flick moves about the viewport's width and lands on an item
-  edge. A `pages: 'item' | 'view'` option is a later additive field. The owner
-  decides; FR7 changes if a page becomes one view.
+  one item. A UIKit paging scroll view makes a page one view: a flick moves
+  about the viewport's width and lands on an item edge. The choices are a view
+  page by default with `useSnapPaging({pages: 'item'})` as an option, item pages
+  only, or view pages only. With one item per view all three give the same
+  stops. Item paging's feel against UIKit's group paging is not measured. The
+  owner decides; FR7 and `SnapPagingOptions` change if a page becomes one view.
 
 ## Content boundary
 
