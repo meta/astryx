@@ -862,8 +862,13 @@ function PointerDateField({
     }
 
     const result = typedDate.parse(pendingInput);
-    if (result.kind === 'nonexistent' || result.kind === 'outOfRange') {
-      // Keep the text and show why it cannot commit; never adjust the date.
+    if (
+      result.kind === 'incomplete' ||
+      result.kind === 'nonexistent' ||
+      result.kind === 'outOfRange'
+    ) {
+      // Keep the text and show why it cannot commit; never finish or adjust
+      // the date.
       setIsRejectionCommitted(true);
       return;
     }

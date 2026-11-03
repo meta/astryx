@@ -83,7 +83,10 @@ export function typedDateError(
   if (result == null) {
     return null;
   }
-  if (result.kind === 'unreadable') {
+  if (
+    result.kind === 'unreadable' ||
+    (result.kind === 'incomplete' && isCommitted)
+  ) {
     return 'unreadable';
   }
   if (

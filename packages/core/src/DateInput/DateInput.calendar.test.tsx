@@ -357,6 +357,25 @@ describe('DateInput onChange while typing a Gregorian date', () => {
     expect(onChange).toHaveBeenCalledExactlyOnceWith('2026-05-13');
   });
 
+  it.each(['blur', 'Enter'])(
+    'keeps a one-digit year on %s and announces it as invalid',
+    commit => {
+      const {input, onChange, container} = renderField('en-US');
+      typeSlowly(input, '1/5/2');
+      const alert = within(container).getByRole('alert');
+      expect(alert).toHaveTextContent('');
+      if (commit === 'blur') {
+        fireEvent.blur(input);
+      } else {
+        fireEvent.keyDown(input, {key: 'Enter'});
+      }
+      expect(input).toHaveValue('1/5/2');
+      expect(input).toHaveAttribute('aria-invalid', 'true');
+      expect(alert).toHaveTextContent('Invalid date');
+      expect(onChange).not.toHaveBeenCalled();
+    },
+  );
+
   it.each([
     ['en-GB', '31/02/2026'],
     ['en-US', '2/30/2026'],
