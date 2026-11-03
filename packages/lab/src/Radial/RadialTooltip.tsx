@@ -12,10 +12,16 @@
 
 'use client';
 
-import {useState, useCallback, useRef, type ReactNode} from 'react';
+import {
+  useState,
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  type ReactNode,
+} from 'react';
 import {createPortal} from 'react-dom';
 import {useLayer} from '@astryxdesign/core/Layer';
-import {useRadial} from './RadialContext';
+import {useRadial, useRadialInteractive} from './RadialContext';
 
 export interface RadialTooltipDatum {
   /** The slice key or axis name */
@@ -79,6 +85,7 @@ export function RadialTooltip({
     angleByAxis,
     axisDomains,
   } = useRadial();
+  const interactive = useRadialInteractive();
 
   const [hoverState, setHoverState] = useState<RadialTooltipDatum | null>(null);
   const [tooltipCoords, setTooltipCoords] = useState({x: 0, y: 0});
@@ -87,6 +94,7 @@ export function RadialTooltip({
   const active = useRef(false);
 
   const layer = useLayer({mode: 'fixed'});
+  const {hide} = layer;
 
   // Resolve SVG + portal target from the <g> mount
   const gRef = useCallback((el: SVGGElement | null) => {
@@ -220,24 +228,24 @@ export function RadialTooltip({
   // Touch: tap to show, drag to scrub
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<SVGCircleElement>) => {
-      if (e.pointerType !== 'mouse') {
+      if (interactive && e.pointerType !== 'mouse') {
         e.preventDefault();
         active.current = true;
         updateTooltip(e);
       }
     },
-    [updateTooltip],
+    [interactive, updateTooltip],
   );
 
   // Mouse: hover. Touch: drag (only if active).
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<SVGCircleElement>) => {
-      if (e.pointerType !== 'mouse' && !active.current) {
+      if (e.pointerType !== 'mouse' && (!interactive || !active.current)) {
         return;
       }
       updateTooltip(e);
     },
-    [updateTooltip],
+    [interactive, updateTooltip],
   );
 
   // Touch: lift to dismiss
@@ -245,9 +253,16 @@ export function RadialTooltip({
     if (active.current) {
       active.current = false;
       setHoverState(null);
-      layer.hide();
+      hide();
     }
-  }, [layer]);
+  }, [hide]);
+
+  // Sync the top-layer popover with touch interaction availability.
+  useLayoutEffect(() => {
+    if (!interactive) {
+      handlePointerUp();
+    }
+  }, [interactive, handlePointerUp]);
 
   const handlePointerLeave = useCallback(() => {
     if (!active.current) {
@@ -287,7 +302,6 @@ export function RadialTooltip({
           cy={cy}
           r={radius + 10}
           fill="transparent"
-          style={{touchAction: 'none'}}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
