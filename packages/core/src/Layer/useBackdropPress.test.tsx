@@ -135,3 +135,53 @@ describe.each(MEMBERS)(
     }
   },
 );
+
+// A nested layer stops its presses at its own root in the React tree, as
+// layerClickBoundary does. The backdrop press still sees them.
+function NestedLayer() {
+  return (
+    <div
+      data-testid="nested-layer"
+      onPointerDown={event => event.stopPropagation()}
+      onPointerUp={event => event.stopPropagation()}
+      onClick={event => event.stopPropagation()}>
+      <input aria-label="Nested field" />
+    </div>
+  );
+}
+
+describe.each([
+  {
+    name: 'Dialog (purpose="info")',
+    render: (onOpenChange: (isOpen: boolean) => void) => (
+      <Dialog isOpen onOpenChange={onOpenChange} aria-label="Note">
+        <NestedLayer />
+      </Dialog>
+    ),
+  },
+  {
+    name: 'Drawer (scrim)',
+    render: (onOpenChange: (isOpen: boolean) => void) => (
+      <Drawer isOpen onOpenChange={onOpenChange} label="Note">
+        <NestedLayer />
+      </Drawer>
+    ),
+  },
+])('a press through a nested layer on $name', ({render: renderMember}) => {
+  it('a drag from the backdrop into the nested layer, then from it to the backdrop, does not dismiss', () => {
+    const onOpenChange = vi.fn();
+    render(renderMember(onOpenChange));
+    const backdrop = backdropOf();
+    const nested = screen.getByTestId('nested-layer');
+
+    fireEvent.pointerDown(backdrop);
+    fireEvent.pointerUp(nested);
+    fireEvent.click(backdrop.firstElementChild ?? backdrop);
+
+    fireEvent.pointerDown(nested);
+    fireEvent.pointerUp(backdrop);
+    fireEvent.click(backdrop);
+
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+});

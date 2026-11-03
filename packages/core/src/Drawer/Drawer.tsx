@@ -616,21 +616,21 @@ export function Drawer({
       {...layerClickBoundary({
         ...safeProps,
         onClick: composeEventHandlers(onClickProp, scrimPress.onClick),
-        // Where the press started is recorded first. The caller's handler
-        // always runs after it, also when a child prevented default.
-        onPointerDown: chainEventHandlers(
-          scrimPress.onPointerDown,
-          safeProps.onPointerDown as PointerHandler | undefined,
-        ),
-        onPointerUp: chainEventHandlers(
-          scrimPress.onPointerUp,
-          safeProps.onPointerUp as PointerHandler | undefined,
-        ),
-        onPointerCancel: chainEventHandlers(
-          scrimPress.onPointerCancel,
-          safeProps.onPointerCancel as PointerHandler | undefined,
-        ),
       })}
+      // The hook records where the press started first. The caller's capture
+      // handler then runs, also when a child prevented default.
+      onPointerDownCapture={chainEventHandlers(
+        scrimPress.onPointerDownCapture,
+        safeProps.onPointerDownCapture as PointerHandler | undefined,
+      )}
+      onPointerUpCapture={chainEventHandlers(
+        scrimPress.onPointerUpCapture,
+        safeProps.onPointerUpCapture as PointerHandler | undefined,
+      )}
+      onPointerCancelCapture={chainEventHandlers(
+        scrimPress.onPointerCancelCapture,
+        safeProps.onPointerCancelCapture as PointerHandler | undefined,
+      )}
       onKeyDown={onKeyDownProp}
       onCancel={handleCancel}>
       <ModalAnnounceProvider dialogRef={dialogRef} isOpen={isOpen && hasScrim}>

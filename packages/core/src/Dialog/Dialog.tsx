@@ -858,19 +858,19 @@ export function Dialog({
       {...layerClickBoundary({
         ...safeProps,
         onClick: chainEventHandlers(backdropPress.onClick, onClickProp),
-        onPointerDown: chainEventHandlers(
-          backdropPress.onPointerDown,
-          safeProps.onPointerDown as PointerHandler | undefined,
-        ),
-        onPointerUp: chainEventHandlers(
-          backdropPress.onPointerUp,
-          safeProps.onPointerUp as PointerHandler | undefined,
-        ),
-        onPointerCancel: chainEventHandlers(
-          backdropPress.onPointerCancel,
-          safeProps.onPointerCancel as PointerHandler | undefined,
-        ),
       })}
+      onPointerDownCapture={chainEventHandlers(
+        backdropPress.onPointerDownCapture,
+        safeProps.onPointerDownCapture as PointerHandler | undefined,
+      )}
+      onPointerUpCapture={chainEventHandlers(
+        backdropPress.onPointerUpCapture,
+        safeProps.onPointerUpCapture as PointerHandler | undefined,
+      )}
+      onPointerCancelCapture={chainEventHandlers(
+        backdropPress.onPointerCancelCapture,
+        safeProps.onPointerCancelCapture as PointerHandler | undefined,
+      )}
       onCancel={handleCancel}
       aria-modal={isHydrating ? undefined : 'true'}
       // The default aria-labelledby (from a DialogHeader title) is set

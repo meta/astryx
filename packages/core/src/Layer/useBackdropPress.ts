@@ -5,16 +5,17 @@
 /**
  * @file useBackdropPress.ts
  * @input A modal layer's backdrop dismissal and whether it is allowed now
- * @output Pointer and click handlers for the layer's <dialog> root
+ * @output Capture-phase pointer handlers and a click handler for the layer's
+ *   <dialog> root
  * @position Shared backdrop-press rule for Dialog and Drawer
  */
 
 import {useCallback, useRef, type PointerEvent, type MouseEvent} from 'react';
 
 export interface BackdropPressHandlers {
-  onPointerDown: (event: PointerEvent<HTMLElement>) => void;
-  onPointerUp: (event: PointerEvent<HTMLElement>) => void;
-  onPointerCancel: (event: PointerEvent<HTMLElement>) => void;
+  onPointerDownCapture: (event: PointerEvent<HTMLElement>) => void;
+  onPointerUpCapture: (event: PointerEvent<HTMLElement>) => void;
+  onPointerCancelCapture: (event: PointerEvent<HTMLElement>) => void;
   onClick: (event: MouseEvent<HTMLElement>) => void;
 }
 
@@ -24,6 +25,10 @@ export interface BackdropPressHandlers {
  * of the layer's edge and ends on the other (it goes to the nearest common
  * ancestor), so a backdrop press dismisses only when its pointer-down and its
  * pointer-up both landed on the backdrop. A cancelled pointer ends the press.
+ *
+ * The pointer handlers run in the capture phase. A nested layer, such as a
+ * popover open in the dialog, stops its presses at its own root, so a
+ * bubble-phase handler here does not see them.
  */
 export function useBackdropPress(
   onBackdropPress: () => void,
@@ -32,18 +37,21 @@ export function useBackdropPress(
   const startedOnBackdropRef = useRef(false);
   const endedOnBackdropRef = useRef(false);
 
-  const onPointerDown = useCallback((event: PointerEvent<HTMLElement>) => {
-    startedOnBackdropRef.current = event.target === event.currentTarget;
-    endedOnBackdropRef.current = false;
-  }, []);
+  const onPointerDownCapture = useCallback(
+    (event: PointerEvent<HTMLElement>) => {
+      startedOnBackdropRef.current = event.target === event.currentTarget;
+      endedOnBackdropRef.current = false;
+    },
+    [],
+  );
 
-  const onPointerUp = useCallback((event: PointerEvent<HTMLElement>) => {
+  const onPointerUpCapture = useCallback((event: PointerEvent<HTMLElement>) => {
     endedOnBackdropRef.current =
       startedOnBackdropRef.current && event.target === event.currentTarget;
     startedOnBackdropRef.current = false;
   }, []);
 
-  const onPointerCancel = useCallback(() => {
+  const onPointerCancelCapture = useCallback(() => {
     startedOnBackdropRef.current = false;
     endedOnBackdropRef.current = false;
   }, []);
@@ -51,6 +59,7 @@ export function useBackdropPress(
   const onClick = useCallback(
     (event: MouseEvent<HTMLElement>) => {
       const pressWasOnBackdrop = endedOnBackdropRef.current;
+      startedOnBackdropRef.current = false;
       endedOnBackdropRef.current = false;
       if (
         isEnabled &&
@@ -63,5 +72,10 @@ export function useBackdropPress(
     [isEnabled, onBackdropPress],
   );
 
-  return {onPointerDown, onPointerUp, onPointerCancel, onClick};
+  return {
+    onPointerDownCapture,
+    onPointerUpCapture,
+    onPointerCancelCapture,
+    onClick,
+  };
 }
