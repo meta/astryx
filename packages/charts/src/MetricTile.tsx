@@ -270,7 +270,7 @@ export function MetricTile({
             </svg>
             {delta.value}
             <span {...stylex.props(styles.srOnly)}>
-              ({t(DIRECTION_MESSAGE_KEYS[delta.direction])})
+              {t(DIRECTION_MESSAGE_KEYS[delta.direction])}
             </span>
           </span>
         ) : null}

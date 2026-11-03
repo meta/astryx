@@ -12,6 +12,7 @@ import {createRef} from 'react';
 import {describe, it, expect} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import {MetricTile} from './MetricTile';
+import {InternationalizationProvider} from '@astryxdesign/core';
 
 describe('MetricTile content', () => {
   it('renders label and value', () => {
@@ -81,6 +82,29 @@ describe('MetricTile delta', () => {
     );
     expect(screen.getByText('+12.4%')).toBeInTheDocument();
     expect(screen.getByText('(trending up)')).toBeInTheDocument();
+  });
+
+  it('announces the direction as one catalog node, with translator-owned punctuation', () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        messages={{
+          fr: {
+            '@astryx.chart.deltaTrendingUp': {
+              defaultMessage: 'en hausse !',
+            },
+          },
+        }}>
+        <MetricTile
+          label="Total requests"
+          value="2.4M"
+          delta={{value: '+12.4%', direction: 'up'}}
+        />
+      </InternationalizationProvider>,
+    );
+    // One text node: no literal parens assembled at the call site.
+    expect(screen.getByText('en hausse !')).toBeInTheDocument();
+    expect(screen.queryByText('(trending up)')).not.toBeInTheDocument();
   });
 
   it('maps up direction to positive sentiment by default', () => {

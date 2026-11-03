@@ -492,15 +492,15 @@
     "description": "Screen-reader-only caption for the small-data table that mirrors a Chart. `{label}` is the Chart's resolved accessible name."
   },
   "@astryx.chart.deltaFlat": {
-    "defaultMessage": "flat",
+    "defaultMessage": "(flat)",
     "description": "Screen-reader text announced after a MetricTile delta value when the metric is unchanged."
   },
   "@astryx.chart.deltaTrendingDown": {
-    "defaultMessage": "trending down",
+    "defaultMessage": "(trending down)",
     "description": "Screen-reader text announced after a MetricTile delta value when the metric is falling."
   },
   "@astryx.chart.deltaTrendingUp": {
-    "defaultMessage": "trending up",
+    "defaultMessage": "(trending up)",
     "description": "Screen-reader text announced after a MetricTile delta value when the metric is rising."
   },
   "@astryx.chartLegend.label": {
@@ -2438,5 +2438,13 @@
   "@astryx.infoTip.label": {
     "defaultMessage": "More information",
     "description": "Default accessible name of an InfoTip, the small info-icon button whose press reveals help about the label, value, or metric beside it."
+  },
+  "@astryx.chart.sparklineValueLabel": {
+    "defaultMessage": "Value",
+    "description": "Series name for a Sparkline trend, announced in the accessible name and data table."
+  },
+  "@astryx.chart.sparklinePositionLabel": {
+    "defaultMessage": "Position",
+    "description": "Name of the point position dimension in a Sparkline accessible name and data table."
   }
 }

@@ -17,6 +17,7 @@
 import type {Ref} from 'react';
 import {useMemo} from 'react';
 import type {BaseProps} from '@astryxdesign/core';
+import {useTranslator} from '@astryxdesign/core';
 import {Chart} from './Chart';
 import type {YBaseline} from './types';
 import type {ChartTooltipProps} from './ChartTooltip';
@@ -69,17 +70,30 @@ export function Sparkline({
   style,
   ...rest
 }: SparklineProps) {
+  const t = useTranslator();
   const rows = useMemo(
     () => data.map((value, index) => ({index, value})),
     [data],
   );
 
+  // The synthetic row keys are user-facing (accessible name, data table),
+  // so both names resolve through the catalog.
+  const valueLabel = t('@astryx.chart.sparklineValueLabel');
+  const positionLabel = t('@astryx.chart.sparklinePositionLabel');
   const series = useMemo(
     () =>
       fill
-        ? [area('value', {color, curve, opacity: 0.25, strokeWidth})]
-        : [line('value', {color, curve, strokeWidth})],
-    [fill, color, curve, strokeWidth],
+        ? [
+            area('value', {
+              color,
+              curve,
+              opacity: 0.25,
+              strokeWidth,
+              label: valueLabel,
+            }),
+          ]
+        : [line('value', {color, curve, strokeWidth, label: valueLabel})],
+    [fill, color, curve, strokeWidth, valueLabel],
   );
 
   return (
@@ -87,6 +101,7 @@ export function Sparkline({
       ref={ref}
       data={rows}
       xKey="index"
+      xLabel={positionLabel}
       series={series}
       height={height}
       margin={SPARKLINE_MARGIN}

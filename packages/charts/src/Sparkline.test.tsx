@@ -12,6 +12,7 @@ import {createRef} from 'react';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {render, screen, act} from '@testing-library/react';
 import {Sparkline} from './Sparkline';
+import {InternationalizationProvider} from '@astryxdesign/core';
 
 const data = [4, 7, 5, 9, 6, 11];
 
@@ -90,6 +91,42 @@ describe('Sparkline rendering', () => {
 
     expect(
       screen.getByRole('img', {name: 'Empty sparkline'}),
+    ).toBeInTheDocument();
+  });
+
+  it('names an untitled chart from catalog labels, not row keys', () => {
+    render(<Sparkline data={data} />);
+    reportWidth(120);
+
+    expect(
+      screen.getByRole('img', {name: 'Chart of Value by Position'}),
+    ).toBeInTheDocument();
+  });
+
+  it('localizes the untitled chart name through the catalog', () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        messages={{
+          fr: {
+            '@astryx.chart.labelWithSeries': {
+              defaultMessage: 'Graphique de {series} par {xKey}',
+            },
+            '@astryx.chart.sparklineValueLabel': {
+              defaultMessage: 'la valeur',
+            },
+            '@astryx.chart.sparklinePositionLabel': {
+              defaultMessage: 'la position',
+            },
+          },
+        }}>
+        <Sparkline data={data} />
+      </InternationalizationProvider>,
+    );
+    reportWidth(120);
+
+    expect(
+      screen.getByRole('img', {name: 'Graphique de la valeur par la position'}),
     ).toBeInTheDocument();
   });
 });
