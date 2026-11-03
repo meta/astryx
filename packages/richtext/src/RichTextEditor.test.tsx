@@ -1836,6 +1836,36 @@ describe('RichTextEditorToolbar — links', () => {
       );
     });
 
+    it('inserts the link at a caret from Cmd/Ctrl+K with promptForUrl', async () => {
+      const editor = await renderWithPrompt();
+      editor.update(() => {
+        const root = $getRoot();
+        root.clear();
+        const paragraph = $createParagraphNode();
+        const textNode = $createTextNode('hello world');
+        paragraph.append(textNode);
+        root.append(paragraph);
+        textNode.select(6, 6);
+      });
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toEqual(['hello world']),
+      );
+
+      const textbox = screen.getByRole('textbox');
+      fireEvent.keyDown(textbox, {key: 'k', metaKey: true});
+      fireEvent.keyDown(textbox, {key: 'k', ctrlKey: true});
+
+      await waitFor(() =>
+        expect(paragraphParts(editor)).toContain(
+          'link:https://example.com/:example.com',
+        ),
+      );
+      expect(paragraphParts(editor)[0]).toBe('hello ');
+      expect(paragraphParts(editor)).not.toContain(
+        'link:https://example.com/:hello world',
+      );
+    });
+
     it('updates the link around a caret instead of splitting it', async () => {
       let editor!: LexicalEditor;
       render(

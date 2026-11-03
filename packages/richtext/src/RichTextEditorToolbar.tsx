@@ -696,37 +696,36 @@ export function RichTextEditorToolbar({
         return false;
       }
 
-      restoreLinkSelection();
       const linkAttributes = hasNewTabLinks
         ? {target: '_blank', rel: 'noopener noreferrer'}
         : {};
-      // With a collapsed selection outside a link there is no text to link,
-      // so the entered URL goes in at the caret as the link's text. This runs
-      // before the toggle command: LinkPlugin handles that command for every
-      // selection, and at a caret it would link the whole text node around
-      // it. A caret inside a link keeps the toggle command, which updates
-      // that link.
-      let isInsertedAtCaret = false;
+      const savedSelection = savedSelectionRef.current;
+      // One update restores the selection, decides, and applies. Inside a
+      // command listener (Cmd/Ctrl+K) Lexical queues an update, so a flag set
+      // in one update cannot steer code that runs after it.
       editor.update(() => {
+        if (savedSelection) {
+          $setSelection(savedSelection.clone());
+        }
         const selection = $getSelection();
-        if (!$isRangeSelection(selection) || !selection.isCollapsed()) {
-          return;
+        if ($isRangeSelection(selection) && selection.isCollapsed()) {
+          const node = selection.anchor.getNode();
+          const isInLink = $isLinkNode(node) || $isLinkNode(node.getParent());
+          // At a caret outside a link there is no text to link, so the URL
+          // becomes the link's text. The toggle command would link the whole
+          // text node around the caret instead.
+          if (!isInLink) {
+            const linkNode = $createLinkNode(url, linkAttributes);
+            linkNode.append($createTextNode(trimmed));
+            selection.insertNodes([linkNode]);
+            return;
+          }
         }
-        const node = selection.anchor.getNode();
-        const isInLink = $isLinkNode(node) || $isLinkNode(node.getParent());
-        if (!isInLink) {
-          const linkNode = $createLinkNode(url, linkAttributes);
-          linkNode.append($createTextNode(trimmed));
-          selection.insertNodes([linkNode]);
-          isInsertedAtCaret = true;
-        }
-      });
-      if (!isInsertedAtCaret) {
         editor.dispatchCommand(TOGGLE_LINK_COMMAND, {url, ...linkAttributes});
-      }
+      });
       return true;
     },
-    [editor, hasNewTabLinks, restoreLinkSelection],
+    [editor, hasNewTabLinks],
   );
 
   const toggleLink = useCallback(() => {
