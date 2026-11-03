@@ -171,9 +171,10 @@ export interface ClickableContainerResult {
   onMouseUp: (event: MouseEvent<HTMLElement>) => void;
   /**
    * Spread on the container with `onClick`. A press that starts on a nested
-   * interactive element does not activate the container, so the container
-   * shows no pressed state for it. A container without it keeps its
-   * activation rule and shows its pressed state for every press.
+   * interactive element does not activate the container. On a container that
+   * paints its press with `usePressFeedback`, this drops that touch press.
+   * A mouse `:active` press paint is unchanged. A container without it keeps
+   * its activation rule and shows its pressed state for every press.
    */
   onPointerDown: (event: PointerEvent<HTMLElement>) => void;
 }
