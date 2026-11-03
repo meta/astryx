@@ -4,7 +4,8 @@
  * @file flatTree.ts
  * @input A DOM node
  * @output Exports parentAcrossShadow, containsAlongFlatTree, which walks it,
- *   deepActiveElement, and shadowHostOf, a shadow root's host
+ *   deepActiveElement, shadowHostOf, a shadow root's host, and
+ *   outermostShadowHostOf
  * @position The flat-tree parent the browser scrolls and dispatches
  *   through, shared by the gesture host's native-scroll probe, the
  *   selection lock (which the press feedback controller uses without the
@@ -51,7 +52,24 @@ export function deepActiveElement(
   return active;
 }
 
-/** The host of a shadow root, open or closed, and null for any other node. */
+/**
+ * The host of a shadow root, open or closed and from any window, and null for
+ * any other node.
+ */
 export function shadowHostOf(node: Node): Element | null {
-  return node instanceof ShadowRoot ? node.host : null;
+  return node.nodeType === node.DOCUMENT_FRAGMENT_NODE && 'host' in node
+    ? (node as ShadowRoot).host
+    : null;
+}
+
+/**
+ * The outermost shadow host above a shadow root, and null for any other node.
+ * A press inside nested closed roots reaches the document as a press on it.
+ */
+export function outermostShadowHostOf(node: Node): Element | null {
+  let host = shadowHostOf(node);
+  for (let next = host; next != null; next = shadowHostOf(next.getRootNode())) {
+    host = next;
+  }
+  return host;
 }

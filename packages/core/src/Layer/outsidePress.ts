@@ -29,7 +29,7 @@
 
 import {useCallback, useEffect, useMemo, useRef} from 'react';
 import {UIKIT_PAN} from '../motion/uikit/gestures';
-import {shadowHostOf} from '../utils/flatTree';
+import {outermostShadowHostOf} from '../utils/flatTree';
 import {subscribeInput} from '../utils/inputStream';
 
 export interface OutsidePressOptions {
@@ -37,14 +37,15 @@ export interface OutsidePressOptions {
   readonly pointerTypes?: ReadonlyArray<string>;
   /**
    * A press outside also closes the layer as it begins to pan, or when the
-   * browser takes it. An anchored menu closes so under a finger. Only the
-   * first pointer counts, and a second one waits for it.
+   * browser takes it. An anchored menu closes so under a finger. While one
+   * press outside is followed, other pointers are ignored.
    */
   readonly closesOnPan?: boolean;
   /**
-   * The shadow root the layer renders in. The document sees a press inside a
-   * closed shadow root as a press on its host. So the root judges a press's
-   * start after the document, and a lift inside it before its host does.
+   * The shadow root the layer renders in. The document sees a press inside
+   * closed shadow roots as a press on the outermost host. So the root judges a
+   * press's start after the document, and a lift inside it before that host
+   * does.
    */
   readonly root?: Node | null;
 }
@@ -81,7 +82,7 @@ export function watchOutsidePress(
   {pointerTypes, closesOnPan = false, root = null}: OutsidePressOptions = {},
 ): () => void {
   const doc = owner.ownerDocument;
-  const host = root == null ? null : shadowHostOf(root);
+  const host = root == null ? null : outermostShadowHostOf(root);
   let startedOutside = false;
   let panStart: {id: number; x: number; y: number} | null = null;
   const follows = (event: PointerEvent) =>
@@ -131,8 +132,8 @@ export function watchOutsidePress(
       onOutside();
     }
   };
-  // The document sees a lift inside a closed root as a lift on its host, and
-  // so does the host. So the root judges a lift inside it on the way down.
+  // The document sees a lift inside closed roots as a lift on the outermost
+  // host, and so does that host. So the root judges a lift inside it on the way down.
   // The host judges, on the way back up, a lift the root did not judge.
   let liftJudgedInRoot: Event | null = null;
   const handleUp = (event: PointerEvent) => {
