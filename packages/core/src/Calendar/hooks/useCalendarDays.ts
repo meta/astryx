@@ -22,7 +22,7 @@ import {
   plainDateAddDays,
 } from '../../utils/plainDate';
 import {useLocale} from '../../i18n';
-import {getStandaloneShortWeekdayNames} from '../getStandaloneShortWeekdayNames';
+import {getWeekdayHeaderNames} from '../getWeekdayHeaderNames';
 
 /**
  * Represents a single day in the calendar grid.
@@ -114,7 +114,7 @@ export function useCalendarDays(
   // Generated strings avoid Date anchors, so weekday headers cannot shift with
   // the runtime timezone. Keep numeric indices as the rotation source of truth.
   const dayNames = useMemo(() => {
-    const names = getStandaloneShortWeekdayNames(locale);
+    const names = getWeekdayHeaderNames(locale);
     return Array.from(
       {length: 7},
       (_, index) => names[(index + weekStartsOn) % 7],

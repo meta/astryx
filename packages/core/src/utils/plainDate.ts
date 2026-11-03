@@ -359,10 +359,10 @@ export function plainDateFormatStandaloneMonthYear(
 
 // e.g. "Sun" (locale-dependent) — the weekday on its own, abbreviated.
 //
-// This is CLDR's `abbreviated` width, which `Intl` reaches natively. Note
-// that Calendar's 2-letter header ("Su") is CLDR's *short* width, a
-// different thing that `Intl` cannot express at all — which is why that one
-// needs the generated lookup table beside it and this one does not.
+// This is CLDR's `abbreviated` width, which `Intl` reaches natively. The
+// picker weekday headers do not use it: they choose abbreviated or CLDR's
+// *short* width per locale, and `Intl` cannot express the short width, so
+// they read a generated table instead.
 export const DATE_FORMAT_WEEKDAY_ONLY: Intl.DateTimeFormatOptions = {
   weekday: 'short',
 };

@@ -1,20 +1,20 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file getStandaloneShortWeekdayNames.ts
- * @input Generated CLDR stand-alone-short weekday table
- * @output Private locale resolver for Calendar weekday headers
- * @position Calendar-internal pure utility; not exported from the package
+ * @file getWeekdayHeaderNames.ts
+ * @input Generated CLDR weekday header table
+ * @output Private locale resolver for weekday header names
+ * @position Package-internal pure utility for the Calendar grid and the
+ *   DateInput bottom sheet; not exported from the package
  */
 
 import {
-  standaloneShortWeekdayNamesByLocale,
-  type StandaloneShortWeekdayNames,
-} from './standaloneShortWeekdayNames.generated';
+  weekdayHeaderNamesByLocale,
+  type WeekdayHeaderNames,
+} from './weekdayHeaderNames.generated';
 
-const weekdayNamesByLocale: Readonly<
-  Record<string, StandaloneShortWeekdayNames>
-> = standaloneShortWeekdayNamesByLocale;
+const weekdayNamesByLocale: Readonly<Record<string, WeekdayHeaderNames>> =
+  weekdayHeaderNamesByLocale;
 const englishWeekdayNames = weekdayNamesByLocale.en;
 
 /**
@@ -22,9 +22,7 @@ const englishWeekdayNames = weekdayNamesByLocale.en;
  * Unicode extensions are ignored through Intl.Locale.baseName. Invalid tags and
  * valid but unsupported languages safely use English.
  */
-export function getStandaloneShortWeekdayNames(
-  locale: string,
-): StandaloneShortWeekdayNames {
+export function getWeekdayHeaderNames(locale: string): WeekdayHeaderNames {
   try {
     const parsed = new Intl.Locale(locale);
     return (
