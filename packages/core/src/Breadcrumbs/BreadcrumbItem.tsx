@@ -73,6 +73,7 @@ import type {DropdownMenuOption} from '../DropdownMenu/DropdownMenu';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {isRenderable} from '../utils/isRenderable';
 // =============================================================================
 // Props
 // =============================================================================
@@ -373,7 +374,9 @@ export function BreadcrumbItem({
 
   const content = (
     <>
-      {startIcon && <span {...stylex.props(itemStyles.icon)}>{startIcon}</span>}
+      {isRenderable(startIcon) && (
+        <span {...stylex.props(itemStyles.icon)}>{startIcon}</span>
+      )}
       {children}
     </>
   );
@@ -527,7 +530,7 @@ function BreadcrumbMenuTrigger({
   // The menu's rows move focus with the last input
   // (`architecture:interaction-modality` INV1); this menu has no press model
   // to activate the tracking they read, so it activates it itself.
-  useInteractionModalityTracking();
+  const {ref: modalityRef} = useInteractionModalityTracking();
 
   const popover = usePopover({
     hasLightDismiss: true,
@@ -646,6 +649,7 @@ function BreadcrumbMenuTrigger({
         ref={useMergedRefs(
           ref as React.Ref<HTMLButtonElement>,
           buttonRef,
+          modalityRef,
           popover.triggerRef,
         )}
         type="button"

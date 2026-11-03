@@ -38,7 +38,7 @@ import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {Icon} from '../Icon';
 import type {IconType} from '../Icon';
 import type {IconName} from '../Icon/globalIconRegistry';
-import type {InputStatus, FieldStatusVariant} from '../Field';
+import type {InputStatus} from '../Field';
 import {usePopover} from '../Popover/usePopover';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {useAnnounce} from '../hooks/useAnnounce';
@@ -59,7 +59,6 @@ import {PowerSearchEditPopover} from './PowerSearchEditPopover';
 import {resolveOperatorLabel} from './resolveOperatorLabel';
 import {themeProps} from '../utils/themeProps';
 import {truncateCharacters} from '../utils/characters';
-import {useTranslator} from '../i18n';
 import {useLocale} from '../i18n/useLocale';
 import type {Locale} from '../i18n/types';
 import type {
@@ -77,6 +76,14 @@ import type {
 } from './types';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/PowerSearch/PowerSearch.generated';
+
+registerEnglishFallback(english);
 // =============================================================================
 // Icon mapping for typeahead entries
 // =============================================================================
@@ -413,7 +420,7 @@ export interface PowerSearchProps extends Omit<
    * - 'detached': message floats below as a separate element with spacing
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
   /** Max width for dropdown menu. */
   menuWidth?: number;
   /** Max display length for filter token values. @default 40 */
@@ -586,7 +593,7 @@ export function PowerSearch({
   const size = useSize(sizeProp, 'md');
   const config = useInternalConfig(configProp);
   const searchSource = usePowerSearchSource(config, maxSearchResults);
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const label = labelFromProps ?? t('@astryx.powersearch.label');
   const placeholder =
@@ -1083,6 +1090,7 @@ export function PowerSearch({
   // Build combined endContent from resultCount + endContent props
   const combinedEndContent = useMemo((): React.ReactNode => {
     const resultCountNode =
+      // eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `resultCountText` is a formatted string, not a slot
       resultCountText != null ? (
         <span {...stylex.props(resultCountStyles.text)}>{resultCountText}</span>
       ) : null;

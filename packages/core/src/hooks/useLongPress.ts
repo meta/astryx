@@ -11,29 +11,31 @@
  *   `useMenuPress` for the held-finger menu open
  *
  * SYNC: When modified, update the hooks barrel /packages/core/src/hooks/index.ts
- *
- * Detects a single-finger long-press: fires `onLongPress` with the press
- * start point after `delayMs`. Cancels if the finger moves past
- * `moveCancelPx` (treated as a scroll/drag), lifts, or the touch is
- * cancelled. The pending timer is also cleared on unmount.
- *
- * Two ways in, one detector. Spread the touch handlers onto an element, or —
- * when the caller already runs its own pointer-event machine, as
- * `useMenuPress` does — call `start`, `moveTo` and `cancel` from it. Either
- * way the hold duration, the movement tolerance and the timer are this
- * hook's, so a long press cannot come to mean one thing on a context menu
- * and another on a menu trigger.
- *
- * Motivation: iOS Safari never synthesizes a `contextmenu` event on
- * long-press, so long-press is the only touch affordance for opening
- * cursor-positioned surfaces.
  */
 
-import {useCallback, useEffect, useRef} from 'react';
+// iOS Safari sends no `contextmenu` event on a long press. So a long press is
+// the only touch way to open a surface at the press point.
+//
+// A caller can spread the touch handlers, or call `start`, `moveTo` and
+// `cancel` from its own pointer events, as `useMenuPress` does. Both ways use
+// this hook's hold time, movement tolerance and timer, so a long press means
+// the same thing on a context menu and on a menu trigger.
+//
+// The defaults come from the long-press recognizer. The recognizer measures
+// its tolerance as a distance, as UIKit does. This hook measures it on each
+// axis. The context menu's own movement allowance is a guess and is not
+// measured yet (AST-094).
 
-// Default long-press tuning.
-const DEFAULT_DELAY_MS = 500;
-const DEFAULT_MOVE_CANCEL_PX = 10;
+import {useCallback, useEffect, useRef} from 'react';
+import {
+  LONG_PRESS_ALLOWABLE_MOVEMENT_PX,
+  LONG_PRESS_DURATION_MS,
+} from '../motion/uikit/longPress';
+
+// The long-press numbers have one source, shared with the gesture
+// recognizers (motion/uikit/longPress.ts).
+const DEFAULT_DELAY_MS = LONG_PRESS_DURATION_MS;
+const DEFAULT_MOVE_CANCEL_PX = LONG_PRESS_ALLOWABLE_MOVEMENT_PX;
 
 export interface UseLongPressOptions {
   /** Fired with the touch start point once the press is held for `delayMs`. */
@@ -43,6 +45,14 @@ export interface UseLongPressOptions {
   /** Hold duration before the press fires, in ms. Defaults to 500. */
   delayMs?: number;
   /** Movement past this distance (px, either axis) cancels the press. Defaults to 10. */
+  moveCancelPx?: number;
+}
+
+/**
+ * @internal A press's own movement tolerance, for a core caller that decides
+ * it as the press starts (useMenuPress's trigger). Not in the hooks entry.
+ */
+export interface LongPressTolerance {
   moveCancelPx?: number;
 }
 
@@ -66,9 +76,39 @@ export interface UseLongPressHandlers {
   cancel: () => void;
 }
 
+/**
+ * @internal The handlers with a per-press tolerance on `start`, for a core
+ * caller that decides it as the press starts (useMenuPress's trigger). Not in
+ * the hooks entry: the public `useLongPress` takes its tolerance from
+ * `moveCancelPx`.
+ */
+export interface LongPressDetectorHandlers extends Omit<
+  UseLongPressHandlers,
+  'start'
+> {
+  start: (
+    point: {x: number; y: number},
+    tolerance?: LongPressTolerance,
+  ) => void;
+}
+
 export function useLongPress(
   options: UseLongPressOptions,
 ): UseLongPressHandlers {
+  const {start, ...handlers} = useLongPressDetector(options);
+  // The public start takes only the point. A per-press tolerance stays
+  // internal to its core caller.
+  const startAt = useCallback(
+    (point: {x: number; y: number}) => start(point),
+    [start],
+  );
+  return {...handlers, start: startAt};
+}
+
+/** @internal useLongPress with a per-press tolerance (LongPressDetectorHandlers). */
+export function useLongPressDetector(
+  options: UseLongPressOptions,
+): LongPressDetectorHandlers {
   const {
     onLongPress,
     disabled = false,
@@ -78,6 +118,8 @@ export function useLongPress(
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startRef = useRef<{x: number; y: number} | null>(null);
+  // The press in progress's tolerance, when its caller chose one at start.
+  const pressToleranceRef = useRef<LongPressTolerance | null>(null);
   // Keep the latest callback without re-creating handlers on every render.
   const onLongPressRef = useRef(onLongPress);
   onLongPressRef.current = onLongPress;
@@ -91,14 +133,15 @@ export function useLongPress(
   }, []);
 
   const start = useCallback(
-    (point: {x: number; y: number}) => {
+    (point: {x: number; y: number}, tolerance?: LongPressTolerance) => {
       if (disabled) {
         return;
       }
-      // Clear any stale timer first, THEN record the start point — clearing
-      // also nulls startRef, so order matters.
+      // Clear a stale timer first, then record the start point. The clear
+      // also sets startRef to null.
       clear();
       startRef.current = {x: point.x, y: point.y};
+      pressToleranceRef.current = tolerance ?? null;
       timerRef.current = setTimeout(() => {
         const from = startRef.current;
         if (from == null) {
@@ -116,11 +159,12 @@ export function useLongPress(
       if (from == null) {
         return false;
       }
+      // This press's own tolerance when its caller chose one, on either axis.
+      const limit = pressToleranceRef.current?.moveCancelPx ?? moveCancelPx;
       if (
-        Math.abs(point.x - from.x) > moveCancelPx ||
-        Math.abs(point.y - from.y) > moveCancelPx
+        Math.abs(point.x - from.x) > limit ||
+        Math.abs(point.y - from.y) > limit
       ) {
-        // Treat as a scroll/drag, not a long-press.
         clear();
         return false;
       }
@@ -135,7 +179,6 @@ export function useLongPress(
         return;
       }
       if (e.touches.length !== 1) {
-        // Multi-touch cancels any pending long-press.
         clear();
         return;
       }
@@ -151,7 +194,6 @@ export function useLongPress(
         return;
       }
       if (e.touches.length !== 1) {
-        // Multi-touch cancels the pending long-press.
         clear();
         return;
       }
@@ -161,7 +203,6 @@ export function useLongPress(
     [clear, moveTo],
   );
 
-  // Cancel any pending long-press timer on unmount.
   useEffect(() => clear, [clear]);
 
   return {

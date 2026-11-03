@@ -17,6 +17,7 @@ import {
   createEvent,
   waitFor,
   act,
+  within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {FileInput} from './FileInput';
@@ -255,6 +256,48 @@ describe('FileInput', () => {
     const input = document.querySelector('input[type="file"]')!;
     expect(input).not.toHaveAttribute('aria-describedby');
     expect(input).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it("joins a caller's aria-describedby to the trigger's own description", () => {
+    render(
+      <>
+        <p id="hint">Up to 10 MB</p>
+        <FileInput
+          label="Report"
+          description="PDF only"
+          aria-describedby="hint"
+          value={null}
+          onChange={() => {}}
+        />
+      </>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Report'});
+    expect(trigger).toHaveAccessibleDescription('Up to 10 MB PDF only');
+  });
+
+  it("puts a caller's other aria-* props on the trigger, and keeps the ones it manages", () => {
+    render(
+      <FileInput
+        label="Report"
+        aria-details="details"
+        aria-expanded={false}
+        aria-posinset={1}
+        aria-label="Ignored"
+        value={null}
+        onChange={() => {}}
+      />,
+    );
+    const trigger = screen.getByRole('button', {name: 'Report'});
+    expect(trigger).toHaveAttribute('aria-details', 'details');
+    // Booleans and numbers reach the trigger too.
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveAttribute('aria-posinset', '1');
+    expect(trigger).toHaveAttribute('aria-label', 'Report');
+    // The hidden input is still aria-hidden, whatever props it takes.
+    expect(document.querySelector('input[type="file"]')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
   });
 
   it('does not mention required without isRequired', () => {
@@ -974,6 +1017,168 @@ describe('FileInput', () => {
     });
   });
 
+  describe('busy interaction', () => {
+    it('keeps a loading trigger focusable without opening the picker on click, Enter or Space', async () => {
+      const user = userEvent.setup();
+      render(
+        <FileInput label="Upload" value={null} onChange={() => {}} isLoading />,
+      );
+      const trigger = screen.getByRole('button', {name: 'Upload'});
+      const click = vi.spyOn(fileInputEl(), 'click');
+
+      await user.click(screen.getByText('Choose file'));
+      await user.tab();
+      expect(trigger).toHaveFocus();
+      await user.keyboard('{Enter} ');
+      fireEvent.click(trigger);
+
+      expect(click).not.toHaveBeenCalled();
+      expect(trigger).toHaveFocus();
+      expect(trigger).toHaveAttribute('aria-busy', 'true');
+      expect(trigger).toHaveAttribute('aria-disabled', 'true');
+      click.mockRestore();
+    });
+
+    it('ignores dropped files while loading without starting another Action', async () => {
+      const onChange = vi.fn();
+      const changeAction = vi.fn(async () => {});
+      render(
+        <FileInput
+          label="Upload"
+          value={null}
+          onChange={onChange}
+          changeAction={changeAction}
+          mode="dropzone"
+          isLoading
+        />,
+      );
+      const trigger = screen.getByRole('button', {name: 'Upload'});
+      const drop = createEvent.drop(trigger, {
+        dataTransfer: {files: [createFile('dropped.txt', 100)]},
+      });
+      await act(async () => fireEvent(trigger, drop));
+
+      expect(drop.defaultPrevented).toBe(true);
+      expect(onChange).not.toHaveBeenCalled();
+      expect(changeAction).not.toHaveBeenCalled();
+    });
+
+    it('cancels native input activation while loading and preserves the idle caller handler', () => {
+      const onClick = vi.fn();
+      const props = {label: 'Upload', value: null, onChange: vi.fn(), onClick};
+      const {rerender} = render(<FileInput {...props} isLoading />);
+      const input = fileInputEl();
+
+      expect(fireEvent.click(input)).toBe(false);
+      expect(onClick).not.toHaveBeenCalled();
+
+      rerender(<FileInput {...props} />);
+      expect(fireEvent.click(input)).toBe(true);
+      expect(onClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('ignores a native picker result delivered after loading starts and accepts it once idle', () => {
+      const onChange = vi.fn();
+      const props = {label: 'Upload', value: null, onChange};
+      const {rerender} = render(<FileInput {...props} />);
+      const input = fileInputEl();
+      const file = createFile('report.txt', 100);
+      fireEvent.click(screen.getByRole('button', {name: 'Upload'}));
+      rerender(<FileInput {...props} isLoading />);
+
+      fireEvent.change(input, {target: {files: [file]}});
+      expect(onChange).not.toHaveBeenCalled();
+
+      rerender(<FileInput {...props} />);
+      fireEvent.change(input, {target: {files: [file]}});
+      expect(onChange).toHaveBeenCalledExactlyOnceWith(file);
+    });
+
+    it('discards drag feedback when loading starts and ignores new drags until idle', () => {
+      const props = {
+        label: 'Upload',
+        value: null,
+        onChange: vi.fn(),
+        mode: 'dropzone' as const,
+      };
+      const {rerender} = render(<FileInput {...props} isLoading />);
+      const trigger = screen.getByRole('button', {name: 'Upload'});
+      const enter = createEvent.dragEnter(trigger);
+      const over = createEvent.dragOver(trigger);
+      fireEvent(trigger, enter);
+      fireEvent(trigger, over);
+      expect(enter.defaultPrevented).toBe(true);
+      expect(over.defaultPrevented).toBe(true);
+
+      rerender(<FileInput {...props} />);
+      expect(screen.getByText('Choose file')).toBeInTheDocument();
+      expect(screen.queryByText('Drop files here')).not.toBeInTheDocument();
+
+      fireEvent.dragEnter(trigger);
+      expect(screen.getByText('Drop files here')).toBeInTheDocument();
+      rerender(<FileInput {...props} isLoading />);
+      rerender(<FileInput {...props} />);
+      expect(screen.getByText('Choose file')).toBeInTheDocument();
+      expect(screen.queryByText('Drop files here')).not.toBeInTheDocument();
+
+      fireEvent.dragOver(trigger);
+      expect(screen.getByText('Drop files here')).toBeInTheDocument();
+    });
+
+    it('blocks a second pick while changeAction is pending and allows picking again after settlement', async () => {
+      let finish: () => void = () => {};
+      const pending = new Promise<void>(resolve => {
+        finish = resolve;
+      });
+      const onChange = vi.fn();
+      const changeAction = vi.fn(async () => pending);
+      render(
+        <FileInput
+          label="Upload"
+          value={null}
+          onChange={onChange}
+          changeAction={changeAction}
+          mode="dropzone"
+        />,
+      );
+      const trigger = screen.getByRole('button', {name: 'Upload'});
+      const input = fileInputEl();
+      const click = vi.spyOn(input, 'click');
+      trigger.focus();
+      fireEvent.change(input, {
+        target: {files: [createFile('first.txt', 100)]},
+      });
+
+      try {
+        expect(trigger).toHaveAttribute('aria-busy', 'true');
+        fireEvent.click(trigger);
+        fireEvent.keyDown(trigger, {key: 'Enter'});
+        fireEvent.keyDown(trigger, {key: ' '});
+        fireEvent.drop(trigger, {
+          dataTransfer: {files: [createFile('second.txt', 100)]},
+        });
+
+        expect(click).not.toHaveBeenCalled();
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(changeAction).toHaveBeenCalledTimes(1);
+        expect(trigger).toHaveFocus();
+        expect(trigger).toHaveAttribute('aria-disabled', 'true');
+      } finally {
+        await act(async () => finish());
+        click.mockRestore();
+      }
+
+      expect(trigger).not.toHaveAttribute('aria-busy');
+      expect(trigger).not.toHaveAttribute('aria-disabled', 'true');
+      fireEvent.change(input, {
+        target: {files: [createFile('after.txt', 100)]},
+      });
+      await act(async () => {});
+      expect(onChange).toHaveBeenCalledTimes(2);
+      expect(changeAction).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('drag and drop', () => {
     it('calls onChange when files are dropped in dropzone mode', () => {
       const handleChange = vi.fn();
@@ -1424,6 +1629,36 @@ describe('FileInput statusVariant forwarding', () => {
         />,
       );
       expectReachableTooltipStatus('File must be under 10MB');
+    },
+  );
+});
+
+// component:Tooltip FR11: the status tooltip renders inside the clickable
+// surface, so a click on its text must stay in the tooltip.
+describe('FileInput status tooltip press', () => {
+  it.each(['input', 'dropzone'] as const)(
+    'a click on the tooltip text does not open the picker in %s mode',
+    mode => {
+      render(
+        <FileInput
+          label="Upload"
+          mode={mode}
+          value={null}
+          onChange={() => {}}
+          status={{type: 'error', message: 'File must be under 10MB'}}
+          statusVariant="tooltip"
+        />,
+      );
+      const openPicker = vi.spyOn(fileInputEl(), 'click');
+      fireEvent.click(
+        within(screen.getByRole('tooltip', h)).getByText(
+          'File must be under 10MB',
+        ),
+      );
+      expect(openPicker).not.toHaveBeenCalled();
+      // Positive control: a click on the surface itself still opens it.
+      fireEvent.click(screen.getByRole('button', {name: 'Upload'}));
+      expect(openPicker).toHaveBeenCalledTimes(1);
     },
   );
 });

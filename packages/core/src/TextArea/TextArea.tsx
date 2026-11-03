@@ -4,7 +4,8 @@
 
 /**
  * @file TextArea.tsx
- * @input Uses React, useId, ChangeEvent, ClipboardEvent, FocusEvent, Field, Icon, Spinner
+ * @input Uses React, useId, ChangeEvent, ClipboardEvent, FocusEvent, Field, Icon, Spinner,
+ *   textEntryTraits (the touch-keyboard trait props)
  * @output Exports TextArea component, TextAreaProps, TextAreaStatus, TextAreaStatusType
  * @position Core implementation; consumed by index.ts, tested by TextArea.test.tsx
  *
@@ -41,9 +42,9 @@ import {
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
-  type FieldStatusVariant,
 } from '../Field';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
+import {isRenderable} from '../utils/isRenderable';
 import {Spinner} from '../Spinner';
 import {useTooltip} from '../Tooltip';
 import {mergeProps} from '../utils';
@@ -62,10 +63,21 @@ import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {useSize} from '../SizeContext/SizeContext';
 import {themeProps} from '../utils/themeProps';
 import {characterCount} from '../utils/characters';
-import {useTranslator} from '../i18n';
+import {
+  textEntryTraitAttributes,
+  type TextEntryTraitProps,
+} from '../Field/textEntryTraits';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/TextArea/TextArea.generated';
+
+registerEnglishFallback(english);
 const COUNTER_WARNING_THRESHOLD = 0.8;
 
 const styles = stylex.create({
@@ -201,10 +213,10 @@ export interface TextAreaStatus {
   message?: string;
 }
 
-export interface TextAreaProps extends Omit<
-  FieldInputBaseProps,
-  'onChange' | 'defaultValue'
-> {
+export interface TextAreaProps
+  extends
+    Omit<FieldInputBaseProps, 'onChange' | 'defaultValue'>,
+    TextEntryTraitProps {
   /** Ref forwarded to the root element */
   ref?: React.Ref<HTMLTextAreaElement>;
   /**
@@ -304,7 +316,7 @@ export interface TextAreaProps extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
    * (e.g. `'100%'`). Sizes the whole field (label, control, and status) so they
@@ -401,6 +413,10 @@ export function TextArea({
   labelTooltip,
   startIcon,
   hasSpellCheck = true,
+  enterKeyHint,
+  inputMode,
+  autoCapitalize,
+  hasAutoCorrect,
   onPaste,
   maxLength,
   hasAutoFocus = false,
@@ -427,7 +443,11 @@ export function TextArea({
     containerStyle,
   });
   const size = useSize(sizeProp, 'md');
-  const t = useTranslator();
+  // One presence check for the start icon's slot and its padding
+  // (`architecture:react-component-runtime` INV16), on the value the caller
+  // passed: an icon component counts as present, as any non-empty value does.
+  const hasStartIcon = isRenderable(startIcon as ReactNode);
+  const t = useComponentTranslator();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const announce = useAnnounce();
   const generatedID = useId();
@@ -622,7 +642,7 @@ export function TextArea({
           controlClassName,
           controlStyle,
         )}>
-        {startIcon && (
+        {hasStartIcon && (
           <span {...stylex.props(styles.startIcon)}>
             {renderIconSlot(startIcon, {size: 'sm', color: 'secondary'})}
           </span>
@@ -639,6 +659,12 @@ export function TextArea({
           onBlur={onBlur}
           placeholder={placeholder}
           rows={rows}
+          {...textEntryTraitAttributes({
+            enterKeyHint,
+            inputMode,
+            autoCapitalize,
+            hasAutoCorrect,
+          })}
           // A disabled textarea keeps its place in the tab order
           // (spec:AST-085): aria-disabled instead of the native attribute,
           // with readOnly + the handleChange guard keeping the value from
@@ -673,7 +699,7 @@ export function TextArea({
               styles.textarea,
               textareaSizeStyles[size],
               isDisabled && styles.textareaDisabled,
-              Boolean(startIcon) && styles.textareaWithStartIcon,
+              hasStartIcon && styles.textareaWithStartIcon,
               // Reserve trailing space only when the end slot actually renders
               // something (spinner or on-field status icon). The `detached`
               // status variant suppresses the on-field icon — its glyph lives
@@ -691,6 +717,7 @@ export function TextArea({
             {statusIcon}
           </span>
         )}
+        {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `maxLength` is a number; 0 still shows its counter */}
         {maxLength != null && (
           <div
             id={counterID}

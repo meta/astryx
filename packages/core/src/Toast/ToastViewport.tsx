@@ -33,6 +33,7 @@ import {useAnnounce} from '../hooks/useAnnounce';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
+import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {
   getActiveModalOutlet,
   subscribeModalOutlets,
@@ -41,9 +42,15 @@ import {
 import {ToastSurface} from './Toast';
 import {ToastContext, type ToastContextValue} from './ToastContext';
 import type {ToastEntry, ToastPosition, ToastDismissReason} from './types';
-import {useTranslator} from '../i18n';
 import {layerInsetProperties} from '../Layer/layerInset';
 import type {LayerInset} from '../Layer/LayerContext';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Toast/ToastViewport.generated';
+
+registerEnglishFallback(english);
 
 const SAFE_AREA_INLINE_START = `max(${spacingVars['--spacing-4']}, env(safe-area-inset-left, 0px))`;
 const SAFE_AREA_INLINE_END = `max(${spacingVars['--spacing-4']}, env(safe-area-inset-right, 0px))`;
@@ -316,7 +323,7 @@ export function ToastViewport({
   isTopLayer = true,
   children,
 }: ToastViewportProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const [toasts, setToasts] = useState<ToastEntry[]>([]);
   const [exitingIds, setExitingIds] = useState<Set<string>>(new Set());
   const toastsRef = useRef(toasts);
@@ -817,7 +824,9 @@ export function ToastViewport({
         {
           style: Object.keys(insetStyle).length > 0 ? insetStyle : undefined,
         },
-      )}>
+      )}
+      // Presses on toasts do not reach handlers around the viewport.
+      {...layerClickBoundary()}>
       <LayerContentBoundary>
         {visibleToasts.map(entry => (
           <ToastRow

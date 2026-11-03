@@ -6,32 +6,19 @@
  * @file useAutoMediaMode.ts
  * @input Ref to the element whose backdrop should be measured
  * @output 'dark' | 'light' | null (not yet measurable)
- * @position INTERNAL — powers `MediaTheme mode="auto"`. Not exported from the
- *   package: MediaTheme is the supported surface for this behavior.
- *   Sibling to useImageMode, which answers the same question for images.
- *
- * Picks the media context a surface wants by measuring what the browser
- * actually painted, rather than trusting a token's name.
- *
- * The bug it exists for: `--color-background-inverted` is not required to be
- * inverted. A theme can define it as a pale grey, and a hardcoded
- * `mode="dark"` then paints white text on it at 1.25:1. Because the surface
- * colour is a runtime value and the mode is a compile-time guess, no amount
- * of care in the component can catch that.
- *
- * The answer can also be `'off'`: when the surface's own ambient text already
- * reads on it, the surface is not effectively inverted and does not want a
- * media context. Verified in Chromium that this loses nothing on a surface
- * that is chromatic but legible — the dark-mode error toast renders
- * identically either way, because a dark page already resolves those tokens
- * to the values the media context would install.
- *
- * @example
- * ```
- * // Inside MediaTheme; see its `mode="auto"`.
- * const detected = useAutoMediaMode(ref, mode === 'auto');
- * ```
+ * @position Internal; powers `MediaTheme mode="auto"`. Not exported from the
+ *   package. Sibling to useImageMode, which does the same for images.
  */
+
+// The hook measures what the browser painted and does not trust a token's
+// name. `--color-background-inverted` need not be inverted: a theme can make
+// it pale grey, and a fixed `mode="dark"` then paints white text on it at
+// 1.25:1. The surface color is a runtime value, so only a measurement can
+// catch this.
+//
+// The answer can be `'off'` when the surface's own text already reads on it.
+// A dark page already resolves those tokens to the media context's values,
+// so a chromatic but legible surface loses nothing.
 
 import {useRef, useState} from 'react';
 import type {RefObject} from 'react';
@@ -45,17 +32,11 @@ import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 export type DetectedMediaMode = 'dark' | 'light' | 'off';
 
 /**
- * Resolve token references to the colors they actually paint, by reading them
- * back off a hidden probe.
- *
- * A custom property cannot simply be read: `getPropertyValue` returns the
- * token's *specified* text, and Astryx tokens are `light-dark(a, b)` pairs
- * that resolve only once used in a real property. The probe assigns each
- * token to `color` and reads the computed value back, which the browser has
- * resolved against the host's own color-scheme and any overrides.
- *
- * `display: none` keeps the probe out of layout — computed color still
- * resolves — so this costs a style recalc and no reflow.
+ * Resolve token references to the colors they paint, through a hidden probe.
+ * `getPropertyValue` returns a token's specified text, and Astryx tokens are
+ * `light-dark(a, b)` pairs that resolve only in a real property. The probe
+ * sets each token as `color` and reads the computed value. `display: none`
+ * keeps the probe out of layout, so this costs a style recalc and no reflow.
  */
 function resolvePaintedColors(
   host: HTMLElement,
@@ -116,14 +97,11 @@ function resolveBackdrop(element: HTMLElement): RGBA | null {
 }
 
 /**
- * Contrast at which a surface's own ambient text counts as reading well
- * enough that no media context is wanted.
- *
- * WCAG's non-text / large-text line. It is deliberately low: this decides
- * whether a surface is *effectively inverted*, not whether its text meets a
- * standard. A pairing that clears 3:1 is one the theme is rendering
- * successfully, and swapping in a media context there changes accent,
- * overlays and borders for no legibility gain.
+ * Contrast at which a surface's own text reads well enough that no media
+ * context is wanted. This is WCAG's large-text line. It is low on purpose: it
+ * decides if a surface is effectively inverted, not if its text meets a
+ * standard. A media context on a 3:1 pairing changes accent, overlays and
+ * borders with no legibility gain.
  */
 const AMBIENT_READS_AT = 3;
 
@@ -182,12 +160,10 @@ export function useAutoMediaMode(
   const {tokens} = useTheme();
   const lastRef = useRef<{background: string; tokens: unknown} | null>(null);
 
-  // Deliberately no dependency array. A surface's color is a painted value:
-  // it changes when a prop on some ancestor changes, and no dependency this
-  // hook could name would catch that (an earlier revision took a `watch`
-  // array and silently went stale whenever a caller forgot an entry). So the
-  // measurement re-runs whenever anything re-renders, and skips its own
-  // expensive half when nothing moved — see the early return below.
+  // No dependency array. A surface color is a painted value, and it changes
+  // when a prop on some ancestor changes. No dependency that this hook can
+  // name catches that. So the measurement runs on each render, and it skips
+  // its expensive half when nothing moved (see the early return below).
   useIsomorphicLayoutEffect(() => {
     const surface = ref.current?.parentElement ?? null;
     if (!isEnabled || surface === null) {
@@ -199,10 +175,9 @@ export function useAutoMediaMode(
       return;
     }
 
-    // The backdrop walk above is a couple of getComputedStyle reads; the
-    // probe below appends a node and forces another style resolution. Skip
-    // it when neither the painted backdrop nor the theme has moved, which is
-    // the overwhelmingly common render.
+    // The probe adds a node and forces another style resolution. Skip it when
+    // neither the painted backdrop nor the theme moved, which is the usual
+    // case.
     const backgroundKey = formatColor(background);
     const last = lastRef.current;
     if (

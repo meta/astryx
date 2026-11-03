@@ -5,11 +5,8 @@
 /**
  * @file MobilePowerSearch.tsx
  * @input Core PowerSearch config, filters and onChange (the same props as
- *   @astryxdesign/core PowerSearch); public @astryxdesign/core components only
- *   (BottomSheet, Button, Field, Heading, Icon, List,
- *   RadioList, Text, TextInput, Token, Tooltip hooks, i18n, hooks —
- *   useAnnounce for every announcement — utils, Layout container-padding
- *   styles)
+ *   @astryxdesign/core PowerSearch); public Core primitives and private Lab
+ *   mobile-sheet confirmation and search-drag dismissal owners
  * @output Exports MobilePowerSearch — Lab prototype of the touch PowerSearch
  *   flow: the whole field is one "Manage filters" trigger with display-only
  *   tokens, a Filters sheet with editable rows and direct remove actions, Add
@@ -93,7 +90,6 @@ import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '@astryxdesign/core';
 import {BottomSheet} from '@astryxdesign/core/BottomSheet';
 import {Button} from '@astryxdesign/core/Button';
-import {Dialog} from '@astryxdesign/core/Dialog';
 import {EmptyState} from '@astryxdesign/core/EmptyState';
 import {
   Field,
@@ -107,7 +103,6 @@ import {
 import {Heading} from '@astryxdesign/core/Heading';
 import {Icon, renderIconSlot, type IconType} from '@astryxdesign/core/Icon';
 import {IconButton} from '@astryxdesign/core/IconButton';
-import {Layout, LayoutContent, LayoutFooter} from '@astryxdesign/core/Layout';
 import {containerPaddingInlineVarStyles} from '@astryxdesign/core/Layout/padding.stylex';
 import {List, ListItem} from '@astryxdesign/core/List';
 import {resolveOperatorLabel} from '@astryxdesign/core/PowerSearch';
@@ -126,7 +121,6 @@ import {formatFilterValue} from '@astryxdesign/core/PowerSearch/utils';
 import type {InternalConfig} from '@astryxdesign/core/PowerSearch/utils';
 import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 import {useSize} from '@astryxdesign/core/SizeContext';
-import {Stack} from '@astryxdesign/core/Stack';
 import {Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Token} from '@astryxdesign/core/Token';
@@ -148,6 +142,8 @@ import {
   typographyVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
 import {isImeKeyEvent, isRenderable, rtlStyles} from '@astryxdesign/core/utils';
+import {MobileSheetConfirmation} from '../internal/MobileSheetConfirmation';
+import {useDismissSearchOnTouchDrag} from '../internal/useDismissSearchOnTouchDrag';
 import {MobilePowerSearchValueEditor} from './MobilePowerSearchValueEditor';
 import {
   createContentSearchSource,
@@ -207,7 +203,7 @@ export interface MobilePowerSearchProps extends Omit<
   /** Validation status. */
   status?: InputStatus;
   /** How the status message is placed. @default 'attached' */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusVariant | 'tooltip';
   /** Max display length for token values. @default 40 */
   maxTokenLength?: number;
   /** Max suggestions in string and entity value typeaheads. @default 10 */
@@ -254,63 +250,6 @@ function PlusIcon(props: SVGProps<SVGSVGElement>) {
       <path d="M5 12h14" />
       <path d="M12 5v14" />
     </svg>
-  );
-}
-
-function ClearFiltersConfirmation({
-  isOpen,
-  onOpenChange,
-  onConfirm,
-}: {
-  isOpen: boolean;
-  onOpenChange: (isOpen: boolean) => void;
-  onConfirm: () => void;
-}) {
-  const titleId = useId();
-  const descriptionId = useId();
-  return (
-    <Dialog
-      isOpen={isOpen}
-      onOpenChange={onOpenChange}
-      purpose="info"
-      role="alertdialog"
-      aria-labelledby={titleId}
-      aria-describedby={descriptionId}
-      width={400}>
-      <Layout
-        content={
-          <LayoutContent>
-            <Heading level={2} id={titleId}>
-              Clear all filters?
-            </Heading>
-            <Text type="body" color="secondary" id={descriptionId}>
-              This removes all editable filters from this search.
-            </Text>
-          </LayoutContent>
-        }
-        footer={
-          <LayoutFooter>
-            <Stack direction="vertical" gap={4} hAlign="stretch">
-              <Button
-                label="Clear filters"
-                variant="destructive"
-                size="lg"
-                onClick={onConfirm}
-                xstyle={styles.confirmationAction}
-              />
-              <Button
-                label="Keep filters"
-                variant="secondary"
-                size="lg"
-                onClick={() => onOpenChange(false)}
-                data-autofocus
-                xstyle={styles.confirmationAction}
-              />
-            </Stack>
-          </LayoutFooter>
-        }
-      />
-    </Dialog>
   );
 }
 
@@ -519,9 +458,6 @@ const styles = stylex.create({
   },
   trailingControlRow: {
     flexDirection: 'row-reverse',
-  },
-  confirmationAction: {
-    width: '100%',
   },
   rowValue: {
     fontWeight: fontWeightVars['--font-weight-bold'],
@@ -953,14 +889,10 @@ export function MobilePowerSearch({
 
   // ------------------------------------------------------------------ focus --
 
-  const blurFieldPickerSearch = useCallback(() => {
-    const activeElement = document.activeElement;
-    const contentSearch = contentSearchRef.current?.querySelector('input');
-    const fieldSearch = fieldSearchRef.current?.querySelector('input');
-    if (activeElement === contentSearch || activeElement === fieldSearch) {
-      (activeElement as HTMLInputElement).blur();
-    }
-  }, []);
+  const fieldPickerDragProps = useDismissSearchOnTouchDrag(() => [
+    contentSearchRef.current?.querySelector('input'),
+    fieldSearchRef.current?.querySelector('input'),
+  ]);
 
   const focusPendingSheetTarget = useCallback(() => {
     const target = pendingSheetFocusRef.current;
@@ -2132,10 +2064,7 @@ export function MobilePowerSearch({
               </div>
             ) : null}
           </div>
-          <div
-            {...scrollViewportProps}
-            onScroll={blurFieldPickerSearch}
-            onTouchMove={blurFieldPickerSearch}>
+          <div {...scrollViewportProps} {...fieldPickerDragProps}>
             <div {...scrollContentProps}>
               {hasContentSearch ? (
                 contentResults.length > 0 ? (
@@ -2427,10 +2356,14 @@ export function MobilePowerSearch({
         </div>
       </BottomSheet>
 
-      <ClearFiltersConfirmation
+      <MobileSheetConfirmation
         isOpen={isClearConfirmationOpen}
         onOpenChange={setIsClearConfirmationOpen}
-        onConfirm={() => {
+        title="Clear all filters?"
+        description="This removes all editable filters from this search."
+        actionLabel="Clear filters"
+        cancelLabel="Keep filters"
+        onAction={() => {
           handleClearAll();
           setIsClearConfirmationOpen(false);
         }}

@@ -109,7 +109,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Some users experience motion sensitivity; animation that feels polished to one person can cause discomfort for another. Astryx components already switch to instant changes when the OS reduced-motion setting is on. Do the same in your own animations with `@media (prefers-reduced-motion: reduce)`.',
+          text: 'Some users experience motion sensitivity; animation that feels polished to one person can cause discomfort for another. When the OS reduced-motion setting is on, Astryx components change at once under a mouse or trackpad, and under a finger they cross-fade instead of moving: opacity only, in 200 ms or less. A value that changes in place, such as a progress fill, takes its new value at once under any pointer. Do the same in your own animations with `@media (prefers-reduced-motion: reduce)`, adding `(pointer: coarse)` for the touch cross-fade.',
         },
       ],
     },

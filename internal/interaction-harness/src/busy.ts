@@ -142,13 +142,14 @@ export interface BusyControlRead {
   /** The control's longest time without a new position, the edges included. */
   readonly longestStallMs: number;
   /**
-   * Of `movedWith`, the frames counted as moved because the component's motion
-   * there was under one cast step per frame (see `busyWindowProof`).
+   * Of `movedWith`, the frames counted as moved where the cast could not show
+   * the component's motion: under one cast step per frame, or a frame
+   * delivered early under two (see `busyWindowProof`).
    */
   readonly belowStep: number;
   /**
    * The component's longest time without a new position, read the same way:
-   * a run of unchanged frames under one cast step per frame is motion.
+   * a run of unchanged frames the cast could not show is motion.
    */
   readonly componentStallMs: number;
 }
@@ -157,6 +158,15 @@ export interface BusyWindow {
   /** Epoch ms when the loop started and ended, on the page's own clock. */
   readonly from: number;
   readonly to: number;
+}
+
+/** The window `blockMainThread` held, with the span its loop measured. */
+export interface BlockedWindow extends BusyWindow {
+  /**
+   * How long the loop held the thread, in ms, between the two clock readings
+   * it started and ended on. It is never less than the time asked for.
+   */
+  readonly spanMs: number;
 }
 
 /**
@@ -199,24 +209,33 @@ export async function blockMainThread(
     minProgressMs = 16,
     timeout = 5_000,
   }: {during?: Locator; minProgressMs?: number; timeout?: number} = {},
-): Promise<BusyWindow> {
+): Promise<BlockedWindow> {
   const minProgress = Math.max(minProgressMs, ONE_FRAME_MS);
   if (during == null) {
     return page.evaluate(duration => {
       // The harness's own work: a trace sets it apart (trace.ts HARNESS_READ).
       console.timeStamp('harness-read');
-      const from = performance.timeOrigin + performance.now();
-      const end = performance.now() + duration;
+      // One reading starts the loop and one ends it. A coarsened clock can
+      // step back between two reads, so a separate read would end it early.
+      // The loop tests the span it returns, which a sum rounded down would not.
+      const start = performance.now();
+      let now = start;
       let spins = 0;
-      while (performance.now() < end) {
+      while (now - start < duration) {
+        now = performance.now();
         spins += 1;
       }
-      return {from, to: performance.timeOrigin + performance.now(), spins};
+      return {
+        from: performance.timeOrigin + start,
+        to: performance.timeOrigin + now,
+        spanMs: now - start,
+        spins,
+      };
     }, ms);
   }
   return during.evaluate(
     (element, {duration, minProgress, wait}) =>
-      new Promise<BusyWindow>((resolve, reject) => {
+      new Promise<BlockedWindow>((resolve, reject) => {
         // The harness's own waits run on the real timers: a frozen timer gate
         // (story.ts) holds only the page's.
         const gate = (
@@ -254,12 +273,16 @@ export async function blockMainThread(
             // the animation: it runs once that frame's rendering update has
             // handed the animation to the compositor.
             later(() => {
-              const from = performance.timeOrigin + performance.now();
-              const end = performance.now() + duration;
-              while (performance.now() < end) {
-                // Busy: nothing else runs.
+              const start = performance.now();
+              let now = start;
+              while (now - start < duration) {
+                now = performance.now();
               }
-              resolve({from, to: performance.timeOrigin + performance.now()});
+              resolve({
+                from: performance.timeOrigin + start,
+                to: performance.timeOrigin + now,
+                spanMs: now - start,
+              });
             }, 0);
           } else if (performance.now() > deadline) {
             reject(new Error('blockMainThread: no animation started'));
@@ -362,6 +385,37 @@ export interface BusyProof extends FrameStats {
 }
 
 /**
+ * The stretches of a judged series that move under `limitPx` per frame,
+ * read over four frames at a time, merged where they overlap: where the cast
+ * cannot show a step on every frame.
+ */
+function slowStretches(
+  values: readonly {t: number; value: number}[],
+  cadence: number,
+  limitPx: number,
+): {from: number; to: number; pxPerFrame: number}[] {
+  const SPAN = 4;
+  const stretches: {from: number; to: number; pxPerFrame: number}[] = [];
+  for (let k = 0; k + SPAN < values.length; k += 1) {
+    const a = values[k];
+    const b = values[k + SPAN];
+    const frames = (b.t - a.t) / cadence;
+    const pxPerFrame = frames > 0 ? Math.abs(b.value - a.value) / frames : 0;
+    if (pxPerFrame <= 0 || pxPerFrame >= limitPx) {
+      continue;
+    }
+    const last = stretches[stretches.length - 1];
+    if (last != null && a.t <= last.to) {
+      last.to = b.t;
+      last.pxPerFrame = Math.min(last.pxPerFrame, pxPerFrame);
+    } else {
+      stretches.push({from: a.t, to: b.t, pxPerFrame});
+    }
+  }
+  return stretches;
+}
+
+/**
  * Frame evidence for a busy window: how many frames the screencast presented
  * inside it, how many of them moved the tracked axis, and the longest stall.
  * The window is trimmed by `marginMs` at both ends so the frame the block
@@ -407,7 +461,9 @@ export interface BusyProof extends FrameStats {
  *
  * `stepPx` and `pxPerFrame` say whether a frame's motion is resolvable at
  * all: under two position steps per frame, a frame delivered early can show
- * no step and read as not moved, which the proof notes (never a failure).
+ * no step and read as not moved. The proof notes each stretch of the judged
+ * part that moves that slowly, read over four frames at a time so a slow tail
+ * inside a fast window shows (never a failure).
  *
  * A loaded machine's screencast can skip frames the compositor still presents
  * (Chromium). Given the compositor's record (`presented`, from
@@ -433,9 +489,12 @@ export interface BusyProof extends FrameStats {
  * A run of frames with no new component position counts as moved when the
  * change that ends it is a single cast step (`stepPx`): the component moves
  * under one step per frame there, as on an easing tail, which the cast cannot
- * show on every frame. The run also has to read as a slowing curve, at most
- * one frame longer than the component's run before it. A freeze ends in a
- * catch-up of more than one step, a stall in a frame-counted animation is
+ * show on every frame. Where the component moved under two steps per frame
+ * over the frames just before the run, a frame delivered early can show no
+ * step too, so the change may carry the motion of every frame the run held
+ * at that pace, to the nearest step. The run also has to read as a slowing
+ * curve, at most one frame longer than the component's run before it. A
+ * freeze ends in a larger catch-up, a stall in a frame-counted animation is
  * longer than its runs before it, and a run that no change ends stays a miss.
  * The component still has to show a new position on at least
  * `minJudgedFrames` of the control's frames.
@@ -742,9 +801,11 @@ export function busyWindowProof(
       `the screencast skipped ${recorderSkipped} frames the compositor presented (at ${skips.map(g => `+${(g.from - window.from).toFixed(0)} ms`).join(', ')})`,
     );
   }
-  if (pxPerFrame > 0 && pxPerFrame < 2 * stepPx) {
+  // Read over a few frames at a time, not the whole part: a fast window can
+  // end in a slow tail whose frames the cast cannot all show.
+  for (const stretch of slowStretches(judgedValues, cadence, 2 * stepPx)) {
     notes.push(
-      `${pxPerFrame.toFixed(1)} px/frame is under two of the cast's ${stepPx} px position steps: a frame delivered early can show no step and read as not moved`,
+      `${stretch.pxPerFrame.toFixed(1)} px/frame is under two of the cast's ${stepPx} px position steps from +${(stretch.from - window.from).toFixed(0)} ms to +${(stretch.to - window.from).toFixed(0)} ms: a frame delivered early there can show no step and read as not moved`,
     );
   }
   // The control's own new positions in the judged part, against its frame
@@ -770,10 +831,10 @@ export function busyWindowProof(
     }
     const controlEdges = [judged.from, ...controlChanges, judged.to];
     // A frame with no new component position, in a run of such frames whose
-    // next change is a single cast step: the component moves under one step
-    // per frame there, which the cast cannot show on every frame, so the
-    // frame counts as moved. A freeze ends in a catch-up of more than one
-    // step, and a run that no change ends stays a miss.
+    // next change the cast's step or an early frame explains (`underStep`):
+    // the cast cannot show every frame there, so the frame counts as moved.
+    // A freeze ends in a larger catch-up, and a run that no change ends stays
+    // a miss.
     const series = tracked.flatMap(f =>
       f.box == null ? [] : [{t: f.t, value: f.box[axis]}],
     );
@@ -788,6 +849,18 @@ export function busyWindowProof(
       }
       return s;
     };
+    // The component's motion per frame over up to four frames before frame
+    // `start`, or null with fewer than two to read.
+    const pxPerFrameBefore = (start: number): number | null => {
+      const back = Math.min(4, start);
+      if (back < 2) {
+        return null;
+      }
+      const frames = (series[start].t - series[start - back].t) / cadence;
+      return frames > 0
+        ? Math.abs(series[start].value - series[start - back].value) / frames
+        : null;
+    };
     const underStep = (t: number): boolean => {
       const i = seriesIndex.get(t);
       if (i == null || changed.has(t)) {
@@ -798,15 +871,30 @@ export function busyWindowProof(
       while (k < series.length && same(k, i)) {
         k += 1;
       }
-      if (
-        k >= series.length ||
-        Math.abs(series[k].value - series[i].value) >= 1.5 * stepPx
-      ) {
+      if (k >= series.length) {
+        return false;
+      }
+      const unchanged = k - 1 - start;
+      // Under one step a frame the change that ends the run is a single step.
+      // Under two, a frame delivered early can also show no step, and the
+      // change then carries the motion of every frame the run held, at the
+      // pace of the frames before it, to the nearest step. An early frame
+      // hides one frame's motion: at one step a frame or more the run is one
+      // frame long, and under one step a frame it adds at most one step to
+      // the catch-up.
+      const catchUp = Math.abs(series[k].value - series[i].value);
+      const pace = pxPerFrameBefore(start);
+      const shown =
+        catchUp < 1.5 * stepPx ||
+        (pace != null &&
+          pace < 2 * stepPx &&
+          (pace < stepPx ? catchUp < 2.5 * stepPx : unchanged <= 1) &&
+          catchUp <= (unchanged + 1) * pace + stepPx);
+      if (!shown) {
         return false;
       }
       // A slowing curve lengthens its runs a frame at a time: a run more than
       // one frame longer than the one before it is a stall.
-      const unchanged = k - 1 - start;
       const before = start > 0 ? start - 1 - runStart(start - 1) : 0;
       return unchanged <= before + 1;
     };
@@ -897,7 +985,7 @@ export function busyWindowProof(
       : `, on screen from +${onScreenFromMs.toFixed(0)} ms (nothing moved before the block)`) +
     (controlRead == null
       ? ''
-      : `; against the control: moved on ${controlRead.movedWith} of its ${controlRead.moved} frames${controlRead.belowStep > 0 ? ` (${controlRead.belowStep} under one cast step a frame)` : ''}, its longest stall ${controlRead.longestStallMs.toFixed(1)} ms`) +
+      : `; against the control: moved on ${controlRead.movedWith} of its ${controlRead.moved} frames${controlRead.belowStep > 0 ? ` (${controlRead.belowStep} where the cast could not show the step)` : ''}, its longest stall ${controlRead.longestStallMs.toFixed(1)} ms`) +
     notes.map(note => `; note: ${note}`).join('');
   return {
     ...stats,

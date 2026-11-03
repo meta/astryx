@@ -9,11 +9,11 @@
  * SYNC: When TopNavMegaMenu changes, update tests to match new behavior
  */
 
-import {createRef} from 'react';
+import {createRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {describe, it, expect, vi, beforeAll, afterAll, afterEach} from 'vitest';
-import {render, screen, act, fireEvent} from '@testing-library/react';
+import {render, screen, act, fireEvent, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {TopNavMegaMenu} from './TopNavMegaMenu';
 import {TopNavMegaMenuItem} from './TopNavMegaMenuItem';
@@ -1149,5 +1149,52 @@ describe('TopNavMegaMenu ref', () => {
       </TopNavRenderContext>,
     );
     expect(ref.current).toBe(screen.getByRole('button', {name: /Products/}));
+  });
+});
+
+// A slot is empty for exactly the values React renders as nothing.
+describe('TopNavMegaMenu empty slots', () => {
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('renders no featured wrapper in the drawer for %s', (_name, featured) => {
+    const section = (element: HTMLElement) => {
+      const trigger = within(element).getByRole('button', {name: 'Products'});
+      // Both renders share an id, so look the group up inside this render.
+      return element
+        .querySelector(`[id="${trigger.getAttribute('aria-controls')}"]`)!
+        .innerHTML.replace(/(id|aria-[a-z]+)="[^"]*"/g, '$1');
+    };
+    const {container: withFeatured} = render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMegaMenu
+          label="Products"
+          items={<TopNavMegaMenuItem title="Analytics" href="/analytics" />}
+          featured={featured as ReactNode}
+        />
+      </TopNavRenderContext>,
+    );
+    const {container: without} = render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMegaMenu
+          label="Products"
+          items={<TopNavMegaMenuItem title="Analytics" href="/analytics" />}
+        />
+      </TopNavRenderContext>,
+    );
+    expect(section(withFeatured)).toBe(section(without));
+  });
+
+  it('renders 0 as featured content, as React does', async () => {
+    const user = userEvent.setup();
+    render(
+      <TopNavRenderContext value="drawer">
+        <TopNavMegaMenu label="Products" featured={0} />
+      </TopNavRenderContext>,
+    );
+    await user.click(screen.getByRole('button', {name: 'Products'}));
+    expect(screen.getByText('0')).toBeInTheDocument();
   });
 });

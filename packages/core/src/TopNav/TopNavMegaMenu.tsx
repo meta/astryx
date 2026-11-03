@@ -38,6 +38,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {isRenderable} from '../utils/isRenderable';
 import {
   colorVars,
   spacingVars,
@@ -538,14 +539,14 @@ function DefaultMegaMenu({
           {...stylex.props(styles.panelContainer)}>
           <div {...stylex.props(styles.panelContent)}>
             {/* Menu items section */}
-            {items != null && (
+            {isRenderable(items) && (
               <Grid columns={2} gap={2} xstyle={styles.menuWrapper}>
                 {items}
               </Grid>
             )}
 
             {/* Featured section */}
-            {featured != null && (
+            {isRenderable(featured) && (
               <div {...stylex.props(styles.featured)}>{featured}</div>
             )}
           </div>
@@ -630,7 +631,7 @@ function DrawerMegaMenu({
           {items}
 
           {/* Featured card */}
-          {featured != null && (
+          {isRenderable(featured) && (
             <div {...stylex.props(styles.drawerFeatured)}>{featured}</div>
           )}
         </div>

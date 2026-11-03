@@ -209,14 +209,54 @@ describe('Calendar', () => {
     expect(screen.getByText('January 2026')).toBeInTheDocument();
 
     rerender(renderCalendar('es-ES'));
-    expect(screen.getByText('enero de 2026')).toBeInTheDocument();
+    expect(screen.getByText('Enero de 2026')).toBeInTheDocument();
 
     const nextButton =
       document.querySelector<HTMLButtonElement>('[data-nav="next"]');
     expect(nextButton).not.toBeNull();
     await user.click(nextButton!);
-    expect(screen.getByText('febrero de 2026')).toBeInTheDocument();
+    expect(screen.getByText('Febrero de 2026')).toBeInTheDocument();
   });
+
+  it.each([
+    ['es-ES', 'Octubre de 2026', 'Noviembre de 2026'],
+    ['fr-FR', 'Octobre 2026', 'Novembre 2026'],
+    ['pl-PL', 'Październik 2026', 'Listopad 2026'],
+    ['ru-RU', 'Октябрь 2026 г.', 'Ноябрь 2026 г.'],
+  ])(
+    'starts each stand-alone month label with a capital in %s',
+    (locale, october, november) => {
+      render(
+        <InternationalizationProvider locale={locale}>
+          <Calendar mode="range" numberOfMonths={2} focusDate="2026-10-01" />
+        </InternationalizationProvider>,
+      );
+      // The heading names both months, each capitalized (FR1).
+      expect(screen.getByText(`${october} – ${november}`)).toBeInTheDocument();
+      // Each grid's name is the same stand-alone label.
+      expect(
+        screen
+          .getAllByRole('grid')
+          .map(grid => grid.getAttribute('aria-label')),
+      ).toEqual([october, november]);
+    },
+  );
+
+  it.each([
+    ['vi-VN', 'tháng 10 năm 2026'],
+    ['de-DE', 'Oktober 2026'],
+    ['en-US', 'October 2026'],
+  ])(
+    'leaves the month label as Intl gives it where CLDR does not capitalize in %s',
+    (locale, label) => {
+      render(
+        <InternationalizationProvider locale={locale}>
+          <Calendar focusDate="2026-10-01" />
+        </InternationalizationProvider>,
+      );
+      expect(screen.getByText(label)).toBeInTheDocument();
+    },
+  );
 
   it('displays correct number of day cells', () => {
     render(<Calendar />);

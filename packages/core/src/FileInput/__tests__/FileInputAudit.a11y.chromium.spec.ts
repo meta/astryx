@@ -441,9 +441,12 @@ function checkCases(
       (entry.ariaBusy === 'true') === Boolean(expected.loading),
       `${id}: aria-busy ${entry.ariaBusy}`,
     );
-    // Disabled states keep their own stories; no matrix case is disabled.
+    // Disabled states keep their own stories; no matrix case is disabled. A
+    // busy field blocks a second selection, so its trigger is aria-disabled
+    // while loading: it stays focusable, which keeps its tooltip status
+    // reachable, and is announced as unavailable for a new file.
     check(
-      entry.ariaDisabled == null,
+      entry.ariaDisabled === (expected.loading ? 'true' : null),
       `${id}: aria-disabled ${entry.ariaDisabled}`,
     );
     if (expected.fileName != null) {

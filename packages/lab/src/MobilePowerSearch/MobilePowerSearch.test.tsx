@@ -1009,11 +1009,16 @@ describe('MobilePowerSearch Add filter', () => {
       sheet().querySelectorAll<HTMLElement>('div'),
     ).find(element => getComputedStyle(element).overflowY === 'auto')!;
     fireEvent.scroll(scrollBody);
+    expect(search).toHaveFocus();
+    fireEvent.touchStart(scrollBody, {touches: [{clientY: 100}]});
+    fireEvent.touchMove(scrollBody, {touches: [{clientY: 107}]});
+    expect(search).toHaveFocus();
+    fireEvent.touchMove(scrollBody, {touches: [{clientY: 109}]});
     expect(search).not.toHaveFocus();
     search.focus();
-    fireEvent.touchMove(scrollBody);
-    expect(search).not.toHaveFocus();
     fireEvent.change(search, {target: {value: 'Field'}});
+    fireEvent.scroll(scrollBody);
+    expect(search).toHaveFocus();
     expect(
       within(sheet()).getAllByRole('button', {name: /^Field/}),
     ).toHaveLength(2);

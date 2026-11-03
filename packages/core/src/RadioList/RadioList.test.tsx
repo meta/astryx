@@ -24,6 +24,7 @@ import {
 import {RadioList} from './RadioList';
 import {RadioListItem} from './RadioListItem';
 import {getForcedColorsRules} from '../__tests__/forcedColors';
+import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 
 // Mock showPopover/hidePopover (not implemented in jsdom) so the tooltip layer
 // reflects its open state via a `popover-open` attribute the tests can assert.
@@ -468,6 +469,96 @@ describe('RadioList', () => {
       const tooltip = screen.getByRole('tooltip', h);
       await user.tab();
       await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+    });
+
+    it('describes each radio with the reason, as well as the radiogroup', () => {
+      renderGroup();
+      const tooltip = screen.getByRole('tooltip', h);
+      for (const name of ['Free', 'Pro']) {
+        const radio = screen.getByRole('radio', {name});
+        expect(radio.getAttribute('aria-describedby')?.split(' ')).toContain(
+          tooltip.id,
+        );
+        expect(radio).toHaveAccessibleDescription(
+          'Upgrade your account to change plans',
+        );
+      }
+      expect(
+        screen
+          .getByRole('radiogroup')
+          .getAttribute('aria-describedby')
+          ?.split(' '),
+      ).toContain(tooltip.id);
+    });
+
+    it("keeps a radio's own description ahead of the reason", () => {
+      render(
+        <RadioList
+          label="Plan"
+          value="free"
+          onChange={() => {}}
+          isDisabled
+          disabledMessage="Upgrade your account to change plans">
+          <RadioListItem
+            label="Free"
+            value="free"
+            description="Up to 3 projects"
+          />
+        </RadioList>,
+      );
+      const tooltip = screen.getByRole('tooltip', h);
+      const radio = screen.getByRole('radio', {name: 'Free'});
+      const ids = radio.getAttribute('aria-describedby')!.split(' ');
+      expect(ids).toHaveLength(2);
+      expect(ids[1]).toBe(tooltip.id);
+      expect(radio).toHaveAccessibleDescription(
+        'Up to 3 projects Upgrade your account to change plans',
+      );
+    });
+
+    // spec:AST-085 FR5: a keyboard user hears the reason on the radio that
+    // takes focus.
+    it('describes the focused radio with the reason when Tab enters the group', async () => {
+      const user = userEvent.setup();
+      renderGroup();
+      await user.tab();
+      const free = screen.getByRole('radio', {name: 'Free'});
+      expect(free).toHaveFocus();
+      expect(free).toHaveAccessibleDescription(
+        'Upgrade your account to change plans',
+      );
+    });
+
+    it('opens the reason on a tap and selects nothing', async () => {
+      __resetInteractionModalityForTest();
+      const onChange = vi.fn();
+      renderGroup({onChange});
+      const tooltip = screen.getByRole('tooltip', h);
+      const pro = screen.getByRole('radio', {name: 'Pro'});
+      // A tap, in the order a browser dispatches it.
+      fireEvent.pointerEnter(pro, {pointerType: 'touch'});
+      fireEvent.pointerDown(pro, {pointerType: 'touch'});
+      fireEvent.pointerUp(pro, {pointerType: 'touch'});
+      fireEvent.mouseEnter(pro);
+      fireEvent.click(pro);
+      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      expect(onChange).not.toHaveBeenCalled();
+      expect(pro).not.toBeChecked();
+    });
+
+    it('adds no reason to the radios of a group that is not disabled', () => {
+      render(
+        <RadioList
+          label="Plan"
+          value="free"
+          onChange={() => {}}
+          disabledMessage="Upgrade your account to change plans">
+          <RadioListItem label="Free" value="free" />
+        </RadioList>,
+      );
+      expect(screen.getByRole('radio', {name: 'Free'})).not.toHaveAttribute(
+        'aria-describedby',
+      );
     });
 
     it('does not render a tooltip when not disabled', () => {

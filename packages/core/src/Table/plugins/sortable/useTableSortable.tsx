@@ -4,7 +4,7 @@
 
 /**
  * @file useTableSortable.tsx
- * @input React, types, Icon, theme tokens, i18n (useTranslator)
+ * @input React, types, Icon, theme tokens, i18n (useComponentTranslator)
  * @output Exports useTableSortable hook and sort-related types
  * @position Sortable plugin; consumed by Table via plugins prop
  *
@@ -19,13 +19,19 @@ import {colorVars, spacingVars, radiusVars} from '../../../theme/tokens.stylex';
 import {focusOutlineProps} from '../../../utils/focusOutline.stylex';
 import {Icon} from '../../../Icon';
 import {resolveContextActions} from '../../tableContextMenu';
-import {useTranslator} from '../../../i18n';
 import type {
   TablePlugin,
   HeaderCellRenderProps,
   TableColumn,
   TableContextAction,
 } from '../../types';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/sortable/useTableSortable.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Sort Types
@@ -210,7 +216,7 @@ function SortHeaderButton<T extends Record<string, unknown>>({
   children: ReactNode;
   configRef: React.RefObject<UseTableSortableConfig>;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const config = configRef.current;
   const sortKey = resolveSortKey(column) ?? '';
   const entryIndex = config.sort.findIndex(e => e.sortKey === sortKey);
@@ -303,12 +309,14 @@ function SortHeaderButton<T extends Record<string, unknown>>({
             color={direction != null ? 'accent' : 'secondary'}
           />
         </span>
+        {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `rank` is the column's sort position, a number */}
         {rank != null && (
           <span {...stylex.props(sortStyles.rank)} aria-hidden="true">
             {rank}
           </span>
         )}
       </button>
+      {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `rank` is the column's sort position, a number */}
       {rank != null && (
         // Hidden, so it adds nothing to the button's or the header's name;
         // aria-describedby still reads it.
@@ -349,7 +357,7 @@ export function useTableSortable<
   T extends Record<string, unknown>,
   TSortKey extends string = string,
 >(config: UseTableSortableConfig<TSortKey>): TablePlugin<T> {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const configRef = useRef(config);
   configRef.current = config;
 

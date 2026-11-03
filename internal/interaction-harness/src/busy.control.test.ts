@@ -157,7 +157,7 @@ describe('busyWindowProof against a control', () => {
     const proof = busyWindowProof(tail, BLOCK, {control: asControl(moving())});
     expect(proof.verdict.failures, proof.summary).toEqual([]);
     expect(proof.control?.belowStep).toBeGreaterThan(0);
-    expect(proof.summary).toMatch(/under one cast step a frame/);
+    expect(proof.summary).toMatch(/where the cast could not show the step/);
   });
 
   it('still fails a slow component frozen on frames the control moved on: the change that ends the run catches up more than one step', () => {

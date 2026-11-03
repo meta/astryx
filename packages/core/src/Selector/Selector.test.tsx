@@ -1077,6 +1077,30 @@ describe('Selector', () => {
       expect(screen.getByRole('combobox', h)).toBeInTheDocument();
     });
 
+    it('asks a touch keyboard for its Search key and no autocorrection in the search row, and Enter still selects the highlighted option', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Apple"
+          onChange={onChange}
+          hasSearch
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: 'Fruit'}));
+      const search = screen.getByRole('combobox', h);
+      expect(search).toHaveAttribute('enterkeyhint', 'search');
+      expect(search).toHaveAttribute('autocorrect', 'off');
+
+      await user.type(search, 'ban');
+      await user.keyboard('{ArrowDown}');
+      expect(search).toHaveAttribute('aria-activedescendant');
+      fireEvent.keyDown(search, {key: 'Enter'});
+      expect(onChange).toHaveBeenCalledWith('Banana');
+    });
+
     // The search input's expanded state, popup relationship, and active option
     // are bound to the shared Combobox contract (Selector.combobox.a11y.test.tsx,
     // search-active); this keeps only the Selector-specific wiring.
@@ -2060,6 +2084,42 @@ describe('Selector', () => {
         'aria-expanded',
         'false',
       );
+    });
+
+    it('reaches accented and stroked options with a plain letter (INV17)', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Selector
+          label="Name"
+          options={['Anh', 'Dung', 'Đào', 'Ánh']}
+          value="Dung"
+          onChange={onChange}
+        />,
+      );
+
+      await user.tab();
+      await user.keyboard('d');
+
+      expect(onChange).toHaveBeenLastCalledWith('Đào');
+    });
+
+    it('puts the exact option first for a typed mark (INV17)', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Selector
+          label="Name"
+          options={['Anh', 'Dung', 'Đào']}
+          value="Anh"
+          onChange={onChange}
+        />,
+      );
+
+      await user.tab();
+      await user.keyboard('đ');
+
+      expect(onChange).toHaveBeenLastCalledWith('Đào');
     });
 
     it('cycles through options sharing a first letter on repeated presses', async () => {
@@ -5115,6 +5175,71 @@ describe('Selector press model', () => {
     expect(listbox).toHaveClass(hash(touchStyles.pinchZoom));
     expect(listbox).not.toHaveClass(hash(touchStyles.none));
     expect(listbox).not.toHaveClass(hash(touchStyles.panYPinchZoom));
+  });
+
+  it('a long list renders its scrolling touch-action from the first open, with no class swap after the open measure', async () => {
+    const user = userEvent.setup();
+    const many = Array.from({length: 249}, (_, i) => `Option ${i}`);
+    const touchStyles = stylex.create({
+      pinchZoom: {touchAction: 'pinch-zoom'},
+      panYPinchZoom: {touchAction: 'pan-y pinch-zoom'},
+    });
+    const hash = (style: stylex.StyleXStyles) =>
+      stylex.props(style).className!.split(' ').pop()!;
+    // A 249-row list overflows its 300 px box.
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get() {
+        return (this as HTMLElement).getAttribute('role') === 'listbox'
+          ? 7968
+          : 0;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+      configurable: true,
+      get() {
+        return (this as HTMLElement).getAttribute('role') === 'listbox'
+          ? 300
+          : 0;
+      },
+    });
+    try {
+      render(<Selector label="Country" options={many} onChange={() => {}} />);
+      const listbox = screen.getByRole('listbox', h);
+      // The class is already the scrolling one while closed, so the open
+      // never swaps it (a swap restyles every row a second time).
+      expect(listbox).toHaveClass(hash(touchStyles.panYPinchZoom));
+      const swaps: string[] = [];
+      const observer = new MutationObserver(() => {
+        if (listbox.classList.contains(hash(touchStyles.pinchZoom))) {
+          swaps.push(listbox.className);
+        }
+      });
+      observer.observe(listbox, {attributes: true, attributeFilter: ['class']});
+      await user.click(screen.getByRole('combobox'));
+      observer.disconnect();
+      expect(swaps).toEqual([]);
+      expect(listbox).toHaveClass(hash(touchStyles.panYPinchZoom));
+    } finally {
+      // jsdom defines both on Element.prototype; drop the overrides.
+      delete (HTMLElement.prototype as {scrollHeight?: number}).scrollHeight;
+      delete (HTMLElement.prototype as {clientHeight?: number}).clientHeight;
+    }
+  });
+
+  it('a list guessed long that fits after the open measure gets the fitting touch-action', async () => {
+    const user = userEvent.setup();
+    const many = Array.from({length: 20}, (_, i) => `Option ${i}`);
+    render(<Selector label="Country" options={many} onChange={() => {}} />);
+    await user.click(screen.getByRole('combobox'));
+    const touchStyles = stylex.create({
+      pinchZoom: {touchAction: 'pinch-zoom'},
+    });
+    // jsdom measures every element at 0 px, so the measure says it fits and
+    // corrects the guess.
+    expect(screen.getByRole('listbox', h)).toHaveClass(
+      stylex.props(touchStyles.pinchZoom).className!.split(' ').pop()!,
+    );
   });
 
   it('marks the listbox as carrying the press model', async () => {

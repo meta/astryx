@@ -223,10 +223,12 @@ export const RADIO_GROUP_BINDING_STATES = [
   {
     id: 'radio-list-option-disabled-with-message',
     binding: 'RadioListItem',
-    summary: 'an unavailable option kept tabReachable for a group-level reason',
+    summary:
+      'an unavailable option kept tabReachable and described by its group-level reason',
     facts: optionFacts({
       checked: true,
       disabled: true,
+      description: 'Managed by your administrator',
       operable: false,
       tabReachable: true,
       pointerCancellation: false,
@@ -281,11 +283,10 @@ export const RADIO_GROUP_BINDING_STATES = [
   {
     id: 'segmented-group-disabled',
     binding: 'SegmentedControl',
-    summary: 'a disabled segmented group outside the tab sequence',
+    summary: 'a disabled segmented group with one tab stop',
     facts: groupFacts({
       disabled: true,
       operable: false,
-      tabReachable: false,
       spaceSelection: false,
       pointerSelection: false,
       arrowSelection: false,
@@ -357,13 +358,12 @@ export const RADIO_GROUP_BINDING_STATES = [
   {
     id: 'segmented-option-group-disabled',
     binding: 'SegmentedControlItem',
-    summary:
-      'a selected segment disabled by its group and removed from Tab order',
+    summary: 'a selected segment disabled by its group that keeps the Tab stop',
     facts: optionFacts({
       checked: true,
       disabled: true,
       operable: false,
-      tabReachable: false,
+      tabReachable: true,
       pointerCancellation: false,
     }),
     subjectName: 'List',
@@ -373,10 +373,11 @@ export const RADIO_GROUP_BINDING_STATES = [
     id: 'segmented-option-group-disabled-with-message',
     binding: 'SegmentedControlItem',
     summary:
-      'a selected unavailable segment kept tabReachable for the group reason',
+      'a selected unavailable segment kept tabReachable and described by the group reason',
     facts: optionFacts({
       checked: true,
       disabled: true,
+      description: 'Choose a project to switch views',
       operable: false,
       tabReachable: true,
       pointerCancellation: false,

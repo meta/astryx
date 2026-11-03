@@ -49,7 +49,7 @@ import {useThemeDefinition} from '../theme/useTheme';
 import * as stylex from '@stylexjs/stylex';
 import {devWarn} from '../utils/devWarning';
 import type {BaseProps} from '../BaseProps';
-import {usePopover} from './usePopover';
+import {FALLBACK_CLOSE_SELECTOR, usePopover} from './usePopover';
 import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
@@ -64,7 +64,13 @@ import {
   preloadPopoverBottomSheet,
 } from './lazyPopoverBottomSheet';
 import {Button} from '../Button';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Popover/Popover.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Helpers
@@ -519,7 +525,7 @@ export function Popover({
   style,
   'data-testid': testId,
 }: PopoverProps): ReactElement {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const measurementFrameRef = useRef<{id: number; view: Window} | null>(null);
   const [hasOverflow, setHasOverflow] = useState(false);
@@ -645,7 +651,7 @@ export function Popover({
             // BottomSheet's scroll area is the panel's own child; content
             // sits inside it.
             element.parentElement !== sheetPanel &&
-            element.closest('[data-astryx-popover-fallback-close]') == null,
+            element.closest(FALLBACK_CLOSE_SELECTOR) == null,
         );
       if (target != null) {
         target.focus({preventScroll: true});

@@ -27,9 +27,16 @@ import type {CheckboxInputProps} from '../CheckboxInput/CheckboxInput';
 import {ListItem} from '../List/ListItem';
 import {ListContext} from '../List/ListContext';
 import {CheckboxListContext} from './CheckboxListContext';
-import {useTranslator} from '../i18n';
 import {ItemDescriptionContext} from '../Item/ItemDescriptionContext';
+import {joinAriaIDs} from '../utils/inputAria';
 import type {ItemAlign} from '../Item';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/CheckboxList/CheckboxListItem.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Styles
@@ -153,14 +160,19 @@ export interface CheckboxListItemProps extends BaseProps<HTMLLIElement> {
  *
  * This component owns `aria-describedby`, so the prop is omitted rather than
  * accepted and overwritten: a caller passing one would otherwise lose the id
- * silently.
+ * silently. After the row's description comes the group's disabled reason
+ * (CheckboxList's disabledMessage), which describes each checkbox (FR9).
  */
 function DescribedCheckboxInput(
   props: Omit<CheckboxInputProps, 'aria-describedby'>,
 ) {
   const describedBy = use(ItemDescriptionContext);
+  const reasonID = use(CheckboxListContext)?.disabledMessageID;
   return (
-    <CheckboxInput {...props} aria-describedby={describedBy ?? undefined} />
+    <CheckboxInput
+      {...props}
+      aria-describedby={joinAriaIDs(describedBy ?? undefined, reasonID)}
+    />
   );
 }
 
@@ -203,7 +215,7 @@ export function CheckboxListItem({
   align,
   ...restProps
 }: CheckboxListItemProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const ctx = use(CheckboxListContext);
 
   if (ctx && ctx.value !== undefined && value === undefined) {

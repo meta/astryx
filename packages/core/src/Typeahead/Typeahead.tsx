@@ -46,7 +46,6 @@ import {
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
-  type FieldStatusVariant,
 } from '../Field';
 import {Token} from '../Token';
 import {useTooltip} from '../Tooltip';
@@ -69,14 +68,22 @@ import {
   type FieldInputBaseProps,
   useFieldInputStyling,
 } from '../Field/fieldParts';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import type {SizeValue} from '../utils/types';
 import type {SearchableItem, SearchSource} from './types';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Typeahead/Typeahead.generated';
+
+registerEnglishFallback(english);
 export type {
   InputStatus as TypeaheadStatus,
   InputStatusType as TypeaheadStatusType,
@@ -116,7 +123,7 @@ export interface TypeaheadProps<T extends SearchableItem> extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
   /**
    * Icon to display at the start of the input.
    * Accepts a ReactNode (e.g. `<Icon icon={SearchIcon} />`) or an SVG icon component directly.
@@ -166,17 +173,21 @@ export interface TypeaheadProps<T extends SearchableItem> extends Omit<
    * @default 'No results found'
    */
   emptySearchText?: ReactNode;
-  /** Whether the input is disabled. @default false */
+  /**
+   * Whether the input is disabled. A disabled field keeps its tab stop: it is
+   * announced as disabled (`aria-disabled`), is read-only, and opens and
+   * picks nothing.
+   * @default false
+   */
   isDisabled?: boolean;
   /**
    * Explains why the input is disabled. When set together with `isDisabled`,
    * the input shows a tooltip with this text on hover and keyboard focus, and
-   * the field stays focusable (via `aria-disabled`) so the reason is
-   * discoverable by keyboard and assistive technology. Editing and selection
-   * stay blocked.
+   * the reason describes the field for assistive technology. Editing and
+   * selection stay blocked.
    *
-   * Use this instead of wrapping a disabled input in `Tooltip` — disabled
-   * controls don't emit the pointer events an external tooltip needs.
+   * Use this instead of wrapping a disabled input in `Tooltip`, so the reason
+   * is attached to the field itself.
    *
    * @example
    * ```
@@ -427,7 +438,7 @@ export function Typeahead<T extends SearchableItem>({
     containerClassName,
     containerStyle,
   });
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const size = useSize(sizeProp, 'md');
   const generatedInputId = useId();
   const inputId = idProp ?? generatedInputId;
@@ -444,10 +455,9 @@ export function Typeahead<T extends SearchableItem>({
   const inputRef = useRef<HTMLInputElement>(null);
   const tokenRef = useRef<HTMLElement>(null);
 
-  // Disabled-reason tooltip. Disabled controls swallow pointer events, so the
-  // tooltip listeners attach to the input wrapper (which already exists) and
-  // the input stays perceivable via aria-disabled + readOnly instead of the
-  // disabled attribute. Editing and selection stay blocked by the isDisabled
+  // Disabled-reason tooltip. The tooltip listeners attach to the input wrapper
+  // (which already exists); a disabled input stays perceivable via
+  // aria-disabled + readOnly instead of the disabled attribute. Editing and selection stay blocked by the isDisabled
   // guards (handleWrapperClick, handleEnterEditMode, and BaseTypeahead's own
   // focus/change guards).
   const showsDisabledMessage = isDisabled && !!disabledMessage;
@@ -528,26 +538,40 @@ export function Typeahead<T extends SearchableItem>({
     [editingValue, isEditing],
   );
 
+  // Focus the token's button once it renders (the next cycle), so keyboard
+  // users stay in the component after edit mode ends.
+  const focusTokenNextFrame = useCallback(() => {
+    requestAnimationFrame(() => {
+      const tokenEl = tokenRef.current;
+      if (tokenEl) {
+        const button = tokenEl.querySelector('button');
+        (button ?? tokenEl).focus();
+      }
+    });
+  }, []);
+
   // Handle selection from dropdown — clears edit mode
   const handleChange = useCallback(
     (item: T | null) => {
       setIsEditing(false);
       setEditingValue(null);
       onChange(item);
-      // After selection, focus the token so keyboard users stay in the component.
-      // Use requestAnimationFrame because the token renders on the next cycle.
       if (item) {
-        requestAnimationFrame(() => {
-          const tokenEl = tokenRef.current;
-          if (tokenEl) {
-            // Focus the internal button inside the token
-            const button = tokenEl.querySelector('button');
-            (button ?? tokenEl).focus();
-          }
-        });
+        focusTokenNextFrame();
       }
     },
-    [onChange],
+    [onChange, focusTokenNextFrame],
+  );
+
+  // Whether the base's list is shown: Escape then hides the list first, and
+  // edit mode stays.
+  const isListOpenRef = useRef(false);
+  const handleOpenChange = useCallback(
+    (isOpen: boolean) => {
+      isListOpenRef.current = isOpen;
+      onOpenChange?.(isOpen);
+    },
+    [onOpenChange],
   );
 
   // Handle clear (explicit X button on token). Edit mode copied the label into
@@ -583,14 +607,14 @@ export function Typeahead<T extends SearchableItem>({
       if (isImeKeyEvent(e.nativeEvent)) {
         return;
       }
-      if (e.key === 'Escape' && editingValue) {
+      if (e.key === 'Escape' && editingValue && !isListOpenRef.current) {
         e.preventDefault();
         setIsEditing(false);
         setEditingValue(null);
-        inputRef.current?.blur();
+        focusTokenNextFrame();
       }
     },
-    [editingValue],
+    [editingValue, focusTokenNextFrame],
   );
 
   // Click wrapper to focus input or enter edit mode
@@ -649,6 +673,7 @@ export function Typeahead<T extends SearchableItem>({
             status && !isDisabled && inputStatusHoverShadowStyles[status.type],
             status && inputStatusFocusWithinStyles[status.type],
             isDisabled && inputWrapperStyles.disabled,
+            isDisabled && inputDisabledFocusStyles.nestedRing,
             inputGroup && groupStyles.inGroup,
             controlXstyle,
           ),
@@ -709,7 +734,8 @@ export function Typeahead<T extends SearchableItem>({
                 emptySearchText={emptySearchText}
                 isDisabled={isDisabled}
                 hasAutoFocus={hasAutoFocus}
-                isFocusableDisabled={showsDisabledMessage}
+                // A disabled field keeps its tab stop (spec:AST-085 FR1).
+                isFocusableDisabled={isDisabled}
                 inputId={inputId}
                 ariaDescribedBy={
                   [ariaDescribedByProp, ariaDescribedBy]
@@ -726,7 +752,7 @@ export function Typeahead<T extends SearchableItem>({
                 // aria-required / aria-invalid still applies.
                 aria-invalid={status?.type === 'error' || rest['aria-invalid']}
                 onChangeQuery={onChangeQuery}
-                onOpenChange={onOpenChange}
+                onOpenChange={handleOpenChange}
                 debounceMs={debounceMs}
                 anchorRef={wrapperRef}
                 onKeyDown={handleKeyDown}

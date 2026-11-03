@@ -59,7 +59,11 @@
  * commit: a main-thread block before that frame delays the motion instead of
  * skipping into it. Everything the call starts, and every
  * call from rest in the same task, starts at that one time, which
- * `handle.started` reports. A call that continues motion on
+ * `handle.started` reports. Where the compositor starts it and the page
+ * learns that start only a frame or more later (Chromium), the call starts
+ * at the frame that commits it, the start the compositor takes, so a
+ * retarget or a rebase before then continues from the frame on screen. A
+ * call that continues motion on
  * screen (a retarget, a catch) keeps an explicit start at the call time, or
  * `options.at` to line several animators up, so the new curve continues
  * from the frame on screen. Keyframes are sampled from the call's start, so
@@ -177,6 +181,7 @@
 
 import {cubicBezier} from './bezier';
 import {solveSpring, toSpring, type SpringDescription} from './spring';
+import {registerPresentedOffset, type PresentedSource} from './presentation';
 import {resolveMotion} from './resolveMotion';
 import {
   reducedMotionCrossFade,
@@ -504,8 +509,22 @@ interface StartGroup {
    * browser's, whatever it says (startAfterBlock).
    */
   framed?: boolean;
+  /**
+   * Made in an animation-frame callback of an animator's own (a presented
+   * call's second frame): the browser commits its animations in that frame,
+   * so the frame after it is not the one that starts them.
+   */
+  madeInFrame?: boolean;
   /** The task it was made in, with every call made in that task. */
   task?: TaskMark;
+  /**
+   * Per channel, when its animation's first frame ran without a known start.
+   * That frame came too late to stand for the start, and the browser had not
+   * told it yet. The compositor starts the animation within about a frame of
+   * this time. Until the browser tells its start, a read of the channel takes
+   * the curve from here.
+   */
+  latest?: Map<Channel, number>;
   /** A later call in the same task that took over its curves. */
   adoptedBy?: StartGroup;
   readonly resolve: (start: number) => void;
@@ -663,6 +682,9 @@ interface TaskMark {
 /** The task the current calls from rest are made in, until it ends. */
 let openTask: TaskMark | null = null;
 
+/** How many of the animators' animation-frame callbacks are running now. */
+let frameDepth = 0;
+
 /** The mark of the running task, opened by its first call from rest. */
 function markTask(time: number, clock: () => number): TaskMark {
   if (openTask == null) {
@@ -718,6 +740,9 @@ const END_RECHECK_MS = 1000 / 60;
 export const PROMOTION_LINGER_MS = 500;
 
 type Channel = 'translate' | 'rotate' | 'scale' | 'opacity';
+
+/** The custom property whose writes make WebKit resolve a moving element. */
+const RESOLVE_PROPERTY = '--astryx-presented';
 
 const CHANNELS: Record<Channel, ReadonlyArray<MotionProperty>> = {
   translate: ['x', 'y'],
@@ -909,13 +934,28 @@ export function createAnimator(
   options: AnimatorOptions = {},
 ): Animator {
   const now = options.now ?? defaultNow;
-  const requestFrame =
+  const frameSource =
     options.requestFrame ??
     (typeof requestAnimationFrame === 'function'
       ? (callback: () => void) => {
           requestAnimationFrame(() => callback());
         }
       : null);
+  // Every frame callback of an animator's counts itself, so a call made in
+  // one knows its animations commit in that frame.
+  const requestFrame =
+    frameSource == null
+      ? null
+      : (callback: () => void) => {
+          frameSource(() => {
+            frameDepth += 1;
+            try {
+              callback();
+            } finally {
+              frameDepth -= 1;
+            }
+          });
+        };
   const pseudoElement = options.pseudoElement;
   // Reduced Motion reads the person's settings and nothing else: no option
   // overrides them (design:reduced-motion DR4).
@@ -929,6 +969,14 @@ export function createAnimator(
   const running = new Map<Channel, Animation>();
   /** Drops a finished, still-filling animation once the main thread runs. */
   const retireTimers = new Map<Channel, ReturnType<typeof setTimeout>>();
+  /**
+   * Animations whose retire looks again at the next frame (scheduleRetire):
+   * each its own, so one still waiting for a replaced animation does not
+   * stand in for the next.
+   */
+  const retireFrames = new Set<Animation>();
+  /** The timer that starts those looks a frame before a curve's end. */
+  const retireLooks = new Map<Channel, ReturnType<typeof setTimeout>>();
   const touched = new Set<Channel>();
   /**
    * The stylesheet's opacity a Reduce Motion dip borrowed because no call
@@ -960,6 +1008,16 @@ export function createAnimator(
   };
   /** The call being committed, when it starts from rest. */
   let callGroup: StartGroup | null = null;
+  /** The element reported to presentation.ts while translate moves. */
+  let presented: Element | null = null;
+  /**
+   * The translate the engine hit-tests the element at while the compositor
+   * moves it: where the animation started, or where a `resolve` left it.
+   */
+  let hitTested = {x: 0, y: 0};
+  /** Counts the style writes that make WebKit resolve the element again. */
+  let resolutions = 0;
+  let unpresent: (() => void) | null = null;
   /** Channels promoted to the element's compositing layer (will-change). */
   const promoted = new Set<Channel>();
   /** The element's own inline will-change, restored when promotion ends. */
@@ -994,7 +1052,7 @@ export function createAnimator(
     if (segment == null) {
       return null;
     }
-    if (time >= segment.start + segment.duration) {
+    if (time >= endOf(property, segment)) {
       return null;
     }
     return segment;
@@ -1020,16 +1078,89 @@ export function createAnimator(
   };
 
   /**
-   * The value on screen at `time`. A curve the browser has not started is at
-   * its start up to now; a later time reads the curve from its provisional
-   * start, the model's best guess until the browser's start moves it (a
-   * companion that samples a curve ahead follows its shape).
+   * A held curve's start once a frame dated its call, as the browser's start
+   * moves it: by that frame's lead over the call's own time.
+   */
+  const datedFromLatest = (
+    segment: Segment,
+    latest: number | undefined,
+  ): {latest: number; start: number} | null =>
+    latest == null || segment.group == null
+      ? null
+      : {latest, start: segment.start + latest - segment.group.provisional};
+
+  /**
+   * When a waiting curve's call had its first frame, which put the curve on
+   * screen. Undefined for a curve that does not wait, or whose call has had
+   * no first frame.
+   */
+  const shownSince = (
+    property: MotionProperty,
+    segment: Segment,
+  ): number | undefined =>
+    segment.group?.resolved === false
+      ? segment.group.latest?.get(CHANNEL_OF[property])
+      : undefined;
+
+  /** A curve's end, dated from its call's first frame while it waits. */
+  const endOf = (property: MotionProperty, segment: Segment): number =>
+    (datedFromLatest(segment, shownSince(property, segment))?.start ??
+      segment.start) + segment.duration;
+
+  /**
+   * Takes a curve on screen out of the call that still waits for the
+   * browser's start. The curve keeps its course, dated from the call's first
+   * frame. A call that has no channel left starts at that frame.
+   */
+  const leaveWaitingCall = (
+    segment: Segment,
+    channel: Channel,
+    latest: number,
+  ) => {
+    const group = segment.group;
+    if (group == null) {
+      return;
+    }
+    const index = group.segments.indexOf(segment);
+    if (index >= 0) {
+      group.segments.splice(index, 1);
+    }
+    segment.start += latest - group.provisional;
+    segment.group = undefined;
+    if (!CHANNELS[channel].some(p => segments.get(p)?.group === group)) {
+      group.latest?.delete(channel);
+      group.channels.delete(channel);
+    }
+    if (group.channels.size === 0 && group.segments.length === 0) {
+      resolveGroup(group, latest);
+    }
+  };
+
+  /**
+   * The value on screen at `time`. Until the browser reports its start, a
+   * held curve shows its first value. A frame that ran without that start
+   * dates the curve. Without that frame, a later time reads from the
+   * provisional start, so a companion that samples ahead follows the curve's
+   * shape.
    */
   const valueAt = (property: MotionProperty, time: number): number => {
     const segment = segments.get(property);
-    if (segment != null && isHeld(segment) && time <= now()) {
+    if (segment != null && isHeld(segment)) {
+      // The compositor starts the call near its first frame. The curve is
+      // dated as the browser's start would date it. A curve that joined by an
+      // older clock keeps its lead over the call's own time.
+      const latest = segment.group?.latest?.get(CHANNEL_OF[property]);
+      const dated = datedFromLatest(segment, latest);
+      if (dated != null) {
+        const elapsed = Math.max(time, dated.latest) - dated.start;
+        return elapsed >= segment.duration
+          ? segment.target
+          : segment.at(elapsed);
+      }
       // Nothing has moved on screen until the browser starts the call.
-      return segment.at(0);
+      if (time <= now()) {
+        return segment.at(0);
+      }
     }
     return curveAt(property, time);
   };
@@ -1037,10 +1168,22 @@ export function createAnimator(
   const velocityAt = (property: MotionProperty, time: number): number => {
     const held = segments.get(property);
     if (held != null && isHeld(held)) {
-      // Still at its start on screen, but moving in the model: a retarget
-      // carries the velocity the curve has reached by now, so a flick whose
-      // moves all land before the browser starts any keeps its speed.
-      return held.speed(Math.max(0, time - held.start));
+      // Still at its start on screen, but moving in the model. A retarget
+      // carries the velocity the curve has reached by now. So a flick whose
+      // moves all land before the browser starts any keeps its speed. Past
+      // its first frame, it reads from that frame, as its value does.
+      const dated = datedFromLatest(
+        held,
+        held.group?.latest?.get(CHANNEL_OF[property]),
+      );
+      return held.speed(
+        Math.max(
+          0,
+          dated != null && time > dated.latest
+            ? time - dated.start
+            : time - held.start,
+        ),
+      );
     }
     const segment = segmentAt(property, time);
     if (segment == null || time < segment.start) {
@@ -1057,6 +1200,62 @@ export function createAnimator(
 
   const finalValue = (property: MotionProperty): number =>
     segments.get(property)?.target ?? resting[property];
+
+  /**
+   * Where translate is drawn relative to where the translate animation
+   * started, read live when a touch lands. iOS WebKit keeps the transform it
+   * resolved when the animation went to the compositor (iOS 26.2: the
+   * element's rect and its hit tests stay at the start for the whole curve,
+   * while the computed style is live), until the animation is retired. A
+   * segment whose start still waits for the browser's commit has painted
+   * nothing of its curve yet.
+   */
+  const drawnTranslate = (property: MotionProperty, time: number) => {
+    const segment = segments.get(property);
+    return segment?.group != null && !segment.group.resolved
+      ? segment.at(0)
+      : valueAt(property, time);
+  };
+
+  const presentedSource: PresentedSource = {
+    offset: (time = now()) => {
+      syncPending();
+      return {
+        x: drawnTranslate('x', time) - hitTested.x,
+        y: drawnTranslate('y', time) - hitTested.y,
+      };
+    },
+    resolve: () => {
+      if (target == null) {
+        return;
+      }
+      syncPending();
+      const time = now();
+      // Any style write makes WebKit resolve the element's transform again,
+      // to the value drawn now, where it then stays (iOS 26.2: in the same
+      // task); a custom property changes nothing else.
+      resolutions += 1;
+      target.style.setProperty(RESOLVE_PROPERTY, String(resolutions));
+      hitTested = {x: drawnTranslate('x', time), y: drawnTranslate('y', time)};
+    },
+  };
+
+  /** Reports the element while its translate moves (not a pseudo-element's). */
+  const present = (isMoving: boolean) => {
+    const element = isMoving && pseudoElement == null ? target : null;
+    if (element === presented) {
+      return;
+    }
+    unpresent?.();
+    unpresent = null;
+    if (presented instanceof HTMLElement) {
+      presented.style.removeProperty(RESOLVE_PROPERTY);
+    }
+    presented = element;
+    if (element != null) {
+      unpresent = registerPresentedOffset(element, presentedSource);
+    }
+  };
 
   const writeInline = (
     channel: Channel,
@@ -1151,6 +1350,8 @@ export function createAnimator(
     running.delete(channel);
     clearTimeout(retireTimers.get(channel));
     retireTimers.delete(channel);
+    clearTimeout(retireLooks.get(channel));
+    retireLooks.delete(channel);
     // An element's inline style takes the value on screen below, so its old
     // animation can go first. A pseudo-element has none: its old animation
     // keeps holding the value until the new one exists (same task, no frame in
@@ -1162,12 +1363,64 @@ export function createAnimator(
     // Settled curves become resting values.
     for (const property of properties) {
       const segment = segments.get(property);
-      if (segment != null && time >= segment.start + segment.duration) {
+      if (segment != null && time >= endOf(property, segment)) {
         resting[property] = segment.target;
         segments.delete(property);
       }
     }
     const moving = properties.filter(p => segments.has(p));
+    if (callGroup == null) {
+      // A call that starts now rebuilds a channel the compositor has moving
+      // since a first frame without a known start. The channel carries on
+      // from that frame, with a start of its own, instead of starting its
+      // curve again.
+      for (const property of moving) {
+        const segment = segments.get(property) as Segment;
+        const latest = shownSince(property, segment);
+        if (latest != null) {
+          leaveWaitingCall(segment, channel, latest);
+        }
+      }
+    }
+    // An explicit call can rebuild a channel while one of its curves still
+    // waits for the browser's start. The animation then joins the current
+    // call, or else that waiting call, with no start of its own.
+    const waiting =
+      callGroup ??
+      moving
+        .map(p => (segments.get(p) as Segment).group)
+        .find(group => group != null && !group.resolved) ??
+      null;
+    const rebuiltAfterFirstFrame = waiting?.framed === true;
+    // The new animation starts at the frame that commits it, from its first
+    // keyframe. That holds for a waiting call it joins after that call's
+    // first frame, and for every waiting call it takes a curve from. So this
+    // channel's reads below, and until that frame, take that first value.
+    const restarted = new Set<StartGroup>();
+    if (rebuiltAfterFirstFrame) {
+      restarted.add(waiting);
+    }
+    if (callGroup != null) {
+      for (const property of moving) {
+        const group = (segments.get(property) as Segment).group;
+        if (group != null && group !== callGroup && !group.resolved) {
+          restarted.add(group);
+        }
+      }
+    }
+    for (const group of restarted) {
+      group.latest?.delete(channel);
+    }
+    if (channel === 'translate') {
+      // The animation built below starts from the value at `time` (its first
+      // keyframe); a rebase or a retarget builds a new one, so a new start.
+      hitTested = {x: valueAt('x', time), y: valueAt('y', time)};
+      present(
+        moving.length > 0 &&
+          target != null &&
+          typeof target.animate === 'function',
+      );
+    }
     if (
       moving.length === 0 ||
       target == null ||
@@ -1190,15 +1443,6 @@ export function createAnimator(
       previous?.cancel();
       return;
     }
-    // A channel rebuilt by an explicit call (set, rebase, a retarget of
-    // another axis) while one of its curves still waits for the browser's
-    // start keeps that start: no explicit start for this animation.
-    const waiting =
-      callGroup ??
-      moving
-        .map(p => (segments.get(p) as Segment).group)
-        .find(group => group != null && !group.resolved) ??
-      null;
     // The keyframes start where the animation will: at the waiting call's
     // own time, which its start moves to the browser's (resolveGroup), so a
     // write later in the task keeps the screen on the model's clock.
@@ -1313,6 +1557,20 @@ export function createAnimator(
       waiting.channels.add(channel);
       // A cancel before the first frame rejects its ready promise.
       (animation as Partial<Animation>).ready?.catch(() => {});
+      if (rebuiltAfterFirstFrame) {
+        // The frame that commits it dates this channel's start again. The
+        // call's other channels keep their own.
+        requestFrame?.(() => {
+          if (
+            !waiting.resolved &&
+            running.get(channel) === animation &&
+            animation.startTime == null &&
+            animation.playState === 'running'
+          ) {
+            (waiting.latest ??= new Map()).set(channel, now());
+          }
+        });
+      }
     } else {
       // One clock: the keyframes were sampled from `time`.
       animation.startTime = time;
@@ -1341,27 +1599,65 @@ export function createAnimator(
     end: number,
   ) => {
     clearTimeout(retireTimers.get(channel));
-    const retire = () => {
-      retireTimers.delete(channel);
+    retireTimers.delete(channel);
+    clearTimeout(retireLooks.get(channel));
+    retireLooks.delete(channel);
+    // Looks for the end in the next frame, before it paints: the frame whose
+    // time reaches the curve's end retires it there, where a timer could land
+    // between two frames under load and leave it on the element a frame or two
+    // past its curve. The timers stay, for a page that draws no frames (a
+    // hidden tab).
+    const lookAtFrame = () => {
+      if (requestFrame == null || retireFrames.has(animation)) {
+        return;
+      }
+      retireFrames.add(animation);
+      requestFrame(() => {
+        retireFrames.delete(animation);
+        retire(true);
+      });
+    };
+    // `atFrame`: a look from a frame callback, which leaves a pending timer
+    // where it is.
+    const retire = (atFrame = false) => {
+      if (!atFrame) {
+        retireTimers.delete(channel);
+      }
       if (running.get(channel) !== animation) {
         return;
       }
       // Paused or sought (a sampler holding it): retire when its own time
       // reaches the curve's end, never from the wall clock.
       const remaining = remainingCurve(animation);
-      if (remaining != null && remaining > 0) {
-        retireTimers.set(
-          channel,
-          setTimeout(
-            retire,
-            animation.playState === 'paused'
-              ? RETIRE_RECHECK_MS
-              : Math.max(remaining, END_RECHECK_MS),
-          ),
-        );
+      if (atFrame && remaining == null) {
+        // Its time cannot be read: the timer decides.
         return;
       }
+      if (remaining != null && remaining > 0) {
+        const paused = animation.playState === 'paused';
+        // A frame look keeps looking while up to two frames remain: the frame
+        // it ran in can be dated before the timer that started the looks was
+        // due, and the frame after it is the one that reaches the end.
+        if (!paused && remaining <= (atFrame ? 2 : 1) * END_RECHECK_MS) {
+          lookAtFrame();
+        }
+        if (!retireTimers.has(channel)) {
+          retireTimers.set(
+            channel,
+            setTimeout(
+              retire,
+              paused ? RETIRE_RECHECK_MS : Math.max(remaining, END_RECHECK_MS),
+            ),
+          );
+        }
+        return;
+      }
+      clearTimeout(retireTimers.get(channel));
+      retireTimers.delete(channel);
       running.delete(channel);
+      if (channel === 'translate') {
+        present(false);
+      }
       // A pseudo-element holds its resting value, unless the stylesheet
       // takes it back now (a borrowed dip that has ended).
       const handsBack =
@@ -1395,6 +1691,20 @@ export function createAnimator(
       flushReleases();
     };
     retireTimers.set(channel, setTimeout(retire, Math.max(0, end - now())));
+    if (requestFrame != null) {
+      // Frames start looking a frame before the end, so the frame that
+      // reaches it retires it even when the timer above runs late.
+      retireLooks.set(
+        channel,
+        setTimeout(
+          () => {
+            retireLooks.delete(channel);
+            lookAtFrame();
+          },
+          Math.max(0, end - now() - END_RECHECK_MS),
+        ),
+      );
+    }
   };
 
   /** The element's own (stylesheet) opacity, read once when a dip starts. */
@@ -1767,10 +2077,14 @@ export function createAnimator(
     for (const channel of start === 'commit' ? [] : channels) {
       for (const property of CHANNELS[channel]) {
         const segment = segments.get(property);
+        // A call's first frame puts its channels on screen, even before the
+        // browser reports the start. So such a channel is not at rest either.
         if (
           segment != null &&
-          time < segment.start + segment.duration &&
-          (segment.group == null || segment.group.resolved)
+          time < endOf(property, segment) &&
+          (segment.group == null ||
+            segment.group.resolved ||
+            shownSince(property, segment) != null)
         ) {
           return null;
         }
@@ -1921,6 +2235,7 @@ export function createAnimator(
     // call's is its second frame's callback, wherever in its frame the call
     // was made.
     group.task = markTask(now(), now);
+    group.madeInFrame = frameDepth > 0;
     queueMicrotask(() => {
       group.fresh = false;
     });
@@ -1940,6 +2255,46 @@ export function createAnimator(
     requestFrame?.(() => {
       syncGroup(group);
       group.framed = true;
+      // Chromium's compositor starts a composited animation when the frame
+      // that commits it reaches it, and tells the page that start a frame or
+      // more later (longer under load). Until then the call would read as
+      // not started while the screen moves it, and a retarget or a rebase
+      // would replay its curve from the start. A call made in a task, still
+      // waiting in the first frame after it, starts now, which the compositor
+      // then takes as its start: the time this frame runs, not its timestamp,
+      // which after a block is the frame time from before the block. Only
+      // when this frame is the one that commits it: not for a call made in a
+      // frame callback, whose frame committed it already, nor when a block
+      // ran between the call and this frame (more than LATE_START_MS), after
+      // which this frame cannot tell a call made in a task from one a page's
+      // own frame callback made; those keep the browser's start.
+      if (
+        !group.resolved &&
+        group.madeInFrame !== true &&
+        now() - (group.task?.first ?? group.provisional) <= LATE_START_MS &&
+        group.animations.some(
+          animation =>
+            animation.startTime == null && animation.playState === 'running',
+        )
+      ) {
+        resolveGroup(group, now());
+      }
+      // The browser's start is still unread. The compositor starts the call
+      // near this frame, so each moving channel's reads take the curve from
+      // now until the browser tells its start.
+      if (!group.resolved) {
+        for (const channel of group.channels) {
+          const animation = running.get(channel);
+          if (
+            animation != null &&
+            group.animations.includes(animation) &&
+            animation.startTime == null &&
+            animation.playState === 'running'
+          ) {
+            (group.latest ??= new Map()).set(channel, now());
+          }
+        }
+      }
     });
     ready.then(
       () => syncGroup(group),
@@ -2882,6 +3237,7 @@ export function createAnimator(
         return;
       }
       flushDeferred();
+      present(false);
       if (next == null) {
         // Unmount, unless a node replaces this one in the same task (React's
         // replacement order: attach(null), then the new node): nothing is
@@ -2916,6 +3272,11 @@ export function createAnimator(
                 clearTimeout(timer);
               }
               retireTimers.clear();
+              for (const timer of retireLooks.values()) {
+                clearTimeout(timer);
+              }
+              retireLooks.clear();
+              retireFrames.clear();
               demote();
               // demote() asks for a fresh will-change read of the node it
               // demotes; a detached node gets none.
@@ -2965,6 +3326,11 @@ export function createAnimator(
         clearTimeout(timer);
       }
       retireTimers.clear();
+      for (const timer of retireLooks.values()) {
+        clearTimeout(timer);
+      }
+      retireLooks.clear();
+      retireFrames.clear();
       if (isOpacityBorrowed) {
         // A running borrowed dip (or an exit by role returning to the
         // stylesheet) stays in the model through any attach, so a pending
@@ -3437,9 +3803,11 @@ export function createAnimator(
         }
         owners.add(segment.owner);
         // A curve still waiting for the browser's start stays in its call:
-        // it starts with that call's commit.
+        // it starts with that call's commit. A curve whose call had its first
+        // frame is on screen already, so it leaves the call (leaveWaitingCall).
+        const latest = shownSince(property, segment);
         const group =
-          segment.group != null && !segment.group.resolved
+          latest == null && segment.group != null && !segment.group.resolved
             ? segment.group
             : undefined;
         const replace = (next: Segment) => {
@@ -3456,6 +3824,9 @@ export function createAnimator(
         if (segment.spring != null) {
           const from = valueAt(property, time) + delta;
           const velocity = velocityAt(property, time);
+          if (latest != null) {
+            leaveWaitingCall(segment, CHANNEL_OF[property], latest);
+          }
           const curve = solveSpring(toSpring(segment.spring), {
             from,
             to: segment.target,
@@ -3476,6 +3847,9 @@ export function createAnimator(
             spring: segment.spring,
           });
         } else {
+          if (latest != null) {
+            leaveWaitingCall(segment, CHANNEL_OF[property], latest);
+          }
           replace({
             ...segment,
             target: segment.target + delta,
@@ -3569,6 +3943,12 @@ export function createAnimator(
         clearTimeout(timer);
       }
       retireTimers.clear();
+      present(false);
+      for (const timer of retireLooks.values()) {
+        clearTimeout(timer);
+      }
+      retireLooks.clear();
+      retireFrames.clear();
       handBackBorrow();
       demote();
       cancelSheetWillChangeRead();

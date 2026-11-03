@@ -19,7 +19,8 @@ import React, {useMemo, useCallback, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, spacingVars, radiusVars} from '../theme/tokens.stylex';
 import {SegmentedControlContext} from './SegmentedControlContext';
-import {useListFocus} from '../hooks/useListFocus';
+import {useInternalListFocus} from '../hooks/useListFocus';
+import {isSegmentDisabledOnItsOwn} from '../privateAttributes/segmentDisabled.stylex';
 import {useKeyboardHint} from '../hooks/useKeyboardHint';
 import {useTooltip} from '../Tooltip';
 import type {
@@ -64,7 +65,9 @@ export interface SegmentedControlProps extends Omit<
    */
   layout?: SegmentedControlLayout;
   /**
-   * Whether the entire control is disabled.
+   * Whether the entire control is disabled. The selected segment keeps the
+   * control's Tab stop, announced as disabled (`aria-disabled`), and nothing
+   * can be selected.
    * @default false
    */
   isDisabled?: boolean;
@@ -72,11 +75,11 @@ export interface SegmentedControlProps extends Omit<
    * Explains why the control is disabled. Applies to the whole-group disabled
    * state (`isDisabled`), not individual segments. When set together with
    * `isDisabled`, the control shows a tooltip with this text on hover and
-   * keyboard focus, and stays focusable (via `aria-disabled`) so the reason is
-   * discoverable by keyboard and assistive technology. Selection stays blocked.
+   * keyboard focus, and the reason describes each segment for assistive
+   * technology. Selection stays blocked.
    *
-   * Use this instead of wrapping a disabled control in `Tooltip` — disabled
-   * controls don't emit the pointer events an external tooltip needs.
+   * Use this instead of wrapping a disabled control in `Tooltip`, so the
+   * reason is attached to the control itself.
    */
   disabledMessage?: string;
   /**
@@ -118,14 +121,10 @@ const styles = stylex.create({
     display: 'flex',
     width: '100%',
   },
+  // Disabled: dimmed, with pointer events left on so a press can focus the
+  // segment that holds the Tab stop and a reason tooltip can open on hover.
+  // Selection is blocked by the isDisabled guards (spec:AST-085 FR1, FR2).
   disabled: {
-    opacity: 0.5,
-    pointerEvents: 'none',
-  },
-  // Disabled *with* a disabledMessage: keep the dimmed look but leave pointer
-  // events on so the group can receive hover and surface the reason tooltip.
-  // Selection is still blocked by the isDisabled guards.
-  disabledWithMessage: {
     opacity: 0.5,
   },
 });
@@ -179,11 +178,10 @@ export function SegmentedControl({
 }: SegmentedControlProps) {
   const size = useSize(sizeProp, 'md');
 
-  // Disabled-reason tooltip. Applies to the whole-group disabled state. Disabled
-  // controls swallow pointer events, so the tooltip listeners attach to the
-  // radiogroup container (and the container keeps pointer events on in this
-  // mode) while the radios stay perceivable via aria-disabled. Selection is
-  // blocked by the isDisabled guards in the click/focus handlers.
+  // Disabled-reason tooltip. Applies to the whole-group disabled state. The
+  // tooltip listeners attach to the radiogroup container, which keeps pointer
+  // events while disabled; the radios stay perceivable via aria-disabled.
+  // Selection is blocked by the isDisabled guards in the click/focus handlers.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -198,12 +196,17 @@ export function SegmentedControl({
   // the radios, skips disabled ones, wraps at the ends, handles Home/End, and
   // repairs the tab stop on mount and whenever items mount/disable — replacing
   // the component's former inline keyboard handler and tab-stop repair effect.
-  const {listRef, handleKeyDown, handleFocus} = useListFocus<HTMLDivElement>({
-    itemSelector: '[role="radio"]:not([aria-disabled="true"])',
-    hasRovingTabIndex: true,
-    wrap: true,
-    orientation: 'horizontal',
-  });
+  const {listRef, handleKeyDown, handleFocus} =
+    useInternalListFocus<HTMLDivElement>({
+      itemSelector: '[role="radio"]:not([aria-disabled="true"])',
+      hasRovingTabIndex: true,
+      // One Tab stop, placed by the control (FR2, FR7): the selected segment,
+      // enabled or not and in a disabled control too, else the first segment
+      // not disabled by its own isDisabled, else the first.
+      tabStopOrder: orderTabStop,
+      wrap: true,
+      orientation: 'horizontal',
+    });
 
   const hint = useKeyboardHint({
     orientation: 'horizontal',
@@ -270,9 +273,19 @@ export function SegmentedControl({
       size,
       layout,
       isDisabled,
-      hasDisabledMessage: showsDisabledMessage,
+      disabledReasonID: showsDisabledMessage
+        ? disabledMessageTooltip.describedBy
+        : undefined,
     }),
-    [value, onChange, size, layout, isDisabled, showsDisabledMessage],
+    [
+      value,
+      onChange,
+      size,
+      layout,
+      isDisabled,
+      showsDisabledMessage,
+      disabledMessageTooltip.describedBy,
+    ],
   );
 
   return (
@@ -297,10 +310,7 @@ export function SegmentedControl({
             styles.container,
             sizeStyles[size],
             layout === 'fill' && styles.fill,
-            isDisabled &&
-              (showsDisabledMessage
-                ? styles.disabledWithMessage
-                : styles.disabled),
+            isDisabled && styles.disabled,
             xstyle,
           ),
           className,
@@ -316,3 +326,21 @@ export function SegmentedControl({
 }
 
 SegmentedControl.displayName = 'SegmentedControl';
+
+/**
+ * The control's segments, its Tab stop first: the selected segment, enabled
+ * or not, else the first segment not disabled by its own isDisabled, else the
+ * first (FR2, FR7).
+ */
+function orderTabStop(list: HTMLElement): ReadonlyArray<HTMLElement> {
+  const segments = Array.from(
+    list.querySelectorAll<HTMLElement>('[role="radio"]'),
+  );
+  const stop =
+    segments.find(segment => segment.getAttribute('aria-checked') === 'true') ??
+    segments.find(segment => !isSegmentDisabledOnItsOwn(segment)) ??
+    segments[0];
+  return stop == null
+    ? []
+    : [stop, ...segments.filter(segment => segment !== stop)];
+}

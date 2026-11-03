@@ -26,6 +26,7 @@ import {
 } from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
+import {isRenderable} from '../utils/isRenderable';
 import type {BadgeVariantMap} from './index';
 
 /**
@@ -249,7 +250,7 @@ export function Badge({
         ? label
         : undefined;
   // Whether the label renders anything, which is when the badge grows with it.
-  const hasLabel = label !== '' && label != null && typeof label !== 'boolean';
+  const hasLabel = isRenderable(label);
 
   return (
     <span

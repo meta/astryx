@@ -87,7 +87,10 @@ wrapper, or a header-like visual treatment.
   painted surface, variant, and selected divider edges to Section.
 - `architecture:container-padding` owns inherited inset and bleed mechanics.
 - useResizable and ResizeHandle own resize state and interaction. LayoutPanel
-  only accepts their current size as an alternative width owner.
+  accepts their current size as an alternative width owner, lends its element
+  to the resize controller for the edge reveal on collapse and open, and owns
+  the focus move and inert state of a collapsing panel
+  (`component:LayoutPanel` FR7, AR2).
 
 ## Canonical concepts
 

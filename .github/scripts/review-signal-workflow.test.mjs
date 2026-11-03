@@ -13,6 +13,11 @@ import path from 'node:path';
 import {describe, expect, it, vi} from 'vitest';
 import YAML from 'yaml';
 
+// The raw file host is offline here, so jobs read their helpers through the API.
+vi.stubGlobal('fetch', async () => {
+  throw new Error('offline');
+});
+
 const root = path.resolve(import.meta.dirname, '../..');
 const workflow = fs.readFileSync(
   path.join(root, '.github/workflows/review-signal.yml'),
@@ -23,6 +28,7 @@ const script = parsed.jobs.flag.steps.find(
   step => step.name === 'Detect signals and route',
 ).with.script;
 const HELPER_PATH = '.github/scripts/review-signal-decision.cjs';
+const BACKOFF_PATH = '.github/scripts/lib/rate-limit-backoff.cjs';
 const WORKFLOW_SHA = '1'.repeat(40);
 const OLD_BASE = '2'.repeat(40);
 const HEAD = '3'.repeat(40);
@@ -38,6 +44,9 @@ async function runSignal({
   rateRemaining = 5000,
   batch = '',
   draft = false,
+  commenter = 'engineer',
+  engOwners = '@engineer',
+  commentBody = `/approve-spec ${HEAD}`,
   // The spec-owner job's decision for a PR that changes no spec record.
   specStatuses = [
     {
@@ -66,7 +75,11 @@ async function runSignal({
     graphql: vi.fn(),
   };
   const getContent = vi.fn(async ({path: filePath, ref}) => {
-    if (filePath === HELPER_PATH) {
+    if (filePath === BACKOFF_PATH) {
+      if (ref !== WORKFLOW_SHA) {
+        throw new Error(`Unexpected content read: ${ref}:${filePath}`);
+      }
+    } else if (filePath === HELPER_PATH) {
       if (ref !== WORKFLOW_SHA || helperMissing) {
         throw Object.assign(new Error('Not Found'), {status: 404});
       }
@@ -149,13 +162,18 @@ async function runSignal({
       payload:
         eventName === 'workflow_dispatch'
           ? {inputs: {pr: backfill ? '' : '42', batch}}
-          : {pull_request: pr},
+          : eventName === 'issue_comment'
+            ? {
+                issue: {number: 42, pull_request: {}},
+                comment: {user: {login: commenter}, body: commentBody},
+              }
+            : {pull_request: pr},
     },
     core,
     {
       env: {
         ...parsed.env,
-        ENG_OWNERS: '@engineer',
+        ENG_OWNERS: engOwners,
         DESIGN_OWNERS: '@designer',
         REVIEW_APP: reviewApp,
       },
@@ -182,8 +200,8 @@ function expectTrustedHelperRead(getContent) {
 
 describe('review-signal trusted helper ref', () => {
   it('only runs the helper-loading job in trusted execution contexts', () => {
-    expect(parsed.jobs.flag.if.trim()).toBe(
-      "github.event_name == 'pull_request_target' || github.event_name == 'workflow_dispatch'",
+    expect(parsed.jobs.flag.if.trim().replace(/\s+/g, ' ')).toBe(
+      "github.event_name == 'pull_request_target' || github.event_name == 'workflow_dispatch' || (github.event_name == 'issue_comment' && github.event.issue.pull_request != null && (startsWith(github.event.comment.body, '/approve-spec') || startsWith(github.event.comment.body, '/revoke-spec')))",
     );
     expect(
       parsed.jobs.flag.steps.some(step =>
@@ -317,6 +335,87 @@ describe('review-signal trusted helper ref', () => {
       );
     },
   );
+});
+
+describe("an engineering owner's owner command re-evaluates the code half (spec:AST-030 FR15)", () => {
+  const approved = [
+    {user: {login: 'engineer'}, state: 'APPROVED', commit_id: HEAD},
+  ];
+
+  it("clears a fork's code-only gate when the owner approved the exact head and then comments", async () => {
+    const h = await runSignal({eventName: 'issue_comment', reviews: approved});
+    expectTrustedHelperRead(h.getContent);
+    expect(h.core.setFailed).not.toHaveBeenCalled();
+    expect(h.github.rest.pulls.get).toHaveBeenCalledExactlyOnceWith({
+      owner: 'meta',
+      repo: 'astryx',
+      pull_number: 42,
+    });
+    expect(h.mutations.createCommitStatus).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sha: HEAD,
+        context: 'review-required',
+        state: 'success',
+      }),
+    );
+    expect(h.mutations.removeLabel).toHaveBeenCalledWith(
+      expect.objectContaining({name: 'needs:code-review'}),
+    );
+  });
+
+  it('keeps the gate pending when the approval is on an older head', async () => {
+    const h = await runSignal({
+      eventName: 'issue_comment',
+      reviews: [{...approved[0], commit_id: OLD_BASE}],
+    });
+    expect(h.mutations.createCommitStatus).toHaveBeenCalledWith(
+      expect.objectContaining({sha: HEAD, state: 'pending'}),
+    );
+  });
+
+  it("changes nothing for a command from someone who isn't an engineering owner", async () => {
+    const h = await runSignal({
+      eventName: 'issue_comment',
+      commenter: 'contributor',
+      reviews: approved,
+    });
+    expect(h.github.rest.pulls.get).not.toHaveBeenCalled();
+    for (const mutation of Object.values(h.mutations)) {
+      expect(mutation).not.toHaveBeenCalled();
+    }
+  });
+
+  it('fails closed when the engineering owner list is unset, never a silent no-op', async () => {
+    await expect(
+      runSignal({eventName: 'issue_comment', engOwners: '', reviews: approved}),
+    ).rejects.toThrow(/Owner variable ENG_OWNERS is empty or unset/);
+  });
+
+  it("never cancels a pull request event's run: a command run has its own group", () => {
+    const group = parsed.jobs.flag.concurrency.group;
+    expect(group).toContain(
+      "github.event_name == 'issue_comment' && format('command-{0}', github.run_id)",
+    );
+    expect(group).not.toContain('github.event.issue.number');
+    expect(parsed.jobs.flag.concurrency['cancel-in-progress']).toBe(true);
+  });
+
+  it('starts no runner for a comment that is not an owner command, and runs no pull-request code', () => {
+    const condition = parsed.jobs.flag.if;
+    expect(condition).toContain('github.event.issue.pull_request != null');
+    expect(condition).toContain(
+      "startsWith(github.event.comment.body, '/approve-spec')",
+    );
+    expect(condition).toContain(
+      "startsWith(github.event.comment.body, '/revoke-spec')",
+    );
+    // The job token can write; nothing from the pull request runs with it.
+    expect(
+      parsed.jobs.flag.steps.some(
+        step => step.uses?.startsWith('actions/checkout@') || step.run,
+      ),
+    ).toBe(false);
+  });
 });
 
 describe('review-signal appearance-only contract', () => {
