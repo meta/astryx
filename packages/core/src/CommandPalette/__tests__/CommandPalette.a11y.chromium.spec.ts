@@ -332,8 +332,10 @@ async function capture(page: Page, scenario: Case) {
       const spinners = elements<HTMLElement>(
         '.astryx-command-palette-input .astryx-spinner',
       );
+      // The arc is the circle in the Spinner's turning rotor (an aria-hidden
+      // span); the track circle sits in its own svg beside it.
       const spinnerArcs = elements<SVGCircleElement>(
-        '.astryx-command-palette-input .astryx-spinner circle:last-of-type',
+        '.astryx-command-palette-input .astryx-spinner span[aria-hidden="true"] circle',
       );
       const shortcuts = elements<HTMLElement>(
         '.astryx-command-palette-footer .astryx-kbd',

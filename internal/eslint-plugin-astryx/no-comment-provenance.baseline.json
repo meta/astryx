@@ -1001,14 +1001,7 @@
     "spec:AST-085",
     "spec:AST-085"
   ],
-  "packages/core/src/Spinner/Spinner.tsx": [
-    "#3617",
-    "#5410",
-    "#6253",
-    "#6253",
-    "FR4",
-    "spec:AST-108"
-  ],
+  "packages/core/src/Spinner/Spinner.tsx": ["#5410"],
   "packages/core/src/StatusDot/StatusDot.tsx": [
     "INV11",
     "INV11",
