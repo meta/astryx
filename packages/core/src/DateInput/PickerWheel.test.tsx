@@ -761,6 +761,25 @@ describe('PickerWheel — keyboard and clicks', () => {
     expect(onChange).toHaveBeenLastCalledWith(12);
   });
 
+  it('lets a turn onto the last allowed row finish when a key during it has nowhere to go', () => {
+    const bound = HOURS.map(option => ({
+      ...option,
+      isDisabled: option.value < 12 || option.value > 17,
+    }));
+    const {column, onChange} = renderOwnedWheel(bound, 16);
+    fireEvent.keyDown(column, {key: 'ArrowDown'});
+    expect(onChange).toHaveBeenLastCalledWith(17);
+    // Mid-turn, a second ArrowDown finds no allowed row past 17.
+    advance(100);
+    fireEvent.keyDown(column, {key: 'ArrowDown'});
+    advance(1000);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(distanceOf(screen.getByRole('option', {name: '17'}))).toBeCloseTo(
+      0,
+      4,
+    );
+  });
+
   it('moves a key from a row outside the bounds onto the first enabled row in its direction', () => {
     const bound = HOURS.map(option => ({
       ...option,

@@ -601,17 +601,17 @@ export function PickerWheel({
         return;
       }
       // Keys step from the row the wheel is heading to, not the one it is
-      // passing: two quick presses move two rows.
-      const heading = motion.target();
-      const offset = motion.isMoving() ? motion.stop() : motion.offset();
+      // passing: two quick presses move two rows. A key with nowhere to go
+      // leaves a turn in flight to finish on its row.
       const row = steppedIndex(
         current.options,
-        nearestIndex(heading, current.layout),
+        nearestIndex(motion.target(), current.layout),
         delta,
       );
       if (row == null) {
         return;
       }
+      const offset = motion.isMoving() ? motion.stop() : motion.offset();
       turnToPosition(row, offset);
     },
     [motion, turnToPosition],
