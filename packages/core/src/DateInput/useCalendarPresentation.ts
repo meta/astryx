@@ -40,8 +40,8 @@ export function useCalendarPresentation(
   const calendar = useCalendarSystem(calendarProp, source);
   const isNativeCalendar = isGregorianCalendar(calendar);
   const isNativeOverridden = presentation === 'native' && !isNativeCalendar;
-  // Synchronizes the development console. warnOnce makes a replay or a
-  // second field a no-op, so the warning appears once for each calendar.
+  // Synchronizes the development console. The key is the component and
+  // calendar, so a replay or a second field does not warn again.
   useEffect(() => {
     if (isNativeOverridden) {
       warnOnce(

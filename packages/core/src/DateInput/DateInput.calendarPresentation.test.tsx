@@ -158,12 +158,12 @@ const CASES = MATRIX.flatMap(
       ['persian', 'coarse', persianCoarse],
     ].map(
       ([calendar, pointer, surface]) =>
-        [name, props, calendar, pointer, surface] as [
+        [name, calendar, pointer, surface, props] as [
           string,
-          PresentationProps,
           CalendarSystem,
           Pointer,
           Surface,
+          PresentationProps,
         ],
     ),
 );
@@ -171,7 +171,7 @@ const CASES = MATRIX.flatMap(
 describe('DateInput surface in a calendar', () => {
   it.each(CASES)(
     '%s in %s on a %s pointer shows the %s',
-    (_name, props, calendar, pointer, surface) => {
+    (_name, calendar, pointer, surface, props) => {
       vi.spyOn(console, 'warn').mockImplementation(() => {});
       stubPointer(pointer);
       render(
@@ -254,7 +254,7 @@ describe('DateTimeInput surface in a calendar', () => {
 
   it.each(CASES)(
     '%s in %s on a %s pointer shows the %s',
-    (_name, props, calendar, pointer, surface) => {
+    (_name, calendar, pointer, surface, props) => {
       vi.spyOn(console, 'warn').mockImplementation(() => {});
       stubPointer(pointer);
       render(

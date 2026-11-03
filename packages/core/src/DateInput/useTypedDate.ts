@@ -19,7 +19,10 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/DateInput/useTypedDate.generated';
-import type {CalendarSystem} from '../utils/calendarSystem';
+import {
+  type CalendarSystem,
+  isGregorianCalendar,
+} from '../utils/calendarSystem';
 import {
   type CalendarDateParseResult,
   calendarDisplayName,
@@ -114,7 +117,7 @@ export function useTypedDate({
   const locale = useLocale();
   const calendar = useCalendarSystem(calendarProp, source);
   const providerCalendar = useCalendarSystem(undefined, source);
-  const isGregorian = calendar === 'gregory' || calendar === 'iso8601';
+  const isGregorian = isGregorianCalendar(calendar);
 
   const prepare = useCallback(() => {
     getCalendarDateLexicon(locale, calendar);
@@ -218,7 +221,7 @@ export function useTypedDate({
   );
 
   const isProviderCalendar = isGregorian
-    ? providerCalendar === 'gregory' || providerCalendar === 'iso8601'
+    ? isGregorianCalendar(providerCalendar)
     : calendar === providerCalendar;
 
   return {
