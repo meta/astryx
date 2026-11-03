@@ -475,6 +475,16 @@ interface WheelFollow {
   /** The fingers' speed at that move, content px per ms. */
   speedX: number;
   speedY: number;
+  /**
+   * The reading behind that speed: the fingers' travel where it began, and
+   * its interval in ms.
+   */
+  readFromX: number;
+  readFromY: number;
+  readSpan: number;
+  /** The fingers' speed before that reading, content px per ms. */
+  priorSpeedX: number;
+  priorSpeedY: number;
 }
 
 /**
@@ -501,6 +511,39 @@ function wheelEndMs(
  */
 function absorbedDebt(debt: number, moved: number): number {
   return Math.sign(debt) * Math.max(0, Math.abs(debt) - Math.abs(moved) / 2);
+}
+
+/**
+ * A stall held a bunched wheel's frames back, and the move just before it took
+ * their time. So the wheel joins that move's reading. It can restore what the
+ * late move lowered, but never passes the speed before it.
+ */
+function joinReading(f: WheelFollow, trueX: number, trueY: number): void {
+  if (f.readSpan <= 0) {
+    return;
+  }
+  f.speedX = joinedSpeed(
+    f.speedX,
+    (trueX - f.readFromX) / f.readSpan,
+    f.priorSpeedX,
+  );
+  f.speedY = joinedSpeed(
+    f.speedY,
+    (trueY - f.readFromY) / f.readSpan,
+    f.priorSpeedY,
+  );
+}
+
+/**
+ * A joined reading, held to the speed before the late move. It only ever
+ * raises the current speed, in the current direction.
+ */
+function joinedSpeed(current: number, reading: number, prior: number): number {
+  const held =
+    Math.sign(reading) * Math.min(Math.abs(reading), Math.abs(prior));
+  return held * current >= 0 && Math.abs(held) > Math.abs(current)
+    ? held
+    : current;
 }
 
 /**
@@ -2271,9 +2314,22 @@ export class GestureHost {
       }
       if (this.wheelSegment?.decaying === true) {
         // Undecided: the real deltas wait for the splitter while the
-        // fingers' last speed carries the pan on.
+        // fingers' last speed carries the pan on. A held wheel with its own
+        // frame ends the reading a stall's bunch joins.
         f.heldX += dx;
         f.heldY += dy;
+        if (this.wheelSegment.bunched) {
+          // A raised speed moves on from where the pan is shown, so the
+          // position never jumps inside the bunch.
+          const since = time - f.lastMove;
+          const speedX = f.speedX;
+          const speedY = f.speedY;
+          joinReading(f, f.trueX - f.heldX, f.trueY - f.heldY);
+          f.baseX += (speedX - f.speedX) * since;
+          f.baseY += (speedY - f.speedY) * since;
+        } else {
+          f.readSpan = 0;
+        }
         this.followProvisionally(gesture, f, time);
         return;
       }
@@ -2286,10 +2342,18 @@ export class GestureHost {
       const debtY = absorbedDebt(gesture.y - beforeY, dy);
       const trueX = beforeX - dx;
       const trueY = beforeY - dy;
-      // A wheel the splitter reads as one stall's merge sets no speed. Its
-      // speed is one the fingers never had.
+      // A wheel the splitter reads as one stall's merge has no speed of its
+      // own. It joins the reading of the move before its bunch, whose
+      // interval holds its time.
       const elapsed = time - f.lastMove;
-      if (elapsed > 0 && this.wheelSegment?.bunched !== true) {
+      if (this.wheelSegment?.bunched === true) {
+        joinReading(f, trueX, trueY);
+      } else if (elapsed > 0) {
+        f.priorSpeedX = f.speedX;
+        f.priorSpeedY = f.speedY;
+        f.readFromX = f.trueX;
+        f.readFromY = f.trueY;
+        f.readSpan = elapsed;
         f.speedX = (trueX - f.trueX) / elapsed;
         f.speedY = (trueY - f.trueY) / elapsed;
       }
@@ -2440,6 +2504,11 @@ export class GestureHost {
         baseY: kept.y,
         speedX: 0,
         speedY: 0,
+        readFromX: kept.x,
+        readFromY: kept.y,
+        readSpan: 0,
+        priorSpeedX: 0,
+        priorSpeedY: 0,
       };
     }
     this.arena.began(
