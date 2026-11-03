@@ -542,15 +542,10 @@ function useResizableController(
   const [serverInitial] = useState(() =>
     readInitialResizableState(options, 'server'),
   );
-  // The factory follows the element behind the ref. A ref is stable across an
-  // element swap, so its current node is compared after every commit. It is
-  // also compared when a ResizeHandle given the ref attaches or lets go of its
-  // element. A child can do that without this component rendering. The
-  // configuration-object form passes no handle (NO_HANDLE). When the element
-  // goes away, the factory on it goes too, with its listeners and attributes.
-  // A factory with no handle keeps the region answering collapse, expand and
-  // resize. A new element gets a new factory, which starts where the region
-  // stood. The same element takes the page back (`resume`).
+  // A ref does not change when its element does. So the element is compared
+  // after every commit, and whenever a ResizeHandle given the ref attaches or
+  // lets go. A new element gets a new factory that starts where the region
+  // stood.
   const follow = useCallback(() => {
     const element = ref.current;
     const entry = slot.get();
