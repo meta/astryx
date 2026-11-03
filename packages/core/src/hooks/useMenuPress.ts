@@ -263,9 +263,9 @@ export interface DropdownMenuPressOptions extends UseMenuPressOptions {
 export type DropdownMenuPressReturn = UseMenuPressReturn;
 
 /**
- * Where a pointer is, for a finger's handoff distance. Only the trigger's
- * opening finger under `touchModel: 'uikit'` gets it. Without it the machine
- * keeps the settle rule.
+ * Where a pointer is, for a finger's handoff distance. Positions reach the
+ * machine only under `touchModel: 'uikit'`. Without them, it keeps the settle
+ * rule.
  */
 function handoffPosition(
   event: PointerEvent,

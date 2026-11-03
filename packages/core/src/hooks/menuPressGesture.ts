@@ -291,8 +291,8 @@ function stepOpen<T>(
   switch (event.type) {
     case 'move': {
       if (isFinger(gesture.pointerType) && hasPosition(event)) {
-        // UIMenu's handoff: the first sample after the open is where the
-        // distance counts from; the finger picks once it is that far away.
+        // UIMenu counts from the first sample after the open, not from the
+        // open point.
         const from = gesture.handoffFrom;
         if (from == null) {
           return {
@@ -453,7 +453,17 @@ export function menuPressStep<T>(
   gesture: MenuPressGesture<T>,
   event: MenuPressEvent<T>,
 ): MenuPressStep<T> {
-  const {gesture: next, effect} = menuPressTransition(gesture, event);
+  // The released machine keeps the settle rule. Positions start the handoff,
+  // so a caller's event reaches the transition without them.
+  const {
+    x: _x,
+    y: _y,
+    ...released
+  } = event as MenuPressEvent<T> & {x?: number; y?: number};
+  const {gesture: next, effect} = menuPressTransition(
+    gesture,
+    released as MenuPressEvent<T>,
+  );
   return {
     gesture: publicGesture(next),
     effect,

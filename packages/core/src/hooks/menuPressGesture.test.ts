@@ -16,6 +16,7 @@ import {
   menuPressTransition,
   type MenuPressInput,
   type MenuPressState,
+  type MenuPressEvent,
 } from './menuPressGesture';
 
 type Row = 'A' | 'B';
@@ -401,6 +402,37 @@ describe('menuPressStep — a finger that opened the menu hands off after travel
 });
 
 describe('menuPressStep, the released public machine', () => {
+  it('keeps the settle rule when a caller\u2019s events carry positions: the opening finger picks the row it lifts on', () => {
+    type Positioned = MenuPressEvent<Row> & {x: number; y: number};
+    let gesture = menuPressStep<Row>(IDLE_MENU_PRESS, {
+      type: 'down',
+      target: 'trigger',
+      pointerType: 'touch',
+      row: null,
+      time: 0,
+    }).gesture;
+    gesture = menuPressStep(gesture, {type: 'opened', time: 500}).gesture;
+    const move: Positioned = {
+      type: 'move',
+      row: 'B' as Row,
+      isInMenu: true,
+      time: 1000,
+      x: 0,
+      y: 60,
+    };
+    gesture = menuPressStep(gesture, move).gesture;
+    const up: Positioned = {
+      type: 'up',
+      row: 'B' as Row,
+      isInMenu: true,
+      isOnTrigger: false,
+      time: 1100,
+      x: 0,
+      y: 60,
+    };
+    expect(menuPressStep(gesture, up).effect).toEqual({type: 'act', row: 'B'});
+  });
+
   it('keeps the released shapes: no handoff state', () => {
     let gesture = menuPressStep(IDLE_MENU_PRESS, {
       type: 'down',
