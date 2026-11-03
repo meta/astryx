@@ -246,6 +246,39 @@ describe('watchOutsidePress, closing on a pan', () => {
     },
   );
 
+  it.each([true, false])(
+    'closes for a lift on a control in an outer closed root that stops the lift (closesOnPan: %s)',
+    closesOnPan => {
+      const outerHost = document.createElement('div');
+      document.body.append(outerHost);
+      const outer = outerHost.attachShadow({mode: 'closed'});
+      const control = document.createElement('button');
+      control.addEventListener('pointerup', event => event.stopPropagation());
+      const innerHost = document.createElement('div');
+      outer.append(control, innerHost);
+      const inner = innerHost.attachShadow({mode: 'closed'});
+      const {outside, onOutside, stop} = setup(inner, closesOnPan);
+      fireEvent.pointerDown(outside, touch(1));
+      fireEvent.pointerUp(control, touch(1));
+      expect(onOutside).toHaveBeenCalledOnce();
+      // The watch does not keep following that press: the next one closes too.
+      fireEvent.pointerDown(outside, touch(2));
+      fireEvent.pointerUp(outside, touch(2));
+      expect(onOutside).toHaveBeenCalledTimes(2);
+      stop();
+    },
+  );
+
+  it('follows a new primary pointer when the followed press’s lift went unseen', () => {
+    const {outside, onOutside, stop} = setup();
+    fireEvent.pointerDown(outside, {...touch(1), isPrimary: true});
+    // The lift of pointer 1 never reaches this document.
+    fireEvent.pointerDown(outside, {...touch(2), isPrimary: true});
+    fireEvent.pointerMove(outside, touch(2, 0, 12));
+    expect(onOutside).toHaveBeenCalledOnce();
+    stop();
+  });
+
   it('keeps the layer open for a press that starts outside and lifts on it, in a closed root of a same-origin iframe', () => {
     const frame = document.createElement('iframe');
     document.body.append(frame);
