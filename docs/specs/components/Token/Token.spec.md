@@ -130,7 +130,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | FR7  | The label never wraps: the root is capped at its container's inline size and clips overflow. In the static and link structures the Label ends in an ellipsis; in the clickable and link-and-remove structures the inner control clips the Label without an ellipsis. `isLabelHidden` keeps the Label in the DOM with a visually hidden clip treatment.                                                                                                                                                                                                                                                                                                                                                                | Current source and tests |
 | FR8  | `color` defaults to `default`, painting `--color-neutral` with primary text; every other built-in tone paints its tinted background with its matching colored text. The `token` target reflects the resolved `color` and `size` for every value, including a theme-added color, which receives no component fill or text color until a theme paints it.                                                                                                                                                                                                                                                                                                                                                               | Current source and tests |
 | FR9  | Clickable and link structures paint the shared hover overlay under a hover-capable pointer and the shared pressed overlay for mouse and touch presses; the static structure paints neither.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Current source           |
-| FR10 | `ref` reaches the root element of every structure. Supported DOM, ARIA, data, and event props reach the root, except that in the clickable structure `aria-labelledby` and `aria-describedby` reach the inner button, the element that owns the token's action (`architecture:public-component-api` INV5); `data-testid` reaches the root; `xstyle`, `className`, and `style` merge in that order after component styles.                                                                                                                                                                                                                                                                                             | Current source and tests |
+| FR10 | `ref` reaches the root element of every structure. Supported DOM, ARIA, data, and event props reach the root, except that in the clickable structure `aria-labelledby`, `aria-describedby`, `aria-haspopup` and `aria-expanded` reach the inner button, the element that owns the token's action (`architecture:public-component-api` INV5); `data-testid` reaches the root; `xstyle`, `className`, and `style` merge in that order after component styles.                                                                                                                                                                                                                                                           | Current source and tests |
 
 ### Allowed variation
 
@@ -142,15 +142,15 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Representative states
 
-| State              | Required invariant                                                                                      | Allowed variation           |
-| ------------------ | ------------------------------------------------------------------------------------------------------- | --------------------------- |
-| Static             | `span` root; Token adds no focusable element except a Remove button.                                    | Tone, size, slots.          |
-| Clickable          | One inner button named by the label, or by a caller `aria-labelledby`; container click calls `onClick`. | End content.                |
-| Link               | Root is the link; focus outline on the link itself.                                                     | Router link component.      |
-| Link and remove    | Container holds a link and a sibling Remove button; surface click activates the link.                   | Modified and middle clicks. |
-| Removable          | Remove button named "Remove {label}" with a 24 by 24 CSS pixel target.                                  | Locale wording.             |
-| Disabled clickable | Buttons focusable with `aria-disabled="true"`; no callback fires; half opacity.                         | Tone.                       |
-| Hidden label       | Label text visually hidden; the root's `aria-label` equals the label.                                   | Structure.                  |
+| State              | Required invariant                                                                                                                                                        | Allowed variation           |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| Static             | `span` root; Token adds no focusable element except a Remove button.                                                                                                      | Tone, size, slots.          |
+| Clickable          | One inner button named by the label, by a caller `aria-labelledby`, or inside PowerSearch by the filter token's full visible text (AR2); container click calls `onClick`. | End content.                |
+| Link               | Root is the link; focus outline on the link itself.                                                                                                                       | Router link component.      |
+| Link and remove    | Container holds a link and a sibling Remove button; surface click activates the link.                                                                                     | Modified and middle clicks. |
+| Removable          | Remove button named "Remove {label}" (inside PowerSearch, over the full visible text, AR2) with a 24 by 24 CSS pixel target.                                              | Locale wording.             |
+| Disabled clickable | Buttons focusable with `aria-disabled="true"`; no callback fires; half opacity.                                                                                           | Tone.                       |
+| Hidden label       | Label text visually hidden; the root's `aria-label` equals the label.                                                                                                     | Structure.                  |
 
 ### Transformation and precedence order
 
@@ -182,7 +182,10 @@ Consumer migration instructions belong in consumer docs and release notes.
   from a caller `aria-labelledby` (FR10). In the link structure the link
   is the root and takes its name from all of its content, including End content
   (a label "Inbox" with a count reads "Inbox 12"). The
-  Remove button is named by the translated "Remove {label}" string.
+  Remove button is named by the translated "Remove {label}" string. Inside
+  PowerSearch, whose filter tokens show their value after the Label, a filter
+  token's inner button is named by its full visible text, and its Remove button
+  by the same translated string over that text.
 - **AR3 — Hidden label.** With `isLabelHidden`, the Label text stays in the
   accessibility tree and names the token, and no element with the generic role
   carries a name (WAI-ARIA 1.2). The root carries `aria-label` equal to the

@@ -19,6 +19,7 @@
  */
 
 import {
+  isValidElement,
   use,
   useEffect,
   useRef,
@@ -44,6 +45,7 @@ import {
   focusVars,
 } from '../theme/tokens.stylex';
 import {Spinner} from '../Spinner/Spinner';
+import {Icon} from '../Icon/Icon';
 import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {IconDefaultSizeProvider} from '../Icon/IconDefaultSizeContext';
 import {iconBoxSizeStyles, type IconSize} from '../Icon/IconSize.stylex';
@@ -71,6 +73,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Button/Button.generated';
+import {isRenderable} from '../utils/isRenderable';
 
 registerEnglishFallback(english);
 
@@ -559,6 +562,21 @@ const groupStyles = stylex.create({
 });
 
 /**
+ * Whether `node` adds nothing to a content name: nothing renders, or an Icon
+ * with no label. Any other node can add text.
+ */
+function addsNoName(node: ReactNode): boolean {
+  if (!isRenderable(node)) {
+    return true;
+  }
+  if (!isValidElement<{label?: unknown}>(node) || node.type !== Icon) {
+    return false;
+  }
+  const {label} = node.props;
+  return typeof label !== 'string' || label.trim() === '';
+}
+
+/**
  * A versatile button component with multiple variants.
  *
  * Styles use Astryx theme tokens via StyleX.
@@ -803,7 +821,7 @@ export function Button({
               : loadingStyles.hiddenContent),
         )}
         aria-hidden={isLoadingState || undefined}>
-        {icon && (
+        {isRenderable(icon) && (
           <span
             {...stylex.props(styles.iconWrapper, iconBoxSizeStyles[iconSize])}>
             <IconDefaultSizeProvider value={iconSize}>
@@ -814,7 +832,7 @@ export function Button({
         {isIconOnly ? null : (
           <span {...stylex.props(styles.labelText)}>{children ?? label}</span>
         )}
-        {!isIconOnly && endContent && (
+        {!isIconOnly && isRenderable(endContent) && (
           <span {...stylex.props(styles.endContentWrapper)}>{endContent}</span>
         )}
       </span>
@@ -835,10 +853,29 @@ export function Button({
     (children != null && children !== label);
   const ariaLabelProp = needsAriaLabel ? {'aria-label': label} : null;
 
+  // The Button's accessible name when props decide it: the derived
+  // aria-label, else a caller aria-label, else the label text alone. It is
+  // not known here when a caller aria-labelledby names the Button from other
+  // elements, or when `icon` or `endContent` can add text to its content
+  // name (a count, for example). A decorative Icon in either slot adds none.
+  const accessibleName =
+    props['aria-labelledby'] != null
+      ? undefined
+      : needsAriaLabel
+        ? label
+        : (props['aria-label'] ??
+          (addsNoName(icon) && addsNoName(endContent) ? label : undefined));
+  // A tooltip that repeats the name adds nothing to the description, so a
+  // screen reader does not read the same words twice.
+  const isTooltipName =
+    tooltip != null &&
+    accessibleName != null &&
+    tooltip.trim() === accessibleName.trim();
+
   // When a tooltip is attached via the hook, point aria-describedby at the
   // tooltip content (composing with any consumer-provided value).
   const describedByProp =
-    tooltip != null
+    tooltip != null && !isTooltipName
       ? {
           'aria-describedby':
             [props['aria-describedby'], tooltipHook.describedBy]

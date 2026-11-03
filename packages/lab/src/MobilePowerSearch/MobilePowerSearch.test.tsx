@@ -822,6 +822,9 @@ describe('MobilePowerSearch Filters sheet', () => {
     const confirmation = screen.getByRole('alertdialog', {
       name: 'Clear all filters?',
     });
+    // A scrim press starts and ends on the dialog itself.
+    fireEvent.pointerDown(confirmation);
+    fireEvent.pointerUp(confirmation);
     fireEvent.click(confirmation);
     expect(
       screen.queryByRole('alertdialog', {name: 'Clear all filters?'}),
@@ -1856,6 +1859,10 @@ describe('MobilePowerSearch content search', () => {
     expect(
       within(sheet()).getByRole('heading', {name: 'Filters'}),
     ).toBeTruthy();
+    // The search sheet held focus as it closed, so words sent with the close
+    // wait for its exit to end (component:BottomSheet FR9, spec:AST-086
+    // FR14); settle that exit.
+    act(() => settleSheets());
     // The add is announced inside the sheet the flow is now on, not on the
     // page body, which assistive technology does not expose under a native
     // modal dialog.
@@ -1890,6 +1897,10 @@ describe('MobilePowerSearch content search', () => {
       within(sheet()).getByRole('button', {name: '"release notes"'}),
     );
     await waitFor(() => expect(isSheetOpen()).toBe(true));
+    // The search sheet held focus as it closed, so words sent with the close
+    // wait for its exit to end (component:BottomSheet FR9, spec:AST-086
+    // FR14); settle that exit.
+    act(() => settleSheets());
     await waitFor(() =>
       expect(sheetRegion().textContent).toBe(
         'Added "release notes" 20 results',

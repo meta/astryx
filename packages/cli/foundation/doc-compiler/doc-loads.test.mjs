@@ -336,6 +336,10 @@ const RUNNERS = {
     runs: '@babel/parser, to find the fixture references and page-local bindings in template source; and a template doc that does not validate, to read the replacement it declares',
     sites: ['importDocModule', 'require(@babel/parser)'],
   },
+  'foundation/discovery/template-source-tree.mjs': {
+    runs: '@babel/parser and @babel/core (CommonJS), each on first use, to read template source and resolve its bindings for demo-content replacement and icon mapping',
+    sites: ['require(@babel/core)', 'require(@babel/parser)'],
+  },
   'foundation/discovery/theme-discovery.mjs': {
     runs: '@babel/parser and jscodeshift (CommonJS), each on first use, so listing bundled themes never loads jscodeshift',
     sites: ['require(@babel/parser)', 'require(jscodeshift)'],

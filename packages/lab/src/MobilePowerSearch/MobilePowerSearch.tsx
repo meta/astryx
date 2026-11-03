@@ -142,8 +142,11 @@ import {
   typographyVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
 import {isImeKeyEvent, isRenderable, rtlStyles} from '@astryxdesign/core/utils';
-import {MobileSheetConfirmation} from '../internal/MobileSheetConfirmation';
-import {useDismissSearchOnTouchDrag} from '../internal/useDismissSearchOnTouchDrag';
+
+import {
+  SheetConfirmation,
+  useDismissSearchOnTouchDrag,
+} from '@astryxdesign/core/internal/touch-sheet';
 import {MobilePowerSearchValueEditor} from './MobilePowerSearchValueEditor';
 import {
   createContentSearchSource,
@@ -889,10 +892,18 @@ export function MobilePowerSearch({
 
   // ------------------------------------------------------------------ focus --
 
-  const fieldPickerDragProps = useDismissSearchOnTouchDrag(() => [
-    contentSearchRef.current?.querySelector('input'),
-    fieldSearchRef.current?.querySelector('input'),
-  ]);
+  // A drag moves focus to the sheet's panel, never to the page body behind
+  // the open modal.
+  const fieldPickerDragProps = useDismissSearchOnTouchDrag(
+    () => [
+      contentSearchRef.current?.querySelector('input'),
+      fieldSearchRef.current?.querySelector('input'),
+    ],
+    () =>
+      (
+        fieldSearchRef.current ?? contentSearchRef.current
+      )?.closest<HTMLElement>('[tabindex="-1"]'),
+  );
 
   const focusPendingSheetTarget = useCallback(() => {
     const target = pendingSheetFocusRef.current;
@@ -2356,7 +2367,7 @@ export function MobilePowerSearch({
         </div>
       </BottomSheet>
 
-      <MobileSheetConfirmation
+      <SheetConfirmation
         isOpen={isClearConfirmationOpen}
         onOpenChange={setIsClearConfirmationOpen}
         title="Clear all filters?"

@@ -23,6 +23,7 @@ import * as fs from 'node:fs';
  * @typedef {{
  *   names: Map<string, string[]>,
  *   entries: Map<string, fs.Dirent[]>,
+ *   byName: Map<string, Map<string, fs.Dirent>>,
  *   exists: Map<string, boolean>,
  * }} ListingCache
  */
@@ -40,9 +41,22 @@ const scope = new AsyncLocalStorage();
 export function withListingCache(fn) {
   if (scope.getStore()) return fn();
   return scope.run(
-    {names: new Map(), entries: new Map(), exists: new Map()},
+    {
+      names: new Map(),
+      entries: new Map(),
+      byName: new Map(),
+      exists: new Map(),
+    },
     fn,
   );
+}
+
+/**
+ * Whether an operation's listing cache is active.
+ * @returns {boolean}
+ */
+export function listingCacheActive() {
+  return scope.getStore() != null;
 }
 
 /**
@@ -76,6 +90,41 @@ export function listDirEntries(dir) {
     cache.entries.set(dir, entries);
   }
   return entries.slice();
+}
+
+/**
+ * The entry named exactly `name` in `dir`'s listing, or null when the folder
+ * holds no such name or cannot be read. Inside an operation, a name the
+ * listing lacks costs no probe of the disk.
+ * @param {string} dir
+ * @param {string} name
+ * @returns {fs.Dirent | null}
+ */
+export function findEntry(dir, name) {
+  const cache = scope.getStore();
+  if (!cache) {
+    try {
+      return (
+        fs
+          .readdirSync(dir, {withFileTypes: true})
+          .find(entry => entry.name === name) ?? null
+      );
+    } catch {
+      return null;
+    }
+  }
+  let byName = cache.byName.get(dir);
+  if (!byName) {
+    let entries;
+    try {
+      entries = listDirEntries(dir);
+    } catch {
+      return null;
+    }
+    byName = new Map(entries.map(entry => [entry.name, entry]));
+    cache.byName.set(dir, byName);
+  }
+  return byName.get(name) ?? null;
 }
 
 /**
