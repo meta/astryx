@@ -364,6 +364,40 @@ test.describe('touch input', () => {
     }
   });
 
+  test("a page whose pointer listener holds its main thread changes a paced flick's release itself: TouchPageStallError, never the runner's", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    // Each pointer move holds the main thread for 60 ms, as a component's
+    // pan handler can. A gesture host samples a finger from pointermove.
+    // WebKit hands the page the next touch only once it is free.
+    await page.route('http://pointer-stalling-page.test/', route =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>addEventListener("pointermove",()=>{const end=performance.now()+60;while(performance.now()<end){}});</script>',
+      }),
+    );
+    await page.goto('http://pointer-stalling-page.test/');
+    const driver = await touchDriver(page);
+    const outcome = await driver
+      .play(
+        drag({x: 200, y: 400}, {x: 200, y: 300}, {durationMs: 100, hz: 60}),
+        {pacing: 'spacing'},
+      )
+      .then(
+        () => 'resolved',
+        (error: unknown) => error,
+      );
+    expect(outcome).toBeInstanceOf(TouchPageStallError);
+    expect(String(outcome)).toMatch(
+      /the page's own touch and pointer listeners took \d+ ms/,
+    );
+  });
+
   test("a page whose touch listener holds its main thread changes a paced flick's release itself: TouchPageStallError, never the runner's", async ({
     page,
     browserName,
@@ -395,7 +429,7 @@ test.describe('touch input', () => {
       );
     expect(outcome).toBeInstanceOf(TouchPageStallError);
     expect(String(outcome)).toMatch(
-      /the page's own touch listeners took \d+ ms/,
+      /the page's own touch and pointer listeners took \d+ ms/,
     );
   });
 

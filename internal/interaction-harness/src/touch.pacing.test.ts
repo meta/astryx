@@ -25,6 +25,7 @@ import {describe, expect, it} from 'vitest';
 import type {TouchEventStep} from './scripts';
 import {
   pacedDeadline,
+  touchArrivalsFrom,
   TOUCH_STILLNESS_MS,
   touchPacingFault,
   TouchPacingError,
@@ -224,6 +225,71 @@ describe("touchPacingFault on a paced play's arrivals", () => {
   });
 });
 
+describe('touchArrivalsFrom', () => {
+  it('gives each step one arrival: the earliest stamp of its pointer and touch events, and the latest handling', () => {
+    expect(
+      touchArrivalsFrom({
+        eventTypes: ['pointerdown', 'touchstart', 'pointermove', 'touchmove'],
+        pointerTypes: ['touch', '', 'touch', ''],
+        stamps: [23, 24, 39, 100],
+        handledAt: [23, 24, 100, 100],
+      }),
+    ).toEqual([
+      {stamp: 23, handledAt: 24},
+      {stamp: 39, handledAt: 100},
+    ]);
+  });
+
+  it("leaves a mouse's pointer event out of a touch step", () => {
+    expect(
+      touchArrivalsFrom({
+        eventTypes: ['pointermove', 'pointermove', 'touchmove'],
+        pointerTypes: ['mouse', 'touch', ''],
+        stamps: [5, 39, 39],
+        handledAt: [90, 40, 40],
+      }),
+    ).toEqual([{stamp: 39, handledAt: 40}]);
+  });
+
+  it("reads a page whose pointer listener held each move as the page's rest, which the touch events alone hide", () => {
+    // This is how WebKit recorded a page whose pointermove listener spins
+    // 60 ms. The touch event is stamped once that listener is done. The next
+    // step arrives 16 ms after it.
+    const moves = [16, 92, 168, 244, 320];
+    const record = {
+      eventTypes: [
+        'pointerdown',
+        'touchstart',
+        ...moves.flatMap(() => ['pointermove', 'touchmove']),
+        'pointerup',
+        'touchend',
+      ],
+      pointerTypes: [
+        'touch',
+        '',
+        ...moves.flatMap(() => ['touch', '']),
+        'touch',
+        '',
+      ],
+      stamps: [0, 0, ...moves.flatMap(t => [t, t + 60]), 384, 384],
+      handledAt: [0, 0, ...moves.flatMap(t => [t + 60, t + 60]), 384, 384],
+    };
+    const fault = touchPacingFault(FLICK, touchArrivalsFrom(record));
+    expect(fault?.kind).toBe('rest');
+    // Each move's 60 ms of handling held the 76 ms gap after it.
+    expect(fault?.heldByPage).toEqual({gapMs: 76, handlingMs: 60});
+    // The touch events alone read the lift 4 ms after the last move.
+    const touchOnly = record.eventTypes
+      .map((type, i) => ({type, i}))
+      .filter(({type}) => type.startsWith('touch'))
+      .map(({i}) => ({
+        stamp: record.stamps[i],
+        handledAt: record.handledAt[i],
+      }));
+    expect(touchPacingFault(FLICK, touchOnly)).toBeNull();
+  });
+});
+
 describe('the pacing errors', () => {
   it("name the release the page read, the script's and the gaps", () => {
     const fault = touchPacingFault(
@@ -256,7 +322,7 @@ describe('the pacing errors', () => {
     });
     expect(error.name).toBe('TouchPageStallError');
     expect(error.message).toMatch(
-      /the page's own touch listeners took 30 ms to handle an event, so the next reached it 46 ms later/,
+      /the page's own touch and pointer listeners took 30 ms to handle an event, so the next reached it 46 ms later/,
     );
     expect(error.message).toMatch(
       /the page changed the release, not the runner/,

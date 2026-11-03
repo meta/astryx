@@ -97,7 +97,7 @@ export interface PlayOptions {
    * last event is out (the lift's `PlayedEvent.release`), and throws when
    * the page read a resting finger, or, given `releaseTolerance`, a release
    * that strays from the script's by more than that share of it:
-   * `TouchPageStallError` when the page's own touch listeners held an event
+   * `TouchPageStallError` when the page's own touch and pointer listeners held an event
    * back, `TouchPacingError` otherwise (see `touchPacingFault`).
    */
   readonly pacing?: TouchPacing;
@@ -205,7 +205,10 @@ export function pacedDeadline(
 export interface TouchArrival {
   /** The event's own `timeStamp`: when it reached the page, in WebKit. */
   readonly stamp: number;
-  /** When the page's own touch listeners had finished with it; NaN unseen. */
+  /**
+   * When the page's own touch and pointer listeners had finished with it;
+   * NaN unseen.
+   */
   readonly handledAt: number;
 }
 
@@ -222,7 +225,7 @@ export interface TouchPacingFault {
   /** The same gaps as the script spaces them, ms. */
   readonly scriptedGapsMs: readonly number[];
   /**
-   * The widest of those gaps when the page's own touch listeners held its
+   * The widest of those gaps when the page's own touch and pointer listeners held its
    * event back (they were still handling the event before), or null.
    */
   readonly heldByPage: {
@@ -371,7 +374,7 @@ function describeFault(fault: TouchPacingFault): string {
 
 /**
  * A paced play's page read a release that is not the script's, and its own
- * touch listeners did not hold the events back: a dispatch stalled before
+ * touch and pointer listeners did not hold the events back: a dispatch stalled before
  * the page. The runner failed, not the component under test.
  */
 export class TouchPacingError extends Error {
@@ -385,7 +388,7 @@ export class TouchPacingError extends Error {
 
 /**
  * A paced play's page read a release that is not the script's because its
- * own touch listeners held an event back: they were still handling the
+ * own touch and pointer listeners held an event back: they were still handling the
  * event before, and WebKit dispatches the next touch only once the page is
  * free. The page changed the release, so this is the proof's own failure.
  */
@@ -396,7 +399,7 @@ export class TouchPageStallError extends Error {
     },
   ) {
     super(
-      `touchDriver: the page's own touch listeners took ${fault.heldByPage.handlingMs.toFixed(0)} ms to handle an event, so the next reached it ${fault.heldByPage.gapMs.toFixed(0)} ms later, and ${describeFault(fault)}: the page changed the release, not the runner`,
+      `touchDriver: the page's own touch and pointer listeners took ${fault.heldByPage.handlingMs.toFixed(0)} ms to handle an event, so the next reached it ${fault.heldByPage.gapMs.toFixed(0)} ms later, and ${describeFault(fault)}: the page changed the release, not the runner`,
     );
     this.name = 'TouchPageStallError';
   }
@@ -545,8 +548,55 @@ export function webkitPageSession(page: Page): WebKitPageProxySession {
   return session;
 }
 
-/** The touch events a paced play's probe records. */
-const TOUCH_TYPES = ['touchstart', 'touchmove', 'touchend', 'touchcancel'];
+/**
+ * The events a paced play's probe records: a gesture host samples a finger
+ * from its pointer events, and a page can handle either kind.
+ */
+const TOUCH_TYPES = [
+  'pointerdown',
+  'pointermove',
+  'pointerup',
+  'pointercancel',
+  'touchstart',
+  'touchmove',
+  'touchend',
+  'touchcancel',
+];
+
+/**
+ * One arrival for each touch event a probe recorded, in dispatch order. WebKit
+ * dispatches each step's pointer events just before its touch event, and
+ * stamps the touch event only once the page's pointer listeners are done.
+ * So an arrival takes the earliest stamp of its step's events, when a
+ * gesture host samples the finger, and the latest handling mark of them.
+ */
+export function touchArrivalsFrom(record: {
+  readonly eventTypes: readonly string[];
+  readonly pointerTypes: readonly string[];
+  readonly stamps: readonly number[];
+  readonly handledAt: readonly number[];
+}): TouchArrival[] {
+  const arrivals: TouchArrival[] = [];
+  let stamp = Number.POSITIVE_INFINITY;
+  let handledAt = Number.NaN;
+  record.eventTypes.forEach((type, i) => {
+    // A mouse's or a pen's pointer event is not this play's.
+    if (!type.startsWith('touch') && record.pointerTypes[i] !== 'touch') {
+      return;
+    }
+    stamp = Math.min(stamp, record.stamps[i]);
+    const mark = record.handledAt[i];
+    if (Number.isFinite(mark)) {
+      handledAt = Number.isNaN(handledAt) ? mark : Math.max(handledAt, mark);
+    }
+    if (type.startsWith('touch')) {
+      arrivals.push({stamp, handledAt});
+      stamp = Number.POSITIVE_INFINITY;
+      handledAt = Number.NaN;
+    }
+  });
+  return arrivals;
+}
 
 /**
  * Records, for each touch event of a paced play, when it reached the page
@@ -569,15 +619,14 @@ function touchArrivalProbe(page: Page): TouchArrivalProbe {
       const record = await run.evaluate(recorded => {
         recorded.stop();
         return {
+          eventTypes: recorded.eventTypes.slice(),
+          pointerTypes: recorded.pointerTypes.slice(),
           stamps: recorded.stamps.slice(),
           handledAt: recorded.handledAt.slice(),
         };
       });
       await run.dispose();
-      return record.stamps.map((stamp, i) => ({
-        stamp,
-        handledAt: record.handledAt[i],
-      }));
+      return touchArrivalsFrom(record);
     },
   };
 }
