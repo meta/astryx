@@ -16,10 +16,10 @@
  * uikit.test.ts enforces both.
  *
  * Most springs are measured on iOS 26.2 or documented by Apple; two are still
- * GUESSES (`segmentedThumb`, `banner`) and two come from WebKit
- * (`switchThumbMove`, `switchThumbStretch`). A guess starts from the
- * nearest sourced spring and names it, so a component built on the table
- * gets the right value the moment its measurement lands, without changing.
+ * GUESSES (`segmentedThumb`, `banner`). `switchThumbMove` is the switch's
+ * measured travel, which uikit/switch.ts reads. A guess starts from the
+ * nearest sourced spring and names it. A component built on the table gets
+ * the measured value the moment it lands, without changing.
  *
  * Press highlight in/out are fades, not springs: see timing.ts.
  *
@@ -388,38 +388,25 @@ export const MENU_REDUCED_MOTION_SPRING = {
 // ---------------------------------------------------------------------
 
 /**
- * UISwitch thumb travelling between off and on.
- * @source webkit Source/WebCore/rendering/cocoa/RenderThemeCocoa.mm
- *   `thumbMoveSpring = SpringSolver(1.0, 438.649…, 31.4159…)`, "Values
- *   chosen for consistency with UIKit" (= response 0.30 s, ratio 0.75);
- *   its settling duration is WebKit's iOS switch duration 0.48801 s
- *   (RenderThemeIOS.h). These are WebKit's iOS 18 values: UIKit's own
- *   switch frames differ, and a switch reads its measured table instead.
- * @measure M-SW02
+ * UISwitch thumb travelling between off and on, measured: the switch table's
+ * `travel` reads this row, so the value has one home.
+ * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+ *   iPhone 17 Pro, the lens's position behavior read on a tap (damping 1,
+ *   response 0.3); the lens center after a 50 ms tap and after a 1 s hold
+ *   fits one spring at 0.31 / 1 (rms 0.11 pt), Oct 23 2026
  */
 export const SWITCH_THUMB_MOVE_SPRING = {
   response: 0.3,
-  dampingRatio: 0.75,
-} as const;
-
-/**
- * UISwitch thumb stretching while pressed and relaxing on release.
- * @source webkit Source/WebCore/rendering/cocoa/RenderThemeCocoa.mm
- *   `thumbPressSpring = SpringSolver(1.0, 322.272…, 31.2364…)`, "Values
- *   chosen for consistency with UIKit" (= response 0.35 s, ratio 0.87);
- *   settles in WebKit's held duration 0.50740 s (RenderThemeIOS.h). As
- *   for `switchThumbMove`, UIKit's own frames differ.
- * @measure M-SW03
- */
-export const SWITCH_THUMB_STRETCH_SPRING = {
-  response: 0.35,
-  dampingRatio: 0.87,
+  dampingRatio: 1,
 } as const;
 
 /**
  * UISegmentedControl selection thumb sliding to a new segment.
- * @source GUESS — WebKit's UIKit-matched switch thumb spring, the nearest
- *   sourced control thumb
+ * @source GUESS — WebKit's UIKit-matched switch thumb spring
+ *   (RenderThemeCocoa.mm `thumbMoveSpring`: response 0.30 s, ratio 0.75),
+ *   kept only until UISegmentedControl's measured spring replaces it;
+ *   UISwitch's measured travel (`SWITCH_THUMB_MOVE_SPRING`)
+ *   belongs to another control
  * @measure M-SG02
  * @measure M-SG03
  */
@@ -453,6 +440,33 @@ export const KEYBOARD_SPRING = {
  * @measure M-T1
  */
 export const BANNER_SPRING = {mass: 3, stiffness: 1000, damping: 500} as const;
+
+/**
+ * UISlider's release: after a finger lifts, the thumb settles on this spring
+ * toward 0.4 of the release's momentum projection. It is critically damped,
+ * so it never overshoots a target ahead of it.
+ * @source measured: UIKit lab, iOS 26.2 simulator, iPhone 17 Pro. The
+ *   `UIViewSpringAnimationBehavior` at the lift reads response 0.4 and
+ *   damping ratio 1. Four releases fit it per frame (the UIKit slider
+ *   table). Oct 23 2026
+ */
+export const SLIDER_RELEASE_SPRING = {response: 0.4, dampingRatio: 1} as const;
+
+/**
+ * UISlider's lift: a finger's touch-down scales the thumb up on this spring.
+ * @source measured: UIKit lab, iOS 26.2 simulator, iPhone 17 Pro. The
+ *   thumb's scale per frame after touch-down (the UIKit slider table).
+ *   Oct 23 2026
+ */
+export const SLIDER_LIFT_SPRING = {response: 0.215, dampingRatio: 0.6} as const;
+
+/**
+ * UISlider's drop: the lift's end scales the thumb back down on this spring.
+ * @source measured: UIKit lab, iOS 26.2 simulator, iPhone 17 Pro. The
+ *   thumb's scale per frame after the lift (the UIKit slider table).
+ *   Oct 23 2026
+ */
+export const SLIDER_DROP_SPRING = {response: 0.5, dampingRatio: 0.7} as const;
 
 /**
  * Every spring above, by row name: the table the existing readers use. A
@@ -490,14 +504,18 @@ export const springs = {
   contextMenuMorph: CONTEXT_MENU_MORPH_SPRING,
   menuReducedMotion: MENU_REDUCED_MOTION_SPRING,
   switchThumbMove: SWITCH_THUMB_MOVE_SPRING,
-  switchThumbStretch: SWITCH_THUMB_STRETCH_SPRING,
   segmentedThumb: SEGMENTED_THUMB_SPRING,
   keyboard: KEYBOARD_SPRING,
   banner: BANNER_SPRING,
+  sliderRelease: SLIDER_RELEASE_SPRING,
+  sliderLift: SLIDER_LIFT_SPRING,
+  sliderDrop: SLIDER_DROP_SPRING,
 } as const;
 
 /**
- * The springs spec:AST-094 FR4 names: the only ones that are motion roles.
+ * The only springs that are motion roles. The touch presentations' record
+ * names some, and a component's own record names others, such as Slider's
+ * three. The generated motion role table lists each with its record.
  * The registry takes these rows alone, so registering ships no other spring.
  */
 const SPRING_ROLES = {
@@ -516,10 +534,13 @@ const SPRING_ROLES = {
   contextMenuLift: CONTEXT_MENU_LIFT_SPRING,
   contextMenuDismiss: CONTEXT_MENU_DISMISS_SPRING,
   contextMenuMorph: CONTEXT_MENU_MORPH_SPRING,
+  sliderRelease: SLIDER_RELEASE_SPRING,
+  sliderLift: SLIDER_LIFT_SPRING,
+  sliderDrop: SLIDER_DROP_SPRING,
 };
 
 /**
- * Registers the springs spec:AST-094 FR4 names as internal motion roles
+ * Registers the role springs (`SPRING_ROLES`) as internal motion roles
  * (motion/roles.ts), by their row names (`springs.settle`). Every other
  * spring, UIKit's menu spring under Reduce Motion and the keyboard's
  * included, is not a role. Nothing registers on import: the touch code that

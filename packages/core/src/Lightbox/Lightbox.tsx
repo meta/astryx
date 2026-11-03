@@ -54,6 +54,8 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Lightbox/Lightbox.generated';
+import {isRenderable} from '../utils/isRenderable';
+import {prepareFocusReturnOnRemoval} from '../utils/focusReturn';
 
 registerEnglishFallback(english);
 /**
@@ -445,29 +447,19 @@ export function Lightbox({
   }, [isOpen, hasItem]);
 
   // A viewer that unmounts while open (rendered only while open, or removed
-  // with the rest of a view) never runs the close branch above, and removing a
-  // <dialog> does not run the browser's own focus return. Focus left inside
-  // it, or dropped to the body by the removal, goes back to the opener.
+  // with the rest of a view) never runs the close branch above. Focus the
+  // removal lost goes back to the opener while the opener is still on the
+  // page.
   useEffect(() => {
     const dialog = dialogRef.current;
+    if (dialog == null) {
+      return;
+    }
+    const returnFocusOnRemoval = prepareFocusReturnOnRemoval(dialog);
     return () => {
-      const trigger = triggerElementRef.current;
-      if (dialog == null || !dialog.open || !(trigger instanceof HTMLElement)) {
-        return;
+      if (dialog.open) {
+        returnFocusOnRemoval(triggerElementRef.current);
       }
-      // Checked once the commit has finished: StrictMode's simulated unmount
-      // leaves the dialog in the document, and only a real removal returns
-      // focus.
-      queueMicrotask(() => {
-        if (dialog.isConnected || !trigger.isConnected) {
-          return;
-        }
-        const doc = trigger.ownerDocument;
-        const active = doc.activeElement;
-        if (active == null || active === doc.body || dialog.contains(active)) {
-          trigger.focus();
-        }
-      });
     };
   }, [hasItem]);
 
@@ -789,7 +781,7 @@ export function Lightbox({
                   )}
                 </div>
 
-                {currentItem.caption && (
+                {isRenderable(currentItem.caption) && (
                   <div {...stylex.props(styles.caption)}>
                     {currentItem.caption}
                   </div>

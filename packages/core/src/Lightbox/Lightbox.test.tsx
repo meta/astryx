@@ -877,6 +877,24 @@ describe('Lightbox unmounting while open', () => {
     expect(document.activeElement).toBe(opener);
   });
 
+  it('leaves focus on a page control the user pressed to remove the viewer', async () => {
+    render(<Gallery />);
+    const opener = screen.getByRole('button', {name: 'View photos'});
+    opener.focus();
+    fireEvent.click(opener);
+    const remove = screen.getByRole('button', {
+      name: 'Remove viewer',
+      hidden: true,
+    });
+    remove.focus();
+
+    fireEvent.click(remove);
+    await Promise.resolve();
+
+    expect(document.querySelector('dialog')).toBeNull();
+    expect(document.activeElement).toBe(remove);
+  });
+
   it('keeps focus inside through StrictMode effects, then returns it on unmount', async () => {
     render(
       <StrictMode>

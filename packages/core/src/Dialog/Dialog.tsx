@@ -80,7 +80,10 @@ import {themeProps} from '../utils/themeProps';
 import type {DialogVariantMap} from './index';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
-import {focusForLastInput} from '../utils/focusReturn';
+import {
+  focusForLastInput,
+  prepareFocusReturnOnRemoval,
+} from '../utils/focusReturn';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -633,6 +636,18 @@ export function Dialog({
       triggerElementRef.current = null;
     }
   }, [isOpen, isInline]);
+
+  // A dialog that unmounts while open (rendered only while open, or removed
+  // with the rest of a view) never runs the close branch above. Focus the
+  // removal lost goes back to the opener.
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (isInline || dialog == null) {
+      return;
+    }
+    const returnFocusOnRemoval = prepareFocusReturnOnRemoval(dialog);
+    return () => returnFocusOnRemoval(triggerElementRef.current);
+  }, [isInline]);
 
   // Host app-global surfaces (toasts) inside this modal while it is open, so
   // they stay visible and operable above it.

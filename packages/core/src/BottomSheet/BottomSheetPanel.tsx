@@ -675,10 +675,23 @@ export function BottomSheetPanel({
     if (motion == null) {
       return;
     }
-    startedMotionRef.current = null;
+    // React can run this effect again for the same motion, for example when
+    // a Suspense boundary shows this content again. The passive effect below
+    // does not run again then, so the motion it started stays started, and a
+    // completion completes at once instead of waiting for that effect.
+    if (startedMotionRef.current !== motion) {
+      startedMotionRef.current = null;
+    }
     pendingMotionCompleteRef.current = null;
+    const complete = () => {
+      if (startedMotionRef.current === motion) {
+        onMotionCompleteRef.current?.(motion);
+      } else {
+        pendingMotionCompleteRef.current = motion;
+      }
+    };
     if (motion === 'entering' && reactivatedEntranceRef.current) {
-      pendingMotionCompleteRef.current = motion;
+      complete();
       return;
     }
     // What ends a motion: the fade is opacity, and the entrance, alignment and
@@ -690,13 +703,7 @@ export function BottomSheetPanel({
     return waitForTransition(
       elementRef.current,
       motion === 'fading' || crossFadeMotion ? 'opacity' : 'transform',
-      () => {
-        if (startedMotionRef.current === motion) {
-          onMotionCompleteRef.current?.(motion);
-        } else {
-          pendingMotionCompleteRef.current = motion;
-        }
-      },
+      complete,
     );
   }, [motion, isCrossFade]);
   // The snap is transform-only; the layout height reconciles when it lands.

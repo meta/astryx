@@ -2674,6 +2674,7 @@ component Tooltip(props: TooltipProps)
   prop onOpenChange?: (isOpen: boolean) => void
   prop placement?: LayerPlacement = 'above'
   prop touchTrigger?: TooltipTouchTrigger = 'auto'
+  prop triggerBehavior?: TooltipTriggerBehavior = 'adaptive'
 component TopNav(props: TopNavProps)
   prop centerContent?: ReactNode
   prop children?: ReactNode
@@ -5654,6 +5655,7 @@ interface TooltipOptions
   onShow?: () => void
   placement?: LayerPlacement = 'above'
   touchTrigger?: TooltipTouchTrigger = 'auto'
+  triggerBehavior?: TooltipTriggerBehavior = 'adaptive'
 interface TooltipProps (props of Tooltip)
 interface TooltipReturn
   anchorId: string
@@ -5663,6 +5665,7 @@ interface TooltipReturn
   ref: RefCallback<HTMLElement>
   renderTooltip: (children: ReactNode, props?: Omit<ContextRenderProps, 'positioning'>) => ReactNode
 type TooltipTouchTrigger = LayerTouchTrigger
+type TooltipTriggerBehavior = 'adaptive' | 'hover' | 'toggle'
 interface TopNavHeadingProps extends BaseProps<HTMLElement> (props of TopNavHeading)
 interface TopNavItemProps extends BaseProps<HTMLAnchorElement> (props of TopNavItem)
 interface TopNavMegaMenuFeaturedCardProps extends BaseProps<HTMLDivElement> (props of TopNavMegaMenuFeaturedCard)
@@ -8902,6 +8905,7 @@ TooltipOptions (.)
 TooltipProps (.)
 TooltipReturn (.)
 TooltipTouchTrigger (.)
+TooltipTriggerBehavior (.)
 useTooltip (.)
 ```
 
@@ -9986,7 +9990,6 @@ var --text-supporting-size (./astryx.css)
 var --text-supporting-weight (./astryx.css)
 var --tree-list-indent (./astryx.css)
 var --tree-list-row-gap (./astryx.css)
-var --x1ue0wla (./astryx.css)
 var --border-color-error (./tailwind-theme.css)
 var --border-color-info (./tailwind-theme.css)
 var --border-color-success (./tailwind-theme.css)
