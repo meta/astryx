@@ -29,6 +29,7 @@ import {
 import type {
   ChatComposerToken,
   ChatComposerTokenCustom,
+  ChatComposerTrigger,
 } from './ChatComposerInput';
 
 // =============================================================================
@@ -89,6 +90,20 @@ function isInsideToken(node: Node): HTMLElement | null {
   return null;
 }
 
+function createTokenPortal(token: ChatComposerToken): TokenPortal {
+  const span = document.createElement('span');
+  const id = `token-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  span.setAttribute('data-astryx-token', '');
+  span.setAttribute('data-astryx-token-value', token.value);
+  span.setAttribute('data-astryx-token-id', id);
+  span.contentEditable = 'false';
+  span.style.display = 'inline-flex';
+  span.style.alignItems = 'center';
+  span.style.height = '1lh';
+  span.style.verticalAlign = 'top';
+  return {id, span, token};
+}
+
 // =============================================================================
 // Hook
 // =============================================================================
@@ -97,6 +112,14 @@ export function useChatComposerTokens({
   editableRef,
   onEmitChange,
 }: UseChatComposerTokensOptions): UseChatComposerTokensReturn {
+  return useChatComposerTokensInternal({editableRef, onEmitChange});
+}
+
+// Draft restoration stays internal so the public token handle is unchanged.
+export function useChatComposerTokensInternal({
+  editableRef,
+  onEmitChange,
+}: UseChatComposerTokensOptions) {
   const [tokenPortals, setTokenPortals] = useState<TokenPortal[]>([]);
 
   // --- Insert token at cursor ---
@@ -117,16 +140,8 @@ export function useChatComposerTokens({
       const range = selection.getRangeAt(0);
 
       // Create a non-editable container — React will portal the Badge into it
-      const span = document.createElement('span');
-      const id = `token-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-      span.setAttribute('data-astryx-token', '');
-      span.setAttribute('data-astryx-token-value', token.value);
-      span.setAttribute('data-astryx-token-id', id);
-      span.contentEditable = 'false';
-      span.style.display = 'inline-flex';
-      span.style.alignItems = 'center';
-      span.style.height = '1lh';
-      span.style.verticalAlign = 'top';
+      const portal = createTokenPortal(token);
+      const {id, span} = portal;
 
       range.deleteContents();
       range.insertNode(span);
@@ -142,8 +157,48 @@ export function useChatComposerTokens({
       selection.addRange(newRange);
 
       // Register for portal rendering
-      setTokenPortals(prev => [...prev, {id, span, token}]);
+      setTokenPortals(prev => [...prev, portal]);
       return id;
+    },
+    [editableRef],
+  );
+
+  const restoreValue = useCallback(
+    (value: string, triggers: ChatComposerTrigger[] = []) => {
+      const editable = editableRef.current;
+      if (!editable) {
+        return;
+      }
+
+      const fragment = document.createDocumentFragment();
+      const portals: TokenPortal[] = [];
+      for (const part of value.split(/(\s+)/)) {
+        if (!part) {
+          continue;
+        }
+        let token: ChatComposerToken | null = null;
+        if (!/^\s+$/.test(part)) {
+          for (const trigger of triggers) {
+            const parsed = trigger.deserialize?.(part);
+            // Restoration must not change the serialized draft.
+            if (parsed?.value === part) {
+              token = parsed;
+              break;
+            }
+          }
+        }
+        if (token) {
+          const portal = createTokenPortal(token);
+          fragment.append(portal.span);
+          portals.push(portal);
+        } else {
+          fragment.append(part);
+        }
+      }
+
+      // Unlike insertion, restoration adds no spacing and does not move focus.
+      editable.replaceChildren(fragment);
+      setTokenPortals(portals);
     },
     [editableRef],
   );
@@ -305,5 +360,6 @@ export function useChatComposerTokens({
     handleKeyDown,
     handlePaste,
     cleanupPortals,
+    restoreValue,
   };
 }
