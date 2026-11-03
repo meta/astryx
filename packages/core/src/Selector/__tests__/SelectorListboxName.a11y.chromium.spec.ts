@@ -3,7 +3,8 @@
 
 /**
  * @file SelectorListboxName.a11y.chromium.spec.ts
- * @input Storybook story core-selector--default with a value selected
+ * @input Storybook stories core-selector--default and --searchable with a
+ *   value selected
  * @output Chromium's own accessibility tree names the open listbox by the
  *   field's label, never by the trigger's value, in the popover and the
  *   bottom sheet.
@@ -30,9 +31,13 @@ test.afterAll(async () => {
   await storybook?.close();
 });
 
-async function listboxNames(page: Page, presentation: string) {
+async function listboxNames(
+  page: Page,
+  presentation: string,
+  story = 'default',
+) {
   await page.goto(
-    `${storybook.origin}/iframe.html?id=core-selector--default&viewMode=story&args=presentation:${presentation};value:Banana`,
+    `${storybook.origin}/iframe.html?id=core-selector--${story}&viewMode=story&args=presentation:${presentation};value:Banana`,
     {waitUntil: 'load'},
   );
   const trigger = page.getByRole('combobox').first();
@@ -54,6 +59,12 @@ test('the popover listbox is named by the field label, not the selected value', 
   expect(await listboxNames(page, 'popover')).toEqual(['Fruit']);
 });
 
+test('the searchable popover listbox is named by the field label', async ({
+  page,
+}) => {
+  expect(await listboxNames(page, 'popover', 'searchable')).toEqual(['Fruit']);
+});
+
 test.describe('bottom sheet', () => {
   test.use({
     hasTouch: true,
@@ -65,5 +76,13 @@ test.describe('bottom sheet', () => {
     page,
   }) => {
     expect(await listboxNames(page, 'bottom-sheet')).toEqual(['Fruit']);
+  });
+
+  test('the searchable bottom-sheet listbox is named by the field label', async ({
+    page,
+  }) => {
+    expect(await listboxNames(page, 'bottom-sheet', 'searchable')).toEqual([
+      'Fruit',
+    ]);
   });
 });
