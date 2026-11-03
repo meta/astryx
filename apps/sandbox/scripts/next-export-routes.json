@@ -782,6 +782,7 @@
     "/templates/table-tree/",
     "/templates/table/",
     "/templates/theme-showcase/",
+    "/templates/useAnnounceHookUsage/",
     "/templates/useCollatorHookUsage/",
     "/templates/useComboboxHookUsage/",
     "/templates/useContainerRevealHookUsage/",

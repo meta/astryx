@@ -51,7 +51,10 @@ import {
   borderVars,
 } from '../theme/tokens.stylex';
 import {focusOutlineStyles} from '../utils';
-import {plainDateFormatStandaloneMonthYear} from '../utils/plainDate';
+import {
+  plainDateFormatDayNumber,
+  plainDateFormatStandaloneMonthYear,
+} from '../utils/plainDate';
 import {
   type DayOfWeek,
   type ISODateString,
@@ -1012,7 +1015,7 @@ function MonthPane({
                       isToday && styles.puckToday,
                       isSelected && styles.puckSelected,
                     )}>
-                    {day.dayNumber}
+                    {plainDateFormatDayNumber(day.dayNumber, locale)}
                   </span>
                 </button>
               </div>
