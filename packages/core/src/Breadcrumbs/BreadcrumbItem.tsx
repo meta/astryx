@@ -73,6 +73,7 @@ import type {DropdownMenuOption} from '../DropdownMenu/DropdownMenu';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {isRenderable} from '../utils/isRenderable';
 // =============================================================================
 // Props
 // =============================================================================
@@ -373,7 +374,9 @@ export function BreadcrumbItem({
 
   const content = (
     <>
-      {startIcon && <span {...stylex.props(itemStyles.icon)}>{startIcon}</span>}
+      {isRenderable(startIcon) && (
+        <span {...stylex.props(itemStyles.icon)}>{startIcon}</span>
+      )}
       {children}
     </>
   );

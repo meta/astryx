@@ -1019,6 +1019,30 @@ describe('MultiSelector', () => {
     expect(onChange).toHaveBeenCalledWith(['Apple', 'Banana', 'Orange']);
   });
 
+  it('asks a touch keyboard for its Search key and no autocorrection in the search row, and Enter still toggles the highlighted option', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <MultiSelector
+        label="Fruit"
+        options={defaultOptions}
+        value={[]}
+        onChange={onChange}
+        hasSearch
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: 'Fruit'}));
+    const search = screen.getByRole('combobox', h);
+    expect(search).toHaveAttribute('enterkeyhint', 'search');
+    expect(search).toHaveAttribute('autocorrect', 'off');
+
+    await user.type(search, 'ban');
+    await user.keyboard('{ArrowDown}');
+    expect(search).toHaveAttribute('aria-activedescendant');
+    fireEvent.keyDown(search, {key: 'Enter'});
+    expect(onChange).toHaveBeenCalledWith(['Banana']);
+  });
+
   it('renders search input when hasSearch', async () => {
     const user = userEvent.setup();
     render(
