@@ -178,6 +178,8 @@ export function useStreamingText(
     '(prefers-reduced-motion: reduce)',
   );
 
+  // Syncs the revealed text with an animation-frame clock while the text
+  // streams.
   useEffect(() => {
     if (!isStreaming || speed === 'instant' || prefersReducedMotion) {
       return;

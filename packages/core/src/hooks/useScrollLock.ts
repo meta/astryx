@@ -54,6 +54,8 @@ let activeLock: ActiveLock | null = null;
  * ```
  */
 export function useScrollLock(isLocked: boolean): void {
+  // Syncs the document's scroll lock with `isLocked`. A count of holders keeps
+  // the page locked until the last one releases.
   useEffect(() => {
     if (!isLocked) {
       return;
