@@ -1927,10 +1927,9 @@ export function Selector<T extends SelectorOptionType>(
       id={listboxId}
       role="listbox"
       {...listboxPress.menuProps}
-      // Named by the field's label in every presentation, not by the
-      // trigger, which shows the value. Directly, not by reference: a modal
-      // sheet drops the label outside it from the accessibility tree, and the
-      // label element also holds the required marker and the label tooltip.
+      // The trigger shows the value, so it cannot name the list.
+      // A modal sheet removes an outside label from the accessibility tree.
+      // The label element also holds the required marker and the tooltip.
       aria-label={label}
       aria-activedescendant={
         surface.isOpen && highlightedIndex >= 0
