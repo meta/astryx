@@ -13,7 +13,8 @@
  * - /packages/core/src/Table/types.ts (TableContextAction)
  */
 
-import {useState, type ReactNode} from 'react';
+import {use, useState, type ReactNode} from 'react';
+import {TableRowFocusContext} from './tableRowFocus';
 import {ContextMenu, type ContextMenuOption} from '../ContextMenu';
 import {Icon} from '../Icon';
 import type {StyleXStyles} from '../theme/types';
@@ -107,12 +108,14 @@ function LazyTableContextMenu({
   getActions: () => TableContextAction[];
   triggerXstyle?: StyleXStyles | StyleXStyles[];
 }): ReactNode {
+  const rowFocus = use(TableRowFocusContext);
   const [options, setOptions] = useState<ContextMenuOption[] | null>(null);
   return (
     <ContextMenu
       items={options ?? []}
       triggerXstyle={triggerXstyle}
       onOpenChange={open => {
+        rowFocus?.onOpenChange(open);
         // Resolve actions when opening; clear on close so state derived later
         // (e.g. current sort direction) is always fresh next open.
         setOptions(open ? toContextMenuOptions(getActions()) : null);
@@ -152,10 +155,10 @@ export function wrapInTableContextMenu(
   // item (it looked like "ascending" was always selected). Focus moves only
   // when the user arrow-keys into the menu.
   return (
-    <ContextMenu
-      items={toContextMenuOptions(actions)}
-      triggerXstyle={triggerXstyle}>
-      {element}
-    </ContextMenu>
+    <LazyTableContextMenu
+      getActions={() => actions}
+      triggerXstyle={triggerXstyle}
+      element={element}
+    />
   );
 }

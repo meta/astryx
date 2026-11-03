@@ -23,6 +23,7 @@ import {Tooltip} from '../../../Tooltip';
 import {warnOnce} from '../../../utils/devWarning';
 import {VisuallyHidden} from '../../../VisuallyHidden';
 import type {TableRowStatus, TableSemanticRowStatus} from '../../index';
+import {registerFixedHeightColumn} from '../../tableColumnAdmission';
 import type {TableColumn, TablePlugin} from '../../types';
 import {
   registerEnglishFallback,
@@ -267,7 +268,9 @@ export function useTableRowStatus<T extends Record<string, unknown>>(
     };
 
     return {
+      rowModel: 'flat',
       transformColumns(columns) {
+        registerFixedHeightColumn(statusColumn);
         return [statusColumn, ...columns];
       },
     };

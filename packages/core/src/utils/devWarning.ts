@@ -44,6 +44,18 @@ export function devWarn(
   console.warn(formatDevMessage(component, message), ...args);
 }
 
+/** Per-instance diagnostics for hooks and imperative callbacks. Internal. */
+export function createDevWarnings() {
+  const warned = new Set<string>();
+  return (component: string, message: string, key: string = message): void => {
+    if (process.env.NODE_ENV === 'production' || warned.has(key)) {
+      return;
+    }
+    warned.add(key);
+    devWarn(component, message);
+  };
+}
+
 /**
  * `console.error` in the standardized `Component: message` format. Unlike
  * {@link devWarn}, this runs in production too: it reports real runtime

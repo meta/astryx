@@ -16,6 +16,7 @@ import {useMemo, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, typeScaleVars} from '../../../theme/tokens.stylex';
 
+import {registerFixedHeightColumn} from '../../tableColumnAdmission';
 import type {TableColumn, TablePlugin} from '../../types';
 
 /**
@@ -56,6 +57,19 @@ const styles = stylex.create({
   },
 });
 
+function createRowIndexLookup<T>(data: T[], getRowKey?: (item: T) => string) {
+  let map: Map<unknown, number> | undefined;
+  return (item: T): number | undefined => {
+    if (map == null) {
+      map = new Map();
+      for (let index = 0; index < data.length; index++) {
+        map.set(getRowKey ? getRowKey(data[index]) : data[index], index);
+      }
+    }
+    return map.get(getRowKey ? getRowKey(item) : item);
+  };
+}
+
 /**
  * Returns a {@link TablePlugin} that prepends a right-aligned, monospaced
  * row-number column. Numbering follows the order of the rendered `data` array,
@@ -72,23 +86,17 @@ export function useTableRowIndex<T extends Record<string, unknown>>(
 ): TablePlugin<T> {
   const {data, getRowKey, label = '#', startFrom = 1} = config;
 
-  // Single item → ordinal lookup, built in one pass and rebuilt only when the
-  // data array or key extractor changes. Keyed by getRowKey when provided
-  // (stable across new object identities), otherwise by object reference.
-  const lookup = useMemo(() => {
-    const map = new Map<unknown, number>();
-    for (let i = 0; i < data.length; i++) {
-      const item = data[i];
-      map.set(getRowKey ? getRowKey(item) : item, i);
-    }
-    return (item: T): number | undefined =>
-      map.get(getRowKey ? getRowKey(item) : item);
-  }, [data, getRowKey]);
+  // The legacy lookup is lazy because windowed cells use Table's own position.
+  const lookup = useMemo(
+    () => createRowIndexLookup(data, getRowKey),
+    [data, getRowKey],
+  );
 
   // The plugin object depends only on the stable lookup and the presentational
   // props — not on data directly — so it stays as stable as its inputs allow.
   return useMemo(
     (): TablePlugin<T> => ({
+      rowModel: 'flat',
       transformColumns(columns) {
         const indexColumn: TableColumn<T> = {
           key: '__rowIndex',
@@ -106,6 +114,13 @@ export function useTableRowIndex<T extends Record<string, unknown>>(
             );
           },
         };
+        registerFixedHeightColumn(
+          indexColumn,
+          startFrom === 1,
+          logicalIndex => (
+            <span {...stylex.props(styles.index)}>{logicalIndex + 1}</span>
+          ),
+        );
         return [indexColumn, ...columns];
       },
     }),

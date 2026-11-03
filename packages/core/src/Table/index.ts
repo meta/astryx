@@ -28,6 +28,12 @@ export interface TableSemanticRowStatus {
 }
 
 export {Table} from './Table';
+export {useTableRowsVirtualization} from './plugins/virtualization';
+export type {
+  UseTableRowsVirtualizationConfig,
+  TableVirtualizationCapability,
+} from './plugins/virtualization';
+export type {TableRenderContext, TableRowContext} from './types';
 export {TableRow} from './TableRow';
 export {TableCell} from './TableCell';
 export {TableHeaderCell} from './TableHeaderCell';
