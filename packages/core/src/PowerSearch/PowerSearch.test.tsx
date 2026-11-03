@@ -250,6 +250,32 @@ describe('PowerSearch', () => {
     expect(screen.getByText('Open')).toBeInTheDocument();
   });
 
+  it('a read-only field removes no filter, by control or by Backspace', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <PowerSearch
+        config={config}
+        filters={[
+          {
+            field: 'title',
+            operator: 'contains',
+            value: {type: 'string', value: 'login'},
+          },
+        ]}
+        onChange={onChange}
+        isReadOnly
+      />,
+    );
+    expect(
+      screen.queryByRole('button', {name: 'Clear all'}),
+    ).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('button', {name: /^Remove /})).toHaveLength(0);
+    await user.click(screen.getByRole('combobox', {name: 'Search'}));
+    await user.keyboard('{Backspace}');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   describe('token value truncation (#4759)', () => {
     it('truncates token values by characters, not code units', () => {
       const truncConfig: PowerSearchConfig = {
