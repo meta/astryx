@@ -9,8 +9,10 @@
  *   release acts once (a link row included: no native link drag cancels a
  *   mouse press), the highlight follows the pointer, a release outside
  *   closes under a mouse and not under a finger, a touch pan in an
- *   overflowing menu cancels the gesture, a pen behaves like a finger, and
- *   Escape after a press-open returns focus to the trigger
+ *   overflowing menu cancels the gesture, a cancelled touch and the window
+ *   losing focus end a finger's gesture with nothing acting and its lit row
+ *   cleared, a pen behaves like a finger, and Escape after a press-open
+ *   returns focus to the trigger
  * @position Real-engine proof for module:DropdownMenu/useMenuPress — the
  *   paths jsdom cannot exercise (hit testing, touch synthesis, scrolling)
  */
@@ -340,6 +342,77 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     const edit = await center(page, 'menuitem', 'Edit');
     await touch.start(cdp, edit);
     await touch.slide(cdp, edit, {x: edit.x + 400, y: edit.y + 200});
+    await touch.end(cdp);
+    await page.waitForTimeout(300);
+    await expect(menu).toBeVisible();
+    expect(activations).toEqual([]);
+  });
+
+  test('touch: a cancelled touch ends the gesture: nothing acts and the lit row clears (spec:AST-094 FR28)', async ({
+    page,
+  }) => {
+    const activations = collectActivations(page);
+    const cdp = await enableTouch(page);
+    await mount(page, MENU_STORY);
+    await touch.tap(cdp, await center(page, TRIGGER));
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    // Measure the rows once the menu has landed: under a finger it may
+    // still be growing out of its trigger (spec:AST-094 FR31).
+    await expect
+      .poll(async () =>
+        menu.evaluate(
+          element =>
+            (element.closest('[popover]') ?? element)
+              .getAnimations({subtree: true})
+              .filter(animation => animation.playState === 'running').length,
+        ),
+      )
+      .toBe(0);
+    const edit = await center(page, 'menuitem', 'Edit');
+    await touch.start(cdp, edit);
+    await expect.poll(async () => activeRowName(page)).toBe('Edit');
+    // The browser takes the touch.
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchCancel',
+      touchPoints: [],
+    });
+    await expect.poll(async () => activeRowName(page)).toBeNull();
+    await page.waitForTimeout(300);
+    await expect(menu).toBeVisible();
+    expect(activations).toEqual([]);
+  });
+
+  test('touch: the window losing focus ends the gesture: nothing acts, the lit row clears, and the lift acts on nothing (spec:AST-094 FR28)', async ({
+    page,
+  }) => {
+    const activations = collectActivations(page);
+    const cdp = await enableTouch(page);
+    await mount(page, MENU_STORY);
+    await touch.tap(cdp, await center(page, TRIGGER));
+    const menu = page.getByRole('menu');
+    await expect(menu).toBeVisible();
+    // Measure the rows once the menu has landed: under a finger it may
+    // still be growing out of its trigger (spec:AST-094 FR31).
+    await expect
+      .poll(async () =>
+        menu.evaluate(
+          element =>
+            (element.closest('[popover]') ?? element)
+              .getAnimations({subtree: true})
+              .filter(animation => animation.playState === 'running').length,
+        ),
+      )
+      .toBe(0);
+    const edit = await center(page, 'menuitem', 'Edit');
+    await touch.start(cdp, edit);
+    await expect.poll(async () => activeRowName(page)).toBe('Edit');
+    // The window loses focus with the finger down (a headless page keeps
+    // focus, so the blur is dispatched to the window).
+    await page.evaluate(() => {
+      window.dispatchEvent(new FocusEvent('blur'));
+    });
+    await expect.poll(async () => activeRowName(page)).toBeNull();
     await touch.end(cdp);
     await page.waitForTimeout(300);
     await expect(menu).toBeVisible();
