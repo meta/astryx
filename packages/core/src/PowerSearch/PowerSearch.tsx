@@ -1620,6 +1620,7 @@ export function PowerSearch({
               containerClassName={className}
               containerStyle={style}
               data-testid={testId}
+              presentation="popover"
             />
           </TokenizerItemRemovableContext>
         </TokenizerClearAllMessageContext>
