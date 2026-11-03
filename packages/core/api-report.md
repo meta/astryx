@@ -5667,10 +5667,12 @@ interface TooltipProps (props of Tooltip)
 interface TooltipReturn
   anchorId: string
   describedBy: string
+  hide: () => void
   interactionRef: RefCallback<HTMLElement>
   positionRef: RefCallback<HTMLElement>
   ref: RefCallback<HTMLElement>
   renderTooltip: (children: ReactNode, props?: Omit<ContextRenderProps, 'positioning'>) => ReactNode
+  show: () => void
 type TooltipTouchTrigger = LayerTouchTrigger
 interface TopNavHeadingProps extends BaseProps<HTMLElement> (props of TopNavHeading)
 interface TopNavItemProps extends BaseProps<HTMLAnchorElement> (props of TopNavItem)

@@ -6,8 +6,9 @@
  * @file usePressPin.ts
  * @input A hover layer's trigger, open state, show and hide, and its
  *   `triggerBehavior` and `touchTrigger` options
- * @output usePressPin, the press toggle that pins a hover layer open;
- *   isPressPinTrigger; stopPressPinClick; the LayerTriggerBehavior type
+ * @output usePressPin, the press toggle that pins a hover layer open, and
+ *   the app hold behind useTooltip's show() and hide(); isPressPinTrigger;
+ *   stopPressPinClick; the LayerTriggerBehavior type
  * @position Core-internal: one call per hover layer, useTooltip's. It owns
  *   the layer's touch trigger, so the host makes no second touch-trigger call.
  *
@@ -103,8 +104,18 @@ export interface UsePressPinReturn {
   isHeldOpen: () => boolean;
   /** Wires the trigger element, or unwires it with `null`. */
   attach: (element: HTMLElement | null) => void;
-  /** Drops the pin: Escape, or a hide that came from elsewhere. */
+  /** Drops the pin and the app hold: Escape, or a hide from elsewhere. */
   unpin: () => void;
+  /**
+   * The app's `show()`: shows the layer and holds it open, as a pin does,
+   * until `release`, Escape, a press outside, or focus leaving the trigger
+   * and the layer. A controlled layer reports the request instead.
+   */
+  hold: () => void;
+  /** The app's `hide()`: drops the hold and hides the layer. */
+  release: () => void;
+  /** Whether the app's `show()` holds the layer open now. */
+  isAppHeld: () => boolean;
   /**
    * While pinned, focus moving onto an element outside the trigger and the
    * layer closes it. Returns whether the pin decided. The pin calls it for its
@@ -112,8 +123,9 @@ export interface UsePressPinReturn {
    */
   handleFocusLeave: (event: FocusEvent) => boolean;
   /**
-   * Whether the layer shows pinned on a wired trigger. The host then announces
-   * its rendered text, unless the layer has a `label`.
+   * Whether the layer shows pinned on a wired trigger, or held by the app's
+   * `show()`. The host then announces its rendered text, unless the layer has
+   * a `label`.
    */
   isPinShown: boolean;
   /** The layer's touch trigger (useTouchTriggerInternal), wired to the pin. */
@@ -175,6 +187,14 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
     setIsPinnedState(next);
   }, []);
 
+  // The app's show() holds the layer on any trigger, in any mode.
+  const isAppHeldRef = useRef(false);
+  const [isAppHeldState, setIsAppHeldState] = useState(false);
+  const setAppHeld = useCallback((next: boolean) => {
+    isAppHeldRef.current = next;
+    setIsAppHeldState(next);
+  }, []);
+
   // The last offered element lets a `triggerBehavior` change rewire it.
   const triggerRef = useRef<HTMLElement | null>(null);
   const offeredRef = useRef<HTMLElement | null>(null);
@@ -192,6 +212,13 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
   // a pinned layer through the pin, so the pin drops with it.
   const hideFromTouch = useCallback(() => {
     const current = optionsRef.current;
+    if (isAppHeldRef.current) {
+      setAppHeld(false);
+      if (current.isOpen !== undefined) {
+        current.report(false);
+        return;
+      }
+    }
     if (current.triggerBehavior === 'toggle' && triggerRef.current != null) {
       if (current.isOpen !== undefined) {
         current.report(false);
@@ -202,7 +229,7 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
       }
     }
     current.hide();
-  }, [setPinned]);
+  }, [setPinned, setAppHeld]);
 
   const {
     isTouchPointerRef,
@@ -233,13 +260,14 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
   const close = useCallback(() => {
     const current = optionsRef.current;
     clearTapOpen();
+    setAppHeld(false);
     if (current.isOpen !== undefined) {
       current.report(false);
       return;
     }
     setPinned(false);
     current.hide();
-  }, [setPinned, clearTapOpen]);
+  }, [setPinned, setAppHeld, clearTapOpen]);
 
   const announceName = useCallback(() => {
     const current = optionsRef.current;
@@ -348,6 +376,9 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
 
   const isHeldOpen = useCallback(() => {
     const current = optionsRef.current;
+    if (isAppHeldRef.current && current.isLayerOpen) {
+      return current.isOpen !== false;
+    }
     if (current.triggerBehavior !== 'toggle' || triggerRef.current == null) {
       return false;
     }
@@ -356,15 +387,24 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
       : isPinnedRef.current && current.isLayerOpen;
   }, []);
 
+  // The pin's own trigger listener and the host's listener for an app hold
+  // can both see one focus move; it closes the layer once.
+  const handledFocusEventsRef = useRef(new WeakSet<Event>());
   const handleFocusLeave = useCallback(
     (event: FocusEvent) => {
+      if (handledFocusEventsRef.current.has(event)) {
+        return true;
+      }
+      handledFocusEventsRef.current.add(event);
       // A Space that comes up after focus left presses nothing.
       spaceHeldRef.current = false;
       if (!isHeldOpen()) {
         return false;
       }
       const next = event.relatedTarget;
-      const trigger = triggerRef.current;
+      // A wired toggle trigger, or for an app hold the host's trigger.
+      const trigger =
+        triggerRef.current ?? optionsRef.current.triggerRef.current;
       // Focus that leaves for no element is a press's to decide. The trigger
       // can sit in another document, so the check uses its own window.
       const view = trigger?.ownerDocument.defaultView;
@@ -473,7 +513,31 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
     if (isPinnedRef.current) {
       setPinned(false);
     }
-  }, [setPinned]);
+    if (isAppHeldRef.current) {
+      setAppHeld(false);
+    }
+  }, [setPinned, setAppHeld]);
+
+  const hold = useCallback(() => {
+    const current = optionsRef.current;
+    if (!current.isEnabled) {
+      return;
+    }
+    setAppHeld(true);
+    armOutsideDismiss();
+    announceName();
+    if (current.isOpen !== undefined) {
+      current.report(true);
+      return;
+    }
+    current.show();
+  }, [setAppHeld, armOutsideDismiss, announceName]);
+
+  const release = useCallback(() => {
+    close();
+  }, [close]);
+
+  const isAppHeld = useCallback(() => isAppHeldRef.current, []);
 
   // Each path that hides a pinned layer drops the pin itself, so a layer that
   // does not show is never reported expanded.
@@ -490,13 +554,18 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
     writeAttribute(trigger, 'aria-controls', isLayerOpen ? layerId : null);
   });
 
-  const isPinShown = isToggleMode && isWired && isExpanded;
+  const isPinShown =
+    (isToggleMode && isWired && isExpanded) ||
+    (isAppHeldState && isLayerOpen && isOpen !== false);
 
   return {
     isToggleTrigger,
     isHeldOpen,
     attach,
     unpin,
+    hold,
+    release,
+    isAppHeld,
     handleFocusLeave,
     isPinShown,
     touch: {
