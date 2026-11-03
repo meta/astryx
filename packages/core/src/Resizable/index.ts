@@ -4,12 +4,14 @@
 
 /**
  * @file index.ts
- * @input Imports from useResizable and ResizeHandle
+ * @input Imports from createResizable (its options type), useResizable and
+ *   ResizeHandle
  * @output Re-exports all public Resizable API
  * @position Package entry point for Resizable
  */
 
 export {percent} from './utils';
+export type {CreateResizableOptions} from './createResizable';
 export {useResizable} from './useResizable';
 export type {ResizablePercentSize, ResizableSize} from './utils';
 export type {
@@ -19,6 +21,7 @@ export type {
   ResizableConfig,
   UseResizableSingleConfig,
   UseResizableMultiConfig,
+  UseResizableResult,
 } from './useResizable';
 
 export {ResizeHandle} from './ResizeHandle';

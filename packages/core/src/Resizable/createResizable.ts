@@ -7,9 +7,9 @@
  * @output createResizable; readInitialResizableState for the hook's first
  *   render; createResizableAs and the internal channel for the hooks
  * @position The Resizable family's factory, internal to the package. Its
- *   input is resizeGesture.ts: it listens with it on a plain handle, and
- *   ResizeHandle drives the region through its model. The
- *   configuration-object useResizable builds on it. No DOM work on import
+ *   input is resizeGesture.ts. Both forms of useResizable and ResizeHandle,
+ *   over a `resizable` prop or bound to its element, drive it. Importing it
+ *   does no DOM work
  */
 
 import {registerEnglishFallback} from '../i18n/englishFallback';
@@ -34,10 +34,15 @@ import {
   type ResizableDirection,
 } from './resizableModel';
 import {
+  bindResizeHandle,
   createResizeGesture,
+  isClaimedResizeHandle,
   type ResizeGesture,
   type ResizeGestureModel,
   type ResizeGestureState,
+  type ResizeHandleBinding,
+  type ResizeHandleConfig,
+  type ResizeHandleView,
 } from './resizeGesture';
 import {separatorAttributes} from './separatorAttributes';
 import type {ResizableSize} from './utils';
@@ -48,7 +53,8 @@ registerEnglishFallback(english);
 /**
  * The catalog's messages for a plain handle: its name and what it announces
  * while collapsed, when the options give neither `label` nor
- * `collapsedLabel`. The factory uses the shipped English messages.
+ * `collapsedLabel`. The bare factory uses the shipped English messages;
+ * useResizable gives the provider's translation instead.
  */
 const LABEL_KEY = '@astryx.resizable.handle.label';
 const COLLAPSED_LABEL_KEY = '@astryx.resizable.collapsed';
@@ -95,26 +101,32 @@ export interface CreateResizableOptions {
   onCollapseChange?: (isCollapsed: boolean) => void;
   /**
    * The handle sits before the panel it resizes (the panel is at the end), so
-   * a drag toward the start grows it.
+   * a drag toward the start grows it. On a ResizeHandle, its own
+   * `isReversed` prop does the same: either one reverses the handle.
    * @default false
    */
   isReversed?: boolean;
   /**
    * Ignores pointer and keyboard input and says so; a plain element keeps its
-   * tab stop.
+   * tab stop. On a ResizeHandle, its own `isDisabled` prop does the same:
+   * either one disables the handle.
    * @default false
    */
   isDisabled?: boolean;
   /**
    * A plain element's accessible name, when it has none of its own. Without
-   * it, the factory uses the message catalog's English message.
+   * it, useResizable gives the message catalog's translation, and the bare
+   * factory the catalog's English message. A ResizeHandle takes its own
+   * `label` prop.
    * @default 'Resize handle'
    */
   label?: string;
   /**
    * Replaces the catalog's "Collapsed" that the handle announces as its
-   * `aria-valuetext` while the region is collapsed. Absent, the factory
-   * announces the shipped English message.
+   * `aria-valuetext` while the region is collapsed, a ResizeHandle's
+   * included. Absent, useResizable announces the provider's translation of
+   * the catalog message, and the bare factory, used outside a provider, the
+   * shipped English one.
    * @default 'Collapsed'
    */
   collapsedLabel?: string;
@@ -282,10 +294,26 @@ interface ResizableInternals {
   /** Calls `listener` after every change to the snapshot. */
   subscribeSnapshot(listener: () => void): () => void;
   /**
+   * What a plain handle announces while collapsed: the provider's
+   * translation of the catalog message, or undefined for the English one.
+   */
+  setCollapsedText(text: string | undefined): void;
+  /**
    * Follows the element behind `containerRef` when it has changed without
    * new options, as a React caller's commit may have swapped it.
    */
   syncContainer(): void;
+  /**
+   * Whether the size is a selection (saved, chosen, or the default resolved
+   * against a measured basis), not the temporary basis's stand-in.
+   */
+  hasSelection(): boolean;
+  /**
+   * Makes `size` the region's selection, for a factory that starts where an
+   * old one's region stood. It is not an interaction, so it reports nothing
+   * through onSizeChange and saves nothing.
+   */
+  select(size: number): void;
   /**
    * Lets go of the page and keeps the region. A gesture in flight ends as
    * cancelled, and the handle's listeners, its attributes and the observers
@@ -309,6 +337,28 @@ export function readResizableInternals(
   controller: ResizableController,
 ): ResizableInternals | undefined {
   return internals.get(controller);
+}
+
+/**
+ * Where a region stands: its size as expanded (not the 0 it reports while
+ * collapsed) and whether it is collapsed. A factory for a new handle of the
+ * same region starts from it: the size as its selection, and the collapse
+ * state as its `defaultIsCollapsed`.
+ * Before the container is measured, the default resolves against the
+ * temporary basis. That size is not a selection, so it reads as undefined. A
+ * new factory resolves its own default once it measures.
+ */
+export function readResizableSelection(
+  controller: ResizableController,
+): {size: number | undefined; isCollapsed: boolean} | undefined {
+  const channel = internals.get(controller);
+  const snapshot = channel?.snapshot();
+  return channel == null || snapshot == null
+    ? undefined
+    : {
+        size: channel.hasSelection() ? snapshot.expandedSize : undefined,
+        isCollapsed: snapshot.isCollapsed,
+      };
 }
 
 /** An attribute's value as the DOM takes it; undefined removes it. */
@@ -394,8 +444,23 @@ export function createResizableAs(
   // Let go of the page by `suspend`, with the region kept.
   let isSuspended = false;
   const listeners = new Set<() => void>();
-  const isReversed = (): boolean => opts.isReversed ?? false;
-  const isDisabled = (): boolean => opts.isDisabled ?? false;
+  // A handle ResizeHandle renders: the component renders the separator's
+  // attributes and forwards its events, so the factory adds neither.
+  const isRenderedByResizeHandle =
+    handle != null && isClaimedResizeHandle(handle);
+  // A plain element the factory drives itself: its listeners and attributes.
+  const drivenHandle = isRenderedByResizeHandle ? null : handle;
+  let isDragging = false;
+  let collapsedText: string | undefined;
+  let view: ResizeHandleView | null = null;
+  const viewListeners = new Set<() => void>();
+  // The ResizeHandle's own isReversed and isDisabled, while it renders the
+  // handle: either it or the options reverses or disables the handle.
+  let handleConfig: ResizeHandleConfig | null = null;
+  const isReversed = (): boolean =>
+    (opts.isReversed ?? false) || (handleConfig?.isReversed ?? false);
+  const isDisabled = (): boolean =>
+    (opts.isDisabled ?? false) || (handleConfig?.isDisabled ?? false);
   const didWarn = {
     min: {current: false},
     max: {current: false},
@@ -641,9 +706,10 @@ export function createResizableAs(
         }
       }
     }
-    if (handle != null && !isSuspended) {
+    if (drivenHandle != null && !isSuspended) {
       announce();
     }
+    refreshView();
     persist();
     const reported = {
       size: derived.isCollapsed ? 0 : derived.size,
@@ -708,25 +774,55 @@ export function createResizableAs(
     }
   }
 
+  /** The view a ResizeHandle renders, replaced only when it changes. */
+  function refreshView(): void {
+    if (!isRenderedByResizeHandle) {
+      return;
+    }
+    const next: ResizeHandleView = {
+      size: derived.isCollapsed ? 0 : derived.size,
+      isCollapsed: derived.isCollapsed,
+      minPx: derived.min,
+      effectiveMaxPx: derived.effectiveMax,
+      isDragging,
+      direction: direction(),
+      isReversed: isReversed(),
+      isDisabled: isDisabled(),
+      collapsedLabel: opts.collapsedLabel,
+    };
+    if (
+      view != null &&
+      (Object.keys(next) as (keyof ResizeHandleView)[]).every(
+        key => view?.[key] === next[key],
+      )
+    ) {
+      return;
+    }
+    view = next;
+    for (const listener of [...viewListeners]) {
+      listener();
+    }
+  }
+
   const original = new Map<string, string | null>();
-  if (handle != null) {
+  if (drivenHandle != null) {
     for (const name of MANAGED_ATTRIBUTES) {
-      original.set(name, handle.getAttribute(name));
+      original.set(name, drivenHandle.getAttribute(name));
     }
   }
   const hasOwnName =
-    handle != null &&
-    (handle.hasAttribute('aria-label') ||
-      handle.hasAttribute('aria-labelledby'));
+    drivenHandle != null &&
+    (drivenHandle.hasAttribute('aria-label') ||
+      drivenHandle.hasAttribute('aria-labelledby'));
 
   const setAttribute = (name: string, value: string | null) => {
-    if (handle == null) {
+    if (drivenHandle == null) {
       return;
     }
     if (value == null) {
-      handle.removeAttribute(name);
-    } else if (handle.getAttribute(name) !== value) {
-      handle.setAttribute(name, value);
+      drivenHandle.removeAttribute(name);
+    } else if (drivenHandle.getAttribute(name) !== value) {
+      drivenHandle.setAttribute(name, value);
     }
   };
 
@@ -747,7 +843,8 @@ export function createResizableAs(
         minPx: min,
         maxPx: effectiveMax,
         isCollapsed,
-        collapsedText: opts.collapsedLabel ?? english[COLLAPSED_LABEL_KEY],
+        collapsedText:
+          opts.collapsedLabel ?? collapsedText ?? english[COLLAPSED_LABEL_KEY],
       },
     });
     if (original.get('tabindex') == null) {
@@ -900,7 +997,12 @@ export function createResizableAs(
       isDisabled: isDisabled(),
     }),
     dragging => {
-      setAttribute('data-resizing', dragging ? '' : null);
+      isDragging = dragging;
+      if (isRenderedByResizeHandle) {
+        refreshView();
+      } else {
+        setAttribute('data-resizing', dragging ? '' : null);
+      }
     },
   );
 
@@ -923,13 +1025,13 @@ export function createResizableAs(
     gesture.doubleClick();
   };
   function bindHandle(): void {
-    handle?.addEventListener('pointerdown', onPointerDown);
-    handle?.addEventListener('pointermove', onPointerMove);
-    handle?.addEventListener('pointerup', onPointerUp);
-    handle?.addEventListener('pointercancel', onPointerCancel);
-    handle?.addEventListener('lostpointercapture', onPointerCancel);
-    handle?.addEventListener('keydown', onKeyDown);
-    handle?.addEventListener('dblclick', onDoubleClick);
+    drivenHandle?.addEventListener('pointerdown', onPointerDown);
+    drivenHandle?.addEventListener('pointermove', onPointerMove);
+    drivenHandle?.addEventListener('pointerup', onPointerUp);
+    drivenHandle?.addEventListener('pointercancel', onPointerCancel);
+    drivenHandle?.addEventListener('lostpointercapture', onPointerCancel);
+    drivenHandle?.addEventListener('keydown', onKeyDown);
+    drivenHandle?.addEventListener('dblclick', onDoubleClick);
   }
 
   /**
@@ -937,13 +1039,13 @@ export function createResizableAs(
    * attributes back; a gesture in flight has ended first.
    */
   function letGoOfPage(): void {
-    handle?.removeEventListener('pointerdown', onPointerDown);
-    handle?.removeEventListener('pointermove', onPointerMove);
-    handle?.removeEventListener('pointerup', onPointerUp);
-    handle?.removeEventListener('pointercancel', onPointerCancel);
-    handle?.removeEventListener('lostpointercapture', onPointerCancel);
-    handle?.removeEventListener('keydown', onKeyDown);
-    handle?.removeEventListener('dblclick', onDoubleClick);
+    drivenHandle?.removeEventListener('pointerdown', onPointerDown);
+    drivenHandle?.removeEventListener('pointermove', onPointerMove);
+    drivenHandle?.removeEventListener('pointerup', onPointerUp);
+    drivenHandle?.removeEventListener('pointercancel', onPointerCancel);
+    drivenHandle?.removeEventListener('lostpointercapture', onPointerCancel);
+    drivenHandle?.removeEventListener('keydown', onKeyDown);
+    drivenHandle?.removeEventListener('dblclick', onDoubleClick);
     stopObservingContainer?.();
     stopObservingContainer = null;
     containerElement = null;
@@ -958,6 +1060,28 @@ export function createResizableAs(
 
   bindHandle();
   commit();
+
+  const binding: ResizeHandleBinding = {
+    gesture,
+    read: () => view as ResizeHandleView,
+    configure(config) {
+      if (isDestroyed) {
+        return;
+      }
+      handleConfig = config;
+      refreshView();
+    },
+    subscribe(listener) {
+      viewListeners.add(listener);
+      return () => {
+        viewListeners.delete(listener);
+      };
+    },
+  };
+  const unbind =
+    handle != null && isRenderedByResizeHandle
+      ? bindResizeHandle(handle, binding)
+      : null;
 
   const controller: ResizableController = {
     get size() {
@@ -997,6 +1121,8 @@ export function createResizableAs(
       // than the factory's own, ends the same way.
       endGesture();
       isDestroyed = true;
+      unbind?.();
+      viewListeners.clear();
       if (!isSuspended) {
         letGoOfPage();
       }
@@ -1013,6 +1139,14 @@ export function createResizableAs(
       };
     },
     model,
+    hasSelection: () => chosenSize != null,
+    select(size) {
+      if (isDestroyed) {
+        return;
+      }
+      chosenSize = size;
+      commit();
+    },
     suspend() {
       if (isDestroyed || isSuspended) {
         return;
@@ -1029,6 +1163,15 @@ export function createResizableAs(
       isSuspended = false;
       bindHandle();
       commit();
+    },
+    setCollapsedText(text) {
+      if (isDestroyed || text === collapsedText) {
+        return;
+      }
+      collapsedText = text;
+      if (drivenHandle != null && !isSuspended) {
+        announce();
+      }
     },
     syncContainer() {
       if (isDestroyed || isSuspended) {
