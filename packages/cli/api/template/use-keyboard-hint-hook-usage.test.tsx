@@ -44,12 +44,25 @@ function focus(element: HTMLElement): void {
   act(() => element.focus());
 }
 
-function pressKey(key: string): void {
+function pressKey(key: string, init: KeyboardEventInit = {}): boolean {
+  let isPrevented = false;
   act(() => {
-    document.activeElement?.dispatchEvent(
-      new KeyboardEvent('keydown', {key, bubbles: true}),
-    );
+    const event = new KeyboardEvent('keydown', {
+      key,
+      bubbles: true,
+      cancelable: true,
+      ...init,
+    });
+    document.activeElement?.dispatchEvent(event);
+    isPrevented = event.defaultPrevented;
   });
+  return isPrevented;
+}
+
+function checkedStar(): number {
+  return stars().findIndex(
+    star => star.getAttribute('aria-checked') === 'true',
+  );
 }
 
 beforeEach(() => {
@@ -99,5 +112,48 @@ describe('useKeyboardHint example', () => {
     focus(outside);
     focus(stars()[1]);
     expect(showPopover).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops at both ends instead of wrapping, and the rating follows focus', () => {
+    renderExample();
+    focus(stars()[0]);
+    for (let i = 0; i < 6; i++) {
+      pressKey('ArrowRight');
+    }
+    expect(stars()[4]).toBe(document.activeElement);
+    expect(checkedStar()).toBe(4);
+
+    for (let i = 0; i < 6; i++) {
+      pressKey('ArrowLeft');
+    }
+    expect(stars()[0]).toBe(document.activeElement);
+    expect(checkedStar()).toBe(0);
+  });
+
+  it('keeps one Tab stop on the checked star', () => {
+    renderExample();
+    focus(stars()[0]);
+    pressKey('ArrowRight');
+    pressKey('ArrowRight');
+    expect(stars().map(star => star.tabIndex)).toEqual([-1, -1, 0, -1, -1]);
+  });
+
+  it('follows the arrows visually in right-to-left', () => {
+    renderExample();
+    container.querySelector<HTMLElement>(
+      '[role="radiogroup"]',
+    )!.style.direction = 'rtl';
+    focus(stars()[0]);
+    pressKey('ArrowLeft');
+    expect(stars()[1]).toBe(document.activeElement);
+    expect(checkedStar()).toBe(1);
+  });
+
+  it('leaves an arrow pressed with a modifier to the browser', () => {
+    renderExample();
+    focus(stars()[0]);
+    expect(pressKey('ArrowRight', {altKey: true})).toBe(false);
+    expect(stars()[0]).toBe(document.activeElement);
+    expect(checkedStar()).toBe(-1);
   });
 });

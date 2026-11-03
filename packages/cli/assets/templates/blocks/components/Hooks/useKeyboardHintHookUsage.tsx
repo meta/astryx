@@ -5,7 +5,7 @@
 import {useState, type KeyboardEvent} from 'react';
 import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
-import {useKeyboardHint} from '@astryxdesign/core/hooks';
+import {useKeyboardHint, useListFocus} from '@astryxdesign/core/hooks';
 import {Icon} from '@astryxdesign/core/Icon';
 import {HStack} from '@astryxdesign/core/Layout';
 import {StarIcon as StarOutline} from '@heroicons/react/24/outline';
@@ -17,28 +17,34 @@ export default function UseKeyboardHintHookUsage() {
   const [rating, setRating] = useState(0);
   // Left and Right move the rating, so the hint shows ← →.
   const hint = useKeyboardHint({orientation: 'horizontal'});
+  // Moves focus between the stars, right-to-left aware and stopping at the
+  // ends; the tab stop stays with the checked star below.
+  const list = useListFocus<HTMLElement>({
+    itemSelector: '[role="radio"]',
+    orientation: 'horizontal',
+    wrap: false,
+    hasHomeEnd: false,
+  });
 
   const handleKeyDown = (e: KeyboardEvent<HTMLElement>) => {
     // Dismisses the hint on the first arrow press; never prevents the key.
     hint.onKeyDown(e);
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') {
-      return;
+    list.handleKeyDown(e);
+    // The hook prevents the arrows it handled, so the rating follows focus.
+    if (
+      (e.key === 'ArrowLeft' || e.key === 'ArrowRight') &&
+      e.defaultPrevented
+    ) {
+      setRating(
+        list.getItems().indexOf(document.activeElement as HTMLElement) + 1,
+      );
     }
-    e.preventDefault();
-    const isRtl = getComputedStyle(e.currentTarget).direction === 'rtl';
-    const step = (e.key === 'ArrowRight') !== isRtl ? 1 : -1;
-    const stars = Array.from(
-      e.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]'),
-    );
-    const current = stars.indexOf(e.target as HTMLElement);
-    const next = Math.min(stars.length - 1, Math.max(0, current + step));
-    setRating(next + 1);
-    stars[next].focus();
   };
 
   return (
     <Card padding={4}>
       <HStack
+        ref={list.listRef}
         gap={1}
         role="radiogroup"
         aria-label="Rating"
