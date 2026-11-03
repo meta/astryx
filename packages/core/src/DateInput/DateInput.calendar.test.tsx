@@ -8,11 +8,23 @@
  * @position Testing; validates DateInput typed entry with a calendar
  */
 
-import {afterAll, beforeAll, describe, expect, it, vi} from 'vitest';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 import {fireEvent, render, screen, within} from '@testing-library/react';
 import {Temporal as TemporalPolyfill} from 'temporal-polyfill/full';
 import {DateInput, type DateInputProps} from './DateInput';
 import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
+import {formatCalendarDateHint} from '../utils/calendarDateParser';
+import type {ISODateString} from '../utils/dateTypes';
+import {plainDateFromISO} from '../utils/plainDate';
 
 const host = globalThis as {Temporal?: unknown};
 const hadTemporal = host.Temporal != null;
@@ -191,6 +203,51 @@ describe('DateInput typed entry with a calendar', () => {
     expect(input).toHaveAttribute('placeholder', 'Select a date');
   });
 
+  describe('format hint example date', () => {
+    // 2026-11-07 is a Saturday.
+    beforeEach(() => {
+      vi.useFakeTimers({toFake: ['Date']});
+      vi.setSystemTime(new Date(2026, 10, 7, 12));
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function hintFor(props: Partial<DateInputProps>) {
+      const {input} = renderField('en', {calendar: 'persian', ...props});
+      fireEvent.focus(input);
+      return input.getAttribute('placeholder');
+    }
+    const hintOf = (iso: ISODateString) =>
+      `e.g., ${formatCalendarDateHint(plainDateFromISO(iso), 'en', 'persian')}`;
+
+    it('uses max when max is before today', () => {
+      expect(hintFor({max: '2026-03-15'})).toBe(hintOf('2026-03-15'));
+    });
+
+    it('uses min when min is after today', () => {
+      expect(hintFor({min: '2027-02-01'})).toBe(hintOf('2027-02-01'));
+    });
+
+    it('uses the nearest weekday when today is a disabled Saturday', () => {
+      expect(
+        hintFor({
+          dateConstraints: [date => date.getDay() !== 0 && date.getDay() !== 6],
+        }),
+      ).toBe(hintOf('2026-11-06'));
+    });
+  });
+
+  it('shows a caller placeholder instead of the format hint', () => {
+    const {input} = renderField('en', {
+      calendar: 'persian',
+      placeholder: 'Pick a day',
+    });
+    fireEvent.focus(input);
+    expect(input).toHaveValue('');
+    expect(input).toHaveAttribute('placeholder', 'Pick a day');
+  });
+
   it('opens its calendar in the same calendar', () => {
     const {input} = renderField('en', {
       calendar: 'persian',
@@ -205,6 +262,37 @@ describe('DateInput typed entry with a calendar', () => {
   it('names the calendar in the description', () => {
     const {input} = renderField('en', {calendar: 'hebrew'});
     expect(input).toHaveAccessibleDescription('Dates use the Hebrew Calendar');
+  });
+
+  it('names no calendar when the field uses the provider calendar', () => {
+    render(
+      <InternationalizationProvider locale="fa-IR" calendar="persian">
+        <DateInput label="Date" onChange={vi.fn()} />
+      </InternationalizationProvider>,
+    );
+    const input = screen.getByRole('combobox');
+    expect(input).not.toHaveAttribute('aria-describedby');
+    fireEvent.focus(input);
+    expect(input.getAttribute('placeholder')).toMatch(/^e\.g\./);
+  });
+
+  it('names the Gregorian calendar inside a Persian provider', () => {
+    render(
+      <InternationalizationProvider locale="en" calendar="persian">
+        <DateInput label="Date" calendar="gregory" onChange={vi.fn()} />
+      </InternationalizationProvider>,
+    );
+    const input = screen.getByRole('combobox');
+    expect(input).toHaveAccessibleDescription(
+      'Dates use the Gregorian Calendar',
+    );
+    fireEvent.focus(input);
+    expect(input).toHaveAttribute('placeholder', 'Select a date');
+  });
+
+  it('names the Persian calendar without a provider calendar', () => {
+    const {input} = renderField('en', {calendar: 'persian'});
+    expect(input).toHaveAccessibleDescription('Dates use the Persian Calendar');
   });
 
   it('keeps the Gregorian field free of a hint and a calendar description', () => {
@@ -246,6 +334,52 @@ describe('DateInput onChange while typing a Gregorian date', () => {
     expect(onChange).not.toHaveBeenCalled();
     fireEvent.keyDown(input, {key: 'Enter'});
     expect(onChange).toHaveBeenCalledExactlyOnceWith('2026-01-25');
+  });
+
+  it('commits a day-first date that does not exist month-first, on blur only', () => {
+    const {input, onChange} = renderField('en-US');
+    typeSlowly(input, '13/5/2026');
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('2026-05-13');
+  });
+
+  it('commits a month-first date that does not exist day-first, on blur', () => {
+    const {input, onChange} = renderField('en-GB');
+    fireEvent.change(input, {target: {value: '5/13/2026'}});
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('2026-05-13');
+  });
+
+  it.each([
+    ['en-GB', '31/02/2026'],
+    ['en-US', '2/30/2026'],
+  ])(
+    'still rejects a Gregorian date that does not exist in either order (%s %s)',
+    (locale, text) => {
+      const {input, onChange, container} = renderField(locale);
+      fireEvent.change(input, {target: {value: text}});
+      fireEvent.blur(input);
+      expect(input).toHaveValue(text);
+      expect(within(container).getByRole('alert')).toHaveTextContent(
+        'This date does not exist in the Gregorian Calendar',
+      );
+      expect(onChange).not.toHaveBeenCalled();
+    },
+  );
+
+  it('never reads a date that does not exist in another calendar with parseDateInput', () => {
+    const {input, onChange, container} = renderField('en', {
+      calendar: 'persian',
+    });
+    fireEvent.change(input, {target: {value: '13/5/1405 AP'}});
+    fireEvent.blur(input);
+    expect(input).toHaveValue('13/5/1405 AP');
+    expect(within(container).getByRole('alert')).toHaveTextContent(
+      'This date does not exist in the Persian Calendar',
+    );
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it('does not fire again on blur for a date it already reported', () => {

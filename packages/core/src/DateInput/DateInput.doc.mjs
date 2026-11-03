@@ -101,7 +101,8 @@ export const docs = {
     {
       name: 'placeholder',
       type: 'string',
-      description: 'Placeholder text shown in the text input.',
+      description:
+        'Placeholder text shown in the text input. A caller placeholder replaces the calendar format hint.',
       default: "'Select a date'",
     },
     {
@@ -479,7 +480,8 @@ export const docsZh = {
     {
       name: 'placeholder',
       type: 'string',
-      description: '文本输入框中显示的占位符文本。',
+      description:
+        '文本输入框中显示的占位符文本。调用方提供的占位符会替代日历格式提示。',
       default: "'Select a date'",
     },
     {

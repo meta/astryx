@@ -104,6 +104,39 @@ describe('DateTimeInput typed date entry with a calendar', () => {
     expect(input.getAttribute('placeholder')).toMatch(/^e\.g\., .+ AP$/);
   });
 
+  it('shows a caller placeholder instead of the format hint', () => {
+    const {input} = renderField('en', {
+      calendar: 'persian',
+      placeholder: 'Pick a day',
+    });
+    fireEvent.focus(input);
+    expect(input).toHaveValue('');
+    expect(input).toHaveAttribute('placeholder', 'Pick a day');
+  });
+
+  it('names no calendar when the field uses the provider calendar', () => {
+    render(
+      <InternationalizationProvider locale="fa-IR" calendar="persian">
+        <DateTimeInput label="Meeting" onChange={vi.fn()} />
+      </InternationalizationProvider>,
+    );
+    const input = screen.getByRole('combobox');
+    expect(input).not.toHaveAttribute('aria-describedby');
+    fireEvent.focus(input);
+    expect(input.getAttribute('placeholder')).toMatch(/^e\.g\./);
+  });
+
+  it('names the Gregorian calendar inside a Persian provider', () => {
+    render(
+      <InternationalizationProvider locale="en" calendar="persian">
+        <DateTimeInput label="Meeting" calendar="gregory" onChange={vi.fn()} />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByRole('combobox')).toHaveAccessibleDescription(
+      'Dates use the Gregorian Calendar',
+    );
+  });
+
   it('commits Gregorian text that only parseDateInput reads on blur', () => {
     const {input, onChange} = renderField('en-US');
     fireEvent.change(input, {target: {value: '2026-01-25 10:00'}});
@@ -111,6 +144,15 @@ describe('DateTimeInput typed date entry with a calendar', () => {
     fireEvent.blur(input);
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange.mock.calls[0][0]).toMatch(/^2026-01-25T/);
+  });
+
+  it('commits a day-first date that does not exist month-first, on blur only', () => {
+    const {input, onChange} = renderField('en-US');
+    typeSlowly(input, '13/5/2026');
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0]).toMatch(/^2026-05-13T/);
   });
 
   it('fires once for a day-first Gregorian date typed one key at a time', () => {

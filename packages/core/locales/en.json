@@ -1137,7 +1137,7 @@
   },
   "@astryx.dateInput.calendarDescription": {
     "defaultMessage": "Dates use the {calendar}",
-    "description": "Screen-reader-only description of a DateInput / DateTimeInput date field that uses a calendar other than the Gregorian calendar. {calendar} is the calendar's localized name from the platform, such as \"Persian Calendar\"."
+    "description": "Screen-reader-only description of a DateInput / DateTimeInput date field whose calendar differs from the app's calendar, such as a Persian field in a Gregorian app or a Gregorian field in a Persian app. {calendar} is the calendar's localized name from the platform, such as \"Persian Calendar\" or \"Gregorian Calendar\"."
   },
   "@astryx.dateInput.resetPicking": {
     "defaultMessage": "Reset",

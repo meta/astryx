@@ -454,7 +454,8 @@ export interface DateTimeInputProps extends Omit<
   hasClear?: boolean;
 
   /**
-   * Placeholder text shown in the date portion when no date is selected.
+   * Placeholder text shown in the date portion when no date is selected. A
+   * caller placeholder replaces the calendar format hint.
    * @default "Select a date"
    */
   placeholder?: string;
@@ -869,7 +870,9 @@ function PointerDateTimeField({
 
   const isDateInputValid = dateTypedError == null;
   const dateFormatHint =
-    isDateFocused && !dateDisplayValue ? typedDate.getFormatHint() : null;
+    placeholderFromProps == null && isDateFocused && !dateDisplayValue
+      ? typedDate.getFormatHint()
+      : null;
 
   // --- Time input state ---
   const [timePendingInput, setTimePendingInput] = useState<string | null>(null);

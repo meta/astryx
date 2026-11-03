@@ -32,6 +32,7 @@ import type {ISODateString, PlainDate} from '../utils/dateTypes';
 import {parseDateInput} from '../utils/dateParser';
 import {
   type SharedDateFormat,
+  nearestAcceptedDate,
   plainDateFromISO,
   plainDateIsAfter,
   plainDateIsBefore,
@@ -62,9 +63,13 @@ export interface TypedDate {
   prepare: () => void;
   parse: (text: string) => CalendarDateParseResult;
   formatCommitted: (value: ISODateString) => string;
-  /** An example date for an empty focused field, or null for Gregorian. */
+  /**
+   * An example date for an empty focused field, or null for Gregorian. The
+   * example is today when the field accepts it, else the nearest date it
+   * accepts.
+   */
   getFormatHint: () => string | null;
-  /** Names the calendar, or null for Gregorian. */
+  /** Names the calendar, or null when it is the provider's calendar. */
   calendarDescription: string | null;
   /** The message for a rejected result. */
   errorMessage: (result: CalendarDateParseResult) => string;
@@ -105,6 +110,7 @@ export function useTypedDate({
   const t = useComponentTranslator();
   const locale = useLocale();
   const calendar = useCalendarSystem(calendarProp, source);
+  const providerCalendar = useCalendarSystem(undefined, source);
   const isGregorian = calendar === 'gregory' || calendar === 'iso8601';
 
   const prepare = useCallback(() => {
@@ -118,11 +124,16 @@ export function useTypedDate({
         getCalendarDateLexicon(locale, calendar),
         {isoIsGregorian: format === 'system_date', isDateDisabled},
       );
-      if (result.kind !== 'unreadable' || !isGregorian) {
+      if (
+        !isGregorian ||
+        (result.kind !== 'unreadable' && result.kind !== 'nonexistent')
+      ) {
         return result;
       }
       // Gregorian text that only parseDateInput reads still commits, on Enter
-      // or blur only: it is never complete while the person types.
+      // or blur only: it is never complete while the person types. This
+      // includes a day-first date in a month-first locale, which
+      // parseDateInput reads by swapping the order.
       const date = parseDateInput(text, locale);
       if (date == null) {
         return result;
@@ -147,15 +158,19 @@ export function useTypedDate({
     [format, locale, calendar],
   );
 
-  const getFormatHint = useCallback(
-    () =>
-      isGregorian
-        ? null
-        : t('@astryx.dateInput.formatHint', {
-            example: formatCalendarDateHint(plainDateToday(), locale, calendar),
-          }),
-    [isGregorian, t, locale, calendar],
-  );
+  const getFormatHint = useCallback(() => {
+    if (isGregorian) {
+      return null;
+    }
+    const example = nearestAcceptedDate(plainDateToday(), {
+      min: min != null ? plainDateFromISO(min) : null,
+      max: max != null ? plainDateFromISO(max) : null,
+      isDateDisabled,
+    });
+    return t('@astryx.dateInput.formatHint', {
+      example: formatCalendarDateHint(example, locale, calendar),
+    });
+  }, [isGregorian, t, locale, calendar, min, max, isDateDisabled]);
 
   const calendarName = useMemo(
     () => calendarDisplayName(calendar, locale),
@@ -205,9 +220,10 @@ export function useTypedDate({
     parse,
     formatCommitted,
     getFormatHint,
-    calendarDescription: isGregorian
-      ? null
-      : t('@astryx.dateInput.calendarDescription', {calendar: calendarName}),
+    calendarDescription:
+      calendar === providerCalendar
+        ? null
+        : t('@astryx.dateInput.calendarDescription', {calendar: calendarName}),
     errorMessage,
   };
 }

@@ -316,7 +316,8 @@ export interface DateInputProps extends Omit<
   dateConstraints?: ReadonlyArray<(date: Date) => boolean>;
 
   /**
-   * Placeholder text shown when no date is selected.
+   * Placeholder text shown when no date is selected. A caller placeholder
+   * replaces the calendar format hint.
    * @default "Select a date"
    */
   placeholder?: string;
@@ -692,7 +693,9 @@ function PointerDateField({
 
   const isInputValid = typedError == null;
   const formatHint =
-    isFocused && !displayValue ? typedDate.getFormatHint() : null;
+    placeholderFromProps == null && isFocused && !displayValue
+      ? typedDate.getFormatHint()
+      : null;
 
   const fieldElementRef = useRef<HTMLDivElement | null>(null);
   // Set just before a close that focus already left the field for, so onHide
