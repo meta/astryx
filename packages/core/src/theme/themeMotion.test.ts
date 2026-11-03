@@ -29,10 +29,13 @@ import {durationDefaults, easeDefaults} from './tokens.stylex';
 const TODAY_MS = [130, 175, 230, 310, 410, 550, 730, 975, 1300];
 const STANDARD = 'cubic-bezier(0.24, 1, 0.4, 1)';
 
+/** The duration tokens whose default is a literal, not a reference. */
+const BAND_DURATIONS = Object.entries(durationDefaults)
+  .filter(([, value]) => !value.startsWith('var('))
+  .map(([name]) => name);
+
 function durationsMs(tokens: Readonly<Record<string, string>>): number[] {
-  return Object.keys(durationDefaults).map(name =>
-    Number.parseFloat(tokens[name]),
-  );
+  return BAND_DURATIONS.map(name => Number.parseFloat(tokens[name]));
 }
 
 describe('the motion knobs (spec:AST-108 FR1)', () => {
@@ -240,6 +243,38 @@ describe('existing motion configuration (spec:AST-108 FR5)', () => {
         },
       }),
     ).toThrow(/reducedMotion is a theme-wide setting/);
+  });
+});
+
+describe('--duration-exit (spec:AST-090 FR12)', () => {
+  it('defaults to --duration-fast', () => {
+    expect(durationDefaults['--duration-exit']).toBe('var(--duration-fast)');
+    expect(resolveThemeMotion({}).durations['--duration-exit']).toBe('175ms');
+  });
+
+  it('follows tempo through --duration-fast, and tempo writes no value for it', () => {
+    const tokens = expandThemeMotion({tempo: 1.2});
+    expect(tokens).not.toHaveProperty('--duration-exit');
+    expect(tokens).not.toHaveProperty('--_astryx-pre-tempo-duration-exit');
+    expect(Object.values(tokens).some(value => value.includes('NaN'))).toBe(
+      false,
+    );
+    expect(
+      resolveThemeMotion({motion: {tempo: 1.2}}).durations['--duration-exit'],
+    ).toBe(`${Math.round(175 * 1.2)}ms`);
+  });
+
+  it('takes a theme override', () => {
+    expect(
+      resolveThemeMotion({tokens: {'--duration-exit': '90ms'}}).durations[
+        '--duration-exit'
+      ],
+    ).toBe('90ms');
+    const theme = defineTheme({
+      name: 'ExitOverride',
+      tokens: {'--duration-exit': '90ms'},
+    });
+    expect(theme.tokens['--duration-exit']).toBe('90ms');
   });
 });
 

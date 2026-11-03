@@ -307,6 +307,8 @@ export const durationDefaults = {
   '--duration-slow-min': '730ms',
   '--duration-slow': '975ms',
   '--duration-slow-max': '1300ms',
+  /** The standard dismissal duration. A theme turns an exit kind on with it. */
+  '--duration-exit': 'var(--duration-fast)',
 } as const;
 
 export const durationVars = stylex.defineVars(durationDefaults);
