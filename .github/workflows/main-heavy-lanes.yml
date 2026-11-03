@@ -254,7 +254,9 @@ jobs:
                   await github.rest.issues.createComment({
                     ...context.repo,
                     issue_number: issue.number,
-                    body: `The full unit run ${newest.html_url} for ${newest.head_sha.slice(0, 7)} succeeded, so main's full unit runs complete again. Closing.`,
+                    // The commit the run tested: the one it names, or none for an
+                    // unnamed run, which tested main's tip when it started (FR21).
+                    body: `The full unit run ${newest.html_url}${tested(newest) ? ` for ${tested(newest).slice(0, 7)}` : ''} succeeded, so main's full unit runs complete again. Closing.`,
                   });
                   await github.rest.issues.update({...context.repo, issue_number: issue.number, state: 'closed', state_reason: 'completed'});
                 }

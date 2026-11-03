@@ -611,6 +611,8 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
         'https://github.com/meta/astryx/actions/runs/20',
       );
       expect(calls.comments[0].body).toContain('succeeded');
+      // An unnamed run names no commit: it tested main's tip when it started.
+      expect(calls.comments[0].body).not.toMatch(/ for [0-9a-f]{7} /);
       expect(calls.updates).toEqual([
         expect.objectContaining({
           issue_number: 42,
@@ -619,6 +621,17 @@ describe("main's release-check and full unit run, about once an hour (DEC-11, FR
         }),
       ]);
       expect(calls.issues).toEqual([]);
+    });
+
+    it('names the commit a named run tested', async () => {
+      const calls = await run({
+        runs: [check(20, {head_sha: sha})],
+        units: [unitAt(20)],
+        issue: {number: 42, title, user: bot},
+      });
+      expect(calls.comments[0].body).toContain(
+        ` for ${sha.slice(0, 7)} succeeded`,
+      );
     });
 
     it('leaves an issue a person opened with the same title open', async () => {
