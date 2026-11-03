@@ -25,7 +25,7 @@ import {
   fireEvent,
   waitFor,
 } from '@testing-library/react';
-import {useRef} from 'react';
+import {useRef, type ComponentProps} from 'react';
 import {Tooltip, TooltipWithTriggerBehavior} from './Tooltip';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
 import {Item} from '../Item/Item';
@@ -1094,4 +1094,23 @@ describe('Tooltip, and its press-to-pin path, on every input (component:Tooltip 
       }
     },
   );
+});
+
+describe('Tooltip keeps press-to-pin internal', () => {
+  it('a spread props object that carries triggerBehavior at runtime pins nothing', () => {
+    const props = {
+      content: 'Billed monthly',
+      triggerBehavior: 'toggle',
+    } as unknown as ComponentProps<typeof Tooltip>;
+    render(
+      <Tooltip {...props}>
+        <button type="button">Billing</button>
+      </Tooltip>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Billing'});
+    fireEvent.pointerDown(trigger, {pointerType: 'mouse'});
+    fireEvent.pointerUp(trigger, {pointerType: 'mouse'});
+    fireEvent.click(trigger, {detail: 1});
+    expect(trigger).not.toHaveAttribute('aria-expanded');
+  });
 });

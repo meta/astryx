@@ -195,7 +195,9 @@ function mergeIds(...ids: (string | undefined | null)[]): string | undefined {
  * ```
  */
 export function Tooltip(props: TooltipProps): ReactElement {
-  return <TooltipWithTriggerBehavior {...props} />;
+  // Pinned, so a spread object that carries the internal option at runtime
+  // cannot reach the press-to-pin path.
+  return <TooltipWithTriggerBehavior {...props} triggerBehavior="adaptive" />;
 }
 
 /**

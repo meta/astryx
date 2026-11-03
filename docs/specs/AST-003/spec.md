@@ -71,10 +71,10 @@ browsers receive a usable reduced fallback, not equivalent behavior.
   Escape/platform case.
 - **FR4 — Passive dependents never shield owners.** An unpinned Tooltip is
   passive. It does not win or block dismissal and disappears as a consequence
-  when its associated owner or trigger interaction closes. A Tooltip or
-  HoverCard that a press pinned open (`component:Tooltip` FR9,
-  `component:HoverCard` FR9) is an active owner: it takes Escape first and
-  closes, and the owner beneath it stays open for that press (DEC-6).
+  when its associated owner or trigger interaction closes. A Tooltip that a
+  press pinned open (`component:Tooltip` FR9) is an active owner: it takes
+  Escape first and closes, and the owner beneath it stays open for that press
+  (DEC-6).
 - **FR5 — Associations are explicit.** Every active or blocking owner records an
   optional parent owner and an interaction-branch root. A passive dependent
   records its associated owner or trigger without creating an owner node or
@@ -190,8 +190,7 @@ Current `main` does not satisfy this spec completely:
 
 - the stack has `close` and `block` but no passive role; Tooltip currently
   consumes Escape ahead of associated owners;
-- no Tooltip or HoverCard pins open on a press yet (`component:Tooltip` FR9,
-  `component:HoverCard` FR9);
+- no HoverCard pins open on a press;
 - no shared owner/branch association graph or outside-branch resolver exists;
 - DropdownMenuSubMenu has a local parent-close chain, but outside channels do not
   consume shared branch identity;

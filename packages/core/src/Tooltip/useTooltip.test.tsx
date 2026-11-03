@@ -662,3 +662,27 @@ describe('useTooltip’s press-to-pin path with a caller’s trigger (component:
     expect(onRow).not.toHaveBeenCalled();
   });
 });
+
+describe('useTooltip keeps press-to-pin internal', () => {
+  it('an options object that carries triggerBehavior at runtime pins nothing', () => {
+    const options = {
+      triggerBehavior: 'toggle',
+      delay: 0,
+    } as unknown as TooltipOptions;
+    function Tip() {
+      const tooltip = useTooltip(options);
+      return (
+        <>
+          <button type="button" ref={tooltip.ref}>
+            What is this?
+          </button>
+          {tooltip.renderTooltip('Billed monthly')}
+        </>
+      );
+    }
+    render(<Tip />);
+    const trigger = screen.getByRole('button', {name: 'What is this?'});
+    fireEvent.click(trigger, {detail: 1});
+    expect(trigger).not.toHaveAttribute('aria-expanded');
+  });
+});
