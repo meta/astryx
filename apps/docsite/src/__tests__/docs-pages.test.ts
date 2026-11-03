@@ -5,11 +5,16 @@ import {
   mergeFlatTopics,
   namespaceCategory,
   namespacePage,
+  rootNamespacePages,
   sectionAnchors,
   withCliCommands,
 } from '../../scripts/docs-pages.mjs';
 import {buildOutline} from '../components/docs/docOutline';
-import {docTopics, type DocSection} from '../generated/docsRegistry';
+import {
+  docRedirects,
+  docTopics,
+  type DocSection,
+} from '../generated/docsRegistry';
 
 const section = (title: string, text = `${title} text.`) => ({
   title,
@@ -200,6 +205,137 @@ describe('a page for part of a namespace', () => {
       'kit-guides': '/docs/kit-guide',
       'kit-overview': '/docs/kit-guide',
     });
+  });
+});
+
+describe('a nested namespace with a page of its own', () => {
+  const guideNode = (route: string, title: string) => ({
+    route,
+    kind: 'generic',
+    title,
+    sections: [section(title)],
+  });
+  const calendars = {
+    route: 'internationalization/calendars',
+    kind: 'namespace',
+    title: 'Calendars',
+    summary: 'Show dates in other calendars.',
+    content: [{type: 'prose', text: 'Values stay ISO dates.'}],
+    slots: [
+      {
+        name: 'guides',
+        children: [
+          guideNode(
+            'internationalization/calendars/calendar-systems',
+            'Choose a calendar',
+          ),
+        ],
+      },
+    ],
+  };
+  const reader = async (
+    route?: string,
+    _section?: string,
+    options: {depth?: number | 'all'} = {},
+  ) => {
+    if (route === 'internationalization' && options.depth === 'all') {
+      return {
+        type: 'docs.node',
+        data: {
+          route: 'internationalization',
+          kind: 'namespace',
+          title: 'Internationalization',
+          summary: 'Locales and calendars.',
+          content: [],
+          slots: [
+            {
+              name: 'guides',
+              children: [
+                guideNode('internationalization/i18n-quick-start', 'Start'),
+                calendars,
+              ],
+            },
+          ],
+        },
+      };
+    }
+    if (route === 'internationalization/calendars' && options.depth === 'all') {
+      return {type: 'docs.node', data: calendars};
+    }
+    return {type: 'docs.detail', data: {category: 'guide', sections: []}};
+  };
+
+  it('leaves the nested namespace off its root page', async () => {
+    const {root} = await rootNamespacePages(reader, 'internationalization');
+    const page = root?.page as {
+      topic: string;
+      sections: Array<{title: string}>;
+    };
+    expect(page.topic).toBe('internationalization');
+    expect(page.sections.map(s => s.title)).toEqual(['Start']);
+    expect(root?.redirects).toEqual({
+      'internationalization-i18n-quick-start':
+        '/docs/internationalization#start',
+    });
+  });
+
+  it('gives it a full page at its slug, under its root page', async () => {
+    const {nested} = await rootNamespacePages(reader, 'internationalization');
+    expect(nested).toHaveLength(1);
+    const [calendarsPage] = nested;
+    expect(calendarsPage.page).toMatchObject({
+      topic: 'internationalization-calendars',
+      title: 'Calendars',
+      description: 'Show dates in other calendars.',
+      category: 'guide',
+      parent: 'internationalization',
+    });
+    const page = calendarsPage.page as {sections: Array<{title: string}>};
+    expect(page.sections.map(s => s.title)).toEqual([
+      'Overview',
+      'Choose a calendar',
+    ]);
+    expect(calendarsPage.redirects).toEqual({
+      'internationalization-calendars-calendar-systems':
+        '/docs/internationalization-calendars#choose-a-calendar',
+    });
+  });
+
+  it('keeps a root namespace with no nested page to one page', async () => {
+    const {root, nested} = await rootNamespacePages(
+      splitReader([
+        {
+          route: 'widgets/basics',
+          title: 'Basics',
+          category: 'foundations',
+          sections: widgetsBefore.sections,
+        },
+      ]),
+      'widgets',
+    );
+    expect(root?.page).toEqual(widgetsBefore);
+    expect(nested).toEqual([]);
+  });
+});
+
+describe('the docs registry', () => {
+  it('shows Calendars on its own page under Internationalization', () => {
+    const calendarsPage = docTopics.find(
+      topic => topic.topic === 'internationalization-calendars',
+    );
+    expect(calendarsPage).toMatchObject({
+      title: 'Calendars',
+      category: 'guide',
+      parent: 'internationalization',
+    });
+    const i18n = docTopics.find(
+      topic => topic.topic === 'internationalization',
+    );
+    expect(i18n?.parent).toBeUndefined();
+    expect(
+      docRedirects['internationalization-calendars-calendar-systems'],
+    ).toMatch(/^\/docs\/internationalization-calendars#/);
+    expect(docRedirects).not.toHaveProperty('internationalization-calendars');
   });
 });
 

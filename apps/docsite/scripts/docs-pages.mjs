@@ -11,8 +11,9 @@
  * @input A docs reader with the CLI docs API's shape
  *   (`docs(topic, section, options)` from `@astryxdesign/cli/api`) and the
  *   flat topics the site already built.
- * @output Doc pages ({topic, title, description, category, sections}) and
- *   redirects from each guide's own slug to its section on the full page.
+ * @output Doc pages ({topic, title, description, category, sections, and
+ *   `parent` for a nested namespace's page}) and redirects from each guide's
+ *   own slug to its section on the full page.
  * @position Used by generate-data.mjs; tested on its own with a fake reader.
  */
 
@@ -34,6 +35,17 @@ export const GUIDE_PAGE_NAMESPACES = new Set(['cli']);
  * @type {Map<string, Array<{route: string, slug: string, title: string, except?: string[], aliases?: string[]}>>}
  */
 export const GUIDE_NAMESPACE_PAGES = new Map();
+
+/**
+ * Nested namespaces that have a page of their own instead of a part of their
+ * root namespace's page. The root page leaves each one out, and each one is a
+ * full page at its route's slug, with `parent` set to the root page's slug so
+ * the sidebar shows it under that page.
+ * @type {Map<string, string[]>}
+ */
+export const NESTED_NAMESPACE_PAGES = new Map([
+  ['internationalization', ['internationalization/calendars']],
+]);
 
 /**
  * Older slugs of a root namespace's page, which redirect to it: global mode
@@ -283,6 +295,32 @@ export async function namespacePage(readDocs, route, options = {}) {
     },
     redirects,
   };
+}
+
+/**
+ * The pages of a root namespace: its own page without the nested namespaces
+ * NESTED_NAMESPACE_PAGES names, and one page for each of those, marked with
+ * the root page as its `parent`. A namespace with no guide below it has no
+ * page.
+ * @param {(topic?: string, section?: string, options?: object) => Promise<any>} readDocs
+ * @param {string} root
+ * @param {{aliases?: string[]}} [options] older slugs of the root page
+ * @returns {Promise<{root: {page: object, redirects: Record<string, string>} | null, nested: Array<{page: object, redirects: Record<string, string>}>}>}
+ */
+export async function rootNamespacePages(readDocs, root, options = {}) {
+  const nestedRoutes = NESTED_NAMESPACE_PAGES.get(root) ?? [];
+  const rootPage = await namespacePage(readDocs, root, {
+    aliases: options.aliases ?? [],
+    except: nestedRoutes,
+  });
+  const nested = [];
+  for (const route of nestedRoutes) {
+    const page = await namespacePage(readDocs, route, {slug: routeSlug(route)});
+    if (!page) continue;
+    if (rootPage) page.page.parent = rootPage.page.topic;
+    nested.push(page);
+  }
+  return {root: rootPage, nested};
 }
 
 /**
