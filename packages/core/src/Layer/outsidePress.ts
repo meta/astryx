@@ -4,7 +4,8 @@
 
 /**
  * @file outsidePress.ts
- * @input Listens for pointer presses on a document
+ * @input Listens for pointer presses on a document, and on a shadow root when
+ *   given one; with closesOnPan, for a pan's moves through core's input stream
  * @output Exports watchOutsidePress and useOutsidePress, which owns one watch
  *   for a component: start on show, stop on hide, stop on unmount;
  *   noteOutsideDismissal and outsideDismissalCount, a per-document count of
@@ -21,10 +22,14 @@
  * browser took the gesture for a scroll or a pinch) forgets it. Inside is
  * judged on the event's composed path, so a field or list inside an open
  * shadow root, which the document sees as its shadow host, is still inside.
+ * A watch given a closed shadow root judges a press's start and lift there.
+ * With closesOnPan, the press also closes the layer as it begins to pan, or
+ * when the browser takes it.
  */
 
 import {useCallback, useEffect, useMemo, useRef} from 'react';
 import {UIKIT_PAN} from '../motion/uikit/gestures';
+import {shadowHostOf} from '../utils/flatTree';
 import {subscribeInput} from '../utils/inputStream';
 
 export interface OutsidePressOptions {
@@ -38,8 +43,8 @@ export interface OutsidePressOptions {
   readonly closesOnPan?: boolean;
   /**
    * The shadow root the layer renders in. The document sees a press inside a
-   * closed shadow root as a press on its host, so the root judges it too,
-   * after the document.
+   * closed shadow root as a press on its host. So the root judges a press's
+   * start after the document, and a lift inside it before its host does.
    */
   readonly root?: Node | null;
 }
@@ -66,6 +71,7 @@ export function outsideDismissalCount(doc: Document): number {
  *   watched.
  * @param isInside - Whether a press with this composed path is inside.
  * @param onOutside - Called once for each press that starts and ends outside.
+ *   With `closesOnPan`, also when that press pans or is cancelled.
  * @returns Stops watching.
  */
 export function watchOutsidePress(
@@ -75,14 +81,14 @@ export function watchOutsidePress(
   {pointerTypes, closesOnPan = false, root = null}: OutsidePressOptions = {},
 ): () => void {
   const doc = owner.ownerDocument;
+  const host = root == null ? null : shadowHostOf(root);
   let startedOutside = false;
-  // The pointer a pan follows, and where it went down.
-  let pointer: {id: number; x: number; y: number} | null = null;
+  let panStart: {id: number; x: number; y: number} | null = null;
   const follows = (event: PointerEvent) =>
     pointerTypes == null || pointerTypes.includes(event.pointerType);
   const close = () => {
     startedOutside = false;
-    pointer = null;
+    panStart = null;
     onOutside();
   };
 
@@ -92,41 +98,63 @@ export function watchOutsidePress(
     if (!follows(event)) {
       return;
     }
-    if (closesOnPan && pointer != null && pointer.id !== event.pointerId) {
+    if (closesOnPan && panStart != null && panStart.id !== event.pointerId) {
       return;
     }
     startedOutside = !isInside(event.composedPath());
     if (closesOnPan) {
-      pointer = startedOutside
+      panStart = startedOutside
         ? {id: event.pointerId, x: event.clientX, y: event.clientY}
         : null;
     }
   };
   const handleMove = (event: PointerEvent) => {
     if (
-      pointer?.id === event.pointerId &&
+      panStart?.id === event.pointerId &&
       Math.max(
-        Math.abs(event.clientX - pointer.x),
-        Math.abs(event.clientY - pointer.y),
+        Math.abs(event.clientX - panStart.x),
+        Math.abs(event.clientY - panStart.y),
       ) >= UIKIT_PAN.hysteresis.value
     ) {
       close();
     }
   };
-  const handleUp = (event: PointerEvent) => {
-    if (!follows(event) || (closesOnPan && pointer?.id !== event.pointerId)) {
+  const judgeUp = (event: PointerEvent) => {
+    if (!follows(event) || (closesOnPan && panStart?.id !== event.pointerId)) {
       return;
     }
     const wasOutside = startedOutside;
     startedOutside = false;
-    pointer = null;
+    panStart = null;
     if (wasOutside && !isInside(event.composedPath())) {
       noteOutsideDismissal(doc);
       onOutside();
     }
   };
+  // The document sees a lift inside a closed root as a lift on its host, and
+  // so does the host. So the root judges a lift inside it on the way down.
+  // The host judges, on the way back up, a lift the root did not judge.
+  let liftJudgedInRoot: Event | null = null;
+  const handleUp = (event: PointerEvent) => {
+    if (host == null || !event.composedPath().includes(host)) {
+      judgeUp(event);
+    }
+  };
+  const handleRootUp = (event: PointerEvent) => {
+    liftJudgedInRoot = event;
+    judgeUp(event);
+  };
+  const handleHostUp = (event: PointerEvent) => {
+    if (event !== liftJudgedInRoot) {
+      judgeUp(event);
+    }
+    liftJudgedInRoot = null;
+  };
   const handleCancel = (event: PointerEvent) => {
-    if (closesOnPan && pointer?.id === event.pointerId) {
+    if (!follows(event)) {
+      return;
+    }
+    if (closesOnPan && panStart?.id === event.pointerId) {
       close();
     } else if (!closesOnPan) {
       startedOutside = false;
@@ -144,6 +172,10 @@ export function watchOutsidePress(
       ? subscribeInput(view, 'pointermove', handleMove)
       : null;
   doc.addEventListener('pointerup', handleUp, true);
+  if (host != null) {
+    root?.addEventListener('pointerup', handleRootUp as EventListener, true);
+    host.addEventListener('pointerup', handleHostUp as EventListener);
+  }
   doc.addEventListener('pointercancel', handleCancel, true);
   return () => {
     for (const target of judges) {
@@ -155,6 +187,14 @@ export function watchOutsidePress(
     }
     stopMoves?.();
     doc.removeEventListener('pointerup', handleUp, true);
+    if (host != null) {
+      root?.removeEventListener(
+        'pointerup',
+        handleRootUp as EventListener,
+        true,
+      );
+      host.removeEventListener('pointerup', handleHostUp as EventListener);
+    }
     doc.removeEventListener('pointercancel', handleCancel, true);
   };
 }
