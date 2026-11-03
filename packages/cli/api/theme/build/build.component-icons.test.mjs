@@ -1,13 +1,14 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file Built themes carry static component icon slots and resolve them as
- *   runtime.
+ * @file Built themes carry component icon slots and resolve them as runtime.
  * @input Real themeBuild and themeBuildFamily calls on source themes whose
- *   `componentIcons` hold names, `null`, and requests, and on a theme with a
- *   slot function.
- * @output Native ESM loads that resolve each slot under the built and the
- *   runtime theme and read the `componentIcons` view; a rejected build.
+ *   `componentIcons` hold static values and slot functions: an imported map, a
+ *   child with inline static slots and an imported slot function, a theme
+ *   extending a built module, a theme extending a package theme, and a family.
+ * @output Native ESM loads that resolve every slot for each state under the
+ *   built and the runtime theme, read the static `componentIcons` view, and
+ *   render CodeBlock's copy button.
  * @position Theme build parity for component icon slots. The node project's
  *   global setup supplies the compiled core package.
  */
@@ -36,20 +37,60 @@ function write(file, source) {
   fs.writeFileSync(path.join(tmpDir, file), source);
 }
 
+const SLOT_FUNCTIONS = `export const copySlot = ({copied}) =>
+  copied ? {icon: 'checkDouble', size: 'lg'} : {icon: 'clock'};
+export const baseSlots = {
+  'code-block-copy': copySlot,
+  'parity-panel-dismiss': {icon: 'close', size: 'sm'},
+  'parity-nav-leading': ({selected}) => (selected ? null : undefined),
+};
+`;
+
+/** A base with an imported slot map, and a child with inline slots. */
+function writeLineage() {
+  write('base/slots.mjs', SLOT_FUNCTIONS);
+  write(
+    'base/source.mjs',
+    `import {defineTheme} from '@astryxdesign/core/theme';
+import {baseSlots} from './slots.mjs';
+export const baseTheme = defineTheme({
+  name: 'slots-base', tokens: {}, componentIcons: baseSlots,
+});
+export default baseTheme;
+`,
+  );
+  write(
+    'child/source.mjs',
+    `import {defineTheme} from '@astryxdesign/core/theme';
+import {baseTheme} from '../base/source.mjs';
+import {copySlot} from '../base/slots.mjs';
+export const childTheme = defineTheme({
+  name: 'slots-child', extends: baseTheme, tokens: {},
+  componentIcons: {
+    'parity-panel-dismiss': null,
+    'parity-tab-close': {size: 'xsm'},
+    'parity-copy-again': copySlot,
+    'parity-nav-leading': undefined,
+  },
+});
+export default childTheme;
+`,
+  );
+}
+
 /** @param {string} file */
 async function buildAndCheck(file) {
   const built = await themeBuild(file, {}, {cwd: tmpDir});
   expect(built?.type).toBe('theme.build');
   const checked = await themeBuild(file, {check: true}, {cwd: tmpDir});
   expect(checked?.data.upToDate).toBe(true);
+  return built;
 }
-
-const SLOTS = ['code-block-copy', 'parity-panel-dismiss', 'parity-tab-close'];
 
 /**
  * Load built and runtime themes with native Node and report, for each pair,
- * how each slot resolves for the copy button's states and what
- * `componentIcons` reads back.
+ * how every slot resolves for each state, the static view, and the glyph in
+ * CodeBlock's copy button.
  *
  * @param {Array<{label: string, built: string, runtime: string}>} pairs -
  *   Module specifiers with `#export` suffixes, relative to the fixture root.
@@ -64,19 +105,40 @@ function inspect(pairs) {
     [
       '--input-type=module',
       '--eval',
-      `const {resolveComponentIcon} = await import(
+      `import {createElement} from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {CodeBlock} from '@astryxdesign/core/CodeBlock';
+import {Theme} from '@astryxdesign/core/theme';
+const {resolveComponentIcon} = await import(
   import.meta.resolve('@astryxdesign/core/Icon').replace(/index\\.js$/, 'globalIconRegistry.js')
 );
+const SLOTS = {
+  'code-block-copy': [{copied: false}, {copied: true}],
+  'parity-copy-again': [{copied: false}, {copied: true}],
+  'parity-panel-dismiss': [undefined],
+  'parity-tab-close': [undefined],
+  'parity-nav-leading': [{selected: false}, {selected: true}],
+};
+const copyGlyph = theme => {
+  const html = renderToStaticMarkup(
+    createElement(Theme, {theme}, createElement(CodeBlock, {code: 'x'})),
+  );
+  return /astryx-code-block-copy-button[^>]*>(.*?)<\\/button>/s.exec(html)?.[1] ?? null;
+};
 const describe = theme => ({
   resolved: Object.fromEntries(
-    ${JSON.stringify(SLOTS)}.flatMap(slot =>
-      [false, true].map(copied => [
-        slot + '|' + copied,
-        resolveComponentIcon(slot, {copied}, {icon: copied ? 'check' : 'copy', size: 'sm'}, theme),
+    Object.entries(SLOTS).flatMap(([slot, states]) =>
+      states.map(state => [
+        slot + '|' + JSON.stringify(state ?? null),
+        resolveComponentIcon(slot, state, {icon: 'copy', size: 'sm'}, theme),
       ]),
     ),
   ),
   componentIcons: theme.componentIcons ?? null,
+  staticViewHasFunction: Object.values(theme.componentIcons ?? {}).some(
+    value => typeof value === 'function',
+  ),
+  copyGlyph: copyGlyph(theme),
 });
 const result = {};
 ${pairs
@@ -95,53 +157,23 @@ process.stdout.write(JSON.stringify(result));`,
   return JSON.parse(output);
 }
 
-function writeLineage() {
-  write(
-    'base/source.mjs',
-    `import {defineTheme} from '@astryxdesign/core/theme';
-export const baseTheme = defineTheme({
-  name: 'slots-base', tokens: {},
-  componentIcons: {'code-block-copy': 'clock', 'parity-panel-dismiss': {icon: 'close', size: 'sm'}},
-});
-export default baseTheme;
-`,
-  );
-  write(
-    'child/source.mjs',
-    `import {defineTheme} from '@astryxdesign/core/theme';
-import {baseTheme} from '../base/source.mjs';
-export const childTheme = defineTheme({
-  name: 'slots-child', extends: baseTheme, tokens: {},
-  componentIcons: {'parity-panel-dismiss': null, 'parity-tab-close': {size: 'xsm'}, 'code-block-copy': undefined},
-});
-export default childTheme;
-`,
-  );
-}
-
-describe('built themes keep static component icon slots', () => {
-  it('resolve every slot as the runtime theme does, through a built base', async () => {
+describe('built themes keep component icon slots', () => {
+  it('resolve every slot and state as the runtime theme does', async () => {
     writeLineage();
     await buildAndCheck('base/source.mjs');
-    // A child extends the BUILT base module.
+    await buildAndCheck('child/source.mjs');
+    // A grandchild extends the BUILT child module and adds a static slot.
     write(
-      'built-child/source.mjs',
+      'grandchild/source.mjs',
       `import {defineTheme} from '@astryxdesign/core/theme';
-import {slotsBaseTheme} from '../base/slots-base.js';
+import {slotsChildTheme} from '../child/slots-child.js';
 export default defineTheme({
-  name: 'slots-built-child', extends: slotsBaseTheme, tokens: {},
+  name: 'slots-grandchild', extends: slotsChildTheme, tokens: {},
   componentIcons: {'parity-tab-close': 'menu'},
 });
 `,
     );
-    await buildAndCheck('child/source.mjs');
-    await buildAndCheck('built-child/source.mjs');
-
-    const module = fs.readFileSync(
-      path.join(tmpDir, 'base/slots-base.js'),
-      'utf8',
-    );
-    expect(module).not.toMatch(/^import /m);
+    await buildAndCheck('grandchild/source.mjs');
 
     const result = inspect([
       {
@@ -155,30 +187,144 @@ export default defineTheme({
         runtime: './child/source.mjs#default',
       },
       {
-        label: 'builtChild',
-        built: './built-child/slots-built-child.js#slotsBuiltChildTheme',
-        runtime: './built-child/source.mjs#default',
+        label: 'grandchild',
+        built: './grandchild/slots-grandchild.js#slotsGrandchildTheme',
+        runtime: './grandchild/source.mjs#default',
       },
     ]);
+
     for (const {built, runtime} of Object.values(result)) {
       expect(built).toEqual(runtime);
+      expect(built.staticViewHasFunction).toBe(false);
     }
-    expect(result.child.built.componentIcons).toEqual({
-      'code-block-copy': 'clock',
+
+    const child = result.child.built;
+    expect(child.resolved).toEqual({
+      'code-block-copy|{"copied":false}': {icon: 'clock', size: 'sm'},
+      'code-block-copy|{"copied":true}': {icon: 'checkDouble', size: 'lg'},
+      'parity-copy-again|{"copied":false}': {icon: 'clock', size: 'sm'},
+      'parity-copy-again|{"copied":true}': {icon: 'checkDouble', size: 'lg'},
+      'parity-panel-dismiss|null': {icon: null, size: 'sm'},
+      'parity-tab-close|null': {icon: 'copy', size: 'xsm'},
+      // An undefined entry inherits the base's slot function.
+      'parity-nav-leading|{"selected":false}': {icon: 'copy', size: 'sm'},
+      'parity-nav-leading|{"selected":true}': {icon: null, size: 'sm'},
+    });
+    // The static view leaves out every slot function.
+    expect(child.componentIcons).toEqual({
       'parity-panel-dismiss': null,
       'parity-tab-close': {size: 'xsm'},
     });
-    expect(result.builtChild.built.resolved).toMatchObject({
-      'code-block-copy|true': {icon: 'clock', size: 'sm'},
-      'parity-panel-dismiss|false': {icon: 'close', size: 'sm'},
-      'parity-tab-close|false': {icon: 'menu', size: 'sm'},
+    expect(result.grandchild.built.resolved['parity-tab-close|null']).toEqual({
+      icon: 'menu',
+      size: 'sm',
+    });
+    expect(child.copyGlyph).toContain('data-size="sm"');
+  });
+
+  it('writes static slots as JSON with no import', async () => {
+    write(
+      'static.mjs',
+      `import {defineTheme} from '@astryxdesign/core/theme';
+export default defineTheme({
+  name: 'slots-static', tokens: {},
+  componentIcons: {'code-block-copy': 'clock', 'parity-panel-dismiss': null},
+});
+`,
+    );
+    await buildAndCheck('static.mjs');
+
+    const module = fs.readFileSync(
+      path.join(tmpDir, 'slots-static.js'),
+      'utf8',
+    );
+    expect(module).not.toMatch(/^import /m);
+    expect(module).not.toContain('__componentIcons');
+    const {staticSlots} = inspect([
+      {
+        label: 'staticSlots',
+        built: './slots-static.js#slotsStaticTheme',
+        runtime: './static.mjs#default',
+      },
+    ]);
+    expect(staticSlots.built).toEqual(staticSlots.runtime);
+    expect(staticSlots.built.componentIcons).toEqual({
+      'code-block-copy': 'clock',
+      'parity-panel-dismiss': null,
     });
   });
 
-  it('keeps static slots in a family build', async () => {
+  it('keeps the slot functions of a package theme it extends', async () => {
+    const pkg = 'node_modules/@fixture/slot-functions';
+    write(
+      `${pkg}/package.json`,
+      JSON.stringify({
+        name: '@fixture/slot-functions',
+        type: 'module',
+        exports: './index.mjs',
+      }),
+    );
+    write(`${pkg}/slots.mjs`, SLOT_FUNCTIONS);
+    write(
+      `${pkg}/index.mjs`,
+      `import {defineTheme} from '@astryxdesign/core/theme';
+import {baseSlots} from './slots.mjs';
+export const packageTheme = defineTheme({
+  name: 'slots-package', tokens: {}, componentIcons: baseSlots,
+});
+`,
+    );
+    write(
+      'package-child.mjs',
+      `import {defineTheme} from '@astryxdesign/core/theme';
+import {packageTheme} from '@fixture/slot-functions';
+export default defineTheme({
+  name: 'slots-package-child', extends: packageTheme, tokens: {},
+  componentIcons: {'parity-tab-close': 'menu'},
+});
+`,
+    );
+    await buildAndCheck('package-child.mjs');
+
+    const {packageChild} = inspect([
+      {
+        label: 'packageChild',
+        built: './slots-package-child.js#slotsPackageChildTheme',
+        runtime: './package-child.mjs#default',
+      },
+    ]);
+
+    expect(packageChild.built).toEqual(packageChild.runtime);
+    expect(
+      packageChild.built.resolved['code-block-copy|{"copied":true}'],
+    ).toEqual({icon: 'checkDouble', size: 'lg'});
+  });
+
+  it('keeps slot functions in a family build', async () => {
     writeLineage();
+    // A member that sets no slots of its own inherits the child's values.
+    write(
+      'inherit/source.mjs',
+      `import {defineTheme} from '@astryxdesign/core/theme';
+import {childTheme} from '../child/source.mjs';
+export default defineTheme({name: 'slots-inherit', extends: childTheme, tokens: {}});
+`,
+    );
+    // The child's inline slot function cannot be carried in family output;
+    // a family child supplies its own static slots only.
+    write(
+      'child/source.mjs',
+      `import {defineTheme} from '@astryxdesign/core/theme';
+import {baseTheme} from '../base/source.mjs';
+export const childTheme = defineTheme({
+  name: 'slots-child', extends: baseTheme, tokens: {},
+  componentIcons: {'parity-panel-dismiss': null, 'parity-tab-close': {size: 'xsm'}},
+});
+export default childTheme;
+`,
+    );
     const receipt = await themeBuildFamily(
-      ['base/source.mjs', 'child/source.mjs'],
+      ['base/source.mjs', 'child/source.mjs', 'inherit/source.mjs'],
       {familyKey: 'slots-family'},
       {cwd: tmpDir},
     );
@@ -196,41 +342,74 @@ export default defineTheme({
         built: `${familyModule}#slotsChildTheme`,
         runtime: './child/source.mjs#default',
       },
+      {
+        label: 'inherit',
+        built: `${familyModule}#slotsInheritTheme`,
+        runtime: './inherit/source.mjs#default',
+      },
     ]);
+
     expect(result.base.built).toEqual(result.base.runtime);
     expect(result.child.built).toEqual(result.child.runtime);
+    expect(result.inherit.built).toEqual(result.inherit.runtime);
+    expect(
+      result.child.built.resolved['code-block-copy|{"copied":true}'],
+    ).toEqual({icon: 'checkDouble', size: 'lg'});
   });
 });
 
-describe('a slot function fails the build', () => {
+describe('the static view never captures a slot binding', () => {
+  it.each(['slot', 'Object'])(
+    'loads a built theme whose slot map is imported as `%s`',
+    async binding => {
+      write('slots.mjs', SLOT_FUNCTIONS);
+      write(
+        'bound.mjs',
+        `import {defineTheme} from '@astryxdesign/core/theme';
+import {baseSlots as ${binding}} from './slots.mjs';
+export default defineTheme({name: 'bound-slots', tokens: {}, componentIcons: ${binding}});
+`,
+      );
+      await buildAndCheck('bound.mjs');
+
+      const {bound} = inspect([
+        {
+          label: 'bound',
+          built: './bound-slots.js#boundSlotsTheme',
+          runtime: './bound.mjs#default',
+        },
+      ]);
+      expect(bound.built).toEqual(bound.runtime);
+      expect(bound.built.componentIcons).toEqual({
+        'parity-panel-dismiss': {icon: 'close', size: 'sm'},
+      });
+    },
+  );
+});
+
+describe('a slot function the build cannot carry fails the build', () => {
   it.each([
     [
       'an inline slot function',
       `componentIcons: {'code-block-copy': ({copied}) => ({icon: copied ? 'check' : 'copy'})}`,
     ],
     [
-      'an imported slot function',
-      `componentIcons: {'code-block-copy': copySlot}`,
+      'a slot function beside a spread map',
+      `componentIcons: {...baseSlots, 'code-block-copy': () => null}`,
     ],
   ])('rejects %s before writing', async (_label, field) => {
-    write('slots.mjs', `export const copySlot = () => ({icon: 'clock'});\n`);
+    write('slots.mjs', SLOT_FUNCTIONS);
     write(
-      'functions.mjs',
+      'inline.mjs',
       `import {defineTheme} from '@astryxdesign/core/theme';
-import {copySlot} from './slots.mjs';
-export default defineTheme({name: 'slot-functions', tokens: {}, ${field}});
+import {baseSlots} from './slots.mjs';
+export default defineTheme({name: 'inline-slots', tokens: {}, ${field}});
 `,
     );
 
     await expect(
-      themeBuild('functions.mjs', {}, {cwd: tmpDir}),
-    ).rejects.toMatchObject({
-      code: 'ERR_THEME_INVALID',
-      message: expect.stringContaining('componentIcons["code-block-copy"]'),
-    });
-    expect(fs.readdirSync(tmpDir).sort()).toEqual([
-      'functions.mjs',
-      'slots.mjs',
-    ]);
+      themeBuild('inline.mjs', {}, {cwd: tmpDir}),
+    ).rejects.toMatchObject({code: 'ERR_THEME_INVALID'});
+    expect(fs.readdirSync(tmpDir).sort()).toEqual(['inline.mjs', 'slots.mjs']);
   });
 });

@@ -1,11 +1,13 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * Resolve importable icon registries for the selected theme export.
+ * Resolve importable icon registries, or component icon slot maps, for the
+ * selected theme export.
  *
- * @input Loaded theme export identity, plus the caller's source reader and the
- *   theme loader's resolver (this module performs no environment access).
- * @output Import bindings and an expression preserving inherited icon registries.
+ * @input Loaded theme export identity, the theme field to carry (`icons` or
+ *   `componentIcons`), plus the caller's source reader and the theme loader's
+ *   resolver (this module performs no environment access).
+ * @output Import bindings and an expression preserving inherited values.
  * @position Private theme-build packaging helper; never evaluates authored source.
  */
 
@@ -25,10 +27,16 @@ import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 
 /** @typedef {{kind: 'reference', module: any, binding: any, members: string[]}} RegistryReference */
 /**
- * `entries` marks a package theme read for its icon entries: its node-valued
- * `icons` merged with the `__icons` that hold its function entries, if any.
- * @typedef {{kind: 'registry', ref: RegistryReference, preferredName: string, override?: boolean, entries?: boolean} | {kind: 'merge', base: RegistryPlan, own: RegistryPlan}} RegistryPlan
+ * `entries` marks a package theme read for its entries: its public field
+ * (node-valued `icons`, or the static `componentIcons` view) merged with the
+ * `__` field that holds its functions, if any. `object` is an inline
+ * `componentIcons` object: each slot is a static value or an imported one.
+ * @typedef {{literal: unknown} | {ref: RegistryReference}} SlotValue
+ * @typedef {{kind: 'registry', ref: RegistryReference, preferredName: string, override?: boolean, entries?: boolean} | {kind: 'merge', base: RegistryPlan, own: RegistryPlan} | {kind: 'object', entries: Array<[string, SlotValue]>}} RegistryPlan
  */
+
+/** Marks a node that is not a static JSON value. */
+const NOT_STATIC = Symbol('not static');
 
 /** @param {any} node */
 function unwrap(node) {
@@ -83,8 +91,20 @@ function bindingNames(pattern) {
   return [];
 }
 
-/** @param {string} [name] @param {string} [reason] @returns {never} */
-function invalidRegistry(name, reason = '') {
+/** @param {string} [name] @param {string} [reason] @param {string} [field] @returns {never} */
+function registryError(name, reason = '', field = 'icons') {
+  if (field === 'componentIcons') {
+    const value = name ? `\`componentIcons: ${name}\`` : 'componentIcons';
+    throw new AstryxError(
+      `Theme sets ${value} but the build cannot carry its slot functions. ` +
+        'The generated module keeps a slot function only through an import; ' +
+        'it cannot copy a function defined in the theme file. ' +
+        (reason ? `${reason} ` : '') +
+        'Move the slot functions to their own module and import them into the theme file.',
+      undefined,
+      ERROR_CODES.ERR_THEME_INVALID,
+    );
+  }
   const registry = name ? `\`icons: ${name}\`` : 'an icon registry';
   throw new AstryxError(
     `Theme sets ${registry} but no import for the registry was found. ` +
@@ -106,9 +126,13 @@ function invalidRegistry(name, reason = '') {
  * base is read for its entries (`__icons`) as well as its node-valued `icons`,
  * and a built base module's `__icons` field is followed instead of `icons`.
  *
+ * With `field: 'componentIcons'`, the same tracing carries a theme's slot
+ * values: a slot function must come from an import, and an inline object may
+ * also hold static values (names, `null`, requests), written as JSON.
+ *
  * @param {string} filePath
  * @param {string | undefined} exportName
- * @param {{hasIcons: boolean, functionEntries?: boolean, readSource: (filename: string) => string, resolveModule: (specifier: string, fromFile: string) => string | Promise<string>, reservedNames?: string[], rawInput?: boolean}} options
+ * @param {{hasIcons: boolean, functionEntries?: boolean, field?: 'icons' | 'componentIcons', readSource: (filename: string) => string, resolveModule: (specifier: string, fromFile: string) => string | Promise<string>, reservedNames?: string[], rawInput?: boolean}} options
  * @returns {Promise<IconImports | null>}
  */
 export async function resolveIconImports(
@@ -117,12 +141,19 @@ export async function resolveIconImports(
   {
     hasIcons,
     functionEntries = false,
+    field = 'icons',
     readSource,
     resolveModule,
     reservedNames = [],
     rawInput = false,
   },
 ) {
+  const entriesField = `__${field}`;
+  const staticSlots = field === 'componentIcons';
+  const defaultName = staticSlots ? 'themeComponentIcons' : 'themeIcons';
+  /** @param {string} [name] @param {string} [reason] @returns {never} */
+  const invalidRegistry = (name, reason) => registryError(name, reason, field);
+
   if (exportName === undefined) {
     if (!hasIcons) return null;
     invalidRegistry(
@@ -410,11 +441,11 @@ export async function resolveIconImports(
     // `__icons`. Read both only when the built theme needs its functions, so
     // a theme without them keeps its existing output.
     return functionEntries
-      ? {kind: 'registry', ref, preferredName: 'themeIcons', entries: true}
+      ? {kind: 'registry', ref, preferredName: defaultName, entries: true}
       : {
           kind: 'registry',
-          ref: {...ref, members: [...ref.members, 'icons']},
-          preferredName: 'themeIcons',
+          ref: {...ref, members: [...ref.members, field]},
+          preferredName: defaultName,
         };
   }
 
@@ -474,13 +505,15 @@ export async function resolveIconImports(
         return {
           kind: 'registry',
           ref,
-          preferredName: preferredName ?? 'themeIcons',
+          preferredName: preferredName ?? defaultName,
           // A namespace's exported registry can be redirected to an icon module;
           // a named theme's .icons cannot be imported from that sidecar.
           override:
             ref.binding.importedName === '*' && ref.members.length === 1,
         };
     }
+    if (staticSlots && node?.type === 'ObjectExpression')
+      return slotObject(module, node);
     // Spreads merge in order. An object adding no entries, such as `{}`, is no
     // local registry: a child keeps its inherited icons and a root emits none.
     if (
@@ -501,6 +534,119 @@ export async function resolveIconImports(
     invalidRegistry(preferredName ?? rootIdentifier(node) ?? undefined);
   }
 
+  /**
+   * The JSON value of a static node: a string, number, boolean, `null`,
+   * `undefined`, or an object of those. Anything else is NOT_STATIC.
+   * @param {any} module @param {any} node @returns {unknown}
+   */
+  function staticValue(module, node) {
+    node = unwrap(node);
+    if (node?.type === 'NullLiteral') return null;
+    if (
+      ['StringLiteral', 'NumericLiteral', 'BooleanLiteral', 'Literal'].includes(
+        node?.type,
+      ) &&
+      (node.value === null || typeof node.value !== 'object')
+    )
+      return node.value;
+    if (node?.type === 'TemplateLiteral' && node.expressions.length === 0)
+      return node.quasis[0].value.cooked;
+    if (
+      (node?.type === 'Identifier' &&
+        node.name === 'undefined' &&
+        !module.bindings.has(node.name)) ||
+      (node?.type === 'UnaryExpression' && node.operator === 'void')
+    )
+      return undefined;
+    if (node?.type !== 'ObjectExpression') return NOT_STATIC;
+    /** @type {Record<string, unknown>} */
+    const value = {};
+    for (const item of node.properties) {
+      const key =
+        ['ObjectProperty', 'Property'].includes(item.type) &&
+        !item.method &&
+        (!item.kind || item.kind === 'init')
+          ? item.computed
+            ? typeof item.key?.value === 'string'
+              ? item.key.value
+              : null
+            : propertyName(item.key)
+          : null;
+      if (key === null) return NOT_STATIC;
+      const entry = staticValue(module, item.value);
+      if (entry === NOT_STATIC) return NOT_STATIC;
+      if (entry !== undefined) value[key] = entry;
+    }
+    return value;
+  }
+
+  /** @param {any} module @param {any} node @param {string} slot @returns {Promise<SlotValue>} */
+  async function slotValue(module, node, slot) {
+    const literal = staticValue(module, node);
+    if (literal !== NOT_STATIC) return {literal};
+    node = unwrap(node);
+    if (node?.type === 'Identifier') {
+      return guarded(`${module.filename}:slot:${node.name}`, async () => {
+        const binding = checkedBinding(module, node.name);
+        if (binding.kind === 'const')
+          return slotValue(module, binding.node, slot);
+        return {ref: importedReference(module, binding)};
+      });
+    }
+    if (node?.type === 'MemberExpression') {
+      const ref = await reference(module, node);
+      if (ref) return {ref};
+    }
+    invalidRegistry(
+      undefined,
+      `The value for "${slot}" is defined in the theme file.`,
+    );
+  }
+
+  /**
+   * An inline `componentIcons` object. Spreads and own slots apply in source
+   * order. An `undefined` slot is left out, so the inherited value stays.
+   * @param {any} module @param {any} node @returns {Promise<RegistryPlan | null>}
+   */
+  async function slotObject(module, node) {
+    /** @type {RegistryPlan | null} */
+    let result = null;
+    /** @type {Array<[string, SlotValue]> | null} */
+    let entries = null;
+    /** @param {RegistryPlan | null} next */
+    const add = next => {
+      if (next)
+        result = result ? {kind: 'merge', base: result, own: next} : next;
+    };
+    for (const item of node.properties) {
+      if (item.type === 'SpreadElement' || item.type === 'SpreadProperty') {
+        if (entries) add({kind: 'object', entries});
+        entries = null;
+        add(await registry(module, item.argument));
+        continue;
+      }
+      const key =
+        ['ObjectProperty', 'Property'].includes(item.type) &&
+        !item.method &&
+        (!item.kind || item.kind === 'init')
+          ? item.computed
+            ? typeof item.key?.value === 'string'
+              ? item.key.value
+              : null
+            : propertyName(item.key)
+          : null;
+      if (key === null)
+        invalidRegistry(
+          undefined,
+          'A slot must be a plain property with a static name.',
+        );
+      entries ??= [];
+      entries.push([key, await slotValue(module, item.value, key)]);
+    }
+    if (entries) add({kind: 'object', entries});
+    return result;
+  }
+
   /** @param {any} module @param {any} node @returns {Promise<Map<string, any>>} */
   async function fields(module, node) {
     node = unwrap(node);
@@ -516,7 +662,7 @@ export async function resolveIconImports(
       if (ref) return referenceFields(ref);
     }
     if (node?.type === 'CallExpression' && isDefineTheme(module, node.callee)) {
-      return new Map([['icons', {plan: await theme(module, node)}]]);
+      return new Map([[field, {plan: await theme(module, node)}]]);
     }
     if (node?.type !== 'ObjectExpression') invalidRegistry();
     const result = new Map();
@@ -533,7 +679,7 @@ export async function resolveIconImports(
         : propertyName(item.key);
       if (key === null)
         invalidRegistry(undefined, 'Computed theme keys cannot be resolved.');
-      if (!['icons', '__icons', 'extends'].includes(key)) continue;
+      if (![field, entriesField, 'extends'].includes(key)) continue;
       if (
         !['ObjectProperty', 'Property'].includes(item.type) ||
         item.method ||
@@ -586,9 +732,9 @@ export async function resolveIconImports(
     }
     const config = await fields(module, node);
     const baseField = config.get('extends');
-    // A built module keeps its function entries in `__icons` beside its
-    // node-valued `icons`; the entries are the registry to carry.
-    const iconField = config.get('__icons') ?? config.get('icons');
+    // A built module keeps its functions in `__icons` (or `__componentIcons`)
+    // beside the public view; those entries are the values to carry.
+    const iconField = config.get(entriesField) ?? config.get(field);
     const base = baseField
       ? await theme(baseField.module, baseField.node)
       : null;
@@ -626,7 +772,7 @@ export async function resolveIconImports(
       /^[A-Za-z_$][\w$]*$/u.test(preferred) &&
       !['default', 'await', 'yield'].includes(preferred)
         ? preferred
-        : 'themeIcons';
+        : defaultName;
     let name = stem;
     let counter = 1;
     while (used.has(name)) name = `${stem}${counter++}`;
@@ -652,19 +798,8 @@ export async function resolveIconImports(
     return relative.startsWith('.') ? relative : `./${relative}`;
   }
 
-  /** @param {RegistryPlan} value @returns {{expression: string, preferredName: string, overridePath?: string, overrideLocalName?: string}} */
-  function render(value) {
-    if (value.kind === 'merge') {
-      const base = render(value.base);
-      const own = render(value.own);
-      return {
-        expression: `{...${base.expression}, ...${own.expression}}`,
-        preferredName: 'themeIcons',
-        overridePath: own.overridePath,
-        overrideLocalName: own.overrideLocalName,
-      };
-    }
-    const {ref} = value;
+  /** @param {RegistryReference} ref */
+  function importedTarget(ref) {
     const source = importPath(ref);
     const identity = `${source}\0${ref.binding.importedName}\0${JSON.stringify(ref.members)}`;
     let localName = emitted.get(identity);
@@ -677,12 +812,46 @@ export async function resolveIconImports(
         localName,
       });
     }
-    const target = ref.members.reduce(
-      (result, member) => `${result}[${JSON.stringify(member)}]`,
+    return {
+      source,
       localName,
-    );
+      target: ref.members.reduce(
+        (result, member) => `${result}[${JSON.stringify(member)}]`,
+        localName,
+      ),
+    };
+  }
+
+  /** @param {RegistryPlan} value @returns {{expression: string, preferredName: string, overridePath?: string, overrideLocalName?: string}} */
+  function render(value) {
+    if (value.kind === 'merge') {
+      const base = render(value.base);
+      const own = render(value.own);
+      return {
+        expression: `{...${base.expression}, ...${own.expression}}`,
+        preferredName: defaultName,
+        overridePath: own.overridePath,
+        overrideLocalName: own.overrideLocalName,
+      };
+    }
+    if (value.kind === 'object') {
+      const properties = value.entries
+        .filter(
+          ([, slot]) => !('literal' in slot) || slot.literal !== undefined,
+        )
+        .map(
+          ([slot, entry]) =>
+            `${JSON.stringify(slot)}: ${'ref' in entry ? importedTarget(entry.ref).target : JSON.stringify(entry.literal)}`,
+        );
+      return {
+        expression: `{${properties.join(', ')}}`,
+        preferredName: defaultName,
+      };
+    }
+    const {ref} = value;
+    const {source, localName, target} = importedTarget(ref);
     const expression = value.entries
-      ? `{...${target}["icons"], ...${target}["__icons"]}`
+      ? `{...${target}[${JSON.stringify(field)}], ...${target}[${JSON.stringify(entriesField)}]}`
       : target;
     return {
       expression,

@@ -2089,7 +2089,7 @@ export async function validateThemePrivateInputs(
  *   import { defaultIconRegistry } from './icons';
  *   icons: defaultIconRegistry,
  * @param {string} filePath
- * @param {'icons' | 'indicators'} field
+ * @param {'icons' | 'indicators' | 'componentIcons'} field
  * @returns {{exportName: string, importPath: string} | null}
  */
 function extractRegistryInfo(filePath, field) {
@@ -2179,6 +2179,53 @@ function themeComponentIcons(theme) {
 }
 
 /**
+ * The generated code that reads the static view of a theme's slot values:
+ * every slot without a function. Like the icon node view, it reads no global
+ * and declares only reserved local names.
+ * @param {string} valuesName - A reserved local name bound to the values.
+ * @param {string} viewName - A reserved local name.
+ * @returns {string}
+ */
+function componentIconViewExpression(valuesName, viewName) {
+  return `(() => {
+  const ${viewName} = {};
+  for (const slot in ${valuesName}) {
+    if (typeof ${valuesName}[slot] !== 'function') ${viewName}[slot] = ${valuesName}[slot];
+  }
+  return ${viewName};
+})()`;
+}
+
+/**
+ * One import statement for a carried registry or slot binding. Ordinary named
+ * imports stay byte-compatible; paths with quotes or escapes are encoded, and
+ * default, namespace, and aliased bindings are kept.
+ * @param {{importPath: string, importedName: string, localName: string}} binding
+ * @param {string} [specifier] - Replaces the import path when given.
+ * @returns {string}
+ */
+function importStatement({importPath, importedName, localName}, specifier) {
+  const source =
+    specifier !== undefined
+      ? JSON.stringify(specifier)
+      : /['\\\r\n]/u.test(importPath)
+        ? JSON.stringify(importPath)
+        : `'${importPath}'`;
+  const imported = /^[$\p{ID_Start}][$\u200c\u200d\p{ID_Continue}]*$/u.test(
+    importedName,
+  )
+    ? importedName
+    : JSON.stringify(importedName);
+  const binding =
+    importedName === 'default'
+      ? localName
+      : importedName === '*'
+        ? `* as ${localName}`
+        : `{ ${imported}${importedName === localName ? '' : ` as ${localName}`} }`;
+  return `import ${binding} from ${source};\n`;
+}
+
+/**
  * Generate a minimal JS module for a built theme.
  * Includes the theme name, marker, and re-exports the icon registry.
  * All styling is in the CSS file.
@@ -2204,13 +2251,15 @@ function themeComponentIcons(theme) {
  * renders, and the theme's `icons` and the re-exported registry are the node
  * view, each function read at `{size: 'md'}` as `DefinedTheme['icons']` is.
  *
- * Component icon slot values are names, `null`, and requests, written as
- * JSON. A slot function cannot be serialized, so it fails the build.
+ * Component icon slots without a function are written as JSON. When a slot
+ * value is a function, the module keeps the values, carried through
+ * `componentIconInfo`'s imports, as `__componentIcons`, and the theme's
+ * `componentIcons` is the static view, as `DefinedTheme['componentIcons']` is.
  *
  * @param {any} themeDef
  * @param {import('./icon-imports.mjs').IconImports | null} iconInfo
  * @param {string} [iconsSpecifier] - Overrides the selected registry specifier.
- * @param {{themeBinding?: string, iconsExpression?: string, indicatorsExpression?: string, artifactBaseName?: string, exportIcons?: boolean}} [moduleOptions]
+ * @param {{themeBinding?: string, iconsExpression?: string, indicatorsExpression?: string, artifactBaseName?: string, exportIcons?: boolean, componentIconInfo?: {imports: import('./icon-imports.mjs').IconImports['imports'], expression: string} | null}} [moduleOptions]
  * @returns {string}
  */
 function generateBuiltModule(
@@ -2223,32 +2272,17 @@ function generateBuiltModule(
     moduleOptions.themeBinding ?? `${toIdentifier(themeDef.name)}Theme`;
   const artifactBaseName = moduleOptions.artifactBaseName ?? themeDef.name;
   const exportIcons = moduleOptions.exportIcons ?? true;
-  // Keep ordinary direct named imports byte-compatible, while encoding paths
-  // with quotes/escapes and retaining default, namespace, and aliased bindings.
   const iconImport = (iconInfo?.imports ?? [])
-    .map(({importPath, importedName, localName}) => {
-      const overridden =
+    .map(binding =>
+      importStatement(
+        binding,
         iconsSpecifier !== undefined &&
-        importPath === iconInfo?.iconsSpecifierImportPath &&
-        localName === iconInfo?.iconsSpecifierLocalName;
-      const specifier = overridden
-        ? JSON.stringify(iconsSpecifier)
-        : /['\\\r\n]/u.test(importPath)
-          ? JSON.stringify(importPath)
-          : `'${importPath}'`;
-      const imported = /^[$\p{ID_Start}][$\u200c\u200d\p{ID_Continue}]*$/u.test(
-        importedName,
-      )
-        ? importedName
-        : JSON.stringify(importedName);
-      const binding =
-        importedName === 'default'
-          ? localName
-          : importedName === '*'
-            ? `* as ${localName}`
-            : `{ ${imported}${importedName === localName ? '' : ` as ${localName}`} }`;
-      return `import ${binding} from ${specifier};\n`;
-    })
+          binding.importPath === iconInfo?.iconsSpecifierImportPath &&
+          binding.localName === iconInfo?.iconsSpecifierLocalName
+          ? iconsSpecifier
+          : undefined,
+      ),
+    )
     .join('');
   const iconDeclaration =
     iconInfo && iconInfo.expression !== iconInfo.exportName
@@ -2278,18 +2312,25 @@ function generateBuiltModule(
         : `\nexport { ${iconInfo.exportName} };\n`
       : '';
 
-  const componentIcons = themeComponentIcons(themeDef);
-  const slotFunction = Object.entries(componentIcons ?? {}).find(
-    ([, value]) => typeof value === 'function',
-  );
-  if (slotFunction) {
+  const componentIconValues = themeComponentIcons(themeDef);
+  const componentIconInfo = moduleOptions.componentIconInfo ?? null;
+  const carriesSlotFunctions = hasFunctionIconEntry(componentIconValues);
+  if (carriesSlotFunctions && !componentIconInfo) {
     throw new AstryxError(
-      `Theme "${themeDef.name}" sets componentIcons["${slotFunction[0]}"] to a slot function, which a built theme cannot carry. ` +
-        'A built theme keeps names, null, and requests. Use one of those, or apply the source theme at runtime.',
+      `Theme "${themeDef.name}" has componentIcons slot functions that the build cannot carry. ` +
+        'Import the slot functions from their own module into the theme file.',
       undefined,
       ERROR_CODES.ERR_THEME_INVALID,
     );
   }
+  const componentIconValuesName = `${themeBinding}ComponentIconValues`;
+  const componentIconPrelude =
+    carriesSlotFunctions && componentIconInfo
+      ? componentIconInfo.imports
+          .map(binding => importStatement(binding))
+          .join('') +
+        `const ${componentIconValuesName} = ${componentIconInfo.expression};\n`
+      : '';
 
   // Resolve token values — tuples become light-dark() strings
   /** @type {Record<string, unknown>} */
@@ -2362,9 +2403,17 @@ function generateBuiltModule(
           ]),
         ),
     ) +
-    serializeField('componentIcons', componentIcons, true);
+    (carriesSlotFunctions
+      ? `  componentIcons: ${componentIconViewExpression(
+          componentIconValuesName,
+          `${themeBinding}ComponentIconView`,
+        )
+          .split('\n')
+          .map((line, i) => (i === 0 ? line : '  ' + line))
+          .join('\n')},\n  __componentIcons: ${componentIconValuesName},\n`
+      : serializeField('componentIcons', componentIconValues, true));
 
-  return `${iconImport}${iconDeclaration}${iconNodesDeclaration}/**
+  return `${iconImport}${componentIconPrelude}${iconDeclaration}${iconNodesDeclaration}/**
  * ${themeDef.name} theme — built by \`${getCliInvocation()} theme build\`
  * Import the CSS file alongside this module:
  *
@@ -2935,10 +2984,15 @@ async function themeBuildInternal(
         ]
       : []),
   ];
+  // Names the slot values and their static view take in the built module.
+  const componentIconNames = [
+    `${toIdentifier(themeDef.name)}ThemeComponentIconValues`,
+    `${toIdentifier(themeDef.name)}ThemeComponentIconView`,
+  ];
   const iconResolution = {
     readSource: (/** @type {string} */ file) => fs.readFileSync(file, 'utf8'),
     resolveModule: resolveThemeModule,
-    reservedNames: reservedNames(functionEntries),
+    reservedNames: [...reservedNames(functionEntries), ...componentIconNames],
     functionEntries,
     rawInput: 'extends' in themeDef,
     hasIcons:
@@ -2948,6 +3002,8 @@ async function themeBuildInternal(
   let iconInfo = standaloneIcons
     ? await resolveIconImports(filePath, themeExportName, iconResolution)
     : null;
+  /** @type {import('./icon-imports.mjs').IconImports | null} */
+  let componentIconInfo = null;
 
   // Validate component overrides
   const warnings = await validateComponentOverrides(themeDef);
@@ -3070,7 +3126,10 @@ async function themeBuildInternal(
         ...iconResolution,
         hasIcons: true,
         functionEntries: resolvedFunctionEntries,
-        reservedNames: reservedNames(resolvedFunctionEntries),
+        reservedNames: [
+          ...reservedNames(resolvedFunctionEntries),
+          ...componentIconNames,
+        ],
       });
     }
     // An opaque package base can legitimately have no icons. Its .icons
@@ -3093,6 +3152,26 @@ async function themeBuildInternal(
         undefined,
         ERROR_CODES.ERR_THEME_INVALID,
       );
+    }
+
+    // A slot function cannot be serialized, so the module imports it from
+    // where the theme source does. Static slot values are written as JSON.
+    if (
+      standaloneIcons &&
+      hasFunctionIconEntry(themeComponentIcons(resolvedTheme))
+    ) {
+      componentIconInfo = await resolveIconImports(filePath, themeExportName, {
+        ...iconResolution,
+        field: 'componentIcons',
+        hasIcons: true,
+        functionEntries: true,
+        reservedNames: [
+          ...reservedNames(true),
+          ...componentIconNames,
+          ...(iconInfo?.imports.map(binding => binding.localName) ?? []),
+          ...(iconInfo ? [iconInfo.exportName] : []),
+        ],
+      });
     }
 
     // Cores that predate adaptations can still resolve typography, color,
@@ -3324,13 +3403,17 @@ async function themeBuildInternal(
   const cssDtsContent =
     generatedHeader(sourceRelative, 'ts', buildCommand, versions) +
     'export {};\n';
-  const jsContent =
-    generatedHeader(sourceRelative, 'js', buildCommand, versions) +
-    generateBuiltModule(
-      resolvedTheme || themeDef,
-      iconInfo,
-      options.iconsSpecifier,
-    );
+  // A family member's module is generated by themeBuildFamily, which carries
+  // its registries and slot functions through the family's own imports.
+  const jsContent = options.__prepareFamily
+    ? ''
+    : generatedHeader(sourceRelative, 'js', buildCommand, versions) +
+      generateBuiltModule(
+        resolvedTheme || themeDef,
+        iconInfo,
+        options.iconsSpecifier,
+        {componentIconInfo},
+      );
   const dtsContent =
     generatedHeader(sourceRelative, 'ts', buildCommand, versions) +
     generateBuiltTypes(resolvedTheme || themeDef, iconInfo, variantsFileName);
@@ -3353,6 +3436,7 @@ async function themeBuildInternal(
       sourceParent,
       iconInfo: extractRegistryInfo(filePath, 'icons'),
       indicatorInfo: extractRegistryInfo(filePath, 'indicators'),
+      componentIconInfo: extractRegistryInfo(filePath, 'componentIcons'),
       variantDecl,
       css: cssPlan,
       versions,
@@ -3672,6 +3756,68 @@ function allocateFamilyBindings(members) {
   const used = new Map();
   return new Map(members.map(member => { const base = familyThemeBinding(member.theme.name), count = used.get(base) ?? 0; used.set(base, count + 1); return [member.theme.name, count === 0 ? base : `${base}${count + 1}`]; }));
 }
+/**
+ * How a family member's module carries slot functions: its parent's values,
+ * then its own. Own slot functions come from a named import of the whole map;
+ * own static values are written as JSON. Null when the member has no slot
+ * function, so its static values are written as JSON alone.
+ * @param {any} member
+ * @param {any} parent - The member's parent in the family, if any.
+ * @param {{themeBinding: string | undefined, parentBinding: string | null | undefined, outDir: string, registryImports: Array<{specifier: string, exportName: string}>, expression: (own: string | null, inherited: string | null) => string | undefined}} context
+ * @returns {{imports: Array<{importPath: string, importedName: string, localName: string}>, expression: string} | null}
+ */
+function familyComponentIcons(member, parent, context) {
+  const values = themeComponentIcons(member.theme);
+  if (!hasFunctionIconEntry(values)) return null;
+  const inheritedValues = themeComponentIcons(parent?.theme);
+  const inherited =
+    context.parentBinding && inheritedValues
+      ? `${context.parentBinding}.${hasFunctionIconEntry(inheritedValues) ? '__componentIcons' : 'componentIcons'}`
+      : null;
+  /** @type {Array<{importPath: string, importedName: string, localName: string}>} */
+  const imports = [];
+  let own = null;
+  const info = member.componentIconInfo;
+  if (info) {
+    const input = familyRegistryInput(
+      info,
+      member.filePath,
+      context.outDir,
+      undefined,
+    );
+    const importPath = input.specifier ?? info.importPath;
+    own = `${context.themeBinding ?? `${toIdentifier(member.theme.name)}Theme`}ComponentIconSource`;
+    imports.push({importPath, importedName: info.exportName, localName: own});
+    context.registryImports.push({
+      specifier: importPath,
+      exportName: info.exportName,
+    });
+  } else {
+    // Without an import, a member's own slots are the ones that differ from
+    // its parent's; they must all be static.
+    /** @type {Record<string, unknown>} */
+    const ownValues = {};
+    for (const [slot, value] of Object.entries(values ?? {})) {
+      if (
+        inheritedValues &&
+        Object.hasOwn(inheritedValues, slot) &&
+        inheritedValues[slot] === value
+      )
+        continue;
+      if (typeof value === 'function') {
+        throw new AstryxError(
+          `Theme "${member.theme.name}" must supply componentIcons slot functions through a named import for family output.`,
+          undefined,
+          ERROR_CODES.ERR_THEME_INVALID,
+        );
+      }
+      ownValues[slot] = value;
+    }
+    if (Object.keys(ownValues).length > 0) own = JSON.stringify(ownValues);
+  }
+  const expression = context.expression(own, inherited);
+  return expression ? {imports, expression} : null;
+}
 /** Rebase a scraped relative registry import to the aggregate module. @param {any} info @param {string} filePath @param {string} outDir @param {string | undefined} override */
 // prettier-ignore
 function familyRegistryInput(info, filePath, outDir, override) {
@@ -3884,6 +4030,13 @@ export async function themeBuildFamily(
       // rebased or overridden specifier replaces the scraped one.
       // prettier-ignore
       const iconImports = icon.info && ownIcons ? {imports: [{importPath: icon.info.importPath, importedName: icon.info.exportName, localName: ownIcons}], expression: ownIcons, exportName: ownIcons, iconsSpecifierImportPath: icon.info.importPath, iconsSpecifierLocalName: ownIcons} : null;
+      const componentIconInfo = familyComponentIcons(member, parent, {
+        themeBinding,
+        parentBinding,
+        outDir,
+        registryImports,
+        expression,
+      });
       return (
         indicatorImport +
         generateBuiltModule(member.theme, iconImports, icon.specifier, {
@@ -3892,6 +4045,7 @@ export async function themeBuildFamily(
           indicatorsExpression: expression(ownIndicators, inheritedIndicators),
           artifactBaseName: baseName,
           exportIcons: false,
+          componentIconInfo,
         })
       );
     })
