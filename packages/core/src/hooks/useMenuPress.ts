@@ -26,10 +26,11 @@
 import {useEffect, useMemo, useRef, useState, type RefObject} from 'react';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {
-  createMenuPress,
+  createCoreMenuPress,
   createMenuPressCore,
   MENU_PRESS_MARKER,
   type CreateMenuPressOptions,
+  type CoreMenuPressReturn,
   type CreateMenuPressReturn,
   type MenuPressCore,
   type MenuPressTouchModel,
@@ -67,10 +68,16 @@ export interface UseMenuPressRefOptions extends Omit<
 /** What the ref form returns: the press's reads; the hook owns its life. */
 export type UseMenuPressRefReturn = Pick<
   CreateMenuPressReturn,
-  'isTriggerClickFromPress' | 'cancel'
+  | 'isTriggerClickFromPress'
+  | 'cancel'
+  | 'handleTriggerPointerDown'
+  | 'handleTriggerContextMenu'
 >;
 
-/** The options form's options: the menu and the trigger as refs. */
+/**
+ * The options form's options: the menu and the trigger as refs.
+ * @deprecated Use the ref form, `useMenuPress(menuRef, options)`.
+ */
 export interface UseMenuPressOptions {
   /** The menu (or listbox) root: the surface whose rows the press picks from. */
   menuRef: RefObject<HTMLElement | null>;
@@ -122,7 +129,10 @@ export interface UseMenuPressOptions {
   isEnabled?: boolean;
 }
 
-/** What the options form returns: props to spread on the menu and the trigger. */
+/**
+ * What the options form returns: props to spread on the menu and the trigger.
+ * @deprecated Use the ref form, `useMenuPress(menuRef, options)`.
+ */
 export interface UseMenuPressReturn {
   /** Spread onto the menu root: claims presses that begin inside it. */
   menuProps: {
@@ -144,96 +154,27 @@ export interface UseMenuPressReturn {
   cancel: () => void;
 }
 
-const FACTORY_CALLBACKS = [
-  'onTriggerPress',
-  'onHighlight',
-  'onActivate',
-  'onDismiss',
-  'getScroller',
-  'hitTest',
-] as const;
-
-/** What the ref form's factory is created from. */
-interface FactoryKey {
-  menu: HTMLElement | null;
-  ownerDocument: Document | null;
-  trigger: HTMLElement | null;
-  itemSelector: string;
-  longPressDelayMs: number | undefined;
-  isEnabled: boolean | undefined;
-  callbacks: string;
-}
-
-function factoryKeyOf(
-  menu: HTMLElement | null,
-  options: UseMenuPressRefOptions,
-): FactoryKey {
-  return {
-    menu,
-    ownerDocument: menu?.ownerDocument ?? null,
-    trigger: options.triggerRef?.current ?? null,
-    itemSelector: options.itemSelector,
-    longPressDelayMs: options.longPressDelayMs,
-    isEnabled: options.isEnabled,
-    // The press falls back to its own behavior for an absent callback. So a
-    // change in which callbacks are given needs a new factory.
-    callbacks: FACTORY_CALLBACKS.filter(name => options[name] != null).join(
-      ',',
-    ),
-  };
-}
-
-function isSameFactoryKey(a: FactoryKey, b: FactoryKey): boolean {
-  return (
-    a.menu === b.menu &&
-    a.ownerDocument === b.ownerDocument &&
-    a.trigger === b.trigger &&
-    a.itemSelector === b.itemSelector &&
-    a.longPressDelayMs === b.longPressDelayMs &&
-    a.isEnabled === b.isEnabled &&
-    a.callbacks === b.callbacks
-  );
-}
-
 /**
- * The factory's options: the key's values, and callbacks that call the latest
- * ones.
+ * The factory's options, from the hook's: the trigger read from its ref. Every
+ * key is named, so an option the caller drops reaches update() as undefined
+ * and the factory falls back to its own behavior.
  */
 function factoryOptionsOf(
-  key: FactoryKey,
-  latest: () => UseMenuPressRefOptions,
+  options: UseMenuPressRefOptions,
 ): CreateMenuPressOptions {
-  const given = new Set(key.callbacks.split(','));
-  const options: CreateMenuPressOptions = {
-    trigger: key.trigger,
-    itemSelector: key.itemSelector,
+  return {
+    trigger: options.triggerRef?.current ?? null,
+    itemSelector: options.itemSelector,
+    onTriggerPress: options.onTriggerPress,
+    onHighlight: options.onHighlight,
+    onActivate: options.onActivate,
+    onDismiss: options.onDismiss,
+    getScroller: options.getScroller,
+    hitTest: options.hitTest,
+    longPressDelayMs: options.longPressDelayMs,
+    isEnabled: options.isEnabled,
+    startBehavior: options.startBehavior,
   };
-  if (key.longPressDelayMs !== undefined) {
-    options.longPressDelayMs = key.longPressDelayMs;
-  }
-  if (key.isEnabled !== undefined) {
-    options.isEnabled = key.isEnabled;
-  }
-  if (given.has('onTriggerPress')) {
-    options.onTriggerPress = pointerType =>
-      latest().onTriggerPress?.(pointerType) ?? false;
-  }
-  if (given.has('onHighlight')) {
-    options.onHighlight = row => latest().onHighlight?.(row);
-  }
-  if (given.has('onActivate')) {
-    options.onActivate = (row, release) => latest().onActivate?.(row, release);
-  }
-  if (given.has('onDismiss')) {
-    options.onDismiss = () => latest().onDismiss?.();
-  }
-  if (given.has('getScroller')) {
-    options.getScroller = () => latest().getScroller?.() ?? null;
-  }
-  if (given.has('hitTest')) {
-    options.hitTest = (x, y) => latest().hitTest?.(x, y) ?? null;
-  }
-  return options;
 }
 
 /**
@@ -263,13 +204,24 @@ export interface DropdownMenuPressOptions extends UseMenuPressOptions {
 export type DropdownMenuPressReturn = UseMenuPressReturn;
 
 /**
+ * DropdownMenu's ref form: the ref form's options, plus its touch model
+ * ({@link DropdownMenuPressOptions.touchModel}).
+ *
+ * @internal
+ */
+export interface DropdownMenuPressRefOptions extends UseMenuPressRefOptions {
+  /** How the finger that opened the menu from the trigger picks. */
+  touchModel?: MenuPressTouchModel;
+}
+
+/**
  * The press model for a menu: the row under the release acts, the highlight
  * follows a held pointer, a mouse opens on press. createMenuPress on the
  * element behind `menuRef`; see createMenuPress.ts. The press attaches when the
  * calling component commits, so a menu that a child mounts in a later commit
  * attaches at the caller's next commit. While the menu element is unmounted,
- * there is no press, not even on the trigger. For press-to-open on a menu
- * rendered only while open, use the options form.
+ * there is no press, not even on the trigger. So a menu that opens on a press
+ * of its trigger keeps its element mounted while it is closed.
  *
  * @example
  * ```
@@ -293,6 +245,7 @@ export function useMenuPress(
 /**
  * The options form: props to spread on the menu root and the trigger. The ref
  * form above listens on both itself, so nothing is spread.
+ * @deprecated Use the ref form, `useMenuPress(menuRef, options)`.
  */
 export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn;
 export function useMenuPress(
@@ -312,13 +265,19 @@ export function useMenuPress(
  * @internal
  */
 export function useDropdownMenuPress(
+  menuRef: RefObject<HTMLElement | null>,
+  options: DropdownMenuPressRefOptions,
+): UseMenuPressRefReturn;
+export function useDropdownMenuPress(
   options: DropdownMenuPressOptions,
-): DropdownMenuPressReturn {
-  return useMenuPressDriver(
-    options,
-    undefined,
-    options.touchModel ?? 'pointer',
-  ) as DropdownMenuPressReturn;
+): DropdownMenuPressReturn;
+export function useDropdownMenuPress(
+  first: RefObject<HTMLElement | null> | DropdownMenuPressOptions,
+  second?: DropdownMenuPressRefOptions,
+): UseMenuPressRefReturn | DropdownMenuPressReturn {
+  const {touchModel = 'pointer'} =
+    second ?? (first as DropdownMenuPressOptions);
+  return useMenuPressDriver(first, second, touchModel);
 }
 
 /** Both forms of the press, with the touch model the entry allows. */
@@ -335,26 +294,33 @@ function useMenuPressDriver(
   const options: UseMenuPressRefOptions = isRefForm
     ? second
     : (first as UseMenuPressOptions);
-  // The press reads the latest render's options when an event arrives.
+  // The options form reads the latest render's options when an event arrives.
+  // The ref form reads them at commit, below.
   const latestRef = useRef({menuRef, options, touchModel});
   latestRef.current = {menuRef, options, touchModel};
 
-  // The ref form: createMenuPress on the element behind the ref. The factory
-  // keeps its creation options. Its callbacks call the latest ones. A new menu,
-  // document, trigger, value option or callback set creates a new factory.
+  // The ref form: createMenuPress on the element behind the ref. A new menu or
+  // document creates a new factory. Every other change reaches it through
+  // update() at commit, so a render that React discards never reaches it.
   const attachedRef = useRef<{
-    key: FactoryKey;
-    press: CreateMenuPressReturn;
+    menu: HTMLElement;
+    ownerDocument: Document;
+    press: CoreMenuPressReturn;
   } | null>(null);
+  // Syncs the factory's listeners with the menu element behind the ref.
   useIsomorphicLayoutEffect(() => {
     if (!isRefForm) {
       return;
     }
-    const {menuRef: ref, options: latest} = latestRef.current;
+    const {menuRef: ref, options: latest, touchModel: model} = latestRef.current;
     const menu = ref.current;
-    const key = factoryKeyOf(menu, latest);
     const attached = attachedRef.current;
-    if (attached != null && isSameFactoryKey(attached.key, key)) {
+    if (
+      attached != null &&
+      attached.menu === menu &&
+      attached.ownerDocument === menu.ownerDocument
+    ) {
+      attached.press.update({...factoryOptionsOf(latest), touchModel: model});
       return;
     }
     attached?.press.destroy();
@@ -362,13 +328,15 @@ function useMenuPressDriver(
       menu == null
         ? null
         : {
-            key,
-            press: createMenuPress(
-              menu,
-              factoryOptionsOf(key, () => latestRef.current.options),
-            ),
+            menu,
+            ownerDocument: menu.ownerDocument,
+            press: createCoreMenuPress(menu, {
+              ...factoryOptionsOf(latest),
+              touchModel: model,
+            }),
           };
   });
+  // Removes the factory's listeners at unmount.
   useIsomorphicLayoutEffect(
     () => () => {
       attachedRef.current?.press.destroy();
@@ -389,6 +357,8 @@ function useMenuPressDriver(
           getTouchModel: () => latestRef.current.touchModel,
         }),
   );
+  // Installs the document's gesture counter at mount. At unmount, it ends a
+  // press in flight and removes that press's document listeners.
   useEffect(() => core?.connect(), [core]);
   // The options form holds the document the menu is in after every commit; the
   // ref form's factory holds its menu's document itself. The page's tracking
@@ -402,6 +372,10 @@ function useMenuPressDriver(
         isTriggerClickFromPress: () =>
           attachedRef.current?.press.isTriggerClickFromPress() ?? false,
         cancel: () => attachedRef.current?.press.cancel(),
+        handleTriggerPointerDown: event =>
+          attachedRef.current?.press.handleTriggerPointerDown(event),
+        handleTriggerContextMenu: event =>
+          attachedRef.current?.press.handleTriggerContextMenu(event),
       };
     }
     return {

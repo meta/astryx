@@ -166,7 +166,6 @@ menuItemHover menuItemHover DropdownMenu/DropdownMenu.doc.mjs DropdownMenu/menuI
 menuItemRoles menuItemRoles DropdownMenu/DropdownMenu.doc.mjs DropdownMenu/menuItemRoles.ts
 menuPressGesture menuPressGesture hooks/useAnimatedLayout.doc.mjs hooks/menuPressGesture.ts
 menuPressMarker menuPressMarker hooks/useAnimatedLayout.doc.mjs hooks/menuPressMarker.ts
-menuPressOnItems menuPressOnItems hooks/useAnimatedLayout.doc.mjs hooks/menuPressOnItems.ts
 menuRegionStops menuRegionStops DropdownMenu/DropdownMenu.doc.mjs DropdownMenu/menuRegionStops.ts
 menuRegionsContext menuRegionsContext DropdownMenu/DropdownMenu.doc.mjs DropdownMenu/menuRegionsContext.ts
 menuWidth menuWidth DropdownMenu/DropdownMenu.doc.mjs DropdownMenu/menuWidth.ts

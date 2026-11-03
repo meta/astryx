@@ -329,17 +329,19 @@ the open, so a screen reader hears one open and one close.
 
 Rejected: opening a sub-menu when a finger rests on its row.
 
-### DEC-9 (proposed) — The options form is deprecated with its callers' migration
+### DEC-9 (proposed) — One factory, and every caller on the ref form
 
 **Reference:** `module:DropdownMenu/useMenuPress/DEC-9`
-**Decider:** proposed by `vjeux`, `2026-11-02`; pending owner review
+**Decider:** proposed by `vjeux`, `2026-11-03`, as the owner decided on
+`2026-11-03`; pending owner review
 
-`useMenuPress(menuRef, options)` delegates to `createMenuPress`, as
-`architecture:public-component-api` INV22 asks. The options form,
-`useMenuPress({menuRef, …})`, is deprecated under INV9 only in the patch that
-migrates every maintained caller (`spec:AST-017` FR29c). DropdownMenu's
-trigger and the menus that track only presses on their items stay on it until
-the ref form can start a press only on an item.
+The ref form delegates to the factory, as `architecture:public-component-api`
+INV22 asks. The factory takes new options in place: they merge with the ones it
+has, apply from the next event, and never end a press in progress. A menu whose
+other content keeps its own clicks starts a press only on an item. A trigger
+event that a caller still forwards reaches the press once. Every maintained
+caller moves to the ref form in the patch that deprecates the options form
+under INV9 (`spec:AST-017` FR29c).
 
 ## Open questions
 
@@ -348,10 +350,6 @@ the ref form can start a press only on an item.
   mouse opens a DropdownMenu on press-down with the settle rule. Opening under
   a finger is `spec:AST-094` FR29's. Until the owner rules, the current record's FR1–FR7
   stand on their own.
-
-- **OQ2 — Does the options form wait for its callers' migration?** (`human-api`)
-  Proposed DEC-9 waits on this owner decision. Until the owner rules, the
-  options form is not deprecated.
 
 The former browser-evidence question is resolved: the touch pan, the finger
 slide and its stray click cannot be exercised in jsdom, and real-Chromium

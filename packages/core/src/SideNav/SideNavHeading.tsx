@@ -48,7 +48,6 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {useMenuHover} from '../hooks/useMenuHover';
 import {useMenuPress} from '../hooks/useMenuPress';
-import {pressOnItemsOnly} from '../hooks/menuPressOnItems';
 import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {
@@ -440,16 +439,12 @@ export function SideNavHeading({
   // FR5); a mouse released outside closes it. Only the role="menu" region is
   // tracked, not the heading button above it.
   const headingMenuRef = useRef<HTMLDivElement>(null);
-  const headingMenuPress = useMenuPress({
-    menuRef: headingMenuRef,
+  useMenuPress(headingMenuRef, {
     itemSelector: HEADING_MENU_ITEM_SELECTOR,
     onDismiss: closeMenu,
     isEnabled: !!menu,
+    startBehavior: 'items',
   });
-  const headingMenuPointerDown = pressOnItemsOnly(
-    headingMenuPress.menuProps.onPointerDown,
-    HEADING_MENU_ITEM_SELECTOR,
-  );
   const dismissCtx = useMemo(() => ({dismiss: closeMenu}), [closeMenu]);
   const headingMenuTouch = stylex.props(
     useMenuOverflow(headingMenuRef, menu, popover.isOpen)
@@ -581,8 +576,6 @@ export function SideNavHeading({
                 ref={headingMenuRef}
                 role="menu"
                 aria-label={heading}
-                {...headingMenuPress.menuProps}
-                onPointerDown={headingMenuPointerDown}
                 {...headingMenuTouch}>
                 <NavHeadingCloseContext value={closeMenuCtx}>
                   {menu}
@@ -815,8 +808,6 @@ export function SideNavHeading({
               ref={headingMenuRef}
               role="menu"
               aria-label={heading}
-              {...headingMenuPress.menuProps}
-              onPointerDown={headingMenuPointerDown}
               {...headingMenuTouch}>
               <NavHeadingDismissContext value={dismissCtx}>
                 {menu}
@@ -899,8 +890,6 @@ export function SideNavHeading({
               ref={headingMenuRef}
               role="menu"
               aria-label={heading}
-              {...headingMenuPress.menuProps}
-              onPointerDown={headingMenuPointerDown}
               {...headingMenuTouch}>
               <NavHeadingDismissContext value={dismissCtx}>
                 {menu}

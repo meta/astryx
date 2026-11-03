@@ -2919,7 +2919,7 @@ hook useLongPress: (options: UseLongPressOptions) => UseLongPressHandlers
 hook useMediaQuery: (query: string, serverDefault?: boolean) => boolean
 hook useMenuPress
   overload (menuRef: RefObject<HTMLElement | null>, options: UseMenuPressRefOptions) => UseMenuPressRefReturn
-  overload (options: UseMenuPressOptions) => UseMenuPressReturn
+  overload (options: UseMenuPressOptions) => UseMenuPressReturn @deprecated
 hook useMergedRefs: <T>(refA?: Ref<T>, refB?: Ref<T>, refC?: Ref<T>, refD?: Ref<T>, refE?: Ref<T>, refF?: Ref<T>) => RefCallback<T>
 hook useMultiCombobox: ({…}: UseMultiComboboxOptions) => UseMultiComboboxResult
 hook useNavHeadingCloseContext: () => NavHeadingCloseContextValue | null
@@ -4103,11 +4103,15 @@ interface CreateMenuPressOptions
   onDismiss?: () => void
   onHighlight?: (row: HTMLElement | null) => void
   onTriggerPress?: (pointerType: MenuPressPointerType) => boolean
+  startBehavior?: 'menu' | 'items' = 'menu'
   trigger?: HTMLElement | null
 interface CreateMenuPressReturn
   cancel: () => void
   destroy: () => void
+  handleTriggerContextMenu: (event: { preventDefault: () => void; nativeEvent?: Event }) => void
+  handleTriggerPointerDown: (event: MenuPressDownEvent) => void
   isTriggerClickFromPress: () => boolean
+  update: (options: Partial<CreateMenuPressOptions>) => void
 interface CreateStaticSourceOptions<T extends SearchableItem = SearchableItem>
   keywords?: (item: T) => string[]
 interface CustomOperatorValue
@@ -4270,10 +4274,10 @@ interface DropdownMenuTriggerProps
   id: string
   onClick: (event: React.MouseEvent<HTMLElement>) => void
   onClickCapture: (event: React.MouseEvent<HTMLElement>) => void
-  onContextMenu: (event: React.MouseEvent<HTMLElement>) => void
+  onContextMenu: (event: React.MouseEvent<HTMLElement>) => void @deprecated
   onFocus: (event: React.FocusEvent<HTMLElement>) => void
   onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void
-  onPointerDown: (event: React.PointerEvent<HTMLElement>) => void
+  onPointerDown: (event: React.PointerEvent<HTMLElement>) => void @deprecated
   ref: (element: HTMLElement | null) => void
 type DurationVarName = keyof typeof durationDefaults
 type EaseVarName = keyof typeof easeDefaults
@@ -4817,6 +4821,16 @@ type MathParseOptions<Plugins extends ReadonlyArray<MarkdownPluginEntry> = reado
 type MediaThemeMode = 'dark' | 'light' | 'auto' | 'off'
 interface MediaThemeProps (props of MediaTheme)
 type MenuPresentation = 'popover' | 'bottom-sheet' | 'adaptive'
+interface MenuPressDownEvent
+  button: number
+  ctrlKey: boolean
+  metaKey?: boolean
+  nativeEvent?: PointerEvent
+  pointerId: number
+  pointerType: string
+  preventDefault: () => void
+  shiftKey?: boolean
+  target: EventTarget | null
 type MenuPressEffect<T> = { type: 'none' } | { type: 'open' } | { type: 'highlight'; row: T } | { type: 'clear' } | { type: 'act'; row: T } | { type: 'settle'; stray: boolean; dismiss: boolean }
 type MenuPressEvent<T> = { type: 'down'; target: 'trigger' | 'menu'; pointerType: MenuPressPointerType; row: T | null; time: number } | { type: 'opened'; time: number } | { type: 'move' … #b8bb8361
 type MenuPressGesture<T> = { phase: 'idle' } | { phase: 'triggerPress'; pointerType: MenuPressPointerType; startedAt: number } | { phase: 'open'; pointerType: MenuPressPointerType; opened … #8aa37415
@@ -6013,7 +6027,7 @@ interface UseLongPressOptions
   disabled?: boolean
   moveCancelPx?: number
   onLongPress: (point: { x: number; y: number }) => void
-interface UseMenuPressOptions
+interface UseMenuPressOptions @deprecated
   getScroller?: () => HTMLElement | null
   hitTest?: (x: number, y: number) => Element | null
   isEnabled?: boolean = true
@@ -6035,9 +6049,10 @@ interface UseMenuPressRefOptions extends Omit<CreateMenuPressOptions, 'trigger'>
   onDismiss?: () => void
   onHighlight?: (row: HTMLElement | null) => void
   onTriggerPress?: (pointerType: MenuPressPointerType) => boolean
+  startBehavior?: 'menu' | 'items' = 'menu'
   triggerRef?: RefObject<HTMLElement | null>
-type UseMenuPressRefReturn = Pick<CreateMenuPressReturn, 'isTriggerClickFromPress' | 'cancel'>
-interface UseMenuPressReturn
+type UseMenuPressRefReturn = Pick<CreateMenuPressReturn, 'isTriggerClickFromPress' | 'cancel' | 'handleTriggerPointerDown' | 'handleTriggerContextMenu'>
+interface UseMenuPressReturn @deprecated
   cancel: () => void
   isTriggerClickFromPress: () => boolean
   menuProps: { onPointerDown: (event: React.PointerEvent<HTMLElement>) => void; [MENU_PRESS_MARKER]: '' }
@@ -9115,6 +9130,7 @@ KeyboardHintOrientation (.)
 ListFocusOrientation (.)
 MENU_PRESS_MARKER (.)
 MENU_PRESS_SETTLE_MS (.)
+MenuPressDownEvent (.)
 MenuPressEffect (.)
 MenuPressEvent (.)
 MenuPressGesture (.)

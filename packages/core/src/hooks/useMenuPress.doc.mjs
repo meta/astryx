@@ -89,19 +89,26 @@ export const docs = {
       description: 'Whether the model is live.',
       default: 'true',
     },
+    {
+      name: 'options.startBehavior',
+      type: "'menu' | 'items'",
+      description:
+        "Where a press may start. 'items' takes only a press that lands on an item, with the main button, so other content in the menu keeps its own clicks and a Ctrl, Cmd or Shift mouse press on a link item opens it as the browser does.",
+      default: "'menu'",
+    },
   ],
   returns: [
     {
       name: 'menuProps',
       type: '{onPointerDown; "data-astryx-menu-press": ""}',
       description:
-        'Options form only, useMenuPress({menuRef, …}): spread onto the menu root. Claims presses that begin inside it and marks the root as carrying the press model.',
+        'Deprecated options form only, useMenuPress({menuRef, …}): spread onto the menu root. Claims presses that begin inside it and marks the root as carrying the press model.',
     },
     {
       name: 'triggerProps',
       type: '{onPointerDown; onContextMenu}',
       description:
-        'Options form only: spread onto the trigger. A mouse press opens the menu at once; a finger held for the delay opens it with the finger still down.',
+        'Deprecated options form only: spread onto the trigger. A mouse press opens the menu at once; a finger held for the delay opens it with the finger still down.',
     },
     {
       name: 'isTriggerClickFromPress',
@@ -148,7 +155,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          "Prefer the ref form, useMenuPress(menuRef, {triggerRef, …}), for a new menu: it listens on the menu and the trigger itself, so nothing is spread. Its press, the trigger's included, exists only while the menu element is mounted. For a menu rendered only while open that a trigger press opens, use the options form, useMenuPress({menuRef, …}), which returns menuProps and triggerProps to spread.",
+          "Use the ref form, useMenuPress(menuRef, {triggerRef, …}): it listens on the menu and the trigger itself, so nothing is spread. Its press, the trigger's included, exists only while the menu element is mounted, so a menu that opens on a press of its trigger keeps its element mounted while closed. The options form, useMenuPress({menuRef, …}), is deprecated.",
       },
     ],
   },
@@ -180,16 +187,18 @@ export const docsDense = {
       'element to edge-autoscroll while tracking; default = menu root if it overflows.',
     'options.longPressDelayMs': 'finger hold before open, ms.',
     'options.isEnabled': 'false = inert.',
+    'options.startBehavior':
+      "'items' = a press starts only on an item; other content keeps its clicks.",
   },
   returnDescriptions: {
     menuProps:
-      'options form: spread on menu root (claims presses, marks the root).',
+      'deprecated options form: spread on menu root (claims presses, marks the root).',
     triggerProps:
-      'options form: spread on trigger (press-open, held-finger open).',
+      'deprecated options form: spread on trigger (press-open, held-finger open).',
     isTriggerClickFromPress:
       'true = the trigger click belongs to the press that already opened / closed; ignore it.',
     cancel:
-      'end the gesture w/o acting. Nothing to spread. No React: createMenuPress(menu, {trigger, …}) → {isTriggerClickFromPress, cancel, destroy}.',
+      'end the gesture w/o acting. Nothing to spread. No React: createMenuPress(menu, {trigger, …}) → {isTriggerClickFromPress, cancel, update, destroy}.',
   },
   usage: {
     description:
@@ -222,7 +231,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Prefer useMenuPress(menuRef, {triggerRef, …}) (nothing to spread) over useMenuPress({menuRef, …}) + menuProps / triggerProps spreads, unless the menu renders only while open: the ref form presses only while the menu is mounted, trigger included.',
+          'Use useMenuPress(menuRef, {triggerRef, …}) (nothing to spread); useMenuPress({menuRef, …}) is deprecated. The press exists only while the menu is mounted, trigger included: keep a press-to-open menu mounted while closed.',
       },
     ],
   },

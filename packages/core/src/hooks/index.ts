@@ -57,6 +57,7 @@ export {createMenuPress} from './createMenuPress';
 export type {
   CreateMenuPressOptions,
   CreateMenuPressReturn,
+  MenuPressDownEvent,
 } from './createMenuPress';
 export {menuPressStep, MENU_PRESS_SETTLE_MS} from './menuPressGesture';
 export type {

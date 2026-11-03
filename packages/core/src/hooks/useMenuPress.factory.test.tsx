@@ -194,28 +194,130 @@ describe('useMenuPress(menuRef, options) — a thin wrapper over createMenuPress
     expect(committed).toHaveBeenCalledWith('mouse');
   });
 
-  it('creates a new factory when a value option changes, and destroys the old one', () => {
+  it('passes a value option change to its factory through update(), with no new factory', () => {
     const create = vi.mocked(createMenuPress);
-    const {rerender} = render(<RefHarness isEnabled />);
+    const onTriggerPress = vi.fn(() => true);
+    const {rerender} = render(
+      <RefHarness isEnabled onTriggerPress={onTriggerPress} />,
+    );
     const first = create.mock.results[0].value as CreateMenuPressReturn;
-    const destroy = vi.spyOn(first, 'destroy');
-    rerender(<RefHarness isEnabled />);
+    const update = vi.spyOn(first, 'update');
+    rerender(<RefHarness isEnabled={false} onTriggerPress={onTriggerPress} />);
     expect(create).toHaveBeenCalledTimes(1);
-    rerender(<RefHarness isEnabled={false} />);
-    expect(create).toHaveBeenCalledTimes(2);
-    expect(destroy).toHaveBeenCalledTimes(1);
-    expect(create.mock.calls[1][1].isEnabled).toBe(false);
+    expect(update).toHaveBeenLastCalledWith(
+      expect.objectContaining({isEnabled: false}),
+    );
+    fireEvent.pointerDown(screen.getByRole('button', {name: 'Open'}), mouse());
+    expect(onTriggerPress).not.toHaveBeenCalled();
   });
 
-  it('creates a new factory when a callback is given or dropped, since the press falls back without one', () => {
+  it('drops an option the caller stops passing: a dropped onDismiss is not called', () => {
+    const first = vi.fn();
+    function Dismissable({onDismiss}: {onDismiss?: () => void}) {
+      const menuRef = useRef<HTMLDivElement>(null);
+      // The options name onDismiss only while it is given, as a caller that
+      // builds them conditionally does.
+      useMenuPress(
+        menuRef,
+        onDismiss == null
+          ? {itemSelector: ITEM_SELECTOR}
+          : {itemSelector: ITEM_SELECTOR, onDismiss},
+      );
+      return (
+        <>
+          <button type="button">Outside</button>
+          <div ref={menuRef} role="menu">
+            <div role="menuitem" tabIndex={-1}>
+              A
+            </div>
+          </div>
+        </>
+      );
+    }
+    const {rerender} = render(<Dismissable onDismiss={first} />);
+    rerender(<Dismissable />);
+    // A mouse pressed in the menu and released outside it, acting on nothing.
+    fireEvent.pointerDown(row('A'), mouse());
+    fireEvent.pointerUp(screen.getByRole('button', {name: 'Outside'}), mouse());
+    expect(first).not.toHaveBeenCalled();
+  });
+
+  it('passes a callback given or dropped through update(), with no new factory: the press falls back without one', () => {
     const create = vi.mocked(createMenuPress);
+    const onTriggerPress = vi.fn(() => true);
     const {rerender} = render(<RefHarness />);
-    expect(create.mock.calls[0][1].onTriggerPress).toBeUndefined();
-    rerender(<RefHarness onTriggerPress={() => true} />);
-    expect(create).toHaveBeenCalledTimes(2);
-    expect(create.mock.calls[1][1].onTriggerPress).toBeTypeOf('function');
-    rerender(<RefHarness onTriggerPress={() => false} />);
-    expect(create).toHaveBeenCalledTimes(2);
+    rerender(<RefHarness onTriggerPress={onTriggerPress} />);
+    expect(create).toHaveBeenCalledTimes(1);
+    fireEvent.pointerDown(screen.getByRole('button', {name: 'Open'}), mouse());
+    expect(onTriggerPress).toHaveBeenCalledWith('mouse');
+  });
+
+  it('moves the press to a new trigger through update(), with no new factory', () => {
+    const create = vi.mocked(createMenuPress);
+    const onTriggerPress = vi.fn(() => true);
+    function TwoTriggers({isSecond}: {isSecond: boolean}) {
+      const menuRef = useRef<HTMLDivElement>(null);
+      const triggerRef = useRef<HTMLButtonElement>(null);
+      useMenuPress(menuRef, {
+        triggerRef,
+        itemSelector: ITEM_SELECTOR,
+        onTriggerPress,
+      });
+      return (
+        <>
+          <button type="button" ref={isSecond ? undefined : triggerRef}>
+            First
+          </button>
+          <button type="button" ref={isSecond ? triggerRef : undefined}>
+            Second
+          </button>
+          <div ref={menuRef} role="menu" />
+        </>
+      );
+    }
+    const {rerender} = render(<TwoTriggers isSecond={false} />);
+    rerender(<TwoTriggers isSecond />);
+    expect(create).toHaveBeenCalledTimes(1);
+    fireEvent.pointerDown(screen.getByRole('button', {name: 'First'}), mouse());
+    expect(onTriggerPress).not.toHaveBeenCalled();
+    fireEvent.pointerDown(
+      screen.getByRole('button', {name: 'Second'}),
+      mouse(2),
+    );
+    expect(onTriggerPress).toHaveBeenCalledWith('mouse');
+  });
+
+  it('takes a trigger press once when a handler of the caller\u2019s also forwards it: a press that closes the menu does not open it again', () => {
+    // The menu is open, so the press closes it and its gesture ends at once.
+    const onTriggerPress = vi.fn(() => false);
+    function Forwarding() {
+      const menuRef = useRef<HTMLDivElement>(null);
+      const triggerRef = useRef<HTMLButtonElement>(null);
+      const menuPress = useMenuPress(menuRef, {
+        triggerRef,
+        itemSelector: ITEM_SELECTOR,
+        onTriggerPress,
+      });
+      return (
+        <>
+          <button
+            type="button"
+            ref={triggerRef}
+            onPointerDown={menuPress.handleTriggerPointerDown}
+            onContextMenu={menuPress.handleTriggerContextMenu}>
+            Open
+          </button>
+          <div ref={menuRef} role="menu">
+            <div role="menuitem" tabIndex={-1}>
+              A
+            </div>
+          </div>
+        </>
+      );
+    }
+    render(<Forwarding />);
+    fireEvent.pointerDown(screen.getByRole('button', {name: 'Open'}), mouse());
+    expect(onTriggerPress).toHaveBeenCalledTimes(1);
   });
 
   it('has no press, not even on the trigger, while the menu element is unmounted', () => {
@@ -319,6 +421,9 @@ describe('useMenuPress(menuRef, options) — a thin wrapper over createMenuPress
     const stub: CreateMenuPressReturn = {
       isTriggerClickFromPress: () => false,
       cancel: () => {},
+      update: () => {},
+      handleTriggerPointerDown: () => {},
+      handleTriggerContextMenu: () => {},
       destroy: () => {},
     };
     vi.mocked(createMenuPress).mockReturnValueOnce(stub);

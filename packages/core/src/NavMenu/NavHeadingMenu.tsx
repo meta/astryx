@@ -19,10 +19,8 @@ import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {useListFocus} from '../hooks/useListFocus';
 import {useMenuPress} from '../hooks/useMenuPress';
-import {pressOnItemsOnly} from '../hooks/menuPressOnItems';
 import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
-import {composeEventHandlers} from '../utils/composeEventHandlers';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {themeProps} from '../utils/themeProps';
 import {
@@ -124,10 +122,10 @@ export function NavHeadingMenu({
   // A press that slides across the rows acts on the row it lifts on, the
   // highlight following the pointer, as every menu does
   // (`family:action-groups` FR1-FR3); a mouse released outside closes it.
-  const menuPress = useMenuPress({
-    menuRef: listRef,
+  useMenuPress(listRef, {
     itemSelector: ENABLED_ITEM_SELECTOR,
     onDismiss: closeMenu ?? dismissMenu,
+    startBehavior: 'items',
   });
   const hasOverflow = useMenuOverflow(listRef, children, true);
 
@@ -224,14 +222,7 @@ export function NavHeadingMenu({
           inlineStyle,
         )}
         {...rest}
-        {...menuPress.menuProps}
-        onPointerDown={composeEventHandlers(
-          onPointerDownProp,
-          pressOnItemsOnly(
-            menuPress.menuProps.onPointerDown,
-            ENABLED_ITEM_SELECTOR,
-          ),
-        )}
+        onPointerDown={onPointerDownProp}
         role="menu"
         onKeyDownCapture={handleMenuKeyDownCapture}
         onKeyDown={handleMenuKeyDown}>

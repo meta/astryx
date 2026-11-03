@@ -309,6 +309,110 @@ describe('createMenuPress — the press model with no React (spec:AST-107 FR6)',
   });
 });
 
+describe('createMenuPress — update, where a press starts, and a forwarded trigger event', () => {
+  it('update() merges options from the next event, and a gesture in progress goes on', () => {
+    const f = fixture();
+    const handle = press(f.menu, {
+      trigger: f.trigger,
+      itemSelector: ITEM_SELECTOR,
+    });
+    fireEvent.pointerDown(f.row('A'), touch());
+    fireEvent.pointerMove(f.row('B'), touch());
+    handle.update({isEnabled: false});
+    // The gesture in progress goes on: its release acts.
+    fireEvent.pointerUp(f.row('B'), touch());
+    expect(f.clicked).toEqual(['B']);
+    // The next press reads the merged options.
+    fireEvent.pointerDown(f.row('C'), touch(2));
+    fireEvent.pointerUp(f.row('C'), touch(2));
+    expect(f.clicked).toEqual(['B']);
+    handle.update({isEnabled: true});
+    fireEvent.pointerDown(f.row('C'), touch(3));
+    fireEvent.pointerUp(f.row('C'), touch(3));
+    expect(f.clicked).toEqual(['B', 'C']);
+  });
+
+  it('update() with a new trigger moves its listeners there, leaving nothing on the old one', () => {
+    const f = fixture();
+    const second = document.createElement('button');
+    second.type = 'button';
+    f.menu.before(second);
+    const onTriggerPress = vi.fn(() => true);
+    const handle = press(f.menu, {
+      trigger: f.trigger,
+      itemSelector: ITEM_SELECTOR,
+      onTriggerPress,
+    });
+    handle.update({trigger: second});
+    fireEvent.pointerDown(f.trigger, mouse());
+    fireEvent.pointerUp(f.trigger, mouse());
+    expect(onTriggerPress).not.toHaveBeenCalled();
+    fireEvent.pointerDown(second, mouse(2));
+    expect(onTriggerPress).toHaveBeenCalledWith('mouse');
+  });
+
+  it("with startBehavior 'items', a press on other content in the menu stays the browser's", () => {
+    const f = fixture();
+    const note = document.createElement('p');
+    note.textContent = 'Note';
+    f.menu.append(note);
+    press(f.menu, {itemSelector: ITEM_SELECTOR, startBehavior: 'items'});
+    // Not taken: the finger's pointerdown keeps its default.
+    expect(fireEvent.pointerDown(note, touch())).toBe(true);
+    fireEvent.pointerMove(f.row('B'), touch());
+    fireEvent.pointerUp(f.row('B'), touch());
+    expect(f.clicked).toEqual([]);
+    // A press on an item is the press model's.
+    expect(fireEvent.pointerDown(f.row('A'), touch(2))).toBe(false);
+    fireEvent.pointerMove(f.row('B'), touch(2));
+    fireEvent.pointerUp(f.row('B'), touch(2));
+    expect(f.clicked).toEqual(['B']);
+  });
+
+  it("with startBehavior 'items', a Ctrl, Cmd or Shift mouse press on a link item stays the browser's", () => {
+    const f = fixture();
+    const link = document.createElement('a');
+    link.href = '#elsewhere';
+    link.setAttribute('role', 'menuitem');
+    link.tabIndex = -1;
+    link.textContent = 'Link';
+    const clicks: string[] = [];
+    link.addEventListener('click', event => {
+      event.preventDefault();
+      clicks.push(event.isTrusted ? 'native' : 'press');
+    });
+    f.menu.append(link);
+    press(f.menu, {itemSelector: ITEM_SELECTOR, startBehavior: 'items'});
+    for (const modifier of ['ctrlKey', 'metaKey', 'shiftKey'] as const) {
+      fireEvent.pointerDown(link, {...mouse(), [modifier]: true});
+      fireEvent.pointerUp(link, {...mouse(), [modifier]: true});
+    }
+    expect(clicks).toEqual([]);
+    // A plain press on the link is the press model's: its release acts.
+    fireEvent.pointerDown(link, mouse(2));
+    fireEvent.pointerUp(link, mouse(2));
+    expect(clicks).toEqual(['press']);
+  });
+
+  it('takes a trigger press once when the caller also forwards it: a press that closes the menu does not open it again', () => {
+    const f = fixture();
+    // The menu is open, so the press closes it and its gesture ends at once.
+    const onTriggerPress = vi.fn(() => false);
+    const handle = press(f.menu, {
+      trigger: f.trigger,
+      itemSelector: ITEM_SELECTOR,
+      onTriggerPress,
+    });
+    // A caller's own handler forwards the same event, as a custom trigger's
+    // props did.
+    f.trigger.addEventListener('pointerdown', event =>
+      handle.handleTriggerPointerDown(event),
+    );
+    fireEvent.pointerDown(f.trigger, mouse());
+    expect(onTriggerPress).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('createMenuPress — destroy (spec:AST-107 FR6)', () => {
   it('removes every listener it added: the menu’s, the trigger’s, and a finished press’s on the document and window', () => {
     warmUp();

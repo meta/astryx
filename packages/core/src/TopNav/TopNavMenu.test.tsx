@@ -471,6 +471,8 @@ describe('TopNavMenu as an action group (family:action-groups)', () => {
         ]}
       />,
     );
+    // A person presses the rows of an open menu.
+    fireEvent.click(screen.getByRole('button', {name: /Products/}));
     expectNativeLinkClicks(item(/Docs/));
   });
 
@@ -486,6 +488,8 @@ describe('TopNavMenu as an action group (family:action-groups)', () => {
         ]}
       />,
     );
+    // A person presses the rows of an open menu.
+    fireEvent.click(screen.getByRole('button', {name: /Products/}));
     for (const pointer of [
       {pointerType: 'touch', pointerId: 1},
       {pointerType: 'mouse', pointerId: 2, button: 0},

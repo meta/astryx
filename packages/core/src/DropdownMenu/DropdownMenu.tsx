@@ -371,7 +371,15 @@ export interface DropdownMenuTriggerProps {
   id: string;
   onClick: (event: React.MouseEvent<HTMLElement>) => void;
   onClickCapture: (event: React.MouseEvent<HTMLElement>) => void;
+  /**
+   * @deprecated The menu listens on the trigger itself, so spreading this
+   *   adds nothing.
+   */
   onPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
+  /**
+   * @deprecated The menu listens on the trigger itself, so spreading this
+   *   adds nothing.
+   */
   onContextMenu: (event: React.MouseEvent<HTMLElement>) => void;
   onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
   onFocus: (event: React.FocusEvent<HTMLElement>) => void;
@@ -1374,8 +1382,7 @@ function DropdownMenuPopover({
   // The press model: the row under a release acts, the highlight follows a
   // held pointer. A mouse released outside the menu dismisses it; a finger
   // released outside leaves it open, so the hook never calls onDismiss then.
-  const menuPress = useDropdownMenuPress({
-    menuRef: listRef,
+  const menuPress = useDropdownMenuPress(listRef, {
     triggerRef: buttonRef,
     itemSelector: MENU_ITEM_SELECTOR,
     onTriggerPress: handleTriggerPress,
@@ -1616,8 +1623,10 @@ function DropdownMenuPopover({
     id: triggerId,
     onClick: handleButtonClick,
     onClickCapture: handleTriggerClickCapture,
-    onPointerDown: menuPress.triggerProps.onPointerDown,
-    onContextMenu: menuPress.triggerProps.onContextMenu,
+    // The press listens on the trigger itself. A caller that still forwards
+    // these hands the same event to it, and it takes the press once.
+    onPointerDown: menuPress.handleTriggerPointerDown,
+    onContextMenu: menuPress.handleTriggerContextMenu,
     onKeyDown: handleButtonKeyDown,
     // The caller's control paints its own ring, and the menu's focus return
     // keeps the browser from drawing one after pointer input (see
@@ -1650,14 +1659,8 @@ function DropdownMenuPopover({
             handleTriggerClickCapture(event);
           }}
           onKeyDown={handleButtonKeyDown}
-          onPointerDown={event => {
-            button.onPointerDown?.(event);
-            menuPress.triggerProps.onPointerDown(event);
-          }}
-          onContextMenu={event => {
-            button.onContextMenu?.(event);
-            menuPress.triggerProps.onContextMenu(event);
-          }}
+          onPointerDown={button.onPointerDown}
+          onContextMenu={button.onContextMenu}
           onFocus={event => {
             button.onFocus?.(event);
             onFocusReturnTargetFocus();
@@ -1710,7 +1713,6 @@ function DropdownMenuPopover({
                 );
               }
             }}
-            {...menuPress.menuProps}
             {...mergeProps(
               themeProps('dropdown-menu', {presentation: 'popover'}),
               stylex.props(

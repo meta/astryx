@@ -27,7 +27,6 @@ import * as stylex from '@stylexjs/stylex';
 import {usePopover} from '../Popover/usePopover';
 import {useMenuHover} from '../hooks/useMenuHover';
 import {useMenuPress} from '../hooks/useMenuPress';
-import {pressOnItemsOnly} from '../hooks/menuPressOnItems';
 import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useListFocus} from '../hooks/useListFocus';
@@ -463,10 +462,10 @@ export function TopNavMenu({
   // A press that slides across the items acts on the item it lifts on, the
   // highlight following the pointer, as every menu does
   // (`family:action-groups` FR1-FR3); a mouse released outside closes it.
-  const menuPress = useMenuPress({
-    menuRef: listRef,
+  useMenuPress(listRef, {
     itemSelector: '[role="menuitem"]',
     onDismiss: close,
+    startBehavior: 'items',
   });
   const hasOverflow = useMenuOverflow(listRef, items.length, popover.isOpen);
 
@@ -597,11 +596,6 @@ export function TopNavMenu({
           role="menu"
           aria-label={label}
           {...contentProps}
-          {...menuPress.menuProps}
-          onPointerDown={pressOnItemsOnly(
-            menuPress.menuProps.onPointerDown,
-            '[role="menuitem"]',
-          )}
           // After the contentProps spread so the full APG composition (roving
           // tabindex + typeahead + Enter/Space activation) replaces the hover
           // hook's basic arrow-key handler.
