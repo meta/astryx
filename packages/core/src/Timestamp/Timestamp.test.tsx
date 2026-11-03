@@ -877,6 +877,29 @@ describe('Timestamp', () => {
       expect(normalize(card.textContent ?? '')).toContain(normalize(expected));
     });
 
+    it('keeps the default hover-card row in the viewer zone with timeZone set', async () => {
+      const user = userEvent.setup();
+      process.env.TZ = 'UTC';
+      render(
+        <Timestamp
+          value={new Date('2026-03-25T10:00:00Z').getTime() / 1000}
+          format="relative"
+          timeZone="Asia/Tokyo"
+          data-testid="ts"
+        />,
+      );
+      const el = screen.getByTestId('ts');
+      await user.tab();
+      expect(el).toHaveFocus();
+      await waitFor(() => {
+        expect(HTMLElement.prototype.showPopover).toHaveBeenCalled();
+      });
+      const card = screen.getByRole('dialog', {hidden: true});
+      // FR7: the default row reads the viewer's zone, not the pinned one.
+      expect(card.textContent).toContain('10:00:00');
+      expect(card.textContent).not.toContain('19:00:00');
+    });
+
     it('does not add a tab stop when the hover card is disabled', () => {
       render(
         <Timestamp
@@ -1866,6 +1889,48 @@ describe('Timestamp server rendering', () => {
       act(() => root?.unmount());
       host.remove();
     }
+  });
+
+  it('keeps the UTC-labelled placeholder for a relative format with timeZone', () => {
+    // FR3/ORD1: while the clock is pending the server placeholder is UTC
+    // with its label, whatever `timeZone` pins.
+    const element = (
+      <Timestamp
+        value={new Date('2026-03-25T10:00:00Z').getTime() / 1000}
+        format="relative"
+        timeZone="America/Los_Angeles"
+        hasTooltip={false}
+      />
+    );
+    process.env.TZ = 'America/Los_Angeles';
+    const html = renderToString(element);
+    expect(html).toContain('UTC');
+    expect(html).not.toContain('Los Angeles');
+  });
+
+  it('ignores timeZone in the relative accessible name', () => {
+    const value = Date.now() / 1000 - 3600;
+    const {rerender} = render(
+      <Timestamp
+        value={value}
+        format="relative"
+        hasTooltip={false}
+        data-testid="ts"
+      />,
+    );
+    const viewerLabel = screen.getByTestId('ts').getAttribute('aria-label');
+    rerender(
+      <Timestamp
+        value={value}
+        format="relative"
+        timeZone="Asia/Tokyo"
+        hasTooltip={false}
+        data-testid="ts"
+      />,
+    );
+    expect(screen.getByTestId('ts').getAttribute('aria-label')).toBe(
+      viewerLabel,
+    );
   });
 
   it('falls back to the viewer zone on an unknown time zone', () => {

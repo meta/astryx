@@ -361,10 +361,13 @@ export function Timestamp({
   // others. The one exception is the pre-hydration placeholder, written in
   // UTC with its label so every zone produces the same markup.
   //
-  // An explicit `timeZone` overrides both: the named zone renders identically
-  // on the server and the client, so absolute output no longer depends on the
-  // server's zone. The placeholder uses it too — server and hydration both
-  // compute from props alone.
+  // An explicit `timeZone` pins absolute display output: the named zone
+  // renders identically on the server and the client, so absolute output no
+  // longer depends on the server's zone. It never reaches the placeholder
+  // (always UTC-labelled per FR3/ORD1), the default hover-card row (always
+  // the viewer's zone per FR7), or a relative format's accessible name
+  // (relative formats ignore it) — those stay viewer- or UTC-based so the
+  // spec's zone guarantees hold whatever is pinned.
   const timeZone = resolveTimezoneID(timeZoneProp, 'timeZone');
   const displayText = !isValidDate
     ? ''
@@ -379,8 +382,8 @@ export function Timestamp({
               locale,
               // The pre-hydration placeholder is written in UTC, labelled, so
               // the server and the hydrating client produce the same text in
-              // every time zone.
-              isClockPending && timeZone === undefined
+              // every time zone — whatever `timeZone` pins.
+              isClockPending
                 ? {timeZone: 'UTC', isTimezoneShown: true}
                 : {timeZone, isTimezoneShown},
             )
@@ -389,13 +392,15 @@ export function Timestamp({
   // Full absolute text for the tooltip (visible — keeps the compact timezone
   // abbreviation) and for the AT-facing aria-label, which spells the timezone
   // out in full: abbreviations like "PST" or "GMT+2" are unexpanded
-  // abbreviations to a screen-reader user (WCAG 3.1.4).
+  // abbreviations to a screen-reader user (WCAG 3.1.4). Both stay in the
+  // viewer's zone: the default hover-card row per FR7, and the relative
+  // accessible name because relative formats ignore `timeZone`.
   const fullAbsoluteText = isValidDate
-    ? formatInstant(date, 'full', locale, {timeZone})
+    ? formatInstant(date, 'full', locale, {timeZone: undefined})
     : '';
   const ariaLabelText = isValidDate
     ? formatInstant(date, 'full', locale, {
-        timeZone,
+        timeZone: undefined,
         timeZoneNameStyle: 'long',
       })
     : '';
