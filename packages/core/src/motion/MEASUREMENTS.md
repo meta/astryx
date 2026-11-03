@@ -129,12 +129,13 @@ Subject "switch S": the first switch in Settings ▸ Accessibility ▸ Display &
 Text Size (Bold Text row); a minimal host app holds a UISwitch on a plain view
 where a switch outside any scroll view is needed.
 
-Captured (iOS 26.2 simulator, Oct 23 2026), with their values landing in the
-switch's own table: M-SW02, M-SW03, M-SW04, M-SW05, M-SW06, M-SW09 (UISwitch
-makes no haptic call), M-SW11 (Reduce Motion: the lift stays, the stretch
-goes), M-SW16 (iOS 26.2). Until that table lands they stay open here, and
-`springs.switchThumbMove` and `switchThumbStretch` keep WebKit's values.
-Partly: M-SW07 (a single tap only). Still open: M-SW17, and M-SW11's On/Off
+Captured (iOS 26.2 simulator, Oct 23 2026), with their values in the
+switch's own table (`uikit/switch.ts`): M-SW02, M-SW03, M-SW04, M-SW05,
+M-SW06, M-SW09 (UISwitch makes no haptic call), M-SW11 (Reduce Motion: the
+lift stays, the stretch goes), M-SW16 (iOS 26.2). `springs.switchThumbMove`
+holds the measured travel the switch's table reads; WebKit's
+`switchThumbStretch` is retired for the table's `lift`. Partly: M-SW07 (a single
+tap only). Still open: M-SW17, and M-SW11's On/Off
 labels, Reduce Transparency and Bold Text.
 
 | ID     | Scene                                                                                                                                              | Gesture                                                                                                                                                                                           | Extract                                                                                                                                    | Method  |

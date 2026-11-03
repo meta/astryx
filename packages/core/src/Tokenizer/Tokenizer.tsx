@@ -55,6 +55,7 @@ import {
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {TokenizerClearAllMessageContext} from './TokenizerClearAllMessageContext';
+import {TokenizerItemRemovableContext} from './TokenizerItemRemovableContext';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useAdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {useIsHydrating} from '../hooks/useIsHydrating';
@@ -103,6 +104,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Tokenizer/Tokenizer.generated';
+import {isRenderable} from '../utils/isRenderable';
 
 registerEnglishFallback(english);
 
@@ -1007,6 +1009,14 @@ export function Tokenizer<T extends SearchableItem>({
   // `endContent`, a clear button, or all three — so its width is measured
   // rather than assumed, and the input reserves it.
   const [laneRef, laneReserve] = useEndLaneReserve(END_LANE_INSET);
+  // A composing component can lock tokens (PowerSearch's read-only field).
+  // Backspace and the token remove controls skip a locked token. Clear all
+  // does not check it.
+  const isItemRemovable = use(TokenizerItemRemovableContext);
+  const canRemoveItem = useCallback(
+    (item: T) => isItemRemovable?.(item) ?? true,
+    [isItemRemovable],
+  );
   // The half of the lane's contents this component knows about. The busy half
   // is the leaf's own business — folding it in here would mean reading the
   // busy state during this render, which is exactly the re-render the store
@@ -1263,7 +1273,7 @@ export function Tokenizer<T extends SearchableItem>({
   // announcement covers both.
   const handleRemove = useCallback(
     (item: T, options?: {silent?: boolean}): boolean => {
-      if (isDisabled) {
+      if (isDisabled || !canRemoveItem(item)) {
         return false;
       }
       const newItems = value.filter(v => v.id !== item.id);
@@ -1274,7 +1284,7 @@ export function Tokenizer<T extends SearchableItem>({
       inputRef.current?.focus();
       return true;
     },
-    [value, onChange, isDisabled, announce, t],
+    [value, onChange, isDisabled, canRemoveItem, announce, t],
   );
 
   // Handle clearing all items
@@ -1414,7 +1424,7 @@ export function Tokenizer<T extends SearchableItem>({
         controlClassName,
         controlStyle,
       )}>
-      {startIcon && (
+      {isRenderable(startIcon as ReactNode) && (
         <span {...stylex.props(value.length > 0 && styles.startIconWithTokens)}>
           {renderIconSlot(startIcon, {size: 'sm', color: 'secondary'})}
         </span>
@@ -1647,7 +1657,7 @@ export function Tokenizer<T extends SearchableItem>({
             controlClassName,
             controlStyle,
           )}>
-          {startIcon && (
+          {isRenderable(startIcon as ReactNode) && (
             <span
               {...stylex.props(value.length > 0 && styles.startIconWithTokens)}>
               {renderIconSlot(startIcon, {size: 'sm', color: 'secondary'})}
@@ -1751,7 +1761,7 @@ export function Tokenizer<T extends SearchableItem>({
           )}>
           {isTruncated && (
             <>
-              {startIcon &&
+              {isRenderable(startIcon as ReactNode) &&
                 renderIconSlot(startIcon, {
                   size: 'sm',
                   color: 'secondary',

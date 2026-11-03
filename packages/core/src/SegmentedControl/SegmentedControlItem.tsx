@@ -37,6 +37,7 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {isRenderable} from '../utils/isRenderable';
 
 export interface SegmentedControlItemProps extends BaseProps<HTMLButtonElement> {
   ref?: React.Ref<HTMLButtonElement>;
@@ -219,7 +220,7 @@ export function SegmentedControlItem({
     },
   );
 
-  const iconElement = icon ? (
+  const iconElement = isRenderable(icon) ? (
     <span {...stylex.props(styles.icon, iconSizeStyles[size])}>{icon}</span>
   ) : null;
 

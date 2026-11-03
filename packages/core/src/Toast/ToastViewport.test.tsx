@@ -19,6 +19,7 @@ import {
   expectTypeOf,
   vi,
   beforeAll,
+  beforeEach,
   afterEach,
 } from 'vitest';
 import {
@@ -39,6 +40,16 @@ import type {ToastProps} from './Toast';
 import {ToastViewport} from './ToastViewport';
 import {useToast} from './useToast';
 import type {ToastOptions} from './types';
+
+// jsdom reports no window focus until an element is focused, but a test page
+// stands for a focused window: a toast raised while the window is blurred
+// starts held (FR2), which the blur tests set up on purpose.
+beforeEach(() => {
+  vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+});
+afterEach(() => {
+  vi.mocked(document.hasFocus).mockRestore?.();
+});
 
 // Spy on the announcement sink so tests can prove a toast is announced exactly
 // once. The mock wraps the real useAnnounce, so the singleton live regions are
@@ -1272,6 +1283,59 @@ describe('Toast blur timer pause', () => {
         within(viewport).queryByText('Auto toast'),
       ).not.toBeInTheDocument();
     } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('Toast raised while the window is blurred', () => {
+  // FR2: a toast raised while the document does not have focus starts held,
+  // so it cannot expire before the user returns to the window.
+  it('starts its auto-hide timer held until the window regains focus', () => {
+    vi.useFakeTimers();
+    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    try {
+      renderViewport(
+        <ShowToastButton options={AUTO_TOAST} triggerLabel="Trigger Auto" />,
+      );
+      act(() => {
+        fireEvent.click(screen.getByText('Trigger Auto'));
+      });
+      const viewport = screen.getByRole('region', {name: 'Notifications'});
+      const heldId = document
+        .querySelector('[data-toast-id]')
+        ?.getAttribute('data-toast-id');
+      act(() => {
+        vi.advanceTimersByTime(30_000);
+      });
+      // An exit that had started would finish here and remove the toast.
+      if (heldId) {
+        act(() => {
+          completeExit(heldId);
+        });
+      }
+      expect(within(viewport).getByText('Auto toast')).toBeInTheDocument();
+
+      hasFocus.mockReturnValue(true);
+      act(() => {
+        window.dispatchEvent(new Event('focus'));
+      });
+      act(() => {
+        vi.advanceTimersByTime(10_000);
+      });
+      const toastId = document
+        .querySelector('[data-toast-id]')
+        ?.getAttribute('data-toast-id');
+      if (toastId) {
+        act(() => {
+          completeExit(toastId);
+        });
+      }
+      expect(
+        within(viewport).queryByText('Auto toast'),
+      ).not.toBeInTheDocument();
+    } finally {
+      hasFocus.mockRestore();
       vi.useRealTimers();
     }
   });

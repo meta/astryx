@@ -54,6 +54,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Lightbox/Lightbox.generated';
+import {isRenderable} from '../utils/isRenderable';
 
 registerEnglishFallback(english);
 /**
@@ -762,7 +763,7 @@ export function Lightbox({
                   )}
                 </div>
 
-                {currentItem.caption && (
+                {isRenderable(currentItem.caption) && (
                   <div {...stylex.props(styles.caption)}>
                     {currentItem.caption}
                   </div>
