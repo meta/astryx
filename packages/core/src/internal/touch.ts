@@ -80,3 +80,7 @@ export {isRtlElement} from '../hooks/isRtlElement';
 export {UIKIT_GESTURES} from '../motion/uikit/gestures';
 export {useTouchPresentation} from '../utils/touchPresentation';
 export {TOUCH_QUERY} from '../utils/touchQueries';
+
+// Lab's TabBar tracks its press with the shared action-group tracker.
+export {useActionGroupTracking} from '../hooks/useActionGroupTracking';
+export type {ActionGroupTrackingOptions} from '../hooks/useActionGroupTracking';

@@ -84,6 +84,18 @@ describe('internal/touch', () => {
     }
   });
 
+  it('re-exports the action-group tracking hook by name', async () => {
+    const entry: Record<string, unknown> = await import('./touch');
+    // Identity alone passes when both sides are undefined.
+    expect(typeof entry.useActionGroupTracking).toBe('function');
+    const modules: Record<string, Record<string, unknown>> = {
+      useActionGroupTracking: await import('../hooks/useActionGroupTracking'),
+    };
+    for (const [name, module] of Object.entries(modules)) {
+      expect(entry[name], name).toBe(module[name]);
+    }
+  });
+
   it('attaches no window or document listeners when it loads', async () => {
     vi.resetModules();
     const onWindow = vi.spyOn(window, 'addEventListener');

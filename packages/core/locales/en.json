@@ -943,6 +943,10 @@
     "defaultMessage": "Maximum value",
     "description": "Accessible name of the upper thumb of a range Slider (two thumbs), announced together with the Slider's own label, for example \"Price range, Maximum value, 80\". Never shown on screen."
   },
+  "@astryx.tabBar.badgedItem": {
+    "defaultMessage": "{label}, {badge}",
+    "description": "Screen-reader name of a bottom tab bar item that shows a badge (\"Library, 3\"). {label} is the tab's visible name; {badge} is the badge's count or its own label (\"3 unread\"). Translators may reorder the two or change the separator."
+  },
   "@astryx.tabList.label": {
     "defaultMessage": "Tabs",
     "description": "Screen-reader-only fallback name for a horizontal tab bar. Plural noun; \"Tabs\" here = UI tab panels, not browser tabs or the Tab key."
