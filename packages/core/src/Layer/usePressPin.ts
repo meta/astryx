@@ -197,6 +197,9 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
 
   // The last offered element lets a `triggerBehavior` change rewire it.
   const triggerRef = useRef<HTMLElement | null>(null);
+  // Every offered trigger, in any mode, so focus leaving ends a pin or an
+  // app hold.
+  const focusTargetRef = useRef<HTMLElement | null>(null);
   const offeredRef = useRef<HTMLElement | null>(null);
   // A primitive: re-attaching the same trigger renders nothing.
   const [offeredKind, setOfferedKind] = useState<'none' | 'other' | 'button'>(
@@ -387,24 +390,15 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
       : isPinnedRef.current && current.isLayerOpen;
   }, []);
 
-  // The pin's own trigger listener and the host's listener for an app hold
-  // can both see one focus move; it closes the layer once.
-  const handledFocusEventsRef = useRef(new WeakSet<Event>());
   const handleFocusLeave = useCallback(
     (event: FocusEvent) => {
-      if (handledFocusEventsRef.current.has(event)) {
-        return true;
-      }
-      handledFocusEventsRef.current.add(event);
       // A Space that comes up after focus left presses nothing.
       spaceHeldRef.current = false;
       if (!isHeldOpen()) {
         return false;
       }
       const next = event.relatedTarget;
-      // A wired toggle trigger, or for an app hold the host's trigger.
-      const trigger =
-        triggerRef.current ?? optionsRef.current.triggerRef.current;
+      const trigger = focusTargetRef.current;
       // Focus that leaves for no element is a press's to decide. The trigger
       // can sit in another document, so the check uses its own window.
       const view = trigger?.ownerDocument.defaultView;
@@ -427,6 +421,8 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
   );
 
   const unwire = useCallback(() => {
+    focusTargetRef.current?.removeEventListener('focusout', handleFocusLeave);
+    focusTargetRef.current = null;
     const previous = triggerRef.current;
     if (previous == null) {
       return;
@@ -434,7 +430,6 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
     previous.removeEventListener('click', handlePress);
     previous.removeEventListener('keydown', handleKeyDown);
     previous.removeEventListener('keyup', handleKeyUp);
-    previous.removeEventListener('focusout', handleFocusLeave);
     const own = ownStateRef.current;
     if (own != null) {
       restoreAttribute(previous, 'aria-expanded', own.expanded);
@@ -463,10 +458,14 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
       }
       settledRef.current = {element, mode: current.triggerBehavior};
       unwire();
-      if (element == null || current.triggerBehavior !== 'toggle') {
+      if (element == null) {
         return;
       }
-      if (!isPressPinTrigger(element)) {
+      // Its own focus-leave listener, in any mode: `focusTrigger="never"`
+      // attaches none, and an app hold needs it on any trigger.
+      element.addEventListener('focusout', handleFocusLeave);
+      focusTargetRef.current = element;
+      if (current.triggerBehavior !== 'toggle' || !isPressPinTrigger(element)) {
         return;
       }
       element.addEventListener('click', handlePress);
@@ -474,8 +473,6 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
         element.addEventListener('keydown', handleKeyDown);
         element.addEventListener('keyup', handleKeyUp);
       }
-      // Its own focus-leave listener: `focusTrigger="never"` attaches none.
-      element.addEventListener('focusout', handleFocusLeave);
       ownStateRef.current = {
         expanded: element.getAttribute('aria-expanded'),
         controls: element.getAttribute('aria-controls'),

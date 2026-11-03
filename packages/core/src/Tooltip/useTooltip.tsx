@@ -395,7 +395,6 @@ export function useTooltipWithTriggerBehavior(
     isHeldOpen: isPressHeldOpen,
     attach: attachPressPin,
     unpin: unpinPress,
-    handleFocusLeave: handlePressFocusLeave,
     hold: holdPress,
     release: releasePress,
     isAppHeld,
@@ -586,9 +585,9 @@ export function useTooltipWithTriggerBehavior(
   // tooltip at all), so the touch path answers it first.
   const handlePointerDown = useCallback(
     (event: PointerEvent) => {
-      // A press on a toggle trigger pins or closes through its click, and a
-      // tooltip the app's show() holds closes through the app's hide(). It
-      // neither hides here nor waits for a tap verdict.
+      // A toggle trigger's press pins or closes through its click. The app's
+      // hide() closes a held tooltip. Neither path hides here or waits for a
+      // tap verdict.
       if (isToggleTrigger(triggerRef.current) || isAppHeld()) {
         return;
       }
@@ -611,18 +610,6 @@ export function useTooltipWithTriggerBehavior(
     ],
   );
 
-  // A tooltip the app's show() holds closes when focus leaves its trigger and
-  // its surface. A toggle trigger's pin has its own listener.
-  const handleHeldFocusOut = useCallback(
-    (event: FocusEvent) => {
-      if (isToggleTrigger(triggerRef.current)) {
-        return;
-      }
-      handlePressFocusLeave(event);
-    },
-    [isToggleTrigger, handlePressFocusLeave],
-  );
-
   // Interaction ref that handles event listeners only
   const interactionRef: RefCallback<HTMLElement> = useCallback(
     (el: HTMLElement | null) => {
@@ -640,7 +627,6 @@ export function useTooltipWithTriggerBehavior(
           'pointerdown',
           handlePointerDown,
         );
-        triggerRef.current.removeEventListener('focusout', handleHeldFocusOut);
       }
 
       if (el) {
@@ -652,8 +638,6 @@ export function useTooltipWithTriggerBehavior(
         el.addEventListener('mouseleave', handleMouseLeave);
         // Press-to-dismiss on a mouse; tap-to-open on a touch pointer.
         el.addEventListener('pointerdown', handlePointerDown);
-        // Whatever `focusTrigger` is, focus leaving closes a held tooltip.
-        el.addEventListener('focusout', handleHeldFocusOut);
 
         // Focus listeners unless focus never opens the tooltip; `auto` decides
         // per event (isFocusForTrigger).
@@ -675,7 +659,6 @@ export function useTooltipWithTriggerBehavior(
       handleFocusOut,
       handlePointerEnter,
       handlePointerDown,
-      handleHeldFocusOut,
     ],
   );
 
