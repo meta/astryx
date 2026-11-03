@@ -46,7 +46,6 @@ import {
 } from '../theme/tokens.stylex';
 import {Spinner} from '../Spinner/Spinner';
 import {Icon} from '../Icon/Icon';
-import {isRenderable} from '../utils/isRenderable';
 import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {IconDefaultSizeProvider} from '../Icon/IconDefaultSizeContext';
 import {iconBoxSizeStyles, type IconSize} from '../Icon/IconSize.stylex';
