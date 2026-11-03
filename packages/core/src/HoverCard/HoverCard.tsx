@@ -10,12 +10,20 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/HoverCard/HoverCard.test.tsx
+ * - /packages/core/src/HoverCard/HoverCard.doc.mjs
  * - /packages/core/src/HoverCard/index.ts
  * - /apps/storybook/stories/HoverCard.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/HoverCard/ (showcase blocks)
  */
 
-import {useCallback, useRef, type ReactElement, type ReactNode} from 'react';
+import {
+  useCallback,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
+import {observeMutations} from '../utils/sharedMutationObserver';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
 import {
@@ -190,9 +198,10 @@ export interface HoverCardProps extends Pick<
   onOpenChange?: (isOpen: boolean) => void;
 
   /**
-   * Whether to show hover indication (dashed underline) on the trigger.
-   * - `'auto'`: Show for text-only children
-   * - `true`: Always show
+   * Whether to show hover indication (dashed underline) on a text trigger.
+   * An element trigger keeps its own styling, so this has no effect on it.
+   * - `'auto'`: Show when children is a single string or number
+   * - `true`: Show on a text trigger
    * - `false`: Never show
    *
    * @default 'auto'
@@ -200,9 +209,10 @@ export interface HoverCardProps extends Pick<
   hasHoverIndication?: 'auto' | boolean;
 
   /**
-   * Controlled open state. When provided, overrides hover/focus triggers:
+   * Controlled open state. When provided, overrides the hover trigger:
    * - `true`: force-show the hover card (hover/focus hide is suppressed)
-   * - `false`: force-hide the hover card
+   * - `false`: hide the hover card and keep hover from opening it; focus on
+   *   the trigger still opens it
    * - `undefined`: uncontrolled — hover/focus triggers manage visibility
    *
    * A controlled hover card still takes Escape when it is the top-most layer,
@@ -299,6 +309,28 @@ export function HoverCard({
     onShow: handleShow,
     onHide: handleHide,
   });
+
+  // The wrapper's first element is the trigger, and it can be replaced after
+  // mount: by new children, or by a child component that swaps its own root
+  // without a render here. Syncs with the DOM: on a replacement the wiring
+  // below re-runs, so the old element is released before the new one is wired.
+  const [triggerReplacements, setTriggerReplacements] = useState(0);
+  const observedTriggerRef = useRef<Element | null>(null);
+  useIsomorphicLayoutEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (textOnly || wrapper == null) {
+      return;
+    }
+    observedTriggerRef.current = wrapper.firstElementChild;
+    return observeMutations(wrapper, {childList: true}, () => {
+      const trigger = wrapper.firstElementChild;
+      if (trigger === observedTriggerRef.current) {
+        return;
+      }
+      observedTriggerRef.current = trigger;
+      setTriggerReplacements(count => count + 1);
+    });
+  }, [textOnly]);
 
   // For element children with display:contents, attach ref to first child
   useIsomorphicLayoutEffect(() => {
@@ -404,6 +436,7 @@ export function HoverCard({
     hoverCard.id,
     hoverCard.isOpen,
     hoverCard.describedBy,
+    triggerReplacements,
   ]);
 
   // While closed, useLayer leaves only an inert <template> marker at this JSX

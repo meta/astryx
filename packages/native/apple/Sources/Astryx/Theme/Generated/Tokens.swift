@@ -100,10 +100,14 @@ public struct ColorTokens: Equatable, Sendable {
   public var borderCyan: Color
   /// `--color-border-emphasized`
   public var borderEmphasized: Color
+  /// `--color-border-error`
+  public var borderError: Color
   /// `--color-border-gray`
   public var borderGray: Color
   /// `--color-border-green`
   public var borderGreen: Color
+  /// `--color-border-info`
+  public var borderInfo: Color
   /// `--color-border-orange`
   public var borderOrange: Color
   /// `--color-border-pink`
@@ -112,8 +116,12 @@ public struct ColorTokens: Equatable, Sendable {
   public var borderPurple: Color
   /// `--color-border-red`
   public var borderRed: Color
+  /// `--color-border-success`
+  public var borderSuccess: Color
   /// `--color-border-teal`
   public var borderTeal: Color
+  /// `--color-border-warning`
+  public var borderWarning: Color
   /// `--color-border-yellow`
   public var borderYellow: Color
   /// `--color-data-blue-1`
@@ -240,10 +248,14 @@ public struct ColorTokens: Equatable, Sendable {
   public var iconCyan: Color
   /// `--color-icon-disabled`
   public var iconDisabled: Color
+  /// `--color-icon-error`
+  public var iconError: Color
   /// `--color-icon-gray`
   public var iconGray: Color
   /// `--color-icon-green`
   public var iconGreen: Color
+  /// `--color-icon-info`
+  public var iconInfo: Color
   /// `--color-icon-orange`
   public var iconOrange: Color
   /// `--color-icon-pink`
@@ -256,10 +268,18 @@ public struct ColorTokens: Equatable, Sendable {
   public var iconRed: Color
   /// `--color-icon-secondary`
   public var iconSecondary: Color
+  /// `--color-icon-success`
+  public var iconSuccess: Color
   /// `--color-icon-teal`
   public var iconTeal: Color
+  /// `--color-icon-warning`
+  public var iconWarning: Color
   /// `--color-icon-yellow`
   public var iconYellow: Color
+  /// `--color-info`
+  public var info: Color
+  /// `--color-info-muted`
+  public var infoMuted: Color
   /// `--color-neutral`
   public var neutral: Color
   /// `--color-on-accent`
@@ -268,12 +288,22 @@ public struct ColorTokens: Equatable, Sendable {
   public var onDark: Color
   /// `--color-on-error`
   public var onError: Color
+  /// `--color-on-error-muted`
+  public var onErrorMuted: Color
+  /// `--color-on-info`
+  public var onInfo: Color
+  /// `--color-on-info-muted`
+  public var onInfoMuted: Color
   /// `--color-on-light`
   public var onLight: Color
   /// `--color-on-success`
   public var onSuccess: Color
+  /// `--color-on-success-muted`
+  public var onSuccessMuted: Color
   /// `--color-on-warning`
   public var onWarning: Color
+  /// `--color-on-warning-muted`
+  public var onWarningMuted: Color
   /// `--color-overlay`
   public var overlay: Color
   /// `--color-overlay-hover`
@@ -334,10 +364,14 @@ public struct ColorTokens: Equatable, Sendable {
   public var textCyan: Color
   /// `--color-text-disabled`
   public var textDisabled: Color
+  /// `--color-text-error`
+  public var textError: Color
   /// `--color-text-gray`
   public var textGray: Color
   /// `--color-text-green`
   public var textGreen: Color
+  /// `--color-text-info`
+  public var textInfo: Color
   /// `--color-text-orange`
   public var textOrange: Color
   /// `--color-text-pink`
@@ -350,8 +384,12 @@ public struct ColorTokens: Equatable, Sendable {
   public var textRed: Color
   /// `--color-text-secondary`
   public var textSecondary: Color
+  /// `--color-text-success`
+  public var textSuccess: Color
   /// `--color-text-teal`
   public var textTeal: Color
+  /// `--color-text-warning`
+  public var textWarning: Color
   /// `--color-text-yellow`
   public var textYellow: Color
   /// `--color-tint-hover`
@@ -387,13 +425,17 @@ public struct ColorTokens: Equatable, Sendable {
     borderBlue: Color,
     borderCyan: Color,
     borderEmphasized: Color,
+    borderError: Color,
     borderGray: Color,
     borderGreen: Color,
+    borderInfo: Color,
     borderOrange: Color,
     borderPink: Color,
     borderPurple: Color,
     borderRed: Color,
+    borderSuccess: Color,
     borderTeal: Color,
+    borderWarning: Color,
     borderYellow: Color,
     dataBlue1: Color,
     dataBlue2: Color,
@@ -457,23 +499,34 @@ public struct ColorTokens: Equatable, Sendable {
     iconBlue: Color,
     iconCyan: Color,
     iconDisabled: Color,
+    iconError: Color,
     iconGray: Color,
     iconGreen: Color,
+    iconInfo: Color,
     iconOrange: Color,
     iconPink: Color,
     iconPrimary: Color,
     iconPurple: Color,
     iconRed: Color,
     iconSecondary: Color,
+    iconSuccess: Color,
     iconTeal: Color,
+    iconWarning: Color,
     iconYellow: Color,
+    info: Color,
+    infoMuted: Color,
     neutral: Color,
     onAccent: Color,
     onDark: Color,
     onError: Color,
+    onErrorMuted: Color,
+    onInfo: Color,
+    onInfoMuted: Color,
     onLight: Color,
     onSuccess: Color,
+    onSuccessMuted: Color,
     onWarning: Color,
+    onWarningMuted: Color,
     overlay: Color,
     overlayHover: Color,
     overlayPressed: Color,
@@ -504,15 +557,19 @@ public struct ColorTokens: Equatable, Sendable {
     textBlue: Color,
     textCyan: Color,
     textDisabled: Color,
+    textError: Color,
     textGray: Color,
     textGreen: Color,
+    textInfo: Color,
     textOrange: Color,
     textPink: Color,
     textPrimary: Color,
     textPurple: Color,
     textRed: Color,
     textSecondary: Color,
+    textSuccess: Color,
     textTeal: Color,
+    textWarning: Color,
     textYellow: Color,
     tintHover: Color,
     track: Color,
@@ -542,13 +599,17 @@ public struct ColorTokens: Equatable, Sendable {
     self.borderBlue = borderBlue
     self.borderCyan = borderCyan
     self.borderEmphasized = borderEmphasized
+    self.borderError = borderError
     self.borderGray = borderGray
     self.borderGreen = borderGreen
+    self.borderInfo = borderInfo
     self.borderOrange = borderOrange
     self.borderPink = borderPink
     self.borderPurple = borderPurple
     self.borderRed = borderRed
+    self.borderSuccess = borderSuccess
     self.borderTeal = borderTeal
+    self.borderWarning = borderWarning
     self.borderYellow = borderYellow
     self.dataBlue1 = dataBlue1
     self.dataBlue2 = dataBlue2
@@ -612,23 +673,34 @@ public struct ColorTokens: Equatable, Sendable {
     self.iconBlue = iconBlue
     self.iconCyan = iconCyan
     self.iconDisabled = iconDisabled
+    self.iconError = iconError
     self.iconGray = iconGray
     self.iconGreen = iconGreen
+    self.iconInfo = iconInfo
     self.iconOrange = iconOrange
     self.iconPink = iconPink
     self.iconPrimary = iconPrimary
     self.iconPurple = iconPurple
     self.iconRed = iconRed
     self.iconSecondary = iconSecondary
+    self.iconSuccess = iconSuccess
     self.iconTeal = iconTeal
+    self.iconWarning = iconWarning
     self.iconYellow = iconYellow
+    self.info = info
+    self.infoMuted = infoMuted
     self.neutral = neutral
     self.onAccent = onAccent
     self.onDark = onDark
     self.onError = onError
+    self.onErrorMuted = onErrorMuted
+    self.onInfo = onInfo
+    self.onInfoMuted = onInfoMuted
     self.onLight = onLight
     self.onSuccess = onSuccess
+    self.onSuccessMuted = onSuccessMuted
     self.onWarning = onWarning
+    self.onWarningMuted = onWarningMuted
     self.overlay = overlay
     self.overlayHover = overlayHover
     self.overlayPressed = overlayPressed
@@ -659,15 +731,19 @@ public struct ColorTokens: Equatable, Sendable {
     self.textBlue = textBlue
     self.textCyan = textCyan
     self.textDisabled = textDisabled
+    self.textError = textError
     self.textGray = textGray
     self.textGreen = textGreen
+    self.textInfo = textInfo
     self.textOrange = textOrange
     self.textPink = textPink
     self.textPrimary = textPrimary
     self.textPurple = textPurple
     self.textRed = textRed
     self.textSecondary = textSecondary
+    self.textSuccess = textSuccess
     self.textTeal = textTeal
+    self.textWarning = textWarning
     self.textYellow = textYellow
     self.tintHover = tintHover
     self.track = track
@@ -702,13 +778,17 @@ public struct ColorTokens: Equatable, Sendable {
     case "color-border-blue": borderBlue
     case "color-border-cyan": borderCyan
     case "color-border-emphasized": borderEmphasized
+    case "color-border-error": borderError
     case "color-border-gray": borderGray
     case "color-border-green": borderGreen
+    case "color-border-info": borderInfo
     case "color-border-orange": borderOrange
     case "color-border-pink": borderPink
     case "color-border-purple": borderPurple
     case "color-border-red": borderRed
+    case "color-border-success": borderSuccess
     case "color-border-teal": borderTeal
+    case "color-border-warning": borderWarning
     case "color-border-yellow": borderYellow
     case "color-data-blue-1": dataBlue1
     case "color-data-blue-2": dataBlue2
@@ -772,23 +852,34 @@ public struct ColorTokens: Equatable, Sendable {
     case "color-icon-blue": iconBlue
     case "color-icon-cyan": iconCyan
     case "color-icon-disabled": iconDisabled
+    case "color-icon-error": iconError
     case "color-icon-gray": iconGray
     case "color-icon-green": iconGreen
+    case "color-icon-info": iconInfo
     case "color-icon-orange": iconOrange
     case "color-icon-pink": iconPink
     case "color-icon-primary": iconPrimary
     case "color-icon-purple": iconPurple
     case "color-icon-red": iconRed
     case "color-icon-secondary": iconSecondary
+    case "color-icon-success": iconSuccess
     case "color-icon-teal": iconTeal
+    case "color-icon-warning": iconWarning
     case "color-icon-yellow": iconYellow
+    case "color-info": info
+    case "color-info-muted": infoMuted
     case "color-neutral": neutral
     case "color-on-accent": onAccent
     case "color-on-dark": onDark
     case "color-on-error": onError
+    case "color-on-error-muted": onErrorMuted
+    case "color-on-info": onInfo
+    case "color-on-info-muted": onInfoMuted
     case "color-on-light": onLight
     case "color-on-success": onSuccess
+    case "color-on-success-muted": onSuccessMuted
     case "color-on-warning": onWarning
+    case "color-on-warning-muted": onWarningMuted
     case "color-overlay": overlay
     case "color-overlay-hover": overlayHover
     case "color-overlay-pressed": overlayPressed
@@ -819,15 +910,19 @@ public struct ColorTokens: Equatable, Sendable {
     case "color-text-blue": textBlue
     case "color-text-cyan": textCyan
     case "color-text-disabled": textDisabled
+    case "color-text-error": textError
     case "color-text-gray": textGray
     case "color-text-green": textGreen
+    case "color-text-info": textInfo
     case "color-text-orange": textOrange
     case "color-text-pink": textPink
     case "color-text-primary": textPrimary
     case "color-text-purple": textPurple
     case "color-text-red": textRed
     case "color-text-secondary": textSecondary
+    case "color-text-success": textSuccess
     case "color-text-teal": textTeal
+    case "color-text-warning": textWarning
     case "color-text-yellow": textYellow
     case "color-tint-hover": tintHover
     case "color-track": track

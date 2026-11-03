@@ -224,7 +224,7 @@ export const docs = {
     },
     {
       name: 'statusVariant',
-      type: 'FieldStatusVariant',
+      type: "'attached' | 'detached' | 'tooltip'",
       description: 'Placement treatment for the status message.',
     },
     {

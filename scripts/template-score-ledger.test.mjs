@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import {describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {TEMPLATE_RUBRIC} from '../packages/cli/assets/docs/tree/template-grading-rubric.doc.mjs';
 
 import {
@@ -33,6 +33,22 @@ import {
   templateGrade,
   validateLedger,
 } from './template-score-ledger.mjs';
+
+/**
+ * The folder every temporary file of these tests lives in, the CLI's included
+ * (its TMPDIR), removed once they finish, so a run leaves nothing behind in the
+ * system temp directory. It is made in beforeAll, not when the module loads:
+ * Vitest skips both hooks when a run filters out every test here.
+ */
+let TEMP_ROOT = '';
+beforeAll(() => {
+  TEMP_ROOT = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'astryx-template-score-ledger-test-'),
+  );
+});
+afterAll(() => {
+  fs.rmSync(TEMP_ROOT, {recursive: true, force: true});
+});
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '..');
 const SCRIPT = path.join(REPO_ROOT, 'scripts', 'template-score-ledger.mjs');
@@ -94,9 +110,9 @@ describe('the public ledger contract', () => {
   it('uses the one wiki file and branch shared by every write path', () => {
     expect(TEMPLATE_LEDGER_FILENAME).toBe('template-scores.json');
     expect(TEMPLATE_LEDGER_URL).toBe(
-      'https://raw.githubusercontent.com/wiki/facebook/astryx/template-scores.json',
+      'https://raw.githubusercontent.com/wiki/meta/astryx/template-scores.json',
     );
-    expect(WIKI_REMOTE).toBe('https://github.com/facebook/astryx.wiki.git');
+    expect(WIKI_REMOTE).toBe('https://github.com/meta/astryx.wiki.git');
     expect(WIKI_BRANCH).toBe('master');
     expect(ensureWikiClone).toBeTypeOf('function');
   });
@@ -436,7 +452,7 @@ function cli(argv, {cwd = REPO_ROOT, input, env} = {}) {
       cwd,
       input,
       encoding: 'utf8',
-      env: {...process.env, ...env},
+      env: {...process.env, TMPDIR: TEMP_ROOT, ...env},
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     return {code: 0, out};
@@ -454,7 +470,7 @@ function identify(directory) {
 }
 
 function makeWiki(seedLedger) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'template-ledger-wiki-'));
+  const root = fs.mkdtempSync(path.join(TEMP_ROOT, 'template-ledger-wiki-'));
   const bare = path.join(root, 'wiki.git');
   const seed = path.join(root, 'seed');
   const clone = path.join(root, 'clone');
@@ -589,7 +605,7 @@ describe('--record', () => {
 
   it('refuses to create a partial ledger at a nonexistent local path', () => {
     const root = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'template-ledger-missing-'),
+      path.join(TEMP_ROOT, 'template-ledger-missing-'),
     );
     const ledger = path.join(root, TEMPLATE_LEDGER_FILENAME);
     const result = cli(

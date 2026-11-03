@@ -157,17 +157,52 @@ describe('BottomSheetPanel', () => {
     expect(onMotionComplete).toHaveBeenLastCalledWith('exiting');
   });
 
+  it('keeps exiting when the engine replaces the exit transition mid-flight', () => {
+    const onMotionComplete = vi.fn();
+    renderPanel({kind: 'exiting'}, {onMotionComplete});
+    const panel = getPanel();
+    // Chromium cancels a running transition whose end value changes, and
+    // starts one from where it was. The exit's percentage transform changes
+    // when the closing frame moves the sheet's height by a fraction of a pixel.
+    panel.getAnimations = () =>
+      [{transitionProperty: 'transform', playState: 'running'}] as never;
+    fireEvent.transitionCancel(panel, {propertyName: 'transform'});
+    expect(onMotionComplete).not.toHaveBeenCalled();
+    panel.getAnimations = () => [];
+    fireEvent.transitionEnd(panel, {propertyName: 'transform'});
+    expect(onMotionComplete).toHaveBeenCalledWith('exiting');
+  });
+
+  it('ends the exit when its transition is cancelled with nothing running on', () => {
+    const onMotionComplete = vi.fn();
+    renderPanel({kind: 'exiting'}, {onMotionComplete});
+    const panel = getPanel();
+    panel.getAnimations = () => [];
+    fireEvent.transitionCancel(panel, {propertyName: 'transform'});
+    expect(onMotionComplete).toHaveBeenCalledWith('exiting');
+  });
+
   it('completes immediately when the rendered transition is disabled', () => {
-    vi.mocked(matchMedia).mockReturnValue({
-      matches: true,
-      media: '(prefers-reduced-motion: reduce)',
-      onchange: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    });
+    // The stylesheet decides reduced motion (its transform transition
+    // collapses under the preference); the gesture hook no longer pins an
+    // inline `none` for it, so this models a rendered `transition: none`
+    // directly, as a mid-drag reconcile writes.
+    const nativeGetComputedStyle = window.getComputedStyle;
+    const spy = vi
+      .spyOn(window, 'getComputedStyle')
+      .mockImplementation((element, pseudo) => {
+        const declaration = nativeGetComputedStyle(element, pseudo);
+        if (
+          element instanceof HTMLElement &&
+          element.classList.contains('astryx-bottom-sheet')
+        ) {
+          Object.defineProperty(declaration, 'transition', {
+            value: 'none',
+            configurable: true,
+          });
+        }
+        return declaration;
+      });
     const onMotionComplete = vi.fn();
     render(
       <BottomSheetPanel
@@ -182,6 +217,7 @@ describe('BottomSheetPanel', () => {
     );
 
     expect(onMotionComplete).toHaveBeenCalledWith('entering');
+    spy.mockRestore();
   });
 
   it('derives its transition backstop from the rendered timing', () => {
@@ -343,10 +379,13 @@ describe('BottomSheetPanel', () => {
    *
    * `--ease-standard` is a decelerate curve: on it the sheet was half gone in
    * 59ms of a 410ms transition and 90% gone in 163ms, so the close was over
-   * before it could be seen. The closing state therefore carries its own
-   * accelerating curve, and only the closing state does.
+   * before it could be seen. The closing state therefore reads the
+   * accelerating `--ease-exit` curve (its default is pinned in
+   * theme/tokens.test.ts), and only the closing state does. A touch
+   * presentation keeps its own curve, which the exit tokens do not change
+   * (spec:AST-090 FR12).
    */
-  it('closes on an accelerating curve of its own, not the entrance timing', () => {
+  it('closes on the exit curve, not the entrance timing', () => {
     const declarationsFor = (element: HTMLElement) => {
       const classes = new Set(element.className.split(/\s+/));
       const out: string[] = [];
@@ -367,6 +406,35 @@ describe('BottomSheetPanel', () => {
       }
       return out.join('\n');
     };
+    // The rules inside an `@media` block with the given condition.
+    const mediaDeclarationsFor = (element: HTMLElement, condition: string) => {
+      const classes = new Set(element.className.split(/\s+/));
+      const out: string[] = [];
+      for (const styleSheet of Array.from(document.styleSheets)) {
+        let rules: CSSRuleList;
+        try {
+          rules = styleSheet.cssRules;
+        } catch {
+          continue;
+        }
+        for (const rule of Array.from(rules)) {
+          if (
+            !(rule instanceof CSSMediaRule) ||
+            rule.media.mediaText.replace(/\s/g, '') !== condition
+          ) {
+            continue;
+          }
+          for (const inner of Array.from(rule.cssRules)) {
+            const selector = (inner as CSSStyleRule).selectorText;
+            const owner = selector?.match(/^\.([\w-]+)/)?.[1];
+            if (owner != null && classes.has(owner)) {
+              out.push(inner.cssText);
+            }
+          }
+        }
+      }
+      return out.join('\n');
+    };
 
     const {container: closing} = render(
       <BottomSheetPanel
@@ -378,14 +446,25 @@ describe('BottomSheetPanel', () => {
         Panel content
       </BottomSheetPanel>,
     );
-    const closingRules = declarationsFor(
-      closing.querySelector('.astryx-bottom-sheet') as HTMLElement,
-    );
-    // An accelerating curve: no vertical rise at the start (y1 = 0), so the
-    // travel lands inside the duration instead of ahead of it.
+    const closingSheet = closing.querySelector(
+      '.astryx-bottom-sheet',
+    ) as HTMLElement;
+    const closingRules = declarationsFor(closingSheet);
+    // The theme's exit curve, not a curve restated locally.
     expect(closingRules).toContain(
+      'transition-timing-function: var(--ease-exit)',
+    );
+    expect(closingRules).not.toContain('cubic-bezier(.3,0,.6,.6)');
+    // Under a coarse pointer the close keeps its own curve, so a theme's
+    // `--ease-exit` does not reach a touch presentation.
+    const coarseClosingRules = mediaDeclarationsFor(
+      closingSheet,
+      '(pointer:coarse)',
+    );
+    expect(coarseClosingRules).toContain(
       'transition-timing-function: cubic-bezier(.3,0,.6,.6)',
     );
+    expect(coarseClosingRules).not.toContain('--ease-exit');
 
     const {container: resting} = render(
       <BottomSheetPanel
@@ -403,7 +482,7 @@ describe('BottomSheetPanel', () => {
     expect(restingRules).toContain(
       'transition-timing-function: var(--ease-standard)',
     );
-    expect(restingRules).not.toContain('cubic-bezier(.3,0,.6,.6)');
+    expect(restingRules).not.toContain('--ease-exit');
   });
 
   describe('container padding', () => {

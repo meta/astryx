@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {useEffect, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {AppShell} from '@astryxdesign/core/AppShell';
 import {
@@ -14,6 +15,7 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {ListItem} from '@astryxdesign/core/List';
 import {MoreMenu} from '@astryxdesign/core/MoreMenu';
 import {NavIcon} from '@astryxdesign/core/NavIcon';
+import {NavHeadingMenu, NavHeadingMenuItem} from '@astryxdesign/core/NavMenu';
 import {Text} from '@astryxdesign/core/Text';
 import {
   HomeIcon,
@@ -125,6 +127,35 @@ export const TitleWithoutIcon: Story = {
 // =============================================================================
 // With Header Menu
 // =============================================================================
+
+/**
+ * A header whose menu holds NavHeadingMenu items. A press that slides across
+ * them acts on the item it lifts on, as every menu does.
+ */
+export const WithHeaderMenuItems: Story = {
+  name: 'Header with Menu Items',
+  render: () => (
+    <SideNav
+      header={
+        <SideNavHeading
+          icon={<NavIcon icon={<CubeIcon style={{width: 16, height: 16}} />} />}
+          heading="Product Name"
+          subheading="Business Account"
+          menu={
+            <NavHeadingMenu>
+              <NavHeadingMenuItem label="Personal Account" onClick={() => {}} />
+              <NavHeadingMenuItem label="Acme Corp" onClick={() => {}} />
+              <NavHeadingMenuItem label="Sign out" onClick={() => {}} />
+            </NavHeadingMenu>
+          }
+        />
+      }>
+      <SideNavSection title="Navigation">
+        <SideNavItem label="Dashboard" icon={HomeIcon} isSelected />
+      </SideNavSection>
+    </SideNav>
+  ),
+};
 
 export const WithHeaderMenu: Story = {
   name: 'Header with Menu',
@@ -811,6 +842,72 @@ export const IconlessNestedItems: Story = {
           <SideNavItem label="Annual" href="/reports/annual" />
         </SideNavItem>
         <SideNavItem label="Analytics" icon={ChartBarIcon} href="/analytics" />
+      </SideNavSection>
+    </SideNav>
+  ),
+};
+
+// =============================================================================
+// Collapse with focus on a row the rail does not render (AR3)
+// =============================================================================
+
+/**
+ * The app collapses the rail from a keyboard shortcut (`[`), which leaves
+ * focus where it was. Focus on "Reports", which has no icon and so is not in
+ * the collapsed rail, moves to the collapse toggle, or, with none, to the
+ * nearest row still in the rail; focus elsewhere stays put.
+ */
+function CollapseFocusDemo({hasButton}: {hasButton: boolean}) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === '[') {
+        setIsCollapsed(collapsed => !collapsed);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
+  return (
+    <div style={{display: 'flex', gap: 16, height: 360}}>
+      <SideNav
+        collapsible={{
+          isCollapsed,
+          onCollapsedChange: setIsCollapsed,
+          hasButton,
+        }}>
+        <SideNavSection title="Main">
+          <SideNavItem label="Dashboard" icon={HomeIcon} href="/dashboard" />
+          <SideNavItem label="Reports" href="/reports" />
+          <SideNavItem label="Team" icon={UserGroupIcon} href="/team" />
+        </SideNavSection>
+      </SideNav>
+      <Button label="Elsewhere" variant="secondary" />
+    </div>
+  );
+}
+
+export const CollapseFocus: Story = {
+  name: 'Collapse Focus',
+  render: () => <CollapseFocusDemo hasButton />,
+};
+
+export const CollapseFocusWithoutToggle: Story = {
+  name: 'Collapse Focus Without Toggle',
+  render: () => <CollapseFocusDemo hasButton={false} />,
+};
+
+/**
+ * Fixture for the RTL audit: a section header with end content, so the
+ * title-then-end-content order can be measured in both directions.
+ */
+export const SectionEndContent: Story = {
+  name: 'Section / End content',
+  render: () => (
+    <SideNav>
+      <SideNavSection title="Projects" endContent={<Badge label="12" />}>
+        <SideNavItem label="Atlas" icon={FolderIcon} href="/atlas" />
+        <SideNavItem label="Beacon" icon={FolderIcon} href="/beacon" />
       </SideNavSection>
     </SideNav>
   ),

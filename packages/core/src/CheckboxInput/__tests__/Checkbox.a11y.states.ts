@@ -311,8 +311,13 @@ export const CHECKBOX_BINDING_STATES = [
     id: 'list-item-group-disabled-with-message',
     binding: 'CheckboxListItem',
     summary:
-      'an item in an unavailable group, kept focusable so the group reason is discoverable',
-    facts: facts({checked: true, operable: false, disabled: true}),
+      'an item in an unavailable group, kept focusable and described by the group reason',
+    facts: facts({
+      checked: true,
+      operable: false,
+      disabled: true,
+      description: 'Managed by your administrator',
+    }),
     visibleLabel: 'Email',
     visibleLabelSelector: '[data-a11y-visible-label]',
     storyId: 'a11y-checkbox-pattern--list-item-group-disabled-with-message',

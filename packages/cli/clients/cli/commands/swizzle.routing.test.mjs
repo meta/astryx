@@ -155,7 +155,7 @@ describe('swizzle — core feedback routing via config', () => {
     expect(result.code).toBe(0);
     const env = JSON.parse(result.stdout);
     expect(env.data.feedback.issuesUrl).toBe(
-      'https://github.com/facebook/astryx/issues/new',
+      'https://github.com/meta/astryx/issues/new',
     );
   });
 });

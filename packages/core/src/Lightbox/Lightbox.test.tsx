@@ -53,6 +53,21 @@ describe('Lightbox', () => {
     expect(dialog).toBeInTheDocument();
   });
 
+  it('opens once an item arrives when opened with none', () => {
+    const {rerender} = render(
+      <Lightbox isOpen={true} onOpenChange={() => {}} media={[]} />,
+    );
+    expect(document.querySelector('dialog')).toBeNull();
+    rerender(
+      <Lightbox
+        isOpen={true}
+        onOpenChange={() => {}}
+        media={[{src: '/photo.jpg', alt: 'Photo'}]}
+      />,
+    );
+    expect(document.querySelector('dialog')).toHaveAttribute('open');
+  });
+
   it('calls showModal when isOpen becomes true', () => {
     render(
       <Lightbox
@@ -115,6 +130,24 @@ describe('Lightbox', () => {
     const closeButton = screen.getByLabelText('Close');
     fireEvent.click(closeButton);
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('ignores a cancel that bubbles up from inside it', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <Lightbox
+        isOpen={true}
+        onOpenChange={onOpenChange}
+        media={{src: '/photo.jpg', alt: 'Photo'}}
+      />,
+    );
+    // Only a close request fired at the <dialog> itself dismisses; a bubbling
+    // `cancel` from a control inside (a dismissed file picker) does not.
+    const inside = document.querySelector('dialog button')!;
+    const fromInside = new Event('cancel', {bubbles: true, cancelable: true});
+    inside.dispatchEvent(fromInside);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(fromInside.defaultPrevented).toBe(false);
   });
 
   it('calls onOpenChange(false) on Escape via cancel event', () => {

@@ -25,6 +25,11 @@ export type PropType =
   | {kind: 'content'}
   /** A shared icon name: the typed icon slot (AST-082 FR4, FR17). */
   | {kind: 'icon'}
+  /**
+   * Words or a switch, such as a tooltip that is on (`true`, the component's
+   * own words), off (`false`), or given words.
+   */
+  | {kind: 'textOrBoolean'}
   | {kind: 'named'; name: string};
 
 export interface PropSpec {

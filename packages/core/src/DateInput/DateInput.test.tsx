@@ -21,7 +21,7 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {getButton, queryButton} from '../__tests__/fastRoleQueries';
-import {DateInput} from './DateInput';
+import {DateInput, type DateInputProps} from './DateInput';
 import {Icon} from '../Icon';
 import {InputGroup} from '../InputGroup';
 import {InputGroupText} from '../InputGroup/InputGroupText';
@@ -421,6 +421,213 @@ describe('DateInput', () => {
     expect(input).toHaveAttribute('aria-expanded', 'true');
   });
 
+  it('typing a day-first date in en-GB never reports a month-first date', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <InternationalizationProvider locale="en-GB">
+        <DateInput label="Start date" onChange={onChange} />
+      </InternationalizationProvider>,
+    );
+    await user.type(screen.getByRole('combobox'), '12/01/2026');
+    const reported = onChange.mock.calls.map(call => String(call[0]));
+    expect(reported.at(-1)).toBe('2026-01-12');
+    // Every value on the way reads 12 January; none reads 1 December.
+    for (const value of reported) {
+      expect(value).toMatch(/-01-12$/);
+    }
+  });
+
+  it('Enter on a busy field does not submit the form', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <DateInput
+          label="Start date"
+          value="2026-01-12"
+          onChange={() => {}}
+          isLoading
+        />
+        <button type="submit">Save</button>
+      </form>,
+    );
+    screen.getAllByRole('combobox')[0].focus();
+    await user.keyboard('{Enter}');
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('Enter on a disabled field does not submit the form', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <DateInput
+          label="Start date"
+          value="2026-01-12"
+          onChange={() => {}}
+          isDisabled
+        />
+        <button type="submit">Save</button>
+      </form>,
+    );
+    screen.getAllByRole('combobox')[0].focus();
+    await user.keyboard('{Enter}');
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('Enter submits the form when nothing is typed, and commits typed text without submitting', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    const onChange = vi.fn();
+    render(
+      <form onSubmit={onSubmit}>
+        <DateInput label="Start date" value="2026-01-12" onChange={onChange} />
+        <button type="submit">Search</button>
+      </form>,
+    );
+    const input = screen.getByRole('combobox');
+    input.focus();
+    await user.keyboard('{Enter}');
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    await user.clear(input);
+    await user.type(input, '2026-02-03');
+    await user.keyboard('{Enter}');
+    expect(onChange).toHaveBeenLastCalledWith('2026-02-03');
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
+  describe('press inside and outside the open calendar', () => {
+    function press(target: Element) {
+      fireEvent.pointerDown(target, {composed: true});
+      fireEvent.pointerUp(target, {composed: true});
+    }
+
+    it('keeps the calendar open on a press in its own input, closes it on a press elsewhere', async () => {
+      render(
+        <>
+          <DateInput label="Date" onChange={() => {}} />
+          <p>Elsewhere</p>
+        </>,
+      );
+      const input = screen.getByRole('combobox');
+      fireEvent.keyDown(input, {key: 'ArrowDown'});
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      // The calendar is a manual popover, so the browser does not
+      // light-dismiss it on a press in the input.
+      expect(document.querySelector('[popover]')).toHaveAttribute(
+        'popover',
+        'manual',
+      );
+
+      press(input);
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+
+      press(screen.getByText('Elsewhere'));
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
+    it('keeps a calendar hosted outside the field open on a press inside it', async () => {
+      // Inside a list item, Layer hosts the calendar outside the field.
+      render(
+        <ul>
+          <li>
+            <DateInput label="Date" onChange={() => {}} />
+          </li>
+          <li>Elsewhere</li>
+        </ul>,
+      );
+      const input = screen.getByRole('combobox');
+      fireEvent.keyDown(input, {key: 'ArrowDown'});
+      const layer = document.querySelector('[popover]') as HTMLElement;
+      expect(layer.closest('li')?.contains(input) ?? false).toBe(false);
+
+      press(layer);
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+
+      press(screen.getByText('Elsewhere'));
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
+    it('closes the calendar when focus moves to another field', async () => {
+      render(
+        <>
+          <DateInput label="Start" onChange={() => {}} />
+          <DateInput label="End" onChange={() => {}} />
+        </>,
+      );
+      const [start, end] = screen.getAllByRole('combobox');
+      start.focus();
+      fireEvent.keyDown(start, {key: 'ArrowDown'});
+      expect(start).toHaveAttribute('aria-expanded', 'true');
+      end.focus();
+      await waitFor(() => {
+        expect(start).toHaveAttribute('aria-expanded', 'false');
+      });
+      // The close keeps focus where the person moved it.
+      expect(document.activeElement).toBe(end);
+    });
+
+    it('closes the calendar when focus leaves the field from its clear button', async () => {
+      render(
+        <>
+          <DateInput
+            label="Start"
+            value="2026-01-15"
+            hasClear
+            onChange={() => {}}
+          />
+          <DateInput label="End" onChange={() => {}} />
+        </>,
+      );
+      const [start, end] = screen.getAllByRole('combobox');
+      start.focus();
+      fireEvent.keyDown(start, {key: 'ArrowDown'});
+      expect(start).toHaveAttribute('aria-expanded', 'true');
+      // Tab from the text lands on the clear button, still in the field.
+      const clear = screen.getByRole('button', {name: /clear/i});
+      clear.focus();
+      expect(start).toHaveAttribute('aria-expanded', 'true');
+      // The next Tab leaves the field from the clear button.
+      end.focus();
+      await waitFor(() => {
+        expect(start).toHaveAttribute('aria-expanded', 'false');
+      });
+      expect(document.activeElement).toBe(end);
+    });
+
+    it('keeps the calendar open on a press on its label', () => {
+      render(<DateInput label="Date" onChange={() => {}} />);
+      const input = screen.getByRole('combobox');
+      fireEvent.keyDown(input, {key: 'ArrowDown'});
+      const label = document.querySelector(
+        `label[for="${input.id}"]`,
+      ) as HTMLLabelElement;
+      expect(label).not.toBeNull();
+      press(label);
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('keeps the calendar open when a scroll starts outside (pointercancel)', () => {
+      render(
+        <>
+          <DateInput label="Date" onChange={() => {}} />
+          <p>Elsewhere</p>
+        </>,
+      );
+      const input = screen.getByRole('combobox');
+      fireEvent.keyDown(input, {key: 'ArrowDown'});
+      const elsewhere = screen.getByText('Elsewhere');
+      fireEvent.pointerDown(elsewhere, {composed: true});
+      fireEvent.pointerCancel(elsewhere, {composed: true});
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
+  });
+
   it('does not open on ArrowDown when disabled', () => {
     render(<DateInput label="Date" isDisabled onChange={() => {}} />);
     const input = screen.getByRole('combobox');
@@ -570,6 +777,67 @@ describe('DateInput', () => {
     );
   });
 
+  it('blocks selection in an open picker after the field becomes disabled', async () => {
+    const user = userEvent.setup();
+    const props = {
+      label: 'Date',
+      value: '2026-10-15',
+      presentation: 'popover',
+      onChange: vi.fn(),
+      changeAction: vi.fn(),
+    } satisfies DateInputProps;
+    const {rerender} = render(<DateInput {...props} />);
+    const input = screen.getByRole('combobox');
+    act(() => input.focus());
+    await user.keyboard('{ArrowDown}');
+    const day = getButton(/October 16, 2026/);
+    act(() => day.focus());
+
+    rerender(<DateInput {...props} isDisabled />);
+    expect(day).toHaveFocus();
+    await user.click(day);
+    await user.keyboard(' ');
+
+    rerender(
+      <DateInput
+        {...props}
+        isDisabled
+        disabledMessage="Scheduling is locked"
+      />,
+    );
+    expect(day).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(props.onChange).not.toHaveBeenCalled();
+    expect(props.changeAction).not.toHaveBeenCalled();
+    expect(input).toHaveValue('October 15, 2026');
+    expect(input).toHaveAttribute('aria-expanded', 'true');
+    expect(day).toHaveFocus();
+  });
+
+  it('dismisses an open picker without committing while loading', async () => {
+    const user = userEvent.setup();
+    const props = {
+      label: 'Date',
+      value: '2026-10-15',
+      presentation: 'popover',
+      onChange: vi.fn(),
+      changeAction: vi.fn(),
+    } satisfies DateInputProps;
+    const {rerender} = render(<DateInput {...props} />);
+    await user.click(getButton('Open calendar'));
+    const day = getButton(/October 16, 2026/);
+
+    rerender(<DateInput {...props} isLoading />);
+    await user.click(day);
+    expect(props.onChange).not.toHaveBeenCalled();
+    expect(props.changeAction).not.toHaveBeenCalled();
+    expect(screen.getByRole('combobox')).toHaveValue('October 15, 2026');
+    expect(screen.getByRole('combobox')).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+  });
+
   // --- Enter key commits typed date ---
 
   it('commits typed date and fires onChange on Enter key', () => {
@@ -633,15 +901,19 @@ describe('DateInput', () => {
       }
 
       render(<ControlledDateInput />);
-      await user.click(getButton('Open calendar'));
+      const toggle = getButton('Open calendar');
+      await user.click(toggle);
       await user.click(getButton(/January 15, 2026/));
+      // The calendar mounts only while open; reopen it to read the selection.
+      await user.click(toggle);
       expect(
         screen.getAllByRole('gridcell', {selected: true, hidden: true}),
       ).toHaveLength(1);
+      await user.click(toggle);
 
       await user.click(getButton('Clear Date'));
       expect(screen.getByRole('combobox')).toHaveValue('');
-      await user.click(getButton('Open calendar'));
+      await user.click(toggle);
 
       expect(
         screen.queryAllByRole('gridcell', {selected: true, hidden: true}),
@@ -1152,6 +1424,53 @@ describe('DateInput', () => {
       expect(screen.getByDisplayValue('Mar 10, 2026')).toBeInTheDocument();
     });
   });
+  describe('calendar while the popover is closed', () => {
+    const calendarGrid = () => document.querySelector('[role="grid"]');
+
+    it('renders no calendar until the popover opens, and none after it closes', () => {
+      render(<DateInput label="Date" value="2026-01-25" onChange={() => {}} />);
+      const toggle = getButton('Open calendar');
+      expect(calendarGrid()).toBeNull();
+
+      fireEvent.click(toggle);
+      expect(calendarGrid()).not.toBeNull();
+
+      fireEvent.click(toggle);
+      expect(calendarGrid()).toBeNull();
+    });
+
+    it('opens on the month of a date typed while closed', () => {
+      function Controlled() {
+        const [value, setValue] = useState<ISODateString | undefined>(
+          '2026-01-25',
+        );
+        return <DateInput label="Date" value={value} onChange={setValue} />;
+      }
+      render(<Controlled />);
+      const input = screen.getByRole('combobox');
+
+      fireEvent.change(input, {target: {value: 'March 5, 2027'}});
+      fireEvent.keyDown(input, {key: 'ArrowDown'});
+
+      expect(calendarGrid()).toHaveAccessibleName('March 2027');
+    });
+
+    it('moves focus into the calendar on each open from the toggle', async () => {
+      render(<DateInput label="Date" value="2026-01-25" onChange={() => {}} />);
+      const toggle = getButton('Open calendar');
+
+      for (let i = 0; i < 2; i++) {
+        fireEvent.click(toggle);
+        // The first calendar control takes focus, not the dialog surface.
+        await waitFor(() => {
+          expect(getButton('Previous month')).toHaveFocus();
+        });
+        fireEvent.click(toggle);
+        expect(calendarGrid()).toBeNull();
+      }
+    });
+  });
+
   describe('weekStartsOn', () => {
     // The calendar popover renders in the top layer; jsdom keeps the content in
     // the DOM but role queries skip it, so read the columnheaders directly.

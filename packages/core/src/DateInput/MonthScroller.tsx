@@ -38,6 +38,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {useCalendarDays} from '../Calendar';
 import {useDirection, useLocale} from '../i18n';
@@ -50,6 +51,7 @@ import {
   borderVars,
 } from '../theme/tokens.stylex';
 import {focusOutlineStyles} from '../utils';
+import {plainDateFormatStandaloneMonthYear} from '../utils/plainDate';
 import {
   type DayOfWeek,
   type ISODateString,
@@ -59,9 +61,13 @@ import {
   plainDateFormat,
   plainDateIsEqual,
   plainDateToISO,
-  DATE_FORMAT_MONTH_YEAR,
   DATE_FORMAT_WITH_WEEKDAY,
 } from '../utils';
+import {
+  playReducedMotionDip,
+  reducedMotionFade,
+  type ReducedMotionDip,
+} from '../motion/reducedMotion';
 import {dateInputTouchSizes, dateInputTouchGeometry} from './tokens.stylex';
 import {useOwnScrollGesture} from './useOwnScrollGesture';
 import {useScrollSettle} from './useScrollSettle';
@@ -84,6 +90,9 @@ const DAY_SIZE = dateInputTouchSizes.daySize;
  * would not merely show a gap, it would re-snap to the nearest mounted one.
  */
 const OVERSCAN = 3;
+
+/** Every listener on the scroller is passive; one options object serves all. */
+const PASSIVE: AddEventListenerOptions = {passive: true};
 
 const styles = stylex.create({
   scroller: {
@@ -326,13 +335,59 @@ export function MonthScroller({
   // updater — React runs updaters during render, where another component's
   // setState is illegal.
   const centerRowRef = useRef(centerRow);
+
+  /**
+   * Scroll snapping is off from a re-center until the frame after its
+   * commit. WebKit keeps the position it snapped to as an index into the
+   * container's snap offsets, and re-snaps to that index after a layout: a
+   * re-center that unmounts panes before the snapped one shifts the index,
+   * so the re-snap lands a month further on, and the scroll that makes
+   * re-centers again. One stalled frame right after an arrow (300 ms,
+   * measured) was enough to set the calendar paging on by itself, a month
+   * every few frames. With snapping off across the commit nothing re-snaps,
+   * and switching it back on a frame later snaps to the pane in place.
+   *
+   * Each pause counts itself, so a batch of re-centers that ends on the
+   * center it began from, which commits no new center, still restores
+   * snapping.
+   *
+   * Not while a finger drives the scroll, from its touch until the scroll it
+   * started comes to rest: iOS tracks a snap target for the gesture, and
+   * turning snapping off drops it, so the swipe coasted past the month for
+   * about two seconds and was corrected late (iOS 26.2 simulator, where the
+   * same swipe snaps in about 0.6 s with snapping left on).
+   */
+  const [snapPauses, setSnapPauses] = useState(0);
+  const isFingerScrollRef = useRef(false);
+  const recenter = useCallback((scroller: HTMLElement, row: number) => {
+    if (!isFingerScrollRef.current) {
+      scroller.style.scrollSnapType = 'none';
+      setSnapPauses(count => count + 1);
+    }
+    setCenterRow(row);
+  }, []);
+  // Synchronizes the scroller's snapping with the browser's frame loop: it
+  // comes back on in the frame after the pause's commit, and a restore still
+  // pending at the next pause or at unmount is dropped.
+  useLayoutEffect(() => {
+    const scroller = scrollerRef.current;
+    if (snapPauses === 0 || scroller == null) {
+      return undefined;
+    }
+    const frame = requestAnimationFrame(() => {
+      scroller.style.scrollSnapType = '';
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [snapPauses]);
   // A row to scroll to once its pane is mounted; see scrollToMonth.
   const pendingScrollRef = useRef<number | null>(null);
 
   /**
    * The row a programmatic scroll is heading for, so its own scroll events
-   * are not reported back as if the user had gone there. Null once a finger
-   * touches the scroller, or once the steered scroll has arrived.
+   * are not reported back as if the user had gone there, and so the settle
+   * correction finishes the steer instead of rounding it back. Null once the
+   * user's own input reaches the scroller (a finger, a wheel or trackpad, a
+   * press, a key), or once the steered scroll has arrived.
    */
   const steeredRowRef = useRef<number | null>(null);
 
@@ -382,8 +437,21 @@ export function MonthScroller({
     );
   }, [paneSize, initialMonthIndex, minMonthIndex, isRTL]);
 
+  // The Reduced Motion dip of a step on a touch screen, owned here so a
+  // second step or the unmount clears it.
+  const dipRef = useRef<ReducedMotionDip | null>(null);
+  const stopDip = useCallback(() => {
+    dipRef.current?.cancel();
+    dipRef.current = null;
+  }, []);
+  // Synchronizes with the dip's animations: they do not outlive the scroller.
+  useEffect(() => stopDip, [stopDip]);
+
   const scrollToMonth = useCallback(
     (monthIndex: number, behavior: ScrollBehavior = 'smooth') => {
+      // Every step replaces a running dip, whichever way it moves. Otherwise
+      // the dip's landing would undo a jump or an immediate step made after it.
+      stopDip();
       const scroller = scrollerRef.current;
       if (scroller == null || paneSize === 0) {
         return;
@@ -401,16 +469,56 @@ export function MonthScroller({
         // below); a jump that far is never worth animating either.
         pendingScrollRef.current = row;
         centerRowRef.current = row;
-        setCenterRow(row);
+        // The jump is a steer too. Recording it replaces a steer left behind
+        // by a scroll that moved nothing (the re-assert when the month and
+        // year wheels close), which the settle would otherwise finish,
+        // pulling the scroller back off the jump's month.
+        steeredRowRef.current = row;
+        recenter(scroller, row);
+        return;
+      }
+      const left = scrollOffsetForRow(row, paneSize, isRTL);
+      // Under reduced motion the month changes without travel: at once on a fine
+      // primary pointer, under an opacity dip on a coarse one (reducedMotionFade).
+      const fade = behavior === 'smooth' ? reducedMotionFade(scroller) : null;
+      if (fade != null) {
+        // The window mounts around the target first, and the scroll lands in
+        // the layout effect below, as a far jump does. So nothing moves the
+        // window after the jump. If the window followed the jump, WebKit would
+        // re-snap it one pane further on every frame. A scroll that lands on
+        // the centre row reports nothing.
+        const land = () => {
+          // The landing is the newest steer. An earlier steer whose scroll
+          // never arrived would otherwise hide every scroll after it, a
+          // trackpad's included. Closing the wheels makes such a steer: it
+          // re-asserts the month already in view.
+          steeredRowRef.current = null;
+          if (row === centerRowRef.current) {
+            scroller.scrollTo({left, behavior: 'auto'});
+            return;
+          }
+          pendingScrollRef.current = row;
+          centerRowRef.current = row;
+          setCenterRow(row);
+        };
+        if (fade.duration === 0) {
+          land();
+          return;
+        }
+        // A newer step replaces this one: only its scroll lands.
+        dipRef.current = playReducedMotionDip(scroller, fade, () => {
+          dipRef.current = null;
+          // The fade-in starts as soon as this returns. So render now: the
+          // scroll lands in the layout effect, before the fade-in.
+          // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the month must change before the dip's fade-in starts
+          flushSync(land);
+        });
         return;
       }
       steeredRowRef.current = row;
-      scroller.scrollTo({
-        left: scrollOffsetForRow(row, paneSize, isRTL),
-        behavior,
-      });
+      scroller.scrollTo({left, behavior});
     },
-    [paneSize, minMonthIndex, rowCount, isRTL],
+    [paneSize, minMonthIndex, rowCount, isRTL, recenter, stopDip],
   );
 
   // Deliberately un-keyed: it runs after every render, costs a null check, and
@@ -476,8 +584,11 @@ export function MonthScroller({
    * A tail crawling slower than half a pixel a frame has effectively arrived,
    * so treating it as arrived is right anyway.
    *
-   * The correction is at most half a pane by construction, and its own scroll
-   * settles onto the boundary it just aimed at, so it cannot oscillate.
+   * After the user's own scroll the correction goes to the nearest boundary,
+   * at most half a pane away. After a steer it goes on to the steered month,
+   * however early the browser cut the steer short. Either way its own scroll
+   * settles onto the boundary it aimed at, where a steer counts as arrived, so
+   * it cannot oscillate.
    */
   const settleFrameRef = useRef<number | undefined>(undefined);
   useEffect(
@@ -490,6 +601,8 @@ export function MonthScroller({
   );
 
   useScrollSettle(scrollerRef, scroller => {
+    // At rest, momentum included: the finger no longer drives the scroll.
+    isFingerScrollRef.current = false;
     if (paneSize === 0) {
       return;
     }
@@ -505,15 +618,22 @@ export function MonthScroller({
       if (Math.abs(scroller.scrollLeft - offsetBefore) >= 0.5) {
         return;
       }
-      const row = rowAtScrollOffset(
-        scroller.scrollLeft,
-        paneSize,
-        rowCount,
-        isRTL,
-      );
+      // A steer the browser cut short is finished, not rounded back. WebKit
+      // ends a smooth scroll that a second one retargeted once the first
+      // one's time is up, firing `scrollend` part-way: an arrow tapped late
+      // in the previous arrow's scroll stopped near that month, and rounding
+      // to the nearest pane put the scroller back on it while the title named
+      // the new one.
+      const steered = steeredRowRef.current;
+      const row =
+        steered ??
+        rowAtScrollOffset(scroller.scrollLeft, paneSize, rowCount, isRTL);
       const target = scrollOffsetForRow(row, paneSize, isRTL);
       // Sub-pixel drift is the browser's own rounding, not a failed snap.
       if (Math.abs(scroller.scrollLeft - target) < 1) {
+        // At rest on its target, a steer has arrived even if no scroll
+        // crossed into its month.
+        steeredRowRef.current = null;
         return;
       }
       scroller.scrollTo({left: target, behavior: 'smooth'});
@@ -554,10 +674,19 @@ export function MonthScroller({
     if (scroller == null || paneSize === 0) {
       return;
     }
-    // A finger on the scroller ends any steering: from here the months it
-    // passes are the user's doing and every one of them is worth reporting.
-    const onTouchStart = () => {
+    // A finger, a wheel or trackpad, a press or a key on the scroller ends any
+    // steering: from here the months it passes are the user's doing, every
+    // one of them is worth reporting, and the settle rounds to the nearest
+    // month instead of finishing a steer. A steer that moved nothing (the
+    // re-assert when the month and year wheels close on the month shown)
+    // would otherwise pull the user's next scroll back to its month.
+    const endSteer = () => {
       steeredRowRef.current = null;
+    };
+    // From a touch until its scroll comes to rest (the settle above), the
+    // finger drives the scroll and a re-center leaves snapping on.
+    const onTouchStart = () => {
+      isFingerScrollRef.current = true;
     };
 
     const onScroll = () => {
@@ -576,7 +705,7 @@ export function MonthScroller({
           return;
         }
         centerRowRef.current = row;
-        setCenterRow(row);
+        recenter(scroller, row);
         // Report nothing while a steer is in flight. `scrollToMonth` is only
         // ever called by something that already knows the month — a wheel
         // commit, a header arrow, the re-assert when the wheels close — so
@@ -590,9 +719,9 @@ export function MonthScroller({
         // the exact moment reports start being trusted again. The month drifted
         // on the way back to the calendar.
         //
-        // Cleared on arrival, or by a touch below — once a finger is on the
-        // scroller the user owns it, and every month it passes is worth
-        // reporting.
+        // Cleared on arrival, or by the user's input below (a finger, a wheel
+        // or trackpad, a press, a key) — from then the user owns the scroller,
+        // and every month it passes is worth reporting.
         if (steeredRowRef.current != null) {
           if (steeredRowRef.current === row) {
             steeredRowRef.current = null;
@@ -602,17 +731,26 @@ export function MonthScroller({
         onVisibleMonthChangeRef.current(minMonthIndex + row);
       });
     };
-    scroller.addEventListener('scroll', onScroll, {passive: true});
-    scroller.addEventListener('touchstart', onTouchStart, {passive: true});
+    scroller.addEventListener('scroll', onScroll, PASSIVE);
+    // The user's input on the scroller ends a steer: from here, it's theirs.
+    scroller.addEventListener('touchstart', endSteer, PASSIVE);
+    scroller.addEventListener('wheel', endSteer, PASSIVE);
+    scroller.addEventListener('pointerdown', endSteer, PASSIVE);
+    scroller.addEventListener('keydown', endSteer, PASSIVE);
+    scroller.addEventListener('touchstart', onTouchStart, PASSIVE);
     return () => {
-      scroller.removeEventListener('scroll', onScroll);
-      scroller.removeEventListener('touchstart', onTouchStart);
+      scroller.removeEventListener('scroll', onScroll, PASSIVE);
+      scroller.removeEventListener('touchstart', endSteer, PASSIVE);
+      scroller.removeEventListener('wheel', endSteer, PASSIVE);
+      scroller.removeEventListener('pointerdown', endSteer, PASSIVE);
+      scroller.removeEventListener('keydown', endSteer, PASSIVE);
+      scroller.removeEventListener('touchstart', onTouchStart, PASSIVE);
       if (frameRef.current != null) {
         cancelAnimationFrame(frameRef.current);
         frameRef.current = undefined;
       }
     };
-  }, [paneSize, rowCount, minMonthIndex, isRTL]);
+  }, [paneSize, rowCount, minMonthIndex, isRTL, recenter]);
 
   // Move the keyboard focus by whole days and let the scroller follow. Paging
   // by month is PageUp/PageDown; everything else is the APG grid vocabulary.
@@ -782,9 +920,8 @@ function MonthPane({
     hasVariableRowCount: false,
   });
 
-  const monthLabel = plainDateFormat(
+  const monthLabel = plainDateFormatStandaloneMonthYear(
     {year, month, day: 1},
-    DATE_FORMAT_MONTH_YEAR,
     locale,
   );
 

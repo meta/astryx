@@ -6,81 +6,52 @@
 
 /**
  * @file Shared hover and pressed overlay states
- * @input Uses StyleX and the semantic interaction-overlay color tokens
- * @output Exports reusable background-color and background-image state styles,
- *   the touch press's registered strength variable (`pressVars`) and its
- *   clocks (`pressConsts`)
+ * @input StyleX and the semantic interaction-overlay color tokens
+ * @output Reusable background-color and background-image state styles, the
+ *   touch press's registered strength variable (`pressVars`) and its clocks
+ *   (`pressConsts`)
  * @position Internal styling utility for interactive core surfaces
- *
- * Every surface that paints a press composes one of these (or carries its own
- * `:active` rule in the same shape), so a change to how the system answers a
- * press is made here once. `pressedBackgroundColor` is the press without the
- * hover, for controls whose hover is a colour or nothing. `pressedAlpha` is the
- * touch press's strength alone, for an owner whose pressed paint lives on a
- * descendant or a pseudo-element.
- *
- * Keep the enabled guard outside the individual states. StyleX assigns an
- * extra priority bucket (and generated selector specificity) to media-nested
- * rules. Repeating `:active` inside the hover-capable branch gives hover and
- * press the same generated specificity; StyleX's native pseudo-state ordering
- * then emits `:active` last.
- *
- * TWO POINTERS, TWO PRESS MODELS. A mouse keeps `:active`. A finger does not:
- * on iOS Safari `:active` paints on the touch itself and can outlive the start
- * of a scroll, so under `@media (pointer: coarse)` the bare `:active` arm is
- * dropped and the press is written by the touch press controller
- * (`utils/pressFeedback.ts`) as `data-astryx-press="on"` once the press is
- * believed (150 ms, no travel, no scroll) and `data-astryx-press="fading"` for the
- * 200 ms release. The two arms paint those through ONE number:
- *
- *  - `--astryx-press-alpha` is the press's strength, 0 to 1. It is a
- *    registered custom property (`@property`, syntax `<number>`, declared once
- *    in the shipped stylesheet by {@link pressVars}), which is what lets it
- *    animate: the overlay itself is a gradient layer, and gradients do not
- *    interpolate, but a registered number does, and every declaration that
- *    reads it is re-resolved on each frame. The touch paint is the pressed
- *    token at that strength — `color-mix(in srgb, pressed calc(alpha * 100%),
- *    transparent)` — declared once here as `--_press-paint` and painted as a
- *    background IMAGE: an image change is discrete, so a composer's colour
- *    transition cannot fade the onset in.
- *  - `[data-astryx-press="on"]` sets the strength to 1 and paints, on the
- *    first frame. Nothing transitions a custom property a composer never named.
- *  - `[data-astryx-press="fading"]` keeps the same paint and runs the release
- *    animation, strength 1 → 0 over {@link PRESS_RELEASE_DURATION} (UIKit's
- *    deselect crossfade; the controller removes the attribute when the same
- *    clock runs out, and by then the paint is gone). It fades to nothing, not
- *    to the hover strength: under a finger there is no hover to land on.
- *
- * WHY AN ANIMATION AND NOT A TRANSITION. Two reasons, both about composers.
- * StyleX is last-wins per property, and composers own their `transition-*`
- * longhands (Button, Item, Tab, Link, ...): the utility can neither append the
- * strength to their transition list nor set one of its own without taking the
- * whole property from them. No composer sets `animation-*` on the element that
- * composes these, so those longhands are free. And a transition needs the
- * declared value to change at the style change, which would make the release
- * arm declare strength 0; every property reading the strength would then
- * change computed value at the lift, and a composer that transitions
- * `background-image` (Button, Token, TreeListItem — Chromium interpolates
- * same-shape gradients) would start its own, shorter fade over this one. With
- * keyframes owning both ends the release arm declares 1 like the on arm, so at
- * the lift nothing a composer transitions changes; only the animation moves.
- *
- * Browser support: Chromium 111+, Safari 16.4+ and Firefox 128+ register the
- * property and interpolate. An engine without `@property` ignores the rule,
- * animates the unregistered value discretely (the paint holds for half the
- * release, then goes) — a step, no worse than the arm before this one.
- *
- * Composers must not set `backgroundImage` of their own on the colour variants
- * (none do): the touch arms own it. Composers must not set `animation-*` on
- * the element that composes any of these (none do): StyleX would drop either
- * the release animation or theirs.
  *
  * SYNC: When modified, update pressFeedback.ts, pressGesture.ts (the fade
  * clock), hooks/usePressFeedback.doc.mjs, the components that paint the touch
  * press off an ancestor scope or a pseudo-element (Switch, Tab,
- * CheckboxInput, RadioListItem, ClickableCard, SelectableCard, Thumbnail)
- * and scripts/build-css.test.mjs.
+ * CheckboxInput, RadioListItem, ClickableCard, SelectableCard, Thumbnail),
+ * Button (a tracked action sizes its `:active` image to zero) and
+ * scripts/build-css.test.mjs.
  */
+
+// Every surface that paints a press uses one of these styles, so a change to
+// the press is made here once.
+//
+// Keep the enabled guard outside the states. StyleX gives media-nested rules
+// a higher priority. With `:active` repeated in the hover branch, hover and
+// press get the same specificity, and StyleX emits `:active` last.
+//
+// A mouse keeps `:active`. A finger does not: on iOS Safari `:active` paints
+// on the touch and can outlive the start of a scroll. So under
+// `@media (pointer: coarse)` the press controller (pressFeedback.ts) writes
+// `data-astryx-press`: `on` when the press is believed, and `fading` for the
+// release. The query reads the primary pointer, so on a phone a mouse or
+// Space-key press loses `:active` too, and the controller writes the
+// attribute at once.
+//
+// The `on` and `fading` arms paint through `--astryx-press-alpha`, a
+// registered `<number>` from 0 to 1. Gradients do not interpolate, but a registered number does.
+// The touch paint is the pressed token at that strength, painted as a
+// background image, so a composer's color transition cannot fade the onset
+// in. `on` sets the strength to 1 on the first frame. `fading` animates it
+// from 1 to 0, not to the hover strength, because a finger has no hover. The
+// theme's motion tempo scales the release clock (AST-108).
+//
+// The release is an animation, not a transition. Composers own their
+// `transition-*` longhands, and StyleX is last-wins per property. A
+// transition would also make the release arm declare 0, so a composer that
+// transitions `background-image` would start its own fade. With keyframes,
+// both arms declare 1 and only the animation moves. An engine without
+// `@property` steps the paint off at half the release.
+//
+// Composers must not set `backgroundImage` on the color variants, or
+// `animation-*` on the element that composes them. The touch arms own both.
 
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
@@ -113,8 +84,13 @@ export const pressConsts = stylex.defineConsts({
   releaseMs: 200,
 });
 
-/** The release's clock as CSS. */
-const PRESS_RELEASE_DURATION = `${pressConsts.releaseMs}ms`;
+/**
+ * The release's clock as CSS, scaled by the theme's `--_astryx-motion-tempo`
+ * up to 1.5, its maximum. The controller's timer reads the same property.
+ */
+const PRESS_RELEASE_DURATION = `calc(${pressConsts.releaseMs}ms * min(var(--_astryx-motion-tempo, 1), 1.5))`;
+/** The same clock under Reduce Motion: a tempo may shorten it, never lengthen it. */
+const PRESS_RELEASE_DURATION_REDUCED = `min(${pressConsts.releaseMs}ms, calc(${pressConsts.releaseMs}ms * var(--_astryx-motion-tempo, 1)))`;
 
 const ENABLED = ':where(:not(:disabled,[aria-disabled="true"]))';
 const HOVER_HOVER = '@media (hover: hover)';
@@ -124,10 +100,14 @@ const COARSE = '@media (pointer: coarse)';
  * attribute is the system's own (`data-astryx-*`, like the pressable marker),
  * outside the namespace a theme's state keys generate into (`[data-<state>]`),
  * so a theme state can never collide with it.
+ *
+ * The press selectors are typed `string`, not as literals. As a computed key,
+ * a `string` gives the object an index signature, and StyleX reads the value
+ * type from it. See {@link ByAttribute}.
  */
-const PRESSED_ON = '[data-astryx-press="on"]';
+const PRESSED_ON: string = '[data-astryx-press="on"]';
 /** Written by the touch press controller for the release's exit. */
-const PRESSED_FADING = '[data-astryx-press="fading"]';
+const PRESSED_FADING: string = '[data-astryx-press="fading"]';
 
 const PRESS_ALPHA = pressVars['--astryx-press-alpha'];
 
@@ -173,21 +153,14 @@ const RELEASE_EASE = 'cubic-bezier(0, 0, 0.2, 1)';
 
 /**
  * The touch press's strength and its release, on the element the controller
- * writes to. Every variant below carries both, as `[PRESS_ALPHA]:
- * pressStrength` and `...pressReleaseAnimation`; `pressedAlpha` is the pair
+ * writes to. Every variant below carries both. `pressedAlpha` is the pair
  * alone.
  *
- * Both objects are written with literal keys, and the strength's own key is
- * spelled inside each variant rather than here, on purpose. StyleX reads a
- * `stylex.create` call from the raw AST, so a computed key written inside
- * the call is still a computed key when it evaluates it. An object hoisted
- * out of the call has been through every other Babel plugin by the time the
- * spread is resolved, and a preset that lowers ES2015 (`next/babel` under
- * the default browserslist: apps/sandbox, and a consumer's source build) has
- * rewritten its computed keys into `_defineProperty` helper calls the
- * evaluator cannot follow, failing the build with "Referenced constant is
- * not defined". Literal keys survive the lowering; `PRESS_ALPHA` cannot be
- * one, since the variable's name is generated, so it stays at each use. The
+ * The keys are literal on purpose. StyleX reads `stylex.create` from the raw
+ * AST. An object hoisted out of the call can first pass through a preset that
+ * lowers ES2015, such as `next/babel`. That preset turns computed keys into
+ * helper calls, and the build fails with "Referenced constant is not
+ * defined". `PRESS_ALPHA` has a generated name, so it stays at each use. The
  * literal keys equal PRESSED_ON and PRESSED_FADING above.
  */
 const pressStrength = {
@@ -195,14 +168,38 @@ const pressStrength = {
   '[data-astryx-press="on"]': 1,
   '[data-astryx-press="fading"]': 1,
 };
-const pressReleaseAnimation = {
+/**
+ * A value that only attribute selectors choose, such as the press arms.
+ *
+ * StyleX infers a value's type from its `default`, its `:` and `@`
+ * conditions, and an index signature. Literal attribute keys are none of
+ * these. For a property whose conditions are all literal attribute keys, it
+ * infers `unknown`, and no component's `xstyle` accepts that. This type gives
+ * the hoisted press arms an index signature.
+ */
+type ByAttribute<Value> = Readonly<{
+  default: null;
+  [attribute: string]: Value | null;
+}>;
+
+const pressReleaseAnimation: Readonly<{
+  animationName: ByAttribute<string>;
+  animationDuration: ByAttribute<
+    Readonly<{default: string; [media: `@media ${string}`]: string}>
+  >;
+  animationTimingFunction: ByAttribute<string>;
+  animationFillMode: ByAttribute<'both'>;
+}> = {
   animationName: {
     default: null,
     '[data-astryx-press="fading"]': pressRelease,
   },
   animationDuration: {
     default: null,
-    '[data-astryx-press="fading"]': PRESS_RELEASE_DURATION,
+    '[data-astryx-press="fading"]': {
+      default: PRESS_RELEASE_DURATION,
+      '@media (prefers-reduced-motion: reduce)': PRESS_RELEASE_DURATION_REDUCED,
+    },
   },
   animationTimingFunction: {
     default: null,

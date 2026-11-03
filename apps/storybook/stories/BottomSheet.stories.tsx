@@ -3,8 +3,8 @@
 /**
  * @file BottomSheet.stories.tsx
  * @input BottomSheet, content primitives, and controlled story state
- * @output BottomSheet examples plus keyboard delegation and nested-layer
- *   Escape browser fixtures
+ * @output BottomSheet examples plus keyboard delegation, nested-layer
+ *   Escape, and exit-focus browser fixtures
  * @position Storybook coverage for BottomSheet presentation and interaction
  */
 
@@ -13,6 +13,8 @@ import * as stylex from '@stylexjs/stylex';
 import {expect, waitFor, within} from 'storybook/test';
 import {useState, type ComponentProps} from 'react';
 import {BottomSheet} from '@astryxdesign/core/BottomSheet';
+import {Dialog, DialogHeader} from '@astryxdesign/core/Dialog';
+import {useAnnounce} from '@astryxdesign/core/hooks';
 import {ScrollableArea} from '@astryxdesign/core/ScrollableArea';
 import {Button} from '@astryxdesign/core/Button';
 import {Divider} from '@astryxdesign/core/Divider';
@@ -23,6 +25,7 @@ import {Text} from '@astryxdesign/core/Text';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {TextArea} from '@astryxdesign/core/TextArea';
 import {CheckboxInput} from '@astryxdesign/core/CheckboxInput';
+import {CheckboxList, CheckboxListItem} from '@astryxdesign/core/CheckboxList';
 import {Popover} from '@astryxdesign/core/Popover';
 
 const meta: Meta<typeof BottomSheet> = {
@@ -275,6 +278,9 @@ function MobileKeyboardCommentForm({onPost}: {onPost: () => void}) {
 export const Showcase: Story = {
   render: () => {
     const [isOpen, setIsOpen] = useState(false);
+    const [inStock, setInStock] = useState(false);
+    const [onSale, setOnSale] = useState(false);
+    const [freeShipping, setFreeShipping] = useState(false);
     return (
       <>
         <Button label="Open sheet" onClick={() => setIsOpen(true)} />
@@ -283,15 +289,82 @@ export const Showcase: Story = {
             <VStack gap={4}>
               <Heading level={3}>Filters</Heading>
               <Divider />
-              <VStack gap={2}>
-                <CheckboxInput label="In stock" value={false} />
-                <CheckboxInput label="On sale" value={false} />
-                <CheckboxInput label="Free shipping" value={false} />
-              </VStack>
+              <CheckboxList label="Filters" isLabelHidden>
+                <CheckboxListItem
+                  label="In stock"
+                  isChecked={inStock}
+                  onCheck={setInStock}
+                />
+                <CheckboxListItem
+                  label="On sale"
+                  isChecked={onSale}
+                  onCheck={setOnSale}
+                />
+                <CheckboxListItem
+                  label="Free shipping"
+                  isChecked={freeShipping}
+                  onCheck={setFreeShipping}
+                />
+              </CheckboxList>
               <Button label="Apply" onClick={() => setIsOpen(false)} />
             </VStack>
           </Section>
         </BottomSheet>
+      </>
+    );
+  },
+};
+
+/**
+ * Done announces and closes in one tap. Rendered inside the sheet, so
+ * `useAnnounce` follows the sheet's dialog; while the sheet fades out over
+ * the Dialog it still covers it, so the words wait and reach the Dialog's
+ * own live region at the sheet's real close (spec:AST-086 FR14).
+ */
+function SaveAndDone({onDone}: {onDone: () => void}) {
+  const announce = useAnnounce();
+  return (
+    <Button
+      label="Done"
+      onClick={() => {
+        announce('Saved');
+        onDone();
+      }}
+    />
+  );
+}
+
+export const SheetOverDialog: Story = {
+  name: 'Sheet over a Dialog',
+  render: () => {
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [isSheetOpen, setIsSheetOpen] = useState(false);
+    return (
+      <>
+        <Button label="Open dialog" onClick={() => setIsDialogOpen(true)} />
+        <Dialog
+          isOpen={isDialogOpen}
+          onOpenChange={setIsDialogOpen}
+          aria-label="Edit item">
+          <Section padding={4}>
+            <VStack gap={4}>
+              <DialogHeader title="Edit item" onOpenChange={setIsDialogOpen} />
+              <Button label="Open sheet" onClick={() => setIsSheetOpen(true)} />
+              <BottomSheet
+                isOpen={isSheetOpen}
+                onOpenChange={setIsSheetOpen}
+                label="Options">
+                <Section padding={4}>
+                  <VStack gap={4}>
+                    <Heading level={3}>Options</Heading>
+                    <CheckboxInput label="Notify me" value={false} />
+                    <SaveAndDone onDone={() => setIsSheetOpen(false)} />
+                  </VStack>
+                </Section>
+              </BottomSheet>
+            </VStack>
+          </Section>
+        </Dialog>
       </>
     );
   },
@@ -786,4 +859,123 @@ export const NestedPopover: Story = {
       </>
     );
   },
+};
+
+/**
+ * A no-scrim sheet with a `data-autofocus` field: focus on open follows the
+ * native host, which lands on the panel; the field is not focused.
+ */
+export const NoScrimAutofocus: Story = {
+  name: 'No scrim with a data-autofocus field',
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [value, setValue] = useState('');
+    return (
+      <>
+        <Button label="Open sheet" onClick={() => setIsOpen(true)} />
+        <BottomSheet
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          label="Filter places"
+          hasScrim={false}
+          height="hug">
+          <Section padding={4}>
+            <VStack gap={3}>
+              <TextInput
+                label="Search"
+                value={value}
+                onChange={setValue}
+                hasAutoFocus
+              />
+              <Button label="Done" onClick={() => setIsOpen(false)} />
+            </VStack>
+          </Section>
+        </BottomSheet>
+      </>
+    );
+  },
+};
+
+/**
+ * A modal sheet with a `data-autofocus` field (a TextInput with hasAutoFocus):
+ * what focus lands on when the sheet opens.
+ */
+export const ModalAutofocus: Story = {
+  name: 'Modal with a data-autofocus field',
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [value, setValue] = useState('');
+    return (
+      <>
+        <Button label="Open sheet" onClick={() => setIsOpen(true)} />
+        <BottomSheet
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          label="Edit note"
+          height="hug">
+          <Section padding={4}>
+            <VStack gap={3}>
+              <TextInput
+                label="Note"
+                value={value}
+                onChange={setValue}
+                hasAutoFocus
+              />
+              <Button label="Done" onClick={() => setIsOpen(false)} />
+            </VStack>
+          </Section>
+        </BottomSheet>
+      </>
+    );
+  },
+};
+
+type ExitFocusChange = 'remove' | 'disable';
+
+function ExitFocusChangeFixture({change}: {change: ExitFocusChange}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isDoneChanged, setIsDoneChanged] = useState(false);
+  const open = () => {
+    setIsDoneChanged(false);
+    setIsOpen(true);
+  };
+  const close = () => {
+    setIsOpen(false);
+    // The control changes after the close starts, during the exit motion.
+    window.setTimeout(() => setIsDoneChanged(true), 100);
+  };
+  return (
+    <>
+      <Button label="Open sheet" onClick={open} />
+      <BottomSheet isOpen={isOpen} onOpenChange={setIsOpen} label="Exit focus">
+        <Section>
+          {change === 'remove' && isDoneChanged ? null : (
+            <Button
+              label="Done"
+              onClick={close}
+              isDisabled={change === 'disable' && isDoneChanged}
+            />
+          )}
+        </Section>
+      </BottomSheet>
+    </>
+  );
+}
+
+/**
+ * Browser fixture: Done closes the sheet, and 100 ms into the exit the Done
+ * control is removed. The sheet goes inert and hidden as focus leaves it.
+ */
+export const ExitFocusControlRemoved: Story = {
+  tags: ['!autodocs'],
+  render: () => <ExitFocusChangeFixture change="remove" />,
+};
+
+/**
+ * Browser fixture: Done closes the sheet, and 100 ms into the exit the Done
+ * control is disabled. The sheet goes inert and hidden as focus leaves it.
+ */
+export const ExitFocusControlDisabled: Story = {
+  tags: ['!autodocs'],
+  render: () => <ExitFocusChangeFixture change="disable" />,
 };

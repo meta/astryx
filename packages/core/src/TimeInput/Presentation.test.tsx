@@ -10,6 +10,8 @@
 import {afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
 import {fireEvent, render, screen} from '@testing-library/react';
 import {TimeInput} from './TimeInput';
+import {InternationalizationProvider} from '../i18n';
+import type {ISOTimeString} from '../utils';
 import {resetDateSegmentProbe} from '../DateInput/nativeDateSegments';
 
 const HOVER_CAPABLE = /\(\s*hover\s*:\s*hover\s*\)/;
@@ -78,6 +80,25 @@ describe('TimeInput presentation', () => {
       expect(document.querySelector('input[type="time"]')).toBeNull();
       unmount();
     }
+  });
+
+  it("bottom-sheet follows the locale's hour cycle in its text and wheels", () => {
+    stubPointer(false);
+    render(
+      <InternationalizationProvider locale="de-DE">
+        <TimeInput
+          label="Start"
+          presentation="bottom-sheet"
+          value={'14:30' as ISOTimeString}
+          onChange={() => {}}
+        />
+      </InternationalizationProvider>,
+    );
+    const input = screen.getByRole('combobox', {name: 'Start'});
+    expect(input).toHaveValue('14:30');
+    fireEvent.click(input);
+    expect(screen.getByRole('listbox', {name: 'Hour'})).toBeInTheDocument();
+    expect(screen.queryByRole('listbox', {name: 'AM/PM'})).toBeNull();
   });
 
   it('bottom-sheet renders the sheet field even on a fine pointer', () => {

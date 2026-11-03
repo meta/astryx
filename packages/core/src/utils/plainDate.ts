@@ -9,6 +9,8 @@
 
 import type {ISODateString, PlainDate} from './dateTypes';
 import type {Locale} from '../i18n/types';
+import {firstCharacter} from './characters';
+import {standaloneMonthCapitalLanguages} from './standaloneMonthCapitals.generated';
 
 export type {PlainDate} from './dateTypes';
 
@@ -200,7 +202,7 @@ export function plainDateToInstant(
   // this wall time skipped or repeated.
   const offsetBefore = getTimezoneOffsetMS(timezoneID, wallTime - DAY_MS);
   const offsetAfter = getTimezoneOffsetMS(timezoneID, wallTime + DAY_MS);
-  // AST-067 (Temporal's "compatible" disambiguation): a wall time that happens
+  // Temporal's "compatible" disambiguation (AST-067): a wall time that happens
   // twice resolves to its earlier occurrence, and one that never happens is
   // read in the offset before the transition, which moves it forward by the
   // length of the gap.
@@ -329,6 +331,32 @@ export const DATE_FORMAT_MONTH_YEAR: Intl.DateTimeFormatOptions = {
   month: 'long',
 };
 
+/**
+ * The month and year as a label that stands alone, such as a calendar heading
+ * or a month grid's name. `Intl` formats the month for running text; where
+ * CLDR titlecases a stand-alone month name (its `contextTransforms`), the
+ * label starts with a capital, as Calendar's weekday headers use CLDR's
+ * stand-alone forms (`component:Calendar` FR1). Internal: not re-exported from
+ * `utils/index.ts`.
+ */
+export function plainDateFormatStandaloneMonthYear(
+  pd: PlainDate,
+  locale: Locale,
+): string {
+  const label = plainDateFormat(pd, DATE_FORMAT_MONTH_YEAR, locale);
+  let language: string;
+  try {
+    language = new Intl.Locale(locale).language;
+  } catch {
+    return label;
+  }
+  if (!standaloneMonthCapitalLanguages.has(language)) {
+    return label;
+  }
+  const first = firstCharacter(label);
+  return first.toLocaleUpperCase(locale) + label.slice(first.length);
+}
+
 // e.g. "Sun" (locale-dependent) — the weekday on its own, abbreviated.
 //
 // This is CLDR's `abbreviated` width, which `Intl` reaches natively. Note
@@ -374,10 +402,65 @@ export function plainDateFormat(
   options: Intl.DateTimeFormatOptions,
   locale: Locale = 'en',
 ): string {
-  return new Intl.DateTimeFormat(locale, {
+  const calendar = options.calendar ?? 'gregory';
+  if (options.timeZone != null) {
+    return dateTimeFormatFor(locale, {...options, calendar}).format(
+      plainDateToDate(pd),
+    );
+  }
+  if (TIME_OF_DAY_FIELDS.some(field => options[field] != null)) {
+    // A zone name or a time of day reads local midnight in the zone current
+    // at the call. A cached formatter would keep the zone it was built in,
+    // so this one is built for the call.
+    return new Intl.DateTimeFormat(locale, {...options, calendar}).format(
+      plainDateToDate(pd),
+    );
+  }
+  // Date fields alone: UTC midnight formatted in UTC, so neither the cached
+  // formatter nor the date depends on the host's zone, which can change while
+  // a page is open.
+  return dateTimeFormatFor(locale, {
     ...options,
-    calendar: options.calendar ?? 'gregory',
-  }).format(plainDateToDate(pd));
+    calendar,
+    timeZone: 'UTC',
+  }).format(utcTime(pd.year, pd.month - 1, pd.day));
+}
+
+/** Options that print a time of day or a zone, which a PlainDate lacks. */
+const TIME_OF_DAY_FIELDS = [
+  'timeZoneName',
+  'hour',
+  'minute',
+  'second',
+  'fractionalSecondDigits',
+  'dayPeriod',
+  'timeStyle',
+] as const satisfies ReadonlyArray<keyof Intl.DateTimeFormatOptions>;
+
+/**
+ * One `Intl.DateTimeFormat` per locale and options, built on first use.
+ * Building a formatter costs far more than formatting with it, and a calendar
+ * formats each of a month's 42 day labels with the same options on every
+ * render. The options are keyed in a fixed order, so the same options written
+ * in another order share a formatter.
+ */
+const dateTimeFormats = new Map<string, Intl.DateTimeFormat>();
+
+/** @internal plainDateFormat's formatter cache; not part of the public API. */
+export function dateTimeFormatFor(
+  locale: Locale,
+  options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  const key = JSON.stringify([
+    locale,
+    Object.entries(options).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+  ]);
+  let format = dateTimeFormats.get(key);
+  if (format == null) {
+    format = new Intl.DateTimeFormat(locale, options);
+    dateTimeFormats.set(key, format);
+  }
+  return format;
 }
 
 /**

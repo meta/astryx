@@ -2,7 +2,10 @@
 
 /**
  * @file shadcn-registry-ci.test.mjs
- * @description Pins the required full-catalog ShadCN compatibility gate.
+ * @description Pins the full-catalog ShadCN compatibility check
+ *   (test-registry-e2e), which runs for release-check until the production
+ *   registry launches; its network-free production gate runs with the unit
+ *   tests (verify-production-gate.test.mjs) and in docsite-test.
  * @input The PR CI workflow, docsite manifest, and catalog verifier source.
  * @output Mutation-sensitive assertions for generation, release gating, stock
  *   client installation, compilation, and the historical required join.
@@ -18,8 +21,7 @@ import yaml from 'yaml';
 const root = path.resolve(import.meta.dirname, '../..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const ci = yaml.parse(read('.github/workflows/ci.yml'));
-const job = ci.jobs['registry-contract'];
-const SPEC_FALSE = "needs.check-scope.outputs.spec_only != 'true'";
+const job = ci.jobs['test-registry-e2e'];
 
 function step(name) {
   return job.steps.find(candidate => candidate.name === name);
@@ -33,39 +35,41 @@ function runLines() {
 }
 
 describe('ShadCN registry CI contract', () => {
-  it('runs as a bounded fail-closed gate and feeds the required test context', () => {
-    expect(job.needs).toEqual(['check-scope']);
-    expect(job.if).toContain('always()');
-    expect(job['runs-on']).toBe('4-core-ubuntu');
+  it('runs for release-check and gates it, not every pull request', () => {
+    // Only CI's run admission (ci-admission.test.mjs).
+    expect(job.needs).toEqual(['admission']);
+    expect(job.if).toBe(
+      "github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check'",
+    );
+    expect(job['runs-on']).toBe('ubuntu-latest');
     expect(job['timeout-minutes']).toBe(15);
-    expect(step('Require successful scope classification').run).toContain(
-      'refusing to skip required work',
-    );
-
-    expect(ci.jobs.test.needs).toContain('registry-contract');
-    const join = ci.jobs.test.steps.find(candidate =>
-      candidate.run?.includes('.github/scripts/ci-test-join.mjs'),
-    );
-    expect(join).toBeDefined();
-    expect(join.env.REGISTRY_CONTRACT_RESULT).toBe(
-      '${{ needs.registry-contract.result }}',
-    );
-  });
-
-  it('runs every material step except on the trusted spec-only lane', () => {
     for (const candidate of job.steps) {
-      if (
-        candidate.name === 'Require successful scope classification' ||
-        candidate.name === 'Skip registry work for spec-only changes'
-      ) {
-        continue;
-      }
-      if (candidate.run || candidate.uses) {
-        expect(candidate.if, candidate.name ?? candidate.uses).toContain(
-          SPEC_FALSE,
-        );
-      }
+      expect(
+        candidate.if ?? '',
+        candidate.name ?? candidate.uses,
+      ).not.toContain('spec_only');
     }
+
+    expect(ci.jobs.test.needs).not.toContain('test-registry-e2e');
+    expect(ci.jobs['release-check'].needs).toContain('test-registry-e2e');
+    expect(ci.jobs['release-check'].steps[0].with.script).toContain(
+      "'test-registry-e2e'",
+    );
+    expect(
+      fs.existsSync(
+        path.join(
+          root,
+          'internal/shadcn-registry/verify-production-gate.test.mjs',
+        ),
+      ),
+    ).toBe(true);
+    // A docsite-only change skips test-node; docsite-test runs the gate too.
+    expect(
+      ci.jobs['docsite-test'].steps.find(
+        candidate =>
+          candidate.name === 'Verify the hidden production registry gate',
+      ).run,
+    ).toBe('node internal/shadcn-registry/verify-production-gate.mjs');
   });
 
   it('proves hidden production output without enabling public discovery', () => {
@@ -120,24 +124,41 @@ describe('ShadCN registry CI contract', () => {
     );
   });
 
-  it('verifies the preview and hidden production registries in separate legs', () => {
-    expect(job.strategy.matrix).toEqual({leg: ['preview', 'production']});
+  it('verifies each registry in a TypeScript and a JavaScript leg, all four required', () => {
+    // Both consumer modes of one registry in one job took 8-12 minutes and
+    // passed the 15-minute limit once, so each mode has its own leg.
+    expect(job.strategy.matrix).toEqual({
+      leg: ['preview', 'production'],
+      mode: ['typescript', 'javascript'],
+    });
     expect(job.strategy['fail-fast']).toBe(false);
+    expect(job.strategy.matrix.include).toBeUndefined();
+    expect(job.strategy.matrix.exclude).toBeUndefined();
+    expect(job.name).toBe(
+      'test-registry-e2e (${{ matrix.leg }}, ${{ matrix.mode }})',
+    );
+    // The matrix job's result, which release-check requires, is success only
+    // when every leg passed.
+    expect(ci.jobs['release-check'].needs).toContain('test-registry-e2e');
     const legOf = {
-      'Verify hidden production registry contract': 'production',
-      'Generate and validate the complete preview registry': 'preview',
-      'Install and build every preview registry item': 'preview',
-      'Generate the hidden production registry': 'production',
-      'Verify hidden production discovery surfaces': 'production',
-      'Install and build every hidden production registry item': 'production',
+      'Generate and validate the complete preview registry':
+        "matrix.leg == 'preview'",
+      'Install and build every preview registry item':
+        "matrix.leg == 'preview'",
+      'Generate the hidden production registry': "matrix.leg == 'production'",
+      'Install and build every hidden production registry item':
+        "matrix.leg == 'production'",
+      // Registry-wide checks, once per registry.
+      'Verify hidden production registry contract':
+        "matrix.leg == 'production' && matrix.mode == 'typescript'",
+      'Verify hidden production discovery surfaces':
+        "matrix.leg == 'production' && matrix.mode == 'typescript'",
     };
-    for (const [name, leg] of Object.entries(legOf)) {
-      expect(step(name).if, name).toBe(
-        `matrix.leg == '${leg}' && ${SPEC_FALSE}`,
-      );
+    for (const [name, condition] of Object.entries(legOf)) {
+      expect(step(name).if, name).toBe(condition);
     }
     // Every leg builds the packages it exercises.
-    expect(step('Build registry package exports').if).toBe(SPEC_FALSE);
+    expect(step('Build registry package exports').if).toBeUndefined();
   });
 
   it('builds every workspace package before exercising local package exports', () => {
@@ -145,14 +166,15 @@ describe('ShadCN registry CI contract', () => {
   });
 
   it('uses the complete clean-consumer verifier in preview and production', () => {
+    // Each leg installs and compiles every item in its own mode.
     expect(step('Install and build every preview registry item').run).toBe(
-      'node internal/shadcn-registry/verify-full-catalog.mjs',
+      'node internal/shadcn-registry/verify-full-catalog.mjs --mode ${{ matrix.mode }}',
     );
     const productionInstall = step(
       'Install and build every hidden production registry item',
     );
     expect(productionInstall.run).toBe(
-      'node internal/shadcn-registry/verify-full-catalog.mjs',
+      'node internal/shadcn-registry/verify-full-catalog.mjs --mode ${{ matrix.mode }}',
     );
     expect(productionInstall.env.ASTRYX_SHADCN_USE_PUBLISHED_PACKAGES).toBe(
       '1',
@@ -165,7 +187,8 @@ describe('ShadCN registry CI contract', () => {
       "'add', ...itemPaths",
       "'--silent'",
       'expectedInstalledFile(file, tsx)',
-      'for (const tsx of [true, false])',
+      'for (const tsx of modes)',
+      'const MODES = {typescript: [true], javascript: [false], all: [true, false]};',
       'did not install declared dependency',
       'alias route',
       'duplicate item name',
@@ -181,5 +204,30 @@ describe('ShadCN registry CI contract', () => {
       expect(verifier).toContain(invariant);
     }
     expect(runLines()).toContain('verify-full-catalog.mjs');
+  });
+});
+
+describe('verify-full-catalog --mode', () => {
+  it('verifies one mode per CI leg, and both by default', async () => {
+    const {selectedModes} =
+      await import('../../internal/shadcn-registry/verify-full-catalog.mjs');
+    expect(selectedModes(['--mode', 'typescript'])).toEqual([true]);
+    expect(selectedModes(['--mode', 'javascript'])).toEqual([false]);
+    expect(selectedModes(['--mode', 'all'])).toEqual([true, false]);
+    expect(selectedModes([])).toEqual([true, false]);
+  });
+
+  it('refuses a mode it does not know', async () => {
+    const {selectedModes} =
+      await import('../../internal/shadcn-registry/verify-full-catalog.mjs');
+    for (const argv of [
+      ['--mode', 'tsx'],
+      ['--mode'],
+      ['--mode', 'constructor'],
+    ]) {
+      expect(() => selectedModes(argv), argv.join(' ')).toThrow(
+        'unknown --mode',
+      );
+    }
   });
 });

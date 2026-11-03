@@ -12,6 +12,9 @@ on:
   pull_request:
     types: [closed]
     branches: [main]
+    # Only a Core component directory can add a component (spec:AST-030 FR14).
+    paths:
+      - 'packages/core/src/**'
 
 permissions: {}
 

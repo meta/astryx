@@ -29,6 +29,14 @@ import {
   DEFAULT_MIN_COLUMN_WIDTH,
 } from '../../columnUtils';
 import {observeResize} from '../../../utils/sharedResizeObserver';
+import {getNodeText} from '../../../utils/getNodeText';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/columnResize/useTableColumnResize.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Config Type
@@ -384,6 +392,7 @@ function ResizeHandle({
   isDraggingRef,
   tableRef,
 }: ResizeHandleProps) {
+  const t = useComponentTranslator();
   const setTableDragging = useCallback(
     (dragging: boolean) => {
       const table = tableRef.current;
@@ -743,10 +752,11 @@ function ResizeHandle({
     ],
   );
 
-  const ariaLabel =
-    typeof columnHeader === 'string'
-      ? `Resize column ${columnHeader}`
-      : `Resize column ${columnKey}`;
+  // Named by the column's visible text, also when its header is a node; the
+  // key is the fallback only for a header with no reachable text (AR1).
+  const ariaLabel = t('@astryx.table.columnResize.resizeColumn', {
+    label: getNodeText(columnHeader) || columnKey,
+  });
 
   return (
     <div
@@ -781,6 +791,13 @@ export function useTableColumnResize<T extends Record<string, unknown>>(
 
   const dragStateRef = useRef<DragState | null>(null);
   const isDraggingRef = useRef(false);
+  // The scroll container's merged ref, kept while the inner ref is the same,
+  // so React does not detach and re-attach it (and every plugin's listeners
+  // on it) on every render.
+  const mergedScrollWrapperRef = useRef<{
+    inner: ScrollWrapperRenderProps['htmlProps']['ref'] | null;
+    merged: (node: HTMLDivElement | null) => void;
+  } | null>(null);
   const tableRef = useRef<HTMLTableElement | null>(null);
 
   const globalMinWidth = config.minWidth;
@@ -941,14 +958,22 @@ export function useTableColumnResize<T extends Record<string, unknown>>(
       ): ScrollWrapperRenderProps {
         // Compose with any ref a prior plugin (e.g. sticky columns,
         // virtualization) already set on the scroll container.
-        const existingRef = props.htmlProps.ref;
-        const mergedRef = (node: HTMLDivElement | null) => {
-          attachScrollGate(node);
-          if (typeof existingRef === 'function') {
-            existingRef(node);
-          } else if (existingRef != null) {
-            existingRef.current = node;
-          }
+        const existingRef = props.htmlProps.ref ?? null;
+        const cached = mergedScrollWrapperRef.current;
+        const mergedRef =
+          cached != null && cached.inner === existingRef
+            ? cached.merged
+            : (node: HTMLDivElement | null) => {
+                attachScrollGate(node);
+                if (typeof existingRef === 'function') {
+                  existingRef(node);
+                } else if (existingRef != null) {
+                  existingRef.current = node;
+                }
+              };
+        mergedScrollWrapperRef.current = {
+          inner: existingRef,
+          merged: mergedRef,
         };
         return {
           ...props,

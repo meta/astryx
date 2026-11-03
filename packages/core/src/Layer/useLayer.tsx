@@ -4,7 +4,7 @@
 
 /**
  * @file useLayer.tsx
- * @input Uses React hooks, Popover API, CSS anchor positioning, shared text/provider boundaries
+ * @input Uses React hooks, Popover API (its `beforetoggle`/`toggle` events through the popoverOperations ledger), CSS anchor positioning, shared text/provider boundaries
  * @output Exports the public useLayer hook plus internal trigger helpers.
  * @position Core layer utility; used by useHoverCard, useTooltip, etc.
  *
@@ -21,6 +21,7 @@ import React, {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
   type RefCallback,
 } from 'react';
@@ -28,6 +29,7 @@ import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {createPortal} from 'react-dom';
 import {LayerContentBoundary} from './layerScopedContext';
+import {layerClickBoundary} from './layerClickBoundary';
 import {addAnchorName, removeAnchorName} from './anchorName';
 import {currentGesture, currentGestureHasClicked} from './gestureCounter';
 import {resolveLayerPortalTarget} from './layerHost';
@@ -45,6 +47,13 @@ import {
   getAnchorClearFallbacks,
   slideRuleName,
 } from './layerSlideRules';
+import {
+  afterPopoverOperations,
+  isBrowserHideInFlight,
+  isPopoverOperationInFlight,
+  observeBrowserHide,
+  runPopoverOperation,
+} from './popoverOperations';
 import {preserveAnimations} from './preserveAnimations';
 import {useLayerContext} from './LayerContext';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
@@ -435,6 +444,14 @@ interface InternalContextLayerOptions extends ContextLayerOptions {
    * its trigger keeps open.
    */
   keepsAnchorClear?: boolean;
+  /**
+   * With `lazyMount`, the layer stays mounted once its first `show()` mounted
+   * it: hiding leaves it in place, so its close plays out and every later
+   * `show()` opens it at once. A layer never shown still mounts only its inert
+   * marker. For a component with many triggers that each own a layer (a
+   * context menu on every table cell).
+   */
+  keepsMountAfterShow?: boolean;
 }
 
 type InternalContextLayerReturn = ContextLayerReturn & InternalLayerFields;
@@ -619,8 +636,9 @@ function failsAnchor(layer: HTMLElement, anchor: HTMLElement): boolean {
  * every show and remount, and while the layer is open whenever its size, its
  * content's size, its anchor's size or the viewport changes; each of those
  * reads lands before the next frame paints. A same-size anchor that moves on
- * screen, in layout or because something scrolled, is read after paint, from
- * the anchor-move observer (FR8). Scroll events are not read: during one the
+ * screen, in layout or because something scrolled, is reported after paint by
+ * the anchor-move observer and read in the next frame, before it paints (FR8).
+ * Scroll events are not read: during one the
  * anchor has moved but the layer anchored to it not yet, so the read would
  * compare a moved anchor with a stale layer. Once switched, a layer keeps its
  * anchor-clear list until it next opens, so it never jumps back over its
@@ -771,9 +789,16 @@ function observeMove(element: HTMLElement, onMove: () => void): () => void {
  * range (spec:AST-059 FR4, FR8): the layer, its content or the anchor
  * resizing (ResizeObserver, before paint), the viewport resizing (before
  * paint), and the anchor moving on screen without resizing, in layout or by a
- * scroll (`observeMove`, after paint). Each calls `keepAnchorClear` for this layer and anchor while
- * `isCurrent` says they are still the live pair. Returns the function that
- * removes every observer and listener it added.
+ * scroll (`observeMove`, reported after paint). Each calls `keepAnchorClear`
+ * for this layer and anchor while `isCurrent` says they are still the live
+ * pair. A move is read in the next animation frame, not in the task that
+ * reports it: placing the layer afresh there, right after the frame that
+ * scrolled its anchor, lets Chromium lay it out for one more frame against
+ * the anchor's position before the scroll, over the anchor, so the second
+ * painted frame would still cover it. Read in the next frame, before it
+ * paints, the fresh placement uses the moved anchor. Reports in one frame
+ * share one read. Returns the function that removes every observer and
+ * listener it added.
  */
 function observeAnchorClearance(
   layer: HTMLElement,
@@ -798,57 +823,113 @@ function observeAnchorClearance(
     }
     observer.observe(anchor);
   }
-  const stopObservingMove = observeMove(anchor, reread);
+  let moveFrame: number | null = null;
+  const stopObservingMove = observeMove(anchor, () => {
+    if (moveFrame !== null) {
+      return;
+    }
+    moveFrame = view.requestAnimationFrame(() => {
+      moveFrame = null;
+      reread();
+    });
+  });
   view.addEventListener('resize', reread);
   return () => {
     observer?.disconnect();
     stopObservingMove();
+    if (moveFrame !== null) {
+      view.cancelAnimationFrame(moveFrame);
+      moveFrame = null;
+    }
     view.removeEventListener('resize', reread);
   };
-}
-
-/**
- * Popover operations in flight, per document.
- *
- * The Popover API refuses to show a popover while the document is in the
- * middle of showing or hiding ANY popover: `showPopover()` throws an
- * `InvalidStateError` ("Invalid to show a popover during another show
- * operation"); an engine still rolling the rule out instead refuses silently
- * with a console warning, which would leave this hook open with nothing
- * shown. Hiding a popover restores focus to the element that had it —
- * synchronously, inside that window — so a focus-driven layer on the element
- * receiving focus (a tooltip on the trigger that just closed a popover) asks
- * to show while the hide is still running. Every layer's show and hide passes
- * through here, so the window is observable: a `show()` that arrives inside
- * it is replayed in a microtask, which runs once the script that started the
- * operation — and the event dispatch it answered — has unwound.
- */
-const popoverOperationsByDocument = new WeakMap<Document, number>();
-
-function runPopoverOperation(doc: Document, operation: () => void): void {
-  popoverOperationsByDocument.set(
-    doc,
-    (popoverOperationsByDocument.get(doc) ?? 0) + 1,
-  );
-  try {
-    operation();
-  } finally {
-    popoverOperationsByDocument.set(
-      doc,
-      (popoverOperationsByDocument.get(doc) ?? 1) - 1,
-    );
-  }
-}
-
-function isPopoverOperationInFlight(doc: Document): boolean {
-  return (popoverOperationsByDocument.get(doc) ?? 0) > 0;
 }
 
 interface ContextLayerMount {
   /** Null means the marker's parent is safe and the layer stays inline. */
   portalTarget: HTMLElement | null;
-  /** Logical writing context lost when moving outside an unsafe ancestor. */
-  portalStyle: React.CSSProperties;
+  /**
+   * Logical writing context lost when moving outside an unsafe ancestor, or
+   * null until it is read. A closed layer mounted ahead of its first show
+   * reads it in `show()`, before the layer opens: reading computed style for
+   * every closed layer on mount forces a style recalculation per layer.
+   */
+  portalStyle: React.CSSProperties | null;
+}
+
+/**
+ * Where a context layer is hosted, published to the one component that
+ * renders it. The hook resolves the mount from the marker's parent once the
+ * marker is in the DOM, and the slot below subscribes to it, so the render
+ * that places the layer re-renders the slot alone: the hook's host (a
+ * Tooltip, a Popover, a menu) and everything under it render once on mount.
+ */
+interface ContextLayerMountStore {
+  readonly get: () => ContextLayerMount | null;
+  readonly set: (mount: ContextLayerMount | null) => void;
+  readonly subscribe: (onChange: () => void) => () => void;
+}
+
+function createContextLayerMountStore(): ContextLayerMountStore {
+  let mount: ContextLayerMount | null = null;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => mount,
+    set: next => {
+      if (next === mount) {
+        return;
+      }
+      mount = next;
+      for (const listener of listeners) {
+        listener();
+      }
+    },
+    subscribe: onChange => {
+      listeners.add(onChange);
+      return () => {
+        listeners.delete(onChange);
+      };
+    },
+  };
+}
+
+const readNoMount = (): ContextLayerMount | null => null;
+
+/**
+ * The marker and, once the hook has resolved where it goes, the layer. The
+ * server and the hydrating render carry the marker alone, so block content
+ * never enters server markup inside `<p>` and its kin; the mount arrives from
+ * the marker's ref callback, and only this component re-renders to place the
+ * layer.
+ */
+function ContextLayerSlot({
+  mountStore,
+  renderLayer,
+  sentinelRef,
+}: {
+  readonly mountStore: ContextLayerMountStore;
+  readonly renderLayer: (mount: ContextLayerMount) => ReactNode;
+  readonly sentinelRef: RefCallback<HTMLTemplateElement>;
+}) {
+  const mount = useSyncExternalStore(
+    mountStore.subscribe,
+    mountStore.get,
+    readNoMount,
+  );
+  // Keep the marker mounted after resolving the layer. Apart from giving
+  // us the real JSX parent on first show, this lets its ref report when a
+  // persistent hook's render call moves to a different host.
+  const sentinel = <template ref={sentinelRef} />;
+  if (mount === null) {
+    return <>{sentinel}</>;
+  }
+  const layer = renderLayer(mount);
+  return (
+    <>
+      {sentinel}
+      {mount.portalTarget ? createPortal(layer, mount.portalTarget) : layer}
+    </>
+  );
 }
 
 function readPortalWritingContext(
@@ -1079,6 +1160,10 @@ function useLayerImplementation(
 ): InternalContextLayerReturn | InternalFixedLayerReturn {
   const {mode, onShow, onHide, lightDismiss = false} = options;
   const lazyMount = mode === 'context' ? (options.lazyMount ?? false) : false;
+  const keepsMountAfterShow =
+    lazyMount && mode === 'context'
+      ? (options.keepsMountAfterShow ?? false)
+      : false;
   const keepsAnchorClear =
     mode === 'context' ? (options.keepsAnchorClear ?? false) : false;
   const id = useId();
@@ -1113,9 +1198,13 @@ function useLayerImplementation(
   // corrective portal, including after the render call moves.
   const sentinelRef = useRef<HTMLTemplateElement | null>(null);
   const contextMountRef = useRef<ContextLayerMount | null>(null);
-  const [contextMount, setContextMount] = useState<ContextLayerMount | null>(
-    null,
-  );
+  // The resolved mount reaches the slot through this store, never through
+  // state on this hook, so placing the layer renders the slot alone. The
+  // generation counts mounts that REPLACE a resolved one (a render call that
+  // moved to another host): the layer element is recreated then, and the
+  // effects below that bind to it re-run.
+  const [mountStore] = useState(createContextLayerMountStore);
+  const [mountGeneration, setMountGeneration] = useState(0);
   // A show() that cannot run yet is remembered here and replayed: one that
   // arrives before the final layer mounts runs when its popover ref attaches;
   // one that arrives while another popover is mid show/hide runs once that
@@ -1138,37 +1227,61 @@ function useLayerImplementation(
     return dismissedByGestureRef.current === gesture;
   }, []);
 
-  const showPopoverElement = useCallback((popover: HTMLElement) => {
+  /**
+   * Asks the browser to show the popover. Returns false when the browser
+   * refused with an `InvalidStateError` while a hide it runs itself is still
+   * in flight (the ledger counts it from `beforetoggle`); the caller then
+   * replays the show once that hide has ended. Any other failure, and a
+   * refusal outside such a hide, reaches the caller: a replay runs outside
+   * the hide, so one that fails is not caught here.
+   */
+  const showPopoverElement = useCallback((popover: HTMLElement): boolean => {
     // Finding infra-4: the Popover API is unsupported on Safari <17 and
     // Firefox <125. On those browsers `showPopover` does not exist, so fall
     // back to plain visibility instead of throwing.
     if (typeof popover.showPopover === 'function') {
-      runPopoverOperation(popover.ownerDocument, () => {
-        // The trigger is passed as the popover's invoker `source`: a layer
-        // hosted away from its trigger then still takes its sequential focus
-        // order (and its popover nesting) from the trigger rather than from
-        // its own DOM position. Browsers without the option ignore it.
-        // `source` is declared as an `HTMLElement`. A caller-rendered icon
-        // trigger is an `SVGElement`, whose dictionary conversion throws
-        // before the popover opens. Omitting the option for it still anchors
-        // the layer, because positioning reads the anchor-name pair, and only
-        // gives up the invoker's focus order. The check asks the trigger's own
-        // window: an HTML trigger rendered into another document (an iframe,
-        // a Picture-in-Picture window) is not an instance of this window's
-        // `HTMLElement`, and keeps its source.
-        const trigger = triggerRef.current;
-        const triggerView = trigger?.ownerDocument.defaultView;
-        popover.showPopover({
-          source:
-            triggerView != null && trigger instanceof triggerView.HTMLElement
-              ? trigger
-              : undefined,
+      const doc = popover.ownerDocument;
+      const duringBrowserHide = isBrowserHideInFlight(doc);
+      try {
+        runPopoverOperation(doc, () => {
+          // The trigger is passed as the popover's invoker `source`: a layer
+          // hosted away from its trigger then still takes its sequential
+          // focus order (and its popover nesting) from the trigger rather
+          // than from its own DOM position. Browsers without the option
+          // ignore it. `source` is declared as an `HTMLElement`. A
+          // caller-rendered icon trigger is an `SVGElement`, whose dictionary
+          // conversion throws before the popover opens. Omitting the option
+          // for it still anchors the layer, because positioning reads the
+          // anchor-name pair, and only gives up the invoker's focus order.
+          // The check asks the trigger's own window: an HTML trigger rendered
+          // into another document (an iframe, a Picture-in-Picture window) is
+          // not an instance of this window's `HTMLElement`, and keeps its
+          // source.
+          const trigger = triggerRef.current;
+          const triggerView = trigger?.ownerDocument.defaultView;
+          popover.showPopover({
+            source:
+              triggerView != null && trigger instanceof triggerView.HTMLElement
+                ? trigger
+                : undefined,
+          });
         });
-      });
+      } catch (error) {
+        // The name, not the constructor: a popover in another document throws
+        // that document's `DOMException`.
+        if (
+          duringBrowserHide &&
+          (error as {name?: unknown} | null)?.name === 'InvalidStateError'
+        ) {
+          return false;
+        }
+        throw error;
+      }
     } else {
       popover.style.display = 'block';
     }
     openedPopoverRef.current = popover;
+    return true;
   }, []);
 
   const isCurrentContextPopover = useCallback(
@@ -1198,24 +1311,74 @@ function useLayerImplementation(
       return;
     }
 
+    // The slide options' `@position-try` rules (FR4) are installed in the
+    // layer's document before its first paint, here where the mount resolves:
+    // the marker's arrival is the one event every mount has, whether the
+    // render call mounts with its host or later. One sheet serves every layer.
+    ensureSlideRules(sentinel.ownerDocument);
+
     const portalTarget = resolveLayerPortalTarget(inlineParent);
+    // A mount for a layer that is opening or open reads its writing context
+    // now; a closed layer's waits for its first show.
+    const opening = pendingShowRef.current || isOpenRef.current;
     const mount: ContextLayerMount = {
       portalTarget,
-      portalStyle: portalTarget
-        ? readPortalWritingContext(sentinel, portalTarget)
-        : {},
+      portalStyle:
+        portalTarget == null
+          ? {}
+          : opening
+            ? readPortalWritingContext(sentinel, portalTarget)
+            : null,
     };
+    const replaced = contextMountRef.current !== null;
     contextMountRef.current = mount;
-    setContextMount(mount);
-  }, [mode]);
+    mountStore.set(mount);
+    if (replaced) {
+      setMountGeneration(generation => generation + 1);
+    }
+  }, [mode, mountStore]);
+
+  // Reads the writing context a closed layer's mount deferred, before the
+  // layer opens. It is written on the popover at once, so the first open frame
+  // already has it (layer-runtime INV12), and published to the slot, whose
+  // render writes the same values. A value the caller's own `style` sets is
+  // already inline and wins, as it does in render.
+  const applyDeferredWritingContext = useCallback(
+    (popover: HTMLElement) => {
+      const mount = contextMountRef.current;
+      const sentinel = sentinelRef.current;
+      if (
+        mount === null ||
+        mount.portalTarget === null ||
+        mount.portalStyle !== null ||
+        sentinel === null
+      ) {
+        return;
+      }
+      const portalStyle = readPortalWritingContext(
+        sentinel,
+        mount.portalTarget,
+      );
+      if (portalStyle.direction != null && popover.style.direction === '') {
+        popover.style.direction = portalStyle.direction;
+      }
+      if (portalStyle.writingMode != null && popover.style.writingMode === '') {
+        popover.style.writingMode = portalStyle.writingMode;
+      }
+      const next: ContextLayerMount = {...mount, portalStyle};
+      contextMountRef.current = next;
+      mountStore.set(next);
+    },
+    [mountStore],
+  );
 
   const clearContextMount = useCallback(() => {
-    if (mode !== 'context' || !lazyMount) {
+    if (mode !== 'context' || !lazyMount || keepsMountAfterShow) {
       return;
     }
     contextMountRef.current = null;
-    setContextMount(null);
-  }, [mode, lazyMount]);
+    mountStore.set(null);
+  }, [mode, lazyMount, keepsMountAfterShow, mountStore]);
 
   const show = useCallback(() => {
     // Every caller lands here, so this is where the dismissing press is
@@ -1234,22 +1397,35 @@ function useLayerImplementation(
       return;
     }
     if (!isOpenRef.current) {
-      // Another popover is mid show/hide (typically one whose hide is handing
-      // focus back to this layer's trigger): the browser would refuse the
-      // show, so replay this call once that operation has returned.
-      if (isPopoverOperationInFlight(popover.ownerDocument)) {
+      const replayWhenSettled = () => {
         pendingShowRef.current = true;
-        queueMicrotask(() => {
+        afterPopoverOperations(popover.ownerDocument, () => {
           if (pendingShowRef.current) {
             pendingShowRef.current = false;
             showRef.current();
           }
         });
+      };
+      // Another layer's own show or hide is running (typically a hide that is
+      // handing focus back to this layer's trigger): the browser would refuse
+      // the show, so replay this call once that operation has returned.
+      if (isPopoverOperationInFlight(popover.ownerDocument)) {
+        replayWhenSettled();
         return;
       }
       popover.removeAttribute(LAYER_CLEARS_ANCHOR_ATTRIBUTE);
       popover.removeAttribute(LAYER_SCROLLS_ATTRIBUTE);
-      showPopoverElement(popover);
+      applyDeferredWritingContext(popover);
+      // A hide the browser runs itself (an Escape its close watcher answers)
+      // is counted too, from `beforetoggle` until the element's `toggle`, a
+      // task after the hide has returned. The show is asked of the browser
+      // first, because the browser accepts it once its hide has returned (a
+      // light dismiss at pointerup, then this show at the click); only a show
+      // it refuses replays once the hide's count has ended.
+      if (!showPopoverElement(popover)) {
+        replayWhenSettled();
+        return;
+      }
       if (keepsAnchorClear) {
         keepAnchorClear(popover, triggerRef.current);
       }
@@ -1261,6 +1437,7 @@ function useLayerImplementation(
     onShow,
     keepsAnchorClear,
     requestContextMount,
+    applyDeferredWritingContext,
     showPopoverElement,
     isCurrentContextPopover,
     wasJustDismissed,
@@ -1399,6 +1576,22 @@ function useLayerImplementation(
   // The isOpenRef guard prevents double-firing: when our hide() already set
   // the ref to false, the subsequent toggle event (which the browser fires
   // as a side-effect of hidePopover) sees false and skips.
+  // A hide the browser runs itself (light dismiss, popover="auto" stack
+  // eviction, an Escape its close watcher answers) never passes through
+  // hide(), so the ledger of popover operations would not know the document
+  // is mid-hide, and a layer that the hide's focus restore wakes would ask the
+  // browser to show inside it. `beforetoggle` fires synchronously as such a
+  // hide starts; the ledger counts the hide from there until the element's
+  // own `toggle`, independent of this hook's bindings, which a render inside
+  // the hide can replace.
+  const handleBeforeToggle = useCallback((e: Event) => {
+    const toggleEvent = e as ToggleEvent;
+    const el = e.currentTarget as HTMLElement | null;
+    if (toggleEvent.newState === 'closed' && isOpenRef.current && el != null) {
+      observeBrowserHide(el);
+    }
+  }, []);
+
   const handleToggle = useCallback(
     (e: Event) => {
       const toggleEvent = e as ToggleEvent;
@@ -1435,16 +1628,21 @@ function useLayerImplementation(
           'toggle',
           listenedHandlerRef.current,
         );
+        listenedElRef.current.removeEventListener(
+          'beforetoggle',
+          handleBeforeToggle,
+        );
         listenedElRef.current = null;
         listenedHandlerRef.current = null;
       }
       if (el && listenedElRef.current !== el) {
         el.addEventListener('toggle', handler);
+        el.addEventListener('beforetoggle', handleBeforeToggle);
         listenedElRef.current = el;
         listenedHandlerRef.current = handler;
       }
     },
-    [],
+    [handleBeforeToggle],
   );
 
   const popoverRefCallback = useCallback(
@@ -1462,9 +1660,25 @@ function useLayerImplementation(
       ) {
         // Changing a portal target remounts the popover. Preserve the logical
         // open state without firing onShow again for the replacement element.
-        showPopoverElement(el);
-        if (keepsAnchorClear) {
-          keepAnchorClear(el, triggerRef.current);
+        // A show the browser refused during one of its own hides replays once
+        // that hide has ended, for the element still mounted then.
+        if (showPopoverElement(el)) {
+          if (keepsAnchorClear) {
+            keepAnchorClear(el, triggerRef.current);
+          }
+        } else {
+          afterPopoverOperations(el.ownerDocument, () => {
+            const current = popoverRef.current;
+            if (
+              isOpenRef.current &&
+              current === el &&
+              openedPopoverRef.current !== el &&
+              showPopoverElement(el) &&
+              keepsAnchorClear
+            ) {
+              keepAnchorClear(el, triggerRef.current);
+            }
+          });
         }
       }
     },
@@ -1481,14 +1695,21 @@ function useLayerImplementation(
   const sentinelRefCallback = useCallback(
     (el: HTMLTemplateElement | null) => {
       sentinelRef.current = el;
-      if (el && (!lazyMount || pendingShowRef.current || isOpenRef.current)) {
+      // A layer that keeps its mount re-resolves it too once it has one.
+      if (
+        el &&
+        (!lazyMount ||
+          pendingShowRef.current ||
+          isOpenRef.current ||
+          (keepsMountAfterShow && contextMountRef.current != null))
+      ) {
         // The render call may have moved while the hook stayed mounted.
         // Resolve again from the newly attached marker rather than reusing a
         // portal target from its previous JSX position.
         requestContextMount();
       }
     },
-    [lazyMount, requestContextMount],
+    [lazyMount, keepsMountAfterShow, requestContextMount],
   );
 
   // Re-bind when the handler identity changes while the element stays mounted,
@@ -1503,24 +1724,15 @@ function useLayerImplementation(
           'toggle',
           listenedHandlerRef.current,
         );
+        listenedElRef.current.removeEventListener(
+          'beforetoggle',
+          handleBeforeToggle,
+        );
         listenedElRef.current = null;
         listenedHandlerRef.current = null;
       }
     };
-  }, [handleToggle, bindToggleListener]);
-
-  // The slide options' `@position-try` rules (FR4) are installed in the
-  // layer's document before its first paint; one sheet serves every layer.
-  useIsomorphicLayoutEffect(() => {
-    if (mode !== 'context') {
-      return;
-    }
-    const doc =
-      popoverRef.current?.ownerDocument ?? sentinelRef.current?.ownerDocument;
-    if (doc) {
-      ensureSlideRules(doc);
-    }
-  }, [mode, contextMount]);
+  }, [handleToggle, bindToggleListener, handleBeforeToggle]);
 
   // Anchor visibility (FR5). The first frame must already be right (FR8), so
   // the opening read is synchronous — a layout effect runs before paint, and a
@@ -1567,8 +1779,9 @@ function useLayerImplementation(
   // give the layer a scroll range (`observeAnchorClearance`). The external
   // systems are those browser observers and listeners; this effect binds them
   // while the layer is open and removes them when it closes, unmounts or is
-  // remounted by a moved render call (`contextMount`). A trigger replaced while
-  // open is rebound by the trigger callback ref, so no DOM node enters state.
+  // remounted by a moved render call (`mountGeneration`). A trigger replaced
+  // while open is rebound by the trigger callback ref, so no DOM node enters
+  // state.
   useIsomorphicLayoutEffect(() => {
     if (!keepsAnchorClear || !isOpen || mode !== 'context') {
       return;
@@ -1588,20 +1801,11 @@ function useLayerImplementation(
       clearObserversRef.current?.();
       clearObserversRef.current = null;
     };
-  }, [keepsAnchorClear, isOpen, mode, contextMount]);
+  }, [keepsAnchorClear, isOpen, mode, mountGeneration]);
 
   // Render function for context mode
   const renderContext = useCallback(
     (children: ReactNode, props?: ContextRenderProps) => {
-      // Keep the marker mounted after resolving the layer. Apart from giving
-      // us the real JSX parent on first show, this lets its ref report when a
-      // persistent hook's render call moves to a different host.
-      const sentinel = <template ref={sentinelRefCallback} />;
-
-      if (contextMount === null) {
-        return <>{sentinel}</>;
-      }
-
       const {
         placement = 'above',
         alignment = 'center',
@@ -1687,7 +1891,8 @@ function useLayerImplementation(
       // The marker gives us the actual JSX parent without mounting arbitrary
       // children there. Safe positions preserve the existing DOM order and
       // cascade; unsafe positions use the nearest corrective portal target.
-      const layer = (
+      // The slot renders the layer once the hook has resolved that mount.
+      const renderLayer = (mount: ContextLayerMount) => (
         <Container
           ref={popoverRefCallback}
           id={id}
@@ -1701,32 +1906,34 @@ function useLayerImplementation(
             ...clearanceProperty,
             ...clearFallbacksProperty,
             ...layerInsetProperties(declaredInset),
-            ...contextMount.portalStyle,
+            ...mount.portalStyle,
             ...extraStyle,
           }}
           onMouseEnter={onMouseEnter}
-          onMouseLeave={onMouseLeave}>
+          onMouseLeave={onMouseLeave}
+          // Presses inside the layer do not reach handlers around where it
+          // is written.
+          {...layerClickBoundary()}>
           <LayerContentBoundary>{children}</LayerContentBoundary>
         </Container>
       );
 
       return (
-        <>
-          {sentinel}
-          {contextMount.portalTarget
-            ? createPortal(layer, contextMount.portalTarget)
-            : layer}
-        </>
+        <ContextLayerSlot
+          mountStore={mountStore}
+          renderLayer={renderLayer}
+          sentinelRef={sentinelRefCallback}
+        />
       );
     },
     [
       anchorId,
-      contextMount,
       declaredInset,
       id,
       isAnchorInView,
       keepsAnchorClear,
       lightDismiss,
+      mountStore,
       popoverRefCallback,
       sentinelRefCallback,
     ],
@@ -1767,7 +1974,10 @@ function useLayerImplementation(
           id={id}
           popover={lightDismiss ? 'auto' : 'manual'}
           className={combinedClassName}
-          style={{...stylexResult.style, ...positionStyle, ...extraStyle}}>
+          style={{...stylexResult.style, ...positionStyle, ...extraStyle}}
+          // Presses inside the layer do not reach handlers around where it
+          // is written.
+          {...layerClickBoundary()}>
           <LayerContentBoundary>{children}</LayerContentBoundary>
         </div>
       );

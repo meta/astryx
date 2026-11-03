@@ -23,6 +23,11 @@ import {
   integrationDocConflicts,
   integrationTemplateConflicts,
 } from './authoring-checks.mjs';
+import {warmIntegrationChecks} from '../../test-utils/warm-integration-checks.mjs';
+
+// The checks' one-time start in this file (TypeScript and its lib files) runs
+// here, while the file is collected, so no test carries it.
+await warmIntegrationChecks();
 
 let tmpDir;
 
@@ -660,9 +665,33 @@ describe('integration diagnostics are read-only', () => {
     );
   }
 
-  it('leaves local and installed packages byte-for-byte unchanged', async () => {
+  it('leaves the local package byte-for-byte unchanged', async () => {
     const pkgDir = path.join(tmpDir, 'pkg');
+    // A TypeScript config scoped to the fixture's own files, beside the
+    // package. Without it the package gets the repository's root config, as
+    // `tsc` reads it, and the props comparison compiles the whole repository.
+    fs.writeFileSync(
+      path.join(tmpDir, 'tsconfig.json'),
+      `${JSON.stringify({extends: '../tsconfig.json', include: ['**/*']})}\n`,
+    );
     writeDiagnosedPackage(pkgDir);
+    const before = snapshot(pkgDir);
+
+    const local = await validateIntegration(undefined, {cwd: pkgDir});
+    await integrationTemplateConflicts(undefined, {cwd: pkgDir});
+    await integrationComponentConflicts(undefined, {cwd: pkgDir});
+    await integrationDocConflicts(undefined, {cwd: pkgDir});
+
+    expect(summarizeIssues(local.data.issues).errors).toBeGreaterThan(0);
+    expect(byCode(local.data.issues, 'unreachable_contribution')).toHaveLength(
+      1,
+    );
+    expect(snapshot(pkgDir)).toEqual(before);
+  });
+
+  // Its own test: all 8 calls in one test take longer than the test limit on
+  // a busy machine.
+  it('leaves the installed package byte-for-byte unchanged', async () => {
     const consumer = path.join(tmpDir, 'consumer');
     fs.mkdirSync(consumer, {recursive: true});
     fs.writeFileSync(
@@ -672,29 +701,17 @@ describe('integration diagnostics are read-only', () => {
     writeDiagnosedPackage(
       path.join(consumer, 'node_modules', '@acme', 'widgets'),
     );
-    const before = {pkg: snapshot(pkgDir), consumer: snapshot(consumer)};
+    const before = snapshot(consumer);
 
-    const local = await validateIntegration(undefined, {cwd: pkgDir});
     const installed = await validateIntegration('@acme/widgets', {
       cwd: consumer,
     });
-    for (const [pkg, cwd] of [
-      [undefined, pkgDir],
-      ['@acme/widgets', consumer],
-    ]) {
-      await integrationTemplateConflicts(pkg, {cwd});
-      await integrationComponentConflicts(pkg, {cwd});
-      await integrationDocConflicts(pkg, {cwd});
-    }
+    await integrationTemplateConflicts('@acme/widgets', {cwd: consumer});
+    await integrationComponentConflicts('@acme/widgets', {cwd: consumer});
+    await integrationDocConflicts('@acme/widgets', {cwd: consumer});
 
-    expect(summarizeIssues(local.data.issues).errors).toBeGreaterThan(0);
-    expect(byCode(local.data.issues, 'unreachable_contribution')).toHaveLength(
-      1,
-    );
     expect(summarizeIssues(installed.data.issues).errors).toBeGreaterThan(0);
-    expect({pkg: snapshot(pkgDir), consumer: snapshot(consumer)}).toEqual(
-      before,
-    );
+    expect(snapshot(consumer)).toEqual(before);
   });
 });
 

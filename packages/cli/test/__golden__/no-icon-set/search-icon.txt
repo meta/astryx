@@ -1,4 +1,4 @@
-Results for "icon" (20 of 220)
+Results for "icon" (20 of 224)
 name:        Icon
 domain:      component
 package:     @astryxdesign/core
@@ -14,6 +14,11 @@ domain:      component
 package:     @astryxdesign/core
 import:      @astryxdesign/core/IconButton
 command:     pnpm exec astryx component IconButton
+name:        InfoTip
+domain:      component
+package:     @astryxdesign/core
+import:      @astryxdesign/core/InfoTip
+command:     pnpm exec astryx component InfoTip
 name:        useInputContainer
 domain:      hook
 package:     @astryxdesign/core
@@ -24,6 +29,18 @@ domain:      hook
 package:     @astryxdesign/core
 import:      @astryxdesign/core/hooks
 command:     pnpm exec astryx hook useInputStatusIcon
+name:        icons
+section:     theme-overrides
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs icons theme-overrides
+parent:      pnpm exec astryx docs icons --index
+name:        icons
+section:     icon-variants
+domain:      doc
+package:     @astryxdesign/cli
+command:     pnpm exec astryx docs icons icon-variants
+parent:      pnpm exec astryx docs icons --index
 name:        BaseTypeaheadCustomSearch
 domain:      template
 package:     @astryxdesign/core
@@ -72,15 +89,3 @@ name:        ChatComposerFooterActions
 domain:      template
 package:     @astryxdesign/core
 command:     pnpm exec astryx template ChatComposerFooterActions --type block
-name:        ChatComposerFullFeatured
-domain:      template
-package:     @astryxdesign/core
-command:     pnpm exec astryx template ChatComposerFullFeatured --type block
-name:        ChatMessageBubbleMetadata
-domain:      template
-package:     @astryxdesign/core
-command:     pnpm exec astryx template ChatMessageBubbleMetadata --type block
-name:        ChatMessageMetadataFooter
-domain:      template
-package:     @astryxdesign/core
-command:     pnpm exec astryx template ChatMessageMetadataFooter --type block

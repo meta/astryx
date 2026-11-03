@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {createRef, Fragment} from 'react';
+import {createRef, Fragment, type ReactNode} from 'react';
 import {describe, expect, it} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
@@ -186,4 +186,25 @@ describe('ChatSystemMessage', () => {
       }
     },
   );
+
+  // A slot is empty for exactly the values React renders as nothing.
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('renders no icon wrapper for %s', (_name, icon) => {
+    const {container: withIcon} = render(
+      <ChatSystemMessage icon={icon as ReactNode}>Notice</ChatSystemMessage>,
+    );
+    const {container: without} = render(
+      <ChatSystemMessage>Notice</ChatSystemMessage>,
+    );
+    expect(withIcon.innerHTML).toBe(without.innerHTML);
+  });
+
+  it('renders 0 as an icon, as React does', () => {
+    render(<ChatSystemMessage icon={0}>Notice</ChatSystemMessage>);
+    expect(screen.getByText('0')).toBeInTheDocument();
+  });
 });

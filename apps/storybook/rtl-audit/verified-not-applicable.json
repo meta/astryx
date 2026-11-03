@@ -351,6 +351,15 @@
     }
   },
   {
+    "component": "core/CommandPaletteEmpty",
+    "reason": "CommandPaletteEmpty owns one message container that centers caller content on both axes with symmetric logical inline padding, block padding, and centered text, and wraps an unbroken token inside the host. It renders no directional glyph, physical inline positioning, reordered controls, horizontal scrolling or dragging, side-placed overlay, or horizontal keyboard behavior; caller text follows the document direction. The content fixture and the CommandPalette audit matrix exercise translated, long, standalone, and in-palette content in RTL without adding a component-owned RTL dimension.",
+    "evidence": {
+      "apps/storybook/stories/CommandPaletteEmpty.stories.tsx": "sha256:35e5e5da27d4440fec7f45d62c9db503210f37c042afd01fd17365ca59c6b2e7",
+      "packages/core/src/CommandPalette/CommandPaletteEmpty.tsx": "sha256:721c495b144ca2e0ccc1f869a44d8be1350d880d17f9a08eb025e7941421bc0e",
+      "packages/core/src/CommandPalette/index.ts": "sha256:ba38845bbde6d73172df2c0791ca513c9f2b7baab17440e066e783ff6cfc7558"
+    }
+  },
+  {
     "component": "core/CommandPaletteList",
     "reason": "CommandPaletteList owns one vertically stacked results container that scrolls on the block axis, with symmetric padding and block-axis gaps. It renders no directional glyph, physical inline positioning, reordered controls, horizontal scrolling or dragging, side-placed overlay, or horizontal keyboard behavior; item and group content follow normal document direction, and CommandPalette owns arrow-key navigation. The dedicated fixtures exercise the standalone listbox and the scrolling palette composition without adding a component-owned RTL dimension.",
     "evidence": {

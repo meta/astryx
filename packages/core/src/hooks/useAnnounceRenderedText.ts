@@ -4,47 +4,33 @@
 
 /**
  * @file useAnnounceRenderedText.ts
- * @input A ref to a rendered element, whether it is showing, and a token that
- *   marks a new occasion to speak
- * @output Announces that element's own rendered text through the persistent
- *   polite live region
- * @position Core a11y hook; mirrors on-screen content into the shared live
- *   region by reading the DOM
- *
- * Some content reaches assistive technology only through a live region: a
- * panel message marked `role="presentation"`, for instance, because
- * `role="listbox"` permits only `option` and `group` children. When that
- * content is a caller-supplied `ReactNode`, the component must announce what
- * it actually rendered — announcing a built-in default over a caller's
- * element tells the screen-reader user something the sighted user is not
- * reading (`spec:AST-056` AR1, FR3).
- *
- * The text is read from the DOM after render, never by inspecting React
- * children. That is the whole point: by the time this runs the browser has
- * rendered the subtree, so text a child component generates inside its own
- * render announces correctly, and there is no tree walk, no depth limit, and
- * no "could not read it" fallback to get wrong.
- *
- * Announcing through the persistent `useAnnounce` region rather than putting
- * `role="status"` on the rendered element is both required here — the element
- * is a listbox child, which may only be `option` or `group` — and the
- * repository's established convention for conditionally rendered messages
- * (see `FieldStatus` and `TimeInput`): a live region that mounts together
- * with its content is not reliably announced.
- *
- * Content hidden with `aria-hidden` or `hidden` is excluded,
- * so a decorative icon stays out of the announcement exactly as it stays out
- * of what a screen reader reads. An `aria-label` renaming a descendant is NOT
- * substituted — the region speaks the rendered text.
- *
- * SYNC: deliberately NOT exported from /packages/core/src/hooks/index.ts —
- * that barrel is re-exported wholesale from the package entry point, so
- * adding it there would ship a new public hook without `spec:AST-002`
- * admission. Import it by path from inside the package.
+ * @input A ref to a rendered element, whether it shows, and a token for each
+ *   new occasion to speak
+ * @output Announces the element's rendered text through the polite live
+ *   region, or through the owner's announcer
+ * @position Core a11y hook. It is not in hooks/index.ts, because that barrel
+ *   is public and a new public hook needs admission (AST-002). Import it by
+ *   path.
  */
 
+// Some content reaches assistive technology only through a live region. For
+// example, a listbox permits only `option` and `group` children, so a panel
+// message in it has `role="presentation"`. When that content is a caller's
+// `ReactNode`, announce what was rendered, not a built-in default (AST-056,
+// AST-086).
+//
+// The text comes from the DOM after render, not from React children, so text
+// that a child component generates is included. A live region that mounts
+// with its content is not reliably announced, so the persistent `useAnnounce`
+// region speaks it. Content with `aria-hidden` or `hidden` is left out. An
+// `aria-label` on a descendant is not used.
+
 import {useEffect, useRef, useState, type RefObject} from 'react';
-import {useAnnounce, type AnnouncePoliteness} from './useAnnounce';
+import {
+  useAnnounce,
+  type AnnounceFn,
+  type AnnouncePoliteness,
+} from './useAnnounce';
 import {useIsHydrating} from './useIsHydrating';
 
 const LIVE_CONTAINER =
@@ -78,17 +64,24 @@ function blockText(element: HTMLElement): string {
 
 export interface AnnounceRenderedTextOptions {
   /**
-   * Text present or changed while the document loads or hydrates is silent;
-   * text that appears or changes later is announced once (`spec:AST-086`
-   * FR11). A mounted live container speaks its own content (FR4); each child is
-   * a block; a reveal without a re-render is read on the next render (FR13).
+   * Text that is present or changes while the document loads or hydrates is
+   * silent. Text that appears or changes later is announced once. A mounted
+   * live container speaks its own content, and each child is a block. A
+   * reveal without a re-render is read on the next render.
    */
   skipFirstRender?: boolean;
   /**
-   * The channel's urgency: errors and time-critical failures are assertive,
-   * every other message polite (`spec:AST-086` FR5). Defaults to polite.
+   * The urgency: assertive for errors and time-critical failures, else
+   * polite. Defaults to polite.
    */
   politeness?: AnnouncePoliteness;
+  /**
+   * The owner's announcer, when the rendered text states the next value of
+   * that announcer's state. For example, a picker's empty-panel message goes
+   * through its search's `hasReplace` instance, so the two replace each other
+   * while not yet exposed. Defaults to this hook's own instance.
+   */
+  announce?: AnnounceFn;
 }
 
 /** The rendered text an assistive technology would read from `element`. */
@@ -128,9 +121,11 @@ export function useAnnounceRenderedText(
   {
     skipFirstRender = false,
     politeness = 'polite',
+    announce: ownerAnnounce,
   }: AnnounceRenderedTextOptions = {},
 ): void {
-  const announce = useAnnounce();
+  const ownAnnounce = useAnnounce();
+  const announce = ownerAnnounce ?? ownAnnounce;
   const spokenRef = useRef<string | null>(null);
   const isHydrating = useIsHydrating();
   // Captured once: an owner rendered before the document finished loading, or
@@ -140,11 +135,9 @@ export function useAnnounceRenderedText(
   );
   const isFirstRunRef = useRef(true);
 
-  // Deliberately no dependency array. The text lives in the DOM, so there is
-  // no React value to depend on that changes when it does — a caller can
-  // change the rendered message without any prop this hook can see. Reading
-  // one element's text per render is cheap, and the dedupe below makes every
-  // render after the first a no-op.
+  // No dependency array: the text lives in the DOM, and a caller can change it
+  // without a prop that this hook sees. One text read per render is cheap, and
+  // the dedupe below makes later renders no-ops.
   useEffect(() => {
     const isFirstRun = isFirstRunRef.current;
     isFirstRunRef.current = false;

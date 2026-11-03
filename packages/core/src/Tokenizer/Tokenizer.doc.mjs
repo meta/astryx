@@ -42,7 +42,7 @@ export const docs = {
       name: 'searchSource',
       type: 'SearchSource<T>',
       description:
-        'Data source providing search and bootstrap methods for populating the dropdown.',
+        'Data source providing search and bootstrap methods. `search(query, context)` may call `context.update(items)` to show matches it already has before it returns; the value it returns is the final list, and every list after the first for a query keeps the shown rows first and adds new rows after them.',
       required: true,
     },
     {
@@ -91,7 +91,8 @@ export const docs = {
     {
       name: 'isDisabled',
       type: 'boolean',
-      description: 'Disables the input and all token interactions.',
+      description:
+        'Disables the input and all token interactions. The input keeps its tab stop: it is announced as disabled (aria-disabled), is read-only, and opens and picks nothing. With tokenOverflowBehavior="unfocusedLayer" and no disabledMessage, the input is natively disabled and out of the tab order.',
       default: 'false',
     },
     {
@@ -104,7 +105,7 @@ export const docs = {
       name: 'disabledMessage',
       type: 'string',
       description:
-        'Explains why the tokenizer is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the input focusable via aria-disabled (input stays blocked). Use this instead of wrapping a disabled Tokenizer in Tooltip. Disabled controls swallow the hover events an external Tooltip needs.',
+        'Explains why the tokenizer is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the input focusable via aria-disabled (input stays blocked). Use this instead of wrapping a disabled Tokenizer in Tooltip, so the reason is attached to the field itself.',
     },
     {
       name: 'status',
@@ -196,7 +197,7 @@ export const docs = {
       name: 'debounceMs',
       type: 'number',
       description:
-        'Debounce delay in ms before triggering search. Set to 0 for synchronous sources.',
+        'Debounce delay in ms before triggering search. Set to 0 for synchronous sources, and for a source that shows local matches through `context.update` and delays its own server request.',
       default: '150',
     },
     {
@@ -266,12 +267,14 @@ export const docs = {
     {
       name: 'containerClassName',
       type: 'string',
-      description: 'Class name for the field container. Same targeting as `containerXstyle`.',
+      description:
+        'Class name for the field container. Same targeting as `containerXstyle`.',
     },
     {
       name: 'containerStyle',
       type: 'CSSProperties',
-      description: 'Inline styles for the field container. Same targeting as `containerXstyle`.',
+      description:
+        'Inline styles for the field container. Same targeting as `containerXstyle`.',
     },
     {
       name: 'controlXstyle',
@@ -288,6 +291,13 @@ export const docs = {
       name: 'controlStyle',
       type: 'CSSProperties',
       description: 'Inline styles for the visual control box.',
+    },
+    {
+      name: 'experimental',
+      type: "{presentation?: 'popover' | 'bottom-sheet' | 'adaptive'}",
+      stability: 'experimental',
+      description:
+        "Experimental options: anything in this object may change or be removed in a patch release, and omitting it keeps the stable behavior. presentation (default 'popover') chooses how the field presents its choices. popover is the inline combobox with its anchored suggestion menu. bottom-sheet replaces it with a trigger showing the selected tokens that opens one tall modal sheet: a search row on top, full-width checkbox rows that keep their place while the sheet is open, a Create row with hasCreate, and a footer pinned in every state with a confirmed Clear all and Save; the sheet edits a draft, so onChange fires once, when Save commits it, and a swipe, scrim or Escape close of a changed draft asks before discarding. adaptive uses the bottom sheet on compact touch screens and the popover otherwise, resolved the same way Selector resolves it. In the sheet presentation the trigger is the control (ref, id, aria-* and data-* reach it; with experimental passed, ref also accepts a Ref<HTMLInputElement | HTMLButtonElement> — an input-only ref still type-checks against that wider type, but with adaptive or bottom-sheet it receives the trigger button at runtime, so type the ref for both elements; TokenizerProps keeps its released ref type and gains only the optional experimental), and renderItem, renderToken, endContent, hasClear, hasEntriesOnFocus, menuWidth, tokenOverflowBehavior and hasAutoFocus have no surface to act on; the field warns once in development when they are passed. For example: <Tokenizer label=\"Tags\" searchSource={tagSource} value={tags} onChange={setTags} hasCreate experimental={{presentation: 'adaptive'}} />.",
     },
   ],
   theming: {
@@ -407,7 +417,7 @@ export const docsZh = {
       name: 'searchSource',
       type: 'SearchSource<T>',
       description:
-        '\u63d0\u4f9b\u641c\u7d22\u548c\u5f15\u5bfc\u65b9\u6cd5\u7684\u6570\u636e\u6e90\uff0c\u7528\u4e8e\u586b\u5145\u4e0b\u62c9\u5217\u8868\u3002',
+        '提供搜索和引导方法的数据源。`search(query, context)` 可调用 `context.update(items)` 先显示已有的匹配项；返回值是最终列表，同一查询在第一个列表之后的每个列表都保留已显示的行，并只在其后追加新行。',
       required: true,
     },
     {
@@ -472,7 +482,7 @@ export const docsZh = {
       name: 'disabledMessage',
       type: 'string',
       description:
-        'Explains why the tokenizer is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the input focusable via aria-disabled (input stays blocked). Use this instead of wrapping a disabled Tokenizer in Tooltip. Disabled controls swallow the hover events an external Tooltip needs.',
+        'Explains why the tokenizer is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the input focusable via aria-disabled (input stays blocked). Use this instead of wrapping a disabled Tokenizer in Tooltip, so the reason is attached to the field itself.',
     },
     {
       name: 'status',
@@ -570,7 +580,7 @@ export const docsZh = {
       name: 'debounceMs',
       type: 'number',
       description:
-        '\u89e6\u53d1\u641c\u7d22\u524d\u7684\u9632\u6296\u5ef6\u8fdf\uff08\u6beb\u79d2\uff09\u3002\u540c\u6b65\u6570\u636e\u6e90\u8bbe\u7f6e\u4e3a 0\u3002',
+        '触发搜索前的防抖延迟（毫秒）。同步数据源，以及通过 `context.update` 显示本地匹配项并自行延迟服务器请求的数据源，设置为 0。',
       default: '150',
     },
     {
@@ -627,6 +637,13 @@ export const docsZh = {
       name: 'controlStyle',
       type: 'CSSProperties',
       description: '可视控件框的内联样式。',
+    },
+    {
+      name: 'experimental',
+      type: "{presentation?: 'popover' | 'bottom-sheet' | 'adaptive'}",
+      stability: 'experimental',
+      description:
+        "实验性选项：此对象中的任何内容都可能在补丁版本中更改或移除；省略它即保持稳定行为。presentation（默认 'popover'）决定字段如何呈现选项：popover 为内联组合框及其锚定建议菜单；bottom-sheet 改为一个显示已选标记的触发按钮，点按后打开一个高的模态底部面板——顶部为搜索行，下方为整行复选框行（面板打开期间位置保持不变），hasCreate 时有「创建」行，底部固定显示需确认的「全部清除」和「保存」；面板编辑的是草稿，onChange 仅在「保存」提交时触发一次，草稿有改动时滑动、点击遮罩或按 Escape 关闭会先询问是否放弃；adaptive 在紧凑触摸屏上使用底部面板，其他情况使用 popover，解析方式与 Selector 相同。在底部面板呈现中，触发按钮即为控件（ref、id、aria-* 和 data-* 都作用于它；传入 experimental 后，ref 也接受 Ref<HTMLInputElement | HTMLButtonElement>——仅为输入框类型的 ref 在这个更宽的类型下仍能通过类型检查，但在 adaptive 或 bottom-sheet 下运行时收到的是触发按钮，因此请为两种元素声明 ref 的类型；TokenizerProps 保留已发布的 ref 类型，仅新增可选的 experimental）；renderItem、renderToken、endContent、hasClear、hasEntriesOnFocus、menuWidth、tokenOverflowBehavior 和 hasAutoFocus 没有作用对象，传入时开发模式下会警告一次。例如：<Tokenizer label=\"标签\" searchSource={tagSource} value={tags} onChange={setTags} hasCreate experimental={{presentation: 'adaptive'}} />。",
     },
   ],
   theming: {
@@ -780,10 +797,12 @@ export const docsDense = {
     ],
   },
   propDescriptions: {
-    containerXstyle: 'StyleX styles for the field container; no effect in InputGroup or horizontal-labels FormLayout. No root xstyle/className/style.',
+    containerXstyle:
+      'StyleX styles for the field container; no effect in InputGroup or horizontal-labels FormLayout. No root xstyle/className/style.',
     containerClassName: 'Class name for the field container.',
     containerStyle: 'Inline styles for the field container.',
-    controlXstyle: 'StyleX styles for the visual control box (border, background, icons); not the native input.',
+    controlXstyle:
+      'StyleX styles for the visual control box (border, background, icons); not the native input.',
     controlClassName: 'Class name for the visual control box.',
     controlStyle: 'Inline styles for the visual control box.',
     label: 'Accessible label for input.',
@@ -825,5 +844,7 @@ export const docsDense = {
       'Icon at input start, before tokens. Icon name, SVG component, or ReactNode.',
     endContent: 'Content at input row end. For buttons, counts, controls.',
     handleRef: 'Imperative handle for focus() and blur() control.',
+    experimental:
+      "Experimental; may change in a patch. presentation: 'popover' (default, inline combobox) | 'bottom-sheet' (trigger + one searchable modal sheet of checkbox rows editing a draft that Save commits; onChange fires once, on Save) | 'adaptive' (sheet on compact touch, else popover).",
   },
 };

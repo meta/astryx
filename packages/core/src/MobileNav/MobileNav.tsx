@@ -70,14 +70,22 @@ import {mergeProps, composeEventHandlers} from '../utils';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
+import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {overlayPaddingReset} from '../Layout/padding.stylex';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
+import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/MobileNav/MobileNav.generated';
+
+registerEnglishFallback(english);
 // =============================================================================
 // Styles
 // =============================================================================
@@ -135,8 +143,8 @@ const styles = stylex.create({
   // ::backdrop is provided by the browser's top layer
   backdrop: {
     '::backdrop': {
+      // No backdrop-filter: a full-viewport blur is costly to repaint.
       backgroundColor: colorVars['--color-overlay'],
-      backdropFilter: 'blur(2px)',
       opacity: 0,
       transitionProperty: 'opacity',
       transitionDuration: durationVars['--duration-medium'],
@@ -224,7 +232,10 @@ const styles = stylex.create({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    height: spacingVars['--spacing-12'],
+    // At least one bar high, and taller for header content that needs it (a
+    // stacked title and search, or a title wrapped at a larger text size), so
+    // it never runs into the first item below.
+    minHeight: spacingVars['--spacing-12'],
     paddingInline: spacingVars['--spacing-2'],
     flexShrink: 0,
     borderBlockEndWidth: borderVars['--border-width'],
@@ -473,7 +484,7 @@ export function MobileNav({
   ref,
   ...rest
 }: MobileNavProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   // Read from AppShell context as fallback
   const appShellMobile = useAppShellMobile();
   const isOpen = isOpenProp ?? appShellMobile.isMobileNavOpen;
@@ -647,6 +658,11 @@ export function MobileNav({
   // only, and never while an IME composition is in progress.
   const handleCancel = useCallback(
     (event: React.SyntheticEvent<HTMLDialogElement>) => {
+      // A cancel that bubbles up from inside (a dismissed file picker) is not
+      // a close request; the platform's is fired at the dialog itself.
+      if (event.target !== event.currentTarget) {
+        return;
+      }
       event.preventDefault();
       if (!shouldDismissOnCloseRequest()) {
         return;
@@ -697,45 +713,55 @@ export function MobileNav({
           ? header
           : t('@astryx.mobileNav.navigation'))
       }
-      onClick={composeEventHandlers(onClickProp, handleDialogClick)}
+      // Presses inside the navigation do not reach handlers around where it
+      // is written.
+      {...layerClickBoundary({
+        ...rest,
+        onClick: composeEventHandlers(onClickProp, handleDialogClick),
+      })}
       onCancel={handleCancel}>
-      <LayerDepthProvider>
-        <LayerContentBoundary>
-          {/* Drawer panel — tabIndex so showModal() focuses the drawer, not the close button */}
-          <div
-            tabIndex={-1}
-            {...stylex.props(
-              styles.drawer,
-              dynamicStyles.width(width),
-              isStart && styles.drawerStart,
-              isStart && isOpen && styles.drawerStartOpen,
-              !isStart && styles.drawerEnd,
-              !isStart && isOpen && styles.drawerEndOpen,
-            )}>
-            {/* Header — content + close button */}
+      <ModalAnnounceProvider dialogRef={dialogRef} isOpen={isOpen}>
+        <LayerDepthProvider>
+          <LayerContentBoundary>
+            {/* Drawer panel — tabIndex so showModal() focuses the drawer, not the close button */}
             <div
-              {...stylex.props(styles.header, !header && styles.headerNoTitle)}>
-              {typeof header === 'string' ? (
-                <Heading level={2} xstyle={styles.headerText}>
-                  {header}
-                </Heading>
-              ) : (
-                (header ?? null)
-              )}
-              <Button
-                variant="ghost"
-                label={t('@astryx.mobileNav.closeNavigation')}
-                icon={<Icon icon="close" color="inherit" />}
-                onClick={() => onOpenChange(false)}
-                isIconOnly
-              />
-            </div>
+              tabIndex={-1}
+              {...stylex.props(
+                styles.drawer,
+                dynamicStyles.width(width),
+                isStart && styles.drawerStart,
+                isStart && isOpen && styles.drawerStartOpen,
+                !isStart && styles.drawerEnd,
+                !isStart && isOpen && styles.drawerEndOpen,
+              )}>
+              {/* Header — content + close button */}
+              <div
+                {...stylex.props(
+                  styles.header,
+                  !header && styles.headerNoTitle,
+                )}>
+                {typeof header === 'string' ? (
+                  <Heading level={2} xstyle={styles.headerText}>
+                    {header}
+                  </Heading>
+                ) : (
+                  (header ?? null)
+                )}
+                <Button
+                  variant="ghost"
+                  label={t('@astryx.mobileNav.closeNavigation')}
+                  icon={<Icon icon="close" color="inherit" />}
+                  onClick={() => onOpenChange(false)}
+                  isIconOnly
+                />
+              </div>
 
-            {/* Scrollable content */}
-            <div {...stylex.props(styles.content)}>{children}</div>
-          </div>
-        </LayerContentBoundary>
-      </LayerDepthProvider>
+              {/* Scrollable content */}
+              <div {...stylex.props(styles.content)}>{children}</div>
+            </div>
+          </LayerContentBoundary>
+        </LayerDepthProvider>
+      </ModalAnnounceProvider>
     </dialog>
   );
 }

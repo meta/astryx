@@ -17,6 +17,7 @@
  */
 
 import {useCallback, useEffect, useRef} from 'react';
+import {isFocusLost} from '../utils/focusReturn';
 
 import {FOCUSABLE_SELECTOR} from './focusableSelector';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
@@ -227,7 +228,29 @@ export interface UseFocusTrapReturn<T extends HTMLElement = HTMLElement> {
 export function useFocusTrap<T extends HTMLElement = HTMLElement>(
   options: UseFocusTrapOptions,
 ): UseFocusTrapReturn<T> {
-  const {isActive, onEscape} = options;
+  return useFocusTrapInternal<T>(options);
+}
+
+/**
+ * Package-internal options. Not re-exported from the package entry point.
+ */
+interface InternalFocusTrapOptions extends UseFocusTrapOptions {
+  /**
+   * The element to restore focus to on deactivation, read at activation. For
+   * an overlay that may move focus inside before the trap activates (initial
+   * focus within the opening event), the element focused at activation is
+   * already inside, so the overlay names its opener instead. Returning `null`
+   * falls back to the element focused at activation.
+   */
+  getRestoreTarget?: () => HTMLElement | null;
+}
+
+export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
+  options: InternalFocusTrapOptions,
+): UseFocusTrapReturn<T> {
+  const {isActive, onEscape, getRestoreTarget} = options;
+  const getRestoreTargetRef = useRef(getRestoreTarget);
+  getRestoreTargetRef.current = getRestoreTarget;
 
   const containerRef = useRef<T | null>(null);
   const lastFocusRef = useRef<Element | null>(null);
@@ -301,7 +324,9 @@ export function useFocusTrap<T extends HTMLElement = HTMLElement>(
     // Snapshot the container now; by cleanup it may be detached or unmounted.
     const container = containerRef.current;
     const doc = trapDocument(container);
-    const previouslyFocused = doc.activeElement as HTMLElement | null;
+    const previouslyFocused =
+      getRestoreTargetRef.current?.() ??
+      (doc.activeElement as HTMLElement | null);
 
     // Whether focus ever entered the trap container while it was active.
     // Initialized from the current active element in case focus was already
@@ -324,14 +349,7 @@ export function useFocusTrap<T extends HTMLElement = HTMLElement>(
         return;
       }
 
-      const active = doc.activeElement;
-      const focusWasLost =
-        active == null ||
-        active === doc.body ||
-        active === doc.documentElement ||
-        (container != null && container.contains(active));
-
-      if (!focusWasLost) {
+      if (!isFocusLost(container, doc)) {
         return;
       }
 
@@ -425,18 +443,25 @@ export function useFocusTrap<T extends HTMLElement = HTMLElement>(
       }
 
       if (event.key === 'Tab') {
-        // Mark that keyboard navigation is happening
+        const active = doc.activeElement;
+        // Any focused node counts, not only HTML elements: an SVG control
+        // inside the container is still inside.
+        if (active == null || !container.contains(active)) {
+          // The trap contains focus that is inside it; it does not pull in a
+          // Tab pressed elsewhere on the page. A layer can be open while focus
+          // legitimately sits outside it — a listbox popup anchored to its own
+          // input, a non-modal popover beside the content it annotates — and
+          // capturing that Tab would take the rest of the page away from
+          // keyboard users.
+          return;
+        }
+
+        // Mark that keyboard navigation is leaving from inside the trap, so a
+        // focus that lands outside is redirected back in.
         isKeyboardNavigationRef.current = true;
 
         const focusable = getFocusableElements(container);
         if (focusable.length === 0) {
-          const active = doc.activeElement;
-          if (!isHTMLElement(active) || !container.contains(active)) {
-            // A layer can be open while focus legitimately sits outside it —
-            // a listbox popup anchored to its own input. Cancelling there
-            // would take Tab away from the whole page.
-            return;
-          }
           // There is nowhere to advance to. Keep focus on the current
           // programmatic target (for example a dialog panel with tabIndex=-1)
           // rather than allowing the browser to move into background content.
