@@ -117,7 +117,7 @@ export const docs = {
       name: 'options.isReversed',
       type: 'boolean',
       description:
-        'The handle sits after the region it resizes (the region is at the end), so a drag toward the start grows it. On a ResizeHandle, its own `isReversed` prop does the same: either one reverses the handle.',
+        'The handle sits before the region it resizes (the region is at the end), so a drag toward the start grows it. On a ResizeHandle, its own `isReversed` prop does the same: either one reverses the handle.',
       default: 'false',
     },
     {
