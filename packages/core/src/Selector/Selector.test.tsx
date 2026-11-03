@@ -5177,6 +5177,37 @@ describe('Selector press model', () => {
     expect(listbox).not.toHaveClass(hash(touchStyles.panYPinchZoom));
   });
 
+  it('re-renders only the rows a highlight move or the open changes, not the whole list', async () => {
+    const user = userEvent.setup();
+    const many = Array.from({length: 50}, (_, i) => `Option ${i}`);
+    // A stable renderOption: it runs once per row render.
+    const rendered: string[] = [];
+    const renderOption = (option: {value: string}) => {
+      rendered.push(option.value);
+      return option.value;
+    };
+    function Harness() {
+      return (
+        <Selector
+          label="Item"
+          options={many}
+          onChange={() => {}}
+          renderOption={renderOption}
+        />
+      );
+    }
+    render(<Harness />);
+    expect(new Set(rendered).size).toBe(50);
+    rendered.length = 0;
+    await user.click(screen.getByRole('combobox'));
+    // Opening highlights the first row; no other row's props change.
+    expect(rendered.length).toBeLessThanOrEqual(2);
+    rendered.length = 0;
+    await user.keyboard('{ArrowDown}');
+    // The highlight moves from row 0 to row 1: those two rows only.
+    expect([...new Set(rendered)].sort()).toEqual(['Option 0', 'Option 1']);
+  });
+
   it('a long list renders its scrolling touch-action from the first open, with no class swap after the open measure', async () => {
     const user = userEvent.setup();
     const many = Array.from({length: 249}, (_, i) => `Option ${i}`);

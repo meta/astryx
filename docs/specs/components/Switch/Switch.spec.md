@@ -214,10 +214,11 @@ measured on UISwitch, iOS 26.2 (`motion/uikit/switch.ts`).
   gesture counter's document listeners, installed once per page; it owns no
   observer, and the busy announcement fires once per busy period. An enabled
   switch also adds one consumer to the shared gesture host, whose listeners
-  are installed once per page, and a `click` listener to the element around
-  its track: at once under a coarse primary
-  pointer, and only during a press under a fine one, where the host arms one
-  passive `pointerdown` listener on that element (`spec:AST-094` FR24).
+  are installed once per page; under a fine primary pointer the host arms one
+  passive `pointerdown` listener on the element around its track
+  (`spec:AST-094` FR24). The switch adds no `click` listener of its own: a
+  lift that waits for the browser's click subscribes to the window's shared
+  input stream until that click comes or the wait runs out.
 
 ## Accessibility contract
 

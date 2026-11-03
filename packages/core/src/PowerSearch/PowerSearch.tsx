@@ -62,6 +62,7 @@ import {themeProps} from '../utils/themeProps';
 import {truncateCharacters} from '../utils/characters';
 import {useLocale} from '../i18n/useLocale';
 import type {Locale} from '../i18n/types';
+import type {SearchableItem} from '../Typeahead/types';
 import type {
   PowerSearchConfig,
   PowerSearchFilter,
@@ -739,22 +740,38 @@ export function PowerSearch({
             value: undefined,
           },
         });
-      } else if (change.type === 'remove' && change.item) {
-        const auxData = change.item.auxiliaryData as PowerSearchAuxData;
-        if (auxData?.filterIndex != null) {
-          const newFilters = filters.filter((_, i) =>
-            _items.some(item => item.auxiliaryData?.filterIndex === i),
+      } else if (change.type === 'remove') {
+        const keptIndices = new Set(
+          _items.map(item => item.auxiliaryData?.filterIndex),
+        );
+        const firstRemovedIndex = filters.findIndex(
+          (_, i) => !keptIndices.has(i),
+        );
+        if (firstRemovedIndex >= 0) {
+          onChange(
+            filters.filter((_, i) => keptIndices.has(i)),
+            'remove',
+            firstRemovedIndex,
           );
-          onChange(newFilters, 'remove', auxData.filterIndex);
         }
       }
     },
     [config, filters, onChange, setPopoverState],
   );
 
-  // Tokenizer's Backspace does not go through renderToken. This predicate
-  // locks every token of a read-only field.
-  const isItemRemovable = useCallback(() => !isReadOnly, [isReadOnly]);
+  // Tokenizer's Backspace and Clear all do not go through renderToken. This
+  // predicate locks each read-only filter, and every token of a read-only
+  // field.
+  const isItemRemovable = useCallback(
+    (item: SearchableItem) => {
+      if (isReadOnly) {
+        return false;
+      }
+      const filterIndex = (item as PowerSearchItem).auxiliaryData?.filterIndex;
+      return filterIndex == null || !filters[filterIndex]?.isReadOnly;
+    },
+    [filters, isReadOnly],
+  );
 
   // Handle clicking a token to edit
   const handleTokenClick = useCallback(
@@ -1077,9 +1094,13 @@ export function PowerSearch({
   const announce = useAnnounce();
   // PowerSearch words its Clear all as its record does; the field announces
   // these words instead of Tokenizer's (component:Tokenizer AR7).
+  const hasReadOnlyFilter = filters.some(filter => filter.isReadOnly);
   const clearAllMessage = useMemo(
-    () => t('@astryx.powersearch.allFiltersRemoved'),
-    [t],
+    () =>
+      hasReadOnlyFilter
+        ? t('@astryx.powersearch.editableFiltersRemoved')
+        : t('@astryx.powersearch.allFiltersRemoved'),
+    [hasReadOnlyFilter, t],
   );
   const announcedResultCountRef = useRef(resultCountText);
   useEffect(() => {

@@ -4,7 +4,7 @@
  * @file useTooltip.test.tsx
  * @input Uses vitest, @testing-library/react, useTooltip hook
  * @output Unit tests for the tooltip show/hide timers and controlled state,
- *   and for a press on a caller's trigger under `triggerBehavior="toggle"`
+ *   and for a press on a caller's trigger through the press-to-pin path
  * @position Testing; validates useTooltip.tsx timing contract. Component-level
  *   behavior lives in Tooltip.test.tsx — this file pins the delays, the
  *   hover-bridge constant, and timer teardown, which are invisible from there.
@@ -23,7 +23,11 @@ import {
   afterEach,
 } from 'vitest';
 import {render, screen, fireEvent, act} from '@testing-library/react';
-import {useTooltip, type TooltipOptions} from './useTooltip';
+import {
+  useTooltip,
+  useTooltipWithTriggerBehavior,
+  type TooltipOptions,
+} from './useTooltip';
 import {useLayer} from '../Layer/useLayer';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
 import type {MouseEvent as ReactMouseEvent} from 'react';
@@ -599,13 +603,16 @@ describe('useTooltip — focusTrigger="auto" decides when focus arrives', () => 
   });
 });
 
-describe('useTooltip with a caller’s trigger under triggerBehavior="toggle" (component:Tooltip FR9)', () => {
+describe('useTooltip’s press-to-pin path with a caller’s trigger (component:Tooltip FR9)', () => {
   function Tip({
     onTriggerClick,
   }: {
     onTriggerClick?: (event: ReactMouseEvent) => void;
   }) {
-    const tooltip = useTooltip({triggerBehavior: 'toggle', delay: 0});
+    const tooltip = useTooltipWithTriggerBehavior({
+      triggerBehavior: 'toggle',
+      delay: 0,
+    });
     return (
       <>
         <button type="button" ref={tooltip.ref} onClick={onTriggerClick}>
@@ -653,5 +660,29 @@ describe('useTooltip with a caller’s trigger under triggerBehavior="toggle" (c
     );
     fireEvent.click(trigger());
     expect(onRow).not.toHaveBeenCalled();
+  });
+});
+
+describe('useTooltip keeps press-to-pin internal', () => {
+  it('an options object that carries triggerBehavior at runtime pins nothing', () => {
+    const options = {
+      triggerBehavior: 'toggle',
+      delay: 0,
+    } as unknown as TooltipOptions;
+    function Tip() {
+      const tooltip = useTooltip(options);
+      return (
+        <>
+          <button type="button" ref={tooltip.ref}>
+            What is this?
+          </button>
+          {tooltip.renderTooltip('Billed monthly')}
+        </>
+      );
+    }
+    render(<Tip />);
+    const trigger = screen.getByRole('button', {name: 'What is this?'});
+    fireEvent.click(trigger, {detail: 1});
+    expect(trigger).not.toHaveAttribute('aria-expanded');
   });
 });

@@ -42,10 +42,9 @@ export const NextToALabel: Story = {
 };
 
 /**
- * Revealing the help is the button's only purpose, so `InfoTip` sets
- * `triggerBehavior="toggle"`: tap the icon on a phone (or with touch emulation
- * on), click it, or press Enter or Space and the help pins open; tap outside
- * and it dismisses.
+ * Revealing the help is the button's only purpose, so `InfoTip` pins it on a
+ * press: tap the icon on a phone (or with touch emulation on), click it, or
+ * press Enter or Space and the help pins open; tap outside and it dismisses.
  */
 export const Touch: Story = {
   render: () => (

@@ -35,12 +35,10 @@ import {
 
 /**
  * How the trigger opens the layer. `adaptive`, the default, previews it on
- * hover and focus, and a tap opens it unless the trigger acts. While
- * `touchTrigger` remains, it decides those taps. `hover` previews it on hover
- * and focus, and no touch or pen tap opens it. `toggle` pins it on every
- * press of a button trigger.
+ * hover and focus, and `touchTrigger` decides taps. `toggle` pins it on every
+ * press of a button trigger. Internal: InfoTip's press-to-pin uses `toggle`.
  */
-export type LayerTriggerBehavior = 'adaptive' | 'hover' | 'toggle';
+export type LayerTriggerBehavior = 'adaptive' | 'toggle';
 
 /** The clicks a press pin answered, so the wrapper can stop them (`stopPressPinClick`). */
 const pressPinClicks = new WeakSet<Event>();
@@ -214,11 +212,7 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
     clearTapOpen,
     armOutsideDismiss,
   } = useTouchTriggerInternal({
-    touchTrigger: isToggleMode
-      ? 'tap'
-      : triggerBehavior === 'hover'
-        ? 'none'
-        : options.touchTrigger,
+    touchTrigger: isToggleMode ? 'tap' : options.touchTrigger,
     isEnabled: options.isEnabled,
     isControlled: isOpen !== undefined,
     isOpen: isLayerOpen,
@@ -466,7 +460,7 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
   const isWired = isToggleMode && offeredKind === 'button';
   useDevWarning(
     options.component,
-    '`triggerBehavior="toggle"` pins only a button trigger (a <button> or role="button"); this trigger keeps tap-only opening.',
+    'A press-to-pin tooltip pins only a button trigger (a <button> or role="button"); this trigger keeps tap-only opening.',
     isToggleMode && offeredKind === 'other',
   );
 
