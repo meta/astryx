@@ -1123,6 +1123,10 @@
     "defaultMessage": "All filters removed",
     "description": "Screen-reader announcement after a PowerSearch field's Clear all removes every filter. Distinct from @astryx.tokenizer.allRemoved: PowerSearch words its items as filters."
   },
+  "@astryx.powersearch.editableFiltersRemoved": {
+    "defaultMessage": "Editable filters removed",
+    "description": "Screen-reader announcement after a PowerSearch field's Clear all removes the filters the user can edit and keeps its read-only filters. Used instead of @astryx.powersearch.allFiltersRemoved while a read-only filter remains."
+  },
   "@astryx.resizable.collapsed": {
     "defaultMessage": "Collapsed",
     "description": "aria-valuetext for the Resizable drag handle (role=separator) while its panel is collapsed to zero size. Replaces the numeric value announcement, since the numeric value is clamped to the minimum while collapsed. Adjective describing the panel state, not a verb/command."

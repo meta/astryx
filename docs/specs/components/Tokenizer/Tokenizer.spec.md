@@ -401,7 +401,11 @@ presentation.
   confirmed in the sheet is announced by the sheet alone (AR6), and the field
   stays silent for it (WCAG 2.2 SC 4.1.3 through `spec:AST-020/FR9`). A
   component that composes Tokenizer and words its own Clear all announces its
-  own words instead (`component:PowerSearch`).
+  own words instead (`component:PowerSearch`). In the `popover` presentation,
+  a component that composes Tokenizer and locks some tokens keeps them: Clear
+  all removes only the other tokens and shows only while one exists, and
+  Backspace removes nothing while the last token is locked
+  (`component:PowerSearch` FR23).
 
 ## Design relationships
 
