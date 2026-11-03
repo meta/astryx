@@ -391,13 +391,16 @@ describe('parseDateInput', () => {
         month: 1,
         day: 5,
       });
-      // A four-digit year written first parses in every locale.
+      // A four-digit year written first parses in every locale, with any
+      // separator the browser reads.
       for (const locale of ['en-GB', 'en-US']) {
-        expect(parseDateInput('2026/01/12', locale)).toEqual({
-          year: 2026,
-          month: 1,
-          day: 12,
-        });
+        for (const text of ['2026/01/12', '2026 01 12', '2026.1.12.']) {
+          expect(parseDateInput(text, locale)).toEqual({
+            year: 2026,
+            month: 1,
+            day: 12,
+          });
+        }
       }
       // The locale-ordered forms still parse in the locale's order.
       expect(parseDateInput('12/01/2026', 'en-GB')).toEqual({
