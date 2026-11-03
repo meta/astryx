@@ -29,7 +29,7 @@ const fieldDefinitions = [
   {key: 'startDate', type: 'date', label: 'Start date'},
 ] as const;
 
-interface Person {
+interface Person extends Record<string, unknown> {
   id: string;
   name: string;
   status: string;

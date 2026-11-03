@@ -3712,6 +3712,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-power-search-config-people-directory",
+      "path": "examples/use-power-search-config/people-directory",
+      "aliases": []
+    },
+    {
       "name": "example-use-press-feedback-pressable-card",
       "path": "examples/use-press-feedback/pressable-card",
       "aliases": []
@@ -3979,6 +3984,11 @@
     {
       "name": "hook-use-popover",
       "path": "hooks/use-popover",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-power-search-config",
+      "path": "hooks/use-power-search-config",
       "aliases": []
     },
     {
