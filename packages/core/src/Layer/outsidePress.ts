@@ -4,8 +4,9 @@
 
 /**
  * @file outsidePress.ts
- * @input Listens for pointer presses on a document, and on a shadow root when
- *   given one; with closesOnPan, for a pan's moves through core's input stream
+ * @input Listens for pointer presses on a document, and on the shadow roots
+ *   around a given root; with closesOnPan, for a pan's moves through core's
+ *   input stream
  * @output Exports watchOutsidePress and useOutsidePress, which owns one watch
  *   for a component: start on show, stop on hide, stop on unmount;
  *   noteOutsideDismissal and outsideDismissalCount, a per-document count of
@@ -22,14 +23,11 @@
  * browser took the gesture for a scroll or a pinch) forgets it. Inside is
  * judged on the event's composed path, so a field or list inside an open
  * shadow root, which the document sees as its shadow host, is still inside.
- * A watch given a closed shadow root judges a press's start and lift there.
- * With closesOnPan, the press also closes the layer as it begins to pan, or
- * when the browser takes it.
  */
 
 import {useCallback, useEffect, useMemo, useRef} from 'react';
 import {UIKIT_PAN} from '../motion/uikit/gestures';
-import {outermostShadowHostOf} from '../utils/flatTree';
+import {shadowHostOf, shadowRootsOutward} from '../utils/flatTree';
 import {subscribeInput} from '../utils/inputStream';
 
 export interface OutsidePressOptions {
@@ -37,15 +35,14 @@ export interface OutsidePressOptions {
   readonly pointerTypes?: ReadonlyArray<string>;
   /**
    * A press outside also closes the layer as it begins to pan, or when the
-   * browser takes it. An anchored menu closes so under a finger. While one
-   * press outside is followed, other pointers are ignored.
+   * browser takes it. While one press outside is followed, other pointers are
+   * ignored. A new primary pointer starts a new press.
    */
   readonly closesOnPan?: boolean;
   /**
-   * The shadow root the layer renders in. The document sees a press inside
-   * closed shadow roots as a press on the outermost host. So the root judges a
-   * press's start after the document, and a lift inside it before that host
-   * does.
+   * The shadow root the layer renders in. The document sees a press inside a
+   * closed root as a press on its host. So each root from this one out to the
+   * document judges presses too, and an inner root's judgment stands.
    */
   readonly root?: Node | null;
 }
@@ -82,7 +79,8 @@ export function watchOutsidePress(
   {pointerTypes, closesOnPan = false, root = null}: OutsidePressOptions = {},
 ): () => void {
   const doc = owner.ownerDocument;
-  const host = root == null ? null : outermostShadowHostOf(root);
+  // The shadow roots from `root` out to the document, innermost first.
+  const shadows = root == null ? [] : shadowRootsOutward(root);
   let startedOutside = false;
   let panStart: {id: number; x: number; y: number} | null = null;
   const follows = (event: PointerEvent) =>
@@ -94,12 +92,18 @@ export function watchOutsidePress(
   };
 
   // Capture phase, so a press whose target stops propagation is still seen.
-  // The root's listener runs after the document's, so its judgment stands.
+  // An inner root's listener runs after the outer ones', so its judgment
+  // stands.
   const handleDown = (event: PointerEvent) => {
     if (!follows(event)) {
       return;
     }
-    if (closesOnPan && panStart != null && panStart.id !== event.pointerId) {
+    if (
+      closesOnPan &&
+      panStart != null &&
+      panStart.id !== event.pointerId &&
+      !event.isPrimary
+    ) {
       return;
     }
     startedOutside = !isInside(event.composedPath());
@@ -132,25 +136,32 @@ export function watchOutsidePress(
       onOutside();
     }
   };
-  // The document sees a lift inside closed roots as a lift on the outermost
-  // host, and so does that host. So the root judges a lift inside it on the way down.
-  // The host judges, on the way back up, a lift the root did not judge.
-  let liftJudgedInRoot: Event | null = null;
-  const handleUp = (event: PointerEvent) => {
-    if (host == null || !event.composedPath().includes(host)) {
+  // The document and each root see a lift inside a deeper closed root as a
+  // lift on that root's host. So each of them judges, in the capture phase,
+  // only a lift whose path does not hold the host below it. The innermost root
+  // judges every lift it sees. A host judges a lift on itself, which no root
+  // sees.
+  let judgedLift: Event | null = null;
+  const judgeUpUnlessBelow =
+    (hostBelow: Element | null) => (event: PointerEvent) => {
+      if (
+        event === judgedLift ||
+        (hostBelow != null && event.composedPath().includes(hostBelow))
+      ) {
+        return;
+      }
+      judgedLift = event;
       judgeUp(event);
-    }
-  };
-  const handleRootUp = (event: PointerEvent) => {
-    liftJudgedInRoot = event;
-    judgeUp(event);
-  };
-  const handleHostUp = (event: PointerEvent) => {
-    if (event !== liftJudgedInRoot) {
-      judgeUp(event);
-    }
-    liftJudgedInRoot = null;
-  };
+    };
+  const handleUp = judgeUpUnlessBelow(shadows.at(-1)?.host ?? null);
+  const liftJudges = shadows.map(({root: shadow, host}, index) => ({
+    shadow,
+    host,
+    handleRootUp: judgeUpUnlessBelow(
+      index === 0 ? null : shadows[index - 1].host,
+    ) as EventListener,
+    handleHostUp: judgeUpUnlessBelow(null) as EventListener,
+  }));
   const handleCancel = (event: PointerEvent) => {
     if (!follows(event)) {
       return;
@@ -162,8 +173,10 @@ export function watchOutsidePress(
     }
   };
 
-  const judges: EventTarget[] =
-    root != null && root !== doc ? [doc, root] : [doc];
+  const judges: EventTarget[] = [
+    doc,
+    ...shadows.map(({root: shadow}) => shadow),
+  ];
   for (const target of judges) {
     target.addEventListener('pointerdown', handleDown as EventListener, true);
   }
@@ -173,9 +186,9 @@ export function watchOutsidePress(
       ? subscribeInput(view, 'pointermove', handleMove)
       : null;
   doc.addEventListener('pointerup', handleUp, true);
-  if (host != null) {
-    root?.addEventListener('pointerup', handleRootUp as EventListener, true);
-    host.addEventListener('pointerup', handleHostUp as EventListener);
+  for (const {shadow, host, handleRootUp, handleHostUp} of liftJudges) {
+    shadow.addEventListener('pointerup', handleRootUp, true);
+    host.addEventListener('pointerup', handleHostUp);
   }
   doc.addEventListener('pointercancel', handleCancel, true);
   return () => {
@@ -188,13 +201,9 @@ export function watchOutsidePress(
     }
     stopMoves?.();
     doc.removeEventListener('pointerup', handleUp, true);
-    if (host != null) {
-      root?.removeEventListener(
-        'pointerup',
-        handleRootUp as EventListener,
-        true,
-      );
-      host.removeEventListener('pointerup', handleHostUp as EventListener);
+    for (const {shadow, host, handleRootUp, handleHostUp} of liftJudges) {
+      shadow.removeEventListener('pointerup', handleRootUp, true);
+      host.removeEventListener('pointerup', handleHostUp);
     }
     doc.removeEventListener('pointercancel', handleCancel, true);
   };
@@ -251,17 +260,12 @@ function isElement(node: Node): node is Element {
   return node.nodeType === 1;
 }
 
-function isShadowRoot(node: Node): node is ShadowRoot {
-  return node.nodeType === 11 && 'host' in node;
-}
-
 /** Whether `node` is the layer with this id, or inside it across shadow roots. */
 function isWithinLayer(node: Node, layerId: string): boolean {
   for (
     let current: Node | null = node;
     current != null;
-    current =
-      current.parentNode ?? (isShadowRoot(current) ? current.host : null)
+    current = current.parentNode ?? shadowHostOf(current)
   ) {
     if (isElement(current) && current.id === layerId) {
       return true;

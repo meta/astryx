@@ -4,8 +4,8 @@ import {afterEach, describe, expect, it} from 'vitest';
 import {
   containsAlongFlatTree,
   deepActiveElement,
-  outermostShadowHostOf,
   shadowHostOf,
+  shadowRootsOutward,
 } from './flatTree';
 
 afterEach(() => {
@@ -93,16 +93,19 @@ describe('shadowHostOf', () => {
   });
 });
 
-describe('outermostShadowHostOf', () => {
-  it('is the host the document sees for a root inside other roots, and null for any other node', () => {
+describe('shadowRootsOutward', () => {
+  it('lists the roots from a root inside others out to the document, each with its host', () => {
     const outerHost = document.createElement('div');
     document.body.append(outerHost);
     const outer = outerHost.attachShadow({mode: 'closed'});
     const innerHost = document.createElement('div');
     outer.append(innerHost);
     const inner = innerHost.attachShadow({mode: 'open'});
-    expect(outermostShadowHostOf(inner)).toBe(outerHost);
-    expect(outermostShadowHostOf(outer)).toBe(outerHost);
-    expect(outermostShadowHostOf(document)).toBeNull();
+    expect(shadowRootsOutward(inner)).toEqual([
+      {root: inner, host: innerHost},
+      {root: outer, host: outerHost},
+    ]);
+    expect(shadowRootsOutward(outer)).toEqual([{root: outer, host: outerHost}]);
+    expect(shadowRootsOutward(document)).toEqual([]);
   });
 });
