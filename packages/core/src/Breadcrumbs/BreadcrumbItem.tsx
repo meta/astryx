@@ -8,7 +8,7 @@
  *   rtlStyles for the contextual default slash, and (for the menu trigger)
  *   usePopover + the shared DropdownMenu item API (renderDropdownItems,
  *   DropdownMenuContext, MENU_ITEM_SELECTOR, useListFocus), and
- *   useCloseMobileDrawerOnActivate
+ *   the AppShell mobile drawer helpers
  * @output Exports BreadcrumbItem component and BreadcrumbItemProps
  * @position Individual breadcrumb item; used inside Breadcrumbs
  *
@@ -73,7 +73,10 @@ import {
 import type {DropdownMenuOption} from '../DropdownMenu/DropdownMenu';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
-import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOnActivate';
+import {
+  useCloseMobileDrawerOnActivate,
+  useIsInAppShellMobileDrawer,
+} from '../AppShell/useCloseMobileDrawerOnActivate';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 // =============================================================================
 // Props
@@ -307,7 +310,10 @@ export function BreadcrumbItem({
   // aria-current on this instead of guessing the <li>'s last child.
   const contentRef = useRef<HTMLElement>(null);
 
-  const handleActivate = useCloseMobileDrawerOnActivate(onClick);
+  const closeDrawerAfter = useCloseMobileDrawerOnActivate(
+    useIsInAppShellMobileDrawer(),
+  );
+  const handleActivate = closeDrawerAfter(onClick);
 
   const isCurrent = isCurrentProp === true;
   const isAutoCandidate = isCurrentProp == null;

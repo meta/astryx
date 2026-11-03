@@ -5,37 +5,48 @@
 /**
  * @file useCloseMobileDrawerOnActivate.ts
  * @input AppShellMobileContext, TopNav and SideNav render modes
- * @output useCloseMobileDrawerOnActivate hook
- * @position Internal AppShell helper: a row inside the AppShell mobile drawer
- *   runs its own click handler and then closes the drawer. Not exported from
- *   the package.
+ * @output useCloseMobileDrawerOnActivate, useIsInAppShellMobileDrawer
+ * @position Internal AppShell helper for rows in the mobile drawer. Not
+ *   exported from the package.
  */
 
-import type {MouseEvent} from 'react';
 import {useAppShellMobile} from './AppShellMobileContext';
 import {useSideNavRenderMode} from '../SideNav/SideNavRenderContext';
 import {useTopNavRenderMode} from '../TopNav/TopNavRenderContext';
 
 /**
- * Inside the AppShell mobile drawer (TopNav content or SideNav content shown
- * there), returns a handler that calls `onClick` and then closes the drawer.
- * Outside the drawer, returns `onClick` unchanged.
+ * Returns a function that wraps a row's click handler. While
+ * `isInMobileDrawer` is true, the wrapped handler calls the row's handler and
+ * then closes the AppShell mobile drawer. Otherwise the row's handler comes
+ * back unchanged. Every drawer row closes the drawer through this one rule.
  */
-export function useCloseMobileDrawerOnActivate<E extends Element>(
-  onClick: ((event: MouseEvent<E>) => void) | undefined,
-): ((event: MouseEvent<E>) => void) | undefined {
+export function useCloseMobileDrawerOnActivate(
+  isInMobileDrawer: boolean,
+): <Args extends unknown[]>(
+  onClick: ((...args: Args) => void) | undefined,
+) => ((...args: Args) => void) | undefined {
+  const {closeMobileNav} = useAppShellMobile();
+  return onClick => {
+    if (!isInMobileDrawer) {
+      return onClick;
+    }
+    return (...args) => {
+      onClick?.(...args);
+      closeMobileNav();
+    };
+  };
+}
+
+/**
+ * Whether the caller renders inside the AppShell mobile drawer: in TopNav
+ * content or SideNav content shown there.
+ */
+export function useIsInAppShellMobileDrawer(): boolean {
   const topNavRenderMode = useTopNavRenderMode();
   const sideNavRenderMode = useSideNavRenderMode();
-  const {closeMobileNav} = useAppShellMobile();
-  const isInMobileDrawer =
+  return (
     topNavRenderMode === 'drawer' ||
     sideNavRenderMode === 'drawer' ||
-    sideNavRenderMode === 'drawer-content';
-  if (!isInMobileDrawer) {
-    return onClick;
-  }
-  return event => {
-    onClick?.(event);
-    closeMobileNav();
-  };
+    sideNavRenderMode === 'drawer-content'
+  );
 }
