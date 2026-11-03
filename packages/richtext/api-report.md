@@ -13,6 +13,7 @@ component RichTextEditor(props: RichTextEditorProps)
   prop description?: string
   prop extensions?: ReadonlyArray<AnyLexicalExtension>
   prop hasAutoFocus?: boolean = false
+  prop hasCellMerge?: boolean = false
   prop hasHistory?: boolean = true, or false when `isCollaborative` is set
   prop hasMarkdownShortcuts?: boolean = true
   prop isCollaborative?: boolean = false

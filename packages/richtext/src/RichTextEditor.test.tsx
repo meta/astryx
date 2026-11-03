@@ -332,6 +332,7 @@ describe('RichTextEditor', () => {
       'extensions',
       'isCollaborative',
       'hasHistory',
+      'hasCellMerge',
       'hasMarkdownShortcuts',
       'markdownExtensions',
       'codeLanguages',

@@ -146,6 +146,13 @@ export const docs = {
       default: 'true, or false when isCollaborative is set',
     },
     {
+      name: 'hasCellMerge',
+      type: 'boolean',
+      description:
+        'Tables may have merged cells. Off by default because GFM tables cannot express a merged cell, so a document that round-trips through Markdown loses the merge. Turn it on for a surface that stores Lexical state directly, where un-merging a table the author merged would be data loss.',
+      default: 'false',
+    },
+    {
       name: 'hasMarkdownShortcuts',
       type: 'boolean',
       description:
