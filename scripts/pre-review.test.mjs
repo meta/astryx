@@ -174,7 +174,7 @@ describe('findingChecks', () => {
       findingChecks([{item: 'j'}, {item: 'i'}, {item: 'j'}]).map(
         item => `${item.id}: ${item.reason}`,
       ),
-    ).toEqual(['i: 1 finding below', 'j: 2 findings below']);
+    ).toEqual(['i: 1 finding above', 'j: 2 findings above']);
   });
 });
 

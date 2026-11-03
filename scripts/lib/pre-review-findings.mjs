@@ -26,32 +26,15 @@ const DIRECTIVE = /eslint-|@ts-|prettier-ignore|@pr-a11y/;
 const RUNTIME = '`architecture:react-component-runtime`';
 
 /**
- * Added plus deleted lines of each path in a unified diff. A binary file
- * counts 0.
+ * Changed lines a person wrote: not lockfiles, snapshots, or generated files.
+ * `changedCountByFile` comes from `readDiff`.
  */
-export function changedLineCounts(diffText) {
-  const counts = new Map();
-  let file = null;
-  let inHunk = false;
-  for (const line of diffText.split('\n')) {
-    const header = /^diff --git a\/\S+ b\/(\S+)/.exec(line);
-    if (header) {
-      file = header[1];
-      inHunk = false;
-      counts.set(file, 0);
-    } else if (line.startsWith('@@')) {
-      inHunk = file != null;
-    } else if (inHunk && (line[0] === '+' || line[0] === '-')) {
-      counts.set(file, counts.get(file) + 1);
-    }
-  }
-  return counts;
-}
-
-/** Changed lines a person wrote: not lockfiles, snapshots, or generated files. */
-export function authoredLineCount(diffText, isGenerated = () => false) {
+export function authoredLineCount(
+  changedCountByFile,
+  isGenerated = () => false,
+) {
   let total = 0;
-  for (const [file, count] of changedLineCounts(diffText)) {
+  for (const [file, count] of Object.entries(changedCountByFile)) {
     if (!LOCKFILE.test(file) && !SNAPSHOT.test(file) && !isGenerated(file)) {
       total += count;
     }
@@ -60,10 +43,10 @@ export function authoredLineCount(diffText, isGenerated = () => false) {
 }
 
 const SIZE_DECLARATIONS = [
-  /\bbehavior[- ]module (?:pull request|PR)\b/i,
+  /(?<!\bnot (?:an? )?)\bbehavior[- ]module (?:pull request|PR)\b/i,
   /^[ \t]*(?:[-*|][ \t]*)?Batch:[ \t]*\S/m,
-  /^[ \t]*(?:[-*|][ \t]*)?Stack:[ \t]*\S/m,
 ];
+const STACK_LINE = /^[ \t]*(?:[-*|][ \t]*)?Stack:[ \t]*\S/m;
 
 /**
  * Item h. `body` is the pull request description, or null when the report
@@ -74,18 +57,20 @@ export function sizeFindings(authored, body) {
   if (body != null && SIZE_DECLARATIONS.some(rule => rule.test(body))) {
     return [];
   }
-  const declare =
-    'or declare a behavior-module pull request, a `Batch:` row, or a `Stack:` line in the description';
+  const split = `Split the change into pull requests of at most ${SIZE_LIMIT} authored lines.`;
+  let fix = split;
+  if (body == null) {
+    fix = `${split} A behavior-module pull request or a \`Batch:\` row that the description declares is exempt; pass --body-file or --pr to read the description.`;
+  } else if (STACK_LINE.test(body)) {
+    fix = `${split} For a stacked pull request, pass --base the branch below it, so the count covers only its own lines.`;
+  }
   return [
     {
       item: 'h',
       file: null,
       line: null,
-      rule: `${authored} authored lines, over ${SIZE_LIMIT}${body == null ? '; description not read' : ''}`,
-      fix:
-        body == null
-          ? `Split the change, ${declare}. Pass --body-file or --pr to check the description.`
-          : `Split the change, ${declare}.`,
+      rule: `${authored} authored lines, over ${SIZE_LIMIT}`,
+      fix,
     },
   ];
 }
@@ -150,7 +135,7 @@ export const SHARED_OWNERS = [
     path: 'packages/core/src/utils/flatTree.ts',
     exempt: ['packages/core/src/utils/flatTree.ts'],
     matches: text =>
-      /\.assignedSlot\b|\bas\s+ShadowRoot\s*\)\s*\.host\b|\binstanceof\s+ShadowRoot\b|\.nodeType\s*===?\s*(?:11\b|Node\.DOCUMENT_FRAGMENT_NODE\b)/.test(
+      /\.assignedSlot\b|\bas\s+ShadowRoot\s*\)\s*\.host\b|\binstanceof\s+ShadowRoot\b[^;]*\.host\b|\.nodeType\s*===?\s*(?:11\b|Node\.DOCUMENT_FRAGMENT_NODE\b)/.test(
         text,
       ),
   },

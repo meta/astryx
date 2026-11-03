@@ -30,7 +30,11 @@ import {
   sizeFindings,
 } from './lib/pre-review-findings.mjs';
 import {isShippedSource, readDiff} from './lib/review-diff.mjs';
-import {checkCoverage, gitTree} from './release/changeset-coverage.mjs';
+import {
+  changedChangesets,
+  checkCoverage,
+  gitTree,
+} from './release/changeset-coverage.mjs';
 import {
   diffText,
   loadKnowledgeIndex,
@@ -317,7 +321,7 @@ export function findingChecks(findings) {
     .map(([id, count]) => ({
       id,
       check: CHECKS[id],
-      reason: `${count} finding${count === 1 ? '' : 's'} below`,
+      reason: `${count} finding${count === 1 ? '' : 's'} above`,
     }));
 }
 
@@ -334,7 +338,7 @@ export function buildReport({
   const diff = diffText(ROOT, head ? `${base}...${head}` : base);
   const classes = classifyPaths(files);
   const index = loadKnowledgeIndex(ROOT);
-  const {addedLines, addedByFile} = readDiff(diff);
+  const {addedLines, addedByFile, changedCountByFile} = readDiff(diff);
   const records = new Map();
   const linkedRecords = new Set();
   const claims = new Set();
@@ -364,16 +368,16 @@ export function buildReport({
       .map(change => change.filename),
   );
   const generated = generatedPaths(files, head ? headSha : null);
-  const authoredLines = authoredLineCount(diff, file => generated.has(file));
+  const authoredLines = authoredLineCount(changedCountByFile, file =>
+    generated.has(file),
+  );
   const merge = mergeConflicts(base, head ?? 'HEAD');
   const coverage = checkCoverage({
     changes,
     base: gitTree(ROOT, fork),
     head: headTree,
   });
-  const changesets = [...present]
-    .filter(file => /^\.changeset\/(?!README\.md$)[^/]+\.md$/.test(file))
-    .map(file => ({file, text: readHead(file) ?? ''}));
+  const changesets = changedChangesets(changes, headTree);
   const recordPaths = [
     ...new Set([
       ...records.values(),

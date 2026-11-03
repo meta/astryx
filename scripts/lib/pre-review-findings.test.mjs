@@ -30,6 +30,8 @@ function diffOf(file, added, removed = []) {
   ].join('\n');
 }
 
+const counted = diff => readDiff(diff).changedCountByFile;
+
 function addedLinesOf(file, lines) {
   return readDiff(diffOf(file, lines)).addedLines;
 }
@@ -38,7 +40,9 @@ const lines = count => Array.from({length: count}, (_, i) => `line ${i}`);
 
 describe('authoredLineCount', () => {
   it('counts added and removed lines', () => {
-    expect(authoredLineCount(diffOf('a.ts', lines(3), lines(2)))).toBe(5);
+    expect(authoredLineCount(counted(diffOf('a.ts', lines(3), lines(2))))).toBe(
+      5,
+    );
   });
 
   it('leaves out lockfiles, snapshots, and generated files', () => {
@@ -49,12 +53,14 @@ describe('authoredLineCount', () => {
       diffOf('packages/core/src/A/A.tsx', lines(7)),
     ].join('\n');
     expect(
-      authoredLineCount(diff, file => file.endsWith('api-report.md')),
+      authoredLineCount(counted(diff), file => file.endsWith('api-report.md')),
     ).toBe(7);
   });
 
   it('counts a removed line that starts with dashes', () => {
-    expect(authoredLineCount(diffOf('a.md', [], ['-- a rule']))).toBe(1);
+    expect(authoredLineCount(counted(diffOf('a.md', ['++ b'], ['-- a'])))).toBe(
+      2,
+    );
   });
 });
 
@@ -66,19 +72,26 @@ describe('sizeFindings', () => {
   it('warns above the limit and asks for the description when it is not read', () => {
     const [finding] = sizeFindings(2001, null);
     expect(finding.item).toBe('h');
-    expect(finding.rule).toContain('2001 authored lines, over 2000');
+    expect(finding.rule).toBe('2001 authored lines, over 2000');
     expect(finding.fix).toContain('--body-file');
   });
 
-  it('accepts a behavior-module, Batch, or Stack declaration', () => {
+  it('accepts a behavior-module or Batch declaration', () => {
     for (const body of [
       'This behavior-module pull request adds the wheel module.',
       'Batch: Slider · finger tracking',
-      '- Stack: 1 of 3, below #123',
     ]) {
       expect(sizeFindings(5000, body)).toEqual([]);
     }
-    expect(sizeFindings(5000, 'One fix. No stack here.')).toHaveLength(1);
+    expect(sizeFindings(5000, 'One fix. No batch here.')).toHaveLength(1);
+    expect(
+      sizeFindings(5000, 'This is not a behavior-module pull request.'),
+    ).toHaveLength(1);
+  });
+
+  it('counts a stacked pull request, and names the base to count against', () => {
+    const [finding] = sizeFindings(5000, '- Stack: 2 of 3, above #123');
+    expect(finding.fix).toContain('pass --base the branch below it');
   });
 });
 
@@ -112,6 +125,7 @@ describe('sharedOwnerFindings', () => {
           "element.addEventListener('pointerdown', onDown);",
           '// A new ResizeObserver here would duplicate observeResize.',
           'const warned = useRef(false);',
+          'const shadow = tree instanceof ShadowRoot ? tree : null;',
         ]),
         ...addedLinesOf('packages/core/src/utils/sharedResizeObserver.ts', [
           'observer = new ResizeObserver(notify);',
