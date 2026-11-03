@@ -158,19 +158,24 @@ the app to turn on.
   and closes, the field's docked container moves up and back with it on FR8's
   ride (DEC-2), keeping a small gap above the keyboard. This holds for a docked
   container the app owns as well: the field moves its nearest fixed-position
-  ancestor. It is the one place Core moves layout it does not own, an exception
-  to FR3 the owner decided (DEC-5). The behavior is internal to the field. No
-  prop, option, context, or other public API turns it on, turns it off, or tunes
-  it, and the app does nothing to get it. The field decides it when it gains
-  focus, in its focus handling, not in an Effect that reacts to focus
+  ancestor that is docked to the viewport's bottom edge (its bottom sits at the
+  viewport's bottom); a fixed container that fills the viewport is never moved.
+  It is the one place Core moves layout it does not own, an exception to FR3 the
+  owner decided (DEC-5). The behavior is internal to the field. No prop, option,
+  context, or other public API turns it on, turns it off, or tunes it, and the
+  app does nothing to get it. The field decides it when it gains focus, in its
+  focus handling, not in an Effect that reacts to focus
   (`architecture:react-component-runtime` INV2). Every covered field shares one
   internal path, the keyboard module (`architecture:react-component-runtime`
   INV11): the height comes from FR2, focus does not pan the page (FR4), and no
-  field measures the keyboard or listens to the visual viewport itself. The
-  document never moves; only the docked container does. A Core host that already
-  applies the keyboard height, such as a fully expanded Tall BottomSheet or the
-  chat composer's dock, keeps doing so, and the field inside it neither moves it
-  again nor adds a second offset. The covered fields are:
+  field measures the keyboard or listens to the visual viewport itself. The page
+  is never panned or translated: a field in scrolling content is scrolled into
+  place by its nearest scroller, the document included, a small gap above the
+  keyboard, in the keyboard report's own event; only a docked container is
+  translated. A Core host that already applies the keyboard height, such as a
+  fully expanded Tall BottomSheet or the chat composer's dock, keeps doing so,
+  and the field inside it neither moves it again nor adds a second offset. The
+  covered fields are:
   - TextInput, TextArea, and NumberInput;
   - the typed fields of DateInput, DateTimeInput, and TimeInput, in every
     presentation that renders one;
@@ -274,11 +279,13 @@ No covered field meets FR9 on `main`. Each gap below is open.
   app's own fixed or sticky bottom bar, in a fixed Toolbar, or in a BottomSheet
   that is not a fully expanded Tall sheet, has no handling that keeps it above
   the keyboard.
-- **Gap 11 — The docked ride.** No covered field rides the keyboard on `main`.
-  The keyboard module that would carry the ride does not exist (Gap 1), no
-  field moves its nearest fixed-position ancestor, and ChatLayout's dock does
-  not apply the keyboard height. BottomSheet's inset stays local to its own
-  sheet.
+- **Gap 11 — The docked ride and the page-content reveal.** No covered field
+  rides the keyboard on `main`. The keyboard module that would carry the ride
+  does not exist (Gap 1), no field moves its nearest fixed-position ancestor
+  docked to the viewport's bottom edge, no field scrolls its nearest scroller to
+  put itself a small gap above the keyboard in the keyboard report's own event,
+  and ChatLayout's dock does not apply the keyboard height. BottomSheet's inset
+  stays local to its own sheet.
 
 ## Verification
 
@@ -295,10 +302,10 @@ No covered field meets FR9 on `main`. Each gap below is open.
 | FR8          | Firefox for Android, emulator or device, top-level document                                                                                                        | focus routes, keyboard shown and hidden, page panned and pinch-zoomed, a sheet moved                                                                                                                                                                                                                                            | The page lurches, the field ends under the keyboard, or the height is wrong after a pan or zoom                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | FR2–FR5      | Safari on iOS in the iOS Simulator or on a device, top-level document                                                                                              | focus routes, keyboard shown and hidden, page panned and pinch-zoomed, a sheet moved, in Safari and as a home-screen app                                                                                                                                                                                                        | The page lurches, the field ends under the keyboard, or the height is wrong after a pan or zoom                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | FR2–FR5, FR8 | Release gate: physical devices in a top-level document (DEC-3)                                                                                                     | iPhone Safari with the toolbar expanded and collapsed; iPhone home-screen app; Firefox for Android (FR2–FR5); Android Chrome with Gboard and Samsung Keyboard at the phone's refresh rate                                                                                                                                       | The page lurches, the field ends under the keyboard, or the surface does not follow the keyboard                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| FR9          | TBD (Gap 1–11): a focus test per covered field, `<Field>.keyboard.test.tsx` beside each one, driving one keyboard change through the keyboard module's test double | each covered field in the page, a Tall and a `hug` BottomSheet, ChatLayout's fixed and sticky dock, an app's fixed bottom bar, and a fixed Toolbar; focus by tap, Tab, and `focus()`                                                                                                                                            | A focused field left under the keyboard, a document scroll, a second offset inside a host that already applies the height, or a field reading the visual viewport itself                                                                                                                                                                                                                                                                                                                                                                            |
+| FR9          | TBD (Gap 1–11): a focus test per covered field, `<Field>.keyboard.test.tsx` beside each one, driving one keyboard change through the keyboard module's test double | each covered field in the page, a Tall and a `hug` BottomSheet, ChatLayout's fixed and sticky dock, an app's fixed bottom bar, and a fixed Toolbar; focus by tap, Tab, and `focus()`; a field in scrolling content in the page and in a nested scroller                                                                         | A focused field left under the keyboard or with no gap above it, a page pan or translate, a reveal later than the keyboard report's event, a second offset inside a host that already applies the height, or a field reading the visual viewport itself                                                                                                                                                                                                                                                                                             |
 | FR9          | TBD (Gap 1): a source boundary check over the covered fields                                                                                                       | every covered field's props type and source                                                                                                                                                                                                                                                                                     | A public prop, option, or context for the behavior, or an Effect that reacts to focus to decide it                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | FR9          | TBD (Gap 1–11): Safari on iOS in the iOS Simulator and Chrome on Android in the emulator, top-level document                                                       | TextInput in the page, ChatComposer in its dock, a Selector search row in its sheet, and a TextInput in a fixed Toolbar                                                                                                                                                                                                         | The field ends under the keyboard, or the page lurches                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| FR9          | TBD (Gap 11): a ride test per covered field, plus physical-device evidence under DEC-3                                                                             | each covered field in a fixed bottom bar, a sheet, and an app-owned docked bar; keyboard show and hide; reduced motion on                                                                                                                                                                                                       | The docked container stays put, lags or jumps after the keyboard settles, ends under the keyboard or with no gap above it, the document moves, or a Core host that already rides is moved twice                                                                                                                                                                                                                                                                                                                                                     |
+| FR9          | TBD (Gap 11): a ride test per covered field, plus physical-device evidence under DEC-3                                                                             | each covered field in a fixed bottom bar, a sheet, an app-owned bar docked to the viewport's bottom edge, and an app-owned fixed container that fills the viewport; keyboard show and hide; reduced motion on                                                                                                                   | The docked container stays put, lags or jumps after the keyboard settles, ends under the keyboard or with no gap above it, the page is panned or translated, a fixed container that fills the viewport or is not docked to the bottom edge moves, or a Core host that already rides is moved twice                                                                                                                                                                                                                                                  |
 
 ## Decision log
 
@@ -382,6 +389,13 @@ container up and back with the keyboard, even when the app owns that
 container, because a docked bar that jumps or hides under the keyboard feels
 broken. This is the one exception to FR3's rule that a component moves only
 its own elements.
+
+The owner set the scope on 2026-11-03. An app-owned container moves only when
+it is fixed and docked to the viewport's bottom edge; a fixed container that
+fills the viewport never moves. Page content is never panned or translated:
+a field in scrolling content is scrolled into place by its nearest scroller,
+the document included, a small gap above the keyboard, in the same event that
+reports the keyboard. Only a docked container is translated.
 
 Rejected: an opt-in prop or per-component keyboard handling; leaving an app's docked bar to the browser's reveal.
 

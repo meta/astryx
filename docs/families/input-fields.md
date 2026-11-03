@@ -259,16 +259,17 @@ another implementation helper.
   on-screen keyboard opens, a member's focused text-entry field stays visible
   above it, wherever the member renders: in the page, a sheet, a bottom bar, or
   a fixed toolbar. A member docked at the bottom of the viewport rides the
-  keyboard, moving its docked container up and back with it, including a
-  container the app owns. This covers TextInput, TextArea, NumberInput, the
-  typed fields of DateInput, DateTimeInput, and TimeInput, the inputs of
-  Typeahead and Tokenizer, and the search row of Selector and MultiSelector. It
-  is internal behavior with no prop or other public API: the member decides it
-  in its focus handling and reads the keyboard module, as `spec:AST-099` FR9
-  requires, which owns the full list of covered fields, including those of
-  PowerSearch, CommandPalette, and ChatComposer. A member whose field brings up
-  no keyboard, such as DateRangeInput, FileInput, ComplexSelector, or a touch
-  picker field with no input mode, is outside it.
+  keyboard, moving its docked container up and back with it, including an
+  app-owned container docked to the viewport's bottom edge. This covers
+  TextInput, TextArea, NumberInput, the typed fields of DateInput,
+  DateTimeInput, and TimeInput, the inputs of Typeahead and Tokenizer, and the
+  search row of Selector and MultiSelector. It is internal behavior with no prop
+  or other public API: the member decides it in its focus handling and reads the
+  keyboard module, as `spec:AST-099` FR9 requires, which owns the full list of
+  covered fields, including those of PowerSearch, CommandPalette, and
+  ChatComposer. A member whose field brings up no keyboard, such as
+  DateRangeInput, FileInput, ComplexSelector, or a touch picker field with no
+  input mode, is outside it.
 
 ## Allowed component variation
 
