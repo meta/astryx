@@ -72,9 +72,9 @@ function showDrawerHost(dialog: HTMLDialogElement, isModal: boolean): void {
   if (isModal) {
     dialog.showModal();
   } else if (typeof dialog.showPopover === 'function') {
-    // A dialog's show focuses its first control inside the show. Counted as a
-    // layer operation, so a tooltip that the focus asks to show waits for the
-    // show to end instead of being refused by the browser.
+    // The dialog's show focuses its first control. A tooltip on that control
+    // then asks to show. The browser refuses a show inside another show.
+    // Counting this show makes the tooltip wait until it ends.
     runPopoverOperation(dialog.ownerDocument, () => dialog.showPopover());
     // The drawer is now the newest top-layer entry: global hosts shown before
     // it (the toast viewport) re-enter above it, as they do above a modal.

@@ -19,6 +19,17 @@ import {
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 
+// The Chromium that CI installs accepts a show inside another show unless
+// these features are on. With them, the base throws and the tooltip stays
+// closed.
+test.use({
+  launchOptions: {
+    args: [
+      '--enable-blink-features=PopoverHintNewBehavior,PopoverHintNestedShowException',
+    ],
+  },
+});
+
 let storybook: StaticServer;
 test.beforeAll(async () => {
   storybook = await serveStorybook(
