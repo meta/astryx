@@ -96,7 +96,9 @@ describe('route resolution', () => {
     // `use-integrations` is the guide for apps that install one;
     // `cli-experimental-render-pages` is the experimental render guide.
     // `styling` shows under `styling-overview`, and
-    // `cli-experimental-icon-set-files` under Icons in Foundations.
+    // `cli-experimental-icon-set-files` under Icons in Foundations;
+    // `internationalization-calendars` is the calendar systems page, under
+    // Internationalization.
     const sidebarGuides = docsSidebarGroups(docTopics)
       .guide.flatMap(({page, children}) => [page, ...children])
       .map(d => d.topic)
@@ -111,6 +113,7 @@ describe('route resolution', () => {
         'cli-host-entry',
         'global',
         'internationalization',
+        'internationalization-calendars',
         'is-my-code-good',
         'layout',
         'migration',
@@ -123,6 +126,24 @@ describe('route resolution', () => {
         'working-with-ai',
       ].sort(),
     );
+  });
+
+  it('shows Calendars on its own page under Internationalization', () => {
+    expect(pageBySlug.get('internationalization-calendars')).toMatchObject({
+      title: 'Calendars',
+      category: 'guide',
+      parent: 'internationalization',
+    });
+    expect(
+      docRedirects['internationalization-calendars-calendar-systems'],
+    ).toMatch(/^\/docs\/internationalization-calendars#/);
+    expect(docRedirects).not.toHaveProperty('internationalization-calendars');
+    const i18n = docsSidebarGroups(docTopics).guide.find(
+      ({page}) => page.topic === 'internationalization',
+    );
+    expect(i18n?.children.map(child => child.topic)).toEqual([
+      'internationalization-calendars',
+    ]);
   });
 
   it('opens every authoring guide at its section on the Authoring page, from its old slug too', () => {
