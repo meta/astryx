@@ -1,0 +1,25 @@
+/* Copyright (c) Meta Platforms, Inc. and affiliates. */
+
+/* No layer-order line of the app's own. Core's reset.css and each block that
+   `@astryx;` emits register it. */
+@import '@astryxdesign/core/reset.css';
+
+@astryx;
+@stylex;
+
+/* The product's own classes over a base rule of each package. */
+.product-core {
+  background-color: rgb(255, 0, 255);
+}
+
+.product-lab {
+  flex-direction: row;
+}
+
+.product-richtext {
+  position: static;
+}
+
+.product-charts {
+  width: 50px;
+}

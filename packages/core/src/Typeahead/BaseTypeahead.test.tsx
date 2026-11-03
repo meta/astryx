@@ -88,6 +88,25 @@ const testStyles = stylex.create({
 });
 
 describe('BaseTypeahead', () => {
+  it('asks a touch keyboard for its Search key and no autocorrection', () => {
+    render(
+      <BaseTypeahead
+        searchSource={emptySource}
+        value={null}
+        onChange={() => {}}
+        aria-label="Find a framework"
+      />,
+    );
+
+    expect(
+      screen.getByRole('combobox', {name: 'Find a framework'}),
+    ).toHaveAttribute('enterkeyhint', 'search');
+
+    expect(
+      screen.getByRole('combobox', {name: 'Find a framework'}),
+    ).toHaveAttribute('autocorrect', 'off');
+  });
+
   it('forwards supported DOM, styling, and event props to the combobox input', () => {
     const onBlur = vi.fn();
     const onFocus = vi.fn();
@@ -381,6 +400,90 @@ describe('BaseTypeahead', () => {
     expect(
       screen.queryByRole('option', {name: 'Result', hidden: true}),
     ).not.toBeInTheDocument();
+  });
+
+  // FR2: a focus load that yields no choice, or fails, closes the list; a
+  // completed empty search for a typed query still shows FR4's message.
+  describe('focus list with no choices', () => {
+    const renderField = (searchSource: SearchSource<SearchableItem>) =>
+      render(
+        <BaseTypeahead
+          searchSource={searchSource}
+          value={null}
+          onChange={() => {}}
+          hasEntriesOnFocus
+        />,
+      );
+
+    it('closes when a cleared query loads an empty focus list', async () => {
+      const user = userEvent.setup();
+      renderField({search: () => [resultItem], bootstrap: () => []});
+      const input = screen.getByRole('combobox');
+
+      await user.type(input, 're');
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Result', hidden: true}),
+        ).toBeInTheDocument();
+      });
+      await user.clear(input);
+
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
+    it('closes when a cleared query leaves the empty-search message for an empty focus list', async () => {
+      const user = userEvent.setup();
+      renderField({search: () => [], bootstrap: () => []});
+      const input = screen.getByRole('combobox');
+
+      await user.type(input, 'zz');
+      await waitFor(() => {
+        expect(screen.getByText('No results found')).toBeInTheDocument();
+      });
+      await user.clear(input);
+
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
+    it('closes when a cleared query fails to load the focus list', async () => {
+      const user = userEvent.setup();
+      renderField({
+        search: () => [resultItem],
+        bootstrap: async () => {
+          throw new Error('offline');
+        },
+      });
+      const input = screen.getByRole('combobox');
+
+      await user.type(input, 're');
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Result', hidden: true}),
+        ).toBeInTheDocument();
+      });
+      await user.clear(input);
+
+      await waitFor(() => {
+        expect(input).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
+    it('still shows the empty-search message for a typed query with no results', async () => {
+      const user = userEvent.setup();
+      renderField({search: () => [], bootstrap: () => [resultItem]});
+      const input = screen.getByRole('combobox');
+
+      await user.type(input, 'zz');
+
+      await waitFor(() => {
+        expect(screen.getByText('No results found')).toBeInTheDocument();
+      });
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
   });
 
   // component:Tokenizer FR13, spec:AST-092 FR4: when the caller's committed

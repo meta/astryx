@@ -421,6 +421,65 @@ describe('DateInput', () => {
     expect(input).toHaveAttribute('aria-expanded', 'true');
   });
 
+  it('Enter on a busy field does not submit the form', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <DateInput
+          label="Start date"
+          value="2026-01-12"
+          onChange={() => {}}
+          isLoading
+        />
+        <button type="submit">Save</button>
+      </form>,
+    );
+    screen.getAllByRole('combobox')[0].focus();
+    await user.keyboard('{Enter}');
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('Enter on a disabled field does not submit the form', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <DateInput
+          label="Start date"
+          value="2026-01-12"
+          onChange={() => {}}
+          isDisabled
+        />
+        <button type="submit">Save</button>
+      </form>,
+    );
+    screen.getAllByRole('combobox')[0].focus();
+    await user.keyboard('{Enter}');
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('Enter submits the form when nothing is typed, and commits typed text without submitting', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    const onChange = vi.fn();
+    render(
+      <form onSubmit={onSubmit}>
+        <DateInput label="Start date" value="2026-01-12" onChange={onChange} />
+        <button type="submit">Search</button>
+      </form>,
+    );
+    const input = screen.getByRole('combobox');
+    input.focus();
+    await user.keyboard('{Enter}');
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    await user.clear(input);
+    await user.type(input, '2026-02-03');
+    await user.keyboard('{Enter}');
+    expect(onChange).toHaveBeenLastCalledWith('2026-02-03');
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
   describe('press inside and outside the open calendar', () => {
     function press(target: Element) {
       fireEvent.pointerDown(target, {composed: true});

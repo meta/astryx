@@ -143,6 +143,28 @@ export const Default: Story = {
   },
 };
 
+const LONG_LIST = Array.from({length: 120}, (_, i) => `Team ${i + 1}`);
+
+/**
+ * A long option list: the list scrolls, End and PageDown scroll it, and a
+ * mouse resting over it keeps the highlight where the keys put it.
+ */
+export const LongList: Story = {
+  tags: ['!autodocs'],
+  render: () => {
+    const [value, setValue] = useState<string | undefined>(undefined);
+    return (
+      <Selector
+        label="Team"
+        options={LONG_LIST}
+        value={value}
+        onChange={v => setValue(v)}
+        presentation="popover"
+      />
+    );
+  },
+};
+
 export const ReadOnly: Story = {
   args: {
     label: 'Assigned owner',

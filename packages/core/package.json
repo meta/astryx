@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/core",
-  "version": "0.7.6",
+  "version": "0.7.7",
   "displayName": "Astryx Core",
   "description": "The component library. Accessible, themeable React components with built-in spacing, dark mode, and StyleX styling.",
   "author": "Meta Open Source",
@@ -398,6 +398,11 @@
       "source": "./src/Indicator/index.ts",
       "types": "./dist/Indicator/index.d.ts",
       "default": "./dist/Indicator/index.js"
+    },
+    "./InfoTip": {
+      "source": "./src/InfoTip/index.ts",
+      "types": "./dist/InfoTip/index.d.ts",
+      "default": "./dist/InfoTip/index.js"
     },
     "./InputGroup": {
       "source": "./src/InputGroup/index.ts",
@@ -824,10 +829,10 @@
       "types": "./dist/internal/touch.d.ts",
       "default": "./dist/internal/touch.js"
     },
-    "./internal/tokenizer-presentation": {
-      "source": "./src/internal/tokenizer-presentation.ts",
-      "types": "./dist/internal/tokenizer-presentation.d.ts",
-      "default": "./dist/internal/tokenizer-presentation.js"
+    "./internal/touch-sheet": {
+      "source": "./src/internal/touch-sheet.ts",
+      "types": "./dist/internal/touch-sheet.d.ts",
+      "default": "./dist/internal/touch-sheet.js"
     }
   },
   "files": [

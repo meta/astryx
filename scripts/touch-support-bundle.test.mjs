@@ -14,14 +14,15 @@
  *   that import the touch module share one copy per page; only the internal
  *   `internal/touch` entry reaches it, and no consumer doc or component
  *   `import()` does
- * @position Node test over source, so it needs no build
+ * @position Node test over source, so it needs no build. Its build files
+ *   live under the repository's `node_modules/.cache`, never the system temp
+ *   directory, whose listing esbuild would read for every build
  */
 
 import fs from 'node:fs';
 import {createRequire} from 'node:module';
-import os from 'node:os';
 import path from 'node:path';
-import {afterAll, describe, expect, it} from 'vitest';
+import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 
 const REPO = path.resolve(import.meta.dirname, '..');
 const CORE_SRC = path.join(REPO, 'packages/core/src');
@@ -31,7 +32,24 @@ const esbuild = require('esbuild');
 /** The gesture core the internal entry re-exports. */
 const PRIMITIVE_INPUT = /^packages\/core\/src\/gestures\//;
 
-const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-touch-module-'));
+/**
+ * Where the builds' entry files live: under the repository's
+ * `node_modules/.cache`, not the system temp directory. esbuild reads the
+ * listing of every directory above each file it bundles, and on a shared
+ * machine the temp directory can hold hundreds of thousands of entries, so
+ * each build there read that listing first. The run's folder is made in
+ * beforeAll, not when the module loads: Vitest skips both hooks when a run
+ * filters out every test here.
+ */
+const CACHE = path.join(
+  REPO,
+  'node_modules/.cache/astryx-touch-support-bundle',
+);
+let scratch = '';
+beforeAll(() => {
+  fs.mkdirSync(CACHE, {recursive: true});
+  scratch = fs.mkdtempSync(path.join(CACHE, 'run-'));
+});
 afterAll(() => {
   fs.rmSync(scratch, {recursive: true, force: true});
 });
@@ -42,7 +60,8 @@ afterAll(() => {
  */
 const BUILD_OPTIONS = {
   absWorkingDir: REPO,
-  outdir: path.join(scratch, 'out'),
+  // Never written (`write: false`): it only names the outputs.
+  outdir: path.join(CACHE, 'out'),
   bundle: true,
   minify: true,
   format: 'esm',
@@ -118,7 +137,16 @@ function filesUnder(dir, pattern) {
  * gives a component its gesture adds that component's import, and each import
  * that reaches it, with a comment naming the gesture.
  */
-const GESTURE_USERS = new Set([]);
+const GESTURE_USERS = new Set([
+  // Slider's thumb.
+  'Slider',
+  // Switch: its press tracking and its drag, for every pointer.
+  'Switch',
+  // SegmentedControl: its press tracking and its drag, for every pointer.
+  'SegmentedControl',
+  // DateTimeInput: through the SegmentedControl its touch field renders.
+  'DateTimeInput',
+]);
 
 /** Public imports that carry no gesture code, whatever the list above says. */
 const NEVER_GESTURE_USERS = ['Button', 'TextInput'];
@@ -321,6 +349,12 @@ export const ${name} = () => new GestureArena();
 });
 
 describe('the touch module internals', () => {
+  it('are built from files under the repository, not the system temp directory', () => {
+    expect(path.relative(REPO, scratch).split(path.sep)[0]).toBe(
+      'node_modules',
+    );
+  });
+
   it('have no entry in the exports map beside the internal touch entry', () => {
     const {exports} = JSON.parse(
       fs.readFileSync(path.join(REPO, 'packages/core/package.json'), 'utf8'),
