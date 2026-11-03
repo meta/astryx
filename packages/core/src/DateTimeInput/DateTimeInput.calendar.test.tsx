@@ -40,11 +40,12 @@ function renderField(locale: string, props: Partial<DateTimeInputProps> = {}) {
   return {...result, input, onChange};
 }
 
-/** The date and time fields each have their own alert region. */
-function alertTexts(container: HTMLElement) {
-  return within(container)
-    .getAllByRole('alert')
-    .map(alert => alert.textContent);
+// A shown status describes the input and announces itself; no alert repeats
+// it.
+function expectShown(input: HTMLElement, box: HTMLElement, text: string) {
+  expect(input).toHaveAccessibleDescription(expect.stringContaining(text));
+  const alerts = within(box).getAllByRole('alert');
+  expect(alerts.map(alert => alert.textContent)).not.toContain(text);
 }
 
 function typeSlowly(input: HTMLElement, text: string) {
@@ -78,7 +79,9 @@ describe('DateTimeInput typed date entry with a calendar', () => {
     fireEvent.change(input, {target: {value: '1 Adar I 5785'}});
     expect(onChange).not.toHaveBeenCalled();
     expect(input).toHaveAttribute('aria-invalid', 'true');
-    expect(alertTexts(container)).toContain(
+    expectShown(
+      input,
+      container,
       'This date does not exist in the Hebrew Calendar',
     );
     fireEvent.blur(input);
@@ -92,9 +95,7 @@ describe('DateTimeInput typed date entry with a calendar', () => {
     });
     fireEvent.change(input, {target: {value: 'April 30, 31 Heisei'}});
     expect(onChange).not.toHaveBeenCalled();
-    expect(alertTexts(container)).toContain(
-      'Enter a date on or after May 1, 1 Reiwa',
-    );
+    expectShown(input, container, 'Enter a date on or after May 1, 1 Reiwa');
   });
 
   it('names the calendar and shows the hint when focused and empty', () => {

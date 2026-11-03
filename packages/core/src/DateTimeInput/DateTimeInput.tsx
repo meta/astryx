@@ -802,13 +802,18 @@ function PointerDateTimeField({
     dateTypedError != null && dateTypedResult != null
       ? typedDate.errorMessage(dateTypedResult)
       : null;
-  // A readable date that cannot commit stays in the field, so its reason is
-  // shown as well as announced.
-  const fieldStatus: InputStatus | undefined =
-    status ??
-    (dateTypedError === 'nonexistent' || dateTypedError === 'outOfRange'
-      ? {type: 'error', message: dateTypedErrorMessage ?? undefined}
-      : undefined);
+  // Text that stays in the field shows its reason as well as announcing it.
+  const dateTypedStatus: InputStatus | undefined =
+    dateTypedErrorMessage != null &&
+    (dateTypedError !== 'unreadable' || isDateRejectionCommitted)
+      ? {type: 'error', message: dateTypedErrorMessage}
+      : undefined;
+  const fieldStatus = status ?? dateTypedStatus;
+  // Field announces a status it shows; the alert carries any other rejection.
+  const dateAlertMessage =
+    status == null && dateTypedStatus != null
+      ? ''
+      : (dateTypedErrorMessage ?? '');
 
   // DateTimeInput fixes its status presentation to the detached message box,
   // so the shared helper suppresses the on-field icon (the message box carries
@@ -1168,6 +1173,8 @@ function PointerDateTimeField({
         handleDateChange(parsedISO, 'input');
       }
     }
+    // A new typing session reports a retyped date again.
+    lastFiredDateRef.current = undefined;
     setDatePendingInput(null);
   }, [
     datePendingInput,
@@ -1895,11 +1902,10 @@ function PointerDateTimeField({
               {/*
             Live region announcing rejected typed date input to assistive
             technology, with one message for each kind of rejection (WCAG
-            3.3.1). Unreadable text reverts on blur, so this is its only
-            feedback.
+            3.3.1).
           */}
               <VisuallyHidden as="div" role="alert" aria-live="assertive">
-                {dateTypedErrorMessage ?? ''}
+                {dateAlertMessage}
               </VisuallyHidden>
               {isRenderable(typedDate.calendarDescription) && (
                 <VisuallyHidden id={calendarDescriptionID}>

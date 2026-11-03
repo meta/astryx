@@ -48,6 +48,13 @@ function renderField(locale: string, props: Partial<DateInputProps> = {}) {
   return {...result, input, onChange};
 }
 
+// A shown status describes the input and announces itself; the alert stays
+// empty, so nothing is spoken twice.
+function expectShown(input: HTMLElement, box: HTMLElement, text: string) {
+  expect(input).toHaveAccessibleDescription(expect.stringContaining(text));
+  expect(within(box).getByRole('alert')).toHaveTextContent('');
+}
+
 /** Types text one character at a time, as a person does. */
 function typeSlowly(input: HTMLElement, text: string) {
   let typed = '';
@@ -108,7 +115,9 @@ describe('DateInput typed entry with a calendar', () => {
     fireEvent.change(input, {target: {value: 'May 1, 31 Heisei'}});
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(input).toHaveAttribute('aria-invalid', 'true');
-    expect(within(container).getByRole('alert')).toHaveTextContent(
+    expectShown(
+      input,
+      container,
       'This date does not exist in the Japanese Calendar',
     );
   });
@@ -119,15 +128,17 @@ describe('DateInput typed entry with a calendar', () => {
       value: '2026-11-02',
     });
     fireEvent.change(input, {target: {value: '12/30/1404 AP'}});
-    expect(within(container).getByRole('alert')).toHaveTextContent(
+    expectShown(
+      input,
+      container,
       'This date does not exist in the Persian Calendar',
     );
     fireEvent.blur(input);
     expect(input).toHaveValue('12/30/1404 AP');
-    expect(input).toHaveAccessibleDescription(
-      expect.stringContaining(
-        'This date does not exist in the Persian Calendar',
-      ),
+    expectShown(
+      input,
+      container,
+      'This date does not exist in the Persian Calendar',
     );
     expect(onChange).not.toHaveBeenCalled();
   });
@@ -141,7 +152,9 @@ describe('DateInput typed entry with a calendar', () => {
     // A Gregorian year typed into a Buddhist field is Buddhist year 2026.
     fireEvent.change(input, {target: {value: '11/2/2026'}});
     expect(onChange).not.toHaveBeenCalled();
-    expect(within(container).getByRole('alert')).toHaveTextContent(
+    expectShown(
+      input,
+      container,
       'Enter a date from January 1, 2569 BE to December 31, 2569 BE',
     );
     fireEvent.change(input, {target: {value: '11/2/2569'}});
@@ -153,16 +166,14 @@ describe('DateInput typed entry with a calendar', () => {
       calendar: 'persian',
       max: '2026-12-31',
     });
-    const alert = within(container).getByRole('alert');
-    const messages = ['abc', '12/30/1404 AP', '1/1/1406 AP'].map(text => {
-      fireEvent.change(input, {target: {value: text}});
-      return alert.textContent;
-    });
-    expect(messages).toEqual([
+    fireEvent.change(input, {target: {value: 'abc'}});
+    expect(within(container).getByRole('alert')).toHaveTextContent(
       'Invalid date',
-      'This date does not exist in the Persian Calendar',
-      'Enter a date on or before Dey 10, 1405 AP',
-    ]);
+    );
+    fireEvent.change(input, {target: {value: '12/30/1404 AP'}});
+    expectShown(input, container, 'does not exist in the Persian Calendar');
+    fireEvent.change(input, {target: {value: '1/1/1406 AP'}});
+    expectShown(input, container, 'on or before Dey 10, 1405 AP');
   });
 
   it('reports nothing for partial input and stays silent while it grows', () => {
@@ -379,7 +390,7 @@ describe('DateInput onChange while typing a Gregorian date', () => {
       }
       expect(input).toHaveValue('1/5/2');
       expect(input).toHaveAttribute('aria-invalid', 'true');
-      expect(alert).toHaveTextContent('Invalid date');
+      expectShown(input, container, 'Invalid date');
       expect(onChange).not.toHaveBeenCalled();
     },
   );
@@ -394,7 +405,9 @@ describe('DateInput onChange while typing a Gregorian date', () => {
       fireEvent.change(input, {target: {value: text}});
       fireEvent.blur(input);
       expect(input).toHaveValue(text);
-      expect(within(container).getByRole('alert')).toHaveTextContent(
+      expectShown(
+        input,
+        container,
         'This date does not exist in the Gregorian Calendar',
       );
       expect(onChange).not.toHaveBeenCalled();
@@ -408,10 +421,33 @@ describe('DateInput onChange while typing a Gregorian date', () => {
     fireEvent.change(input, {target: {value: '13/5/1405 AP'}});
     fireEvent.blur(input);
     expect(input).toHaveValue('13/5/1405 AP');
-    expect(within(container).getByRole('alert')).toHaveTextContent(
+    expectShown(
+      input,
+      container,
       'This date does not exist in the Persian Calendar',
     );
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['fa-IR', 'persian', '1404/12/30'],
+    ['sv-SE', 'gregory', '2026-02-30'],
+  ] as const)(
+    'reports no date while %s %s text grows to a day the month lacks',
+    (locale, calendar, text) => {
+      const {input, onChange} = renderField(locale, {calendar});
+      typeSlowly(input, text);
+      expect(onChange).not.toHaveBeenCalled();
+    },
+  );
+
+  it('reports a retyped date again after the caller keeps its value', () => {
+    const {input, onChange} = renderField('en-US', {value: '2026-01-01'});
+    for (let round = 1; round <= 2; round += 1) {
+      typeSlowly(input, '11/2/2026');
+      fireEvent.blur(input);
+      expect(onChange).toHaveBeenCalledTimes(round);
+    }
   });
 
   it('does not fire again on blur for a date it already reported', () => {

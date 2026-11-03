@@ -634,13 +634,18 @@ function PointerDateField({
     typedError != null && typedResult != null
       ? typedDate.errorMessage(typedResult)
       : null;
-  // A readable date that cannot commit stays in the field, so its reason is
-  // shown as well as announced.
-  const fieldStatus: InputStatus | undefined =
-    status ??
-    (typedError === 'nonexistent' || typedError === 'outOfRange'
-      ? {type: 'error', message: typedErrorMessage ?? undefined}
-      : undefined);
+  // Text that stays in the field shows its reason as well as announcing it.
+  const typedStatus: InputStatus | undefined =
+    typedErrorMessage != null &&
+    (typedError !== 'unreadable' || isRejectionCommitted)
+      ? {type: 'error', message: typedErrorMessage}
+      : undefined;
+  const fieldStatus = status ?? typedStatus;
+  // Field announces a status it shows; the alert carries any other rejection.
+  const alertMessage =
+    status == null && typedStatus != null && !inputGroup
+      ? ''
+      : (typedErrorMessage ?? '');
 
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
     useInputStatusIcon({
@@ -879,6 +884,8 @@ function PointerDateField({
         fireChange(parsedISO);
       }
     }
+    // A new typing session reports a retyped date again.
+    lastFiredValueRef.current = undefined;
     setPendingInput(null);
   }, [pendingInput, isEffectivelyDisabled, value, fireChange, typedDate]);
 
@@ -1064,11 +1071,10 @@ function PointerDateField({
       />
       {/*
           Live region announcing rejected typed input to assistive technology,
-          with one message for each kind of rejection (WCAG 3.3.1). Unreadable
-          text reverts on blur, so this is its only feedback.
+          with one message for each kind of rejection (WCAG 3.3.1).
         */}
       <VisuallyHidden as="div" role="alert" aria-live="assertive">
-        {typedErrorMessage ?? ''}
+        {alertMessage}
       </VisuallyHidden>
       {isRenderable(typedDate.calendarDescription) && (
         <VisuallyHidden id={calendarDescriptionID}>
