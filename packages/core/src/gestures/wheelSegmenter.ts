@@ -56,7 +56,8 @@ export function isBunched(intervalMs: number): boolean {
  * shrink smoothly. The lift is the start of a run of shrinking deltas that
  * has lost a fifth of its size. In the finger phase, a pause of `idleMs`
  * ends the gesture. In the momentum phase, a reversal, a jump up against the
- * decay, or a pause of 50 ms starts a new gesture. Momentum never pauses,
+ * decay, or a pause of 50 ms starts a new gesture. A bunched wheel is never
+ * a jump. The decay reads it by its last step. Momentum never pauses,
  * reverses or grows.
  */
 export class WheelSegmenter {
@@ -84,10 +85,16 @@ export class WheelSegmenter {
         boundary = 'reversal';
       } else if (gap >= MOMENTUM_GAP_MS) {
         boundary = 'gap';
-      } else if (size >= 2 && size > this.previous * 1.3 + 0.5) {
+      } else if (!bunched && size >= 2 && size > this.previous * 1.3 + 0.5) {
         boundary = 'jump';
       }
     }
+    // A bunched wheel carries the steps of the frames it merged. The decay
+    // goes on from its last step, so the steps after it read as they are.
+    const steps =
+      boundary == null && bunched && this.previous > 0
+        ? Math.max(1, Math.round(size / this.previous))
+        : 1;
     if (boundary != null) {
       this.gesture += 1;
       this.phase = 'finger';
@@ -112,7 +119,7 @@ export class WheelSegmenter {
       }
     }
     this.count += 1;
-    this.previous = size;
+    this.previous = size / steps;
     if (sign !== 0) {
       this.sign = sign;
     }
