@@ -138,11 +138,15 @@ export function parseDateInput(
   if (/^\d+$/.test(trimmed)) {
     return null;
   }
-  // Numeric text that is not one of the locale-ordered forms above is no
-  // date either. Native `Date` reads `a/b/c` month-first in every locale and
-  // accepts a one- to three-digit year, so "12/0" or "12/01/2" in a
-  // day-first locale would become a wrong date.
-  if (/^[\d\s./-]+$/.test(trimmed)) {
+  // In a day-first locale, numeric text outside the locale-ordered forms
+  // above is not a date. Native `Date` reads `a/b/c` month first, and it
+  // takes a year of one to three digits. So "12/01/2" would give a wrong
+  // date. A four-digit year written first is not ambiguous.
+  if (
+    isLocaleDayFirst(locale) &&
+    /^[\d\s./-]+$/.test(trimmed) &&
+    !/^\d{4}[/.]\d{1,2}[/.]\d{1,2}$/.test(trimmed)
+  ) {
     return null;
   }
 

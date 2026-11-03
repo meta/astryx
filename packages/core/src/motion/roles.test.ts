@@ -23,6 +23,7 @@ import {
   motionRoleIn,
   motionRoleOf,
   motionRoleVariable,
+  parseCssEasing,
   parseMotionRoleValue,
   registerMotionTable,
 } from './roles';
@@ -219,6 +220,7 @@ describe('motion roles', () => {
     expect(
       Object.fromEntries(discoveredRoles().map(role => [role.id, role.kind])),
     ).toMatchObject({
+      'segmented.selectionSpring': 'spring',
       'springs.contextMenuDismiss': 'spring',
       'springs.contextMenuLift': 'spring',
       'springs.contextMenuMorph': 'spring',
@@ -293,5 +295,21 @@ describe('motion roles', () => {
     });
     expect(parseMotionRoleValue('duration', ' 0.3s ')).toBe(300);
     expect(parseMotionRoleValue('curve', 'ease-in')).toBeNull();
+  });
+});
+
+describe('parseCssEasing', () => {
+  it('reads a keyword as the control points CSS gives it, and a cubic-bezier() as a curve role does', () => {
+    expect(parseCssEasing('linear')).toEqual([0, 0, 1, 1]);
+    expect(parseCssEasing(' ease-out ')).toEqual([0, 0, 0.58, 1]);
+    expect(parseCssEasing('cubic-bezier(0.24, 1, 0.4, 1)')).toEqual([
+      0.24, 1, 0.4, 1,
+    ]);
+  });
+
+  it('gives null for an easing it cannot read as one curve', () => {
+    expect(parseCssEasing('steps(4)')).toBeNull();
+    expect(parseCssEasing('')).toBeNull();
+    expect(parseCssEasing('cubic-bezier(2, 0, 0.5, 1)')).toBeNull();
   });
 });

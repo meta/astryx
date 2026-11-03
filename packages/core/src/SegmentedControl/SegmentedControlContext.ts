@@ -29,6 +29,12 @@ export interface SegmentedControlContextValue {
    * described by the reason (spec:AST-085 FR5).
    */
   disabledReasonID?: string;
+  /**
+   * True in the touch presentation (under a finger, `useTouchPresentation`):
+   * the control animates selection changes itself (the surface slides), so
+   * segments drop their CSS transitions.
+   */
+  isTouchPresentation?: boolean;
 }
 
 export const SegmentedControlContext =
