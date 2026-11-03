@@ -2,7 +2,7 @@
 
 /**
  * @file ResizeHandle.test.tsx
- * @input Uses vitest, @testing-library/react, react-dom, useResizable, ResizeHandle
+ * @input vitest, testing-library, react-dom, useResizable, ResizeHandle, createResizable
  * @output Unit tests for ResizeHandle keyboard operability, ARIA state and hydration
  * @position Testing; validates ResizeHandle.tsx implementation
  *
@@ -22,6 +22,7 @@ import {hydrateRoot} from 'react-dom/client';
 import {renderToString} from 'react-dom/server';
 import {ResizeHandle} from './ResizeHandle';
 import type {ResizeHandleProps} from './ResizeHandle';
+import {createResizable} from './createResizable';
 import {useResizable} from './useResizable';
 import type {ResizableProps, UseResizableSingleConfig} from './useResizable';
 
@@ -1259,6 +1260,47 @@ describe('ResizeHandle', () => {
       const hitArea = getSeparator().firstElementChild as HTMLElement;
       expect(hitArea.getAttribute('style') ?? '').not.toContain('min(');
       expect(getSeparator().className).not.toContain('OnShortPane');
+    },
+  );
+
+  it.each([
+    ['enabled', {}, false],
+    ['disabled', {}, true],
+    ['collapsed', {collapsible: true, defaultIsCollapsed: true}, false],
+  ] as const)(
+    'announces the same separator attributes as a factory driving a plain element when %s',
+    (_, extra, isDisabled) => {
+      const config = {defaultSize: 200, minSize: 100, maxSize: 400, ...extra};
+      const view = render(
+        <Harness
+          config={config}
+          handleProps={{label: 'Resize handle', isDisabled}}
+        />,
+      );
+      const handle = getSeparator();
+      const element = document.createElement('div');
+      document.body.append(element);
+      const resizable = createResizable(element, {...config, isDisabled});
+      const names = [
+        'role',
+        'tabindex',
+        'aria-label',
+        'aria-orientation',
+        'aria-valuenow',
+        'aria-valuemin',
+        'aria-valuemax',
+        'aria-valuetext',
+        'aria-disabled',
+      ];
+      const read = (node: Element) =>
+        Object.fromEntries(names.map(name => [name, node.getAttribute(name)]));
+      try {
+        expect(read(element)).toEqual(read(handle));
+      } finally {
+        resizable.destroy();
+        element.remove();
+        view.unmount();
+      }
     },
   );
 
