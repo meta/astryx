@@ -414,8 +414,8 @@ sheet it reveals is the latest again and takes the host back; a sheet is
 raised only among sheet outlets, so a Dialog opened from a sheet and
 supplied later stays the latest until it closes. A BottomSheet releases its
 outlet when it starts closing: its dialog stays modal through the exit
-animation, but inert. A modal Drawer also releases its outlet when it starts
-closing, so toasts do not slide out with it. A top-layer viewport renders into a host element
+animation, but inert. A closing BottomSheet with focus inside is not yet inert or hidden (`component:BottomSheet` FR9); it becomes inert and hidden when focus leaves it or its exit ends. A modal Drawer also releases its outlet when it starts closing, so toasts
+do not slide out with it. A top-layer viewport renders into a host element
 it owns, moves that host into the latest open outlet, returns it to the
 viewport's tree position when no outlet is open, and enters the top layer again
 after each move. Toasts therefore paint above the modal and stay operable inside

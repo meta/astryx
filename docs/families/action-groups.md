@@ -141,9 +141,10 @@ Selector's and MultiSelector's options FR1–FR5
   is highlighted over a disabled action, a gap, or outside the group
   (`spec:AST-094` FR27).
 - **FR3 — Sliding off cancels.** A press that lifts outside the group acts on
-  nothing; a cancelled pointer, a second finger, or the window losing focus
-  ends the gesture with nothing acting (`spec:AST-094` FR28). Whether a
-  member that opened for the gesture stays open stays with the member.
+  nothing; a second finger ends the gesture with nothing acting (`spec:AST-094`
+  FR28), as a lost focus or a cancelled pointer does (`spec:AST-094` FR44).
+  Whether a member that opened for the gesture stays open stays with the
+  member.
 - **FR4 — A toggle group toggles only the lifted action.** In a toggle group,
   only the action lifted on toggles; sliding across never toggles the actions
   passed over.

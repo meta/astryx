@@ -534,10 +534,10 @@ describe('ToastViewport above a BottomSheet', () => {
     expect(viewport.closest('dialog')).toBe(getDialog('Filters'));
 
     fireEvent.click(screen.getByRole('button', {name: 'Close Filters'}));
-    // The sheet stays an open modal through its exit animation, but inert and
-    // hidden; toasts must not go down with it.
+    // The sheet stays an open dialog through its exit animation, no longer
+    // modal and taking no presses; toasts must not go down with it.
     expect(getDialog('Filters')).toHaveAttribute('open');
-    expect(getDialog('Filters')).toHaveAttribute('inert');
+    expect(getDialog('Filters')).not.toHaveAttribute('aria-modal');
     expect(viewport.closest('dialog')).toBe(getDialog('Edit'));
     expect(viewport.closest('[inert], [aria-hidden="true"]')).toBeNull();
   });

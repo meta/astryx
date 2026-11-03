@@ -1271,7 +1271,9 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       />,
     );
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    expect(dialog).toHaveAttribute('aria-hidden', 'true');
+    // Focus is in the search field, so the closing sheet stays out of inert
+    // and aria-hidden until its exit ends (component:BottomSheet FR9).
+    expect(dialog).not.toHaveAttribute('aria-modal');
     // BottomSheet hands focus back after its exit motion.
     fireEvent.transitionEnd(document.querySelector('.astryx-bottom-sheet')!, {
       propertyName: 'transform',
