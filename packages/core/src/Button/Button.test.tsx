@@ -21,6 +21,7 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Button} from './Button';
+import {Icon} from '../Icon/Icon';
 import * as stylex from '@stylexjs/stylex';
 import {
   hasPressedArm,
@@ -542,6 +543,14 @@ describe('Button', () => {
       );
       const button = screen.getByRole('button', {name: 'Close the editor'});
       expect(button).toHaveAccessibleDescription('Close');
+    });
+
+    it('adds no description when a decorative Icon sits beside a repeated label', () => {
+      render(
+        <Button label="Edit" icon={<Icon icon="close" />} tooltip="Edit" />,
+      );
+      const button = screen.getByRole('button', {name: 'Edit'});
+      expect(button).not.toHaveAttribute('aria-describedby');
     });
 
     it('keeps the description when endContent adds to the name', () => {
