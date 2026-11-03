@@ -5179,6 +5179,29 @@ describe('Selector press model', () => {
     expect(listbox).not.toHaveClass(hash(touchStyles.panYPinchZoom));
   });
 
+  it('a press held still after a key lights the pressed row', async () => {
+    const user = userEvent.setup();
+    const many = Array.from({length: 30}, (_, i) => `Option ${i}`);
+    render(<Selector label="Item" options={many} onChange={() => {}} />);
+    const trigger = screen.getByRole('combobox');
+    trigger.focus();
+    await user.keyboard('{ArrowDown}');
+    const listbox = screen.getByRole('listbox', h);
+    const rows = within(listbox).getAllByRole('option', h);
+    await user.keyboard('{End}');
+    expect(trigger).toHaveAttribute('aria-activedescendant', rows[29].id);
+    // The browser reports the row under the still mouse as entered.
+    fireEvent.mouseOver(rows[20]);
+    expect(trigger).toHaveAttribute('aria-activedescendant', rows[29].id);
+    // The mouse presses without moving: the pressed row lights.
+    fireEvent.pointerDown(rows[20], {
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+    });
+    expect(trigger).toHaveAttribute('aria-activedescendant', rows[20].id);
+  });
+
   it('a row that scrolls under a still mouse after a key does not take the highlight; a mouse that moves does', async () => {
     const user = userEvent.setup();
     const many = Array.from({length: 30}, (_, i) => `Option ${i}`);

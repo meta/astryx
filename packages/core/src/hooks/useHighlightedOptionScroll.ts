@@ -9,7 +9,7 @@
  * @output Exports useHighlightedOptionScroll: keeps the highlighted option
  *   scrolled into view for keyboard navigation while hover-driven highlights
  *   never scroll, and a hover after a keyboard move waits for the pointer to
- *   move; the hover callback is stable while `setHighlightedIndex` is
+ *   move or press; the hover callback is stable while `setHighlightedIndex` is
  * @position Internal hook; used by useCombobox, useMultiCombobox,
  *   BaseTypeahead, and DateTimeInput — the owners of combobox highlight state
  */
@@ -30,13 +30,18 @@ interface UseHighlightedOptionScrollOptions {
 
 /**
  * Highlights the hovered option at `index`. `onHighlight` runs when the hover
- * takes effect: at once, or after the pointer moves when a keyboard move
- * holds the highlight.
+ * takes effect: at once, or after the pointer moves or presses when a
+ * keyboard move holds the highlight.
  */
 export type HighlightFromHover = (
   index: number,
   onHighlight?: () => void,
 ) => void;
+
+interface WaitingHover {
+  index: number;
+  onHighlight?: () => void;
+}
 
 /**
  * Keep the highlighted option visible during keyboard navigation — but not for
@@ -46,10 +51,9 @@ export type HighlightFromHover = (
  * Keyboard paths call the raw setter directly and keep their scrolling; hover
  * paths call the returned callback.
  *
- * After a keyboard move, a hover waits for the pointer to move. A key that
- * scrolls the list moves rows under a still mouse, and the browser reports
- * the row under it as entered; that row takes the highlight only once the
- * pointer moves.
+ * A keyboard move holds the highlight. A key that scrolls the list moves rows
+ * under a still mouse, and the browser reports the row under it as entered;
+ * that row takes the highlight only once the pointer moves or presses.
  */
 export function useHighlightedOptionScroll({
   isOpen,
@@ -61,18 +65,70 @@ export function useHighlightedOptionScroll({
   // The callback reads no render state, so memoized rows keep one function.
   const hoveredIndexRef = useRef<number | null>(null);
   const shownIndexRef = useRef(highlightedIndex);
-  // Set by a keyboard move, cleared by the next real pointer move.
-  const isKeyAnchoredRef = useRef(false);
-  // The hover that came while the keyboard held the highlight.
-  const waitingHoverRef = useRef<{
-    index: number;
-    onHighlight?: () => void;
-  } | null>(null);
+  // The hover that came while a keyboard move held the highlight.
+  const waitingHoverRef = useRef<WaitingHover | null>(null);
+  // Present while a keyboard move holds the highlight; removes the hold's
+  // document listeners.
+  const holdRef = useRef<(() => void) | null>(null);
+  const setHighlightedIndexRef = useRef(setHighlightedIndex);
+  // The pointer's last screen position a hold saw, kept across holds.
   const lastPointerRef = useRef<{x: number; y: number} | null>(null);
+
+  const applyHover = useCallback((hover: WaitingHover) => {
+    hoveredIndexRef.current = hover.index;
+    setHighlightedIndexRef.current(hover.index);
+    hover.onHighlight?.();
+  }, []);
+
+  const endHold = useCallback(() => {
+    holdRef.current?.();
+    holdRef.current = null;
+  }, []);
+
+  const releaseHold = useCallback(() => {
+    endHold();
+    const waiting = waitingHoverRef.current;
+    waitingHoverRef.current = null;
+    if (waiting != null) {
+      applyHover(waiting);
+    }
+  }, [applyHover, endHold]);
+
+  // Holds the highlight until the pointer moves or presses. The listeners
+  // live only while the hold does. Movement is read by screen coordinates: a
+  // scroll moves the rows, not the pointer. The browser reports a row as
+  // entered before the move that reaches it, so the first real move gives
+  // that row the highlight. A press releases at once, so a held press lights
+  // the pressed row.
+  const startHold = useCallback(() => {
+    waitingHoverRef.current = null;
+    if (holdRef.current != null) {
+      return;
+    }
+    const onPointerMove = (event: PointerEvent) => {
+      const last = lastPointerRef.current;
+      lastPointerRef.current = {x: event.screenX, y: event.screenY};
+      if (
+        last != null &&
+        last.x === event.screenX &&
+        last.y === event.screenY
+      ) {
+        return;
+      }
+      releaseHold();
+    };
+    const options = {capture: true, passive: true} as const;
+    document.addEventListener('pointermove', onPointerMove, options);
+    document.addEventListener('pointerdown', releaseHold, options);
+    holdRef.current = () => {
+      document.removeEventListener('pointermove', onPointerMove, options);
+      document.removeEventListener('pointerdown', releaseHold, options);
+    };
+  }, [releaseHold]);
 
   const highlightFromHover = useCallback<HighlightFromHover>(
     (index, onHighlight) => {
-      if (isKeyAnchoredRef.current) {
+      if (holdRef.current != null) {
         waitingHoverRef.current = {index, onHighlight};
         return;
       }
@@ -83,40 +139,13 @@ export function useHighlightedOptionScroll({
     [setHighlightedIndex],
   );
 
-  // Effect: subscribes to the document's pointer moves while the list is
-  // open. Movement is read by screen coordinates: a scroll moves the rows,
-  // not the pointer. The browser reports a row as entered before the move
-  // that reaches it, so the first real move gives that row the highlight.
+  // Effect: keeps the hold's document listeners calling the current setter.
   useEffect(() => {
-    if (!isOpen) {
-      return undefined;
-    }
-    const onPointerMove = (event: PointerEvent) => {
-      const last = lastPointerRef.current;
-      lastPointerRef.current = {x: event.screenX, y: event.screenY};
-      if (
-        !isKeyAnchoredRef.current ||
-        (last != null && last.x === event.screenX && last.y === event.screenY)
-      ) {
-        return;
-      }
-      isKeyAnchoredRef.current = false;
-      const waiting = waitingHoverRef.current;
-      waitingHoverRef.current = null;
-      if (waiting != null) {
-        highlightFromHover(waiting.index, waiting.onHighlight);
-      }
-    };
-    document.addEventListener('pointermove', onPointerMove, {
-      capture: true,
-      passive: true,
-    });
-    return () => {
-      document.removeEventListener('pointermove', onPointerMove, {
-        capture: true,
-      });
-    };
-  }, [isOpen, highlightFromHover]);
+    setHighlightedIndexRef.current = setHighlightedIndex;
+  }, [setHighlightedIndex]);
+
+  // Effect: removes the hold's document listeners on unmount.
+  useEffect(() => endHold, [endHold]);
 
   useEffect(() => {
     // Only a move to the hovered row came from the hover. A hover on the row
@@ -128,19 +157,22 @@ export function useHighlightedOptionScroll({
       hasMoved && hoveredIndexRef.current === highlightedIndex;
     hoveredIndexRef.current = null;
     if (!isOpen) {
-      isKeyAnchoredRef.current = false;
       waitingHoverRef.current = null;
+      endHold();
       return;
     }
     if (isFromHover || highlightedIndex < 0) {
       return;
     }
-    isKeyAnchoredRef.current = true;
-    waitingHoverRef.current = null;
-    document
-      .getElementById(getOptionId(highlightedIndex))
-      ?.scrollIntoView?.({block: 'nearest'});
-  }, [isOpen, highlightedIndex, getOptionId, itemCount]);
+    // A list that is not shown (a closed CommandPalette reports itself as
+    // open) has no option to scroll and no hover to hold back.
+    const option = document.getElementById(getOptionId(highlightedIndex));
+    if (option == null) {
+      return;
+    }
+    startHold();
+    option.scrollIntoView?.({block: 'nearest'});
+  }, [isOpen, highlightedIndex, getOptionId, itemCount, endHold, startHold]);
 
   return highlightFromHover;
 }

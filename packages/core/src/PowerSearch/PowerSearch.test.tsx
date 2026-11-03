@@ -1004,6 +1004,7 @@ describe('field menu highlight under a resting pointer', () => {
       name: 'Status',
       hidden: true,
     });
+    fireEvent.pointerMove(status, {screenX: 30, screenY: 40});
     fireEvent.mouseMove(status);
     expect(input.getAttribute('aria-activedescendant')).toBe(status.id);
   });

@@ -51,6 +51,25 @@ beforeEach(() => {
 });
 
 describe('CommandPalette', () => {
+  it('a closed palette adds no document pointermove listener', () => {
+    const addListener = vi.spyOn(document, 'addEventListener');
+    try {
+      render(
+        <CommandPalette
+          isOpen={false}
+          onOpenChange={() => {}}
+          searchSource={simpleSource}
+        />,
+      );
+      const moveListeners = addListener.mock.calls.filter(
+        ([type]) => type === 'pointermove',
+      );
+      expect(moveListeners).toEqual([]);
+    } finally {
+      addListener.mockRestore();
+    }
+  });
+
   it('renders when isOpen is true', () => {
     render(
       <CommandPalette
