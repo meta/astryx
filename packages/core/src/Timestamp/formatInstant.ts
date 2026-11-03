@@ -30,7 +30,7 @@
  */
 
 import {SHARED_DATE_FORMAT_OPTIONS, getWallClock} from '../utils/plainDate';
-import type {CalendarSystem} from '../utils/calendarSystem';
+import {formatInstantDate, type CalendarSystem} from '../utils/calendarSystem';
 import type {Locale} from '../i18n/types';
 import type {TimestampFormat} from './Timestamp';
 
@@ -164,25 +164,31 @@ export function formatInstant(
       }).format(date);
 
     case 'date':
-      return new Intl.DateTimeFormat(locale, {
-        ...SHARED_DATE_FORMAT_OPTIONS.date,
-        ...zone,
+      return formatInstantDate(
         calendar,
-      }).format(date);
+        date,
+        SHARED_DATE_FORMAT_OPTIONS.date,
+        locale,
+        timeZone,
+      );
 
     case 'date_long':
-      return new Intl.DateTimeFormat(locale, {
-        ...SHARED_DATE_FORMAT_OPTIONS.date_long,
-        ...zone,
+      return formatInstantDate(
         calendar,
-      }).format(date);
+        date,
+        SHARED_DATE_FORMAT_OPTIONS.date_long,
+        locale,
+        timeZone,
+      );
 
     case 'date_weekday':
-      return new Intl.DateTimeFormat(locale, {
-        ...SHARED_DATE_FORMAT_OPTIONS.date_weekday,
-        ...zone,
+      return formatInstantDate(
         calendar,
-      }).format(date);
+        date,
+        SHARED_DATE_FORMAT_OPTIONS.date_weekday,
+        locale,
+        timeZone,
+      );
 
     case 'date_time':
       return new Intl.DateTimeFormat(locale, {

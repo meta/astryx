@@ -29,7 +29,8 @@ import {formatInstant} from './formatInstant';
 import {formatTooltipLines} from './tooltipEntries';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {InternationalizationProvider} from '../i18n';
-import type {CalendarSystem} from '../utils/calendarSystem';
+import {formatCalendarDate, type CalendarSystem} from '../utils/calendarSystem';
+import {SHARED_DATE_FORMAT_OPTIONS} from '../utils/plainDate';
 import {__resetDevWarnings} from '../utils/devWarning';
 
 async function openTimestampHoverCard(): Promise<HTMLElement> {
@@ -1913,5 +1914,63 @@ describe('Timestamp calendar systems', () => {
       expect(screen.getByTestId('ts')).toHaveTextContent('2569');
       expect(warn).not.toHaveBeenCalled();
     });
+  });
+
+  it.each(['date', 'date_long', 'date_weekday'] as const)(
+    'writes %s in the Chinese calendar as Calendar names the day',
+    format => {
+      const day = {year: 2027, month: 2, day: 6};
+      expect(
+        formatInstant(new Date('2027-02-06T12:00:00Z'), format, 'en', {
+          timeZone: 'UTC',
+          calendar: 'chinese',
+        }),
+      ).toBe(
+        formatCalendarDate(
+          'chinese',
+          day,
+          SHARED_DATE_FORMAT_OPTIONS[format],
+          'en',
+        ),
+      );
+    },
+  );
+
+  it('hydrates a clock format rendered on a server without Temporal', () => {
+    const value = Date.now() / 1000 - 7200;
+    const element = (
+      <InternationalizationProvider locale="en" calendar="persian">
+        <Timestamp value={value} format="relative" hasTooltip={false} />
+      </InternationalizationProvider>
+    );
+    const globals = globalThis as {Temporal?: unknown};
+    const savedTemporal = globals.Temporal;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const host = document.createElement('div');
+    delete globals.Temporal;
+    try {
+      host.innerHTML = renderToString(element);
+    } finally {
+      globals.Temporal = savedTemporal;
+    }
+    document.body.appendChild(host);
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const recovered: unknown[] = [];
+    let root: Root | undefined;
+    try {
+      act(() => {
+        root = hydrateRoot(host, element, {
+          onRecoverableError: error => recovered.push(error),
+        });
+      });
+      expect(host.textContent).toBe('2 hours ago');
+      expect(recovered).toEqual([]);
+      expect(errors).not.toHaveBeenCalled();
+    } finally {
+      errors.mockRestore();
+      warn.mockRestore();
+      act(() => root?.unmount());
+      host.remove();
+    }
   });
 });

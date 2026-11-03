@@ -46,7 +46,6 @@ const getPercentFormat = byLocale(
     }),
 );
 
-/** One date formatter per locale and calendar. */
 function byLocaleAndCalendar(
   options: Intl.DateTimeFormatOptions,
 ): (locale: Locale, calendar: CalendarSystem) => Intl.DateTimeFormat {

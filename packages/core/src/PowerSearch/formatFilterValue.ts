@@ -13,7 +13,7 @@
 import type {OperatorValue, FilterValue, EnumItem} from './types';
 import type {InternalConfig} from './useInternalConfig';
 import type {Locale, TranslatorFn} from '../i18n';
-import type {CalendarSystem} from '../utils/calendarSystem';
+import {formatInstantDate, type CalendarSystem} from '../utils/calendarSystem';
 import {truncateCharacters} from '../utils/characters';
 import {registerEnglishFallback} from '../i18n/englishFallback';
 import english from '../i18n/generated-english/PowerSearch/formatFilterValue.generated';
@@ -70,24 +70,25 @@ export function formatDateAbsolute(
   isDateOnly = true,
   calendar: CalendarSystem = 'gregory',
 ): string {
-  const options: Intl.DateTimeFormatOptions = isDateOnly
-    ? {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        timeZone: resolveDateZone(timezoneID, true),
-        calendar,
-      }
-    : {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        timeZone: resolveDateZone(timezoneID, false),
-        calendar,
-      };
-  return new Intl.DateTimeFormat(locale, options).format(unixSeconds * 1000);
+  const instant = new Date(unixSeconds * 1000);
+  if (isDateOnly) {
+    return formatInstantDate(
+      calendar,
+      instant,
+      {year: 'numeric', month: 'short', day: 'numeric'},
+      locale,
+      resolveDateZone(timezoneID, true),
+    );
+  }
+  return new Intl.DateTimeFormat(locale, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: resolveDateZone(timezoneID, false),
+    calendar,
+  }).format(instant);
 }
 
 function formatRelativeDate(value: string): string {

@@ -21,6 +21,8 @@ import {
   plainDateFormatDayNumber,
   plainDateFormatStandaloneMonthYear,
   plainDateFormatToParts,
+  plainDateFromDate,
+  plainDateFromInstant,
   plainDateIsInRange,
   getDaysInMonth,
 } from './plainDate';
@@ -374,6 +376,32 @@ export function formatCalendarDate(
           : part.value,
     )
     .join('');
+}
+
+/**
+ * Formats the day an instant falls on in `timeZone` (the host's zone when
+ * omitted) with date-only `options`, naming its month and day as
+ * `formatCalendarDate` does.
+ */
+export function formatInstantDate(
+  calendar: CalendarSystem,
+  instant: Date,
+  options: Intl.DateTimeFormatOptions,
+  locale: Locale,
+  timeZone?: string,
+): string {
+  if (calendar === 'gregory' || !isCalendarSystemAvailable(calendar)) {
+    return new Intl.DateTimeFormat(locale, {
+      ...options,
+      ...(timeZone === undefined ? {} : {timeZone}),
+      calendar,
+    }).format(instant);
+  }
+  const day =
+    timeZone === undefined
+      ? plainDateFromDate(instant)
+      : plainDateFromInstant(instant.getTime(), timeZone);
+  return formatCalendarDate(calendar, day, options, locale);
 }
 
 /**
