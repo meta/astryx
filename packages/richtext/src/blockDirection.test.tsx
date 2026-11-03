@@ -85,9 +85,9 @@ describe('a top-level block carries its own direction (spec:AST-061 FR6)', () =>
       expect(container.querySelector('table')).not.toBeNull(),
     );
     expect(blockDirections(container)).toEqual(['auto']);
-    const parts = [
-      ...container.querySelectorAll('table, tr, th, td'),
-    ].map(part => part.getAttribute('dir'));
+    const parts = [...container.querySelectorAll('table, tr, th, td')].map(
+      part => part.getAttribute('dir'),
+    );
     expect(parts.every(dir => dir === null || dir === 'auto')).toBe(true);
   });
 
@@ -112,9 +112,7 @@ describe('a top-level block carries its own direction (spec:AST-061 FR6)', () =>
         )}
       />,
     );
-    await waitFor(() =>
-      expect(container.querySelector('ul')).not.toBeNull(),
-    );
+    await waitFor(() => expect(container.querySelector('ul')).not.toBeNull());
     // The list and the code block take no direction of their own. A fenced
     // code block has no per-line node to carry one, so the block keeps the
     // document's direction and `unicode-bidi: plaintext` gives each line
@@ -213,9 +211,7 @@ describe('a top-level block carries its own direction (spec:AST-061 FR6)', () =>
     const {container} = render(
       <RichTextView value={markdownToEditorStateJSON('🎉 מזל טוב')} />,
     );
-    await waitFor(() =>
-      expect(container.querySelector('p')).not.toBeNull(),
-    );
+    await waitFor(() => expect(container.querySelector('p')).not.toBeNull());
     // Fails before the fix with 'ltr': the emoji is a surrogate pair, which
     // Lexical's left-to-right class matches.
     expect(container.querySelector('p')?.getAttribute('dir')).toBe('rtl');

@@ -2025,7 +2025,11 @@ for (const direction of ['ltr', 'rtl'] as const) {
     );
     await page
       .locator('textarea')
-      .fill(['```js', '// \u05e9\u05dc\u05d5\u05dd', 'const x = 1;', '```'].join('\n'));
+      .fill(
+        ['```js', '// \u05e9\u05dc\u05d5\u05dd', 'const x = 1;', '```'].join(
+          '\n',
+        ),
+      );
     // The story draws the editor and the read-only view of one document.
     await expect(page.locator('[data-lexical-editor] code')).toHaveCount(2);
     // Syntax highlighting splits a line into many spans, so read the
@@ -2072,8 +2076,7 @@ for (const direction of ['ltr', 'rtl'] as const) {
             const sorted = [...row].sort((a, b) => a.left - b.left);
             return {
               visual: sorted.map(entry => entry.char).join(''),
-              startsAtLeftEdge:
-                Math.round(sorted[0].left - box.left) <= 20,
+              startsAtLeftEdge: Math.round(sorted[0].left - box.left) <= 20,
             };
           }),
       };

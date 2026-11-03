@@ -102,9 +102,9 @@ for (const direction of ['ltr', 'rtl'] as const) {
     const paragraph = page.locator(`${EDITOR} > p`).first();
     // Nothing typed: no direction of its own, so it follows the document.
     await expect(paragraph).toHaveAttribute('dir', 'auto');
-    expect(
-      await paragraph.evaluate(el => getComputedStyle(el).direction),
-    ).toBe(direction);
+    expect(await paragraph.evaluate(el => getComputedStyle(el).direction)).toBe(
+      direction,
+    );
 
     await page.keyboard.type('123 ');
     // Still no strong character.
@@ -112,15 +112,15 @@ for (const direction of ['ltr', 'rtl'] as const) {
 
     await page.keyboard.type('Hello');
     await expect(paragraph).toHaveAttribute('dir', 'ltr');
-    expect(
-      await paragraph.evaluate(el => getComputedStyle(el).direction),
-    ).toBe('ltr');
+    expect(await paragraph.evaluate(el => getComputedStyle(el).direction)).toBe(
+      'ltr',
+    );
 
     await page.keyboard.press('ControlOrMeta+a');
     await page.keyboard.type('\u05e9\u05dc\u05d5\u05dd');
     await expect(paragraph).toHaveAttribute('dir', 'rtl');
-    expect(
-      await paragraph.evaluate(el => getComputedStyle(el).direction),
-    ).toBe('rtl');
+    expect(await paragraph.evaluate(el => getComputedStyle(el).direction)).toBe(
+      'rtl',
+    );
   });
 }
