@@ -152,6 +152,11 @@ describe('theme build --watch', () => {
       [CLI_BIN, 'theme', 'build', 'wt.mjs', '--watch'],
       {cwd: tmpDir, env: {...process.env, FORCE_COLOR: '0'}},
     );
+    // Vitest runs this even when the test times out mid-wait, which skips the
+    // `finally` below, so the watcher never outlives the test.
+    onTestFinished(() => {
+      child.kill('SIGKILL');
+    });
     let stdout = '';
     child.stdout.on('data', d => (stdout += d.toString()));
     child.stderr.on('data', d => (stdout += d.toString()));
@@ -169,7 +174,13 @@ describe('theme build --watch', () => {
       const changed = `export default { name: 'wt', tokens: { '--color-bg': '#010203' } };\n`;
       fs.writeFileSync(themeFile, changed);
       await waitForOutput(child, read, 'rebuilding wt\\.mjs', {
-        onPoll: () => fs.writeFileSync(themeFile, changed),
+        onPoll: () => {
+          try {
+            fs.writeFileSync(themeFile, changed);
+          } catch {
+            // The temporary folder is gone at teardown.
+          }
+        },
       });
       // The second "Watching" line follows the finished rebuild.
       await waitForOutput(child, read, 'Watching', {count: 2});
@@ -313,29 +324,7 @@ describe('theme build --watch', () => {
       // child process. Wait for that line instead of polling for the files
       // under the 8 s deadline: on a loaded runner two builds can outlast it.
       // If the line never comes, the test fails at its own time limit.
-      await new Promise((resolve, reject) => {
-        const check = () => {
-          if (/Watching w1\.mjs, w2\.mjs/.test(stdout)) {
-            stop();
-            resolve(undefined);
-          }
-        };
-        const exited = (/** @type {number | null} */ code) => {
-          stop();
-          reject(
-            new Error(`watch exited (${code}) before watching:\n${stdout}`),
-          );
-        };
-        const stop = () => {
-          child.stdout.off('data', check);
-          child.stderr.off('data', check);
-          child.off('exit', exited);
-        };
-        child.stdout.on('data', check);
-        child.stderr.on('data', check);
-        child.on('exit', exited);
-        check();
-      });
+      await waitForOutput(child, () => stdout, 'Watching w1\\.mjs, w2\\.mjs');
       expect(fs.existsSync(path.join(tmpDir, 'w1.css'))).toBe(true);
       expect(fs.existsSync(path.join(tmpDir, 'w2.css'))).toBe(true);
       const firstCssBefore = fs.readFileSync(
