@@ -24,10 +24,11 @@ const DECIMAL_DIGIT = new RegExp('\\p{Nd}', 'u');
 
 /**
  * Zero-width joiners, bidi marks and isolates (which Intl writes around RTL
- * numbers and day periods), and the BOM Excel prepends.
+ * numbers and day periods), bidi embeddings in pasted text, and the BOM Excel
+ * prepends.
  */
 export const INVISIBLE_CHARS =
-  /[\u200B-\u200D\u200E\u200F\u061C\u2066-\u2069\uFEFF]/g;
+  /[\u200B-\u200D\u200E\u200F\u061C\u202A-\u202E\u2066-\u2069\uFEFF]/g;
 
 /**
  * Value of any Unicode decimal digit. Each digit script lays its ten digits

@@ -4,7 +4,8 @@
  * @file calendarDateParser.roundtrip.test.ts
  * @input Uses vitest, temporal-polyfill, calendarDateParser, calendarSystem
  * @output Round-trip matrix: every calendar's committed text and format hint,
- *   in its native locale, English and Swedish, read back as the same date
+ *   in its native locale, English, Swedish, and locales whose words collide or
+ *   whose years cycle, read back as the same date
  * @position Testing; samples 1900 through 2100 for calendarDateParser.ts
  */
 
@@ -48,6 +49,22 @@ const NATIVE_LOCALES: Readonly<Record<CalendarSystem, string>> = {
   'islamic-civil': 'ar-EG',
   'islamic-tbla': 'ar',
   'islamic-umalqura': 'ar-SA',
+};
+
+// Weekday words that are also month or era names, weekdays written with a
+// number, month names with a digit, and years written in the 60-year cycle.
+const MORE_LOCALES: Partial<Record<CalendarSystem, string>> = {
+  gregory: 'fr-FR it-IT es-ES ro-RO vi-VN',
+  buddhist: 'fr-FR',
+  roc: 'de-DE',
+  japanese: 'it-IT hu-HU',
+  persian: 'nb-NO',
+  hebrew: 'vi-VN',
+  chinese: 'ca-ES cs-CZ de-DE fi-FI fr-FR it-IT nl-NL pl-PL pt-PT ru-RU',
+  dangi: 'pt-BR fi-FI',
+  ethiopic: 'pt-BR',
+  'islamic-civil': 'fr-FR hu-HU sr-RS',
+  'islamic-umalqura': 'hu-HU sr-RS',
 };
 
 // Chinese and Korean text costs far more to compose under the polyfill, so
@@ -107,4 +124,9 @@ describe('committed text reads back as the same date (FR13)', () => {
       expect(failures('sv-SE', calendar, step * 3, 4)).toEqual([]);
     });
   }
+  it.each(Object.entries(MORE_LOCALES))('%s in %s', (calendar, locales) => {
+    for (const locale of locales.split(' ')) {
+      expect(failures(locale, calendar as CalendarSystem, 997, 1)).toEqual([]);
+    }
+  });
 });

@@ -2,7 +2,8 @@
 
 /**
  * @file calendarDateParser.ts
- * @input Typed date text, a locale, and a calendar system; Intl and calendarSystem
+ * @input Typed date text, a locale, and a calendar system; Intl, calendarSystem
+ *   and unicodeDigits
  * @output Cached per-locale lexicons, a typed-date parser with distinct rejection
  *   kinds, committed display text, the format hint, and calendar display names
  * @position Core utility; reads and writes dates typed in a calendar system
@@ -16,10 +17,12 @@ import type {PlainDate} from './dateTypes';
 import type {Locale} from '../i18n/types';
 import {
   type CalendarSystem,
+  type CalendarDateFields,
   calendarDateFromFields,
   calendarDayOfMonth,
   calendarMonthOf,
   calendarMonthsInYear,
+  formatDayNumber,
   isCalendarSystemAvailable,
   isGregorianAligned,
 } from './calendarSystem';
@@ -31,6 +34,7 @@ import {
   plainDateAddDays,
   plainDateToday,
 } from './plainDate';
+import {INVISIBLE_CHARS, toAsciiDigits} from './unicodeDigits';
 
 /** How a typed text reads in a calendar. */
 export type CalendarDateParseResult =
@@ -86,6 +90,7 @@ export interface CalendarDateLexicon {
   readonly eras: ReadonlyMap<string, string>;
   readonly yearAliases: ReadonlyMap<string, string>;
   readonly trailers: ReadonlySet<string>;
+  readonly weekdays: ReadonlySet<string>;
   readonly vocabulary: ReadonlyArray<string>;
   readonly vocabularySet: ReadonlySet<string>;
   readonly isNumericMonthOrdinal: boolean;
@@ -125,14 +130,19 @@ const LONG_WITH_WEEKDAY: Intl.DateTimeFormatOptions = {
   ...LONG,
   weekday: 'short',
 };
-const BIDI_MARKS = /[\u061c\u200b-\u200f\u202a-\u202e\u2066-\u2069]/g;
-const DECIMAL_DIGIT = /\p{Nd}/u;
-const LETTER = /[\p{L}\p{M}]/u;
-const SEPARATOR = /[\p{P}\p{S}]/u;
+// Built at runtime: the Babel copy in a Next.js source build rejects a
+// `\p{...}` regex literal.
+const LETTER = new RegExp('[\\p{L}\\p{M}]', 'u');
+const SEPARATOR = new RegExp('[\\p{P}\\p{S}]', 'u');
+const ONLY_SEPARATORS = new RegExp('^[\\p{P}\\p{S}]+$', 'u');
+const NOT_WORDS = new RegExp('[\\d\\p{P}\\p{S}]+', 'gu');
+const LATIN_MARKS = new RegExp('(\\p{Script=Latin})\\p{Mn}+', 'gu');
 // Scripts written without spaces between words: a name may run into the
 // next word, so a name match there needs no word boundary.
-const SPACELESS =
-  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u;
+const SPACELESS = new RegExp(
+  '[\\p{Script=Han}\\p{Script=Hiragana}\\p{Script=Katakana}\\p{Script=Hangul}\\p{Script=Thai}\\p{Script=Lao}\\p{Script=Khmer}\\p{Script=Myanmar}]',
+  'u',
+);
 const LUNISOLAR: ReadonlySet<CalendarSystem> = new Set(['chinese', 'dangi']);
 const WITHOUT_ERA: ReadonlySet<CalendarSystem> = new Set([
   'gregory',
@@ -238,42 +248,9 @@ function partsOf(
   return formatter(locale, calendar, options).formatToParts(epochMs(pd));
 }
 
-const numberFormatters = new Map<string, Intl.NumberFormat>();
-
-function formatInteger(value: number, locale: Locale, numberingSystem: string) {
-  const key = `${locale}|${numberingSystem}`;
-  let result = numberFormatters.get(key);
-  if (result == null) {
-    result = new Intl.NumberFormat(locale, {
-      useGrouping: false,
-      numberingSystem,
-    });
-    numberFormatters.set(key, result);
-  }
-  return result.format(value);
-}
-
 // =============================================================================
 // Normalization
 // =============================================================================
-
-const digitValues = new Map<string, string>();
-
-function asciiDigit(ch: string): string {
-  let value = digitValues.get(ch);
-  if (value === undefined) {
-    // Unicode encodes every decimal digit set as ten consecutive code points
-    // that start at zero, so the distance to the run's start is the value.
-    const codePoint = ch.codePointAt(0) ?? 0;
-    let zero = codePoint;
-    while (zero > 0 && DECIMAL_DIGIT.test(String.fromCodePoint(zero - 1))) {
-      zero--;
-    }
-    value = String((codePoint - zero) % 10);
-    digitValues.set(ch, value);
-  }
-  return value;
-}
 
 /** Text in one comparable form: ASCII digits, lower case, no Latin accents. */
 export function normalizeDateText(text: string, locale: Locale): string {
@@ -281,21 +258,18 @@ export function normalizeDateText(text: string, locale: Locale): string {
   if (/^[\u0020-\u007e]*$/.test(text)) {
     return /[A-Z]/.test(text) ? text.toLocaleLowerCase(locale) : text;
   }
-  let result = text
+  const folded = text
     .normalize('NFKC')
-    .replace(BIDI_MARKS, '')
-    .replace(/\p{Nd}/gu, asciiDigit)
+    .replace(INVISIBLE_CHARS, '')
     // People type an ASCII apostrophe or quote for Hebrew geresh and gershayim.
     .replace(/[\u05f3\u2018\u2019\u02bc`]/g, "'")
     .replace(/[\u05f4\u201c\u201d]/g, '"');
-  if (/[\p{Lu}\p{Lt}]/u.test(result)) {
-    result = result.toLocaleLowerCase(locale);
-  }
+  let result = (toAsciiDigits(folded) ?? folded).toLocaleLowerCase(locale);
   if (/[\u00c0-\u024f\u1e00-\u1eff]/.test(result)) {
     // Fold Latin accents only: in other scripts a mark is part of the letter.
     result = result
       .normalize('NFD')
-      .replace(/(\p{Script=Latin})\p{Mn}+/gu, '$1')
+      .replace(LATIN_MARKS, '$1')
       .normalize('NFC');
   }
   return result;
@@ -409,24 +383,24 @@ function buildLexicon(
   const yearAliases = new Map<string, string>();
   const skip = new Set<string>();
   const trailers = new Set<string>();
+  const weekdays = new Set<string>();
 
-  const addSkip = (text: string) => {
-    for (const word of norm(text)
-      .replace(/[\d\p{P}\p{S}]+/gu, ' ')
-      .split(/\s+/)) {
+  const addSkip = (text: string, words = skip) => {
+    for (const word of norm(text).replace(NOT_WORDS, ' ').split(/\s+/)) {
       if (word) {
-        skip.add(word);
+        words.add(word);
       }
     }
   };
-  const addMonth = (text: string, code: string) => {
+  const addMonth = (text: string, {code, ordinal}: SampledMonth) => {
     const name = norm(text);
-    if (!name) {
-      return;
-    }
-    if (/\d/.test(name)) {
-      // A month number with affixes: "11月", "9:e mån", "윤6", "6bis".
-      const match = /^(\D*)(\d+)(\D*)$/.exec(name);
+    // A month number with affixes: "11月", "9:e mån", "윤6", "6bis". A name
+    // can also hold another number: Hungarian "Réb. 1" is the third month.
+    const match = /^(\D*)(\d+)(\D*)$/.exec(name);
+    const isOwnNumber = [ordinal, Number(code.slice(1, 3))].includes(
+      Number(match?.[2]),
+    );
+    if (!name || (/\d/.test(name) && (!LETTER.test(name) || isOwnNumber))) {
       if (match != null && (match[1] || match[3])) {
         templates.set(`${match[1]}#${match[3]}`, {
           pre: match[1],
@@ -476,7 +450,7 @@ function buildLexicon(
         } else {
           baseText.set(baseKey, text);
         }
-        addMonth(text, month.code);
+        addMonth(text, month);
       });
     }
   }
@@ -506,7 +480,7 @@ function buildLexicon(
           const tail = parts.at(-1);
           if (tail?.type === 'literal') {
             const trailer = norm(tail.value).replace(/\s+/g, '');
-            if (trailer && /^[\p{P}\p{S}]+$/u.test(trailer)) {
+            if (ONLY_SEPARATORS.test(trailer)) {
               trailers.add(trailer);
             }
           }
@@ -521,6 +495,11 @@ function buildLexicon(
         )?.value;
         if (text != null) {
           addSkip(text);
+          addSkip(text, weekdays);
+          // Vietnamese writes a weekday as a word and a number: "Thứ 2".
+          if (/\d/.test(norm(text))) {
+            skip.add(norm(text));
+          }
         }
       }
     }
@@ -549,8 +528,12 @@ function buildLexicon(
   for (const [code, iso] of Object.entries(ERA_SAMPLES[calendar] ?? {})) {
     const sample = isoToPlainDate(iso);
     for (const loc of locales) {
-      for (const era of eraWidths) {
-        const text = partsOf(loc, calendar, ERA_WIDTHS[era], sample).find(
+      // A full date can spell the era differently, such as French "EB".
+      for (const options of [
+        ...eraWidths.map(width => ERA_WIDTHS[width]),
+        ...literalFormats,
+      ]) {
+        const text = partsOf(loc, calendar, options, sample).find(
           p => p.type === 'era',
         )?.value;
         if (text != null && norm(text)) {
@@ -625,6 +608,7 @@ function buildLexicon(
     eras,
     yearAliases,
     trailers,
+    weekdays,
     vocabulary: [...vocabularySet].sort((a, b) => b.length - a.length),
     vocabularySet,
     isNumericMonthOrdinal,
@@ -657,9 +641,13 @@ function calendarEraYear(
 
 type Token =
   | {readonly t: 'num'; readonly v: string; readonly isAlias?: boolean}
-  | {readonly t: 'month'; readonly codes: ReadonlySet<string>}
+  | {
+      readonly t: 'month';
+      readonly codes: ReadonlySet<string>;
+      readonly isWeekday?: boolean;
+    }
   | {readonly t: 'monthNum'; readonly v: string; readonly isLeap: boolean}
-  | {readonly t: 'era'; readonly code: string}
+  | {readonly t: 'era'; readonly code: string; readonly isWeekday?: boolean}
   | {readonly t: 'leap'}
   | {readonly t: 'word'}
   | {readonly t: 'sep'; readonly v: string};
@@ -805,13 +793,14 @@ function matchJoinedWord(
 }
 
 function wordToken(word: string, lex: CalendarDateLexicon): Token {
+  const isWeekday = lex.weekdays.has(word.replace(NOT_WORDS, ''));
   const codes = lex.months.get(word);
   if (codes != null) {
-    return {t: 'month', codes};
+    return {t: 'month', codes, isWeekday};
   }
   const era = lex.eras.get(word);
   if (era != null) {
-    return {t: 'era', code: era};
+    return {t: 'era', code: era, isWeekday};
   }
   if (lex.leapMarkers.has(word)) {
     return {t: 'leap'};
@@ -843,6 +832,22 @@ function monthByPrefix(
   return found;
 }
 
+/**
+ * A weekday word can also be a month or era name, such as French "mar.". When
+ * the text has another month or era, the first such word is the weekday.
+ */
+function weekdaysAsWords(tokens: Token[]): Token[] {
+  let out = tokens;
+  for (const kinds of [['month', 'monthNum'], ['era']]) {
+    const named = out.filter(t => kinds.includes(t.t));
+    const weekday = named.find(t => 'isWeekday' in t && t.isWeekday);
+    if (named.length > 1 && weekday != null) {
+      out = out.map(t => (t === weekday ? {t: 'word'} : t));
+    }
+  }
+  return out;
+}
+
 function sameCodes(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
   return a.size === b.size && [...a].every(code => b.has(code));
 }
@@ -855,14 +860,9 @@ const INCOMPLETE: CalendarDateParseResult = {kind: 'incomplete'};
 const UNREADABLE: CalendarDateParseResult = {kind: 'unreadable'};
 const EMPTY: CalendarDateParseResult = {kind: 'empty'};
 
-interface DateFields {
-  era?: string;
-  eraYear?: number;
-  year?: number;
-  monthCode?: string;
-  month?: number;
-  day: number;
-}
+type DateFields = {
+  -readonly [K in keyof CalendarDateFields]: CalendarDateFields[K];
+};
 
 /**
  * Reads typed text as a date in the lexicon's calendar. Values are Gregorian.
@@ -889,10 +889,11 @@ export function parseCalendarDate(
       );
     }
   }
-  const tokens = tokenize(s, lex);
-  if (tokens === 'incomplete' || tokens === 'unreadable') {
-    return tokens === 'incomplete' ? INCOMPLETE : UNREADABLE;
+  const read = tokenize(s, lex);
+  if (read === 'incomplete' || read === 'unreadable') {
+    return read === 'incomplete' ? INCOMPLETE : UNREADABLE;
   }
+  const tokens = weekdaysAsWords(read);
   const nums = tokens.filter(
     (token): token is Extract<Token, {t: 'num'}> => token.t === 'num',
   );
@@ -1112,18 +1113,13 @@ function isLastFieldClosed(
   }
   const value = Number(last.v);
   if (field === 'day') {
-    const length = date == null ? 31 : daysInMonth(lex.calendar, date);
-    return value * 10 > length;
+    // Not the month's own length: a 3 can start a 30 that the month lacks,
+    // and the field must then report that day, not the 3rd.
+    return value * 10 > 31;
   }
   const monthsInYear =
     date == null ? 13 : calendarMonthsInYear(lex.calendar, date);
   return value * 10 > monthsInYear;
-}
-
-function daysInMonth(calendar: CalendarSystem, date: PlainDate): number {
-  return isGregorianAligned(calendar)
-    ? getDaysInMonth(date.year, date.month)
-    : calendarMonthOf(calendar, date).length;
 }
 
 function windowedYear(twoDigits: number, current: number): number {
@@ -1279,26 +1275,19 @@ function formatLunisolar(
 ): string {
   const month = calendarMonthOf(calendar, pd);
   const mid = plainDateAddDays(month.start, Math.floor(month.length / 2));
-  let resolved = options;
-  let parts = partsOf(locale, calendar, resolved, mid);
-  if (!parts.some(p => partType(p) === 'relatedYear' || p.type === 'year')) {
-    // Some locales write only the cycle year name; the long form also has
-    // the Gregorian year.
-    resolved = options.weekday ? LONG_WITH_WEEKDAY : LONG;
-    parts = partsOf(locale, calendar, resolved, mid);
-  }
-  const numberingSystem = formatter(
-    locale,
-    calendar,
-    resolved,
-  ).resolvedOptions().numberingSystem;
-  const weekday = partsOf(locale, calendar, resolved, pd).find(
+  const parts = partsOf(locale, calendar, options, mid);
+  const numberingSystem = formatter(locale, calendar, options).resolvedOptions()
+    .numberingSystem;
+  const weekday = partsOf(locale, calendar, options, pd).find(
     p => p.type === 'weekday',
   )?.value;
+  // Some locales write the year as its place in the 60-year cycle, which
+  // does not read back. The related Gregorian year does.
+  const hasRelatedYear = parts.some(p => partType(p) === 'relatedYear');
   return parts
     .map(part => {
       if (part.type === 'day') {
-        return formatInteger(
+        return formatDayNumber(
           calendarDayOfMonth(calendar, pd),
           locale,
           numberingSystem,
@@ -1306,6 +1295,10 @@ function formatLunisolar(
       }
       if (part.type === 'weekday') {
         return weekday ?? part.value;
+      }
+      if (!hasRelatedYear && /^year(Name)?$/.test(partType(part))) {
+        const year = calendarYearOf(calendar, mid);
+        return formatDayNumber(year, locale, numberingSystem);
       }
       return part.value;
     })

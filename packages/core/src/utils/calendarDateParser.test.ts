@@ -108,6 +108,15 @@ describe('reading dates written in the calendar (FR9)', () => {
     expect(iso('ja-JP', 'japanese', 'R8/11/2')).toBe('2026-11-02');
     expect(iso('ja-JP', 'japanese', 'Reiwa 8/11/2')).toBe('2026-11-02');
     expect(iso('de-DE', 'gregory', 'Mo., 2. Nov. 2026')).toBe('2026-11-02');
+    expect(iso('hu-HU', 'islamic-civil', 'MF 1447. Réb. 1 2.')).toBe(
+      '2025-08-26',
+    );
+  });
+
+  it('reads a weekday word that is also a month name as the weekday', () => {
+    expect(iso('fr-FR', 'gregory', 'mar. 3 nov. 2026')).toBe('2026-11-03');
+    expect(iso('it-IT', 'gregory', 'mar 3 mar 2026')).toBe('2026-03-03');
+    expect(iso('vi-VN', 'gregory', 'Thứ 3, 3 thg 11, 2026')).toBe('2026-11-03');
   });
 
   it('ignores case and Latin diacritics', () => {
@@ -276,6 +285,11 @@ describe('complete input (FR12)', () => {
     expect(complete('ja-JP', 'japanese', '令和8年11月2日')).toBe(true);
     expect(complete('ko-KR', 'dangi', '2026. 9. 2')).toBe(false);
     expect(complete('ko-KR', 'dangi', '2026. 9. 2.')).toBe(true);
+  });
+
+  it('keeps a one-digit day open until it exceeds the longest month, 31', () => {
+    expect(complete('fa-IR', 'persian', '1404/12/3')).toBe(false);
+    expect(complete('sv-SE', 'gregory', '2026-02-3')).toBe(false);
   });
 
   it('counts an era year with its era as a complete year', () => {
