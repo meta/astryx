@@ -577,7 +577,7 @@ export function PowerSearch({
       ? config.getOperator(editedFilter.field, editedFilter.operator)
       : undefined;
   const editedBuiltInFilter =
-    editedOperator != null &&
+    editedOperator == null ||
     componentOverrides?.[editedOperator.value.type]?.Token == null
       ? editedFilter
       : undefined;

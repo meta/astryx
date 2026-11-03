@@ -144,6 +144,28 @@ describe('a PowerSearch filter token', () => {
     ).toBeInTheDocument();
   });
 
+  it('opens a named dialog for a token whose operator the config lacks', async () => {
+    const user = userEvent.setup();
+    render(
+      <PowerSearch
+        config={config}
+        filters={[{...openFilter, operator: 'was'}]}
+        onChange={() => {}}
+      />,
+    );
+
+    const token = screen
+      .getAllByRole('button', {name: /^Status/})
+      .find(button => button.getAttribute('aria-haspopup') === 'dialog');
+    expect(token).toBeDefined();
+    await user.click(token!);
+
+    const dialog = await screen.findByRole('dialog', {hidden: true});
+    expect(dialog).toHaveAccessibleName(
+      token!.getAttribute('aria-label') ?? '',
+    );
+  });
+
   it('keeps the plain popover for a token from a components override', async () => {
     const user = userEvent.setup();
     function CustomToken({onClick}: PowerSearchTokenProps) {
