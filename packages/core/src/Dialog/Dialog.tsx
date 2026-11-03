@@ -660,16 +660,15 @@ export function Dialog({
           return;
         }
         // isFocusLost reads the dialog's own document. For a dialog in an
-        // iframe opened from the page, the page's focus must be lost too, or
-        // rest on the frame that hosted the dialog: a page control the user
-        // pressed to remove the dialog keeps its focus.
-        const triggerDocument = trigger.ownerDocument;
+        // iframe, the document that hosts the frame must also have lost focus
+        // or keep it on that frame, wherever the opener is: a control the
+        // user pressed outside the frame to remove the dialog keeps its focus.
         const host = dialog.ownerDocument.defaultView?.frameElement ?? null;
-        const isPageFocusLost =
-          dialog.ownerDocument === triggerDocument ||
-          isFocusDetached(triggerDocument) ||
-          triggerDocument.activeElement === host;
-        if (isFocusLost(dialog) && isPageFocusLost) {
+        const isHostFocusLost =
+          host == null ||
+          isFocusDetached(host.ownerDocument) ||
+          host.ownerDocument.activeElement === host;
+        if (isFocusLost(dialog) && isHostFocusLost) {
           focusForLastInput(trigger);
         }
       });

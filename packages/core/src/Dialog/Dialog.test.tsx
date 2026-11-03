@@ -250,6 +250,60 @@ describe('Dialog', () => {
       }
     });
 
+    it('keeps the focus of a page control that removes a dialog opened inside an iframe', async () => {
+      const frame = document.createElement('iframe');
+      document.body.append(frame);
+      const frameDocument = frame.contentDocument!;
+      // jsdom gives each document its own HTMLDialogElement prototype.
+      const {prototype} = frameDocument.defaultView!.HTMLDialogElement;
+      prototype.showModal = HTMLDialogElement.prototype.showModal;
+      prototype.close = HTMLDialogElement.prototype.close;
+      function FramedApp() {
+        const [isOpen, setIsOpen] = useState(false);
+        return (
+          <>
+            {createPortal(
+              <>
+                <button type="button" onClick={() => setIsOpen(true)}>
+                  Open in frame
+                </button>
+                {isOpen ? (
+                  <Dialog isOpen onOpenChange={setIsOpen} aria-label="In frame">
+                    <button type="button">Inside frame</button>
+                  </Dialog>
+                ) : null}
+              </>,
+              frameDocument.body,
+            )}
+            <button type="button" onClick={() => setIsOpen(false)}>
+              Remove from page
+            </button>
+          </>
+        );
+      }
+      try {
+        const {unmount} = render(<FramedApp />);
+        const opener = frameDocument.querySelector('button')!;
+        opener.focus();
+        fireEvent.click(opener);
+        // Focus was last inside the dialog in the frame's document.
+        Array.from(frameDocument.querySelectorAll('button'))
+          .find(button => button.textContent === 'Inside frame')!
+          .focus();
+        const remove = screen.getByRole('button', {name: 'Remove from page'});
+        remove.focus();
+
+        fireEvent.click(remove);
+        await Promise.resolve();
+
+        expect(frameDocument.querySelector('dialog')).toBeNull();
+        expect(document.activeElement).toBe(remove);
+        unmount();
+      } finally {
+        frame.remove();
+      }
+    });
+
     it('leaves focus that moved elsewhere when the dialog unmounts', async () => {
       function Page() {
         const [isOpen, setIsOpen] = useState(true);
