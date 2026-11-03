@@ -727,33 +727,38 @@ function StandaloneBottomSheet({
   // Native listeners, because React drops the `focusout` a browser sends while
   // React removes the focused element, and Firefox and WebKit send no
   // `focusout` for a removed element at all, so a subtree change is read too.
-  // Each reads the focus after the event. Outside a hold, releasing it
-  // changes nothing.
-  const exitFocusRef = useCallback((dialog: HTMLDialogElement | null) => {
-    if (dialog == null) {
-      return;
-    }
-    const releaseIfFocusLeft = () => {
-      if (!dialog.contains(dialog.ownerDocument.activeElement)) {
-        setIsExitFocusHeld(false);
+  // Each reads the focus after the event. They attach only while a closing
+  // sheet holds focus, so a closed or open sheet observes nothing.
+  const isWatchingExitFocus =
+    !isOpen && isPresented && !isReplaced && isExitFocusHeld;
+  const exitFocusRef = useCallback(
+    (dialog: HTMLDialogElement | null) => {
+      if (dialog == null || !isWatchingExitFocus) {
+        return;
       }
-    };
-    const onFocusOut = () => queueMicrotask(releaseIfFocusLeft);
-    dialog.addEventListener('focusout', onFocusOut);
-    const unobserve = observeMutations(
-      dialog,
-      {
-        childList: true,
-        subtree: true,
-        attributeFilter: ['disabled', 'hidden', 'inert'],
-      },
-      releaseIfFocusLeft,
-    );
-    return () => {
-      dialog.removeEventListener('focusout', onFocusOut);
-      unobserve();
-    };
-  }, []);
+      const releaseIfFocusLeft = () => {
+        if (!dialog.contains(dialog.ownerDocument.activeElement)) {
+          setIsExitFocusHeld(false);
+        }
+      };
+      const onFocusOut = () => queueMicrotask(releaseIfFocusLeft);
+      dialog.addEventListener('focusout', onFocusOut);
+      const unobserve = observeMutations(
+        dialog,
+        {
+          childList: true,
+          subtree: true,
+          attributeFilter: ['disabled', 'hidden', 'inert'],
+        },
+        releaseIfFocusLeft,
+      );
+      return () => {
+        dialog.removeEventListener('focusout', onFocusOut);
+        unobserve();
+      };
+    },
+    [isWatchingExitFocus],
+  );
   const dialogComposedRef = useMergedRefs(dialogRef, modalityRef, exitFocusRef);
   useScrollLock(shouldPresent && hasScrim);
   useDevWarning(
