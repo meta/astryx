@@ -852,6 +852,50 @@ describe('DateTimeInput', () => {
     });
   });
 
+  describe('typed text when the field becomes disabled or busy', () => {
+    // An unfinished year makes the commit reject the text, which a commit
+    // while enabled keeps and marks invalid.
+    it.each([
+      ['isLoading', 'blur'],
+      ['isLoading', 'Enter'],
+      ['isDisabled', 'blur'],
+      ['isDisabled', 'Enter'],
+    ] as const)(
+      'keeps the value and drops typed text on %s, then %s',
+      async (state, gesture) => {
+        const user = userEvent.setup();
+        const onChange = vi.fn();
+        const value = '2026-01-12T09:00' as ISODateTimeString;
+        const {rerender} = render(
+          <DateTimeInput label="Starts" value={value} onChange={onChange} />,
+        );
+        const dateInput = screen.getByRole('combobox');
+        await user.clear(dateInput);
+        await user.type(dateInput, '3/15/2');
+        expect(onChange).not.toHaveBeenCalled();
+
+        rerender(
+          <DateTimeInput
+            label="Starts"
+            value={value}
+            onChange={onChange}
+            {...{[state]: true}}
+          />,
+        );
+        if (gesture === 'Enter') {
+          await user.keyboard('{Enter}');
+        } else {
+          await user.tab();
+        }
+
+        expect(dateInput).toHaveValue('January 12, 2026');
+        expect(onChange).not.toHaveBeenCalled();
+        expect(dateInput).not.toHaveAttribute('aria-invalid');
+        expect(screen.queryByText('Invalid date')).not.toBeInTheDocument();
+      },
+    );
+  });
+
   describe('invalid typed input feedback (WCAG 3.3.1)', () => {
     it('sets aria-invalid="true" on the date input when typed date is unparseable', () => {
       render(<DateTimeInput label="Meeting" onChange={() => {}} />);
