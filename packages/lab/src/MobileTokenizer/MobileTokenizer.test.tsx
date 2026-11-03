@@ -185,6 +185,9 @@ describe('MobileTokenizer (Lab, single-sheet flow)', () => {
     let discard = await screen.findByRole('alertdialog', {
       name: 'Discard changes?',
     });
+    // A scrim press starts and ends on the dialog itself.
+    fireEvent.pointerDown(discard);
+    fireEvent.pointerUp(discard);
     fireEvent.click(discard);
     await waitFor(() =>
       expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument(),

@@ -2,8 +2,9 @@
 
 /**
  * @file useAnnounceRenderedText.adopters.test.tsx
- * @input Every core component that announces its own rendered content, with
- *   the shared own-content module replaced by a recorder
+ * @input Every core component that announces its own rendered content,
+ *   Tooltip's pin included, with the shared own-content module replaced by a
+ *   recorder
  * @output architecture:react-component-runtime INV10 test: each adopter hands
  *   its own-content announcement to the shared module and announces none of it
  *   itself
@@ -64,9 +65,9 @@ const {Selector} = await import('../Selector');
 const {MultiSelector} = await import('../MultiSelector');
 const {CommandPalette} = await import('../CommandPalette');
 const {BaseTypeahead} = await import('../Typeahead/BaseTypeahead');
-const {TokenizerWithPresentation} =
-  await import('../internal/tokenizer-presentation');
+const {Tokenizer} = await import('../Tokenizer/Tokenizer');
 const {createStaticSource} = await import('../Typeahead/createStaticSource');
+const {TooltipWithTriggerBehavior} = await import('../Tooltip/Tooltip');
 
 const source = createStaticSource([{id: 'apple', label: 'Apple'}]);
 
@@ -164,6 +165,18 @@ const ADOPTERS: Record<string, () => Promise<void>> = {
     fireEvent.change(screen.getByRole('combobox'), {target: {value: 'zzz'}});
     await expectDelegated('No results found');
   },
+  'Tooltip/useTooltip.tsx': async () => {
+    // A tooltip a press pinned says its own text (component:Tooltip FR10).
+    render(
+      <TooltipWithTriggerBehavior
+        content="Billed on the first of each month"
+        triggerBehavior="toggle">
+        <button type="button">About billing</button>
+      </TooltipWithTriggerBehavior>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'About billing'}));
+    await expectDelegated('Billed on the first of each month');
+  },
   'Tokenizer/TokenizerBottomSheet.tsx': async () => {
     // The sheet's own content is a caller's `emptySearchText` element; the
     // default EmptyState announces itself.
@@ -175,7 +188,7 @@ const ADOPTERS: Record<string, () => Promise<void>> = {
     // module's load alone outlasts it.
     await import('../Tokenizer/TokenizerBottomSheet');
     render(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={source}
         value={[]}

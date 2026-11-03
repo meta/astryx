@@ -162,4 +162,14 @@ describe('useMediaQuery', () => {
     const html = renderToString(createElement(TestComponent));
     expect(html).toContain('data-mobile="false"');
   });
+
+  it('answers its server default where the window has no matchMedia, as a test DOM may', () => {
+    vi.stubGlobal('matchMedia', undefined);
+    const off = renderHook(() => useMediaQuery('(pointer: coarse)'));
+    expect(off.result.current).toBe(false);
+    const on = renderHook(() => useMediaQuery('(pointer: coarse)', true));
+    expect(on.result.current).toBe(true);
+    off.unmount();
+    on.unmount();
+  });
 });
