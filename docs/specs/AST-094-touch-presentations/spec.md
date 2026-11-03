@@ -111,8 +111,9 @@ a measured, sourced difference exists.
   measures (0.55 for a scroll view and a sheet), and a release MUST pick its
   rest point by projecting its velocity the way its UIKit counterpart does:
   with a deceleration rate, or with a measured projection time.
-  A paging scroll view (the pager, and Carousel with `hasSnap` where the
-  pager runs) picks its rest page as its UIKit counterpart measures it, with no
+  A paging scroll view (the pager, and a Carousel given
+  `snap={useSnapPaging()}` where the pager runs, an opt-in under
+  `component:Carousel` FR7) picks its rest page as its UIKit counterpart measures it, with no
   projection: the nearest page, or the next page in the release's direction
   when the release is at least `paging.release.advanceSpeed` (300 pt/s) fast,
   at any position on the page. It moves at most
@@ -1068,7 +1069,7 @@ Rejected: cancelling moves only after the pan begins.
 **Reference:** `spec:AST-094/DEC-25`
 **Decider:** `cixzhang`, `2026-11-01`
 
-A pager, Carousel with `hasSnap` where the pager runs, and Lightbox's gallery pick the rest page and
+A pager, a Carousel given `snap={useSnapPaging()}` where the pager runs, and Lightbox's gallery pick the rest page and
 start the settle as UIKit's paging scroll view does on iOS 26.2. UIKit
 chooses the page by a speed threshold, the same 300 pt/s at 10, 25 and 40 %
 of a page, not by a projection, and starts a slow release's settle from rest.
