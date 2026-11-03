@@ -114,11 +114,13 @@
     "data-astryx-press"
   ],
   "packages/core/src/gestures/touchActionRule.ts": ["data-astryx-touch-action"],
+  "packages/core/src/hooks/createMenuPress.ts": [
+    "data-astryx-menu-press-surface"
+  ],
   "packages/core/src/hooks/useAnnounce.ts": [
     "data-astryx-live-region",
     "data-astryx-modal-live-region"
   ],
-  "packages/core/src/hooks/useMenuPress.ts": ["data-astryx-menu-press-surface"],
   "packages/core/src/theme/Theme.tsx": [
     "data-astryx-id",
     "data-astryx-id",

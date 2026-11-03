@@ -90,7 +90,8 @@ adopter.
 - Compatibility class: additive public hook and types; behavior change inside
   the menu family
 - Migration decision: `module:DropdownMenu/useMenuPress/DEC-3`; proposed
-  `module:DropdownMenu/useMenuPress/DEC-4` (pending owner review);
+  `module:DropdownMenu/useMenuPress/DEC-4` and
+  `module:DropdownMenu/useMenuPress/DEC-9` (pending owner review);
   `spec:AST-094` FR25 (a caller that needs the released 500 ms wait passes
   `longPressDelayMs: 500`)
 
@@ -328,6 +329,18 @@ the open, so a screen reader hears one open and one close.
 
 Rejected: opening a sub-menu when a finger rests on its row.
 
+### DEC-9 (proposed) — The options form is deprecated with its callers' migration
+
+**Reference:** `module:DropdownMenu/useMenuPress/DEC-9`
+**Decider:** proposed by `vjeux`, `2026-11-02`; pending owner review
+
+`useMenuPress(menuRef, options)` delegates to `createMenuPress`, as
+`architecture:public-component-api` INV22 asks. The options form,
+`useMenuPress({menuRef, …})`, is deprecated under INV9 only in the patch that
+migrates every maintained caller (`spec:AST-017` FR29c). DropdownMenu's
+trigger and the menus that track only presses on their items stay on it until
+the ref form can start a press only on an item.
+
 ## Open questions
 
 - **OQ1 — Is press-to-open the menu family's trigger model?** (`human-design`)
@@ -335,6 +348,10 @@ Rejected: opening a sub-menu when a finger rests on its row.
   mouse opens a DropdownMenu on press-down with the settle rule. Opening under
   a finger is `spec:AST-094` FR29's. Until the owner rules, the current record's FR1–FR7
   stand on their own.
+
+- **OQ2 — Does the options form wait for its callers' migration?** (`human-api`)
+  Proposed DEC-9 waits on this owner decision. Until the owner rules, the
+  options form is not deprecated.
 
 The former browser-evidence question is resolved: the touch pan, the finger
 slide and its stray click cannot be exercised in jsdom, and real-Chromium

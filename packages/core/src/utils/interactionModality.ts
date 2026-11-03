@@ -6,8 +6,9 @@
  * @file interactionModality.ts
  * @input Global pointerdown/keydown events
  * @output useInteractionModalityTracking, useInteractionModalityTrackingFor,
- *   and getInteractionModality, which reads how the user last interacted in a
- *   document
+ *   trackInteractionModalityIn and getInteractionModality. The third tracks a
+ *   document with no React, for a factory that owns its element. The last
+ *   reads how the user last interacted in a document.
  * @position Internal document-wide singleton; used where `:focus-visible`
  *   alone is too broad
  */
@@ -132,7 +133,9 @@ function trackInteractionModality(): () => void {
  * consumer installs the document's listener pair and the last one's cleanup
  * removes it. The page's own document keeps its document-lifetime listeners.
  */
-function trackInteractionModalityIn(targetDocument: Document): () => void {
+export function trackInteractionModalityIn(
+  targetDocument: Document,
+): () => void {
   if (typeof document !== 'undefined' && targetDocument === document) {
     return trackInteractionModality();
   }
@@ -233,15 +236,23 @@ export function useInteractionModalityTracking(): InteractionModalityTracking {
  * callback ref. After every commit it holds the ref's CURRENT owner document,
  * and the same Effect's cleanup releases it, so a detached, replaced or moved
  * node releases the old document before the new one is held.
+ * With `holdsDocument` false it holds no element document, for a hook whose
+ * element another tracker already holds (useMenuPress's ref form, through
+ * createMenuPress). The page's tracking still starts at mount, so a menu
+ * mounted at its first open reads that open's input.
  */
 export function useInteractionModalityTrackingFor(
   elementRef: RefObject<Element | null>,
+  holdsDocument = true,
 ): () => InteractionModality {
   // Syncs the document's interaction-modality tracking with this mount.
   useEffect(() => trackInteractionModality(), []);
   // Syncs modality tracking in the element's second document, such as an iframe
   // or a Picture-in-Picture window.
   useEffect(() => {
+    if (!holdsDocument) {
+      return undefined;
+    }
     const ownerDocument = elementRef.current?.ownerDocument;
     if (
       ownerDocument == null ||

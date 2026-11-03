@@ -17,19 +17,20 @@ export const docs = {
     'listbox',
     'macos',
     'ios',
+    'createMenuPress',
   ],
   params: [
     {
-      name: 'options',
-      type: 'UseMenuPressOptions',
-      description: 'Configuration object.',
+      name: 'menuRef',
+      type: 'RefObject<HTMLElement | null>',
+      description:
+        'The menu or listbox root — the surface whose rows a press picks from. The hook creates a press for the element behind the ref after each commit, calls the latest callbacks, creates a new press when the menu, its document, the trigger, a value option or the set of callbacks changes, and destroys it at unmount. While the element is unmounted there is no press, not even on the trigger.',
       required: true,
     },
     {
-      name: 'options.menuRef',
-      type: 'RefObject<HTMLElement | null>',
-      description:
-        'The menu or listbox root — the surface whose rows a press picks from.',
+      name: 'options',
+      type: 'UseMenuPressRefOptions',
+      description: 'Configuration object.',
       required: true,
     },
     {
@@ -43,7 +44,7 @@ export const docs = {
       name: 'options.triggerRef',
       type: 'RefObject<HTMLElement | null>',
       description:
-        'The control that opens the menu, when a press may start there.',
+        "The control that opens the menu, when a press may start there. It gets the press only while the menu element is mounted, so a menu rendered only while open opens on the trigger's click alone.",
     },
     {
       name: 'options.onTriggerPress',
@@ -94,13 +95,13 @@ export const docs = {
       name: 'menuProps',
       type: '{onPointerDown; "data-astryx-menu-press": ""}',
       description:
-        'Spread onto the menu root. Claims presses that begin inside it and marks the root as carrying the press model.',
+        'Options form only, useMenuPress({menuRef, …}): spread onto the menu root. Claims presses that begin inside it and marks the root as carrying the press model.',
     },
     {
       name: 'triggerProps',
       type: '{onPointerDown; onContextMenu}',
       description:
-        'Spread onto the trigger: a mouse press opens the menu at once; a finger held for the delay opens it with the finger still down.',
+        'Options form only: spread onto the trigger. A mouse press opens the menu at once; a finger held for the delay opens it with the finger still down.',
     },
     {
       name: 'isTriggerClickFromPress',
@@ -112,7 +113,7 @@ export const docs = {
       name: 'cancel',
       type: '() => void',
       description:
-        'End the gesture in flight with nothing acting, for when the menu closes under it.',
+        'End the gesture in flight with nothing acting, for when the menu closes under it. Nothing is spread: the press listens on the menu and its trigger itself and marks the menu root with data-astryx-menu-press. Without React, createMenuPress(menu, options) takes the same options with the trigger as an element (trigger) and returns {isTriggerClickFromPress, cancel, destroy}; destroy removes every listener it added.',
     },
   ],
   usage: {
@@ -144,6 +145,11 @@ export const docs = {
         description:
           'Read a row click with detail 0 as a keyboard activation; the hook dispatches its pointer activation with detail 0 too. Use isMenuPressActivation() to tell them apart.',
       },
+      {
+        guidance: true,
+        description:
+          "Prefer the ref form, useMenuPress(menuRef, {triggerRef, …}), for a new menu: it listens on the menu and the trigger itself, so nothing is spread. Its press, the trigger's included, exists only while the menu element is mounted. For a menu rendered only while open that a trigger press opens, use the options form, useMenuPress({menuRef, …}), which returns menuProps and triggerProps to spread.",
+      },
     ],
   },
   relatedComponents: ['DropdownMenu', 'ContextMenu', 'Selector'],
@@ -157,10 +163,12 @@ export const docsDense = {
   description:
     'macOS/iOS menu press model for any pointer: the row under the RELEASE acts, the highlight follows a held pointer, a mouse opens on press and drags in, a held finger opens with the finger down. Document-level pointerId tracking; the browser stray click after a touch is swallowed. Already mounted by DropdownMenu / ContextMenu / DropdownMenuSubMenu / Selector / menu bottom sheet.',
   paramDescriptions: {
+    menuRef:
+      'menu / listbox root; a press per element, latest callbacks, new press on a new menu / document / trigger / value option / callback set; none while unmounted; destroyed at unmount.',
     options: 'config.',
-    'options.menuRef': 'menu / listbox root.',
     'options.itemSelector': 'selector for ENABLED rows; anything else clears.',
-    'options.triggerRef': 'the control that opens the menu.',
+    'options.triggerRef':
+      'the control that opens the menu; pressed only while the menu is mounted.',
     'options.onTriggerPress':
       'mouse press / held finger on trigger: open, return whether it opened (false = the press closed it).',
     'options.onHighlight':
@@ -174,11 +182,14 @@ export const docsDense = {
     'options.isEnabled': 'false = inert.',
   },
   returnDescriptions: {
-    menuProps: 'spread on menu root (claims presses, marks the root).',
-    triggerProps: 'spread on trigger (press-open, held-finger open).',
+    menuProps:
+      'options form: spread on menu root (claims presses, marks the root).',
+    triggerProps:
+      'options form: spread on trigger (press-open, held-finger open).',
     isTriggerClickFromPress:
       'true = the trigger click belongs to the press that already opened / closed; ignore it.',
-    cancel: 'end the gesture w/o acting.',
+    cancel:
+      'end the gesture w/o acting. Nothing to spread. No React: createMenuPress(menu, {trigger, …}) → {isTriggerClickFromPress, cancel, destroy}.',
   },
   usage: {
     description:
@@ -207,6 +218,11 @@ export const docsDense = {
         guidance: false,
         description:
           'Treat a detail-0 row click as keyboard; the hook dispatches w/ detail 0 too — use isMenuPressActivation().',
+      },
+      {
+        guidance: true,
+        description:
+          'Prefer useMenuPress(menuRef, {triggerRef, …}) (nothing to spread) over useMenuPress({menuRef, …}) + menuProps / triggerProps spreads, unless the menu renders only while open: the ref form presses only while the menu is mounted, trigger included.',
       },
     ],
   },

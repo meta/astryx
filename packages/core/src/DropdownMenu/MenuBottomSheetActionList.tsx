@@ -74,8 +74,7 @@ export function MenuBottomSheetActionList({
   // The press model: the row under a finger's RELEASE acts, and the
   // highlight (focus) follows the finger across the rows. The sheet is modal,
   // so a release outside it is the scrim's, not a dismissal of ours.
-  const menuPress = useMenuPress({
-    menuRef: listRef,
+  useMenuPress(listRef, {
     itemSelector: SHEET_ROW_SELECTOR,
   });
 
@@ -148,11 +147,7 @@ export function MenuBottomSheetActionList({
   };
 
   return (
-    <List
-      ref={listComposedRef}
-      density="spacious"
-      xstyle={styles.list}
-      {...menuPress.menuProps}>
+    <List ref={listComposedRef} density="spacious" xstyle={styles.list}>
       {items.map((option, index) => {
         if ('type' in option && option.type === 'divider') {
           return (

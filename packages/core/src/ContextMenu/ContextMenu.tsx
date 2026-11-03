@@ -77,6 +77,7 @@ import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useMenuDrillIn} from '../DropdownMenu/useMenuDrillIn';
 import {useInternalListFocus} from '../hooks/useListFocus';
 import {useMenuPress} from '../hooks/useMenuPress';
+import {MENU_PRESS_MARKER} from '../hooks/menuPressMarker';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useLongPress} from '../hooks/useLongPress';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
@@ -749,9 +750,16 @@ export function ContextMenu({
 
   // The press model: the row under a release acts, the highlight follows a
   // held pointer, a mouse released outside dismisses and a finger leaves the
-  // menu open.
-  const menuPress = useMenuPress({
-    menuRef: listRef,
+  // menu open. It runs on the menu element only, never on the items sheet's
+  // container. That container's Back keeps its press paint, which skips
+  // anything inside a press root.
+  const pressMenuRef = useRef<HTMLDivElement>(null);
+  const menuElementRef = useMergedRefs(listRef, pressMenuRef);
+  // The touch sheet mounts the menu in its lazy boundary's own commit, before
+  // the press attaches. The marker is in the markup, so the menu carries it
+  // from its first paint.
+  const pressMarker = {[MENU_PRESS_MARKER]: ''};
+  useMenuPress(pressMenuRef, {
     itemSelector: MENU_ITEM_SELECTOR,
     onDismiss: closeMenu,
     isEnabled: !usesBottomSheet,
@@ -759,7 +767,8 @@ export function ContextMenu({
 
   const renderedMenu = (
     <div
-      ref={listRef}
+      ref={menuElementRef}
+      {...pressMarker}
       id={menuId}
       role="menu"
       data-autofocus={usesBottomSheet ? '' : undefined}
@@ -767,7 +776,6 @@ export function ContextMenu({
       aria-label={label}
       onKeyDown={listKeyDown}
       onContextMenu={e => e.preventDefault()}
-      {...menuPress.menuProps}
       {...mergeProps(
         themeProps('context-menu'),
         stylex.props(

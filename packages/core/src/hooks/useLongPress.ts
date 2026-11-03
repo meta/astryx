@@ -7,8 +7,8 @@
  * @input Long-press options: onLongPress callback, disabled, delayMs, moveCancelPx
  * @output Touch handlers to spread onto an element, plus the same detection
  *   driven by hand for a caller already observing pointer events
- * @position Core hook for long-press invocation; used by ContextMenu and by
- *   `useMenuPress` for the held-finger menu open
+ * @position Core hook for long-press invocation; used by ContextMenu. The menu
+ *   press runs longPressDetector directly for its held-finger open
  *
  * SYNC: When modified, update the hooks barrel /packages/core/src/hooks/index.ts
  * and the detector it wraps, /packages/core/src/hooks/longPressDetector.ts
@@ -18,9 +18,10 @@
 // the only touch way to open a surface at the press point.
 //
 // A caller can spread the touch handlers, or call `start`, `moveTo` and
-// `cancel` from its own pointer events, as `useMenuPress` does. Both ways use
-// the hold time, movement tolerance and timer of createLongPressDetector. So a
-// long press means the same thing on a context menu and on a menu trigger.
+// `cancel` from its own pointer events. The menu press runs
+// createLongPressDetector directly. The hold time, tolerance and timer are
+// the same, so a long press means the same on a context menu and on a menu
+// trigger.
 //
 // The defaults come from the long-press recognizer. The recognizer measures
 // its tolerance as a distance, as UIKit does. This hook measures it on each
@@ -30,13 +31,8 @@
 // The hold is a deadline on the touch events' own clock (longPressDetector.ts).
 
 import {useCallback, useEffect, useState} from 'react';
-import {
-  createLongPressDetector,
-  type LongPressTolerance,
-} from './longPressDetector';
+import {createLongPressDetector} from './longPressDetector';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
-
-export type {LongPressTolerance};
 
 export interface UseLongPressOptions {
   /** Fired with the touch start point once the press is held for `delayMs`. */
@@ -73,39 +69,9 @@ export interface UseLongPressHandlers {
   cancel: () => void;
 }
 
-/**
- * @internal The handlers with a per-press tolerance on `start`, for a core
- * caller that decides it as the press starts (useMenuPress's trigger). Not in
- * the hooks entry: the public `useLongPress` takes its tolerance from
- * `moveCancelPx`.
- */
-export interface LongPressDetectorHandlers extends Omit<
-  UseLongPressHandlers,
-  'start'
-> {
-  start: (
-    point: {x: number; y: number},
-    tolerance?: LongPressTolerance,
-  ) => void;
-}
-
 export function useLongPress(
   options: UseLongPressOptions,
 ): UseLongPressHandlers {
-  const {start, ...handlers} = useLongPressDetector(options);
-  // The public start takes only the point. A per-press tolerance stays
-  // internal to its core caller.
-  const startAt = useCallback(
-    (point: {x: number; y: number}) => start(point),
-    [start],
-  );
-  return {...handlers, start: startAt};
-}
-
-/** @internal useLongPress with a per-press tolerance (LongPressDetectorHandlers). */
-export function useLongPressDetector(
-  options: UseLongPressOptions,
-): LongPressDetectorHandlers {
   const [detector] = useState(() => createLongPressDetector(options));
   // The detector reads only committed options. A render that React discards
   // never reaches it.
@@ -114,13 +80,19 @@ export function useLongPressDetector(
   });
   // The detector's pending timer ends with the component.
   useEffect(() => detector.cancel, [detector]);
+  // The public start takes only the point. A per-press tolerance stays with
+  // the detector's core callers.
+  const startAt = useCallback(
+    (point: {x: number; y: number}) => detector.start(point),
+    [detector],
+  );
 
   return {
     onTouchStart: detector.touchStart,
     onTouchMove: detector.touchMove,
     onTouchEnd: detector.touchEnd,
     onTouchCancel: detector.touchEnd,
-    start: detector.start,
+    start: startAt,
     moveTo: detector.moveTo,
     cancel: detector.cancel,
   };

@@ -1548,8 +1548,7 @@ export function Selector<T extends SelectorOptionType>(
     surface.isOpen,
     filteredItems.length > MOST_ROWS_THAT_FIT,
   );
-  const listboxPress = useMenuPress({
-    menuRef: listboxRef,
+  useMenuPress(listboxRef, {
     itemSelector: '[role="option"]:not([aria-disabled="true"])',
     onHighlight: row => {
       if (row == null) {
@@ -1909,7 +1908,6 @@ export function Selector<T extends SelectorOptionType>(
         id={listboxId}
         role="listbox"
         aria-label={label}
-        {...listboxPress.menuProps}
         {...stylex.props(
           styles.dropdown,
           listboxHasOverflow
@@ -1927,7 +1925,6 @@ export function Selector<T extends SelectorOptionType>(
       ref={attachListbox}
       id={listboxId}
       role="listbox"
-      {...listboxPress.menuProps}
       // The trigger shows the value, so it cannot name the list.
       // A modal sheet removes an outside label from the accessibility tree.
       // The label element also holds the required marker and the tooltip.

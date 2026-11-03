@@ -310,8 +310,7 @@ export function TabMenu({
   // A press that slides across the options picks the one it lifts on, the
   // highlight following the pointer, as DropdownMenu's does
   // (`family:action-groups` FR1-FR3, FR5); a mouse released outside closes it.
-  const menuPress = useMenuPress({
-    menuRef: listRef,
+  useMenuPress(listRef, {
     itemSelector: MENU_ITEM_SELECTOR,
     onDismiss: popover.hide,
   });
@@ -419,7 +418,6 @@ export function TabMenu({
           id={menuId}
           role="menu"
           aria-label={label}
-          {...menuPress.menuProps}
           onKeyDown={handleMenuKeyDown}
           onFocus={handleFocus}
           {...mergeProps(

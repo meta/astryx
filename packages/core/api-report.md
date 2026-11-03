@@ -2917,7 +2917,9 @@ hook useListFocus: <T extends HTMLElement = HTMLElement>(options?: UseListFocusO
 hook useLocale: () => Locale
 hook useLongPress: (options: UseLongPressOptions) => UseLongPressHandlers
 hook useMediaQuery: (query: string, serverDefault?: boolean) => boolean
-hook useMenuPress: (options: UseMenuPressOptions) => UseMenuPressReturn
+hook useMenuPress
+  overload (menuRef: RefObject<HTMLElement | null>, options: UseMenuPressRefOptions) => UseMenuPressRefReturn
+  overload (options: UseMenuPressOptions) => UseMenuPressReturn
 hook useMergedRefs: <T>(refA?: Ref<T>, refB?: Ref<T>, refC?: Ref<T>, refD?: Ref<T>, refE?: Ref<T>, refF?: Ref<T>) => RefCallback<T>
 hook useMultiCombobox: ({…}: UseMultiComboboxOptions) => UseMultiComboboxResult
 hook useNavHeadingCloseContext: () => NavHeadingCloseContextValue | null
@@ -2990,6 +2992,7 @@ function createAnimator: (element: HTMLElement) => Animator
 function createCodeLanguage: ({…}: CreateCodeLanguageOptions) => CodeLanguage
 function createISOTimeString: (value: string) => ISOTimeString | null
 function createIncrementalState: <MathEnabled extends boolean = false>() => IncrementalState<MathEnabled>
+function createMenuPress: (menu: HTMLElement, options: CreateMenuPressOptions) => CreateMenuPressReturn
 function createPowerSearchConfig: <const D extends ReadonlyArray<FieldDefinition>>(definitions: D, configName?: string) => { config: PowerSearchConfig; applyFilters: <T extends InferData<D>>(filters: ReadonlyArray<PowerSearchFilter>, data: ReadonlyArray<T>) => T[] }
 function createStaticSource: <T extends SearchableItem>(items: T[], options?: CreateStaticSourceOptions<T>) => SearchSource<T>
 function dateToISO: (pd: PlainDate) => ISODateString
@@ -4090,6 +4093,21 @@ interface ContextRenderProps
 type CoreIndicatorName = 'check' | 'checkbox' | 'radio'
 type CoreTokenName = keyof typeof colorDefaults | keyof typeof spacingDefaults | keyof typeof sizeDefaults | keyof typeof borderDefaults | keyof typeof focusDefaults | keyof typeof  … #4209c9b3
 type CreateCodeLanguageOptions = CodeLanguageMeta & { tokenize: CodeLanguageTokenize }
+interface CreateMenuPressOptions
+  getScroller?: () => HTMLElement | null
+  hitTest?: (x: number, y: number) => Element | null
+  isEnabled?: boolean = true
+  itemSelector: string
+  longPressDelayMs?: number = 500
+  onActivate?: (row: HTMLElement, release: PointerEvent) => void
+  onDismiss?: () => void
+  onHighlight?: (row: HTMLElement | null) => void
+  onTriggerPress?: (pointerType: MenuPressPointerType) => boolean
+  trigger?: HTMLElement | null
+interface CreateMenuPressReturn
+  cancel: () => void
+  destroy: () => void
+  isTriggerClickFromPress: () => boolean
 interface CreateStaticSourceOptions<T extends SearchableItem = SearchableItem>
   keywords?: (item: T) => string[]
 interface CustomOperatorValue
@@ -6007,6 +6025,18 @@ interface UseMenuPressOptions
   onHighlight?: (row: HTMLElement | null) => void
   onTriggerPress?: (pointerType: MenuPressPointerType) => boolean
   triggerRef?: RefObject<HTMLElement | null>
+interface UseMenuPressRefOptions extends Omit<CreateMenuPressOptions, 'trigger'>
+  getScroller?: () => HTMLElement | null
+  hitTest?: (x: number, y: number) => Element | null
+  isEnabled?: boolean = true
+  itemSelector: string
+  longPressDelayMs?: number = 500
+  onActivate?: (row: HTMLElement, release: PointerEvent) => void
+  onDismiss?: () => void
+  onHighlight?: (row: HTMLElement | null) => void
+  onTriggerPress?: (pointerType: MenuPressPointerType) => boolean
+  triggerRef?: RefObject<HTMLElement | null>
+type UseMenuPressRefReturn = Pick<CreateMenuPressReturn, 'isTriggerClickFromPress' | 'cancel'>
 interface UseMenuPressReturn
   cancel: () => void
   isTriggerClickFromPress: () => boolean
@@ -9074,6 +9104,8 @@ AnnouncePoliteness (.)
 ClickableContainerResult (.)
 ContainerRevealOptions (.)
 ContentRevealOptions (.)
+CreateMenuPressOptions (.)
+CreateMenuPressReturn (.)
 EntryAnimationPreset (.)
 Hotkey (.)
 INTERACTIVE_SELECTORS (.)
@@ -9120,6 +9152,8 @@ UseListFocusReturn (.)
 UseLongPressHandlers (.)
 UseLongPressOptions (.)
 UseMenuPressOptions (.)
+UseMenuPressRefOptions (.)
+UseMenuPressRefReturn (.)
 UseMenuPressReturn (.)
 UseOverflowOptions (.)
 UseOverflowReturn (.)
@@ -9130,6 +9164,7 @@ UseTreeFocusOptions (.)
 UseTreeFocusReturn (.)
 UseTypeaheadOptions (.)
 UseTypeaheadReturn (.)
+createMenuPress (.)
 hasActiveFocusTrapEscape (.)
 hasInteractiveAncestor (.)
 hasTextSelection (.)

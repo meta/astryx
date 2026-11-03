@@ -5,8 +5,8 @@
  * @input The long-press numbers (motion/uikit/longPress.ts) and touch events
  * @output createLongPressDetector(): one long press at a time, timed on the
  *   touch events' clock, with no React
- * @position Internal; the core of useLongPress and useLongPressDetector
- *   (useLongPress.ts). Not in the hooks entry.
+ * @position Internal; the core of useLongPress (useLongPress.ts) and of the
+ *   menu press's held finger (createMenuPress.ts). Not in the hooks entry.
  *
  * SYNC: When modified, update /packages/core/src/hooks/useLongPress.ts
  */
@@ -41,7 +41,7 @@ export interface LongPressDetectorOptions {
 
 /**
  * @internal A press's own movement tolerance, for a core caller that decides
- * it as the press starts (useMenuPress's trigger).
+ * it as the press starts (the menu press's trigger).
  */
 export interface LongPressTolerance {
   moveCancelPx?: number;
