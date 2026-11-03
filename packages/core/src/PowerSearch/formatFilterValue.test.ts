@@ -1,11 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, expect, it} from 'vitest';
-import {
-  formatDateAbsolute,
-  formatDateAbsoluteCompact,
-  formatFilterValue,
-} from './formatFilterValue';
+import {formatDateAbsolute, formatFilterValue} from './formatFilterValue';
 import type {TranslatorFn} from '../i18n';
 import type {OperatorValue, FilterValue} from './types';
 
@@ -298,7 +294,6 @@ describe('formatFilterValue', () => {
         formatDateAbsolute(unixSeconds, 'th-TH', undefined),
         formatDateAbsolute(unixSeconds, 'th-TH', 'UTC', false),
         formatDateAbsolute(unixSeconds, 'th-TH', undefined, false),
-        formatDateAbsoluteCompact(unixSeconds, 'th-TH'),
       ]) {
         expect(value).toContain('2026');
         expect(value).not.toContain('2569');

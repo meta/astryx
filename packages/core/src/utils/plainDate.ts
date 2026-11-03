@@ -173,6 +173,38 @@ export function getTimeZoneParts(
   };
 }
 
+/** The wall-clock fields of an instant: in a zone, or in the viewer's. */
+export interface WallClock {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+}
+
+/**
+ * Wall-clock fields for an instant, in the named zone or in the viewer's
+ * zone (`undefined`, `null` or ""). The zone-less branch reads plain `Date`
+ * getters, so the default rendering needs no `Intl` zone data. The explicit
+ * return type keeps both branches on one shape.
+ */
+export function getWallClock(
+  date: Date,
+  timeZone: string | null | undefined,
+): WallClock {
+  return !timeZone
+    ? {
+        year: date.getFullYear(),
+        month: date.getMonth() + 1,
+        day: date.getDate(),
+        hour: date.getHours(),
+        minute: date.getMinutes(),
+        second: date.getSeconds(),
+      }
+    : getTimeZoneParts(date.getTime(), timeZone);
+}
+
 function getTimezoneOffsetMS(timezoneID: string, instant: number): number {
   const parts = getTimeZoneParts(instant, timezoneID);
   return (
