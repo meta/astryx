@@ -169,7 +169,15 @@ export class RichTextExtensionNode extends DecoratorNode<unknown> {
     return {span: importExtensionElement, div: importExtensionElement};
   }
 
-  constructor(facts: RichTextExtensionNodeFacts, format = 0, key?: NodeKey) {
+  // A registered node class must be constructible with no arguments: Lexical
+  // builds one of each to read its properties, and the Yjs binding does the
+  // same when it creates a collaborative binding. `factsFrom` supplies the
+  // same empty values it gives a node whose stored facts are damaged.
+  constructor(
+    facts: RichTextExtensionNodeFacts = factsFrom({}),
+    format = 0,
+    key?: NodeKey,
+  ) {
     super(key);
     this.__facts = facts;
     this.__format = facts.display === 'inline' ? format : 0;
