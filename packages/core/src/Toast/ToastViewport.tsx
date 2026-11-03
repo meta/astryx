@@ -21,6 +21,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from 'react';
 import type {ReactNode} from 'react';
 import {createPortal} from 'react-dom';
@@ -229,6 +230,8 @@ interface ToastRowProps {
   isReversed: boolean;
   onExited: (id: string) => void;
   onDismiss: (id: string, reason: ToastDismissReason) => void;
+  /** Whether the card carries its own live region (see ToastViewport). */
+  isLiveRegion: boolean;
 }
 
 /**
@@ -251,6 +254,7 @@ function ToastRow({
   isReversed,
   onExited,
   onDismiss,
+  isLiveRegion,
 }: ToastRowProps) {
   const o = entry.options;
   const type = o.type ?? 'info';
@@ -302,13 +306,16 @@ function ToastRow({
           onDismiss={reason => onDismiss(entry.id, reason)}
           renderContent={o.renderContent}
           timerKey={entry.id}
-          isLiveRegion={false}
+          isLiveRegion={isLiveRegion}
         />
       </div>
     </div>
   );
 }
 ToastRow.displayName = 'ToastRow';
+
+const hasActiveModalOutlet = (): boolean => getActiveModalOutlet() != null;
+const hasNoModalOutlet = (): boolean => false;
 
 /**
  * Container that renders and manages toast notifications. Place at the root
@@ -408,9 +415,7 @@ export function ToastViewport({
 
   // Announce toasts through the persistent singleton live regions. They are
   // mounted empty and only mutated afterwards, which screen readers announce
-  // (see useAnnounce.ts). The cards here carry no live region of their own:
-  // a card updated in place would announce its new text a second time. The
-  // announcement happens in addToast — the imperative
+  // (see useAnnounce.ts). The announcement happens in addToast — the imperative
   // dispatch path invoked once per useToast() call from an event handler,
   // never from render — so each toast is announced exactly once by
   // construction, independent of the React render lifecycle (StrictMode
@@ -418,6 +423,16 @@ export function ToastViewport({
   // re-renders never re-announce). It is client-only (addToast never runs
   // during SSR), so it is SSR-safe.
   const announce = useAnnounce();
+  // An open native modal hides the body-level channel above from assistive
+  // technology, so while the viewport is hosted in one, each card announces
+  // itself through its own live region instead. Outside a modal the cards
+  // carry none, so a card updated in place is announced once.
+  const hasModalOutlet = useSyncExternalStore(
+    subscribeModalOutlets,
+    hasActiveModalOutlet,
+    hasNoModalOutlet,
+  );
+  const isModalHosted = isTopLayer && hasModalOutlet;
 
   const addToast = useCallback(
     (entry: ToastEntry) => {
@@ -906,6 +921,7 @@ export function ToastViewport({
             isReversed={isReversed}
             onExited={handleExited}
             onDismiss={removeToast}
+            isLiveRegion={isModalHosted}
           />
         ))}
       </LayerContentBoundary>
