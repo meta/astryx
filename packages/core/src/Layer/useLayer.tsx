@@ -437,6 +437,11 @@ interface InternalLayerFields {
  */
 interface InternalContextLayerOptions extends ContextLayerOptions {
   /**
+   * Called as the layer starts to hide, before the browser hides it: from
+   * `hide()`, a light dismiss or the Escape key.
+   */
+  onBeforeHide?: () => void;
+  /**
    * The layer must never settle over its anchor (spec:AST-059 FR4). When the
    * standard fallback list settles it over its anchor, it switches to its
    * anchor-clear list: beside the trigger, then whichever block side is
@@ -1159,6 +1164,14 @@ function useLayerImplementation(
   options: InternalContextLayerOptions | FixedLayerOptions,
 ): InternalContextLayerReturn | InternalFixedLayerReturn {
   const {mode, onShow, onHide, lightDismiss = false} = options;
+  const onBeforeHide =
+    options.mode === 'context' ? options.onBeforeHide : undefined;
+  // The toggle listener is bound once. It reads the close-start callback
+  // through this ref, updated after each commit.
+  const onBeforeHideRef = useRef(onBeforeHide);
+  useIsomorphicLayoutEffect(() => {
+    onBeforeHideRef.current = onBeforeHide;
+  });
   const lazyMount = mode === 'context' ? (options.lazyMount ?? false) : false;
   const keepsMountAfterShow =
     lazyMount && mode === 'context'
@@ -1446,6 +1459,7 @@ function useLayerImplementation(
   const hide = useCallback(() => {
     pendingShowRef.current = false;
     if (isOpenRef.current) {
+      onBeforeHideRef.current?.();
       const el = popoverRef.current;
       // Clear the open state BEFORE hiding: hidePopover fires `toggle`, and
       // the reconciler below reads this ref to tell the browser's own
@@ -1588,6 +1602,9 @@ function useLayerImplementation(
     const toggleEvent = e as ToggleEvent;
     const el = e.currentTarget as HTMLElement | null;
     if (toggleEvent.newState === 'closed' && isOpenRef.current && el != null) {
+      // The browser started this close (a light dismiss or Escape); hide()
+      // calls the callback for its own closes.
+      onBeforeHideRef.current?.();
       observeBrowserHide(el);
     }
   }, []);
