@@ -191,9 +191,9 @@ These requirements apply to the text fields of `DateInput` and
 - **FR10 — Years are years of the calendar.** A typed year is a year of the
   active calendar, never a converted Gregorian year: `2026` in a Buddhist field
   is Buddhist year 2026. The format hint and the committed text show the era,
-  such as `พ.ศ.` or `民國`. Without a typed era, a one- or two-digit Japanese year
+  such as `พ.ศ.` (B.E., the Buddhist Era) or `民國` (Minguo, the ROC era). Without a typed era, a one- or two-digit Japanese year
   is in the current era and a four-digit Japanese year is Gregorian, an ROC year
-  of up to three digits is in the 民國 era, and an Ethiopic year is in the AM
+  of up to three digits is in the 民國 (Minguo) era, and an Ethiopic year is in the AM
   era. A two-digit year resolves to the year within the 80 years before and 19
   years after the current year of the calendar. A Japanese era year outside its
   era is rejected. No default year range applies; `min` and `max` catch a year
@@ -236,7 +236,9 @@ These requirements apply to the text fields of `DateInput` and
   of the selected calendar year, including leap months by name. When the year
   changes, the month stays if the new year has it and otherwise becomes its
   common counterpart. Year labels include the era where the calendar has eras,
-  such as `令和8`.
+  such as `令和8` (Reiwa 8). A year that an era change splits takes the era of
+  the selected date, as the native iOS picker does: 2019 reads `平成31` (Heisei 31) with January selected and `令和元` (Reiwa 1, the era's first year) with July
+  selected.
 - **FR17 — `DateRangeInput` shows the range in the calendar.** Its trigger text
   and its calendar use the calendar. It has no typed entry.
 
