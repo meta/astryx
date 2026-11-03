@@ -268,6 +268,23 @@ for (const [dir, pillPlacement] of [
     await expect(pill).toHaveCSS('opacity', '1');
     await page.mouse.move(x, y);
     await expect(pill).toHaveCSS('opacity', '1');
+    // The pill's hit area reaches only toward the zone. Just past its far
+    // side, the pointer finds the pane, so a short item keeps its own drag.
+    const farX =
+      pillBox.x >= zoneBox.x + zoneBox.width
+        ? pillBox.x + pillBox.width + 3
+        : pillBox.x - 3;
+    const isPillPastItsFarSide = await pill.evaluate(
+      (element, [px, py]) => {
+        const hit = document.elementFromPoint(px, py);
+        return hit != null && (hit === element || element.contains(hit));
+      },
+      [farX, y],
+    );
+    expect(
+      isPillPastItsFarSide,
+      'the pill takes no pointer past its far side',
+    ).toBe(false);
     const before = await handle.getAttribute('aria-valuenow');
     await page.mouse.down();
     await page.mouse.move(x + (dir === 'ltr' ? 40 : -40), y, {steps: 4});
