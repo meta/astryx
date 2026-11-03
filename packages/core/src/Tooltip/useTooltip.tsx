@@ -4,7 +4,7 @@
 
 /**
  * @file useTooltip.tsx
- * @input Uses useLayer, useTooltipHold, React hooks
+ * @input Uses useLayer, useTouchTriggerInternal, React hooks
  * @output Exports useTooltip hook with stable trigger refs for hover/focus/tap tooltips
  *   and imperative show() and hide() for an app-built toggle trigger
  * @position Layer hook; builds on useLayer for tooltip behavior
@@ -17,6 +17,7 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
   type ReactNode,
   type RefCallback,
 } from 'react';
@@ -27,12 +28,14 @@ import {
   type LayerAlignment,
   type LayerPlacement,
 } from '../Layer/useLayer';
-import type {LayerTouchTrigger} from '../Layer/useTouchTrigger';
+import {
+  useTouchTriggerInternal,
+  type LayerTouchTrigger,
+} from '../Layer/useTouchTrigger';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {registerLayerSurface} from '../Layer/layerSurfacePress';
-import {useTooltipHold} from './useTooltipHold';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {themeProps} from '../utils/themeProps';
 import {
@@ -350,34 +353,101 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     hideLayer();
   }, [clearTimeouts, hideLayer]);
 
-  // The app's show() holds the tooltip open. The hold also owns the
-  // tooltip's touch trigger, so this one call wires both.
+  // DOM listeners read the latest controlled state through a ref.
+  const latestRef = useRef({isOpen, isLayerOpen, onShow, onHide});
+  latestRef.current = {isOpen, isLayerOpen, onShow, onHide};
+
+  // The app's show() holds the tooltip open until hide(), Escape, a press or
+  // scroll outside, or focus leaving the trigger and the tooltip.
+  const isHeldRef = useRef(false);
+  const [isHeldState, setIsHeldState] = useState(false);
+  const setHeld = useCallback((next: boolean) => {
+    isHeldRef.current = next;
+    setIsHeldState(next);
+  }, []);
+
+  // The touch trigger's outside dismissal (a press or scroll outside) ends a
+  // hold with the tooltip.
+  const hideFromTouch = useCallback(() => {
+    if (isHeldRef.current) {
+      setHeld(false);
+      const latest = latestRef.current;
+      if (latest.isOpen !== undefined) {
+        latest.onHide?.();
+        return;
+      }
+    }
+    hideNow();
+  }, [setHeld, hideNow]);
+
   const {
-    isHeldOpen,
-    isHeld,
-    attach: attachHold,
-    drop: dropHold,
-    hold,
-    release,
-    isHoldShown,
-    touch: {
-      isTouchPointerRef,
-      isTouchInteraction,
-      handlePointerEnter,
-      handlePointerDown: handleTouchPointerDown,
-      clearTapOpen,
-    },
-  } = useTooltipHold({
+    isTouchPointerRef,
+    isTouchInteraction,
+    handlePointerEnter,
+    handlePointerDown: handleTouchPointerDown,
+    clearTapOpen,
+    armOutsideDismiss,
+  } = useTouchTriggerInternal({
     touchTrigger,
     isEnabled,
-    isOpen,
-    isLayerOpen,
+    isControlled: isOpen !== undefined,
+    isOpen: isLayerOpen,
     layerId,
     triggerRef,
     show: showNow,
-    hide: hideNow,
-    report: next => (next ? onShow?.() : onHide?.()),
+    hide: hideFromTouch,
   });
+
+  const isHeldOpen = useCallback(() => {
+    const latest = latestRef.current;
+    return isHeldRef.current && latest.isLayerOpen && latest.isOpen !== false;
+  }, []);
+
+  const releaseHold = useCallback(() => {
+    clearTapOpen();
+    setHeld(false);
+    const latest = latestRef.current;
+    if (latest.isOpen !== undefined) {
+      latest.onHide?.();
+      return;
+    }
+    hideNow();
+  }, [clearTapOpen, setHeld, hideNow]);
+
+  const dropHold = useCallback(() => {
+    if (isHeldRef.current) {
+      setHeld(false);
+    }
+  }, [setHeld]);
+
+  // Focus leaving the trigger and the tooltip ends a hold, whatever
+  // `focusTrigger` is. Focus that leaves for no element is a press's to
+  // decide. The trigger can sit in another document, so the check uses its
+  // own window.
+  const handleHeldFocusOut = useCallback(
+    (event: FocusEvent) => {
+      if (!isHeldOpen()) {
+        return;
+      }
+      const next = event.relatedTarget;
+      const trigger = triggerRef.current;
+      const view = trigger?.ownerDocument.defaultView;
+      if (view == null || !(next instanceof view.Node)) {
+        return;
+      }
+      const surface = trigger?.ownerDocument.getElementById(layerId) ?? null;
+      if (
+        trigger?.contains(next) === true ||
+        surface?.contains(next) === true
+      ) {
+        return;
+      }
+      releaseHold();
+    },
+    [isHeldOpen, layerId, releaseHold],
+  );
+
+  const isHoldShown = isHeldState && isLayerOpen && isOpen !== false;
 
   // Only a hold announces the text: a preview is already the trigger's
   // description.
@@ -546,7 +616,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     (event: PointerEvent) => {
       // The app's hide() closes a held tooltip. A press neither hides it here
       // nor waits for a tap verdict.
-      if (isHeld()) {
+      if (isHeldRef.current) {
         return;
       }
       if (handleTouchPointerDown(event)) {
@@ -558,7 +628,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       clearTimeouts();
       hideLayer();
     },
-    [isHeld, handleTouchPointerDown, isOpen, clearTimeouts, hideLayer],
+    [handleTouchPointerDown, isOpen, clearTimeouts, hideLayer],
   );
 
   // Interaction ref that handles event listeners only
@@ -570,6 +640,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         triggerRef.current.removeEventListener('mouseleave', handleMouseLeave);
         triggerRef.current.removeEventListener('focusin', handleFocusIn);
         triggerRef.current.removeEventListener('focusout', handleFocusOut);
+        triggerRef.current.removeEventListener('focusout', handleHeldFocusOut);
         triggerRef.current.removeEventListener(
           'pointerenter',
           handlePointerEnter,
@@ -598,11 +669,12 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         }
       }
 
+      // Its own focus-leave listener: `focusTrigger="never"` attaches none.
+      el?.addEventListener('focusout', handleHeldFocusOut);
       triggerRef.current = el;
-      attachHold(el);
     },
     [
-      attachHold,
+      handleHeldFocusOut,
       focusTrigger,
       handleMouseEnter,
       handleMouseLeave,
@@ -749,13 +821,23 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
 
   const show = useCallback(() => {
     clearTimeouts();
-    hold();
-  }, [clearTimeouts, hold]);
+    if (!isEnabled) {
+      return;
+    }
+    setHeld(true);
+    armOutsideDismiss();
+    const latest = latestRef.current;
+    if (latest.isOpen !== undefined) {
+      latest.onShow?.();
+      return;
+    }
+    showLayer();
+  }, [clearTimeouts, isEnabled, setHeld, armOutsideDismiss, showLayer]);
 
   const hide = useCallback(() => {
     clearTimeouts();
-    release();
-  }, [clearTimeouts, release]);
+    releaseHold();
+  }, [clearTimeouts, releaseHold]);
 
   return {
     ref,

@@ -284,7 +284,7 @@ export interface UseTouchTriggerReturn {
 
 /**
  * useTouchTrigger's return plus the outside dismissal's arm, for useTooltip's
- * hold (useTooltipHold). Not exported from the Layer entry point.
+ * hold behind show() and hide(). Not exported from the Layer entry point.
  *
  * @internal
  */

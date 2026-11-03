@@ -7,10 +7,9 @@
  *   button opens and closes the tooltip, Escape, a press outside, and focus
  *   leaving still close it, it is announced once, and a controlled isOpen is
  *   not overridden
- * @position Testing; validates the app toggle path in useTooltip.tsx and
- *   useTooltipHold.ts
+ * @position Testing; validates the app toggle path in useTooltip.tsx
  *
- * SYNC: When useTooltip.tsx or useTooltipHold.ts changes, update these tests.
+ * SYNC: When useTooltip.tsx changes, update these tests.
  */
 
 import {

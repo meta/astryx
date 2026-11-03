@@ -9,10 +9,9 @@
  *   it. The button carries the toggle state, a press on a hover preview keeps
  *   it shown, and the press stops at the button. Plus the touch trigger's
  *   outside close for a trigger in another document.
- * @position Unit tests beside InfoTip.tsx, useTooltip.tsx, useTooltipHold.ts
+ * @position Unit tests beside InfoTip.tsx and useTooltip.tsx
  *
- * SYNC: When InfoTip.tsx, useTooltip.tsx or useTooltipHold.ts change, update
- * these cases.
+ * SYNC: When InfoTip.tsx or useTooltip.tsx change, update these cases.
  */
 
 import {
