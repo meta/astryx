@@ -405,6 +405,12 @@ Known verification gaps:
   and `useResizable` `collapsible` and CodeBlock `isCollapsible`; Calendar
   `mode` and FileInput `isMultiple`; FileInput `mode`; Tokenizer and
   PowerSearch `tokenOverflowBehavior`; OverflowList `behavior`.
+- INV3: Carousel `hasSnap` takes `boolean | SnapPaging`. Omitted or `false`
+  does not snap, `true` is native scroll snap, and a value from
+  `useSnapPaging` is snap paging. This third state is a known deviation from
+  the rule that an `is…` or `has…` boolean names only a true on/off. The owner
+  accepted it on 2026-11-02 so that builders keep one snap prop
+  (`component:Carousel/DEC-2`); it is not renamed.
 - INV22: known gaps include `useLongPress`, `useMenuPress`,
   `usePressFeedback`, `useClickableContainer`, `useInputContainer`,
   `useOverlay`, `useCombobox`, `useMultiCombobox`, `useResizable`,
