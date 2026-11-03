@@ -186,7 +186,8 @@ These requirements apply to the text fields of `DateInput` and
   the Gregorian calendar, text that matches none of these forms, or that names a
   date the locale's numeric order does not have, still commits on Enter or blur
   when `parseDateInput` reads it: `13/5/2026` in `en-US` commits 13 May 2026.
-  Otherwise FR11 applies. A one-digit year is not a date.
+  Otherwise FR11 applies. A one-digit year is not a date, even when
+  `parseDateInput` reads it.
 - **FR10 — Years are years of the calendar.** A typed year is a year of the
   active calendar, never a converted Gregorian year: `2026` in a Buddhist field
   is Buddhist year 2026. The format hint and the committed text show the era,
@@ -245,14 +246,13 @@ These requirements apply to the text fields of `DateInput` and
 ### Shared formatters
 
 - **FR18 — Built-in date formats follow the provider's calendar.** Timestamp's
-  date-bearing formats, PowerSearch date values, Schedule date labels, and chart
-  date formatters render in the calendar of their `InternationalizationProvider`
-  (FR2, without a component prop). Time-only formats, relative formats, and
-  `system_*` formats do not change. Pure date helpers keep a Gregorian default
-  and take an explicit calendar: `plainDateFormat` through its existing
-  `calendar` format option, and `formatSharedDate`, `shortDate`, and `monthYear`
-  through an optional `calendar` argument. Astryx call sites pass the resolved
-  calendar.
+  date-bearing formats, PowerSearch date values, and Schedule date labels render
+  in the calendar of their `InternationalizationProvider` (FR2, without a
+  component prop). Time-only formats, relative formats, and `system_*` formats
+  do not change. Pure date helpers keep a Gregorian default and take an explicit
+  calendar: `plainDateFormat` through its existing `calendar` format option, and
+  `formatSharedDate`, `shortDate`, and `monthYear` through an optional
+  `calendar` argument. Astryx call sites pass the resolved calendar.
 
 ### Chinese and Korean
 
@@ -319,8 +319,9 @@ These requirements apply to the text fields of `DateInput` and
 - `component:Calendar`, `component:DateInput`, `component:DateRangeInput`, and
   `component:DateTimeInput` add the `calendar` prop, project FR4–FR17 and
   AR1–AR3, and record the `spec:AST-013` FR12 exception.
-- `component:Timestamp` and the PowerSearch, Schedule, and chart formatters
-  follow FR18.
+- `component:Timestamp` and `component:PowerSearch` follow FR18 and record the
+  `spec:AST-013` FR12 exception. Schedule follows FR18, and the chart formatters
+  take FR18's optional `calendar` argument.
 - `spec:AST-043` FR1–FR3 name the calendar exception: under a calendar other
   than `gregory` or `iso8601`, `adaptive-native`, the deprecated `nativePicker`
   values, and an explicit `presentation="native"` use the Astryx surface for
@@ -338,7 +339,8 @@ These requirements apply to the text fields of `DateInput` and
     field reverts the text on blur on the latest stable release. The value
     does not change in either case: a nonbreaking interaction change (FR5).
   - `parseDateInput` in `@astryxdesign/core/utils` does not change, and the
-    Gregorian text field still commits any text it reads (FR9).
+    Gregorian text field still commits any text it reads, except a one-digit
+    year (FR9).
   - A two-digit year follows the locale's field order: `1/5/26` in `en-GB`
     commits 1 May 2026, where the latest stable release commits the
     month-first 5 January 2026. This restores the locale order that
@@ -346,10 +348,12 @@ These requirements apply to the text fields of `DateInput` and
   - In month-first locales a two-digit year reads within FR10's window, where
     the latest stable release uses the runtime's `Date` parsing: in 2026,
     `1/5/46` to `1/5/49` in `en-US` commit 1946 to 1949 instead of 2046 to 2049.
-    No record documents the `Date` reading: nonbreaking (FR3).
+    `component:DateInput` FR6 records the `Date` fallback as an implementation
+    gap, so this restores FR6: nonbreaking (FR5).
   - A one-digit year is not a date: `1/5/2`, which the latest stable release
-    reads through the runtime's `Date` as 5 January 2002, does not commit. No
-    record documents that reading: nonbreaking (FR3).
+    reads through the runtime's `Date` as 5 January 2002, does not commit. This
+    also restores `component:DateInput` FR6, which records that fallback as a
+    gap: nonbreaking (FR5).
   - `formatSharedDate`, `shortDate`, and `monthYear` gain an optional argument:
     additive (FR5).
 - Consumer docs: the internationalization guide covers choosing a calendar,
@@ -361,18 +365,18 @@ These requirements apply to the text fields of `DateInput` and
 
 ## Verification
 
-| Contract     | Verification                                                                                                 | Representative states                                                                                                                                                                                                  | Mutation or failure expectation                                                                                                                    |
-| ------------ | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1–FR2      | Provider and component resolution tests                                                                      | Every identifier; `-u-ca-islamic`; an unknown identifier; component over provider over `-u-ca-` over default; bare `fa-IR`                                                                                             | A bare locale selects a calendar, the precedence changes, or an unknown identifier throws                                                          |
-| FR3          | Callback and form tests in non-Gregorian calendars                                                           | Select, type, clear, `min`, `max`, and `dateConstraints` in `persian` and `hebrew`                                                                                                                                     | Any reported or submitted value is not Gregorian ISO                                                                                               |
-| FR4, FR6–FR7 | Month-structure tests against `Temporal` for every calendar from 1900 through 2100; real-browser grid checks | Persian month boundaries, a Hebrew leap year, the Ethiopic thirteenth month, the Japanese era change, a Chinese leap month; PageUp, PageDown, Shift+PageUp, Shift+PageDown                                             | A month start, length, or step differs from `Temporal`, or a leap month vanishes                                                                   |
-| FR5          | Real-browser runs with `Temporal` removed, with and without the polyfill; server render and hydrate          | `persian` with and without `Temporal`; `buddhist` and `japanese` without `Temporal`                                                                                                                                    | A crash, a missing warning, or a hydration mismatch                                                                                                |
-| FR8          | Calendar week-number tests                                                                                   | `persian` and `hebrew` grids with `hasWeekNumbers`                                                                                                                                                                     | A week number that is not ISO 8601                                                                                                                 |
-| FR9–FR14     | Parser tests; a round-trip matrix; DateInput and DateTimeInput interaction tests                             | Every calendar from 1900 through 2100 in native locales, English, and Swedish, in every named format; Adar; partial input; mixed digits; Japanese eras; invalid dates; Gregorian text that only `parseDateInput` reads | A round trip fails, an invalid date is adjusted, `onChange` fires on partial input, or Gregorian text that `parseDateInput` reads stops committing |
-| FR15–FR17    | Presentation tests and touch interaction tests                                                               | `adaptive-native` and `native` with `persian`; month counts in Hebrew leap and common years; era year labels; `DateRangeInput` trigger text                                                                            | A native date input renders for a non-Gregorian calendar under any presentation, or a wheel shows 12 months for a 13-month year                    |
-| FR18         | Formatter tests                                                                                              | Timestamp date formats, PowerSearch values, Schedule labels, and chart dates in `persian`                                                                                                                              | A built-in date format ignores the provider's calendar, or a `system_*` format changes                                                             |
-| FR19         | Documentation review                                                                                         | The internationalization guide and date component docs                                                                                                                                                                 | The caveat is missing                                                                                                                              |
-| AR1–AR3      | Accessibility-tree and announcement assertions                                                               | Day buttons and announcements in `persian`; each rejection kind                                                                                                                                                        | A spoken date uses another calendar than the grid, or two rejection kinds share a message                                                          |
+| Contract     | Verification                                                                                                 | Representative states                                                                                                                                                                                                  | Mutation or failure expectation                                                                                                                                                  |
+| ------------ | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1–FR2      | Provider and component resolution tests                                                                      | Every identifier; `-u-ca-islamic`; an unknown identifier; component over provider over `-u-ca-` over default; bare `fa-IR`                                                                                             | A bare locale selects a calendar, the precedence changes, or an unknown identifier throws                                                                                        |
+| FR3          | Callback and form tests in non-Gregorian calendars                                                           | Select, type, clear, `min`, `max`, and `dateConstraints` in `persian` and `hebrew`                                                                                                                                     | Any reported or submitted value is not Gregorian ISO                                                                                                                             |
+| FR4, FR6–FR7 | Month-structure tests against `Temporal` for every calendar from 1900 through 2100; real-browser grid checks | Persian month boundaries, a Hebrew leap year, the Ethiopic thirteenth month, the Japanese era change, a Chinese leap month; PageUp, PageDown, Shift+PageUp, Shift+PageDown                                             | A month start, length, or step differs from `Temporal`, or a leap month vanishes                                                                                                 |
+| FR5          | Real-browser runs with `Temporal` removed, with and without the polyfill; server render and hydrate          | `persian` with and without `Temporal`; `buddhist` and `japanese` without `Temporal`                                                                                                                                    | A crash, a missing warning, or a hydration mismatch                                                                                                                              |
+| FR8          | Calendar week-number tests                                                                                   | `persian` and `hebrew` grids with `hasWeekNumbers`                                                                                                                                                                     | A week number that is not ISO 8601                                                                                                                                               |
+| FR9–FR14     | Parser tests; a round-trip matrix; DateInput and DateTimeInput interaction tests                             | Every calendar from 1900 through 2100 in native locales, English, and Swedish, in every named format; Adar; partial input; mixed digits; Japanese eras; invalid dates; Gregorian text that only `parseDateInput` reads | A round trip fails, an invalid date is adjusted, `onChange` fires on partial input, or Gregorian text that `parseDateInput` reads, other than a one-digit year, stops committing |
+| FR15–FR17    | Presentation tests and touch interaction tests                                                               | `adaptive-native` and `native` with `persian`; month counts in Hebrew leap and common years; era year labels; `DateRangeInput` trigger text                                                                            | A native date input renders for a non-Gregorian calendar under any presentation, or a wheel shows 12 months for a 13-month year                                                  |
+| FR18         | Formatter tests                                                                                              | Timestamp date formats, PowerSearch values, Schedule labels, and chart dates in `persian`                                                                                                                              | A built-in date format ignores the provider's calendar, or a `system_*` format changes                                                                                           |
+| FR19         | Documentation review                                                                                         | The internationalization guide and date component docs                                                                                                                                                                 | The caveat is missing                                                                                                                                                            |
+| AR1–AR3      | Accessibility-tree and announcement assertions                                                               | Day buttons and announcements in `persian`; each rejection kind                                                                                                                                                        | A spoken date uses another calendar than the grid, or two rejection kinds share a message                                                                                        |
 
 Known verification gap: none of these suites exist on `main`.
 
