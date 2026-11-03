@@ -326,6 +326,11 @@ These requirements apply to the text fields of `DateInput` and
   than `gregory` or `iso8601`, `adaptive-native`, the deprecated `nativePicker`
   values, and an explicit `presentation="native"` use the Astryx surface for
   `DateInput` and `DateTimeInput` (FR15).
+- A provider locale with an explicit `-u-ca-` keyword, which the latest stable
+  release shows in Gregorian, shows that calendar in `Calendar`, the date
+  inputs, and FR18's formats. The keyword is the application's explicit request
+  for the calendar (DEC-2): nonbreaking (FR5), and `calendar="gregory"` keeps
+  Gregorian.
 - Gregorian behavior that changes, with its `spec:AST-017` class:
   - FR7's Shift+PageUp and Shift+PageDown year step gives keys with no
     documented behavior the APG date picker's year step, which
@@ -411,6 +416,16 @@ nested provider replaces its parent's context.
 
 Rejected: following the locale's default calendar, because it silently changes
 every screen in a locale whose default calendar is not Gregorian.
+
+An explicit `-u-ca-` keyword is the application asking for that calendar by
+name; a locale carries one only when the application wrote it there. Honoring
+it is therefore not a silent change: a locale such as `en-u-ca-buddhist`, which
+the latest stable release still shows in Gregorian, shows the Buddhist calendar,
+and the application keeps Gregorian with `calendar="gregory"`.
+
+Rejected: a separate `calendar="from-locale"` opt-in before the keyword takes
+effect, because it adds a value whose only job is to repeat a request the
+locale already makes.
 
 ### DEC-3 — Temporal does the calendar arithmetic, and the application loads any polyfill
 
