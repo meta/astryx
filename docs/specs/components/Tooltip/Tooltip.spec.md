@@ -389,7 +389,11 @@ Rejected: a `touchTrigger` beside `triggerBehavior`, which splits one question a
 
 ## Open questions
 
-None.
+- **OQ1 — Implicit toggle.** (`human-api`) With `triggerBehavior="toggle"`,
+  Tooltip takes over its child button's press implicitly. Open: whether toggle
+  stays implicit or moves to an explicit pattern. There, the caller's button
+  opens and closes the tooltip through `show()` and `hide()`, which
+  `useTooltip` would expose. Low priority.
 
 ## Content boundary
 
