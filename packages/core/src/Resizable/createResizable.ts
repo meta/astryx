@@ -905,7 +905,6 @@ export function createResizableAs(
     },
   );
 
-  // --- Listeners on the handle ---
   const onPointerDown = (event: PointerEvent) => {
     gesture.pointerDown(event);
   };
