@@ -337,14 +337,17 @@ export function useClickableContainer({
         containerEl == null ||
         !(eventTarget instanceof Element) ||
         eventTarget === event.currentTarget ||
-        !hasInteractiveAncestor(eventTarget, containerEl)
+        !hasInteractiveAncestor(eventTarget, containerEl) ||
+        // The control the container delegates to is the container's own
+        // action: a press on it activates the container.
+        interactiveRef?.current?.contains(eventTarget) === true
       ) {
         return;
       }
       markNestedPress(containerEl);
       cancelPress(containerEl);
     },
-    [containerRef, disabled],
+    [containerRef, interactiveRef, disabled],
   );
 
   return {onClick, onMouseUp, onPointerDown};
