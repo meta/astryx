@@ -17,6 +17,11 @@ export type ButtonGroupOrientation = 'horizontal' | 'vertical';
 export interface ButtonGroupContextValue {
   orientation: ButtonGroupOrientation;
   isDisabled: boolean;
+  /**
+   * Set inside ButtonGroup's overflow menu: a collapsed member renders as a
+   * menu row instead of a button.
+   */
+  isOverflowMenu?: boolean;
 }
 
 export const ButtonGroupContext = createContext<ButtonGroupContextValue | null>(

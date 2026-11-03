@@ -41,7 +41,10 @@ const styles = stylex.create({
   container: {
     display: 'flex',
     alignItems: 'center',
-    overflow: 'hidden',
+    // Keep the fitting clip while allowing the shared focus outline to paint
+    // outside an interactive child. `hidden` clips the entire 5px ring.
+    overflow: 'clip',
+    overflowClipMargin: 8,
     whiteSpace: 'nowrap',
     minWidth: 0,
   },
@@ -49,7 +52,8 @@ const styles = stylex.create({
     display: 'flex',
     flexWrap: 'wrap',
     alignContent: 'flex-start',
-    overflow: 'hidden',
+    overflow: 'clip',
+    overflowClipMargin: 8,
     whiteSpace: 'normal',
     minWidth: 0,
   },

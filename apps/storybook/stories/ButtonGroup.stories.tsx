@@ -236,3 +236,30 @@ export const LongLabels: Story = {
     </div>
   ),
 };
+
+/**
+ * `overflow="menu"` in a resizable container. Drag the corner: members that
+ * no longer fit collapse into a "More" menu, the group's surface hugs the
+ * members that are shown, and they return when the row widens again.
+ */
+export const OverflowMenu: Story = {
+  render: () => (
+    <div
+      style={{
+        resize: 'horizontal',
+        overflow: 'hidden',
+        border: '1px dashed #ccc',
+        padding: 16,
+        width: 220,
+        minWidth: 80,
+        maxWidth: '100%',
+      }}>
+      <ButtonGroup label="Zoom controls" overflow="menu" elevation="med">
+        <Button label="Zoom out" />
+        <Button label="Reset" />
+        <Button label="Zoom in" />
+        <Button label="Delete" variant="destructive" />
+      </ButtonGroup>
+    </div>
+  ),
+};
