@@ -98,7 +98,8 @@ export const docs = {
         {
           name: 'focusTrigger',
           type: "'auto' | 'always' | 'never'",
-          description: 'Controls when focus events trigger the hover card.',
+          description:
+            'When focus should open the hover card. auto opens when the trigger itself takes focus, or focus lands inside a trigger that is focusable at that moment, so a roving-tabindex member opens when the arrow keys reach it.',
           default: "'auto'",
         },
         {
@@ -303,7 +304,8 @@ export const docsZh = {
         {
           name: 'focusTrigger',
           type: "'auto' | 'always' | 'never'",
-          description: '控制焦点事件何时触发悬浮卡片。',
+          description:
+            '焦点何时打开悬浮卡片。auto 在触发元素自身获得焦点，或焦点落在当时可聚焦的触发元素内部时打开，因此方向键到达漫游 tabindex 成员时也会打开。',
           default: "'auto'",
         },
         {
