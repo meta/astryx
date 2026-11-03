@@ -364,7 +364,7 @@ function namedPackages(changesets) {
 }
 
 /** The Changesets a change adds or edits, read from its head. */
-function changedChangesets(changes, head) {
+export function changedChangesets(changes, head) {
   return changes
     .filter(
       change =>

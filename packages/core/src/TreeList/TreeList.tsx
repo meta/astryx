@@ -39,6 +39,14 @@ import {themeProps} from '../utils/themeProps';
 import {useTreeFocusInternal} from '../hooks/useTreeFocus';
 import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
 import {
+  moveFocusLeftBehind,
+  noteFocusWithin,
+  type FocusWithin,
+} from '../utils/focusReturn';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {useFocusLeavingChange} from '../utils/useFocusLeavingChange';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
   applyLayoutChangeTransition,
   holdLayoutExit,
   playLayoutChange,
@@ -383,6 +391,76 @@ export function TreeList({
     },
     [animatedLayout, expandedIds],
   );
+  // Focus inside a branch's child group when it collapses would be lost once
+  // the group goes (or turns inert for its exit). It moves to the collapsing
+  // row itself (AR2); focus anywhere else is not moved. The shared sequence
+  // notes it in the commit before the DOM changes and moves it once the
+  // collapse has committed.
+  // The tree's own document's last input decides the moved focus's ring.
+  const {ref: modalityRef} = useInteractionModalityTracking();
+  const noteCollapsingFocus = useFocusLeavingChange<
+    ReadonlySet<string>,
+    {focus: FocusWithin; ids: string[]}
+  >(
+    expandedIds,
+    // Every expanded row whose group holds focus, outermost first, found by
+    // walking up from the focused element: which of them collapsed is known
+    // only after the commit.
+    (previous: ReadonlySet<string>) => {
+      const tree = treeElementRef.current;
+      const active = tree?.ownerDocument.activeElement;
+      if (tree == null || active == null || !tree.contains(active)) {
+        return null;
+      }
+      let focus: FocusWithin | null = null;
+      const ids: string[] = [];
+      for (
+        let element = active.parentElement;
+        element != null && element !== tree;
+        element = element.parentElement
+      ) {
+        const id = element.parentElement?.dataset.treeId;
+        if (
+          element.getAttribute('role') === 'group' &&
+          id != null &&
+          previous.has(id)
+        ) {
+          focus = noteFocusWithin(element);
+          ids.unshift(id);
+        }
+      }
+      return focus == null ? null : {focus, ids};
+    },
+    (noted, expanded) => {
+      // The outermost row that collapsed: a row inside it goes with it.
+      const id = noted.ids.find(candidate => !expanded.has(candidate));
+      if (id == null) {
+        return;
+      }
+      const row = treeElementRef.current?.querySelector<HTMLElement>(
+        `[data-tree-id="${CSS.escape(id)}"]`,
+      );
+      const moved = moveFocusLeftBehind(
+        noted.focus,
+        row,
+        row?.querySelector(':scope > [role="group"]') ?? null,
+      );
+      // The row focus moved to holds the tree's one Tab stop, unless it is
+      // disabled (AR1, AR2).
+      if (moved && row != null) {
+        takeTabStop(row);
+      }
+    },
+  );
+  const beforeExpansionChange = useCallback(
+    (previous: ReadonlySet<string>) => {
+      noteCollapsingFocus(previous);
+      if (animatedLayout != null) {
+        measureChanges(previous);
+      }
+    },
+    [animatedLayout, measureChanges, noteCollapsingFocus],
+  );
   // Without a handle the chevrons keep the theme's own turn: a spring a
   // handle set stays only while it is passed (`spec:AST-105` FR2).
   useLayoutEffect(() => {
@@ -481,7 +559,7 @@ export function TreeList({
     }
   }, [expandedIds, animatedLayout, endExit]);
 
-  const {treeRef, handleKeyDown, handleFocus} =
+  const {treeRef, handleKeyDown, handleFocus, takeTabStop} =
     useTreeFocusInternal<HTMLUListElement>({
       onToggleExpand: handleToggle,
       onActivate: activateItem,
@@ -495,6 +573,7 @@ export function TreeList({
   useLayoutEffect(() => {
     treeElementRef.current = treeRef.current;
   });
+  const mergedTreeRef = useMergedRefs(treeRef, modalityRef);
 
   const handleRootKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -605,14 +684,12 @@ export function TreeList({
           {header}
         </div>
       )}
-      {animatedLayout != null && (
-        <LayoutChangeSnapshot
-          value={expandedIds}
-          onBeforeChange={measureChanges}
-        />
-      )}
+      <LayoutChangeSnapshot
+        value={expandedIds}
+        onBeforeChange={beforeExpansionChange}
+      />
       <ul
-        ref={treeRef}
+        ref={mergedTreeRef}
         role="tree"
         aria-label={hasHeader ? undefined : ariaLabel}
         aria-labelledby={hasHeader ? headerId : ariaLabelledby}

@@ -410,9 +410,9 @@ export function useScrollSpy({
     const onSettle = () => finish(true);
     const onManual = () => finish(false);
     const onKeyDown = (event: KeyboardEvent) => {
-      // A key the outline itself consumed (arrow roving focus, Space
-      // activation) is prevented, so the browser will not scroll — it is not a
-      // manual scroll intent and must not cancel the navigation it just began.
+      // The outline prevents the Space key that activates a link. The
+      // browser then does not scroll. So this key is not a manual scroll, and
+      // it does not end the navigation.
       if (!event.defaultPrevented && SCROLL_KEYS.has(event.key)) {
         finish(false);
       }

@@ -13,7 +13,12 @@ import {createRequire} from 'node:module';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {listDir, pathExists} from './listing-cache.mjs';
+import {
+  findEntry,
+  listDir,
+  listingCacheActive,
+  pathExists,
+} from './listing-cache.mjs';
 import {ERROR_CODES} from '../response/error-codes.mjs';
 import {carriedCore, runChoice} from '../release/run-context.mjs';
 import {findDeclaringPackage} from '../release/project.mjs';
@@ -868,6 +873,31 @@ export function listComponents(coreDir) {
 }
 
 /**
+ * `path.relative(root, target)`, read straight off the string when `target`
+ * is a plain path under `root`. A resolver probes tens of thousands of such
+ * paths, and `path.relative` normalizes both on every call.
+ * @param {string} root
+ * @param {string} target
+ * @returns {string}
+ */
+function relativeInside(root, target) {
+  const prefix = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
+  if (path.isAbsolute(root) && target.startsWith(prefix)) {
+    const rest = target.slice(prefix.length);
+    const plain =
+      rest !== '' &&
+      !(path.sep === '\\' && rest.includes('/')) &&
+      rest
+        .split(path.sep)
+        .every(
+          segment => segment !== '' && segment !== '.' && segment !== '..',
+        );
+    if (plain) return rest;
+  }
+  return path.relative(root, target);
+}
+
+/**
  * Does `targetPath` exist with EXACTLY this spelling?
  *
  * `fs.existsSync` answers through the filesystem's own case folding, so on
@@ -883,13 +913,28 @@ export function listComponents(coreDir) {
  * @returns {boolean}
  */
 export function existsCaseExact(targetPath, rootDir) {
-  if (!pathExists(targetPath)) return false;
-
-  const rel = path.relative(rootDir, targetPath);
-  if (rel === '') return true;
+  const rel = relativeInside(rootDir, targetPath);
+  if (rel === '') return pathExists(targetPath);
   if (path.isAbsolute(rel) || rel === '..' || rel.startsWith(`..${path.sep}`))
     return false;
 
+  if (listingCacheActive()) {
+    // Inside an operation the folders' listings answer, so a name that a
+    // listing lacks costs no probe of the disk. A symbolic link still needs
+    // its target.
+    let folder = rootDir;
+    let entry = null;
+    for (const segment of rel.split(path.sep)) {
+      entry = findEntry(folder, segment);
+      if (!entry) return false;
+      folder = folder.endsWith(path.sep)
+        ? `${folder}${segment}`
+        : `${folder}${path.sep}${segment}`;
+    }
+    return !entry?.isSymbolicLink() || pathExists(targetPath);
+  }
+
+  if (!pathExists(targetPath)) return false;
   let dir = rootDir;
   for (const segment of rel.split(path.sep)) {
     let entries;

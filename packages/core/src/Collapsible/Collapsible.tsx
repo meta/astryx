@@ -52,6 +52,14 @@ import {
 import {useCollapsible} from './useCollapsible';
 import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
 import {
+  moveFocusLeftBehind,
+  noteFocusWithin,
+  type FocusWithin,
+} from '../utils/focusReturn';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {useFocusLeavingChange} from '../utils/useFocusLeavingChange';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
   applyLayoutChangeTransition,
   holdLayoutExit,
   playLayoutChange,
@@ -449,6 +457,29 @@ export function Collapsible({
     }
   }, [isOpen, isExiting]);
 
+  // Focus inside the content when it closes would be lost to the page once
+  // the content hides. It moves to the trigger that closes it (AR4); focus
+  // anywhere else is not moved. The shared sequence notes it in the commit
+  // before the DOM changes and moves it once the close has committed.
+  // The trigger's own document's last input decides the moved focus's ring.
+  const {ref: modalityRef} = useInteractionModalityTracking();
+  const mergedTriggerRef = useMergedRefs(triggerRef, modalityRef);
+  const noteClosingFocus = useFocusLeavingChange(
+    isOpen,
+    (wasOpen: boolean) =>
+      wasOpen ? noteFocusWithin(contentRef.current) : null,
+    (focus: FocusWithin) =>
+      moveFocusLeftBehind(focus, triggerRef.current, contentRef.current),
+  );
+  const beforeOpenChange = useCallback(
+    (wasOpen: boolean) => {
+      noteClosingFocus(wasOpen);
+      if (animatedLayout != null) {
+        measureChange();
+      }
+    },
+    [animatedLayout, measureChange, noteClosingFocus],
+  );
   // Activation is blocked by this guard rather than the native `disabled`
   // attribute, so the trigger keeps `aria-disabled` semantics and stays
   // discoverable. A native `disabled` button would silently swallow events
@@ -513,7 +544,7 @@ export function Collapsible({
       )}
       {...props}>
       <button
-        ref={triggerRef}
+        ref={mergedTriggerRef}
         type="button"
         onClick={handleToggle}
         aria-disabled={isDisabled || undefined}
@@ -547,9 +578,7 @@ export function Collapsible({
         <span {...stylex.props(styles.triggerLabel)}>{trigger}</span>
         {!isChevronAtStart && chevron}
       </button>
-      {animatedLayout != null && (
-        <LayoutChangeSnapshot value={isOpen} onBeforeChange={measureChange} />
-      )}
+      <LayoutChangeSnapshot value={isOpen} onBeforeChange={beforeOpenChange} />
       <div
         ref={contentRef}
         id={contentId}

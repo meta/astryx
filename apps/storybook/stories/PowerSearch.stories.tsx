@@ -452,8 +452,10 @@ const meta: Meta<typeof PowerSearch> = {
   component: PowerSearch,
   tags: ['autodocs'],
   decorators: [
+    // A 600px column where there is room that shrinks with the viewport, so
+    // the stories, the touch presentations above all, fit a phone-sized canvas.
     Story => (
-      <div style={{width: 600}}>
+      <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 600px)'}}>
         <Story />
       </div>
     ),
@@ -2053,4 +2055,185 @@ export const StatusVariantComparison: Story = {
       </div>
     );
   },
+};
+
+// =============================================================================
+// Experimental bottom-sheet presentation
+// =============================================================================
+
+// The sheet flow is designed for a phone: view these stories at a compact
+// touch viewport (Storybook's mobile2 preset) to see the sheets as a person
+// would.
+function PhoneFrame({children}: {children: React.ReactNode}) {
+  return <div style={{width: 390, maxWidth: '100%'}}>{children}</div>;
+}
+
+function FilterDump({filters}: {filters: ReadonlyArray<PowerSearchFilter>}) {
+  if (filters.length === 0) {
+    return null;
+  }
+  return (
+    <pre
+      style={{
+        marginTop: 16,
+        padding: 12,
+        borderRadius: 8,
+        fontSize: 12,
+        overflow: 'auto',
+        maxWidth: 390,
+      }}>
+      {JSON.stringify(filters, null, 2)}
+    </pre>
+  );
+}
+
+const sheetPresetFilters: ReadonlyArray<PowerSearchFilter> = [
+  {
+    field: 'status',
+    operator: 'any_of',
+    value: {type: 'enum_list', value: ['open', 'in_progress']},
+  },
+  {field: 'priority', operator: 'is', value: {type: 'enum', value: 'p1'}},
+  {
+    field: 'created',
+    operator: 'after',
+    value: {type: 'date_absolute', unixSeconds: 1710039600},
+  },
+];
+
+/**
+ * `experimental={{presentation: 'bottom-sheet'}}`: the field is one trigger
+ * with display-only tokens; a tap opens the Filters sheet, whose rows edit or
+ * remove a filter, Add filter opens above it with the fields, and the value
+ * step opens above that and stages operator → value. Dismissing a step
+ * reveals the one beneath. Clear all asks first. List values (Assignee, Tags)
+ * open the Tokenizer's own sheet above the step.
+ */
+export const ExperimentalBottomSheet: Story = {
+  render: args => {
+    const [filters, setFilters] =
+      useState<ReadonlyArray<PowerSearchFilter>>(sheetPresetFilters);
+    return (
+      <PhoneFrame>
+        <PowerSearch
+          {...args}
+          config={fullConfig}
+          filters={filters}
+          onChange={next => setFilters(next)}
+          // A count that follows the filters, so a commit from the flow (and
+          // Clear all) changes it and the flow announces the change.
+          resultCount={Math.max(1, Math.round(240 / (filters.length + 1)))}
+          timezoneID="America/Los_Angeles"
+          experimental={{presentation: 'bottom-sheet'}}
+        />
+        <FilterDump filters={filters} />
+      </PhoneFrame>
+    );
+  },
+  name: 'Experimental: bottom sheet (forced)',
+  parameters: {viewport: {defaultViewport: 'mobile2'}},
+};
+
+/**
+ * `experimental={{presentation: 'adaptive'}}`: the sheet flow on a compact
+ * coarse-pointer screen, the tokenizer field and editor popover otherwise.
+ * Resize the viewport or switch the pointer emulation to see it switch.
+ */
+export const ExperimentalAdaptive: Story = {
+  render: args => {
+    const [filters, setFilters] =
+      useState<ReadonlyArray<PowerSearchFilter>>(sheetPresetFilters);
+    return (
+      <PhoneFrame>
+        <PowerSearch
+          {...args}
+          config={fullConfig}
+          filters={filters}
+          onChange={next => setFilters(next)}
+          timezoneID="America/Los_Angeles"
+          experimental={{presentation: 'adaptive'}}
+        />
+        <FilterDump filters={filters} />
+      </PhoneFrame>
+    );
+  },
+  name: 'Experimental: adaptive',
+};
+
+/**
+ * With `contentSearchFieldKey`, Add filter carries the content search: the
+ * field typeahead's suggestions list inline under the search box, and a value
+ * suggestion commits a filter straight away.
+ */
+export const ExperimentalBottomSheetContentSearch: Story = {
+  render: args => {
+    const [filters, setFilters] = useState<ReadonlyArray<PowerSearchFilter>>(
+      [],
+    );
+    return (
+      <PhoneFrame>
+        <PowerSearch
+          {...args}
+          config={contentSearchConfig}
+          filters={filters}
+          onChange={next => setFilters(next)}
+          placeholder="Search issues…"
+          experimental={{presentation: 'bottom-sheet'}}
+        />
+        <FilterDump filters={filters} />
+      </PhoneFrame>
+    );
+  },
+  name: 'Experimental: bottom sheet with content search',
+  parameters: {viewport: {defaultViewport: 'mobile2'}},
+};
+
+/**
+ * Read-only keeps the Filters sheet as plain rows with Done only; disabled
+ * keeps the trigger focusable (aria-disabled) and shows its reason; the result
+ * count renders at the end of the field in both presentations.
+ */
+export const ExperimentalBottomSheetStates: Story = {
+  render: () => {
+    const [filters, setFilters] =
+      useState<ReadonlyArray<PowerSearchFilter>>(sheetPresetFilters);
+    return (
+      <PhoneFrame>
+        <div style={{display: 'flex', flexDirection: 'column', gap: 24}}>
+          <PowerSearch
+            config={fullConfig}
+            filters={filters}
+            onChange={next => setFilters(next)}
+            label="Read-only filters"
+            isLabelHidden={false}
+            isReadOnly
+            resultCount={42}
+            experimental={{presentation: 'bottom-sheet'}}
+          />
+          <PowerSearch
+            config={fullConfig}
+            filters={filters}
+            onChange={next => setFilters(next)}
+            label="Disabled filters"
+            isLabelHidden={false}
+            isDisabled
+            disabledMessage="Pick a project first"
+            experimental={{presentation: 'bottom-sheet'}}
+          />
+          <PowerSearch
+            config={fullConfig}
+            filters={filters}
+            onChange={next => setFilters(next)}
+            label="With a status"
+            isLabelHidden={false}
+            status={{type: 'error', message: 'Add at least one filter'}}
+            startIcon={MagnifyingGlassIcon}
+            experimental={{presentation: 'bottom-sheet'}}
+          />
+        </div>
+      </PhoneFrame>
+    );
+  },
+  name: 'Experimental: bottom sheet states',
+  parameters: {viewport: {defaultViewport: 'mobile2'}},
 };

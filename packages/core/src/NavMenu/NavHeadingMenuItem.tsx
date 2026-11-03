@@ -29,6 +29,7 @@ import type {BaseProps} from '../BaseProps';
 import {useNavHeadingMenuContext} from './NavMenuContext';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {themeProps} from '../utils/themeProps';
+import {isRenderable} from '../utils/isRenderable';
 
 const styles = stylex.create({
   root: {
@@ -196,7 +197,7 @@ export function NavHeadingMenuItem({
         ) : (
           label
         )}
-        {description && (
+        {isRenderable(description) && (
           <Text type="supporting" maxLines={1}>
             {description}
           </Text>

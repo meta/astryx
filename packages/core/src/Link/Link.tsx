@@ -47,8 +47,14 @@ import {themeDataAttributes, themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {useTranslator} from '../i18n';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Link/Link.generated';
+
+registerEnglishFallback(english);
 
 /**
  * Base link styles
@@ -92,6 +98,9 @@ const styles = stylex.create({
     backgroundColor: 'transparent',
     borderStyle: 'none',
     padding: 0,
+    // Browsers centre a button's text; a wrapped label lines up as an
+    // anchor's does.
+    textAlign: 'inherit',
     pointerEvents: 'auto',
     position: 'relative',
   },
@@ -320,7 +329,7 @@ export function Link({
   // document controller once, so the link's output stays a pure function of
   // its props.
   const pressable = usePressFeedback();
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const newTabLabel = newTabLabelFromProps ?? t('@astryx.link.newTab');
   const LinkComponent = useLinkComponent(as);
   const role = useInteractiveRole({href, onClick, isDisabled});

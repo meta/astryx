@@ -36,10 +36,16 @@ import {
   registryContentHash,
 } from '../../packages/cli/authoring/shadcn/receipt.mjs';
 import {
+  DEMO_CONTENT_MODULE,
+  MARKED_VIDEO_PLACEHOLDER,
+} from '../../packages/cli/foundation/discovery/template-adapter.mjs';
+import {
   buildShadcnRegistry,
   generateShadcnRegistry,
   generateShadcnRegistryForTarget,
 } from '../../apps/docsite/scripts/generate-shadcn-registry.mjs';
+import {createPublishedImportJudge} from '../../apps/docsite/scripts/published-exports.mjs';
+import {readImports} from '../../packages/cli/foundation/integrations/public-imports.mjs';
 import {
   SHADCN_CLI_VERSION,
   blockRegistryIdentity,
@@ -348,6 +354,33 @@ describe('buildShadcnRegistry', () => {
     expect(counts.skippedUnpublishedBlocks).toBe(1);
   });
 
+  it('skips a block that lazy-loads or re-exports an unpublished subpath', () => {
+    const input = fixture();
+    input.blocks.push(
+      {
+        ...input.blocks[0],
+        dirName: 'TimerLazy',
+        name: 'Timer — Lazy',
+        displayName: 'Timer — Lazy',
+        source:
+          "import {lazy} from 'react';\n" +
+          "const Timer = lazy(() => import('@astryxdesign/core/Timer'));\n" +
+          'export default function TimerLazy() { return <Timer />; }\n',
+      },
+      {
+        ...input.blocks[0],
+        dirName: 'TimerReexport',
+        name: 'Timer — Re-export',
+        displayName: 'Timer — Re-export',
+        source: "export {Timer as default} from '@astryxdesign/core/Timer';\n",
+      },
+    );
+
+    const {counts} = buildShadcnRegistry(input);
+
+    expect(counts.skippedUnpublishedBlocks).toBe(2);
+  });
+
   it('omits production blocks that import an unpublished named component', () => {
     const root = mkdtempSync(
       path.join(tmpdir(), 'astryx-shadcn-unpublished-component-'),
@@ -377,6 +410,203 @@ describe('buildShadcnRegistry', () => {
       expect(
         existsSync(path.join(outDir, 'showcases', 'button', 'future.json')),
       ).toBe(false);
+    } finally {
+      rmSync(root, {recursive: true, force: true});
+    }
+  });
+
+  it('omits production blocks that import a name the published subpath lacks, and keeps them in preview', () => {
+    const root = mkdtempSync(
+      path.join(tmpdir(), 'astryx-shadcn-unpublished-export-'),
+    );
+    try {
+      const input = fixture();
+      input.blocks.push({
+        ...input.blocks[0],
+        dirName: 'ButtonAnimated',
+        name: 'Button — Animated',
+        displayName: 'Button — Animated',
+        source:
+          "import {createAnimator} from '@astryxdesign/core';\n" +
+          "import {Button} from '@astryxdesign/core/Button';\n" +
+          'export default function ButtonAnimated() { createAnimator(null); return <Button label="Save" />; }\n',
+      });
+      // The published release exports Button but not createAnimator.
+      const publishedImports = statement =>
+        statement.source.startsWith('@astryxdesign/core')
+          ? statement.names
+              .map(binding => binding.imported)
+              .filter(name => name !== 'Button')
+          : undefined;
+
+      const latest = generateShadcnRegistryForTarget({
+        target: 'latest',
+        outDir: path.join(root, 'latest'),
+        publishedImports,
+        ...input,
+      });
+      const canary = generateShadcnRegistryForTarget({
+        target: 'canary',
+        outDir: path.join(root, 'canary'),
+        publishedImports,
+        ...input,
+      });
+
+      expect(latest.total).toBe(3);
+      expect(latest.skippedUnpublishedBlocks).toBe(1);
+      expect(latest.unpublishedImports).toEqual([
+        {
+          block: 'ButtonAnimated',
+          specifier: '@astryxdesign/core',
+          names: ['createAnimator'],
+          packageName: '@astryxdesign/core',
+          version: '0.5.2',
+        },
+      ]);
+      expect(
+        existsSync(
+          path.join(root, 'latest', 'showcases', 'button', 'animated.json'),
+        ),
+      ).toBe(false);
+      expect(canary.total).toBe(4);
+      expect(canary.unpublishedImports).toEqual([]);
+      expect(
+        existsSync(
+          path.join(root, 'canary', 'showcases', 'button', 'animated.json'),
+        ),
+      ).toBe(true);
+    } finally {
+      rmSync(root, {recursive: true, force: true});
+    }
+  });
+
+  it('keeps a production block whose own package declarations it cannot read, and names it', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'astryx-published-unread-'));
+    try {
+      const dist = path.join(root, 'packages', 'core', 'dist');
+      mkdirSync(dist, {recursive: true});
+      // The root is built and declares Button; the Button subpath is not.
+      writeFileSync(path.join(dist, 'index.js'), 'export const Button = 1;\n');
+      writeFileSync(
+        path.join(dist, 'index.d.ts'),
+        'export declare const Button: unknown;\n',
+      );
+      const input = fixture();
+      input.blocks.push({
+        ...input.blocks[0],
+        dirName: 'ButtonCounter',
+        name: 'Button — Counter',
+        displayName: 'Button — Counter',
+        source:
+          "import {useState} from 'react';\n" +
+          "import {Button} from '@astryxdesign/core';\n" +
+          'export default function ButtonCounter() { const [n] = useState(0); return <Button label={String(n)} />; }\n',
+      });
+      const publishedImports = createPublishedImportJudge(root, [
+        {...packages[1], packagePath: 'packages/core'},
+      ]);
+
+      const result = generateShadcnRegistryForTarget({
+        target: 'latest',
+        outDir: path.join(root, 'shadcn'),
+        publishedImports,
+        ...input,
+      });
+
+      expect(result.total).toBe(4);
+      expect(result.skippedUnpublishedBlocks).toBe(0);
+      expect(result.unpublishedImports).toEqual([]);
+      // Only Astryx's own unread subpath is named; `react` stays silent.
+      expect(result.unreadImports).toEqual([
+        {
+          block: 'ButtonShowcase',
+          specifier: '@astryxdesign/core/Button',
+          packageName: '@astryxdesign/core',
+          version: '0.5.2',
+        },
+      ]);
+    } finally {
+      rmSync(root, {recursive: true, force: true});
+    }
+  });
+
+  it('judges an import against a published subpath with the CLI reader, re-exports included', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'astryx-published-exports-'));
+    try {
+      const dist = path.join(root, 'packages', 'core', 'dist');
+      mkdirSync(path.join(dist, 'Button'), {recursive: true});
+      writeFileSync(
+        path.join(dist, 'index.js'),
+        "export * from './Button/index.js';\nexport function createTheme() {}\n",
+      );
+      writeFileSync(
+        path.join(dist, 'index.d.ts'),
+        "export * from './Button/index.js';\nexport declare function createTheme(): void;\n",
+      );
+      writeFileSync(
+        path.join(dist, 'Button', 'index.js'),
+        'export const Button = 1;\n',
+      );
+      writeFileSync(
+        path.join(dist, 'Button', 'index.d.ts'),
+        'export declare const Button: unknown;\nexport type ButtonProps = {label: string};\n',
+      );
+      const core = {
+        name: '@astryxdesign/core',
+        version: '0.5.2',
+        packagePath: 'packages/core',
+        packageExports: {
+          '.': {types: './dist/index.d.ts', default: './dist/index.js'},
+          './*': {types: './dist/*/index.d.ts', default: './dist/*/index.js'},
+        },
+      };
+      const judge = createPublishedImportJudge(root, [core]);
+      const statement = text => readImports(text)[0];
+
+      expect(
+        judge(
+          statement("import {Button, createTheme} from '@astryxdesign/core';"),
+        ),
+      ).toEqual([]);
+      expect(
+        judge(
+          statement(
+            "import {createAnimator, Button} from '@astryxdesign/core';",
+          ),
+        ),
+      ).toEqual(['createAnimator']);
+      expect(
+        judge(
+          statement(
+            "import type {ButtonProps} from '@astryxdesign/core/Button';",
+          ),
+        ),
+      ).toEqual([]);
+      // Not built there, or another package: it cannot tell, or it is not
+      // the snapshot's to judge.
+      expect(
+        judge(statement("import {Timer} from '@astryxdesign/core/Missing';")),
+      ).toBeNull();
+      expect(
+        judge(statement("import {useState} from 'react';")),
+      ).toBeUndefined();
+
+      // An `export *` from a package the snapshot cannot resolve leaves the
+      // list incomplete, so the judge cannot tell.
+      writeFileSync(
+        path.join(dist, 'index.d.ts'),
+        "export * from 'outside-library';\nexport declare function createTheme(): void;\n",
+      );
+      writeFileSync(
+        path.join(dist, 'index.js'),
+        "export * from 'outside-library';\nexport function createTheme() {}\n",
+      );
+      const rejudge = createPublishedImportJudge(root, [core]);
+      expect(
+        rejudge(
+          statement("import {createAnimator} from '@astryxdesign/core';"),
+        ),
+      ).toBeNull();
     } finally {
       rmSync(root, {recursive: true, force: true});
     }
@@ -694,6 +924,162 @@ describe('buildShadcnRegistry', () => {
     } finally {
       rmSync(project, {recursive: true, force: true});
     }
+  });
+
+  it('installs a block and a page as a copy writes them, with marked placeholders and a disclosing description', async () => {
+    const project = mkdtempSync(path.join(tmpdir(), 'astryx-shadcn-demo-'));
+    try {
+      writeConsumerProject(project);
+      const base = fixture();
+      const {items} = buildShadcnRegistry(
+        fixture({
+          packages: packages.map(pkg =>
+            pkg.name === '@astryxdesign/core'
+              ? {
+                  ...pkg,
+                  packageExports: {
+                    ...pkg.packageExports,
+                    './Card': './dist/Card/index.js',
+                    './Text': './dist/Text/index.js',
+                  },
+                }
+              : pkg,
+          ),
+          blocks: [
+            {
+              ...base.blocks[0],
+              componentsUsed: ['Card'],
+              source:
+                "import {Card} from '@astryxdesign/core/Card';\n" +
+                `import {PlayingCardContents} from '${DEMO_CONTENT_MODULE}';\n` +
+                'export default function ButtonShowcase() {\n' +
+                '  return (\n' +
+                '    <Card padding={4}>\n' +
+                '      <PlayingCardContents rank="Q" suit="hearts" />\n' +
+                '      <img src="/template-assets/hero.jpg" alt="" />\n' +
+                '      <video src="/template-assets/clip.mp4" />\n' +
+                '    </Card>\n' +
+                '  );\n' +
+                '}\n',
+            },
+          ],
+          templates: [
+            {
+              ...base.templates[0],
+              source:
+                "import {Card} from '@astryxdesign/core/Card';\n" +
+                'export default function Page() {\n' +
+                '  return <Card><img src="/template-assets/hero.jpg" alt="" /></Card>;\n' +
+                '}\n',
+            },
+          ],
+        }),
+      );
+      const block = items.find(
+        item => item.name === 'showcase-button-variants',
+      );
+      const page = items.find(item => item.name === 'template-dashboard');
+      for (const item of [block, page]) {
+        const copied = item.files[0].content;
+        expect(copied).not.toContain(DEMO_CONTENT_MODULE);
+        expect(copied).not.toContain('PlayingCardContents');
+        expect(copied).not.toContain('/template-assets/');
+        expect(copied).toContain('<img src="data:image/svg+xml,');
+      }
+      expect(block.files[0].content).toContain(
+        '<Card padding={4}>\n      <Text>Card content</Text>',
+      );
+      expect(block.files[0].content).toContain(
+        `<video src="${MARKED_VIDEO_PLACEHOLDER}" />`,
+      );
+      expect(block.description).toBe(
+        'Shows a primary button. Astryx replaced 2 demo media references and 1 demo content element with marked placeholders; put your own content there.',
+      );
+      expect(page.description).toBe(
+        'A metrics dashboard. Astryx replaced 1 demo media reference with marked placeholders; put your own content there.',
+      );
+      expect(block.dependencies).not.toContainEqual(
+        expect.stringContaining('demo-content'),
+      );
+
+      const itemPath = path.join(project, 'block.json');
+      writeFileSync(itemPath, JSON.stringify(block));
+      await execFileAsync(
+        process.execPath,
+        [SHADCN_ENTRY, 'add', itemPath, '--yes'],
+        {cwd: project, timeout: 30_000, env: shadcnEnv(project)},
+      );
+      const showcases = path.join(
+        project,
+        'src',
+        'components',
+        'astryx',
+        'showcases',
+      );
+      const installedSource = readFileSync(
+        path.join(showcases, 'ButtonShowcase.tsx'),
+        'utf8',
+      );
+      expect(installedSource).toBe(block.files[0].content);
+      // The released reader validates a version 2 receipt strictly, so an
+      // extra field would break `astryx upgrade` on an older CLI.
+      const installedReceipt = JSON.parse(
+        readFileSync(
+          path.join(showcases, '.astryx', 'showcase-button-variants.json'),
+          'utf8',
+        ),
+      );
+      expect(Object.keys(installedReceipt).sort()).toEqual([
+        'files',
+        'item',
+        'schemaVersion',
+        'source',
+      ]);
+      expect(parseRegistryReceipt(installedReceipt)).toMatchObject({
+        schemaVersion: 2,
+      });
+    } finally {
+      rmSync(project, {recursive: true, force: true});
+    }
+  });
+
+  it('installs an integration-package block from its authored file, so it discloses its replacements', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'astryx-shadcn-integration-'));
+    try {
+      const authoredSourcePath = path.join(dir, 'ButtonShowcase.tsx');
+      const source = src =>
+        `export default function ButtonShowcase() {\n  return <video src="${src}" />;\n}\n`;
+      writeFileSync(authoredSourcePath, source('/template-assets/clip.mp4'));
+      const [base] = fixture().blocks;
+      // `source` is `template show` output, so its video source is already empty.
+      const block = {
+        ...base,
+        sourcePackage: '@astryxdesign/lab',
+        source: source(''),
+      };
+      const {items} = buildShadcnRegistry(
+        fixture({blocks: [{...block, authoredSourcePath}]}),
+      );
+      const item = items.find(({name}) => name === 'showcase-button-variants');
+      expect(item.files[0].content).toContain(
+        `<video src="${MARKED_VIDEO_PLACEHOLDER}" />`,
+      );
+      expect(item.description).toBe(
+        'Shows a primary button. Astryx replaced 1 demo media reference with marked placeholders; put your own content there.',
+      );
+    } finally {
+      rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
+  it('leaves the description of an item with no demo content as written', () => {
+    const {items} = buildShadcnRegistry(fixture());
+    expect(
+      items.find(item => item.name === 'showcase-button-variants').description,
+    ).toBe('Shows a primary button.');
+    expect(
+      items.find(item => item.name === 'template-dashboard').description,
+    ).toBe('A metrics dashboard.');
   });
 
   it('records the exact JavaScript bytes written by stock ShadCN', async () => {
