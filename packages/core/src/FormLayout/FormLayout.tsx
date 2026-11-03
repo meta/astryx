@@ -106,7 +106,8 @@ export interface FormLayoutProps extends BaseProps<HTMLDivElement> {
    *   expose `aria-required` even though they show no indicator. Checkboxes,
    *   switches and checkbox groups are the exception: an unchecked box, an off
    *   switch or an empty group is an answer, so they take no required state
-   *   from the default, only from their own `isRequired`.
+   *   from the default. A checkbox or switch is required only through its own
+   *   `isRequired`.
    * - unset — today's behavior: `isRequired` and `isOptional` each show their
    *   own indicator independently.
    *

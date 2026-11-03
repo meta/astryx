@@ -585,8 +585,6 @@ export function Switch({
   const pressable = usePressFeedback();
   const descriptionID = useId();
   const statusMessageID = useId();
-  // A form's required default gives this control no required state: an off switch is an answer.
-  // Only its own `isRequired` sets `aria-required` and native `required`.
 
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
@@ -661,6 +659,7 @@ export function Switch({
         aria-disabled={isDisabled ? 'true' : undefined}
         form={isDisabled ? '' : undefined}
         required={isRequired}
+        // A form's required default sets nothing here: an off switch is an answer.
         aria-required={isRequired ? 'true' : undefined}
         onChange={e => {
           if (isDisabled || isBusy) {

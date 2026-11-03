@@ -351,8 +351,6 @@ export function CheckboxInput({
   const id = idProp || generatedId;
   const descriptionID = useId();
   const statusMessageID = useId();
-  // A form's required default gives this control no required state: an unchecked box is an answer.
-  // Only its own `isRequired` sets `aria-required` and native `required`.
 
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
@@ -481,6 +479,7 @@ export function CheckboxInput({
             onClick={isDisabled ? undefined : rest.onClick}
             readOnly={isReadOnly}
             required={isRequired}
+            // A form's required default sets nothing here: an unchecked box is an answer.
             aria-required={isRequired ? 'true' : undefined}
             onChange={e => {
               if (isDisabled || isBusy || isReadOnly) {

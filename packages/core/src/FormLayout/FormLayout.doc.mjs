@@ -29,7 +29,7 @@ export const docs = {
       name: 'defaultOptionality',
       type: "'optional' | 'required'",
       description:
-        'The state the form treats as its default, so only the exception shows an optional/required indicator. With "optional", only fields marked isRequired show an indicator; with "required", only fields marked isOptional do. A field that restates the default shows nothing. Under "required" the unmarked fields also expose aria-required so screen readers match the visual default; aria-required only, never the native required attribute. CheckboxInput, Switch and CheckboxList are the exception: an unchecked box, an off switch or an empty group is an answer, so they take no required state from the default, only from their own isRequired. Leave unset for today\'s per-field behavior.',
+        'The state the form treats as its default, so only the exception shows an optional/required indicator. With "optional", only fields marked isRequired show an indicator; with "required", only fields marked isOptional do. A field that restates the default shows nothing. Under "required" the unmarked fields also expose aria-required so screen readers match the visual default; aria-required only, never the native required attribute. CheckboxInput, Switch and CheckboxList are the exception: an unchecked box, an off switch or an empty group is an answer, so they take no required state from the default. A CheckboxInput or Switch is required only through its own isRequired. Leave unset for today\'s per-field behavior.',
     },
     {
       name: 'children',
@@ -124,7 +124,7 @@ export const docsZh = {
       name: 'defaultOptionality',
       type: "'optional' | 'required'",
       description:
-        '表单视为默认的状态，因此仅例外字段显示可选/必填指示器。设为 "optional" 时，仅标记 isRequired 的字段显示指示器；设为 "required" 时，仅标记 isOptional 的字段显示。与默认一致的字段不显示任何内容。设为 "required" 时，未标记的字段仍会暴露 aria-required，使屏幕阅读器与视觉默认一致——仅作用于 aria-required，不改变原生 required 属性。CheckboxInput、Switch 和 CheckboxList 例外：未勾选的复选框、关闭的开关或空的复选框组本身就是一个回答，因此默认值不会赋予它们必填状态，只有它们自己的 isRequired 才会。不设置则保持当前逐字段行为。',
+        '表单视为默认的状态，因此仅例外字段显示可选/必填指示器。设为 "optional" 时，仅标记 isRequired 的字段显示指示器；设为 "required" 时，仅标记 isOptional 的字段显示。与默认一致的字段不显示任何内容。设为 "required" 时，未标记的字段仍会暴露 aria-required，使屏幕阅读器与视觉默认一致——仅作用于 aria-required，不改变原生 required 属性。CheckboxInput、Switch 和 CheckboxList 例外：未勾选的复选框、关闭的开关或空的复选框组本身就是一个回答，因此默认值不会赋予它们必填状态。CheckboxInput 或 Switch 只有通过自身的 isRequired 才会成为必填。不设置则保持当前逐字段行为。',
     },
     {
       name: 'children',
@@ -270,7 +270,7 @@ export const docsDense = {
     direction:
       'Field arrangement. Vertical stacks top-to-bottom; horizontal uses one fractional grid track per field in logical inline order; horizontal-labels places labels on the inline-start side and collapses when the viewport is <=480px.',
     defaultOptionality:
-      'State the form treats as default, so only the exception is marked. "optional" → only isRequired fields show an indicator; "required" → only isOptional fields do. Under "required" unmarked fields also expose aria-required (aria only, not native required), except CheckboxInput, Switch and CheckboxList, which are required only through their own isRequired. Unset = per-field behavior.',
+      'State the form treats as default, so only the exception is marked. "optional" → only isRequired fields show an indicator; "required" → only isOptional fields do. Under "required" unmarked fields also expose aria-required (aria only, not native required), except CheckboxInput, Switch and CheckboxList, which take no required state from it (CheckboxInput and Switch are required only through their own isRequired). Unset = per-field behavior.',
     children:
       'Form fields to arrange. Accepts Astryx inputs + Field-wrapped custom controls.',
     xstyle:
