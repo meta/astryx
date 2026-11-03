@@ -278,7 +278,8 @@ export function Theme({
   registerTheme(theme);
 
   useThemeStyleInjection(theme);
-  // No public theme resolves to 'always' yet, so no theme marks its root.
+  // resolveMotionKnobs resolves no public theme to 'always', so no theme
+  // marks its root.
   const reducesMotion =
     resolveMotionKnobs(theme.__axes?.motion).reducedMotion === 'always';
   useRootThemeSync(isNested, mode, theme.name, reducesMotion);
