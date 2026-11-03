@@ -519,11 +519,10 @@ export function Calendar({ref, ...props}: CalendarProps) {
         !(maxDateForKeys && plainDateIsAfter(pd, maxDateForKeys));
       let targetPd: PlainDate;
       if (unit === 'months') {
-        // A page targets the same day of the month `offset` months away
-        // (clamped to that month's length). Past `min`/`max` nothing moves; a
-        // month with no enabled day is no destination either, the same as an
-        // arrow with no enabled day in its direction; a target disabled by a
-        // constraint lands on that month's first enabled day instead.
+        // A page targets the same day of the month `offset` months away,
+        // clamped to that month's length. Past `min` or `max`, nothing moves.
+        // A month with no enabled day is no target, as for an arrow. A target
+        // disabled by a constraint moves to that month's first enabled day.
         const candidate = plainDateAddMonths(currentPd, delta * (offset ?? 1));
         if (!inRange(candidate)) {
           return;
@@ -1010,7 +1009,7 @@ function MonthGrid({
   });
 
   // Shift+PageUp and Shift+PageDown move a year: twelve months, so the
-  // month keys' clamping and bounds apply. The grid hook handles the rest.
+  // month keys' clamping and bounds apply.
   const handleDayGridKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       if (e.shiftKey && (e.key === 'PageUp' || e.key === 'PageDown')) {

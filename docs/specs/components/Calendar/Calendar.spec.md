@@ -150,9 +150,10 @@ Consumer migration instructions belong in consumer docs and release notes.
   ArrowLeft and ArrowRight move by a day following the reading direction
   (`design:bidirectionality` DR6),
   ArrowUp and ArrowDown by a week, Home and End to the first and last enabled day of the
-  week, PageUp and PageDown by a month, Shift+PageUp and Shift+PageDown by a
-  year (the same day of the month, clamped to that month's length), and Enter
-  or Space picks the focused day;
+  week, PageUp and PageDown by a month, and Enter or Space picks the focused
+  day. Named exception: Shift+PageUp and Shift+PageDown move by a year (the
+  same day of the month, clamped to that month's length), as in the APG date
+  picker dialog;
   an arrow skips a day disabled by a constraint and continues in the
   same direction, crossing the month edge when it must; an arrow or Page key whose target
   lies past `min` or `max` changes nothing and keeps focus where it is, and
