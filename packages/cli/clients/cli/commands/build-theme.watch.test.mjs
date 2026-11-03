@@ -51,6 +51,51 @@ function runCli(args, cwd) {
   }
 }
 
+/**
+ * Resolves once the child's output holds `count` matches of `pattern`, and
+ * rejects if the child exits first. It waits on the watcher's own output, not
+ * on a clock: only the test's timeout bounds it. `onPoll`, if given, runs
+ * every `interval` ms while it waits.
+ */
+function waitForOutput(
+  child,
+  read,
+  pattern,
+  {count = 1, onPoll, interval = 250} = {},
+) {
+  const matches = () => (read().match(new RegExp(pattern, 'g')) ?? []).length;
+  return new Promise((resolve, reject) => {
+    const check = () => {
+      if (matches() >= count) {
+        cleanup();
+        resolve();
+      }
+    };
+    const exited = code => {
+      cleanup();
+      reject(
+        new Error(
+          `the watcher exited (${code}) before ${pattern} x${count}:\n${read()}`,
+        ),
+      );
+    };
+    const timer = setInterval(() => {
+      onPoll?.();
+      check();
+    }, interval);
+    const cleanup = () => {
+      clearInterval(timer);
+      child.stdout.off('data', check);
+      child.stderr.off('data', check);
+      child.off('exit', exited);
+    };
+    child.stdout.on('data', check);
+    child.stderr.on('data', check);
+    child.once('exit', exited);
+    check();
+  });
+}
+
 /** Poll until `predicate()` is true or the timeout elapses. */
 async function waitFor(predicate, {timeout = 8000, interval = 50} = {}) {
   const start = Date.now();
@@ -111,44 +156,24 @@ describe('theme build --watch', () => {
     child.stdout.on('data', d => (stdout += d.toString()));
     child.stderr.on('data', d => (stdout += d.toString()));
 
+    const read = () => stdout;
     try {
-      // Initial build produces the CSS.
-      const built = await waitFor(() => fs.existsSync(cssFile));
-      expect(built).toBe(true);
-      const firstCss = fs.readFileSync(cssFile, 'utf-8');
-      expect(firstCss).toMatch(/#ffffff/);
+      // The watcher prints "Watching" once its initial build has finished and
+      // fs.watch is armed, and again after each rebuild finishes.
+      await waitForOutput(child, read, 'Watching');
+      expect(fs.readFileSync(cssFile, 'utf-8')).toMatch(/#ffffff/);
 
-      // Wait until the watcher is actually watching before editing, so the
-      // change isn't missed. The "Watching" line is printed only after fs.watch
-      // is armed, so it's a truthful "safe to edit now" signal.
-      await waitFor(() => /Watching/i.test(stdout));
-
-      // Change the theme — the token value changes so the CSS must change.
-      // fs.watch event delivery is best-effort on some platforms/under load, so
-      // re-touch the file until the rebuild is observed (idempotent write).
+      // Change the theme: the token value changes, so the CSS must change.
+      // fs.watch can drop an event under load, so the write repeats until the
+      // watcher reports the change (an idempotent write).
       const changed = `export default { name: 'wt', tokens: { '--color-bg': '#010203' } };\n`;
       fs.writeFileSync(themeFile, changed);
-
-      const rebuilt = await waitFor(
-        () => {
-          try {
-            if (fs.readFileSync(cssFile, 'utf-8').includes('#010203'))
-              return true;
-          } catch {
-            // CSS mid-write; fall through to re-touch.
-          }
-          // Re-touch to recover a dropped watch event under load.
-          try {
-            fs.writeFileSync(themeFile, changed);
-          } catch {
-            // Re-touch failed (e.g. dir mid-teardown); the next poll retries.
-          }
-          return false;
-        },
-        {timeout: 20000, interval: 200},
-      );
-      expect(rebuilt).toBe(true);
-      expect(stdout).toMatch(/rebuild/i);
+      await waitForOutput(child, read, 'rebuilding wt\\.mjs', {
+        onPoll: () => fs.writeFileSync(themeFile, changed),
+      });
+      // The second "Watching" line follows the finished rebuild.
+      await waitForOutput(child, read, 'Watching', {count: 2});
+      expect(fs.readFileSync(cssFile, 'utf-8')).toContain('#010203');
     } finally {
       // SIGINT must stop the watcher and exit cleanly.
       child.kill('SIGINT');
