@@ -5,7 +5,7 @@
 /**
  * @file useTabBarLens.ts
  * @input The capsule, the item count, the selected index, the presentation,
- *   and the lift's handler. Core's animator and long-press
+ *   the minimized state and the lift's handler. Core's animator and long-press
  *   recognizer (internal/touch), uikitTabBar.ts and tabBarModel.ts.
  * @output useTabBarLens: the selection lens's motion and press tracking, and
  *   the refs TabBar puts on the capsule and the lens's layers
@@ -35,12 +35,14 @@ import {
   UIKIT_GESTURES,
   useGestureRecognizer,
 } from '@astryxdesign/core/internal/touch';
+import {observeResize} from '@astryxdesign/core';
 import {
   copyTransform,
   itemCenters,
   itemWidth,
   lensTarget,
   liftScale,
+  minimizedCenter,
   nearestIndex,
 } from './tabBarModel';
 import {useMotionAnimator} from '../internal/useMotionAnimator';
@@ -51,6 +53,12 @@ const DRAG_SLOP = UIKIT_GESTURES.longPress.allowableMovement.value;
 
 /** How long the selected copy's curves run: past any lens spring's settle. */
 const COPY_HORIZON_S = 1.5;
+/**
+ * How long the selected copy stays visible when the bar minimizes. It fades
+ * with the items (`minimizeFade`, under 1% after 0.3 s), so its counter-move
+ * stops there instead of sampling keyframes nobody sees.
+ */
+const COPY_FADE_S = 0.3;
 
 /** Seconds between the samples a derived curve's velocity is read from. */
 const VELOCITY_STEP_S = 0.001;
@@ -67,6 +75,8 @@ interface Press {
   isDragging: boolean;
   /** A tab was selected when the finger landed: the lens follows it. */
   hasLens: boolean;
+  /** Landed on a disabled tab: nothing moves until the finger drags. */
+  isIgnored: boolean;
   /** A fine pointer's press: a drag moves the lens body, with no lift. */
   readonly isFine: boolean;
   /** The capsule's box in client px, before the flex. */
@@ -99,8 +109,15 @@ export interface UseTabBarLensOptions {
    * lens on springs. Otherwise a press drags it in the mouse presentation.
    */
   readonly isTouch: boolean;
+  /** The bar is minimized (useTabBarMinimize.ts): the lens is in the circle. */
+  readonly isMinimized: boolean;
   /** A press released over the item at `index`: a lift, or a drag's release. */
   readonly onLift: (index: number) => void;
+  /**
+   * Whether the item at `index` is disabled: a finger landing on it is
+   * ignored until it drags (UIKit ignores a tap on a disabled tab).
+   */
+  readonly isDisabled?: (index: number) => boolean;
 }
 
 export interface TabBarLensRefs {
@@ -179,10 +196,16 @@ function useAnimatorList(count: number) {
  *
  * A selection change slides the body from where the lens was on screen to its
  * new resting place. On `lensTravel` from rest (a key, the app), or continuing
- * the settle a lift started. Every animation runs on the compositor; a finger's
- * moves retarget them, so the lens keeps moving through a busy main thread.
- * Under Reduce Motion the animator cross-fades instead of moving and a press
- * scales nothing. Each spring plays as measured, from the UIKit table.
+ * the settle a lift started.
+ *
+ * Minimizing (useTabBarMinimize.ts) carries the lens into the minimized circle.
+ * It travels to the circle's centre (`collapseTravel`) and shrinks to its size
+ * while fading (`collapseSize`), and the selected copy fades out with the items
+ * (`minimizeFade`). Expanding plays it back. A minimized bar takes no press.
+ * Every animation runs on the compositor; a finger's moves retarget them, so
+ * the lens keeps moving through a busy main thread. Under Reduce Motion the
+ * animator cross-fades instead of moving and a press scales nothing. Each
+ * spring plays as measured, from the UIKit table.
  *
  * Under a fine pointer the same press drags the lens in the mouse presentation.
  * A fine pointer is a mouse, a pen, or a finger on a screen whose primary
@@ -200,7 +223,9 @@ export function useTabBarLens({
   count,
   selectedIndex,
   isTouch,
+  isMinimized,
   onLift,
+  isDisabled,
 }: UseTabBarLensOptions): TabBarLensRefs {
   const capsule = useMotionAnimator();
   const body = useMotionAnimator();
@@ -256,13 +281,19 @@ export function useTabBarLens({
   const selectedRef = useRef(selectedIndex);
   selectedRef.current = selectedIndex;
   const onLiftRef = useRef(onLift);
+  const isDisabledRef = useRef(isDisabled);
+  isDisabledRef.current = isDisabled;
   onLiftRef.current = onLift;
+  // The tabs sit in the tab layer while one is mounted.
   const tabsOf = (capsule: HTMLElement) =>
-    [...capsule.children].filter(
+    [
+      ...(capsule.querySelector('[data-tab-bar-items]') ?? capsule).children,
+    ].filter(
       (child): child is HTMLElement => child.getAttribute('role') === 'tab',
     );
   // The tab a press at viewport (x, y) would choose: the tab nearest it. Off
   // the bar nothing is chosen, under every pointer, so sliding off cancels.
+  // A disabled tab is never chosen.
   const pickRef = useRef<(x: number, y: number) => HTMLElement | null>(
     () => null,
   );
@@ -277,6 +308,9 @@ export function useTabBarLens({
       return null;
     }
     const index = nearestIndex(x - press.left, press.centers);
+    if (isDisabledRef.current?.(index) === true) {
+      return null;
+    }
     return tabsOf(element)[index] ?? null;
   };
   // What the lift does with the tab it chose: set by the lift's own handler.
@@ -293,15 +327,6 @@ export function useTabBarLens({
       onActivate: tab => runRef.current?.(tab),
     })),
   );
-  /**
-   * Where the lens heads for a press at `x`: after it, rubber-banded past
-   * the end items. Off the bar, where the lift would choose nothing, the lens
-   * shows the selected tab again.
-   */
-  const chaseTarget = (x: number, centers: number[]) =>
-    tracker.highlighted == null
-      ? centers[Math.max(selectedRef.current, 0)]
-      : lensTarget(x, centers);
   /** Runs the tab the tracker resolved, through `run`; null if none. */
   const runLift = (run: (tab: HTMLElement) => void) => {
     runRef.current = run;
@@ -347,9 +372,11 @@ export function useTabBarLens({
 
   /**
    * Plays the selected copy's counter-transform from `at`, derived from the
-   * body's curves as they now stand. Called after every change to the body.
+   * body's curves as they now stand. Called after every change to the body;
+   * `fromRest` when the body's call started from rest, so the copy joins its
+   * start at the browser's commit.
    */
-  const playCopy = (at: number) => {
+  const playCopy = (at: number, fromRest = false, horizon = COPY_HORIZON_S) => {
     const sample = (t: number) => {
       const time = at + t * 1000;
       return copyTransform(
@@ -359,7 +386,7 @@ export function useTabBarLens({
       );
     };
     const curve = (key: 'x' | 'scaleX' | 'scaleY'): MotionCurve => ({
-      duration: COPY_HORIZON_S,
+      duration: horizon,
       at: t => sample(t)[key],
       velocity: t =>
         (sample(t + VELOCITY_STEP_S)[key] -
@@ -368,7 +395,7 @@ export function useTabBarLens({
     });
     copy.animator.play(
       {x: curve('x'), scaleX: curve('scaleX'), scaleY: curve('scaleY')},
-      {at},
+      fromRest ? {} : {at},
     );
   };
 
@@ -410,6 +437,16 @@ export function useTabBarLens({
     );
   };
 
+  /**
+   * Where the lens heads for a press at `x`: after it, rubber-banded past
+   * the end items. Where the lift would choose nothing (off the bar, or over
+   * a disabled tab) the lens shows the selected tab again.
+   */
+  const chaseTarget = (x: number, centers: number[]) =>
+    tracker.highlighted == null
+      ? centers[Math.max(selectedRef.current, 0)]
+      : lensTarget(x, centers);
+
   const begin = (recognizer: LongPressGestureRecognizer) => {
     const element = capsuleRef.current;
     const selected = selectedRef.current;
@@ -425,6 +462,10 @@ export function useTabBarLens({
     const centers = itemCenters(element.offsetWidth, count, isRtl);
     const size = itemWidth(element.offsetWidth, count);
     const x = recognizer.location().x - left;
+    // A finger landing on a disabled tab: UIKit ignores the tap, so the lens
+    // neither heads for it nor lifts unless the finger then drags.
+    const isIgnored =
+      isDisabledRef.current?.(nearestIndex(x, centers)) === true;
     pressRef.current = {
       centers,
       size,
@@ -433,6 +474,7 @@ export function useTabBarLens({
       lastX: x,
       isDragging: false,
       hasLens: selected >= 0,
+      isIgnored,
       isFine: !isTouch,
       box: {
         left,
@@ -448,9 +490,10 @@ export function useTabBarLens({
     if (!isTouch) {
       return;
     }
-    // No tab selected: there is no lens to move; the lift chooses the tab
-    // nearest the finger.
-    if (selected < 0) {
+    // Nothing moves now when no tab is selected: there is no lens to move, and
+    // the lift chooses the tab nearest the finger. Nothing moves either for a
+    // finger landing on a disabled tab, since UIKit ignores the tap.
+    if (selected < 0 || isIgnored) {
       return;
     }
     // The lifted lens magnifies the selected look: its copy mounts now, in
@@ -483,11 +526,13 @@ export function useTabBarLens({
     press.isDragging ||= Math.abs(x - press.startX) > DRAG_SLOP;
     if (press.isFine) {
       // A fine pointer's drag carries the lens on the finger's tracking
-      // spring, with no lift and no copy of the items. Where the release would
-      // choose nothing, the lens shows the selected tab again.
+      // spring, with no lift and no copy of the items. A press that began on a
+      // disabled tab counts once it drags. Where the release would choose
+      // nothing, the lens shows the selected tab again.
       if (!press.isDragging) {
         return;
       }
+      press.isIgnored = false;
       if (press.hasLens && selected >= 0) {
         const target = chaseTarget(x, press.centers) - press.centers[selected];
         if (body.animator.reducedMotion({}) === 'off') {
@@ -503,10 +548,25 @@ export function useTabBarLens({
       }
       return;
     }
+    const at = performance.now();
+    if (press.isIgnored) {
+      if (!press.isDragging) {
+        return;
+      }
+      // A drag from a disabled tab: the press counts from here (the lens,
+      // when there is one, lifts, its copy drawn, and chases).
+      press.isIgnored = false;
+      if (press.hasLens && selected >= 0) {
+        motionRef.current += 1;
+        if (body.animator.reducedMotion({}) === 'off') {
+          flushSync(() => setIsCopyShown(true));
+        }
+        lift(true, at, press.size);
+      }
+    }
     if (!press.hasLens || selected < 0) {
       return;
     }
-    const at = performance.now();
     body.animator.animate(
       {x: chaseTarget(x, press.centers) - press.centers[selected]},
       {spring: press.isDragging ? tabBar.lensTrack : tabBar.lensTravel},
@@ -520,7 +580,8 @@ export function useTabBarLens({
     pressRef.current = null;
     const selected = selectedRef.current;
     const element = capsuleRef.current;
-    if (press == null || element == null) {
+    // A tap on a disabled tab moved nothing and chooses nothing.
+    if (press == null || press.isIgnored || element == null) {
       tracker.cancel();
       return;
     }
@@ -648,6 +709,11 @@ export function useTabBarLens({
           isTouchRef.current
             ? lockSelection(elements, target)
             : () => undefined,
+        // Only the capsule's own box: the search tab beside it is a button.
+        shouldReceiveTouch: (_recognizer, touch) => {
+          const box = capsuleRef.current?.getBoundingClientRect();
+          return box != null && touch.x >= box.left && touch.x <= box.right;
+        },
       }),
     recognizer => {
       switch (recognizer.state) {
@@ -667,23 +733,109 @@ export function useTabBarLens({
       }
     },
     {
+      isEnabled: !isMinimized,
       // Under a mouse the host writes no touch styles: desktop selection
       // is unchanged.
       manageStyle: isTouch,
     },
   );
 
-  // Synchronizes the recognizer's press with the presentation: when the
-  // presentation changes under a press, the press ends here, as a cancel. A
-  // cancel chooses nothing, so the app hears nothing.
+  // Synchronizes the recognizer's press with the bar's state and the
+  // presentation. When the bar minimizes (the recognizer turns off) or the
+  // presentation changes under a press, the press ends here as a cancel. A
+  // recognizer turned off reports nothing more. A cancel chooses nothing, so
+  // the app hears nothing.
   const endRef = useRef(end);
   endRef.current = end;
   useEffect(() => {
     const press = pressRef.current;
-    if (press != null && press.isFine === isTouch) {
+    if (press != null && (isMinimized || press.isFine === isTouch)) {
       endRef.current(true);
     }
-  }, [isTouch]);
+  }, [isTouch, isMinimized]);
+  /** The body's offset and scale that put the lens in the minimized circle. */
+  const collapsed = (element: HTMLElement, selected: number) => {
+    const width = element.offsetWidth;
+    const isRtl = isRtlElement(element);
+    return {
+      x:
+        minimizedCenter(width, isRtl) -
+        itemCenters(width, count, isRtl)[selected],
+      scaleX: tabBar.minimizedSize / itemWidth(width, count),
+      scaleY: tabBar.minimizedSize / tabBar.itemHeight,
+    };
+  };
+
+  // Minimizing carries the lens into the circle; expanding brings it back.
+  const wasMinimizedRef = useRef(isMinimized);
+  useLayoutEffect(() => {
+    const was = wasMinimizedRef.current;
+    wasMinimizedRef.current = isMinimized;
+    const element = capsuleRef.current;
+    const selected = selectedRef.current;
+    if (was === isMinimized || element == null || selected < 0) {
+      return;
+    }
+    const target = isMinimized
+      ? collapsed(element, selected)
+      : {x: 0, scaleX: 1, scaleY: 1};
+    const now = performance.now();
+    // From rest every curve starts when the browser commits the frame, so a
+    // busy main thread delays the motion instead of skipping into it. Motion
+    // already on screen continues from now.
+    const isMoving =
+      body.animator.getVelocity('x', now) !== 0 ||
+      body.animator.getVelocity('scaleX', now) !== 0;
+    const options = isMoving ? {at: now} : {};
+    // Under a finger: the bar collapses for the minimize and the search tab.
+    body.animator.animate(
+      {x: target.x},
+      {spring: tabBar.collapseTravel},
+      options,
+    );
+    body.animator.animate(
+      {
+        scaleX: target.scaleX,
+        scaleY: target.scaleY,
+        opacity: isMinimized ? 0 : 1,
+      },
+      {spring: tabBar.collapseSize},
+      options,
+    );
+    copy.animator.animate(
+      {opacity: isMinimized ? 0 : 1},
+      {spring: tabBar.minimizeFade},
+      options,
+    );
+    playCopy(now, !isMoving, isMinimized ? COPY_FADE_S : COPY_HORIZON_S);
+  }, [isMinimized, isTouch, capsuleRef, body, copy]);
+
+  // Minimized, the bar's width can still change (a rotation, a split view):
+  // the lens stays in the circle.
+  useEffect(() => {
+    const element = capsuleRef.current;
+    if (!isMinimized || element == null) {
+      return;
+    }
+    let width = element.offsetWidth;
+    // Core's shared observer. Its first call, at once, finds the same width.
+    return observeResize(element, () => {
+      const next = element.offsetWidth;
+      const selected = selectedRef.current;
+      if (next === width || selected < 0) {
+        return;
+      }
+      width = next;
+      const isRtl = isRtlElement(element);
+      body.animator.set({
+        x:
+          minimizedCenter(next, isRtl) -
+          itemCenters(next, count, isRtl)[selected],
+        scaleX: tabBar.minimizedSize / itemWidth(next, count),
+        scaleY: tabBar.minimizedSize / tabBar.itemHeight,
+      });
+    });
+  }, [isMinimized, capsuleRef, body, count]);
 
   // Synchronizes the recognizer's press and the lens's animations with the tab
   // list. When it changes under a held finger, the press ends here, as a
@@ -716,6 +868,14 @@ export function useTabBarLens({
       selectedIndex < 0 ||
       from >= count
     ) {
+      return;
+    }
+    if (wasMinimizedRef.current) {
+      // Minimized: the lens stays in the circle, now measured from the new
+      // resting place.
+      const target = collapsed(element, selectedIndex);
+      body.animator.set(target);
+      playCopy(performance.now());
       return;
     }
     const isRtl = isRtlElement(element);

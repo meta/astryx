@@ -4,7 +4,8 @@
  * @file tabBarModel.ts
  * @input TabBar's UIKit values (uikitTabBar.ts)
  * @output TabBar's pure geometry: the items' widths and centres, the item a
- *   lift commits, and the lens's target and scale.
+ *   lift commits, and the lens's target and scale. Also the minimized
+ *   circle and the accessory's and the search field's boxes.
  * @position Math of the lab TabBar; no DOM, no React. Coordinates are the
  *   capsule's own, in px, before its flex scale. x runs from its left edge,
  *   and items go in logical order.
@@ -133,4 +134,103 @@ export function copyTransform(
   scaleY: number,
 ): {x: number; scaleX: number; scaleY: number} {
   return {x: -x / scaleX, scaleX: 1 / scaleX, scaleY: 1 / scaleY};
+}
+
+/**
+ * The minimized circle's centre in a capsule `width` px wide: concentric with
+ * the capsule's leading cap.
+ */
+export function minimizedCenter(width: number, isRtl = false): number {
+  const half = tabBar.barHeight / 2;
+  return isRtl ? width - half : half;
+}
+
+export interface AccessoryBox {
+  /** From the capsule's inline-start edge, px. */
+  readonly start: number;
+  /** From the capsule's top edge, px (negative: above it). */
+  readonly top: number;
+  readonly width: number;
+}
+
+/**
+ * The bottom accessory's box in a bar `width` px wide (the capsule, and the
+ * search circle when there is one). Above the bar it is as wide as the bar.
+ * Minimized, it sits inline between the circle and the bar's trailing end,
+ * concentric with the trailing cap. With a minimized search circle it ends
+ * `accessoryGap` before that circle.
+ */
+export function accessoryBox(
+  width: number,
+  isInline: boolean,
+  hasSearch = false,
+): AccessoryBox {
+  const {barHeight, minimizedSize, accessoryHeight, accessoryGap} = tabBar;
+  if (!isInline) {
+    return {start: 0, top: -(accessoryGap + accessoryHeight), width};
+  }
+  const start = barHeight / 2 + minimizedSize / 2 + accessoryGap;
+  return {
+    start,
+    top: (barHeight - accessoryHeight) / 2,
+    width: width - start - accessoryEnd(hasSearch),
+  };
+}
+
+/** The inline accessory's distance from the bar's trailing end. */
+export function accessoryEnd(hasSearch: boolean): number {
+  const inset = (tabBar.barHeight - tabBar.minimizedSize) / 2;
+  return hasSearch ? inset + tabBar.minimizedSize + tabBar.accessoryGap : inset;
+}
+
+/**
+ * The search field's box in a bar `width` px wide, from the bar's inline-start
+ * edge. Inline in the bar's row beside the leading circle, or (active) spanning
+ * the screen but for the cancel button. `top` is the inline row, where the
+ * active field stays too.
+ */
+export function searchFieldBox(width: number, isActive: boolean): AccessoryBox {
+  const {barHeight, minimizedSize, searchFieldGap, barInset, searchActive} =
+    tabBar;
+  const inset = (barHeight - minimizedSize) / 2;
+  const top = inset;
+  if (!isActive) {
+    const start = inset + minimizedSize + searchFieldGap;
+    return {start, top, width: width - start - inset};
+  }
+  const outset = barInset - searchActive.inset;
+  return {
+    start: -outset,
+    top,
+    width:
+      width + 2 * outset - searchActive.cancelSize - searchActive.cancelGap,
+  };
+}
+
+/**
+ * How far the search circle moves as it becomes the active field's cancel
+ * button. From the minimized circle's place at the bar's trailing end to
+ * `searchActive.inset` from the screen's edge, px toward the trailing side.
+ */
+export function searchCancelShift(): number {
+  const {barInset, barHeight, minimizedSize, searchActive} = tabBar;
+  return barInset + (barHeight - minimizedSize) / 2 - searchActive.inset;
+}
+
+/**
+ * The search field's lift above the keyboard, in px (negative is up). The
+ * field's bottom rests at `fieldBottom` (viewport px, unlifted). It moves for
+ * its bottom to sit `searchKeyboardGap` above a keyboard covering `inset` px of
+ * a `viewportHeight` px layout viewport. A keyboard too low to reach the field
+ * lifts nothing.
+ */
+export function searchLift(
+  viewportHeight: number,
+  inset: number,
+  fieldBottom: number,
+): number {
+  return Math.min(
+    0,
+    viewportHeight - inset - tabBar.searchKeyboardGap - fieldBottom,
+  );
 }

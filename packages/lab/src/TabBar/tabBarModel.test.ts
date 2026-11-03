@@ -19,6 +19,11 @@ import {
   itemWidthCss,
   lensTarget,
   liftScale,
+  accessoryBox,
+  searchCancelShift,
+  searchFieldBox,
+  searchLift,
+  minimizedCenter,
   naturalWidth,
   nearestIndex,
 } from './tabBarModel';
@@ -198,5 +203,79 @@ describe('copyTransform', () => {
         expect(onScreen.y).toBeCloseTo(p.y, 9);
       }
     }
+  });
+});
+
+describe('minimizedCenter', () => {
+  it('is concentric with the leading cap: the 48 pt circle at x 28 in a bar at x 21', () => {
+    expect(minimizedCenter(290) - tabBar.minimizedSize / 2 + 21).toBe(28);
+    expect(minimizedCenter(360)).toBe(31);
+  });
+
+  it('sits at the right end in a right-to-left bar', () => {
+    expect(minimizedCenter(360, true)).toBe(329);
+  });
+});
+
+describe('accessoryBox', () => {
+  // UIKit's frames over a bar at (21, 791), 360 wide.
+  const onScreen = (box: {start: number; top: number; width: number}) => ({
+    x: 21 + box.start,
+    y: 791 + box.top,
+    width: box.width,
+  });
+
+  it('sits 8 pt above the bar, as wide as it: (21, 735, 360 × 48)', () => {
+    expect(onScreen(accessoryBox(360, false))).toEqual({
+      x: 21,
+      y: 735,
+      width: 360,
+    });
+  });
+
+  it('minimized, sits inline after the circle: (84, 798, 290 × 48)', () => {
+    expect(onScreen(accessoryBox(360, true))).toEqual({
+      x: 84,
+      y: 798,
+      width: 290,
+    });
+  });
+
+  it('with a search tab, ends 8 pt before the minimized search circle: (84, 798, 234 × 48)', () => {
+    expect(onScreen(accessoryBox(360, true, true))).toEqual({
+      x: 84,
+      y: 798,
+      width: 234,
+    });
+  });
+});
+
+describe('searchFieldBox', () => {
+  it('sits inline beside the leading circle: (88, 798, 286 × 48)', () => {
+    const box = searchFieldBox(360, false);
+    expect({x: 21 + box.start, y: 791 + box.top, width: box.width}).toEqual({
+      x: 88,
+      y: 798,
+      width: 286,
+    });
+  });
+
+  it('active, spans the screen but for the cancel button: (8, 330 wide)', () => {
+    const box = searchFieldBox(360, true);
+    expect({x: 21 + box.start, width: box.width}).toEqual({x: 8, width: 330});
+  });
+});
+
+describe('the active search field', () => {
+  it('moves the search circle 20 pt as it becomes the cancel button: (326 → 346)', () => {
+    expect(searchCancelShift()).toBe(20);
+  });
+
+  it('lifts the field to 8 pt above the keyboard: 798 → 483 over a 335 pt keyboard', () => {
+    // The field's bottom rests at 846 in the bar on an 874 pt screen.
+    expect(searchLift(874, 335, 846)).toBe(483 - 798);
+    // No keyboard, or one too low to reach it: no lift.
+    expect(searchLift(874, 0, 846)).toBe(0);
+    expect(searchLift(874, 10, 846)).toBe(0);
   });
 });

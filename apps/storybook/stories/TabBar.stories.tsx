@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {flushSync} from 'react-dom';
 import type {Meta, StoryObj} from '@storybook/react';
 import {
@@ -9,6 +9,8 @@ import {
   Squares2X2Icon as GridOutline,
   UserCircleIcon as UserOutline,
   BellIcon as BellOutline,
+  Cog6ToothIcon as CogOutline,
+  QuestionMarkCircleIcon as HelpOutline,
 } from '@heroicons/react/24/outline';
 import {
   BookOpenIcon as BookOpenSolid,
@@ -16,8 +18,20 @@ import {
   Squares2X2Icon as GridSolid,
   UserCircleIcon as UserSolid,
   BellIcon as BellSolid,
+  Cog6ToothIcon as CogSolid,
+  QuestionMarkCircleIcon as HelpSolid,
 } from '@heroicons/react/24/solid';
-import {TabBar, TabBarItem} from '@astryxdesign/lab';
+import {ForwardIcon, PauseIcon, PlayIcon} from '@heroicons/react/24/solid';
+import {MagnifyingGlassIcon} from '@heroicons/react/24/outline';
+import {
+  TabBar,
+  TabBarItem,
+  TabBarMoreList,
+  TabBarSearchTab,
+  SearchField,
+  type SearchFieldHandle,
+  type TabBarAccessoryPlacement,
+} from '@astryxdesign/lab';
 import {Button} from '@astryxdesign/core/Button';
 import {LayerProvider} from '@astryxdesign/core/Layer';
 import {Icon, type IconType} from '@astryxdesign/core/Icon';
@@ -110,6 +124,11 @@ function Bar({
   badges = {library: 3},
   keeps = [],
   onChange,
+  minimizeBehavior,
+  bottomAccessory,
+  hasSearch = false,
+  searchActivates,
+  disabled = [],
 }: {
   sections?: Section[];
   initial?: string;
@@ -118,10 +137,32 @@ function Bar({
   keeps?: string[];
   /** Also told of every choice. */
   onChange?: (value: string) => void;
+  minimizeBehavior?: 'never' | 'onScrollDown';
+  bottomAccessory?: (placement: TabBarAccessoryPlacement) => React.ReactNode;
+  hasSearch?: boolean;
+  /** The search tab's `automaticallyActivates`. */
+  searchActivates?: boolean;
+  disabled?: string[];
 }) {
   const [value, setValue] = useState(initial);
   const [reselects, setReselects] = useState(0);
-  const title = sections.find(section => section.value === value)?.label ?? '';
+  const [isSearchActive, setIsSearchActive] = useState(false);
+  const fieldRef = useRef<SearchFieldHandle | null>(null);
+  const [query, setQuery] = useState('');
+  // Cancelling search returns to the tab it was chosen from.
+  const lastTabRef = useRef(initial);
+  if (value !== 'search') {
+    lastTabRef.current = value;
+  }
+  const setSearchActive = (isActive: boolean) => {
+    setIsSearchActive(isActive);
+    if (!isActive) {
+      setValue(lastTabRef.current);
+    }
+  };
+  const title =
+    sections.find(section => section.value === value)?.label ??
+    (value === 'search' ? 'Search' : '');
   return (
     <>
       <Screen title={title} reselects={reselects} />
@@ -135,6 +176,8 @@ function Bar({
         }}
         onReselect={() => setReselects(n => n + 1)}
         label="Sections"
+        minimizeBehavior={minimizeBehavior}
+        bottomAccessory={bottomAccessory}
         data-testid="tab-bar">
         {sections.map(section => (
           <TabBarItem
@@ -144,8 +187,30 @@ function Bar({
             icon={<Icon icon={section.icon} size="lg" />}
             selectedIcon={<Icon icon={section.selectedIcon} size="lg" />}
             badge={badges[section.value]}
+            isDisabled={disabled.includes(section.value)}
           />
         ))}
+        {hasSearch ? (
+          <TabBarSearchTab
+            value="search"
+            label="Search"
+            icon={<Icon icon={MagnifyingGlassIcon} size="lg" />}
+            isActive={isSearchActive}
+            onActiveChange={setSearchActive}
+            automaticallyActivates={searchActivates}
+            fieldRef={fieldRef}>
+            <SearchField
+              placement="tab"
+              label="Search"
+              placeholder="Search"
+              value={query}
+              onChange={setQuery}
+              isActive={isSearchActive}
+              onActiveChange={setSearchActive}
+              handleRef={fieldRef}
+            />
+          </TabBarSearchTab>
+        ) : null}
       </TabBar>
     </>
   );
@@ -154,6 +219,119 @@ function Bar({
 /** Four tabs, a badge on Library. Choosing Home again counts a reselect. */
 export const Default: Story = {
   render: () => <Bar />,
+};
+
+/**
+ * Scroll the page down under a finger: the bar collapses into a circle with
+ * the selected icon. Scroll back to the top, or tap the circle, to expand it.
+ */
+export const MinimizeOnScroll: Story = {
+  render: () => <Bar initial="library" minimizeBehavior="onScrollDown" />,
+};
+
+/** A now-playing bar for the bottom accessory; inline, it drops "Next". */
+function NowPlaying({placement}: {placement: TabBarAccessoryPlacement}) {
+  const [isPlaying, setIsPlaying] = useState(false);
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        width: '100%',
+        padding: '0 8px 0 6px',
+        boxSizing: 'border-box',
+      }}>
+      <div
+        aria-hidden
+        style={{
+          width: 36,
+          height: 36,
+          flexShrink: 0,
+          borderRadius: 8,
+          background: 'linear-gradient(135deg, #f97316, #db2777)',
+        }}
+      />
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          fontSize: 14,
+        }}>
+        Midnight City
+      </div>
+      <Button
+        label={isPlaying ? 'Pause' : 'Play'}
+        variant="ghost"
+        isIconOnly
+        icon={<Icon icon={isPlaying ? PauseIcon : PlayIcon} />}
+        onClick={() => setIsPlaying(playing => !playing)}
+      />
+      {placement === 'expanded' ? (
+        <Button
+          label="Next"
+          variant="ghost"
+          isIconOnly
+          icon={<Icon icon={ForwardIcon} />}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * A bottom accessory above the bar. Scroll the page down under a finger: it
+ * moves down inline beside the circle, and back up at the top. The stack is
+ * 139 px tall (the bar's 83 and the accessory's 56), declared on
+ * LayerProvider so menus, popovers and toasts clear it.
+ */
+export const BottomAccessory: Story = {
+  render: () => (
+    <LayerProvider inset={{blockEnd: 139}}>
+      <Bar
+        initial="library"
+        minimizeBehavior="onScrollDown"
+        bottomAccessory={placement => <NowPlaying placement={placement} />}
+      />
+    </LayerProvider>
+  ),
+};
+
+/**
+ * A search tab: a circle at the trailing end, apart from the tabs, which share
+ * a narrower capsule. Choosing it collapses the bar to a circle with the tab it
+ * was chosen from, and raises its field above the keyboard. The search circle
+ * beside it is the cancel button, which returns to that tab. Scroll down under
+ * a finger: both circles stay.
+ */
+export const SearchTab: Story = {
+  render: () => (
+    <Bar
+      hasSearch
+      minimizeBehavior="onScrollDown"
+      bottomAccessory={placement => <NowPlaying placement={placement} />}
+    />
+  ),
+};
+
+/**
+ * A search tab that waits inline (`automaticallyActivates={false}`):
+ * choosing it shows the field in the bar; a tap on the field activates it.
+ */
+export const SearchTabWaitsInline: Story = {
+  render: () => <Bar hasSearch searchActivates={false} />,
+};
+
+/**
+ * The app has disabled the selected tab (Home) and search is chosen from it.
+ * Leaving search returns to the enabled tab nearest it (Library), never to the
+ * disabled one.
+ */
+export const SearchFromDisabledTab: Story = {
+  render: () => <Bar hasSearch searchActivates={false} disabled={['home']} />,
 };
 
 /** Badges appear, change and disappear at once, as UIKit's do. */
@@ -272,6 +450,121 @@ export const DropsLastTab: Story = {
 
 export const Badges: Story = {
   render: () => <BadgesDemo />,
+};
+
+/** Browse is disabled: dimmed, and a tap, the keys or the lens leave it unchosen. */
+export const DisabledTab: Story = {
+  render: () => <Bar disabled={['browse']} />,
+};
+
+/** Six sections: the four the bar holds, then two that overflow into More. */
+const SIX: Section[] = [
+  ...SECTIONS,
+  {
+    value: 'settings',
+    label: 'Settings',
+    icon: CogOutline,
+    selectedIcon: CogSolid,
+  },
+  {value: 'help', label: 'Help', icon: HelpOutline, selectedIcon: HelpSolid},
+];
+
+function MoreDemo({hasSearch = false}: {hasSearch?: boolean}) {
+  const [value, setValue] = useState('home');
+  const [reselects, setReselects] = useState(0);
+  const [isSearchActive, setIsSearchActive] = useState(false);
+  const fieldRef = useRef<SearchFieldHandle | null>(null);
+  const [query, setQuery] = useState('');
+  const tabs = SIX.map(section => (
+    <TabBarItem
+      key={section.value}
+      value={section.value}
+      label={section.label}
+      icon={<Icon icon={section.icon} size="lg" />}
+      selectedIcon={<Icon icon={section.selectedIcon} size="lg" />}
+      badge={section.value === 'help' ? 2 : undefined}
+    />
+  ));
+  const inMore = SIX.slice(4).find(section => section.value === value);
+  return (
+    <>
+      {value === 'more' ? (
+        <div style={{padding: '16px 16px 104px'}}>
+          <h1 style={{margin: '8px 0 16px', fontSize: 28}}>More</h1>
+          <TabBarMoreList value={value} onChoose={setValue}>
+            {tabs}
+          </TabBarMoreList>
+        </div>
+      ) : inMore != null ? (
+        <div style={{padding: '16px 16px 104px'}}>
+          <Button
+            label="More"
+            variant="ghost"
+            onClick={() => setValue('more')}
+          />
+          <h1 style={{margin: '8px 0 16px', fontSize: 28}}>{inMore.label}</h1>
+        </div>
+      ) : (
+        <Screen
+          title={SIX.find(section => section.value === value)?.label ?? ''}
+          reselects={reselects}
+        />
+      )}
+      <TabBar
+        value={value}
+        onChange={setValue}
+        onReselect={reselected => {
+          // More again returns to its list, as iOS pops More's stack.
+          if (reselected === 'more') {
+            setValue('more');
+          } else {
+            setReselects(n => n + 1);
+          }
+        }}
+        label="Sections"
+        data-testid="tab-bar">
+        {tabs}
+        {hasSearch ? (
+          <TabBarSearchTab
+            value="search"
+            label="Search"
+            icon={<Icon icon={MagnifyingGlassIcon} size="lg" />}
+            isActive={isSearchActive}
+            onActiveChange={setIsSearchActive}
+            automaticallyActivates={false}
+            fieldRef={fieldRef}>
+            <SearchField
+              placement="tab"
+              label="Search"
+              placeholder="Search"
+              value={query}
+              onChange={setQuery}
+              isActive={isSearchActive}
+              onActiveChange={setIsSearchActive}
+              handleRef={fieldRef}
+            />
+          </TabBarSearchTab>
+        ) : null}
+      </TabBar>
+    </>
+  );
+}
+
+/**
+ * Six tabs: the bar shows the first four and More, whose list holds the
+ * rest. A section chosen there opens inside More, which stays selected;
+ * More again returns to the list.
+ */
+export const MoreTab: Story = {
+  render: () => <MoreDemo />,
+};
+
+/**
+ * Six tabs and a search tab: a section opened inside More stays in the
+ * search tab's leading circle (as More) while searching.
+ */
+export const MoreTabWithSearch: Story = {
+  render: () => <MoreDemo hasSearch />,
 };
 
 /** Five tabs: the items overlap more, as they do on iOS. */

@@ -14,3 +14,5 @@
  */
 
 export {useTabBarLens} from './useTabBarLens';
+export {useTabBarMinimize} from './useTabBarMinimize';
+export {useTabBarSearch} from './useTabBarSearch';

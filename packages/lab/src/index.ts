@@ -344,8 +344,13 @@ export {
 export {
   TabBar,
   TabBarItem,
+  TabBarMoreList,
+  TabBarSearchTab,
+  type TabBarAccessoryPlacement,
   type TabBarItemProps,
+  type TabBarMoreListProps,
   type TabBarProps,
+  type TabBarSearchTabProps,
 } from './TabBar';
 
 // RichTextEditor (RFC meta/astryx#3899) moved out of @astryxdesign/lab into
