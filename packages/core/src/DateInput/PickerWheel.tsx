@@ -348,7 +348,7 @@ export function PickerWheel({
     [motion],
   );
 
-  // The motion's layout follows the rows.
+  // Syncs the wheel's motion engine with the row geometry it plans on.
   useIsomorphicLayoutEffect(() => {
     motion.setLayout(layout);
   }, [motion, layout]);
@@ -430,7 +430,6 @@ export function PickerWheel({
     }
   }, [isActive, motion]);
 
-  // A finger lands: a moving wheel stops where it is on screen.
   const onTouchDown = useCallback(
     (time: number) => {
       caughtRef.current = motion.isMoving();
@@ -651,7 +650,6 @@ export function PickerWheel({
     return () => column.removeEventListener('wheel', onWheel);
   }, [isActive, moveBy]);
 
-  // Home and End: the first and the last enabled row.
   const moveToEnd = useCallback(
     (end: 'first' | 'last') => {
       const row = endIndex(latestRef.current.options, end);

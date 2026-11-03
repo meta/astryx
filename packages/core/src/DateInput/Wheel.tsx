@@ -514,7 +514,6 @@ export function ScrollWheel({
     [moveTo, options, activeIndex],
   );
 
-  // Home and End: the first and the last enabled row.
   const toEnd = useCallback(
     (end: 'first' | 'last') => moveTo(endIndex(options, end)),
     [moveTo, options],
