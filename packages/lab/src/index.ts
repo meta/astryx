@@ -333,6 +333,13 @@ export {
   type MobilePowerSearchProps,
 } from './MobilePowerSearch';
 
+// SearchField: the phone search field of iOS 26's UISearchController.
+export {
+  SearchField,
+  type SearchFieldHandle,
+  type SearchFieldProps,
+} from './SearchField';
+
 // RichTextEditor (RFC meta/astryx#3899) moved out of @astryxdesign/lab into
 // its own package, @astryxdesign/richtext. Import it from there:
 //   import {RichTextEditor, RichTextView} from '@astryxdesign/richtext';
