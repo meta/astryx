@@ -67,9 +67,8 @@ export function useHighlightedOptionScroll({
   const shownIndexRef = useRef(highlightedIndex);
   // The hover that came while a keyboard move held the highlight.
   const waitingHoverRef = useRef<WaitingHover | null>(null);
-  // Present while a keyboard move holds the highlight; removes the hold's
-  // document listeners.
-  const holdRef = useRef<(() => void) | null>(null);
+  // Set only while a keyboard move holds the highlight.
+  const removeHoldListenersRef = useRef<(() => void) | null>(null);
   const setHighlightedIndexRef = useRef(setHighlightedIndex);
   // The pointer's last screen position a hold saw, kept across holds.
   const lastPointerRef = useRef<{x: number; y: number} | null>(null);
@@ -81,8 +80,8 @@ export function useHighlightedOptionScroll({
   }, []);
 
   const endHold = useCallback(() => {
-    holdRef.current?.();
-    holdRef.current = null;
+    removeHoldListenersRef.current?.();
+    removeHoldListenersRef.current = null;
   }, []);
 
   const releaseHold = useCallback(() => {
@@ -102,7 +101,7 @@ export function useHighlightedOptionScroll({
   // the pressed row.
   const startHold = useCallback(() => {
     waitingHoverRef.current = null;
-    if (holdRef.current != null) {
+    if (removeHoldListenersRef.current != null) {
       return;
     }
     const onPointerMove = (event: PointerEvent) => {
@@ -120,7 +119,7 @@ export function useHighlightedOptionScroll({
     const options = {capture: true, passive: true} as const;
     document.addEventListener('pointermove', onPointerMove, options);
     document.addEventListener('pointerdown', releaseHold, options);
-    holdRef.current = () => {
+    removeHoldListenersRef.current = () => {
       document.removeEventListener('pointermove', onPointerMove, options);
       document.removeEventListener('pointerdown', releaseHold, options);
     };
@@ -128,7 +127,7 @@ export function useHighlightedOptionScroll({
 
   const highlightFromHover = useCallback<HighlightFromHover>(
     (index, onHighlight) => {
-      if (holdRef.current != null) {
+      if (removeHoldListenersRef.current != null) {
         waitingHoverRef.current = {index, onHighlight};
         return;
       }
@@ -147,6 +146,8 @@ export function useHighlightedOptionScroll({
   // Effect: removes the hold's document listeners on unmount.
   useEffect(() => endHold, [endHold]);
 
+  // Effect: scrolls the highlighted option into view in the document, and
+  // starts or ends the hold on its document listeners.
   useEffect(() => {
     // Only a move to the hovered row came from the hover. A hover on the row
     // already highlighted changes nothing, so a later run for the same row
@@ -156,18 +157,18 @@ export function useHighlightedOptionScroll({
     const isFromHover =
       hasMoved && hoveredIndexRef.current === highlightedIndex;
     hoveredIndexRef.current = null;
-    if (!isOpen) {
+    if (isFromHover) {
+      return;
+    }
+    // A cleared highlight, a closed list, or a list that is not shown (a
+    // closed CommandPalette reports itself as open) has nothing to hold.
+    const option =
+      isOpen && highlightedIndex >= 0
+        ? document.getElementById(getOptionId(highlightedIndex))
+        : null;
+    if (option == null) {
       waitingHoverRef.current = null;
       endHold();
-      return;
-    }
-    if (isFromHover || highlightedIndex < 0) {
-      return;
-    }
-    // A list that is not shown (a closed CommandPalette reports itself as
-    // open) has no option to scroll and no hover to hold back.
-    const option = document.getElementById(getOptionId(highlightedIndex));
-    if (option == null) {
       return;
     }
     startHold();

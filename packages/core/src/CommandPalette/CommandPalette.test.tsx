@@ -339,6 +339,42 @@ describe('CommandPalette', () => {
     expect(handleOpenChange).not.toHaveBeenCalled();
   });
 
+  it('an inline preview highlights its value again after a key and a cleared query', async () => {
+    const user = userEvent.setup();
+    render(
+      <CommandPalette
+        isOpen={true}
+        isInline
+        onOpenChange={() => {}}
+        searchSource={simpleSource}
+        value="settings"
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    const settingsId = async () =>
+      (await screen.findByRole('option', {name: 'Settings', hidden: true})).id;
+    await waitFor(async () => {
+      expect(input.getAttribute('aria-activedescendant')).toBe(
+        await settingsId(),
+      );
+    });
+    await user.click(input);
+    // Keys only from here: a press would end the keyboard's hold.
+    await user.keyboard('{ArrowDown}');
+    await user.keyboard('h');
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('option', {name: 'Settings', hidden: true}),
+      ).toBeNull();
+    });
+    await user.keyboard('{Backspace}');
+    await waitFor(async () => {
+      expect(input.getAttribute('aria-activedescendant')).toBe(
+        await settingsId(),
+      );
+    });
+  });
+
   it('preserves local Escape closing for inline previews', () => {
     const handleOpenChange = vi.fn();
     render(

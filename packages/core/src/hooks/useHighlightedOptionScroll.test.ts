@@ -75,6 +75,25 @@ describe('useHighlightedOptionScroll', () => {
     expect(onHighlight).toHaveBeenCalledTimes(1);
   });
 
+  it('a cleared highlight ends the hold, so the next hover applies at once', () => {
+    addOptions(3);
+    const setHighlightedIndex = vi.fn();
+    const {result, rerender} = renderHook(
+      ({highlightedIndex}: {highlightedIndex: number}) =>
+        useHighlightedOptionScroll({
+          isOpen: true,
+          highlightedIndex,
+          setHighlightedIndex,
+          getOptionId,
+        }),
+      {initialProps: {highlightedIndex: 0}},
+    );
+    // A new search clears the highlight; a value then highlights by hover.
+    rerender({highlightedIndex: -1});
+    result.current(1);
+    expect(setHighlightedIndex).toHaveBeenCalledWith(1);
+  });
+
   it('a hover over the row already highlighted does not stop a new list from scrolling that row into view', () => {
     const scrolled = addOptions(3);
     const setHighlightedIndex = vi.fn();
