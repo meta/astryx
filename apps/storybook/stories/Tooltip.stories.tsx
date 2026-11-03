@@ -173,6 +173,7 @@ export const CustomToggleTrigger: Story = {
           label="About billing"
           variant="secondary"
           ref={tooltip.ref}
+          aria-describedby={tooltip.describedBy}
           aria-expanded={isPinned}
           aria-controls={tooltip.describedBy}
           onClick={() => {

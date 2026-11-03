@@ -74,8 +74,9 @@ in `Tooltip.doc.mjs`.
 - Released default preserved: yes. `touchTrigger` keeps its released values
   and its default `auto`. A disabled control is not an action, so its reason
   opens on a tap (FR5); that restoration ships on its own as a patch `[fix]`
-- Compatibility class: no public prop, default, DOM, styling, or target change;
-  the press-to-pin path (FR9, FR10) is internal and adds no public surface
+- Compatibility class: additive: `useTooltip`'s return gains `show` and `hide`
+  (FR12); no public prop, default, DOM, styling, or target change; the
+  press-to-pin path (FR9, FR10) is internal and adds no public surface
 - Controlled/uncontrolled behavior: uncontrolled by default; `isOpen` forces the
   state, and a controlled tooltip reports close requests through
   `onOpenChange(false)` without closing itself (FR7); on the press-to-pin path

@@ -140,7 +140,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'For a toggle-style trigger, have your own button call show() and hide() on each press. Give it aria-expanded (true while show() holds the tooltip, false after hide() or onHide) and aria-controls set to describedBy, and keep its own accessible name. For an info icon, use InfoTip instead.',
+          'For a toggle-style trigger, have your own button call show() and hide() on each press. Give it aria-describedby and aria-controls set to describedBy, and aria-expanded (true while show() holds the tooltip, false after hide() or onHide), and keep its own accessible name. For an info icon, use InfoTip instead.',
       },
       {
         guidance: false,
@@ -204,7 +204,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Toggle-style trigger: own button calls show()/hide() per press, sets aria-expanded (true while held) + aria-controls={describedBy}, keeps its own name. Info icon: use InfoTip.',
+          'Toggle-style trigger: own button calls show()/hide() per press, sets aria-describedby + aria-controls={describedBy}, aria-expanded (true while held), keeps its own name. Info icon: use InfoTip.',
       },
       {
         guidance: false,

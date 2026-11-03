@@ -226,8 +226,8 @@ export interface TooltipReturn {
    * `isEnabled` is false.
    *
    * Use `show()` and `hide()` to build a toggle-style trigger: your own button
-   * calls them, sets `aria-expanded` (true while shown) and
-   * `aria-controls={describedBy}`, and keeps its own accessible name.
+   * calls them, sets `aria-describedby` and `aria-controls` to `describedBy`
+   * and `aria-expanded` (true while shown), and keeps its own accessible name.
    */
   show: () => void;
 
