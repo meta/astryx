@@ -167,10 +167,10 @@ function fadeMs(element: Element): number {
 }
 
 /**
- * The release animations that still run for `element`'s press. A release
- * animation is a finite CSS animation that has not finished, on the element,
- * on its `::before` or `::after`, or on a descendant whose nearest press owner
- * is the element. A component can draw its release on a part inside the
+ * The release animations that still run for `element`'s press. Each is a
+ * finite CSS animation that has not finished. It runs on the element, on its
+ * `::before` or `::after`, or on a descendant whose nearest press owner is
+ * the element, because a component can draw its release on a part inside the
  * surface. A press owner nested inside plays the release of its own press,
  * so it never extends this one. The list is empty where the engine has no Web
  * Animations.
@@ -204,11 +204,11 @@ function releaseAnimationsOf(element: Element): Animation[] {
  * Calls `end` when the release on `element` is over. A busy main thread
  * delays the first frame of the release animation, and with it the end. So a
  * clock that starts at the `fading` write can cut the release short. When
- * `clockMs` runs out, a release animation that still runs, or still waits for
- * its first frame, is waited for until it finishes or is cancelled (the
- * surface was unmounted or restyled). With no release animation (an instant
- * release, a surface without one, an engine without Web Animations), the
- * release ends at the clock. Returns a cancel.
+ * `clockMs` runs out, the release waits for each release animation that still
+ * runs or still waits for its first frame. It ends when those finish or are
+ * cancelled, as when the surface is unmounted or restyled. With no release
+ * animation (an instant release, a surface without one, an engine without Web
+ * Animations), the release ends at the clock. Returns a cancel.
  */
 function endAfterRelease(
   element: Element,
