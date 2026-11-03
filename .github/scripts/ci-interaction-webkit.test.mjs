@@ -56,7 +56,7 @@ describe('WebKit interaction proof routing', () => {
   it('always reports, behind the same pull-request gate as the Chromium proofs', () => {
     expect(webkit.if).toBe(chromium.if);
     expect(ungated(webkit.if)).toBe(
-      "github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true'",
+      "github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true'",
     );
     // Admission too: the Storybook build starts beside it (spec:AST-030 FR16).
     expect(webkit.needs).toEqual([

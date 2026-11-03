@@ -90,8 +90,18 @@ export interface ArenaBeganInput extends TouchBeganInput {
 export interface GestureArenaOptions {
   clock?: GestureClock;
   environment?: GestureEnvironment;
-  /** Touches a recognizer now owns: cancel the browser's default for them. */
-  onClaim?: (touchIds: ReadonlyArray<number>) => void;
+  /**
+   * Touches a recognizer now owns, and the recognizer that claimed them. A
+   * claim comes in any state: a recognizer that waits on another's failure
+   * claims while `possible`, and a swipe claims as `ended`. Each claim is
+   * reported once.
+   */
+  onClaim?: (
+    touchIds: ReadonlyArray<number>,
+    claimer: GestureRecognizer,
+  ) => void;
+  /** Claimed touches given back to the browser (releaseClaim). */
+  onRelease?: (touchIds: ReadonlyArray<number>) => void;
   /** A click deferred at touch end resolved: replay it, or drop it. */
   onDeferredClick?: (touch: GestureTouch, allowed: boolean) => void;
   /**
@@ -100,6 +110,13 @@ export interface GestureArenaOptions {
    * listening now (`spec:AST-094` FR24).
    */
   onIdle?: () => void;
+  /**
+   * Whether the browser keeps a contact for itself while it is down. Then no
+   * claiming recognizer recognizes with it before its lift. So a mouse or pen
+   * drag that starts on selectable text selects that text. A recognition at
+   * the lift, such as a tap's, is unaffected.
+   */
+  refusesClaim?: (touch: GestureTouch) => boolean;
   /** Every recognizer transition, for debugging and tests. */
   onTransition?: (
     recognizer: GestureRecognizer,
@@ -553,7 +570,8 @@ export class GestureArena {
   ): void {
     if (
       !internals(recognizer).shouldBegin() ||
-      this.isVetoedByConsumer(recognizer)
+      this.isVetoedByConsumer(recognizer) ||
+      this.isRefusedByBrowser(recognizer)
     ) {
       this.fail(recognizer);
       return;
@@ -635,6 +653,23 @@ export class GestureArena {
     return winner.canPrevent(other) && other.canBePrevented(winner);
   }
 
+  /**
+   * Whether a recognizer that claims touches would take a contact the
+   * browser keeps while it is down (`refusesClaim`).
+   */
+  private isRefusedByBrowser(recognizer: GestureRecognizer): boolean {
+    const refuses = this.options.refusesClaim;
+    if (refuses == null || !recognizer.claimsTouches) {
+      return false;
+    }
+    return recognizer.trackedTouches.some(
+      touch =>
+        touch.phase !== 'ended' &&
+        touch.phase !== 'cancelled' &&
+        refuses(touch),
+    );
+  }
+
   /** UIControl's rule: a control may veto an overlapping ancestor recognizer. */
   private isVetoedByConsumer(recognizer: GestureRecognizer): boolean {
     for (const id of internals(recognizer).seenTouchIds) {
@@ -674,6 +709,7 @@ export class GestureArena {
     recognizer: GestureRecognizer,
     keep: ReadonlySet<number> = new Set(),
   ): void {
+    const released: number[] = [];
     for (const touch of recognizer.trackedTouches) {
       const record = this.records.get(touch.id);
       if (record == null || !record.isClaimed || keep.has(touch.id)) {
@@ -692,7 +728,11 @@ export class GestureArena {
       );
       if (!isOwned) {
         record.isClaimed = false;
+        released.push(touch.id);
       }
+    }
+    if (released.length > 0) {
+      this.options.onRelease?.(released);
     }
   }
 
@@ -768,7 +808,7 @@ export class GestureArena {
       }
     }
     if (claimed.length > 0) {
-      this.options.onClaim?.(claimed);
+      this.options.onClaim?.(claimed, recognizer);
     }
   }
 
