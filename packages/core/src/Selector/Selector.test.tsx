@@ -2028,6 +2028,8 @@ describe('Selector', () => {
         scrollIntoView.mockClear();
 
         const options = screen.getAllByRole('option', {hidden: true});
+        // The mouse moves onto the row: a hover after keyboard use.
+        fireEvent.pointerMove(options[3], {screenX: 40, screenY: 80});
         fireEvent.mouseEnter(options[3]);
 
         const trigger = screen.getByRole('combobox');
@@ -5177,10 +5179,12 @@ describe('Selector press model', () => {
     fireEvent.pointerMove(rows[20], {screenX: 100, screenY: 200});
     fireEvent.mouseOver(rows[20]);
     expect(active()).toBe(rows[29].id);
-    // The mouse moves: the row under it takes the highlight.
+    // The mouse moves: the row under it takes the highlight, even when the
+    // browser reported entering that row before the move (Chrome's order).
     fireEvent.pointerMove(rows[21], {screenX: 100, screenY: 230});
-    fireEvent.mouseOver(rows[21]);
     expect(active()).toBe(rows[21].id);
+    fireEvent.mouseOver(rows[22]);
+    expect(active()).toBe(rows[22].id);
   });
 
   it('a long list renders its scrolling touch-action from the first open, with no class swap after the open measure', async () => {
