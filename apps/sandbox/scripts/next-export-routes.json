@@ -61,6 +61,8 @@
     "/templates/",
     "/templates/AlertDialogAsyncAction/",
     "/templates/AlertDialogDeleteConfirmation/",
+    "/templates/AnimatorPlayingCards/",
+    "/templates/AnimatorPlayingCardsVanilla/",
     "/templates/AppShellContentOnly/",
     "/templates/AppShellMobileHookUsage/",
     "/templates/AppShellShowcase/",
