@@ -498,6 +498,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-audio-player",
+      "path": "components/lab/audio-player",
+      "aliases": []
+    },
+    {
       "name": "component-lab-chart-area",
       "path": "components/lab/chart-area",
       "aliases": []
@@ -618,6 +623,66 @@
       "aliases": []
     },
     {
+      "name": "component-lab-media-captions-button",
+      "path": "components/lab/media-captions-button",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-media-fullscreen-button",
+      "path": "components/lab/media-fullscreen-button",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-media-mute-button",
+      "path": "components/lab/media-mute-button",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-media-play-button",
+      "path": "components/lab/media-play-button",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-media-playback-rate-button",
+      "path": "components/lab/media-playback-rate-button",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-media-player",
+      "path": "components/lab/media-player",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-media-player-audio",
+      "path": "components/lab/media-player-audio",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-media-player-video",
+      "path": "components/lab/media-player-video",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-media-seek-button",
+      "path": "components/lab/media-seek-button",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-media-time",
+      "path": "components/lab/media-time",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-media-time-slider",
+      "path": "components/lab/media-time-slider",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-media-volume-slider",
+      "path": "components/lab/media-volume-slider",
+      "aliases": []
+    },
+    {
       "name": "component-lab-radial-chart",
       "path": "components/lab/radial-chart",
       "aliases": []
@@ -690,6 +755,11 @@
     {
       "name": "component-lab-transfer-list-selector",
       "path": "components/lab/transfer-list-selector",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-video-player",
+      "path": "components/lab/video-player",
       "aliases": []
     },
     {
@@ -3809,6 +3879,11 @@
     {
       "name": "hook-create-animator",
       "path": "hooks/create-animator",
+      "aliases": []
+    },
+    {
+      "name": "hook-lab-use-media-player",
+      "path": "hooks/lab/use-media-player",
       "aliases": []
     },
     {

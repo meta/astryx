@@ -324,6 +324,42 @@ export {
   type DiffViewerSide,
 } from './DiffViewer';
 
+// MediaPlayer — video and audio players with themed controls over the native media element
+export {
+  AudioPlayer,
+  MediaCaptionsButton,
+  MediaFullscreenButton,
+  MediaMuteButton,
+  MediaPlayButton,
+  MediaPlaybackRateButton,
+  MediaPlayer,
+  MediaPlayerAudio,
+  MediaPlayerVideo,
+  MediaSeekButton,
+  MediaTime,
+  MediaTimeSlider,
+  MediaVolumeSlider,
+  VideoPlayer,
+  useMediaPlayer,
+  type AudioPlayerProps,
+  type MediaControlSize,
+  type MediaPlayButtonProps,
+  type MediaPlaybackRateButtonProps,
+  type MediaPlayerActions,
+  type MediaPlayerAudioProps,
+  type MediaPlayerError,
+  type MediaPlayerProps,
+  type MediaPlayerState,
+  type MediaPlayerVideoProps,
+  type MediaSeekButtonProps,
+  type MediaTextTrackInfo,
+  type MediaTimeProps,
+  type MediaVolumeSliderProps,
+  type UseMediaPlayerResult,
+  type VideoPlayerCaptionTrack,
+  type VideoPlayerProps,
+} from './MediaPlayer';
+
 // RichTextEditor (RFC meta/astryx#3899) moved out of @astryxdesign/lab into
 // its own package, @astryxdesign/richtext. Import it from there:
 //   import {RichTextEditor, RichTextView} from '@astryxdesign/richtext';
