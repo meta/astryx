@@ -174,13 +174,11 @@ export function useMultiCombobox({
       // The action cell is the caller's control, usable whether or not the
       // option itself is disabled (spec:AST-058 FR4).
       if (cell === 'action') {
-        highlightOnHover(index);
-        setHighlightedCell('action');
+        highlightOnHover(index, () => setHighlightedCell('action'));
         return;
       }
       if (!item.disabled) {
-        highlightOnHover(index);
-        setHighlightedCell('option');
+        highlightOnHover(index, () => setHighlightedCell('option'));
       }
     },
     [highlightOnHover],

@@ -662,6 +662,14 @@ describe('integration diagnostics are read-only', () => {
 
   it('leaves local and installed packages byte-for-byte unchanged', async () => {
     const pkgDir = path.join(tmpDir, 'pkg');
+    // A TypeScript config scoped to the fixture's own files, beside the
+    // packages: with none, the local package gets the repository's root
+    // config, as `tsc` reads it, and the props comparison compiles every file
+    // in the repository. The installed copy, under `node_modules`, reads none.
+    fs.writeFileSync(
+      path.join(tmpDir, 'tsconfig.json'),
+      `${JSON.stringify({extends: '../tsconfig.json', include: ['**/*']})}\n`,
+    );
     writeDiagnosedPackage(pkgDir);
     const consumer = path.join(tmpDir, 'consumer');
     fs.mkdirSync(consumer, {recursive: true});
