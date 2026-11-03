@@ -88,6 +88,8 @@
   ],
   "packages/core/src/Switch/Switch.tsx": [
     "data-astryx-press",
+    "data-astryx-press",
+    "data-astryx-press",
     "data-astryx-press"
   ],
   "packages/core/src/TabList/Tab.tsx": [

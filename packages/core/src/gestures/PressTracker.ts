@@ -95,12 +95,6 @@ export interface PressTrackerOptions {
    * does nothing passes none. @default undefined
    */
   selectionLock?: SelectionLock;
-  /**
-   * Whether the press of `touchId` holds the browser's context menu closed
-   * now; the host then cancels it. For a control whose hold acts, such as a
-   * switch. @default undefined
-   */
-  holdsContextMenu?: (touchId: number) => boolean;
   trackingExpansion?: number;
   /**
    * When the highlight waits `contentTouchDelay`: inside a scroller (a
@@ -316,10 +310,6 @@ export function createPressTracker(options: PressTrackerOptions): PressTracker {
 
     isEnabled(): boolean {
       return options.isEnabled?.() !== false;
-    },
-
-    holdsContextMenu(id: number): boolean {
-      return options.holdsContextMenu?.(id) === true;
     },
 
     touchBegan(touch: GestureTouch): void {

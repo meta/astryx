@@ -132,8 +132,6 @@ export function usePressTracker(
           recognizer,
         ),
       isEnabled: () => optionsRef.current.isEnabled?.() ?? true,
-      holdsContextMenu: id =>
-        optionsRef.current.holdsContextMenu?.(id) === true,
       // The caller's brake, or the host's: a touch that stops a flick
       // presses nothing, as a UIKit control in a decelerating scroll view.
       isBraking: touch => {

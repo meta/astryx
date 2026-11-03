@@ -235,7 +235,7 @@ a measured, sourced difference exists.
   activation stays the browser's click, except that an action a
   `family:action-groups` member tracks activates at the lift (FR26), and a toggle
   under `spec:AST-020` FR9's slide-off exception (Switch, Checkbox,
-  CheckboxListItem) may also complete on a lift after the finger slid off; and a Switch completes its own toggle at the lift of a finger hold or a flipping drag, rather than through the browser's click (`component:Switch` FR15). Where the engine hit-tests an element a compositor animation moves at the motion's start (iOS WebKit), a touch on moving content goes to what was drawn under the finger at touch-down, and a tap there (no recognizer claimed it, the browser did not take it, and it stayed within 45 pt) MUST activate it: the browser's own click for that touch is cancelled or swallowed, and that element receives one click, an editable focused first.
+  CheckboxListItem) may also complete on a lift after the finger slid off. Where the engine hit-tests an element a compositor animation moves at the motion's start (iOS WebKit), a touch on moving content goes to what was drawn under the finger at touch-down, and a tap there (no recognizer claimed it, the browser did not take it, and it stayed within 45 pt) MUST activate it: the browser's own click for that touch is cancelled or swallowed, and that element receives one click, an editable focused first.
   Under a fine pointer a control uses a third profile with no delay: its
   press paint starts at once on `pointerdown`, through the same press
   controller and release fade as a finger's, in place of CSS `:active`; the

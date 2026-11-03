@@ -282,17 +282,11 @@ describe('build-css astryx.css', () => {
           .map(line => line.match(/animation-duration:\s*([^;}]+)/)?.[1])
           .filter(Boolean);
       // One clock, the one the controller removes the attribute on, and its
-      // Reduce Motion arm, which a tempo never lengthens past it (FR4). A
-      // press layer that fades on the compositor (Switch's) runs on it too.
+      // Reduce Motion arm, which a tempo never lengthens past it (FR4).
       const releaseMs = await readReleaseMs();
-      for (const reduced of [false, true]) {
-        const durations = durationsOf(reduced);
-        expect(durations.length).toBeGreaterThan(0);
-        expect(durations.map(toMs), durations.join(' | ')).toEqual(
-          durations.map(() => releaseMs),
-        );
-      }
-      expect(durationsOf(true).every(value => /^min\(/.test(value))).toBe(true);
+      expect(durationsOf(false).map(toMs)).toEqual([releaseMs]);
+      expect(durationsOf(true).map(toMs)).toEqual([releaseMs]);
+      expect(durationsOf(true)[0]).toMatch(/^min\(/);
       // The onset is instant: nothing animates on the on arm.
       const on = lines().filter(line =>
         line.includes('[data-astryx-press="on"]'),

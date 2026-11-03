@@ -45,7 +45,6 @@ import {
 import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
 import {subscribeInput} from './inputStream';
 import {TOUCH_QUERY} from './touchPresentation';
-import {holdsPressThroughDrag} from '../privateAttributes/pressHoldsDrag.stylex';
 
 /**
  * The marker the controller finds with `closest()`. Every Astryx component
@@ -440,10 +439,6 @@ function onPointerMove(event: PointerEvent): void {
     live == null ||
     (live.pointerId != null && event.pointerId !== live.pointerId)
   ) {
-    return;
-  }
-  // The finger drags the surface's own control: its travel keeps the press.
-  if (holdsPressThroughDrag(live.element)) {
     return;
   }
   apply(

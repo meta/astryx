@@ -2346,48 +2346,6 @@ describe('GestureHost', () => {
     expect(during.defaultPrevented).toBe(true);
   });
 
-  it('cancels the context menu while a press consumer holds it closed, and only while its touch is down', () => {
-    const {box} = mount('<div id="box"></div>');
-    let isHeld = false;
-    const tracker = createPressTracker({
-      getBounds: () => null,
-      holdsContextMenu: () => isHeld,
-    });
-    detachers.push(host.attachConsumer(box, tracker));
-    const opensMenu = () => {
-      const event = new MouseEvent('contextmenu', {
-        bubbles: true,
-        cancelable: true,
-      });
-      box.dispatchEvent(event);
-      return !event.defaultPrevented;
-    };
-    const finger = {id: 1, x: 10, y: 10};
-    touch('touchstart', box, [finger], [finger], 0);
-    expect(opensMenu()).toBe(true);
-    isHeld = true;
-    expect(opensMenu()).toBe(false);
-    touch('touchend', box, [finger], [], 600);
-    expect(opensMenu()).toBe(true);
-  });
-
-  it('leaves the context menu to the browser for a press consumer that does not hold it', () => {
-    const {box} = mount('<div id="box"></div>');
-    detachers.push(
-      host.attachConsumer(box, createPressTracker({getBounds: () => null})),
-    );
-    const finger = {id: 1, x: 10, y: 10};
-    touch('touchstart', box, [finger], [finger], 0);
-    host.arena.advanceTime(600);
-    const event = new MouseEvent('contextmenu', {
-      bubbles: true,
-      cancelable: true,
-    });
-    box.dispatchEvent(event);
-    expect(event.defaultPrevented).toBe(false);
-    touch('touchend', box, [finger], [], 700);
-  });
-
   it('holds the click of a tap a double tap may claim, and replays it when the double tap fails', () => {
     const {row, button} = mount(
       '<div id="row"><button id="button">Go</button></div>',

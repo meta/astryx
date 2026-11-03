@@ -121,8 +121,6 @@ function filesUnder(dir, pattern) {
 const GESTURE_USERS = new Set([
   // Slider's thumb.
   'Slider',
-  // Switch: its press tracking and its drag, for every pointer.
-  'Switch',
 ]);
 
 /** Public imports that carry no gesture code, whatever the list above says. */
