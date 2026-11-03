@@ -41,14 +41,15 @@
  * component folder changes, or a component it is named after is in scope;
  * never for a `scope` token or an unknown scope.
  *
- * `--changed-only <file> --owned-by <components>` (the default check of the
- * components a pull request touches): run the browser specs the pull request
- * adds or modifies, listed one per line in <file>, then the `scoped` and
- * `release-only` specs that the comma-separated touched components own by
- * `specOwners`. It reads no title, runs no component audit, uses no `scope`
- * token, and runs no spec of a reverse dependent; a changed `audit` spec still
+ * `--changed-only <specs> --changed-files <files> --owned-by <components>`
+ * (the default check of the components a pull request touches): run the
+ * browser specs the pull request adds or modifies, listed one per line in
+ * <specs>, then the `scoped` and `release-only` specs that the comma-separated
+ * touched components own (`ownedSpecs`; <files> lists every changed path, one
+ * per line, for the folder-change rule). It reads no title, runs no component
+ * audit, and runs no spec of a reverse dependent; a changed `audit` spec still
  * waits for its audit pull request. To stay inside the job's 15-minute budget
- * it runs at most CHANGED_SPEC_LIMIT changed files, starts an owned file only
+ * it takes at most CHANGED_SPEC_LIMIT changed files, starts each file only
  * when the run still fits DEFAULT_CHECK_BUDGET_MS at that file's recorded time
  * (.github/a11y-contract-durations.json), and stops at that budget. Each file
  * it leaves out is reported as not run, never as passed or failed. Locally,
@@ -425,9 +426,9 @@ function median(values) {
 
 /**
  * The default check's run. First the changed specs, at most the limit, in path
- * order. Then the owned specs, in path order: an owned file starts only when
- * the run still fits the budget with that file at its recorded time (with the
- * margin). The other files are not run, with the label that runs them.
+ * order. Then the owned specs, in path order. A file starts only when the run
+ * still fits the budget with that file at its recorded time (with the margin).
+ * The other files are not run, with the label that runs them.
  * @param {object} options
  * @param {{file: string, reason: string}[]} options.changed
  * @param {{file: string, reason: string}[]} options.owned
@@ -442,16 +443,17 @@ export function planDefaultCheck({
   workers,
   budgetMs = DEFAULT_CHECK_BUDGET_MS,
 }) {
-  const {run, notRun} = withinBudget(changed);
+  const {run: changedInLimit, notRun} = withinBudget(changed);
   const fallback = median(Object.values(seconds));
   const secondsOf = file => seconds[file] ?? fallback;
   const msOf = file => secondsOf(file) * 1000 * RECORDED_TIME_MARGIN;
   const planned = new Set(changed.map(({file}) => file));
-  const files = run.map(({file}) => file);
-  const ordered = [...owned].sort((a, b) => a.file.localeCompare(b.file));
-  for (const entry of ordered) {
-    if (planned.has(entry.file)) continue;
-    planned.add(entry.file);
+  const run = [];
+  const files = [];
+  const ordered = [...owned]
+    .filter(({file}) => !planned.has(file))
+    .sort((a, b) => a.file.localeCompare(b.file));
+  for (const entry of [...changedInLimit, ...ordered]) {
     const withFile = [...files, entry.file];
     if (STARTUP_MS + projectedMs(withFile, msOf, workers) <= budgetMs) {
       run.push(entry);
@@ -659,6 +661,12 @@ function contractWorkers() {
   return Number.isInteger(workers) && workers > 0 ? workers : 1;
 }
 
+/** A file's non-empty lines, or null for no file name. */
+function readLines(file) {
+  if (!file) return null;
+  return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean);
+}
+
 /** The value after a flag, or null when the flag is absent. */
 function flagValue(argv, flag) {
   const index = argv.indexOf(flag);
@@ -711,12 +719,16 @@ function main() {
     ? process.env.GITHUB_EVENT_NAME === 'pull_request'
     : true;
   const changedOnlyFile = flagValue(argv, '--changed-only');
+  const changedFilesFile = flagValue(argv, '--changed-files');
   const ownedByValue = flagValue(argv, '--owned-by');
   const ownedBy = (ownedByValue ?? '').split(',').filter(Boolean);
-  if (ownedByValue != null && changedOnlyFile == null) {
-    throw new Error('--owned-by needs --changed-only');
+  if (
+    (ownedByValue != null || changedFilesFile != null) &&
+    changedOnlyFile == null
+  ) {
+    throw new Error('--owned-by and --changed-files need --changed-only');
   }
-  const flagValues = new Set([changedOnlyFile, ownedByValue]);
+  const flagValues = new Set([changedOnlyFile, changedFilesFile, ownedByValue]);
   // Outside CI, a run with no base compares with origin/main.
   const base =
     process.env.BASE_SHA ||
@@ -751,7 +763,11 @@ function main() {
     changedOnlyFile != null
       ? planDefaultCheck({
           changed: changedOnly(routed, changedPaths),
-          owned: ownedSpecs({specs, components: ownedBy, changedPaths}),
+          owned: ownedSpecs({
+            specs,
+            components: ownedBy,
+            changedPaths: readLines(changedFilesFile) ?? changedPaths,
+          }),
           seconds: readDurations(root),
           workers: contractWorkers(),
         })

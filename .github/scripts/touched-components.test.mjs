@@ -743,7 +743,12 @@ describe('pr-component-a11y-contracts routing', () => {
   it('runs the changed specs and the touched owners, on four workers, inside the job budget', () => {
     expect(runStep.if).toBe(ran);
     expect(runStep.run).toBe(
-      'node .github/scripts/a11y-pr-contracts.mjs --changed-only "$SPECS_PATH" --owned-by "$OWNERS"',
+      'node .github/scripts/a11y-pr-contracts.mjs --changed-only "$SPECS_PATH" --changed-files "$FILES_PATH" --owned-by "$OWNERS"',
+    );
+    // Every changed path, not only the changed specs: a change in a
+    // component folder owns that folder's specs.
+    expect(runStep.env.FILES_PATH).toBe(
+      '${{ steps.scope.outputs.changed_files_path }}',
     );
     // A wide change has no owned specs.
     expect(runStep.env.OWNERS).toBe(

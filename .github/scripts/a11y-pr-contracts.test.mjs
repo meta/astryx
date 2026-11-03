@@ -324,6 +324,29 @@ describe('the default check of the touched components', () => {
     expect(files(notRun)).toEqual([COMBOBOX_FIELD]);
   });
 
+  it('reports a changed spec that does not fit as not run, never starts it', () => {
+    const tokenizer =
+      'packages/core/src/Tokenizer/__tests__/TokenizerEndLane.a11y.chromium.spec.ts';
+    const {run, notRun} = planDefaultCheck({
+      changed: [
+        {file: SWITCH, reason: 'spec changed'},
+        {file: tokenizer, reason: 'spec changed'},
+      ],
+      owned: [],
+      seconds: {...seconds, [tokenizer]: 551.8},
+      workers: 4,
+    });
+    expect(run).toEqual([{file: SWITCH, reason: 'spec changed'}]);
+    expect(notRun).toEqual([
+      {
+        file: tokenizer,
+        reason: expect.stringMatching(
+          /^spec changed; its expected 552 s does not fit .*ci:run-a11y/,
+        ),
+      },
+    ]);
+  });
+
   it('expects the median recorded time for a file that has none', () => {
     const fresh = spec(
       'packages/core/src/Switch/__tests__/SwitchFresh.a11y.chromium.spec.ts',
@@ -379,8 +402,10 @@ describe('the default check of the touched components', () => {
       'utf8',
     );
     expect(runner).toContain("flagValue(argv, '--owned-by')");
+    // The folder-change rule reads every changed path, not the spec list.
+    expect(runner).toContain("flagValue(argv, '--changed-files')");
     expect(runner).toContain(
-      'owned: ownedSpecs({specs, components: ownedBy, changedPaths})',
+      'changedPaths: readLines(changedFilesFile) ?? changedPaths',
     );
     expect(runner).toContain('seconds: readDurations(root)');
     expect(runner).toContain('workers: contractWorkers()');
@@ -911,6 +936,39 @@ describe('repository specs', () => {
         file,
       ).not.toThrow();
     }
+  });
+
+  it("owns a component folder's contracts for a change in that folder", () => {
+    // A folder of several components: an edit to one of them names only that
+    // owner, so the folder's hook and surface specs are owned by the change.
+    const specs = files.map(file => ({
+      file,
+      routing: parseRouting(fs.readFileSync(path.join(root, file), 'utf8')),
+    }));
+    const owned = ownedSpecs({
+      specs,
+      components: ['core/ChatLayout'],
+      changedPaths: ['packages/core/src/Chat/ChatLayout.tsx'],
+    }).map(({file}) => file);
+    for (const file of [
+      'packages/core/src/Chat/__tests__/ChatLayoutScrollButtonSurface.a11y.chromium.spec.ts',
+      'packages/core/src/Chat/__tests__/useChatStreamScroll.a11y.chromium.spec.ts',
+    ]) {
+      expect(owned, file).toContain(file);
+    }
+    expect(
+      ownedSpecs({
+        specs,
+        components: ['core/ChatLayout'],
+        changedPaths: [],
+      }).map(({file}) => file),
+    ).not.toContain(
+      'packages/core/src/Chat/__tests__/useChatStreamScroll.a11y.chromium.spec.ts',
+    );
+    // Audit bindings in the folder still wait for their audit pull request.
+    expect(owned).not.toContain(
+      'packages/core/src/Chat/__tests__/ChatMessageList.a11y.chromium.spec.ts',
+    );
   });
 });
 

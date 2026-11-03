@@ -3825,9 +3825,10 @@ jobs:
           ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           WORKFLOW_SHA: ${{ github.sha }}
           SPECS_PATH: ${{ steps.specs.outputs.path }}
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
           OWNERS: ${{ steps.touched.outputs.has_components == 'true' && steps.touched.outputs.a11y_owners || '' }}
           A11Y_CONTRACT_WORKERS: 4
-        run: node .github/scripts/a11y-pr-contracts.mjs --changed-only "$SPECS_PATH" --owned-by "$OWNERS"
+        run: node .github/scripts/a11y-pr-contracts.mjs --changed-only "$SPECS_PATH" --changed-files "$FILES_PATH" --owned-by "$OWNERS"
 
       - name: Upload contract evidence
         if: always() && (steps.contracts.outcome == 'success' || steps.contracts.outcome == 'failure')
