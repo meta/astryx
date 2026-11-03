@@ -5,7 +5,8 @@
 /**
  * @file useTooltip.tsx
  * @input Uses useLayer, usePressPin, React hooks
- * @output Exports useTooltip hook with stable trigger refs for hover/focus/tap tooltips
+ * @output Exports useTooltip hook with stable trigger refs for hover/focus/tap tooltips,
+ *   and the module-only useTooltipWithTriggerBehavior that InfoTip's press-to-pin uses
  * @position Layer hook; builds on useLayer for tooltip behavior
  *
  * SYNC: When modified, update:
@@ -31,7 +32,7 @@ import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {registerLayerSurface} from '../Layer/layerSurfacePress';
-import {usePressPin} from '../Layer/usePressPin';
+import {usePressPin, type LayerTriggerBehavior} from '../Layer/usePressPin';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {themeProps} from '../utils/themeProps';
 import {
@@ -83,14 +84,6 @@ export type TooltipFocusTrigger = 'auto' | 'always' | 'never';
  */
 export type TooltipTouchTrigger = LayerTouchTrigger;
 
-/**
- * How the trigger opens the tooltip. `adaptive`, the default, previews it on
- * hover and focus, and a tap opens it unless the trigger acts. `hover`
- * previews it on hover and focus, and no touch or pen tap opens it. `toggle`
- * pins it on a click, tap, Enter, or Space on a button trigger.
- */
-export type TooltipTriggerBehavior = 'adaptive' | 'hover' | 'toggle';
-
 export interface TooltipOptions {
   /**
    * Position placement relative to anchor
@@ -135,31 +128,9 @@ export interface TooltipOptions {
    * - `tap`: tap always opens the tooltip, even on a trigger that acts
    * - `none`: touch never opens the tooltip
    *
-   * It decides only under `triggerBehavior="adaptive"`, the default.
-   *
    * @default 'auto'
    */
   touchTrigger?: TooltipTouchTrigger;
-
-  /**
-   * How the trigger opens the tooltip:
-   * - `adaptive` (the default): hover and focus preview it. A tap opens it
-   *   unless the trigger performs an action of its own. While `touchTrigger`
-   *   remains, it decides those taps.
-   * - `hover`: hover and focus preview it; no touch or pen tap opens it.
-   * - `toggle`: on a button trigger, a click, a tap, Enter, or Space pins the
-   *   tooltip open, and the same press closes it. Hover and keyboard focus
-   *   still preview it. A pinned tooltip stays until Escape, a second press,
-   *   a press outside, or focus leaving. Astryx clickable rows and cards
-   *   ignore the pinning press, except an Item row on a trigger that is not
-   *   a native button. The `Tooltip` component also stops it at a child
-   *   trigger. A hook caller stops a plain `onClick` ancestor itself. The
-   *   trigger reports `aria-expanded` and `aria-controls`, and the tooltip's
-   *   text is announced once when it pins. `touchTrigger` is ignored.
-   *
-   * @default 'adaptive'
-   */
-  triggerBehavior?: TooltipTriggerBehavior;
 
   /**
    * Whether the tooltip is enabled.
@@ -296,6 +267,37 @@ function isFocusable(element: HTMLElement): boolean {
  */
 
 export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
+  return useTooltipWithTriggerBehavior(options);
+}
+
+/**
+ * Module-only options for `useTooltipWithTriggerBehavior`. Not exported from
+ * the package.
+ */
+export interface TooltipWithTriggerBehaviorOptions extends TooltipOptions {
+  /**
+   * How the trigger opens the tooltip:
+   * - `adaptive` (the default): hover and focus preview it. `touchTrigger`
+   *   decides taps.
+   * - `toggle`: on a button trigger, a click, a tap, Enter, or Space pins the
+   *   tooltip open, and the same press closes it. Hover and keyboard focus
+   *   still preview it. A pinned tooltip stays until Escape, a second press,
+   *   a press outside, or focus leaving. The trigger reports `aria-expanded`
+   *   and `aria-controls`, and the tooltip's text is announced once when it
+   *   pins. `touchTrigger` is ignored. InfoTip uses it.
+   *
+   * @default 'adaptive'
+   */
+  triggerBehavior?: LayerTriggerBehavior;
+}
+
+/**
+ * `useTooltip` with a trigger behavior. Module-only: InfoTip's press-to-pin
+ * goes through it, and the package does not export it.
+ */
+export function useTooltipWithTriggerBehavior(
+  options: TooltipWithTriggerBehaviorOptions = {},
+): TooltipReturn {
   const {
     placement = 'above',
     alignment = 'center',

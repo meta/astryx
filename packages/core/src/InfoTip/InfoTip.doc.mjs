@@ -66,7 +66,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Rely on InfoTip rather than a hand-rolled info button on touch: it sets Tooltip triggerBehavior to toggle, so a tap, a click, Enter, or Space pins the tooltip even though the trigger is a button, and a tap outside dismisses it.',
+          'Rely on InfoTip rather than a hand-rolled info button on touch: it pins its help on a press, so a tap, a click, Enter, or Space pins the tooltip even though the trigger is a button, and a tap outside dismisses it.',
       },
       {
         guidance: false,
@@ -131,7 +131,7 @@ export const docsZh = {
       {
         guidance: true,
         description:
-          'Rely on InfoTip rather than a hand-rolled info button on touch: it sets Tooltip triggerBehavior to toggle, so a tap, a click, Enter, or Space pins the tooltip even though the trigger is a button, and a tap outside dismisses it.',
+          'Rely on InfoTip rather than a hand-rolled info button on touch: it pins its help on a press, so a tap, a click, Enter, or Space pins the tooltip even though the trigger is a button, and a tap outside dismisses it.',
       },
       {
         guidance: false,
@@ -168,7 +168,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Rely on InfoTip rather than a hand-rolled info button on touch: it sets Tooltip triggerBehavior to toggle, so a tap, a click, Enter, or Space pins the tooltip even though the trigger is a button, and a tap outside dismisses it.',
+          'Rely on InfoTip rather than a hand-rolled info button on touch: it pins its help on a press, so a tap, a click, Enter, or Space pins the tooltip even though the trigger is a button, and a tap outside dismisses it.',
       },
       {
         guidance: false,

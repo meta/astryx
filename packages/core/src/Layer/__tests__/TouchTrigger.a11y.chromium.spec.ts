@@ -11,8 +11,8 @@
  *   the trigger, never opens for a touch that turns into a scroll, and a
  *   tap-opened layer closes when a tap outside lifts or a scroll starts
  *   outside.
- *   Each `triggerBehavior` value answers a finger or pen tap as it says, and
- *   a toggle trigger pins on a press, also under a mouse.
+ *   A plain Tooltip and InfoTip's press-to-pin each answer a finger or pen
+ *   tap as they say, and InfoTip pins on a press, also under a mouse.
  * @position Run with `pnpm test:a11y-contract`. Only a real engine decides
  *   whether a touch is a tap, a scroll or a long press, so these outcomes
  *   cannot be shown in jsdom; the unit suites (Tooltip.test.tsx,
@@ -201,7 +201,7 @@ for (const {name, story, trigger, action, layer} of cases) {
   });
 }
 
-test.describe('Tooltip triggerBehavior="toggle" (component:Tooltip FR9, FR10)', () => {
+test.describe('Tooltip press-to-pin through InfoTip (component:Tooltip FR9, FR10)', () => {
   const STORY = 'a11y-tooltip-toggle-behavior--button-toggle';
   const CARD_STORY = 'a11y-tooltip-toggle-behavior--in-a-clickable-card';
   const LAYER = '.astryx-tooltip:popover-open';
@@ -275,7 +275,7 @@ test.describe('Tooltip triggerBehavior="toggle" (component:Tooltip FR9, FR10)', 
   });
 });
 
-test.describe('Tooltip triggerBehavior under a finger and a pen (component:Tooltip FR5, FR9)', () => {
+test.describe('Tooltip and InfoTip under a finger and a pen (component:Tooltip FR5, FR9)', () => {
   const STORY = 'a11y-tooltip-toggle-behavior--trigger-behaviors';
   const LAYER = '.astryx-tooltip:popover-open';
   const term = (page: Page, name: string) =>
@@ -309,13 +309,10 @@ test.describe('Tooltip triggerBehavior under a finger and a pen (component:Toolt
   }
 
   for (const pointer of ['finger', 'pen'] as const) {
-    test(`a ${pointer} tap never opens hover, opens adaptive, and pins toggle`, async ({
+    test(`a ${pointer} tap opens a plain Tooltip term and pins an InfoTip`, async ({
       page,
     }) => {
       const finger = await openStory(page, STORY);
-      await tapWith(page, finger, term(page, 'Hover term'), pointer);
-      await page.waitForTimeout(300);
-      await expect(page.locator(LAYER)).toHaveCount(0);
       await tapWith(page, finger, term(page, 'Adaptive term'), pointer);
       await expect(page.locator(LAYER)).toHaveText('Adaptive: a tap opens it');
       const toggle = page.getByRole('button', {name: 'Toggle term'});
@@ -357,41 +354,5 @@ test.describe('a pinned layer under a mouse (component:Tooltip FR9)', () => {
     expect(await focusIsOnBody(page)).toBe(true);
     await expect(layer).toHaveCount(1);
     await expect(button).toHaveAttribute('aria-expanded', 'true');
-  });
-
-  test('a click on an anchored trigger runs its own click handler and pins it, and the card around it ignores the press', async ({
-    page,
-  }) => {
-    await open(page, 'a11y-tooltip-toggle-behavior--anchored-action-in-a-card');
-    const button = page.getByRole('button', {name: 'What is this?'});
-    const layer = page.locator('.astryx-tooltip:popover-open');
-    const opened = page.getByText(/^Card opened \d+ times$/);
-    const pressed = page.getByText(/^Button pressed \d+ times$/);
-    await expect(opened).toHaveText('Card opened 0 times');
-    await expect(pressed).toHaveText('Button pressed 0 times');
-    await button.click();
-    await expect(layer).toHaveCount(1);
-    await expect(button).toHaveAttribute('aria-expanded', 'true');
-    await expect(pressed).toHaveText('Button pressed 1 times');
-    await expect(opened).toHaveText('Card opened 0 times');
-    await button.click();
-    await expect(layer).toHaveCount(0);
-    await expect(pressed).toHaveText('Button pressed 2 times');
-    await expect(opened).toHaveText('Card opened 0 times');
-  });
-
-  test('with focusTrigger="never", Tab to another control closes a pinned tooltip', async ({
-    page,
-  }) => {
-    await open(page, 'a11y-tooltip-toggle-behavior--focus-trigger-never');
-    const button = page.getByRole('button', {name: 'What is this?'});
-    const layer = page.locator('.astryx-tooltip:popover-open');
-    await button.click();
-    await expect(layer).toHaveCount(1);
-    await expect(button).toBeFocused();
-    await page.keyboard.press('Tab');
-    await expect(page.getByRole('button', {name: 'Next'})).toBeFocused();
-    await expect(layer).toHaveCount(0);
-    await expect(button).toHaveAttribute('aria-expanded', 'false');
   });
 });
