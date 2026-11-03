@@ -494,8 +494,8 @@ function BaseTableInner<T extends Record<string, unknown>>({
       resolvedContent
     );
 
-    // An overlay (a resize handle) is a control of its own, so it must not add
-    // to the header's name: the header is named by the rest of its content.
+    // The overlay is a control of its own. Keep its name and value out of the
+    // header's name.
     const namesOwnHeader =
       isRenderable(overlay) &&
       mergedHtmlProps['aria-label'] == null &&
