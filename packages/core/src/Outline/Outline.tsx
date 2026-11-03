@@ -12,7 +12,7 @@
  * - Sliding indicator track (vertical divider + animated active bar)
  * - Density variant (default/compact)
  * - Scroll-spy active state when uncontrolled
- * - Roving-tabindex keyboard navigation (Arrow/Home/End, Enter/Space activate)
+ * - Each link in the normal Tab order (Enter/Space activate)
  * - onNavigateStart / onNavigateEnd callbacks around the smooth scroll
  * - Scroll scoping (offset, scrollContainerRef, hasScrollOnClick)
  *

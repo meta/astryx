@@ -74,16 +74,29 @@ interface Receipt {
 let storybook: StaticServer;
 const receipts: Receipt[] = [];
 let checkoutSha = '';
+
+/**
+ * Whether the checkout is the PR head itself, or the merge commit CI checks
+ * out for a pull request, whose parents include the PR head. The raw commit
+ * object lists its parents even in a shallow clone.
+ */
+function checksOutHead(checkoutSha: string, headSha: string): boolean {
+  if (checkoutSha === headSha) {
+    return true;
+  }
+  const commit = execFileSync('git', ['cat-file', '-p', checkoutSha], {
+    encoding: 'utf8',
+  });
+  return commit.split('\n').some(line => line === `parent ${headSha}`);
+}
 let storybookSha = '';
 
 test.beforeAll(async () => {
   checkoutSha = execFileSync('git', ['rev-parse', 'HEAD'], {
     encoding: 'utf8',
   }).trim();
-  if (
-    process.env.ASTRYX_HEAD_SHA &&
-    process.env.ASTRYX_HEAD_SHA !== checkoutSha
-  ) {
+  const reviewedHead = process.env.ASTRYX_HEAD_SHA;
+  if (reviewedHead && !checksOutHead(checkoutSha, reviewedHead)) {
     throw new Error('The audited checkout does not match the PR head');
   }
   fs.mkdirSync(OUTPUT, {recursive: true});
@@ -97,7 +110,9 @@ test.beforeAll(async () => {
     );
   }
   storybookSha = (await stamp.text()).trim();
-  if (storybookSha !== checkoutSha) {
+  // A pull request's Storybook is stamped with the PR head, while CI checks
+  // out that head's merge commit.
+  if (storybookSha !== checkoutSha && storybookSha !== reviewedHead) {
     throw new Error(
       'The served Storybook build does not match the audited checkout',
     );
