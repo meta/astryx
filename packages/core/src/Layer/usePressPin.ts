@@ -8,11 +8,13 @@
  *   `triggerBehavior` and `touchTrigger` options
  * @output usePressPin, the press toggle that pins a hover layer open;
  *   isPressPinTrigger; stopPressPinClick; the LayerTriggerBehavior type
- * @position Core-internal: one call per hover layer, useTooltip's. It owns
- *   the layer's touch trigger, so the host makes no second touch-trigger call.
+ * @position Core-internal, one call per hover layer (useTooltip and
+ *   useHoverCard). It owns the layer's touch trigger, so the host makes no
+ *   touch-trigger call of its own.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Tooltip/useTooltip.tsx
+ * - /packages/core/src/HoverCard/useHoverCard.tsx
  * - /packages/core/src/Layer/usePressPin.test.tsx
  */
 
@@ -269,10 +271,7 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
   const toggle = useCallback(() => {
     const current = optionsRef.current;
     if (current.isOpen !== undefined) {
-      if (!current.isOpen) {
-        armOutsideDismiss();
-        announceName();
-      } else {
+      if (current.isOpen) {
         clearTapOpen();
       }
       current.report(!current.isOpen);
@@ -517,6 +516,23 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
   });
 
   const isPinShown = isToggleMode && isWired && wiresState && isExpanded;
+
+  // Unlike `isPinShown`, this counts an own-text pin, which has no toggle
+  // state.
+  const isPinVisible = isToggleMode && isWired && isExpanded;
+
+  // Syncs the outside dismissal and the live region with a controlled owner's
+  // answer. Both start each time the layer shows pinned, as the rendered-text
+  // announcement does.
+  const wasPinVisibleRef = useRef(false);
+  useEffect(() => {
+    const isNewlyPinned = isPinVisible && !wasPinVisibleRef.current;
+    wasPinVisibleRef.current = isPinVisible;
+    if (isNewlyPinned && isOpen !== undefined) {
+      armOutsideDismiss();
+      announceName();
+    }
+  }, [isPinVisible, isOpen, armOutsideDismiss, announceName]);
 
   return {
     isToggleTrigger,

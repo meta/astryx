@@ -2,16 +2,18 @@
 
 /**
  * @file TooltipToggleBehaviorA11y.stories.tsx
- * @input Uses Tooltip, Button, ClickableCard and Layout from core
+ * @input Uses Tooltip, HoverCard, Button, ClickableCard and Layout from core
  * @output Fixtures for the toggle-behavior browser tests. One is a button
  *   whose only job is its tooltip, alone and inside a clickable card. One is
  *   an anchored trigger with its own click handler, inside a clickable card.
  *   One is a trigger whose tooltip opens on no focus. One story has a trigger
- *   per `triggerBehavior` value.
+ *   per `triggerBehavior` value. One is an unlabelled HoverCard of two
+ *   paragraphs on a button.
  * @position The reproduction path for the `triggerBehavior="toggle"` cases in
  *   `packages/core/src/Layer/__tests__/TouchTrigger.a11y.chromium.spec.ts`
- *   (`component:Tooltip` FR9, FR10). Per `docs/specs/AST-009/spec.md` FR30, a
- *   browser claim is checked against a checked-in story.
+ *   (`component:Tooltip` FR9, FR10; `component:HoverCard` FR9, FR10). Per
+ *   `docs/specs/AST-009/spec.md` FR30, a browser claim is checked against a
+ *   checked-in story.
  *
  * SYNC: The spec navigates to these story ids by name. Nothing at compile
  *   time catches a renamed export — the Chromium spec does, when it finds no
@@ -22,6 +24,7 @@ import {useRef, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {Button} from '@astryxdesign/core/Button';
 import {ClickableCard} from '@astryxdesign/core/ClickableCard';
+import {HoverCard} from '@astryxdesign/core/HoverCard';
 import {VStack} from '@astryxdesign/core/Layout';
 import {Tooltip} from '@astryxdesign/core/Tooltip';
 
@@ -177,6 +180,31 @@ export const TriggerBehaviors: Story = {
           </Button>
         </Tooltip>
       </VStack>
+    </div>
+  ),
+};
+
+/**
+ * An unlabelled card of two paragraphs on a button. A press pins it, and its
+ * text is announced with the paragraphs apart. A press on that text moves
+ * focus to no element and keeps it pinned.
+ */
+export const HoverCardToggle: Story = {
+  render: () => (
+    <div style={{padding: 100}}>
+      <HoverCard
+        content={
+          <>
+            <p>Ada Lovelace</p>
+            <p>Analyst, Payments</p>
+          </>
+        }
+        placement="below"
+        triggerBehavior="toggle">
+        <Button label="Ada" variant="secondary">
+          Ada
+        </Button>
+      </HoverCard>
     </div>
   ),
 };

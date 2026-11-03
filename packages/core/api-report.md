@@ -1290,6 +1290,7 @@ component HoverCard(props: HoverCardProps)
   prop onOpenChange?: (isOpen: boolean) => void
   prop placement?: LayerPlacement = 'above'
   prop touchTrigger?: HoverCardTouchTrigger = 'auto'
+  prop triggerBehavior?: HoverCardTriggerBehavior = 'adaptive'
   prop xstyle?: StyleXStyles
   inherits HTMLAttributes
 component Icon(props: IconProps)
@@ -4408,6 +4409,7 @@ interface HoverCardOptions
   onShow?: () => void
   placement?: LayerPlacement = 'above'
   touchTrigger?: HoverCardTouchTrigger = 'auto'
+  triggerBehavior?: HoverCardTriggerBehavior = 'adaptive'
 interface HoverCardProps extends Pick<BaseProps, 'xstyle' | 'className' | 'style'> (props of HoverCard)
 interface HoverCardReturn
   anchorId: string
@@ -4421,6 +4423,7 @@ interface HoverCardReturn
   renderHoverCard: (children: ReactNode, props?: Omit<ContextRenderProps, 'positioning'>) => ReactNode
   show: () => void
 type HoverCardTouchTrigger = LayerTouchTrigger
+type HoverCardTriggerBehavior = 'adaptive' | 'hover' | 'toggle'
 type ISODateString = `${number}${number}${number}${number}-${number}${number}-${number}${number}`
 type ISODateTimeString = string & { readonly __brand: 'ISODateTimeString' }
 type ISOTimeString = string & { readonly __brand: 'ISOTimeString' }
@@ -7071,6 +7074,7 @@ HoverCardOptions (.)
 HoverCardProps (.)
 HoverCardReturn (.)
 HoverCardTouchTrigger (.)
+HoverCardTriggerBehavior (.)
 useHoverCard (.)
 ```
 

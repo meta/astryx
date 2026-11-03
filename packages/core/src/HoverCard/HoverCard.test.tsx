@@ -29,10 +29,15 @@ import {
 } from '@testing-library/react';
 import {renderToString} from 'react-dom/server';
 import {hydrateRoot} from 'react-dom/client';
-import {StrictMode, type ComponentProps} from 'react';
+import {
+  StrictMode,
+  type ComponentProps,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button/Button';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
+import {Item} from '../Item/Item';
 import {Theme, defineTheme} from '../theme';
 import {HoverCard} from './HoverCard';
 import {useHoverCard} from './useHoverCard';
@@ -1608,5 +1613,225 @@ describe('HoverCard timing, hold, and controlled state', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
     expect(trigger).toHaveAttribute('aria-controls', 'own-menu');
     expect(trigger).toHaveAttribute('aria-describedby');
+  });
+});
+
+describe('HoverCard triggerBehavior on every input (component:HoverCard FR5, FR9)', () => {
+  beforeEach(() => {
+    __resetInteractionModalityForTest();
+  });
+
+  type Behavior = 'adaptive' | 'hover' | 'toggle';
+
+  /** An info-only trigger: a span, or under the toggle the button it pins. */
+  function setup(
+    triggerBehavior?: Behavior,
+    touchTrigger?: 'auto' | 'tap' | 'none',
+    trigger = triggerBehavior === 'toggle' ? 'button' : 'span',
+  ) {
+    const onOpenChange = vi.fn<(open: boolean) => void>();
+    render(
+      <HoverCard
+        content={<p>Ada Lovelace, analyst</p>}
+        delay={0}
+        onOpenChange={onOpenChange}
+        triggerBehavior={triggerBehavior}
+        touchTrigger={touchTrigger}>
+        {trigger === 'button' ? (
+          <button type="button">Ada</button>
+        ) : (
+          <span tabIndex={0}>Ada</span>
+        )}
+      </HoverCard>,
+    );
+    const opened = () => onOpenChange.mock.calls.some(([open]) => open);
+    return {trigger: screen.getByText('Ada'), opened};
+  }
+
+  /** A finger: it arrives, lands, lifts, then the click. */
+  function tap(element: HTMLElement) {
+    fireEvent.pointerEnter(element, {pointerType: 'touch'});
+    fireEvent.pointerDown(element, {pointerType: 'touch'});
+    fireEvent.pointerUp(element, {pointerType: 'touch'});
+    fireEvent.click(element);
+  }
+
+  const settle = async () =>
+    new Promise(resolve => {
+      setTimeout(resolve, 50);
+    });
+
+  describe.each([
+    ['adaptive by default', undefined, true],
+    ['adaptive', 'adaptive', true],
+    ['hover', 'hover', false],
+    ['toggle', 'toggle', true],
+  ] as const)('%s', (_, behavior, tapOpens) => {
+    it('a mouse hover previews it', async () => {
+      const {trigger, opened} = setup(behavior);
+      fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(trigger);
+      await waitFor(() => expect(opened()).toBe(true));
+    });
+
+    it('focus previews it', async () => {
+      const {trigger, opened} = setup(behavior);
+      fireEvent.focusIn(trigger);
+      await waitFor(() => expect(opened()).toBe(true));
+    });
+
+    it(`a tap ${tapOpens ? 'opens' : 'never opens'} it`, async () => {
+      const {trigger, opened} = setup(behavior);
+      tap(trigger);
+      await settle();
+      expect(opened()).toBe(tapOpens);
+    });
+
+    it.each(['mouse click', 'touch tap'] as const)(
+      `a %s on a button trigger ${behavior === 'toggle' ? 'pins it' : 'pins nothing'}`,
+      async press => {
+        const {trigger} = setup(behavior, undefined, 'button');
+        if (press === 'mouse click') {
+          fireEvent.pointerDown(trigger, {pointerType: 'mouse'});
+          fireEvent.pointerUp(trigger, {pointerType: 'mouse'});
+          fireEvent.click(trigger);
+        } else {
+          tap(trigger);
+        }
+        await settle();
+        expect(trigger.getAttribute('aria-expanded')).toBe(
+          behavior === 'toggle' ? 'true' : null,
+        );
+      },
+    );
+  });
+
+  it.each([
+    ['adaptive', 'none', 'span', 'decides: no tap opens it', false],
+    ['adaptive', 'tap', 'button', 'decides: every tap opens it', true],
+    ['hover', 'tap', 'button', 'is ignored: no tap opens it', false],
+    ['toggle', 'none', 'button', 'is ignored: a tap pins it', true],
+  ] as const)(
+    'beside triggerBehavior="%s", touchTrigger="%s" on a %s %s',
+    async (behavior, touchTrigger, trigger, _, tapOpens) => {
+      const card = setup(behavior, touchTrigger, trigger);
+      tap(card.trigger);
+      await settle();
+      expect(card.opened()).toBe(tapOpens);
+    },
+  );
+});
+
+describe('useHoverCard with a caller’s trigger under triggerBehavior="toggle" (component:HoverCard FR9)', () => {
+  function Card({
+    onTriggerClick,
+  }: {
+    onTriggerClick?: (event: ReactMouseEvent) => void;
+  }) {
+    const hoverCard = useHoverCard({triggerBehavior: 'toggle', delay: 0});
+    return (
+      <>
+        <button type="button" ref={hoverCard.ref} onClick={onTriggerClick}>
+          Ada
+        </button>
+        {hoverCard.renderHoverCard(<p>Ada Lovelace, analyst</p>)}
+      </>
+    );
+  }
+  const trigger = () => screen.getByRole('button', {name: 'Ada'});
+
+  it('the trigger’s own onClick runs, and an Astryx ClickableCard around it does not activate', () => {
+    const onCard = vi.fn();
+    const onTrigger = vi.fn();
+    render(
+      <ClickableCard label="Card" onClick={onCard}>
+        <Card onTriggerClick={onTrigger} />
+      </ClickableCard>,
+    );
+
+    fireEvent.click(trigger());
+
+    expect(onTrigger).toHaveBeenCalledTimes(1);
+    expect(onCard).not.toHaveBeenCalled();
+    expect(trigger()).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('a plain onClick element around it receives the press, unless the trigger’s onClick stops it', () => {
+    const onRow = vi.fn();
+    const {unmount} = render(
+      <div onClick={onRow}>
+        <Card />
+      </div>,
+    );
+    fireEvent.click(trigger());
+    expect(onRow).toHaveBeenCalledTimes(1);
+    expect(trigger()).toHaveAttribute('aria-expanded', 'true');
+    unmount();
+
+    onRow.mockClear();
+    render(
+      <div onClick={onRow}>
+        <Card onTriggerClick={event => event.stopPropagation()} />
+      </div>,
+    );
+    fireEvent.click(trigger());
+    expect(onRow).not.toHaveBeenCalled();
+  });
+});
+
+describe('a HoverCard toggle press stops at its trigger (component:HoverCard FR9)', () => {
+  const CARD = 'Ada Lovelace, analyst';
+  function ToggleCard({isNative = true}: {isNative?: boolean}) {
+    return (
+      <HoverCard content={<p>{CARD}</p>} triggerBehavior="toggle" delay={0}>
+        {isNative ? (
+          <button type="button">Ada</button>
+        ) : (
+          <span role="button" tabIndex={0}>
+            Ada
+          </span>
+        )}
+      </HoverCard>
+    );
+  }
+  const trigger = () => screen.getByRole('button', {name: 'Ada'});
+
+  it('inside a ClickableCard, the card does not open', () => {
+    const onCard = vi.fn();
+    render(
+      <ClickableCard label="Team" onClick={onCard}>
+        <ToggleCard />
+      </ClickableCard>,
+    );
+    fireEvent.click(trigger(), {detail: 1});
+    expect(trigger()).toHaveAttribute('aria-expanded', 'true');
+    expect(onCard).not.toHaveBeenCalled();
+  });
+
+  // Item's row click already skips a native button, so this trigger is not one.
+  it('inside an Item row, the row does not activate', () => {
+    const onRow = vi.fn();
+    render(
+      <Item
+        label="Team"
+        onClick={onRow}
+        endContent={<ToggleCard isNative={false} />}
+      />,
+    );
+    fireEvent.click(trigger(), {detail: 1});
+    expect(trigger()).toHaveAttribute('aria-expanded', 'true');
+    expect(onRow).not.toHaveBeenCalled();
+  });
+
+  it('inside a <label>, the label does not operate its control', () => {
+    render(
+      <label>
+        <input type="checkbox" aria-label="Notify" />
+        <ToggleCard />
+      </label>,
+    );
+    fireEvent.click(trigger(), {detail: 1});
+    expect(trigger()).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('checkbox', {name: 'Notify'})).not.toBeChecked();
   });
 });

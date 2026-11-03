@@ -2,16 +2,18 @@
 
 /**
  * @file usePressPin.test.tsx
- * @input Uses vitest, @testing-library/react, Tooltip, useTooltipInternal,
- *   usePressPin
- * @output Tests of `triggerBehavior="toggle"`: a press pins and closes the
- *   layer, and a pin stays when the pointer leaves. Escape, a second press, a
- *   press outside, or focus leaving closes it. The trigger carries the toggle
- *   state, the press stops at the trigger, and a non-button trigger warns. A
- *   trigger whose layer repeats its text pins with no toggle state.
+ * @input Uses vitest, @testing-library/react, Tooltip, HoverCard,
+ *   useTooltipInternal, usePressPin
+ * @output Tests of `triggerBehavior="toggle"` on Tooltip and HoverCard: a
+ *   press pins and closes the layer, and a pin stays when the pointer leaves.
+ *   Escape, a second press, a press outside, or focus leaving closes it. The
+ *   trigger carries the toggle state, the press stops at the trigger, and a
+ *   non-button trigger warns. A trigger whose layer repeats its text pins
+ *   with no toggle state.
  * @position Unit tests beside usePressPin
  *
- * SYNC: When usePressPin.ts or useTooltip.tsx change, update these cases.
+ * SYNC: When usePressPin.ts, useTooltip.tsx, or useHoverCard.tsx change,
+ * update these cases.
  */
 
 import {
@@ -787,7 +789,62 @@ function RepeatingText({text}: {text: string}): ReactElement {
   );
 }
 
+function ControlledRepeatingText({
+  text,
+  onOpenChange,
+}: {
+  text: string;
+  onOpenChange: (isOpen: boolean) => void;
+}): ReactElement {
+  const [isOpen, setIsOpen] = useState(false);
+  const tooltip = useTooltipInternal({
+    triggerBehavior: 'toggle',
+    repeatsTriggerText: true,
+    isOpen,
+    onShow: () => {
+      onOpenChange(true);
+      setIsOpen(true);
+    },
+    onHide: () => {
+      onOpenChange(false);
+      setIsOpen(false);
+    },
+  });
+  return (
+    <>
+      <span
+        ref={tooltip.ref}
+        tabIndex={0}
+        aria-describedby={tooltip.describedBy}>
+        {text}
+      </span>
+      {tooltip.renderTooltip(<span data-full="">{text}</span>)}
+      <p>Elsewhere</p>
+    </>
+  );
+}
+
 describe('a trigger whose tooltip repeats its own text (component:Tooltip FR9)', () => {
+  it('a controlled own-text pin that its owner opens closes on a press outside', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <ControlledRepeatingText
+        text="Quarterly revenue by region"
+        onOpenChange={onOpenChange}
+      />,
+    );
+    click(screen.getAllByText('Quarterly revenue by region')[0]);
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    const full = document.querySelector<HTMLElement>('[data-full]');
+    expect(
+      full?.closest<HTMLElement>('[popover]')?.matches(':popover-open'),
+    ).toBe(true);
+    const elsewhere = screen.getByText('Elsewhere');
+    fireEvent.pointerDown(elsewhere);
+    fireEvent.pointerUp(elsewhere);
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+  });
+
   it('pins without being a button, with no warning, toggle state, or announcement', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
@@ -824,6 +881,60 @@ describe('a trigger whose tooltip repeats its own text (component:Tooltip FR9)',
       full?.closest<HTMLElement>('[popover]')?.matches(':popover-open'),
     ).toBe(true);
     expect(onCard).not.toHaveBeenCalled();
+  });
+});
+
+describe('HoverCard triggerBehavior="toggle" on a trigger that is not a button', () => {
+  it('keeps the labelled card’s own aria-expanded and aria-controls (FR3), and warns', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      render(
+        <HoverCard
+          content={<p>Ada Lovelace, analyst</p>}
+          label="Ada's profile"
+          triggerBehavior="toggle"
+          delay={0}>
+          <span tabIndex={0}>Ada</span>
+        </HoverCard>,
+      );
+      const trigger = screen.getByText('Ada');
+      expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
+      expect(trigger).not.toHaveAttribute('aria-expanded', 'true');
+      act(() => {
+        trigger.focus();
+      });
+      fireEvent.focusIn(trigger);
+      const card = layerOf('Ada Lovelace, analyst') as HTMLElement;
+      expect(card.matches(':popover-open')).toBe(true);
+      expect(trigger).toHaveAttribute('aria-controls', card.id);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('triggerBehavior="toggle"'),
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('keeps tap-only opening: a click pins nothing, and a tap opens the card', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      render(
+        <HoverCard
+          content={<p>Ada Lovelace, analyst</p>}
+          triggerBehavior="toggle"
+          delay={0}>
+          <span tabIndex={0}>Ada</span>
+        </HoverCard>,
+      );
+      const trigger = screen.getByText('Ada');
+      click(trigger);
+      expect(shows('Ada Lovelace, analyst')).toBe(false);
+      expect(trigger).not.toHaveAttribute('aria-expanded', 'true');
+      tap(trigger);
+      expect(shows('Ada Lovelace, analyst')).toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 
@@ -1136,5 +1247,314 @@ describe('a tooltip that starts repeating its trigger text after mount', () => {
     } finally {
       warn.mockRestore();
     }
+  });
+});
+
+describe('HoverCard triggerBehavior="toggle" (component:HoverCard FR9, FR10)', () => {
+  const CARD = 'Ada Lovelace, analyst';
+
+  function ProfileCard({onRow}: {onRow?: () => void}): ReactElement {
+    return (
+      <div onClick={onRow}>
+        <HoverCard
+          content={<p>{CARD}</p>}
+          label="Ada's profile"
+          triggerBehavior="toggle">
+          <button type="button">Ada</button>
+        </HoverCard>
+      </div>
+    );
+  }
+
+  it('a press pins the card, a press on its content keeps it, and the trigger press closes it', () => {
+    render(<ProfileCard />);
+    const trigger = screen.getByRole('button', {name: 'Ada'});
+    click(trigger);
+    expect(shows(CARD)).toBe(true);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
+    expect(trigger).toHaveAttribute(
+      'aria-controls',
+      (layerOf(CARD) as HTMLElement).id,
+    );
+    fireEvent.pointerDown(screen.getByText(CARD));
+    expect(shows(CARD)).toBe(true);
+    click(trigger);
+    expect(shows(CARD)).toBe(false);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('a labelled card says its label once when a press pins it, not its text', () => {
+    render(<ProfileCard />);
+    click(screen.getByRole('button', {name: 'Ada'}));
+    expect(announce).toHaveBeenCalledTimes(1);
+    expect(announce).toHaveBeenCalledWith("Ada's profile", 'polite');
+    // Closing and pinning again says it again, once.
+    click(screen.getByRole('button', {name: 'Ada'}));
+    click(screen.getByRole('button', {name: 'Ada'}));
+    expect(announce).toHaveBeenCalledTimes(2);
+  });
+
+  it('a controlled labelled card says its label once its owner pins it', () => {
+    function Controlled() {
+      const [isOpen, setIsOpen] = useState(false);
+      return (
+        <HoverCard
+          content={<p>{CARD}</p>}
+          label="Ada's profile"
+          triggerBehavior="toggle"
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}>
+          <button type="button">Ada</button>
+        </HoverCard>
+      );
+    }
+    render(<Controlled />);
+    click(screen.getByRole('button', {name: 'Ada'}));
+    expect(shows(CARD)).toBe(true);
+    expect(announce).toHaveBeenCalledTimes(1);
+    expect(announce).toHaveBeenCalledWith("Ada's profile", 'polite');
+  });
+
+  it('a controlled labelled card says nothing when its owner keeps it closed', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <>
+        <HoverCard
+          content={<p>{CARD}</p>}
+          label="Ada's profile"
+          triggerBehavior="toggle"
+          isOpen={false}
+          onOpenChange={onOpenChange}>
+          <button type="button">Ada</button>
+        </HoverCard>
+        <p>Elsewhere</p>
+      </>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Ada'});
+    click(trigger);
+    expect(shows(CARD)).toBe(false);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(announce).not.toHaveBeenCalled();
+    // A press outside after the refusal reports nothing more.
+    const elsewhere = screen.getByText('Elsewhere');
+    fireEvent.pointerDown(elsewhere);
+    fireEvent.pointerUp(elsewhere);
+    expect(onOpenChange).toHaveBeenCalledTimes(1);
+    expect(onOpenChange).toHaveBeenCalledWith(true);
+  });
+
+  it('a controlled labelled card says its label each time its owner opens it, after a declined press too', () => {
+    const onOpenChange = vi.fn();
+    function Owned() {
+      const [isOpen, setIsOpen] = useState(false);
+      return (
+        <>
+          <HoverCard
+            content={<p>{CARD}</p>}
+            label="Ada's profile"
+            triggerBehavior="toggle"
+            isOpen={isOpen}
+            onOpenChange={onOpenChange}>
+            <button type="button">Ada</button>
+          </HoverCard>
+          <button type="button" onClick={() => setIsOpen(open => !open)}>
+            Owner
+          </button>
+          <p>Elsewhere</p>
+        </>
+      );
+    }
+    render(<Owned />);
+    const owner = screen.getByRole('button', {name: 'Owner'});
+    // The owner opens it with no press: the label is said once.
+    fireEvent.click(owner, {detail: 1});
+    expect(shows(CARD)).toBe(true);
+    expect(announce).toHaveBeenCalledTimes(1);
+    fireEvent.click(owner, {detail: 1});
+    expect(shows(CARD)).toBe(false);
+    // A declined press says nothing, and the next open says it once again.
+    click(screen.getByRole('button', {name: 'Ada'}));
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+    expect(announce).toHaveBeenCalledTimes(1);
+    fireEvent.click(owner, {detail: 1});
+    expect(announce).toHaveBeenCalledTimes(2);
+    expect(announce).toHaveBeenLastCalledWith("Ada's profile", 'polite');
+    // The shown pin closes on a press outside.
+    const elsewhere = screen.getByText('Elsewhere');
+    fireEvent.pointerDown(elsewhere);
+    fireEvent.pointerUp(elsewhere);
+    expect(onOpenChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it('the press stops at its trigger: the row around it does not activate', () => {
+    const onRow = vi.fn();
+    render(<ProfileCard onRow={onRow} />);
+    tap(screen.getByRole('button', {name: 'Ada'}));
+    expect(shows(CARD)).toBe(true);
+    expect(onRow).not.toHaveBeenCalled();
+  });
+
+  it('a tap pins it, and the next tap on the trigger closes it', () => {
+    render(<ProfileCard />);
+    const trigger = screen.getByRole('button', {name: 'Ada'});
+    tap(trigger);
+    expect(shows(CARD)).toBe(true);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    tap(trigger);
+    expect(shows(CARD)).toBe(false);
+  });
+
+  it('Enter and Space on a role="button" trigger pin and close it', () => {
+    render(
+      <HoverCard
+        content={<p>{CARD}</p>}
+        label="Ada's profile"
+        triggerBehavior="toggle">
+        <span role="button" tabIndex={0}>
+          Ada
+        </span>
+      </HoverCard>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Ada'});
+    fireEvent.keyDown(trigger, {key: 'Enter'});
+    expect(shows(CARD)).toBe(true);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.keyDown(trigger, {key: ' '});
+    fireEvent.keyUp(trigger, {key: ' '});
+    expect(shows(CARD)).toBe(false);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('a press outside closes it', () => {
+    render(
+      <>
+        <ProfileCard />
+        <p>Elsewhere</p>
+      </>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Ada'});
+    click(trigger);
+    const elsewhere = screen.getByText('Elsewhere');
+    fireEvent.pointerDown(elsewhere);
+    fireEvent.pointerUp(elsewhere);
+    expect(shows(CARD)).toBe(false);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('focus moving outside closes it', () => {
+    render(
+      <>
+        <ProfileCard />
+        <button type="button">Next field</button>
+      </>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Ada'});
+    act(() => {
+      trigger.focus();
+    });
+    click(trigger);
+    expect(shows(CARD)).toBe(true);
+    act(() => {
+      screen.getByRole('button', {name: 'Next field'}).focus();
+    });
+    expect(shows(CARD)).toBe(false);
+  });
+
+  it('with focusTrigger="never", focus moving to another control closes a pinned card', () => {
+    render(
+      <>
+        <HoverCard
+          content={<p>{CARD}</p>}
+          label="Ada's profile"
+          triggerBehavior="toggle"
+          focusTrigger="never">
+          <button type="button">Ada</button>
+        </HoverCard>
+        <button type="button">Next field</button>
+      </>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Ada'});
+    act(() => {
+      trigger.focus();
+    });
+    click(trigger);
+    expect(shows(CARD)).toBe(true);
+    act(() => {
+      screen.getByRole('button', {name: 'Next field'}).focus();
+    });
+    expect(shows(CARD)).toBe(false);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('a pinned card whose triggerBehavior turns to adaptive closes on leave again', () => {
+    vi.useFakeTimers();
+    const card = (triggerBehavior?: 'toggle') => (
+      <HoverCard
+        content={<p>{CARD}</p>}
+        label="Ada's profile"
+        triggerBehavior={triggerBehavior}>
+        <button type="button">Ada</button>
+      </HoverCard>
+    );
+    const {rerender} = render(card('toggle'));
+    const trigger = screen.getByRole('button', {name: 'Ada'});
+    click(trigger);
+    expect(shows(CARD)).toBe(true);
+    rerender(card());
+    fireEvent.mouseLeave(trigger);
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(shows(CARD)).toBe(false);
+  });
+
+  it('a pinned card stays when the pointer leaves the trigger and the card', () => {
+    vi.useFakeTimers();
+    render(<ProfileCard />);
+    const trigger = screen.getByRole('button', {name: 'Ada'});
+    click(trigger);
+    fireEvent.mouseLeave(trigger);
+    fireEvent.mouseLeave(layerOf(CARD) as HTMLElement);
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(shows(CARD)).toBe(true);
+  });
+
+  it('a press on the card’s own text keeps it, though focus moves to no element', () => {
+    render(<ProfileCard />);
+    const trigger = screen.getByRole('button', {name: 'Ada'});
+    act(() => {
+      trigger.focus();
+    });
+    click(trigger);
+    const text = screen.getByText(CARD);
+    fireEvent.pointerDown(text);
+    fireEvent.focusOut(trigger, {relatedTarget: null});
+    fireEvent.pointerUp(text);
+    fireEvent.click(text);
+    expect(shows(CARD)).toBe(true);
+  });
+
+  it('an unlabelled card says its own text once when it pins, its paragraphs kept apart', () => {
+    render(
+      <HoverCard
+        content={
+          <>
+            <p>Ada Lovelace</p>
+            <p>Analyst, Payments</p>
+          </>
+        }
+        triggerBehavior="toggle">
+        <button type="button">Ada</button>
+      </HoverCard>,
+    );
+    click(screen.getByRole('button', {name: 'Ada'}));
+    expect(announce).toHaveBeenCalledTimes(1);
+    expect(announce).toHaveBeenCalledWith(
+      'Ada Lovelace Analyst, Payments',
+      'polite',
+    );
   });
 });
