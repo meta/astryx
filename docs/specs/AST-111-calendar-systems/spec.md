@@ -282,8 +282,7 @@ These requirements apply to the text fields of `DateInput` and
   names, selection and navigation announcements, error messages, and the bounds
   in error messages use the calendar.
 - **AR2 — The field describes its format.** With a calendar other than
-  `gregory` or `iso8601`, an empty focused field shows an example date in the
-  calendar's numeric pattern. The field's description names its calendar only
+  `gregory` or `iso8601`, an empty focused field without a caller `placeholder` shows an example date in the calendar's numeric pattern; a caller's `placeholder` always wins. The field's description names its calendar only
   when that calendar differs from its provider's calendar, so a page in one
   calendar does not repeat it and a page that mixes calendars says which field
   uses which.
