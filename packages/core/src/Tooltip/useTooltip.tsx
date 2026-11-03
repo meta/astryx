@@ -5,7 +5,8 @@
 /**
  * @file useTooltip.tsx
  * @input Uses useLayer, usePressPin, React hooks
- * @output Exports useTooltip hook with stable trigger refs for hover/focus/tap tooltips,
+ * @output Exports useTooltip hook with stable trigger refs for hover/focus/tap tooltips
+ *   and imperative show() and hide() for an app-built toggle trigger,
  *   and the module-only useTooltipWithTriggerBehavior that InfoTip's press-to-pin uses
  * @position Layer hook; builds on useLayer for tooltip behavior
  *
@@ -216,6 +217,25 @@ export interface TooltipReturn {
     children: ReactNode,
     props?: Omit<ContextRenderProps, 'positioning'>,
   ) => ReactNode;
+
+  /**
+   * Opens the tooltip now and keeps it open until `hide()`, Escape, a press
+   * outside, or focus leaving its trigger, as a pinned tooltip does. Its text
+   * is announced once. Reports through `onShow`. Under a controlled `isOpen`,
+   * it calls `onShow` and does not change `isOpen`. Does nothing while
+   * `isEnabled` is false.
+   *
+   * Use `show()` and `hide()` to build a toggle-style trigger: your own button
+   * calls them, sets `aria-describedby` and `aria-controls` to `describedBy`
+   * and `aria-expanded` (true while shown), and keeps its own accessible name.
+   */
+  show: () => void;
+
+  /**
+   * Closes the tooltip now. Reports through `onHide`. Under a controlled
+   * `isOpen`, it calls `onHide` and does not change `isOpen`.
+   */
+  hide: () => void;
 }
 
 /**
@@ -375,6 +395,9 @@ export function useTooltipWithTriggerBehavior(
     isHeldOpen: isPressHeldOpen,
     attach: attachPressPin,
     unpin: unpinPress,
+    hold: holdPress,
+    release: releasePress,
+    isAppHeld,
     isPinShown,
     touch: {
       isTouchPointerRef,
@@ -562,9 +585,10 @@ export function useTooltipWithTriggerBehavior(
   // tooltip at all), so the touch path answers it first.
   const handlePointerDown = useCallback(
     (event: PointerEvent) => {
-      // A press on a toggle trigger pins or closes through its click. It
-      // neither hides the preview here nor waits for a tap verdict.
-      if (isToggleTrigger(triggerRef.current)) {
+      // A toggle trigger's press pins or closes through its click. The app's
+      // hide() closes a held tooltip. Neither path hides here or waits for a
+      // tap verdict.
+      if (isToggleTrigger(triggerRef.current) || isAppHeld()) {
         return;
       }
       if (handleTouchPointerDown(event)) {
@@ -576,7 +600,14 @@ export function useTooltipWithTriggerBehavior(
       clearTimeouts();
       hideLayer();
     },
-    [isToggleTrigger, handleTouchPointerDown, isOpen, clearTimeouts, hideLayer],
+    [
+      isToggleTrigger,
+      isAppHeld,
+      handleTouchPointerDown,
+      isOpen,
+      clearTimeouts,
+      hideLayer,
+    ],
   );
 
   // Interaction ref that handles event listeners only
@@ -665,9 +696,11 @@ export function useTooltipWithTriggerBehavior(
       showLayer();
     } else {
       clearTimeouts();
+      // A pin or app hold ends when the consumer closes the tooltip.
+      unpinPress();
       hideLayer();
     }
-  }, [isOpen, clearTimeouts, showLayer, hideLayer]);
+  }, [isOpen, clearTimeouts, showLayer, hideLayer, unpinPress]);
 
   // Dismiss on Escape (WCAG 1.4.13 — dismissible) through the shared layer
   // stack. A visible tip is the top-most layer, so it takes the press and
@@ -763,6 +796,16 @@ export function useTooltipWithTriggerBehavior(
     ],
   );
 
+  const show = useCallback(() => {
+    clearTimeouts();
+    holdPress();
+  }, [clearTimeouts, holdPress]);
+
+  const hide = useCallback(() => {
+    clearTimeouts();
+    releasePress();
+  }, [clearTimeouts, releasePress]);
+
   return {
     ref,
     positionRef: layerRef,
@@ -770,5 +813,7 @@ export function useTooltipWithTriggerBehavior(
     anchorId: layerAnchorId,
     describedBy: layerId,
     renderTooltip,
+    show,
+    hide,
   };
 }
