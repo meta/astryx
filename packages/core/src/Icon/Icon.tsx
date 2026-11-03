@@ -412,16 +412,15 @@ function IconFromRegistry({
 }) {
   const themeName = useThemeName();
   const resolvedIcon = resolveIcon(name, themeName, {size, variant});
-  // The glyph can change while the span stays, so attach the ref again when
-  // the resolved glyph changes.
+  // The glyph can change while the span stays. Attach the ref again when it
+  // does.
   const attachSvgRef = useCallback(
     (span: HTMLSpanElement | null) =>
       svgRef == null
         ? undefined
         : mergeRefs(svgRef)(span?.querySelector('svg') ?? null),
-    // resolvedIcon is not read in the callback; it is listed so that a new
-    // glyph gets a new attach.
-    [svgRef, resolvedIcon],
+    // eslint-disable-next-line @eslint-react/exhaustive-deps -- resolveIcon's inputs: a new glyph gets a new attach, and a function entry's new element each render does not.
+    [svgRef, name, themeName, size, variant],
   );
 
   if (resolvedIcon == null) {

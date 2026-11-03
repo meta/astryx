@@ -229,17 +229,41 @@ describe('Icon', () => {
     it('moves to the new svg when the name changes', () => {
       resetIcons();
       resetThemes();
+      function DownGlyph() {
+        return <svg data-testid="down-svg" />;
+      }
+      function UpGlyph() {
+        return <svg data-testid="up-svg" />;
+      }
       registerIcons({
-        'numberInput:stepperDown': <svg data-testid="down-svg" />,
-        'numberInput:stepperUp': <svg data-testid="up-svg" />,
+        'numberInput:stepperDown': <DownGlyph />,
+        'numberInput:stepperUp': <UpGlyph />,
       });
       const ref = createRef<SVGSVGElement>();
       const {rerender} = render(
         <Icon icon="numberInput:stepperDown" ref={ref} />,
       );
-      expect(ref.current).toBe(screen.getByTestId('down-svg'));
+      const down = screen.getByTestId('down-svg');
+      expect(ref.current).toBe(down);
       rerender(<Icon icon="numberInput:stepperUp" ref={ref} />);
       expect(ref.current).toBe(screen.getByTestId('up-svg'));
+      expect(ref.current).not.toBe(down);
+    });
+
+    it('attaches a stable callback ref once for a function entry, across rerenders', () => {
+      resetIcons();
+      resetThemes();
+      registerIcons({
+        'numberInput:stepperDown': () => <svg data-testid="fn-svg" />,
+      });
+      const ref = vi.fn();
+      const {rerender} = render(
+        <Icon icon="numberInput:stepperDown" ref={ref} />,
+      );
+      rerender(<Icon icon="numberInput:stepperDown" ref={ref} />);
+      rerender(<Icon icon="numberInput:stepperDown" ref={ref} />);
+      expect(ref).toHaveBeenCalledTimes(1);
+      expect(ref).toHaveBeenCalledWith(screen.getByTestId('fn-svg'));
     });
 
     it('becomes null when the name changes to a text glyph', () => {
