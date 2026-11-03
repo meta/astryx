@@ -243,6 +243,28 @@ describe('InfoTip press-to-pin (component:InfoTip FR2)', () => {
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
   });
 
+  it('a press on a preview released on the help ends its hold; the next press pins it', () => {
+    vi.useFakeTimers();
+    render(<InfoTooltip />);
+    const trigger = screen.getByRole('button', {name: 'About billing'});
+    fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
+    fireEvent.mouseEnter(trigger);
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    const help = layerOf(TIP) as HTMLElement;
+    fireEvent.pointerDown(trigger, {pointerType: 'mouse', button: 0});
+    fireEvent.pointerUp(help, {pointerType: 'mouse', button: 0});
+    act(() => {
+      vi.advanceTimersByTime(0);
+    });
+    expect(shows(TIP)).toBe(false);
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    click(trigger);
+    expect(shows(TIP)).toBe(true);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+
   it('a right or middle press on a preview does not hold it', () => {
     vi.useFakeTimers();
     render(<InfoTooltip />);

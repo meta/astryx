@@ -19,6 +19,7 @@
 
 import {
   useCallback,
+  useRef,
   useState,
   type MouseEvent,
   type PointerEvent,
@@ -175,7 +176,11 @@ export function InfoTip({
   const mergedRef = useMergedRefs(ref, watchButtonHitArea, tooltip.ref);
 
   // A primary mouse or pen press on a preview calls show() first. The hook's
-  // press-to-close then leaves it open. The click pins it.
+  // press-to-close then leaves it open. The click pins it. A press that ends
+  // off the button gets no click, so its hold ends with the press: the
+  // browser sends the click in the same task as the pointerup, before the
+  // timer runs.
+  const isPressHoldPendingRef = useRef(false);
   const handlePointerDownCapture = useCallback(
     (event: PointerEvent<HTMLButtonElement>) => {
       if (
@@ -187,6 +192,23 @@ export function InfoTip({
         return;
       }
       tooltip.show();
+      const view = event.currentTarget.ownerDocument.defaultView;
+      if (view == null) {
+        return;
+      }
+      isPressHoldPendingRef.current = true;
+      const endPress = () => {
+        view.removeEventListener('pointerup', endPress, true);
+        view.removeEventListener('pointercancel', endPress, true);
+        view.setTimeout(() => {
+          if (isPressHoldPendingRef.current) {
+            isPressHoldPendingRef.current = false;
+            tooltip.hide();
+          }
+        }, 0);
+      };
+      view.addEventListener('pointerup', endPress, true);
+      view.addEventListener('pointercancel', endPress, true);
     },
     [isPinned, isShown, tooltip],
   );
@@ -198,6 +220,7 @@ export function InfoTip({
     (event: MouseEvent<HTMLButtonElement>) => {
       stopInReactTree(event);
       event.preventDefault();
+      isPressHoldPendingRef.current = false;
       if (isPinned) {
         tooltip.hide();
         return;
