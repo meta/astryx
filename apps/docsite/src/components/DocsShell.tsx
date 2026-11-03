@@ -27,6 +27,7 @@ import type {
   DocsNavPackage,
   DocsNavTopic,
 } from './docsNav';
+import {guideSidebarItems} from './guideSidebarData';
 
 interface DocsShellProps {
   children: React.ReactNode;
@@ -106,11 +107,8 @@ export function DocsShell({children, nav}: DocsShellProps) {
   const libraryPackages = packages.filter(p => !isTheme(p) && !p.canaryOnly);
   const canaryPackages = packages.filter(p => !isTheme(p) && p.canaryOnly);
 
-  // Classify doc topics by category (from data). Getting Started is promoted
-  // to a top-level nav item, so it is excluded from the Guide section.
-  const guideTopics = docTopics
-    .filter(d => d.category === 'guide' && d.topic !== 'getting-started')
-    .sort((a, b) => a.title.localeCompare(b.title));
+  // Classify doc topics by category (from data).
+  const guideItems = guideSidebarItems(docTopics);
   const foundationTopics = docTopics
     .filter(d => d.category === 'foundations')
     .sort(foundationsSort);
@@ -196,14 +194,36 @@ export function DocsShell({children, nav}: DocsShellProps) {
                 <SideNavItem
                   label="Guide"
                   collapsible={{defaultIsCollapsed: false}}>
-                  {guideTopics.map(d => (
-                    <SideNavItem
-                      key={d.topic}
-                      label={d.title}
-                      href={`/docs/${d.topic}`}
-                      isSelected={pathname === `/docs/${d.topic}`}
-                    />
-                  ))}
+                  {guideItems.map(({page, children}) =>
+                    children.length === 0 ? (
+                      <SideNavItem
+                        key={page.topic}
+                        label={page.title}
+                        href={`/docs/${page.topic}`}
+                        isSelected={pathname === `/docs/${page.topic}`}
+                      />
+                    ) : (
+                      <SideNavItem
+                        key={page.topic}
+                        label={page.title}
+                        href={`/docs/${page.topic}`}
+                        isSelected={pathname === `/docs/${page.topic}`}
+                        collapsible={{
+                          defaultIsCollapsed: !children.some(
+                            d => pathname === `/docs/${d.topic}`,
+                          ),
+                        }}>
+                        {children.map(d => (
+                          <SideNavItem
+                            key={d.topic}
+                            label={d.title}
+                            href={`/docs/${d.topic}`}
+                            isSelected={pathname === `/docs/${d.topic}`}
+                          />
+                        ))}
+                      </SideNavItem>
+                    ),
+                  )}
                 </SideNavItem>
               </SideNavSection>
 
