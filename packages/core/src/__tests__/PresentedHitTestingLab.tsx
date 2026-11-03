@@ -1,40 +1,43 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+'use client';
+
 /**
  * @file PresentedHitTestingLab.tsx
  * @input Touches on a sheet that springs up over a full-page scrim, the
  *   Replay button and the correction switch
- * @output The sheet, its Done button and the scrim, driven by Core's gesture
- *   host and animator, with readouts of what the engine hit-tested at each
- *   touch-down, Done's clicks, the scrim's taps, the sheet pan's translation
- *   and how far the page scrolled during the last touch on the sheet. The
- *   switch turns the host's presented hit testing off, as the control.
- * @position app/lab/presented-hit-testing: the one docsite module that
- *   imports `@astryxdesign/core/internal/touch` (eslint.config.js names it)
- *
- * iOS WebKit hit-tests an element a compositor animation moves where the
- * motion started, so mid-motion a finger on the drawn Done reaches the scrim
- * under it. With the correction on, the host sends the touch to what is drawn
- * under the finger (FR11: Done clicks once, the scrim takes nothing) and keeps
- * a drag on the moving sheet from scrolling the page (FR19). Other engines
- * already hit-test the drawn sheet, so the switch changes nothing there.
+ * @output PresentedHitTestingLab: the sheet, its Done button and the scrim,
+ *   driven by the gesture host and the motion animator, with readouts of what
+ *   the engine hit-tested at each touch-down, Done's clicks, the scrim's taps,
+ *   the sheet pan's translation and how far the page scrolled in the last
+ *   touch. The switch turns the host's presented hit testing off.
+ * @position A device-check harness for the gesture host's presented hit
+ *   testing. The Storybook story "Core/Gestures/Presented hit testing"
+ *   renders it, so a phone can open it on a preview. Not exported.
  */
 
-'use client';
-
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useRef, useState, type TouchEvent} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {Button} from '@astryxdesign/core/Button';
-import {HStack, VStack} from '@astryxdesign/core/Layout';
-import {Switch} from '@astryxdesign/core/Switch';
-import {Heading, Text} from '@astryxdesign/core/Text';
+import {Button} from '../Button/Button';
+import {Heading} from '../Heading/Heading';
+import {HStack} from '../HStack/HStack';
+import {Switch} from '../Switch/Switch';
+import {Text} from '../Text/Text';
+import {VStack} from '../VStack/VStack';
 import {
-  createAnimator,
-  GestureHost,
-  isIosWebKit,
-  PanGestureRecognizer,
-  TapGestureRecognizer,
-} from '@astryxdesign/core/internal/touch';
+  colorVars,
+  radiusVars,
+  shadowVars,
+  spacingVars,
+} from '../theme/tokens.stylex';
+import {
+  createMotionAnimator,
+  defaultPrefersReducedMotion,
+} from '../motion/animator';
+import {isIosWebKit} from '../utils/touchQueries';
+import {GestureHost} from '../gestures/GestureHost';
+import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
+import {TapGestureRecognizer} from '../gestures/TapGestureRecognizer';
 
 /**
  * The sheet's spring: critically damped like UIKit's sheet, slowed from
@@ -48,32 +51,32 @@ const LOG_LENGTH = 3;
 /** Rows behind the scrim, so the page can scroll. */
 const ROWS = Array.from({length: 40}, (_, index) => index + 1);
 
-type Animator = ReturnType<typeof createAnimator>;
+type Animator = ReturnType<typeof createMotionAnimator>;
 
 const s = stylex.create({
   page: {
     minHeight: '100vh',
-    backgroundColor: 'var(--color-background-surface)',
+    backgroundColor: colorVars['--color-background-surface'],
   },
   bar: {
     position: 'sticky',
     top: 0,
     zIndex: 3,
-    paddingBlock: 'var(--spacing-2)',
-    paddingInline: 'var(--spacing-3)',
-    backgroundColor: 'var(--color-background-surface)',
+    paddingBlock: spacingVars['--spacing-2'],
+    paddingInline: spacingVars['--spacing-3'],
+    backgroundColor: colorVars['--color-background-surface'],
     borderBottomWidth: 1,
     borderBottomStyle: 'solid',
-    borderBottomColor: 'var(--color-border)',
+    borderBottomColor: colorVars['--color-border'],
   },
   rows: {
-    padding: 'var(--spacing-4)',
+    padding: spacingVars['--spacing-4'],
   },
   scrim: {
     position: 'fixed',
     inset: 0,
     zIndex: 1,
-    backgroundColor: 'var(--color-overlay)',
+    backgroundColor: colorVars['--color-overlay'],
   },
   sheet: {
     position: 'fixed',
@@ -81,11 +84,11 @@ const s = stylex.create({
     bottom: 0,
     zIndex: 2,
     height: 240,
-    padding: 'var(--spacing-4)',
-    backgroundColor: 'var(--color-background-surface)',
-    borderTopLeftRadius: 'var(--radius-element)',
-    borderTopRightRadius: 'var(--radius-element)',
-    boxShadow: 'var(--shadow-high)',
+    padding: spacingVars['--spacing-4'],
+    backgroundColor: colorVars['--color-background-surface'],
+    borderStartStartRadius: radiusVars['--radius-element'],
+    borderStartEndRadius: radiusVars['--radius-element'],
+    boxShadow: shadowVars['--shadow-high'],
   },
 });
 
@@ -115,12 +118,15 @@ function partOf(
 
 export function PresentedHitTestingLab() {
   const scrimRef = useRef<HTMLDivElement>(null);
-  const sheetRef = useRef<HTMLElement>(null);
+  const sheetRef = useRef<HTMLElement | null>(null);
   const doneRef = useRef<HTMLDivElement>(null);
   const animatorRef = useRef<Animator | null>(null);
   const scrollAtTouchRef = useRef<number | null>(null);
   const [correction, setCorrection] = useState(true);
-  const [iosWebKit, setIosWebKit] = useState<boolean | null>(null);
+  // Storybook renders this on the client only, so the engine and the
+  // motion setting can be read on the first render.
+  const [iosWebKit] = useState(() => isIosWebKit());
+  const [reducedMotion] = useState(() => defaultPrefersReducedMotion());
   const [log, setLog] = useState<ReadonlyArray<string>>([]);
   const [doneClicks, setDoneClicks] = useState(0);
   const [scrimTaps, setScrimTaps] = useState(0);
@@ -132,42 +138,43 @@ export function PresentedHitTestingLab() {
     setLog(lines => [`${at} s: ${line}`, ...lines].slice(0, LOG_LENGTH));
   }, []);
 
-  // Reads the engine once mounted: the check needs the browser's CSS.
-  useEffect(() => {
-    setIosWebKit(isIosWebKit());
-  }, []);
-
-  // Owns the sheet's animator for the page's life.
-  useEffect(() => {
-    const animator = createAnimator(sheetRef.current);
+  // The animator lives as long as the sheet element.
+  const attachSheet = useCallback((sheet: HTMLElement | null) => {
+    if (sheet == null) {
+      return undefined;
+    }
+    sheetRef.current = sheet;
+    const animator = createMotionAnimator(sheet);
     animatorRef.current = animator;
     return () => {
       animator.dispose();
       animatorRef.current = null;
+      sheetRef.current = null;
     };
   }, []);
 
-  // Logs what the engine hit-tested at each touch-down, before the host
-  // corrects anything.
-  useEffect(() => {
-    const onTouchStart = (event: TouchEvent) => {
-      const parts = {
-        done: doneRef.current,
-        sheet: sheetRef.current,
-        scrim: scrimRef.current,
-      };
-      record(
-        `touch-down: the engine hit-tested ${partOf(event.target, parts)}`,
-      );
+  // The page root sees every touch in the capture phase, before the host
+  // corrects anything. On iOS WebKit a touch on the moving sheet targets the
+  // scrim, so a handler on the sheet would miss it.
+  const onTouchStartCapture = (event: TouchEvent<HTMLDivElement>) => {
+    const parts = {
+      done: doneRef.current,
+      sheet: sheetRef.current,
+      scrim: scrimRef.current,
     };
-    document.addEventListener('touchstart', onTouchStart, {
-      capture: true,
-      passive: true,
-    });
-    return () => {
-      document.removeEventListener('touchstart', onTouchStart, {capture: true});
-    };
-  }, [record]);
+    record(`touch-down: the engine hit-tested ${partOf(event.target, parts)}`);
+    if (event.touches.length === 1) {
+      scrollAtTouchRef.current = window.scrollY;
+    }
+  };
+  const onTouchFinishCapture = (event: TouchEvent<HTMLDivElement>) => {
+    const start = scrollAtTouchRef.current;
+    if (start == null || event.touches.length > 0) {
+      return;
+    }
+    setScrolled(Math.round(Math.abs(window.scrollY - start)));
+    scrollAtTouchRef.current = null;
+  };
 
   // Drives the scrim's tap and the sheet's pan through a gesture host with
   // the correction on (`auto`: iOS WebKit only) or off, rebuilt on a switch.
@@ -225,7 +232,7 @@ export function PresentedHitTestingLab() {
     };
   }, [correction, record]);
 
-  const replay = useCallback(() => {
+  const replay = () => {
     const animator = animatorRef.current;
     const sheet = sheetRef.current;
     if (animator == null || sheet == null) {
@@ -234,17 +241,18 @@ export function PresentedHitTestingLab() {
     animator.set({y: sheet.offsetHeight + 48});
     animator.animate({y: 0}, {spring: SPRING});
     record('Replay: the sheet springs up');
-  }, [record]);
+  };
 
-  const engine =
-    iosWebKit == null
-      ? 'engine: reading…'
-      : iosWebKit
-        ? 'engine: iOS WebKit, so the correction applies'
-        : 'engine: not iOS WebKit, so the switch changes nothing here';
+  const engine = iosWebKit
+    ? 'engine: iOS WebKit, so the correction applies'
+    : 'engine: not iOS WebKit, so the switch changes nothing here';
 
   return (
-    <div {...stylex.props(s.page)}>
+    <div
+      onTouchStartCapture={onTouchStartCapture}
+      onTouchEndCapture={onTouchFinishCapture}
+      onTouchCancelCapture={onTouchFinishCapture}
+      {...stylex.props(s.page)}>
       <VStack gap={1} xstyle={s.bar}>
         <HStack gap={3} vAlign="center" hAlign="between" wrap="wrap">
           <Heading level={1}>Presented hit testing</Heading>
@@ -263,14 +271,21 @@ export function PresentedHitTestingLab() {
             />
           </HStack>
         </HStack>
-        <Text type="supporting">
-          Press Replay, then tap Done or drag the sheet down while it rises (
-          {engine}).
-        </Text>
+        {reducedMotion ? (
+          <Text type="supporting" color="primary">
+            Reduce Motion is on, so the sheet does not move and there is nothing
+            to check. Turn Reduce Motion off and reload.
+          </Text>
+        ) : (
+          <Text type="supporting">
+            Press Replay, then tap Done or drag the sheet down while it rises (
+            {engine}).
+          </Text>
+        )}
         <Text type="supporting" color="primary">
           Done clicked {doneClicks} · scrim took {scrimTaps} · pan {panY} px ·
           page scrolled {scrolled == null ? '–' : `${scrolled} px`} in the last
-          touch on the sheet
+          touch
         </Text>
         <VStack gap={0}>
           {log.map(line => (
@@ -288,20 +303,7 @@ export function PresentedHitTestingLab() {
         ))}
       </VStack>
       <div ref={scrimRef} aria-hidden={true} {...stylex.props(s.scrim)} />
-      <section
-        ref={sheetRef}
-        aria-label="Sheet"
-        onTouchStart={() => {
-          scrollAtTouchRef.current = window.scrollY;
-        }}
-        onTouchEnd={() => {
-          const start = scrollAtTouchRef.current;
-          if (start != null) {
-            setScrolled(Math.round(Math.abs(window.scrollY - start)));
-          }
-          scrollAtTouchRef.current = null;
-        }}
-        {...stylex.props(s.sheet)}>
+      <section ref={attachSheet} aria-label="Sheet" {...stylex.props(s.sheet)}>
         <VStack gap={2}>
           <HStack gap={2} vAlign="center" hAlign="between">
             <Heading level={2}>Sheet</Heading>
