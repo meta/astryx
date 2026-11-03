@@ -24,6 +24,9 @@ minimumReleaseAge: 10080
 minimumReleaseAgeExclude:
   - '@astryxdesign/*'
   - 'dompurify'
+  # Security release 2026-11-03 (next 16.4.5); remove on/after 2026-11-10.
+  - 'next'
+  - '@next/*'
 
 # Single source of truth for the workspace's vite version: every consumer
 # (root test config, packages/build) declares "vite": "catalog:", so a bump
