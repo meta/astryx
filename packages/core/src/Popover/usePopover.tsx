@@ -18,7 +18,7 @@
 
 import React, {useCallback, useEffect, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {useLayer, type ContextRenderProps} from '../Layer/useLayer';
+import {useLayerInternal, type ContextRenderProps} from '../Layer/useLayer';
 import {useFocusTrapInternal} from '../hooks/useFocusTrap';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import type {StyleXStyles} from '@stylexjs/stylex';
@@ -392,12 +392,25 @@ export interface UsePopoverReturn {
  * }
  * ```
  */
+/**
+ * Options a core component may pass through `usePopoverInternal`; not part
+ * of the public `usePopover` options.
+ */
+interface InternalPopoverOptions extends UsePopoverOptions {
+  /**
+   * Called as the popover starts to hide, before the browser hides it: from
+   * `hide()`, a light dismiss or the Escape key.
+   */
+  onBeforeHide?: () => void;
+}
+
 function usePopoverImplementation(
-  options: UsePopoverOptions = {},
+  options: InternalPopoverOptions = {},
 ): UsePopoverReturn {
   const {
     onShow,
     onHide,
+    onBeforeHide,
     xstyle,
     className,
     style,
@@ -435,11 +448,12 @@ function usePopoverImplementation(
   }, [onShow]);
 
   // Core layer for popover positioning
-  const layer = useLayer({
+  const layer = useLayerInternal({
     mode: 'context',
     lightDismiss: hasLightDismiss,
     onShow: handleLayerShow,
     onHide,
+    onBeforeHide,
   });
 
   // Focus trap for the popover content. Escape stays registered while light
@@ -667,5 +681,15 @@ function usePopoverImplementation(
 }
 
 export function usePopover(options: UsePopoverOptions = {}): UsePopoverReturn {
+  return usePopoverImplementation(options);
+}
+
+/**
+ * @internal The popover with the layer's close start, for core's menus; not
+ * exported from the package barrel.
+ */
+export function usePopoverInternal(
+  options: InternalPopoverOptions = {},
+): UsePopoverReturn {
   return usePopoverImplementation(options);
 }

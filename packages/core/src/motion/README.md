@@ -21,6 +21,7 @@ roles through `resolveMotion`.
 | `uikit/paging.ts`                                | A paging UIScrollView: the integrator that settles a release on its page, the page rule, the catch, `setContentOffset(animated:)`.                                   |
 | `uikit/navigation.ts`                            | UINavigationController: push velocity, parallax, dimming, transition clock, interactive pop finish rule.                                                             |
 | `uikit/progressBar.ts`                           | UIProgressView's fill: the whole-track duration and curve, its minimum length and empty alpha; the reduced-motion pulse (three roles).                               |
+| `uikit/menu.ts`                                  | UIMenu: the shape it grows from (its press values are `UIKIT_MENU_PRESS`).                                                                                           |
 | `uikit/gestures.ts`                              | Gesture recognizer thresholds, the velocity filter and haptic stand-ins, as `{value, unit}` entries (sources in JSDoc).                                              |
 | `uikit/segmented.ts`                             | UISegmentedControl: the selection indicator's spring; under Reduce Motion the animator's cross-fade replaces it.                                                     |
 | `uikit/switch.ts`                                | UISwitch on iOS 26.2: geometry, the lift, settle, travel and tracking springs, the flip distance, the track colour.                                                  |

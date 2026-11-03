@@ -2993,3 +2993,65 @@ describe('a layer that keeps its anchor clear (spec:AST-059 FR4)', () => {
     ).toBe('');
   });
 });
+
+describe('useLayerInternal onBeforeHide', () => {
+  it('fires once as a close starts: from hide() and from the browser\u2019s own dismissal', () => {
+    const fire = (el: HTMLElement, type: string, newState: string) => {
+      const event = new Event(type);
+      Object.defineProperty(event, 'newState', {value: newState});
+      el.dispatchEvent(event);
+    };
+    const originalShow = HTMLElement.prototype.showPopover;
+    const originalHide = HTMLElement.prototype.hidePopover;
+    HTMLElement.prototype.showPopover = function (this: HTMLElement) {
+      fire(this, 'beforetoggle', 'open');
+      fire(this, 'toggle', 'open');
+    };
+    HTMLElement.prototype.hidePopover = function (this: HTMLElement) {
+      fire(this, 'beforetoggle', 'closed');
+      fire(this, 'toggle', 'closed');
+    };
+    const calls: string[] = [];
+    let api: {show: () => void; hide: () => void} | null = null;
+    function BeforeHideHarness({
+      onReady,
+    }: {
+      onReady: (next: {show: () => void; hide: () => void}) => void;
+    }) {
+      const layer = useLayerInternal({
+        mode: 'context',
+        lightDismiss: true,
+        onBeforeHide: () => calls.push('before'),
+        onHide: () => calls.push('hide'),
+      });
+      onReady({show: layer.show, hide: layer.hide});
+      return (
+        <>
+          <button type="button" ref={layer.ref}>
+            Trigger
+          </button>
+          {layer.render(<span>Layer content</span>, {})}
+        </>
+      );
+    }
+    try {
+      render(<BeforeHideHarness onReady={next => (api = next)} />);
+      act(() => api?.show());
+      act(() => api?.hide());
+      expect(calls).toEqual(['before', 'hide']);
+      // The browser's own dismissal (a light dismiss, Escape) never calls
+      // hide().
+      act(() => api?.show());
+      const popover = document.querySelector<HTMLElement>('[popover]');
+      expect(popover).not.toBeNull();
+      act(() => {
+        fire(popover!, 'beforetoggle', 'closed');
+        fire(popover!, 'toggle', 'closed');
+      });
+      expect(calls).toEqual(['before', 'hide', 'before', 'hide']);
+    } finally {
+      HTMLElement.prototype.showPopover = originalShow;
+      HTMLElement.prototype.hidePopover = originalHide;
+    }
+  });
+});

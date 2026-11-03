@@ -201,8 +201,7 @@ export const docs = {
       name: 'presentation',
       type: "'popover' | 'bottom-sheet' | 'adaptive'",
       description:
-        "Presentation surface for data-driven items. 'popover' stays anchored, 'bottom-sheet' always renders the actions in a modal BottomSheet, and 'adaptive' uses a BottomSheet on compact coarse-pointer layouts while remaining anchored elsewhere. Compound children currently support popover only.",
-      default: "'popover'",
+        "Presentation surface for data-driven items. 'popover' stays anchored, 'bottom-sheet' always renders the actions in a modal BottomSheet, and 'adaptive' uses a BottomSheet on compact coarse-pointer layouts while remaining anchored elsewhere. Compound children currently support popover only. Omitted, the menu is anchored, and under a finger, on every device, its trigger opens as the finger presses (inside a scroll view, after the 150 ms content-touch delay), and the opening finger picks after moving 10 px. Pass 'popover' to keep the pointer behavior on every device, a 500 ms hold included.",
     },
     {
       name: 'isMenuOpen',
@@ -277,7 +276,7 @@ export const docs = {
   usage: {
     anatomy,
     description:
-      'A dropdown menu that displays a list of actionable items in a popup triggered by a button. Use to present action options as a next step in a process, or to offer contextual actions without cluttering the interface. Like the menus of macOS and iOS, the row under the pointer when it is released is the row that acts, the highlight follows a held mouse or finger, a mouse opens it on press and can drag straight into it, and a finger held on the trigger opens it with the finger down.',
+      'A dropdown menu that displays a list of actionable items in a popup triggered by a button. Use to present action options as a next step in a process, or to offer contextual actions without cluttering the interface. Like the menus of macOS and iOS, the row under the pointer when it is released is the row that acts, the highlight follows a held mouse or finger, a mouse opens it on press and can drag straight into it, and a finger held on the trigger opens it with the finger down. Under a finger, on every device, it behaves like UIMenu on iOS: a finger opens the menu as it presses the trigger (inside a scroll view, once the 150 ms content-touch delay has passed with no scroll), and the finger that opened it picks a row only once it has moved 10 px (so the row that appears under it is never picked by accident). Where the primary pointer is coarse (a phone or tablet), the menu also grows out of its trigger and collapses back into it on UIKit\u2019s springs, and a pan that starts outside it dismisses it as the page scrolls.',
     bestPractices: [
       {
         guidance: true,

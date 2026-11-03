@@ -251,6 +251,41 @@ export const UIKIT_PRESS = {
   momentumMemory: {value: 3000, unit: 'ms'},
 } as const satisfies Record<string, GestureConstant>;
 
+/**
+ * UIMenu presented by a button whose menu is its primary action.
+ * `holdOpenSlop`: how far a finger on the button may drift and still open
+ * the menu. `handoff`: how far the finger that opened it travels before it
+ * picks. The menu press model reads copies of them in
+ * `hooks/menuPressValues.ts`.
+ */
+export const UIKIT_MENU_PRESS = {
+  /**
+   * How far the finger may move on a button inside a scroll view during the
+   * content-touch delay and still open the menu. It is the trigger's drift
+   * allowance.
+   * @source GUESS — Between the 12 pt that opened and the 14 pt that did not:
+   *   UIKit lab, iOS 26.2 simulator, iPhone 17 Pro, gesture-state hook, Oct
+   *   23 2026 (M-MN1): on a button outside any scroll view a 12 pt move within
+   *   80 ms still opened the menu at about 151 ms; moves of 14, 17, 20 and 25
+   *   pt opened nothing; the recognizer reads an allowableMovement of 10.
+   * @measure M-G21
+   */
+  holdOpenSlop: {value: 13, unit: 'px'},
+  /**
+   * After the menu opens under a still-held finger, the finger travels this
+   * far before it starts picking. The distance is a straight line from the
+   * first sample the menu receives after it opened. Until then nothing is
+   * lit, and lifting acts on nothing.
+   * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+   *   iPhone 17 Pro, gesture-state hook, steps 150 ms apart, Oct 23 2026
+   *   (M-MN2): with the menu open under a held finger and a 1 pt first step,
+   *   moves of (0, 9) and (7, 7) picked nothing; (0, 10), (0, 11), (10, 0),
+   *   (9, 9) and (10, 10) picked; a 9 pt step followed by 3 pt more picked
+   *   nothing
+   */
+  handoff: {value: 10, unit: 'px'},
+} as const satisfies Record<string, GestureConstant>;
+
 export const UIKIT_VELOCITY = {
   /**
    * UIPanGestureRecognizer.velocity(in:) is this times the newest event's
@@ -318,6 +353,7 @@ export const UIKIT_GESTURES = {
   screenEdgePan: UIKIT_SCREEN_EDGE_PAN,
   control: UIKIT_CONTROL,
   press: UIKIT_PRESS,
+  menuPress: UIKIT_MENU_PRESS,
   velocity: UIKIT_VELOCITY,
 } as const;
 

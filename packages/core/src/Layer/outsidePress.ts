@@ -31,12 +31,15 @@ import {useCallback, useEffect, useMemo, useRef} from 'react';
  *   watched.
  * @param isInside - Whether a press with this composed path is inside.
  * @param onOutside - Called once for each press that starts and ends outside.
+ * @param onCancelOutside - Called when the browser takes a press that started
+ *   outside (a pointercancel: a scroll or a pinch).
  * @returns Stops watching.
  */
 export function watchOutsidePress(
   owner: Element,
   isInside: (path: ReadonlyArray<EventTarget>) => boolean,
   onOutside: () => void,
+  onCancelOutside?: (event: PointerEvent) => void,
 ): () => void {
   const doc = owner.ownerDocument;
   let startedOutside = false;
@@ -52,8 +55,12 @@ export function watchOutsidePress(
       onOutside();
     }
   };
-  const handleCancel = () => {
+  const handleCancel = (event: PointerEvent) => {
+    const wasOutside = startedOutside;
     startedOutside = false;
+    if (wasOutside) {
+      onCancelOutside?.(event);
+    }
   };
 
   doc.addEventListener('pointerdown', handleDown, true);
@@ -72,6 +79,7 @@ export interface OutsidePressWatch {
     owner: Element,
     isInside: (path: ReadonlyArray<EventTarget>) => boolean,
     onOutside: () => void,
+    onCancelOutside?: (event: PointerEvent) => void,
   ) => void;
   /** Stop watching; does nothing when no watch is running. */
   stop: () => void;
@@ -90,9 +98,14 @@ export function useOutsidePress(): OutsidePressWatch {
     stopRef.current = null;
   }, []);
   const start = useCallback<OutsidePressWatch['start']>(
-    (owner, isInside, onOutside) => {
+    (owner, isInside, onOutside, onCancelOutside) => {
       stopRef.current?.();
-      stopRef.current = watchOutsidePress(owner, isInside, onOutside);
+      stopRef.current = watchOutsidePress(
+        owner,
+        isInside,
+        onOutside,
+        onCancelOutside,
+      );
     },
     [],
   );
