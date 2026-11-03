@@ -36,6 +36,7 @@ import {
   DATE_FORMAT_WITH_WEEKDAY,
   DATE_FORMAT_MONTH_YEAR,
   plainDateWeekFieldName,
+  plainDateFormatToParts,
 } from './plainDate';
 import type {ISODateString} from './dateTypes';
 
@@ -780,6 +781,20 @@ describe('plainDateFormatStandaloneMonthYear', () => {
     ['pt-BR', 'outubro de 2026'],
   ])('keeps the Intl label in %s', (locale, label) => {
     expect(plainDateFormatStandaloneMonthYear(october, locale)).toBe(label);
+  });
+});
+
+describe('plainDateFormatToParts', () => {
+  it.each([
+    [{dateStyle: 'full'}],
+    [{timeZone: 'Asia/Tokyo', dateStyle: 'long'}],
+    [{hour: 'numeric', day: 'numeric'}],
+  ] as const)('joins to the plainDateFormat text for %o', options => {
+    const pd = plainDateFromISO('2026-11-03');
+    const parts = plainDateFormatToParts(pd, options, 'fa-IR');
+    expect(parts.map(part => part.value).join('')).toBe(
+      plainDateFormat(pd, options, 'fa-IR'),
+    );
   });
 });
 

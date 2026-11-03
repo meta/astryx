@@ -96,7 +96,7 @@ export const docs = {
       type: "'gregory' | 'iso8601' | 'buddhist' | 'roc' | 'japanese' | 'persian' | 'indian' | 'hebrew' | 'chinese' | 'dangi' | 'coptic' | 'ethiopic' | 'ethioaa' | 'islamic-civil' | 'islamic-tbla' | 'islamic-umalqura'",
       required: false,
       description:
-        "Calendar system of the subtree, such as 'persian', 'hebrew', or 'buddhist'. The provider resolves it and exposes it on the context as `calendar`; Astryx date components show Gregorian dates. When omitted, a `-u-ca-` keyword in `locale` selects the calendar, else Gregorian; a locale's default calendar never applies. Values stay Gregorian ISO dates. Calendars other than gregory, iso8601, buddhist, roc, and japanese need `Temporal`; where the runtime lacks it, load a polyfill such as `temporal-polyfill/full/global` on the server and in the browser, or those calendars resolve to Gregorian and warn in development.",
+        "Calendar system of the subtree, such as 'persian', 'hebrew', or 'buddhist'. The provider resolves it and exposes it on the context as `calendar`; Astryx date components show Gregorian dates. When omitted, a `-u-ca-` keyword in `locale` selects the calendar, else Gregorian; a locale's default calendar never applies. Values stay Gregorian ISO dates. Calendars other than gregory, iso8601, buddhist, roc, and japanese need `Temporal`; the context keeps the requested calendar, and where the runtime lacks `Temporal`, a date component that resolves it shows Gregorian dates and warns in development. Load a polyfill such as `temporal-polyfill/full/global` on the server and in the browser.",
     },
     {
       name: 'children',

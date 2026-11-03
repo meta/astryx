@@ -283,7 +283,8 @@ for all 30 shipped locales plus `pseudo`.
   calendar never applies. `PlainDate` values, constraints, and machine formats
   stay Gregorian ISO in every calendar. The runtime's `Temporal` owns the
   arithmetic of every calendar whose months are not Gregorian; where it is
-  missing, those calendars resolve to Gregorian (`spec:AST-111` FR5). Shared
+  missing, a date component that resolves such a calendar shows Gregorian
+  dates (`spec:AST-111` FR5). Shared
   built-in date formatters pin the Gregorian calendar unless an Astryx call site
   passes the resolved calendar. The low-level `plainDateFormat` display-calendar
   override remains a supported explicit caller choice.

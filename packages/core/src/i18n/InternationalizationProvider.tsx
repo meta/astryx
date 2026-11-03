@@ -114,7 +114,9 @@ export interface InternationalizationProviderProps {
    * dates. When omitted, a `-u-ca-` keyword in `locale` selects the calendar,
    * else Gregorian; a locale's default calendar never applies. Calendars
    * other than `gregory`, `iso8601`, `buddhist`, `roc`, and `japanese` need
-   * `Temporal`; without it they resolve to Gregorian.
+   * `Temporal`. The context keeps the requested calendar; where `Temporal` is
+   * missing, a date component that resolves it shows Gregorian dates and
+   * warns once in development.
    *
    * @example
    * ```

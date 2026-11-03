@@ -19,6 +19,7 @@ import {
   plainDateAddMonths,
   plainDateFormat,
   plainDateFormatStandaloneMonthYear,
+  plainDateFormatToParts,
   plainDateIsAfter,
   plainDateIsBefore,
   getDaysInMonth,
@@ -290,16 +291,10 @@ export function formatCalendarMonthLabel(
   );
 }
 
-// Intl has no month names for `iso8601`. It drops the month or orders the
-// fields oddly, so labels use `gregory`, which has the same months and days.
+// Intl has no month names for `iso8601`. Labels use `gregory`, which has the
+// same months and days.
 function labelCalendar(calendar: CalendarSystem): CalendarSystem {
   return calendar === 'iso8601' ? 'gregory' : calendar;
-}
-
-function utcMidnight(pd: PlainDate): number {
-  const date = new Date(0);
-  date.setUTCFullYear(pd.year, pd.month - 1, pd.day);
-  return date.getTime();
 }
 
 function formatToParts(
@@ -308,11 +303,7 @@ function formatToParts(
   options: Intl.DateTimeFormatOptions,
   locale: Locale,
 ): Intl.DateTimeFormatPart[] {
-  return dateTimeFormatFor(locale, {
-    ...options,
-    calendar,
-    timeZone: 'UTC',
-  }).formatToParts(utcMidnight(pd));
+  return plainDateFormatToParts(pd, {...options, calendar}, locale);
 }
 
 const MONTH_PART_TYPES: ReadonlySet<string> = new Set([
