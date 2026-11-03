@@ -218,7 +218,7 @@ describe('PowerSearch', () => {
     expect(screen.getAllByRole('button', {name: /^Remove /})).toHaveLength(2);
 
     await user.click(
-      screen.getAllByRole('button', {name: 'Remove Status: is'})[0],
+      screen.getAllByRole('button', {name: 'Remove Status: is Open'})[0],
     );
 
     expect(screen.getAllByRole('button', {name: /^Remove /})).toHaveLength(1);
@@ -757,7 +757,7 @@ describe('filter token focus', () => {
 
     await user.tab({shift: true}); // Remove button
     await user.tab({shift: true}); // Token label
-    expect(screen.getByRole('button', {name: 'Status: is'})).toHaveFocus();
+    expect(screen.getByRole('button', {name: 'Status: is Open'})).toHaveFocus();
     await user.keyboard('{Enter}');
     expect(
       await screen.findByRole('button', {name: 'Apply', hidden: true}),
@@ -844,7 +844,7 @@ describe('maxOperatorMenuItems', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', {name: 'Person: is any of'}));
+    await user.click(screen.getByRole('button', {name: /^Person: is any of /}));
     const inputs = screen.getAllByRole('combobox', {hidden: true});
     const valueInput = inputs[inputs.length - 1];
     await user.type(valueInput, 'Person');
