@@ -717,6 +717,147 @@ describe('CommandPalette', () => {
     }
   });
 
+  describe('a new searchSource while open', () => {
+    function spySource(items: SearchableItem[]) {
+      const source = createStaticSource(items);
+      return {
+        ...source,
+        search: vi.fn((query: string): ReturnType<typeof source.search> =>
+          source.search(query),
+        ),
+        bootstrap: vi.fn((): ReturnType<typeof source.bootstrap> =>
+          source.bootstrap(),
+        ),
+      };
+    }
+    const fruits = [
+      {id: 'apple', label: 'Apple'},
+      {id: 'apricot', label: 'Apricot'},
+    ];
+    const tools = [
+      {id: 'awl', label: 'Awl'},
+      {id: 'axe', label: 'Axe'},
+    ];
+
+    it('re-runs the current query against the new source and keeps the query text', async () => {
+      const user = userEvent.setup();
+      const first = spySource(fruits);
+      const second = spySource(tools);
+      const {rerender} = render(
+        <CommandPalette isOpen onOpenChange={() => {}} searchSource={first} />,
+      );
+      const input = screen.getByRole('combobox');
+      await user.type(input, 'a');
+      await waitFor(() =>
+        expect(screen.getByText('Apple')).toBeInTheDocument(),
+      );
+
+      rerender(
+        <CommandPalette isOpen onOpenChange={() => {}} searchSource={second} />,
+      );
+
+      await waitFor(() => expect(screen.getByText('Axe')).toBeInTheDocument());
+      expect(second.search).toHaveBeenCalledTimes(1);
+      expect(second.search).toHaveBeenCalledWith('a');
+      expect(second.bootstrap).not.toHaveBeenCalled();
+      expect(screen.queryByText('Apple')).toBeNull();
+      expect(input).toHaveValue('a');
+    });
+
+    it('re-runs the bootstrap against the new source when the query is empty', async () => {
+      const first = spySource(fruits);
+      const second = spySource(tools);
+      const {rerender} = render(
+        <CommandPalette isOpen onOpenChange={() => {}} searchSource={first} />,
+      );
+      await waitFor(() =>
+        expect(screen.getByText('Apple')).toBeInTheDocument(),
+      );
+
+      rerender(
+        <CommandPalette isOpen onOpenChange={() => {}} searchSource={second} />,
+      );
+
+      await waitFor(() => expect(screen.getByText('Axe')).toBeInTheDocument());
+      expect(second.bootstrap).toHaveBeenCalledTimes(1);
+      expect(second.search).not.toHaveBeenCalled();
+      expect(screen.queryByText('Apple')).toBeNull();
+    });
+
+    it('drops a result the old source returns after the switch', async () => {
+      const user = userEvent.setup();
+      let resolveLate: (items: SearchableItem[]) => void = () => {};
+      const first: SearchSource<SearchableItem> = {
+        ...createStaticSource(fruits),
+        search: async () =>
+          new Promise<SearchableItem[]>(resolve => {
+            resolveLate = resolve;
+          }),
+      };
+      const second = spySource(tools);
+      const {rerender} = render(
+        <CommandPalette isOpen onOpenChange={() => {}} searchSource={first} />,
+      );
+      await user.type(screen.getByRole('combobox'), 'a');
+
+      rerender(
+        <CommandPalette isOpen onOpenChange={() => {}} searchSource={second} />,
+      );
+      await waitFor(() => expect(screen.getByText('Axe')).toBeInTheDocument());
+      await act(async () => {
+        resolveLate([{id: 'stale', label: 'Stale fruit'}]);
+      });
+
+      expect(screen.queryByText('Stale fruit')).toBeNull();
+      expect(screen.getByText('Axe')).toBeInTheDocument();
+    });
+
+    it('resets the highlight', async () => {
+      const user = userEvent.setup();
+      const first = spySource(fruits);
+      const second = spySource(tools);
+      const {rerender} = render(
+        <CommandPalette isOpen onOpenChange={() => {}} searchSource={first} />,
+      );
+      const input = screen.getByRole('combobox');
+      await waitFor(() =>
+        expect(screen.getByText('Apple')).toBeInTheDocument(),
+      );
+      await user.click(input);
+      await user.keyboard('{ArrowDown}');
+      expect(input).toHaveAttribute('aria-activedescendant');
+
+      rerender(
+        <CommandPalette isOpen onOpenChange={() => {}} searchSource={second} />,
+      );
+
+      await waitFor(() => expect(screen.getByText('Axe')).toBeInTheDocument());
+      expect(input).not.toHaveAttribute('aria-activedescendant');
+    });
+
+    it('does not query a new source while closed', async () => {
+      const first = spySource(fruits);
+      const second = spySource(tools);
+      const {rerender} = render(
+        <CommandPalette
+          isOpen={false}
+          onOpenChange={() => {}}
+          searchSource={first}
+        />,
+      );
+      rerender(
+        <CommandPalette
+          isOpen={false}
+          onOpenChange={() => {}}
+          searchSource={second}
+        />,
+      );
+      await act(async () => {});
+      expect(second.search).not.toHaveBeenCalled();
+      expect(second.bootstrap).not.toHaveBeenCalled();
+    });
+  });
+
   describe('screen reader announcements', () => {
     const politeRegion = () =>
       document.querySelector('[data-astryx-live-region="polite"]');
