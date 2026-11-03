@@ -901,7 +901,7 @@ export function Item({
       {...(isDelegate
         ? {
             onPointerDown: chainEventHandlers(
-              swipeHandlers?.onPointerDown ?? restProps.onPointerDown,
+              restProps.onPointerDown,
               delegatedOnPointerDown,
             ),
           }

@@ -14,6 +14,7 @@
 
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
+import {subscribeInput} from '../utils/inputStream';
 
 const NESTED_PRESS = 'data-astryx-nested-press';
 
@@ -28,13 +29,16 @@ export function markNestedPress(container: HTMLElement): void {
     return;
   }
   container.setAttribute(NESTED_PRESS, '');
-  const unmark = () => {
+  const stops = [
+    subscribeInput(view, 'pointerup', unmark),
+    subscribeInput(view, 'pointercancel', unmark),
+  ];
+  function unmark() {
     container.removeAttribute(NESTED_PRESS);
-    view.removeEventListener('pointerup', unmark, true);
-    view.removeEventListener('pointercancel', unmark, true);
-  };
-  view.addEventListener('pointerup', unmark, true);
-  view.addEventListener('pointercancel', unmark, true);
+    for (const stop of stops) {
+      stop();
+    }
+  }
 }
 
 export const nestedPressStyles = stylex.create({
