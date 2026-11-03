@@ -201,8 +201,7 @@ export const docs = {
       name: 'presentation',
       type: "'popover' | 'bottom-sheet' | 'adaptive'",
       description:
-        "Presentation surface for data-driven items. 'popover' stays anchored, 'bottom-sheet' always renders the actions in a modal BottomSheet, and 'adaptive' uses a BottomSheet on compact coarse-pointer layouts while remaining anchored elsewhere. Compound children currently support popover only.",
-      default: "'popover'",
+        "Presentation surface for data-driven items. 'popover' stays anchored, 'bottom-sheet' always renders the actions in a modal BottomSheet, and 'adaptive' uses a BottomSheet on compact coarse-pointer layouts while remaining anchored elsewhere. Compound children currently support popover only. Omitted, the menu is anchored, and under a finger, on every device, its trigger opens as the finger presses (inside a scroll view, after the 150 ms content-touch delay), and the opening finger picks after moving 10 px. Pass 'popover' to keep the pointer behavior on every device, a 500 ms hold included.",
     },
     {
       name: 'isMenuOpen',

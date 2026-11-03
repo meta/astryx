@@ -16,7 +16,7 @@ import {Heading} from '../Heading/Heading';
 import {Icon, renderIconSlot} from '../Icon/Icon';
 import {List} from '../List/List';
 import {ListItem} from '../List/ListItem';
-import {useMenuPress} from '../hooks/useMenuPress';
+import {useMenuSurfacePress} from '../hooks/useMenuPress';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
 import {rtlStyles} from '../utils/rtlStyles';
@@ -74,7 +74,7 @@ export function MenuBottomSheetActionList({
   // The press model: the row under a finger's RELEASE acts, and the
   // highlight (focus) follows the finger across the rows. The sheet is modal,
   // so a release outside it is the scrim's, not a dismissal of ours.
-  const menuPress = useMenuPress({
+  const menuPress = useMenuSurfacePress({
     menuRef: listRef,
     itemSelector: SHEET_ROW_SELECTOR,
   });
@@ -151,6 +151,9 @@ export function MenuBottomSheetActionList({
     <List
       ref={listComposedRef}
       density="spacious"
+      // Focus parks on the list when no row is lit, as in DropdownMenu's own
+      // menu, so a row a cancelled finger lit loses its highlight.
+      tabIndex={-1}
       xstyle={styles.list}
       {...menuPress.menuProps}>
       {items.map((option, index) => {
