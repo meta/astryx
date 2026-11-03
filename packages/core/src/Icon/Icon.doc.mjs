@@ -78,9 +78,9 @@ export const docs = {
     },
     {
       name: 'color',
-      type: "'primary' | 'secondary' | 'tertiary' | 'disabled' | 'accent' | 'info' | 'success' | 'error' | 'warning' | 'inherit' | 'blue' | 'red' | 'green' | 'gray' | 'cyan' | 'teal' | 'yellow' | 'orange' | 'pink' | 'purple'",
+      type: "'primary' | 'secondary' | 'tertiary' | 'disabled' | 'accent' | 'info' | 'success' | 'error' | 'warning' | 'inherit'",
       description:
-        'Color variant mapped to Astryx icon color tokens. Semantic values (primary through warning) follow the role; palette values (blue through purple) pick a non-semantic hue; inherit uses the surrounding text color.',
+        'Color variant mapped to Astryx icon color tokens. Semantic values (primary through warning) follow the role, and inherit uses the surrounding text color. On the web, Icon also accepts the palette values blue, red, green, gray, cyan, teal, yellow, orange, pink, and purple, which pick a non-semantic hue.',
       default: "'inherit'",
     },
     {
@@ -233,9 +233,9 @@ export const docsZh = {
     },
     {
       name: 'color',
-      type: "'primary' | 'secondary' | 'tertiary' | 'disabled' | 'accent' | 'info' | 'success' | 'error' | 'warning' | 'inherit' | 'blue' | 'red' | 'green' | 'gray' | 'cyan' | 'teal' | 'yellow' | 'orange' | 'pink' | 'purple'",
+      type: "'primary' | 'secondary' | 'tertiary' | 'disabled' | 'accent' | 'info' | 'success' | 'error' | 'warning' | 'inherit'",
       description:
-        '映射到 Astryx 图标颜色令牌的颜色变体。语义值（primary 到 warning）跟随角色；调色板值（blue 到 purple）选择非语义色相；inherit 使用周围文字的颜色。',
+        '映射到 Astryx 图标颜色令牌的颜色变体。语义值（primary 到 warning）跟随角色，inherit 使用周围文字的颜色。在 Web 上，Icon 还接受调色板值 blue、red、green、gray、cyan、teal、yellow、orange、pink 和 purple，它们选择非语义色相。',
       default: "'inherit'",
     },
     {
