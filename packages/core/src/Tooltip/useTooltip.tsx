@@ -417,44 +417,6 @@ export function useTooltipWithTriggerBehavior(
     }, delay);
   }, [isEnabled, isOpen, clearTimeouts, showLayer, delay]);
 
-  // A caller can remove the surface and its trigger ref while disabled (the
-  // Button inside DropdownMenu does). Drop interaction-owned state as well as
-  // timers, or mounting the surface again restores a stale open tooltip.
-  // Explicit controlled visibility still belongs to the caller.
-  const wasEnabledRef = useRef(isEnabled);
-  useEffect(() => {
-    const wasEnabled = wasEnabledRef.current;
-    wasEnabledRef.current = isEnabled;
-    if (!isEnabled) {
-      clearTimeouts();
-      if (isOpen === undefined) {
-        hideLayer();
-      }
-    } else if (!wasEnabled && isOpen === undefined) {
-      // Focus may have returned while the listeners were detached. Recover
-      // keyboard discovery from the current focus, never the old open state.
-      const trigger = triggerRef.current;
-      if (
-        trigger != null &&
-        (focusTrigger === 'always' ||
-          (focusTrigger === 'auto' && isFocusable(trigger))) &&
-        trigger.ownerDocument.activeElement === trigger &&
-        trigger.matches(':focus-visible') &&
-        !isTouchInteraction()
-      ) {
-        showLayer();
-      }
-    }
-  }, [
-    isEnabled,
-    isOpen,
-    focusTrigger,
-    clearTimeouts,
-    hideLayer,
-    showLayer,
-    isTouchInteraction,
-  ]);
-
   // Schedule hide with delay (suppressed when isOpen is true).
   // A small hover bridge (when hideDelay is 0) lets the pointer travel from the
   // trigger onto the tooltip surface without the tooltip vanishing — required
@@ -512,6 +474,64 @@ export function useTooltipWithTriggerBehavior(
     [isTouchPointerRef, layerId, scheduleHide],
   );
 
+  // Whether focus on `target` opens the tooltip. Only keyboard focus
+  // (`:focus-visible`) opens it, not programmatic focus such as a dialog's
+  // auto-focus or focus a closing layer returns after a pointer pick. A tap
+  // focuses the trigger it activates, and `:focus-visible` does not filter
+  // that out on every element: a tapped `<input>` or contenteditable matches
+  // it. With `trigger`, the focus must also count for that trigger under
+  // `focusTrigger`.
+  const opensOnFocus = useCallback(
+    (target: HTMLElement, trigger: HTMLElement | null): boolean => {
+      if (
+        trigger != null &&
+        focusTrigger !== 'always' &&
+        (focusTrigger === 'never' ||
+          (target !== trigger && !isFocusable(trigger)))
+      ) {
+        return false;
+      }
+      return !isTouchInteraction() && target.matches(':focus-visible');
+    },
+    [focusTrigger, isTouchInteraction],
+  );
+
+  // A caller can remove the surface and its trigger ref while disabled (the
+  // Button inside DropdownMenu does). On the change to disabled, drop the
+  // timers and close an open uncontrolled tooltip, or mounting the surface
+  // again restores a stale open tooltip. On the change back, focus may have
+  // arrived while the listeners were detached: open only for focus that would
+  // open the tooltip now, never from the old open state. Explicit controlled
+  // visibility still belongs to the caller.
+  const wasEnabledRef = useRef(isEnabled);
+  useEffect(() => {
+    const wasEnabled = wasEnabledRef.current;
+    wasEnabledRef.current = isEnabled;
+    if (isEnabled === wasEnabled) {
+      return;
+    }
+    if (!isEnabled) {
+      if (isOpen === undefined && isLayerOpen) {
+        hideNow();
+      } else if (showTimeoutRef.current) {
+        clearTimeout(showTimeoutRef.current);
+        showTimeoutRef.current = null;
+      }
+      return;
+    }
+    const trigger = triggerRef.current;
+    const focused = trigger?.ownerDocument.activeElement;
+    if (
+      isOpen === undefined &&
+      trigger != null &&
+      focused instanceof HTMLElement &&
+      trigger.contains(focused) &&
+      opensOnFocus(focused, trigger)
+    ) {
+      showNow();
+    }
+  }, [isEnabled, isOpen, isLayerOpen, hideNow, showNow, opensOnFocus]);
+
   // Under `auto`, whether focus counts is decided when it arrives, not when
   // the listeners attach: a roving-tabindex member that was `tabindex="-1"`
   // then can be the tab stop now. A trigger that receives focus is focusable
@@ -540,30 +560,13 @@ export function useTooltipWithTriggerBehavior(
       if (!isEnabled || !focusCountedRef.current) {
         return;
       }
-      // A tap focuses the trigger it activates, and `:focus-visible` does not
-      // filter that out on every element: a tapped `<input>` or contenteditable
-      // matches it. Those are exactly the action triggers `auto` just decided
-      // to keep shut, so without this the focus reopens what the tap
-      // suppressed, over the field the user is trying to type into.
-      if (isTouchInteraction()) {
-        return;
-      }
-      // Only show tooltip for keyboard focus (:focus-visible),
-      // not programmatic focus (e.g. dialog auto-focus, touch tap)
-      const target = e.target as HTMLElement;
-      if (!target.matches(':focus-visible')) {
+      if (!opensOnFocus(e.target as HTMLElement, null)) {
         return;
       }
       clearTimeouts();
       showLayer();
     },
-    [
-      isEnabled,
-      isFocusForTrigger,
-      isTouchInteraction,
-      clearTimeouts,
-      showLayer,
-    ],
+    [isEnabled, isFocusForTrigger, opensOnFocus, clearTimeouts, showLayer],
   );
 
   // A pinned tooltip's focus-leave close is the pin's own: it listens on the

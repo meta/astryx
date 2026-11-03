@@ -29,6 +29,7 @@ import {
   type TooltipOptions,
 } from './useTooltip';
 import {useLayer} from '../Layer/useLayer';
+import {Tooltip} from './Tooltip';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
 import type {MouseEvent as ReactMouseEvent} from 'react';
 
@@ -269,6 +270,39 @@ describe('useTooltip — enabled transitions', () => {
     tick(1000);
     expect(tooltipElement().matches(':popover-open')).toBe(true);
     expect(onHide).not.toHaveBeenCalled();
+  });
+
+  it('reports no close on a rerender while it stays disabled', () => {
+    const reported: boolean[] = [];
+    const {rerender} = render(
+      <Tooltip
+        content="Hint"
+        isDefaultOpen
+        onOpenChange={isOpen => reported.push(isOpen)}>
+        <button type="button">Trigger</button>
+      </Tooltip>,
+    );
+    rerender(
+      <Tooltip
+        content="Hint"
+        isDefaultOpen
+        isEnabled={false}
+        onOpenChange={isOpen => reported.push(isOpen)}>
+        <button type="button">Trigger</button>
+      </Tooltip>,
+    );
+    expect(reported).toEqual([true, false]);
+
+    rerender(
+      <Tooltip
+        content="Hint"
+        isDefaultOpen
+        isEnabled={false}
+        onOpenChange={isOpen => reported.push(isOpen)}>
+        <button type="button">Trigger</button>
+      </Tooltip>,
+    );
+    expect(reported).toEqual([true, false]);
   });
 
   it('keeps a controlled tooltip closed when re-enabled on a focused trigger', () => {
