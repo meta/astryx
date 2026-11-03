@@ -143,6 +143,39 @@ describe('CommandPalette', () => {
     });
   });
 
+  it('refreshes bootstrap results when searchSource changes while open', async () => {
+    const initialSource = createStaticSource([
+      {id: 'overview', label: 'Overview'},
+    ]);
+    const replacementSource = createStaticSource([
+      {id: 'project-a', label: 'Alpha project'},
+      {id: 'project-b', label: 'Beta project'},
+    ]);
+    const {rerender} = render(
+      <CommandPalette
+        isOpen={true}
+        onOpenChange={() => {}}
+        searchSource={initialSource}
+      />,
+    );
+
+    expect(await screen.findByText('Overview')).toBeInTheDocument();
+
+    rerender(
+      <CommandPalette
+        isOpen={true}
+        onOpenChange={() => {}}
+        searchSource={replacementSource}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Alpha project')).toBeInTheDocument();
+      expect(screen.getByText('Beta project')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Overview')).not.toBeInTheDocument();
+  });
+
   it('auto-groups items by auxiliaryData.group', async () => {
     render(
       <CommandPalette

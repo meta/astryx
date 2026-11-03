@@ -321,6 +321,8 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
   const [optimisticSearch, setOptimisticSearch] = useOptimistic(search);
   const [optimisticResults, setOptimisticResults] =
     useOptimistic(searchResults);
+  const currentQueryRef = useRef(optimisticSearch);
+  currentQueryRef.current = optimisticSearch;
   const isBusy = isPending;
   const searchVersionRef = useRef(0);
   const emptyStateRef = useRef<HTMLDivElement>(null);
@@ -511,9 +513,9 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
 
   useEffect(() => {
     if (isOpen) {
-      runSearchRef.current('');
+      runSearchRef.current(currentQueryRef.current);
     }
-  }, [isOpen]);
+  }, [isOpen, searchSource]);
 
   // Wrap combobox's onKeyDown to preserve inline-preview Escape handling and
   // select + close on Enter. Modal Escape stays unclaimed here so Dialog's
