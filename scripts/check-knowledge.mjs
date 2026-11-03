@@ -37,6 +37,7 @@ const {
   componentSpecPathForSource,
   isComponentSpecRecordPath,
   isIgnoredComponentKnowledgeSegment,
+  isKnowledgeRecordPath,
   isPlatformComponentSpecPath,
   locateComponentKnowledgePath,
 } = require('../.github/scripts/knowledge-paths.cjs');
@@ -526,21 +527,6 @@ function repositoryFileList(root) {
   } catch {
     return null;
   }
-}
-
-function isKnowledgeRecordPath(filePath) {
-  if (/^docs\/(?:architecture|design|families)\/[^/]+\.md$/.test(filePath)) {
-    return !filePath.endsWith('/README.md');
-  }
-  if (/^docs\/specs\/[^/]+\/(?:spec|plan)\.md$/.test(filePath)) {
-    return true;
-  }
-  const themeMatch = /^packages\/themes\/([^/]+)\/([^/]+)\.spec\.md$/.exec(
-    filePath,
-  );
-  if (themeMatch) return themeMatch[1] === themeMatch[2];
-  if (classifyPackageArchitectureRecordPath(filePath)) return true;
-  return isComponentSpecRecordPath(filePath);
 }
 
 const REVIEW_CONCERN_NAME_PATTERN = REVIEW_TRIGGER_PATTERN;

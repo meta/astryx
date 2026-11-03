@@ -89,8 +89,9 @@ Consumer migration instructions belong in consumer docs and release notes.
 - Label, description, status message placement, label tooltip, and `width` —
   owned by Field under `family:input-fields` (shared owner section).
 - The browser time picker's own interface — owned by the platform.
-- BottomSheet and wheel mechanics — owned by `component:BottomSheet` and the
-  shared wheel used by the date and time inputs.
+- BottomSheet hosting — owned by `component:BottomSheet`; the sheet wheels'
+  rest, motion, scroll input, and look — owned by `component:DateInput` (FR13–FR15,
+  DEC-1, DEC-2).
 - Combined date and time — owned by DateTimeInput.
 - Read-only — not provided.
 

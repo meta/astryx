@@ -3,7 +3,8 @@
 /**
  * @file CircularProgressMotion.a11y.chromium.spec.ts
  * @input Built CircularProgress stories in real Chromium (Web Animations
- *   seeking, CDP screencast, tracing)
+ *   seeking, CDP screencast, tracing), the interaction harness's busy-window
+ *   control and proof
  * @output Browser evidence that a determinate value change keeps moving while
  *   a script holds the main thread and paints nothing per frame, that the
  *   ring at rest draws what the stroked circle drew, and that the arc stays
@@ -24,7 +25,14 @@ import {
   serveStorybook,
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
-import {inPresentationOrder} from '@astryxdesign/interaction-harness';
+import {
+  busyWindowProof,
+  CONTROL_RGB,
+  inPresentationOrder,
+  startBusyControl,
+  trackMarker,
+  type TrackedFrame,
+} from '@astryxdesign/interaction-harness';
 
 let storybook: StaticServer;
 test.beforeAll(async () => {
@@ -152,35 +160,59 @@ async function colors(page: Page) {
 
 /**
  * For each degree clockwise from 12 o'clock, whether the ring's centerline is
- * drawn in the fill color in the given screenshot (PNGs of the ring box).
+ * drawn in the fill color in the given screenshot: PNGs of the ring box, or,
+ * with `frame`, PNGs of the whole viewport (`viewportWidth` CSS px wide) read
+ * at the ring box, the same pixels a crop to that box would hold.
  */
 async function inkByDegree(
   page: Page,
   shots: string[],
   palette: {fill: number[]; track: number[]},
+  frame?: {ring: Box; viewportWidth: number},
 ): Promise<boolean[][]> {
   const scratch = await page.context().newPage();
   try {
     return await scratch.evaluate(
-      async ({items, fill, track, diameter, stroke}) => {
+      async ({items, fill, track, diameter, stroke, region}) => {
         const out: boolean[][] = [];
         for (const item of items) {
           const bitmap = await createImageBitmap(
             await (await fetch(`data:image/png;base64,${item}`)).blob(),
           );
-          const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+          // The ring box in the shot's pixels: the whole shot, or the box's
+          // pixels in a viewport frame.
+          const frameScale =
+            region == null ? 1 : bitmap.width / region.viewportWidth;
+          const x0 =
+            region == null ? 0 : Math.round(region.ring.x * frameScale);
+          const y0 =
+            region == null ? 0 : Math.round(region.ring.y * frameScale);
+          const boxWidth =
+            region == null
+              ? bitmap.width
+              : Math.round(region.ring.width * frameScale);
+          const boxHeight =
+            region == null
+              ? bitmap.height
+              : Math.round(region.ring.height * frameScale);
+          const canvas = new OffscreenCanvas(boxWidth, boxHeight);
           const context = canvas.getContext('2d');
           if (context == null) {
             throw new Error('no 2d context');
           }
-          context.drawImage(bitmap, 0, 0);
-          const {data, width} = context.getImageData(
+          context.drawImage(
+            bitmap,
+            x0,
+            y0,
+            boxWidth,
+            boxHeight,
             0,
             0,
-            bitmap.width,
-            bitmap.height,
+            boxWidth,
+            boxHeight,
           );
-          const scale = bitmap.width / diameter;
+          const {data, width} = context.getImageData(0, 0, boxWidth, boxHeight);
+          const scale = boxWidth / diameter;
           const r = ((diameter - stroke) / 2) * scale;
           const c = (diameter / 2) * scale;
           const d = (a: number[], b: number[]) =>
@@ -200,7 +232,13 @@ async function inkByDegree(
         }
         return out;
       },
-      {items: shots, ...palette, diameter: DIAMETER, stroke: STROKE},
+      {
+        items: shots,
+        ...palette,
+        diameter: DIAMETER,
+        stroke: STROKE,
+        region: frame ?? null,
+      },
     );
   } finally {
     await scratch.close();
@@ -263,6 +301,10 @@ test('a value change keeps moving while a script holds the main thread', async (
     everyNthFrame: 1,
   });
   await page.waitForTimeout(300);
+  // The harness's busy-window control, through the block: a box the
+  // compositor moves along the top edge, clear of the ring, in the same
+  // screencast.
+  const control = await startBusyControl(page);
   // A value change, one presented frame, then 700 ms of script.
   const busy = await page.evaluate(
     async ({storyId}) =>
@@ -298,6 +340,9 @@ test('a value change keeps moving while a script holds the main thread', async (
       }),
     {storyId: STORY},
   );
+  // Gone once the block ends, so the page is still again when the
+  // screencast stops.
+  await control.remove();
   await page.waitForTimeout(300);
   await cdp.send('Page.stopScreencast');
   await Promise.all(acks);
@@ -309,61 +354,54 @@ test('a value change keeps moving while a script holds the main thread', async (
   // that shows the arc behind an earlier one still has its own later
   // timestamp, so it stays in place.
   const presented = inPresentationOrder(raw);
-  // Crop each frame to the ring, then read how far the arc reaches.
-  const scratch = await page.context().newPage();
-  let crops: string[];
-  try {
-    crops = await scratch.evaluate(
-      async ({items, ring}) => {
-        const out: string[] = [];
-        for (const item of items) {
-          const bitmap = await createImageBitmap(
-            await (await fetch(`data:image/png;base64,${item}`)).blob(),
-          );
-          const scale = bitmap.width / 240;
-          const canvas = new OffscreenCanvas(
-            Math.round(ring.width * scale),
-            Math.round(ring.height * scale),
-          );
-          const context = canvas.getContext('2d');
-          if (context == null) {
-            throw new Error('no 2d context');
-          }
-          context.drawImage(
-            bitmap,
-            Math.round(ring.x * scale),
-            Math.round(ring.y * scale),
-            canvas.width,
-            canvas.height,
-            0,
-            0,
-            canvas.width,
-            canvas.height,
-          );
-          const blob = await canvas.convertToBlob({type: 'image/png'});
-          const bytes = new Uint8Array(await blob.arrayBuffer());
-          let binary = '';
-          for (const byte of bytes) {
-            binary += String.fromCharCode(byte);
-          }
-          out.push(btoa(binary));
-        }
-        return out;
-      },
-      {items: presented.map(f => f.data), ring: box},
-    );
-  } finally {
-    await scratch.close();
-  }
-  const rows = await inkByDegree(page, crops, palette);
+  // How far the arc reaches in each frame, read at the ring.
+  const rows = await inkByDegree(
+    page,
+    presented.map(f => f.data),
+    palette,
+    {ring: box, viewportWidth: 240},
+  );
   const frames = rows.map((row, i) => ({t: presented[i].t, ...span(row)}));
   const inside = frames.filter(
     f => f.t >= busy.from + 20 && f.t <= busy.to - 20,
   );
-  // The change lasts the theme's 410 ms, so it moves through most of the
-  // block, one piece the whole way, and lands at 90%.
-  const reaches = new Set(inside.map(f => f.last));
-  expect(reaches.size).toBeGreaterThanOrEqual(10);
+  // The control, in the frames around the block (the proof reads it from the
+  // last frame before the block through the block's end).
+  const controlFrames = await trackMarker(
+    page,
+    presented
+      .filter(f => f.t >= busy.from - 250 && f.t <= busy.to)
+      .map(f => ({
+        t: f.t,
+        data: f.data,
+        format: 'png' as const,
+        viewportWidth: 240,
+        viewportHeight: 160,
+      })),
+    {rgb: CONTROL_RGB},
+  );
+  // The change runs through the block: the arc's reach shows a new degree on
+  // every frame the control moved on, and stalls no longer than the control,
+  // until it settles (the harness's busy proof: the screencast's capture rate
+  // thins both alike). It settles 3 degrees short of its end: on the change's
+  // own clock each 1-degree step of the reading takes 2 to 8 ms up to 324,
+  // then 12, 12 and 18 ms for 325, 326 and 327 before it rests at 328, so
+  // from 325 two frames can read the same degree while the arc still moves.
+  // It stays one piece the whole way, and lands at 90%.
+  const arc: TrackedFrame[] = frames.map(f => ({
+    t: f.t,
+    box: {x: f.last, y: 0, width: 1, height: 1},
+    pixels: 1,
+  }));
+  const proof = busyWindowProof(arc, busy, {
+    axis: 'x',
+    settledWithin: 3,
+    control: controlFrames,
+  });
+  test
+    .info()
+    .annotations.push({type: 'busy window', description: proof.summary});
+  expect(proof.verdict.failures, proof.summary).toEqual([]);
   for (const frame of inside) {
     expect(frame.pieces, `pieces at ${frame.t}`).toBe(1);
   }

@@ -17,6 +17,7 @@ public enum AstryxNode: Decodable, Equatable, Sendable {
   case hStack(HStackNode)
   case icon(IconNode)
   case item(ItemNode)
+  case listItem(ListItemNode)
   case progressBar(ProgressBarNode)
   case selector(SelectorNode)
   case `switch`(SwitchNode)
@@ -38,6 +39,7 @@ public enum AstryxNode: Decodable, Equatable, Sendable {
     case .hStack(let node): return node.key
     case .icon(let node): return node.key
     case .item(let node): return node.key
+    case .listItem(let node): return node.key
     case .progressBar(let node): return node.key
     case .selector(let node): return node.key
     case .`switch`(let node): return node.key
@@ -67,6 +69,7 @@ public enum AstryxNode: Decodable, Equatable, Sendable {
       case "HStack": self = .hStack(try HStackNode(from: decoder))
       case "Icon": self = .icon(try IconNode(from: decoder))
       case "Item": self = .item(try ItemNode(from: decoder))
+      case "ListItem": self = .listItem(try ListItemNode(from: decoder))
       case "ProgressBar": self = .progressBar(try ProgressBarNode(from: decoder))
       case "Selector": self = .selector(try SelectorNode(from: decoder))
       case "Switch": self = .`switch`(try SwitchNode(from: decoder))

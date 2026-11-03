@@ -28,12 +28,12 @@ import {
   type PressTracker,
   type PressTrackerOptions,
 } from './PressTracker';
+import {useAttachment} from '../hooks/useAttachment';
 import {
   isSyncingGestures,
   syncingGestures,
-  useAttachment,
   useIsUnmountedRef,
-} from './useAttachment';
+} from './gestureSync';
 
 export type UsePressTrackerOptions = Omit<
   PressTrackerOptions,
@@ -132,6 +132,8 @@ export function usePressTracker(
           recognizer,
         ),
       isEnabled: () => optionsRef.current.isEnabled?.() ?? true,
+      holdsContextMenu: id =>
+        optionsRef.current.holdsContextMenu?.(id) === true,
       // The caller's brake, or the host's: a touch that stops a flick
       // presses nothing, as a UIKit control in a decelerating scroll view.
       isBraking: touch => {

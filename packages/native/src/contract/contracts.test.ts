@@ -125,6 +125,12 @@ describe('native contracts', () => {
         reason: 'type "IconVariant" has no portable definition yet',
       },
       {name: 'xstyle', reason: 'web styling input'},
+      {
+        name: 'className',
+        reason: '"className" already means something else in web',
+      },
+      {name: 'style', reason: 'web styling input'},
+      {name: 'ref', reason: 'web element reference'},
     ]);
 
     const swift = generateSwift(contracts);
@@ -241,6 +247,27 @@ describe('native contracts', () => {
         'rel',
         'data-testid',
         'as',
+        'interactiveRef',
+      ]),
+    );
+  });
+
+  it('gives ListItem the row contract without density or markers, which come from its list', async () => {
+    const {contracts} = await buildContracts(loadCoreDoc);
+    const row = contracts.find(contract => contract.name === 'ListItem');
+    expect(row).toBeDefined();
+    expect(row!.core.label).toMatchObject({
+      type: {kind: 'string'},
+      optional: false,
+    });
+    expect(row!.core.startContent?.type).toEqual({kind: 'content'});
+    expect(Object.keys(row!.core)).not.toContain('density');
+    expect(row!.webOnly.map(prop => prop.name)).toEqual(
+      expect.arrayContaining([
+        'swipeActions',
+        'swipeBehavior',
+        'target',
+        'rel',
         'interactiveRef',
       ]),
     );

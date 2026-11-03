@@ -22,6 +22,7 @@ verified_by:
     .github/scripts/review-signal-decision.test.mjs,
     .github/scripts/review-signal-workflow.test.mjs,
     .github/scripts/spec-owner-decision.test.mjs,
+    apps/docsite/src/__tests__/example-coverage.test.ts,
   ]
 deciding_specs: []
 ---
@@ -49,7 +50,8 @@ deciding_specs: []
       "DEC-10",
       "DEC-12",
       "DEC-13",
-      "DEC-15"
+      "DEC-15",
+      "INV28"
     ]
   }
 }
@@ -112,7 +114,11 @@ follows only links that records and files declare:
 - path fields: `applies_to`, `verified_by`, and `path-applicability:v1` patterns;
 - names: family `members`, design `components`, and `affects_consumer_docs` ids
   naming the path's component or consumer-doc topic;
-- citations: a system-spec number such as `AST-030` written in the file;
+- citations: a system-spec number such as `AST-030`, or a claim such as
+  `AST-108 FR4`, written in the file's prose, such as a Markdown document. The
+  lookup also reads one in a source comment, but INV29 moves each such link
+  into a record before the comment is removed, so removing a comment never
+  drops a file's only link to a record;
 - inheritance: the references a linked record relies on.
 
 A current record may cite a previous human decision. When the new case is within
@@ -336,6 +342,101 @@ Every record is either:
   and a candidate that is not a valid record fails `pnpm check:knowledge`.
   `README.md` index files, `plan.md` implementation plans, and the paths
   discovery already ignores are not candidates.
+
+### Consumer docs
+
+- **INV28 — Every public hook has a minimal, runnable example that
+  demonstrates it.** A public hook is a hook that a package's committed API
+  report lists. Its documentation includes at least one realistic, runnable
+  example: a live template block that names the hook as its example target
+  (`exampleFor`, or `alsoExampleFor` when the block also serves another page).
+  The example:
+  - shows the hook inside a component solving the use case its docs state;
+  - imports the package's own code only through its public entry points;
+  - covers the hook's main parameters and return values;
+  - passes the docs build;
+  - gets its visible behavior from the hook itself, so removing the hook breaks
+    what the example shows; and
+  - is minimal: only the code needed to show the use case, with no unrelated UI
+    or styling.
+
+  How a docs page selects and orders its example blocks belongs to
+  `architecture:template-authoring`. A public hook without a conforming example
+  is a docs gap, tracked as an issue in the repository's issue queue (DEC-16).
+
+### Source comments
+
+- **INV29 — Source comments explain only non-obvious work.** Names, structure,
+  and control flow make source code explain itself. A comment that restates
+  what the code does is a defect: the fix is clearer code, not a comment. A
+  source comment explains only what a reader cannot see in the code: a reason,
+  a constraint, an invariant, or a browser or platform quirk. It never narrates
+  the code, restates a name or a type, names a pull request, an issue, or a
+  date, or quotes or cites a knowledge record. The record links the code, so
+  `pnpm specs:for <path>` finds the governing record, and a component's
+  `{Name}.spec.md` holds its record ids. When a comment's citation is a file's
+  only link to a record or claim, a record links the file first, and only then
+  is the comment removed, so `pnpm specs:for <path>` lists the same records and
+  cited claims before and after. A whole-record citation, such as `AST-108`,
+  becomes an `applies_to`, `verified_by`, or `path-applicability:v1` link in
+  the cited record. Those links reach the whole record, so they cannot keep a
+  cited claim, such as `AST-108 FR4`. A claim-scoped reference in the file's
+  own component, module, or theme record keeps it, in the reference field for
+  the cited record's kind, such as `system_specs: [spec:AST-108/FR4]` in the
+  `Spinner` record for `Spinner.tsx`. `pnpm check:knowledge` resolves only a
+  `/DEC-N` claim in a theme or module record's `references`, so a claim
+  citation in a theme or module file, such as `AST-079 FR2` in
+  `butterTheme.ts`, stays until that check resolves any claim suffix. Until a
+  record holds one of these links, the citation stays. Comments follow the
+  ASD-STE100 Simplified Technical English style: at most 20 words in an
+  instruction and 25 in a description,
+  one topic per sentence, active voice, present tense, simple words with one
+  meaning each, and no idioms or filler. These comments stay:
+  - the copyright line;
+  - the file header: `@input`, `@output`, `@position`, and `SYNC:` reminders,
+    in about 12 lines at most, with no prose that repeats the main JSDoc;
+  - JSDoc on exported components, props, hooks, and utilities, with untagged
+    `@example` fences;
+  - the note on each Effect that names the external system it synchronizes
+    (`architecture:react-component-runtime` INV3);
+  - directives a tool reads: lint and TypeScript directives, the `@pr-a11y`
+    routing lines in the header comments of browser accessibility spec files
+    that `spec:AST-030` FR12 reads, and any other comment line a repository
+    tool parses.
+
+Example. This comment breaks INV29. It cites a record, packs several topics
+into long sentences, and restates the `finalFocusRef` line below it:
+
+```ts
+// The returned focus shows the focus-visible ring only after keyboard
+// input (`architecture:interaction-modality` INV1). The native close
+// may already have restored focus to the target with a ring; the helper
+// clears it first.
+//
+// With a sheet still open beneath this one, focus returns into that
+// sheet: to the opener when it is there, else to the sheet's panel.
+//
+// An explicit `finalFocusRef` always receives focus, as released. The
+// recorded opener of a non-modal sheet does so only if the person was
+// still in the sheet when it closed (`hidePopover()` never moves
+// focus, and the page behind it was live, so focus the person took
+// elsewhere stays there).
+```
+
+This comment follows INV29. Each sentence states one fact, and the code states
+the rest:
+
+```ts
+// The native close can show a focus ring on the target. Clear it. The ring
+// shows only after keyboard input.
+//
+// If a sheet is open below, focus goes to this sheet's opener when it is in
+// that sheet, else to that sheet's panel.
+//
+// A non-modal sheet returns focus to its opener only if focus was still in
+// the sheet. The page behind it stays live, so the person can move focus
+// away first.
+```
 
 ## Path applicability
 
@@ -763,14 +864,25 @@ this flow passes the historical review benchmark and is enforced on pull request
   component/module changes as no DD change, DD-only, or mixed from trusted base
   and head bytes. DD-only requires unchanged path, kind, authority, and every byte
   outside a valid optional block.
-- `.github/scripts/change-scope.cjs` identifies pure spec-record changes.
+- `.github/scripts/knowledge-paths.cjs` holds the one list of record paths.
+  It names the records `check:knowledge` discovers and the owner-gated paths:
+  every record; every Markdown file under `docs/specs/` or a package's
+  `specs/` or `docs/architecture/`, READMEs included; every Markdown file in
+  the family, design, architecture and theme-docs folders except each
+  folder's `README.md` index; every `*.spec.md` in a theme package; and the
+  normative design assets. Ignored locations stay ignored.
+- `.github/scripts/change-scope.cjs` identifies pure spec-record changes and
+  the owner-gated paths a change touches, and classifies paths for callers
+  outside the workflow (`--classify-paths`).
 - `.github/workflows/review-signal.yml` publishes the one review gate,
   `review-required`, which carries spec-owner approval too (DEC-14). One owner approval covers every knowledge-record change in the pull
   request and binds the approved spec content, not a commit. Approval for every
   record kind derives from `.github/ENGOWNERS`; current design and theme records,
   normative design assets, and DD-only current component/module changes
   additionally accept `.github/DESIGNOWNERS`. A mixed DD plus other
-  component/module edit requires both groups. Record metadata never
+  component/module edit requires both groups. An owner-gated Markdown file with
+  no authority of its own, such as a generated table beside a spec, requires an
+  engineering owner. Record metadata never
   self-authorizes. The gate decides approval only; it never enables auto-merge.
 - `.github/workflows/review-signal.yml` lets a DESIGNOWNER author bypass the
   engineering gate only when trusted-base code verifies every changed Core line
@@ -1045,12 +1157,12 @@ checks, the owner gate, and path routing.
 
 A spec owner reviews a pull request's knowledge-record changes together and
 approves or reworks them as a whole. The approval binds the **spec content**:
-one fingerprint over every changed knowledge-record and normative design-asset
-path, each read at a commit. In Markdown records the fingerprint omits the
-front-matter `authority`, `approved_by`, and `approved_at` values, so recording
-an approval and moving a record from `draft` to `current` never change it. The
-workflow computes every fingerprint from the pull request's files; no comment,
-label, or status supplies it.
+one fingerprint over every changed owner-gated path, each read at a commit. In
+Markdown records the fingerprint omits the front-matter `authority`,
+`approved_by`, and `approved_at` values, so recording an approval and moving a
+record from `draft` to `current` never change it. The workflow computes every
+fingerprint from the pull request's files; no comment, label, or status
+supplies it.
 
 - **Approving acts.** Each of these, by an eligible owner, approves the content
   of the commit it names, and counts while that commit's fingerprint equals the
@@ -1130,31 +1242,53 @@ Rejected: records beside each package's code, because a component's core and
 platform records then sit in different packages and every platform package
 needs its own spec location.
 
+### DEC-16 — Hook examples are governed by spec, and gaps are issues
+
+**Reference:** `architecture:knowledge-contracts/DEC-16`
+**Decider:** `cixzhang`, `2026-11-01`
+
+Hook documentation is governed by this record, and every public hook's docs
+carry a minimal, runnable example that demonstrates the hook (INV28). A missing
+or non-conforming example is an issue in the repository's issue queue, sized as
+a contributor's first pick-up. The owner's direction: "should be governed by
+spec and any gaps should be issues in astryx issue queue. They would be good
+first pick ups by contributors" and "for any example, make sure it actually
+demonstrates the hook. Ideally it should appear fairly minimal".
+
+The example-coverage report checks hook examples the way it checks
+component-doc examples: it reports missing and non-conforming examples and never
+gates a merge or release (owner decision, 2026-09-30).
+
+Rejected: an example that renders a component which calls the hook internally,
+because the reader never sees the hook wired.
+
 ## Verification
 
-| Invariant                         | Evidence                                                                                                                                                                                                     | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| INV1, INV6                        | `scripts/check-knowledge.test.mjs`                                                                                                                                                                           | An unapproved current record or unmigrated active record passes                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| INV5, INV7                        | `.github/scripts/change-scope.test.mjs`                                                                                                                                                                      | A template, schema, guidance, architecture, code change, unsafe rename, or truncated list qualifies as spec-only                                                                                                                                                                                                                                                                                                                                                                              |
-| Approval follows the spec content | `.github/scripts/spec-owner-decision.test.mjs`                                                                                                                                                               | An approval of other spec content clears the gate, a self-declared owner becomes an approver, or the wrong owner group approves a current record                                                                                                                                                                                                                                                                                                                                              |
-| INV3, INV4, INV11                 | Blinded historical review benchmark                                                                                                                                                                          | Reviewer re-asks a settled decision, invents a new one, approves an unsettled public delta, or treats a contradiction as preserves                                                                                                                                                                                                                                                                                                                                                            |
-| INV10                             | Record-content and review-disposition fixtures                                                                                                                                                               | A spec assigns a PR verdict, or a reviewer treats a PR link as authority                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| INV13                             | Blinded spec-authorship fixture plus overlap-search receipt                                                                                                                                                  | An author creates parallel authority, searches only landed records or filenames, misses open work on the canonical owner, or treats an open PR as authority                                                                                                                                                                                                                                                                                                                                   |
-| INV14, INV15                      | Narrow-decision and mixed-intent review fixtures                                                                                                                                                             | A current visual slice is forced to contract its whole module, a separable tagalong blocks a repair, or review reports a gap without a landing-ready remedy                                                                                                                                                                                                                                                                                                                                   |
-| INV16, INV17                      | Spec-first review and missing-context fixtures                                                                                                                                                               | Generated checklist completeness overrides authority, review invents product direction, restates supplied context, or fails to identify an unrelated tagalong or affected caller state                                                                                                                                                                                                                                                                                                        |
-| INV18                             | Spec-review mechanism analysis plus owner migration receipt                                                                                                                                                  | A new/amended product spec requires a private mechanism without proving it is public, silently invalidates an existing current record, or leaves touched architecture wording in the product contract                                                                                                                                                                                                                                                                                         |
-| INV19                             | Spec-review ownership-collision receipt and human decision                                                                                                                                                   | Automated review approves a product contract, omits current/open owner overlap, misses a collision or architecture leak, or returns only a human hold without actionable written analysis                                                                                                                                                                                                                                                                                                     |
-| INV20, DEC-9                      | `scripts/check-knowledge.test.mjs` and `scripts/review-global-baselines.mjs`                                                                                                                                 | A matching review misses a current global claim, loads a draft/nonmatching claim, loses base-commit provenance, or treats the rest of a routed record as authority                                                                                                                                                                                                                                                                                                                            |
-| INV21, DEC-10                     | `.github/scripts/component-design-decisions.test.mjs`, `.github/scripts/review-signal-decision.test.mjs`, `.github/scripts/spec-owner-decision.test.mjs`, and `.github/scripts/lib/classify-visual.test.mjs` | A malformed/local DD escapes validation, stale approval clears a new head, owner routing loses mixed-change gates, or executable/API/unknown runtime code is misclassified as appearance-only                                                                                                                                                                                                                                                                                                 |
-| DEC-14                            | `.github/scripts/spec-owner-reconcile.test.mjs`, `.github/scripts/spec-owner-decision.test.mjs`, and `.github/scripts/spec-owner-workflow.test.mjs`                                                          | A non-spec commit, base merge, rebase, or status flip resets approval; changed spec text or a new spec path keeps it; a command naming other spec content, a reaction, a non-owner act, or an author review approves; `review-required` succeeds while spec approval is missing or before the spec decision is published; a revoke or request for changes naming other spec content is ignored; a missing approval reports failure; or an evaluation leaves its head without a terminal state |
-| DEC-11                            | `.github/scripts/review-signal-decision.test.mjs`, `.github/scripts/review-clear-workflow.test.mjs`, and `.github/scripts/review-signal-workflow.test.mjs`                                                   | An app approval clears a read-only or fork author or an earlier head; a later app request for changes or dismissal leaves the gate clear; an app approval overrides an ENGOWNER request for changes; or an unset app or unreadable permission clears the gate                                                                                                                                                                                                                                 |
+| Invariant                         | Evidence                                                                                                                                                                                                     | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INV1, INV6                        | `scripts/check-knowledge.test.mjs`                                                                                                                                                                           | An unapproved current record or unmigrated active record passes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| INV5, INV7                        | `.github/scripts/change-scope.test.mjs`                                                                                                                                                                      | A template, schema, guidance, architecture, code change, unsafe rename, or truncated list qualifies as spec-only                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Approval follows the spec content | `.github/scripts/spec-owner-decision.test.mjs`                                                                                                                                                               | An approval of other spec content clears the gate, a self-declared owner becomes an approver, or the wrong owner group approves a current record                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| INV3, INV4, INV11                 | Blinded historical review benchmark                                                                                                                                                                          | Reviewer re-asks a settled decision, invents a new one, approves an unsettled public delta, or treats a contradiction as preserves                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| INV10                             | Record-content and review-disposition fixtures                                                                                                                                                               | A spec assigns a PR verdict, or a reviewer treats a PR link as authority                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| INV13                             | Blinded spec-authorship fixture plus overlap-search receipt                                                                                                                                                  | An author creates parallel authority, searches only landed records or filenames, misses open work on the canonical owner, or treats an open PR as authority                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| INV14, INV15                      | Narrow-decision and mixed-intent review fixtures                                                                                                                                                             | A current visual slice is forced to contract its whole module, a separable tagalong blocks a repair, or review reports a gap without a landing-ready remedy                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| INV16, INV17                      | Spec-first review and missing-context fixtures                                                                                                                                                               | Generated checklist completeness overrides authority, review invents product direction, restates supplied context, or fails to identify an unrelated tagalong or affected caller state                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| INV18                             | Spec-review mechanism analysis plus owner migration receipt                                                                                                                                                  | A new/amended product spec requires a private mechanism without proving it is public, silently invalidates an existing current record, or leaves touched architecture wording in the product contract                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| INV19                             | Spec-review ownership-collision receipt and human decision                                                                                                                                                   | Automated review approves a product contract, omits current/open owner overlap, misses a collision or architecture leak, or returns only a human hold without actionable written analysis                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| INV20, DEC-9                      | `scripts/check-knowledge.test.mjs` and `scripts/review-global-baselines.mjs`                                                                                                                                 | A matching review misses a current global claim, loads a draft/nonmatching claim, loses base-commit provenance, or treats the rest of a routed record as authority                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| INV21, DEC-10                     | `.github/scripts/component-design-decisions.test.mjs`, `.github/scripts/review-signal-decision.test.mjs`, `.github/scripts/spec-owner-decision.test.mjs`, and `.github/scripts/lib/classify-visual.test.mjs` | A malformed/local DD escapes validation, stale approval clears a new head, owner routing loses mixed-change gates, or executable/API/unknown runtime code is misclassified as appearance-only                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| DEC-14                            | `.github/scripts/spec-owner-reconcile.test.mjs`, `.github/scripts/spec-owner-decision.test.mjs`, `.github/scripts/spec-owner-workflow.test.mjs`, and `.github/scripts/knowledge-paths.test.mjs`              | A non-spec commit, base merge, rebase, or status flip resets approval; changed spec text or a new spec path keeps it; a command naming other spec content, a reaction, a non-owner act, or an author review approves; `review-required` succeeds while spec approval is missing or before the spec decision is published; a revoke or request for changes naming other spec content is ignored; a missing approval reports failure; an evaluation leaves its head without a terminal state; or a current record `check:knowledge` discovers, or an owner-gated Markdown file with no authority of its own, changes without an owner |
+| DEC-11                            | `.github/scripts/review-signal-decision.test.mjs`, `.github/scripts/review-clear-workflow.test.mjs`, and `.github/scripts/review-signal-workflow.test.mjs`                                                   | An app approval clears a read-only or fork author or an earlier head; a later app request for changes or dismissal leaves the gate clear; an app approval overrides an ENGOWNER request for changes; or an unset app or unreadable permission clears the gate                                                                                                                                                                                                                                                                                                                                                                       |
 
-| Invariant            | Evidence                                                                                                                                                                               | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| INV22–INV24          | Contributor/reviewer evidence inventory; public-link and byte verification; retained remote refs; unchanged fixture/baseline/media paths                                               | Disposable captures enter the source tree, cleanup loses a referenced image, a temporary branch is called durable, or storage changes overwrite an owner's proof or retention contract                                                                                                                                                                                                                                             |
-| INV25, INV26, DEC-12 | `scripts/specs-for-file.test.mjs`, `scripts/check-knowledge.test.mjs`, and `pnpm check:knowledge`                                                                                      | A current record is reached by no tracked non-record path, a lookup infers a link from a name, a pattern matches nothing or the whole repository, or a pattern match widens a claim or outranks a narrower owner                                                                                                                                                                                                                   |
-| INV27, DEC-13        | `scripts/check-knowledge.test.mjs`, `.github/scripts/change-scope.test.mjs`, and `pnpm check:knowledge`                                                                                | A `*.spec.md` file or a Markdown file under a `specs` directory without valid record frontmatter, outside its kind's location, or following a package-local template passes                                                                                                                                                                                                                                                        |
-| DEC-15               | `.github/scripts/knowledge-paths.test.mjs`, `.github/scripts/change-scope.test.mjs`, `scripts/check-knowledge.test.mjs`, `scripts/specs-for-file.test.mjs`, and `pnpm check:knowledge` | A component or module record outside `docs/specs/components/<ComponentRoot>/`, a `*.spec.md` left in a component package's source tree or beside a Swift view, a record matched to the wrong package when two share a root, a record whose component root no registered package's source tree has, a platform record whose id or `platform_of` does not match its path, or a platform record change that skips the spec-owner gate |
+| Invariant            | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                   | Failure signal                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| INV22–INV24          | Contributor/reviewer evidence inventory; public-link and byte verification; retained remote refs; unchanged fixture/baseline/media paths                                                                                                                                                                                                                                                                                                   | Disposable captures enter the source tree, cleanup loses a referenced image, a temporary branch is called durable, or storage changes overwrite an owner's proof or retention contract                                                                                                                                                                                                                                             |
+| INV25, INV26, DEC-12 | `scripts/specs-for-file.test.mjs`, `scripts/check-knowledge.test.mjs`, and `pnpm check:knowledge`                                                                                                                                                                                                                                                                                                                                          | A current record is reached by no tracked non-record path, a lookup infers a link from a name, a pattern matches nothing or the whole repository, or a pattern match widens a claim or outranks a narrower owner                                                                                                                                                                                                                   |
+| INV27, DEC-13        | `scripts/check-knowledge.test.mjs`, `.github/scripts/change-scope.test.mjs`, and `pnpm check:knowledge`                                                                                                                                                                                                                                                                                                                                    | A `*.spec.md` file or a Markdown file under a `specs` directory without valid record frontmatter, outside its kind's location, or following a package-local template passes                                                                                                                                                                                                                                                        |
+| INV28, DEC-16        | `apps/docsite/src/lib/exampleCoverage.mjs` and `apps/docsite/src/__tests__/example-coverage.test.ts` (advisory: the report prints and never gates), plus review of each hook example against INV28's criteria                                                                                                                                                                                                                              | The report omits a public hook that has no hook doc or no conforming example block, or a missing or non-conforming hook example fails a merge or release                                                                                                                                                                                                                                                                           |
+| INV29                | Baselined lint over comments in package source (not built): record ids, pull request and issue numbers, date stamps, and long quote blocks fail in new comments, and existing sites are baselined. Review reports narration and file headers past about 12 lines as non-blocking findings. Cleanup lands in per-area pull requests with no behavior change, each with a `pnpm specs:for` comparison of every touched file before and after | A new comment cites a record, pull request, issue, or date, quotes a record, or narrates the code; a header grows past about 12 lines, with no lint failure or review finding; removing a comment drops a record or cited claim from a file's `pnpm specs:for` result because that comment was the file's only link to it; or cleanup removes or rewrites a directive a tool reads, such as a `@pr-a11y` line                      |
+| DEC-15               | `.github/scripts/knowledge-paths.test.mjs`, `.github/scripts/change-scope.test.mjs`, `scripts/check-knowledge.test.mjs`, `scripts/specs-for-file.test.mjs`, and `pnpm check:knowledge`                                                                                                                                                                                                                                                     | A component or module record outside `docs/specs/components/<ComponentRoot>/`, a `*.spec.md` left in a component package's source tree or beside a Swift view, a record matched to the wrong package when two share a root, a record whose component root no registered package's source tree has, a platform record whose id or `platform_of` does not match its path, or a platform record change that skips the spec-owner gate |
 
 Evidence placement is enforced by contributors and reviewers. The local
 `docs/pr-assets/` ignore prevents accidental staging; it is not a blocking CI
@@ -1184,3 +1318,8 @@ the core record beside it.
 Current enforcement gap: no checked-in gate yet proves the open-pull-request
 search. Until one exists, the pull-request summary records the search terms,
 canonical owner/path, and overlapping open work inspected.
+
+Current enforcement gap: the example-coverage report lists each public hook
+that has no hook doc or no example block naming it, but it cannot see whether
+an example demonstrates its hook, so review checks that part of INV28. Each public hook without a conforming example is an open
+docs gap under INV28, tracked in the repository's issue queue.

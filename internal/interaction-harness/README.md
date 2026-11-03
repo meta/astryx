@@ -56,7 +56,7 @@ committed: a pull request links or attaches it.
 | `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact final-move speed, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`.                                                |
 | `touch.ts`      | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                                                               |
 | `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `sampleRects` (per-rAF rects), `frameStats`.                                                                                              |
-| `busy.ts`       | `blockMainThread(page, ms)` and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall, a verdict; `presented` adds the compositor's own frames.                                                                                             |
+| `busy.ts`       | `blockMainThread(page, ms)`, which returns the window it held and the span its loop measured, and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall, a verdict; `presented` adds the compositor's own frames.                           |
 | `webInput.ts`   | `webInputDriver(page)`: `wheel({x, y, dx, dy, ctrl})` and `pen(points)` as real engine input, for proofs across pointers (`spec:AST-100` FR4); `wheel` resolves once the page has the step; read back through the input log.                                                 |
 | `trace.ts`      | `traceRendering(page, body)`: main-thread counts of UpdateLayoutTree / Layout / PrePaint / Paint / Layerize / UpdateLayer / ScrollLayer / HitTest, `countBetween`, long tasks; `installLongTaskLog` / `readLongTasks`; `startCompositorTrace`: when the compositor presents. |
 | `curves.ts`     | `holdAnimations`, `armHold`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `releaseAnimations`, `releaseAnimationLog` (frees what the recorder kept, before a heap or listener count).     |
@@ -281,6 +281,67 @@ cannot show such a gesture; record it in real time instead, with
 the page's surface right after it changes ("Unable to capture screenshot"); a
 storyboard takes that photograph again two frames later, up to three attempts
 in all, and lists each retake under `recaptures` in the trace.
+
+## Page freeze
+
+A proof that must act on a component mid-animation (a second tap mid-slide, a
+finger that lands before the last lift reaches the app) races the test
+process: on a loaded runner the motion has moved on, or ended, before the next
+command reaches the page. The page freeze (`src/freeze.ts`) stops the scene
+instead, and the proof acts at an instant of the scene's own time.
+
+- `installPageFreeze(page)` installs the page clock, before the page loads
+  (before `openStory`); then `installTimerGate` as usual. A page that never
+  calls it keeps its own clock. Code that kept a bound `performance.now`
+  before the install keeps the real clock.
+- `freezePage` and `thawPage` stop and start the scene in one page task.
+- `freezePageOn(page, type)` freezes on the next `type` event, in that
+  event's own task and before any page listener for it: the install adds one
+  window capture listener for each pointer, touch, mouse, key, wheel and
+  scroll event before any page script runs, and the call arms it. Any other
+  type throws.
+  A freeze armed on `scroll` lands when the scroll event fires, after the
+  scroll position has already moved.
+- `freezePageWhen(page, predicate, arg)` freezes on the first real frame the
+  predicate holds, and rejects after its timeout.
+- `advanceFrozenPage(page, ms)` moves the page's clock and every held
+  animation on together by `ms`; timers and frame callbacks stay held.
+
+While frozen, every animation in the document is paused where it stands (Web
+Animations, CSS animations and transitions), and so is any the page starts
+meanwhile, at its start. The timer gate holds the page's timers and frame
+callbacks. These clocks stand still: `performance.now()`, `Date.now()`,
+`event.timeStamp`, frame callback times, `document.timeline.currentTime`
+and `Animation.startTime`. `new Date()` keeps the real clock. Timeouts the
+page set before the freeze stop counting too, and come due on the page's clock
+after the thaw. An interval keeps the real clock and skips its ticks while
+frozen. The harness's own waits keep the real clock, so they still sample,
+hold and time out on a frozen page. Only animations on the document timeline are held: one on a
+scroll or view timeline follows its scroller, frozen or not. Input still
+arrives, and its handlers run, each reading the frozen instant. An animation
+reads as it did before the freeze (`playState` stays `running`).
+
+At the thaw every held animation plays on from where it stood, dated on the
+timeline's own time, so it is drawn where it stood in the thaw frame. That
+includes one whose start the page wrote while frozen: the timeline reads the
+current frame's time, which trails the page's clock by however far into the
+frame the thaw runs, so a start dated from now would sit before its start for
+the rest of that frame. After a thaw the page's times run again, behind real
+time by every frozen span so far, so the page's clock and its animations on
+the compositor agree as they did before the freeze.
+
+Not held yet: a run the page reverses, or a finished run it plays again,
+while frozen. A freeze holds the top document; a frame's content keeps running.
+A CSS animation a freeze held no longer follows `animation-play-state` after
+the thaw. A freeze in which no frame starts ends at the frame before it, so the page's
+clock and its runs come out of it up to a frame ahead.
+
+The clock lives in script because no engine has a native freeze that holds
+animations. Chromium's `Emulation.setVirtualTimePolicy` stops
+`performance.now()` and timers but not Web Animations or frame callbacks in
+the headless shell (300 ms into a pause the timeline had advanced 300 ms and a
+compositor animation 45 px), and its `advance` policy cannot return to real
+time: it fast-forwards whenever the page is idle.
 
 ## Engine limits (measured with Playwright 1.61)
 

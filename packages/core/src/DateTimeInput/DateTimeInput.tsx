@@ -33,6 +33,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {
   colorVars,
   sizeVars,
@@ -63,6 +64,11 @@ import {
 } from '../Calendar';
 import {useCalendarConstraints} from '../Calendar/hooks';
 import {usePopover} from '../Popover';
+import {
+  isFocusInsideOwnedLayer,
+  isPressInsideOwnedLayer,
+  useOutsidePress,
+} from '../Layer/outsidePress';
 import {useTooltip} from '../Tooltip';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
@@ -98,7 +104,7 @@ import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {useSize} from '../SizeContext/SizeContext';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
-import {useLocale, useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
 import {
   formatLocaleTime,
   parseLocaleTime,
@@ -116,6 +122,13 @@ import {
   type PickerPresentation,
 } from '../utils/inputPresentation';
 import {useDevWarning} from '../hooks/useDevWarning';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/DateTimeInput/DateTimeInput.generated';
+
+registerEnglishFallback(english);
 export type ISODateTimeString = string & {
   readonly __brand: 'ISODateTimeString';
 };
@@ -149,18 +162,6 @@ export type {
 const HORIZONTAL_SEGMENT_BASIS = 196;
 
 const styles = stylex.create({
-  // The shared disabled style drops the focus ring; restore it while a
-  // control inside the field holds focus (spec:AST-085 FR6). Defaults repeat it.
-  disabledFocusRing: {
-    borderColor: {
-      default: colorVars['--color-border-emphasized'],
-      ':focus-within': colorVars['--color-accent'],
-    },
-    boxShadow: {
-      default: 'none',
-      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
-    },
-  },
   row: {
     display: 'flex',
     flexWrap: 'wrap',
@@ -668,7 +669,7 @@ function PointerDateTimeField({
     onKeyDown: onKeyDownProp,
     ...controlProps
   } = rest;
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const usesNativePicker = nativeMode !== 'off';
   // `forced` (`presentation="native"`, FR2): no Astryx fallback. `adaptive`
@@ -1142,22 +1143,27 @@ function PointerDateTimeField({
         if (!isEffectivelyDisabled) {
           popover.show({skipAutoFocus: true});
         }
-      } else if (e.key === 'Enter') {
+      } else if (
+        e.key === 'Enter' &&
+        (datePendingInput !== null || isEffectivelyDisabled)
+      ) {
+        // Typed text holds Enter back, or a form would submit the value from
+        // before the commit. A disabled or busy field must not submit its
+        // form either. Otherwise Enter keeps its default, as in any text field.
         e.preventDefault();
         commitDatePendingInput();
       }
     },
-    [popover, commitDatePendingInput, isEffectivelyDisabled],
+    [popover, commitDatePendingInput, isEffectivelyDisabled, datePendingInput],
   );
 
   // --- Time-option popover (#2727) ---
   const timeListboxId = useId();
   const [highlightedTimeIndex, setHighlightedTimeIndex] = useState(-1);
 
-  // With popover="auto", showing the popover between pointerdown and
-  // pointerup/click lets the browser's light-dismiss treat that same click as
-  // "outside" and close it again. Defer the show past the click, as
-  // BaseTypeahead does for the same reason.
+  // Defer a show that happens during a press past that press's click, so the
+  // list's outside-press watch starts after the press ends and never judges
+  // it, as BaseTypeahead does.
   const timePointerActiveRef = useRef(false);
 
   // Whether the highlight is still the one typing derived, or the user has
@@ -1177,14 +1183,35 @@ function PointerDateTimeField({
     );
   }, []);
 
+  // The time list is a manual popover: the browser's light dismiss counts a
+  // press in the time input as outside (a text input cannot be an invoker), so
+  // a press in the field would close the list it just opened. A press on the
+  // time field or in the list is inside; a press anywhere else closes it
+  // (architecture:layer-runtime, component:BaseTypeahead FR12's rule).
+  const timeOutsidePress = useOutsidePress();
   const timePopover = usePopover({
-    hasLightDismiss: true,
+    hasLightDismiss: false,
     hasCloseButton: false,
     hasAutoFocus: false,
     // The popup's own role="listbox" carries the semantics; the input keeps
     // DOM focus, so announcing a dialog here would misrepresent it.
     role: 'none',
-    onHide: () => setHighlightedTimeIndex(-1),
+    onShow: () => {
+      const field = timeContainerRef.current;
+      if (field == null) {
+        return;
+      }
+      timeOutsidePress.start(
+        field,
+        path => isPressInsideOwnedLayer(path, field, timePopover.id),
+        // Called after usePopover has returned, so `timePopover` is assigned.
+        () => timePopover.hide(),
+      );
+    },
+    onHide: () => {
+      timeOutsidePress.stop();
+      setHighlightedTimeIndex(-1);
+    },
   });
 
   // Anchor the list to the time wrapper, not the date input the field's own
@@ -1421,22 +1448,19 @@ function PointerDateTimeField({
     (e: FocusEvent<HTMLInputElement>) => {
       setIsTimeFocused(false);
 
-      // Native light dismiss only fires on outside clicks and Escape, so a focus
-      // move that is neither — Tab handled elsewhere, or a programmatic focus —
-      // would strand the listbox open in the top layer. Focus landing inside the
+      // The outside-press watch only answers pointer presses and Escape stays
+      // on the layer stack, so a focus move that is neither — Tab handled
+      // elsewhere, or a programmatic focus — would strand the listbox open. Focus landing inside the
       // field or the popup itself is not a leave. Mirrors BaseTypeahead.
-      if (timePopover.isOpen) {
-        const next = e.relatedTarget as Node | null;
-        const popoverEl = next ? document.getElementById(timePopover.id) : null;
-        if (
-          !next ||
-          !(
-            timeContainerRef.current?.contains(next) ||
-            popoverEl?.contains(next)
-          )
-        ) {
-          timePopover.hide();
-        }
+      if (
+        timePopover.isOpen &&
+        !isFocusInsideOwnedLayer(
+          e.relatedTarget,
+          timeContainerRef.current,
+          timePopover.id,
+        )
+      ) {
+        timePopover.hide();
       }
 
       if (timePendingInput === null) {
@@ -1692,7 +1716,7 @@ function PointerDateTimeField({
               sizeStyles[size],
               styles.dateWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
-              isEffectivelyDisabled && styles.disabledFocusRing,
+              isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
               status && inputStatusBorderStyles[status.type],
               status &&
                 !isEffectivelyDisabled &&
@@ -1829,7 +1853,7 @@ function PointerDateTimeField({
           }
           // On the wrapper, not just the input: clicking the clock icon or the
           // padding is routed to the input as a synthetic click, which would
-          // otherwise open the list mid-gesture and let light dismiss eat it.
+          // otherwise open the list mid-gesture.
           onPointerDown={hasTimeOptions ? markTimePointerActive : undefined}
           {...mergeProps(
             themeProps('date-time-input-time-segment', {
@@ -1841,7 +1865,7 @@ function PointerDateTimeField({
               sizeStyles[size],
               styles.timeWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
-              isEffectivelyDisabled && styles.disabledFocusRing,
+              isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
               status && inputStatusBorderStyles[status.type],
               status &&
                 !isEffectivelyDisabled &&

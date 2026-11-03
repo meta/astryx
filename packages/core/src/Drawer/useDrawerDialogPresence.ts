@@ -32,6 +32,8 @@ import {
   type SetStateAction,
 } from 'react';
 import {flushSync} from 'react-dom';
+import {notifyTopLayerEntry} from '../Layer/modalOutlet';
+import {runPopoverOperation} from '../Layer/popoverOperations';
 
 /** Slack past the computed transition before the backstop gives up waiting. */
 const EXIT_BACKSTOP_BUFFER_MS = 50;
@@ -70,7 +72,13 @@ function showDrawerHost(dialog: HTMLDialogElement, isModal: boolean): void {
   if (isModal) {
     dialog.showModal();
   } else if (typeof dialog.showPopover === 'function') {
-    dialog.showPopover();
+    // The dialog's show focuses its first control. A tooltip on that control
+    // then asks to show. The browser refuses a show inside another show.
+    // Counting this show makes the tooltip wait until it ends.
+    runPopoverOperation(dialog.ownerDocument, () => dialog.showPopover());
+    // The drawer is now the newest top-layer entry: global hosts shown before
+    // it (the toast viewport) re-enter above it, as they do above a modal.
+    notifyTopLayerEntry();
   } else {
     // Reduced fallback for browsers below the Popover API support floor.
     dialog.show();
