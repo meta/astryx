@@ -150,11 +150,30 @@ describe('the interaction proof legs in ci.yml', () => {
         '.github/scripts',
         'scripts/lib',
       ]);
+      // The head checkout replaces the workspace, so a step before it keeps
+      // the three files in the runner's temporary directory.
+      const keep = step(job, "Keep the leg planner from the workflow's commit");
+      const checkout = job.steps.findIndex(
+        each =>
+          each.name === 'Checkout' &&
+          String(each.with?.ref).includes('pull_request.head.sha'),
+      );
+      expect(job.steps.indexOf(keep)).toBeGreaterThan(1);
+      expect(job.steps.indexOf(keep)).toBeLessThan(checkout);
+      expect(keep.if).toBe("steps.scope.outputs.applies == 'true'");
+      for (const [file, dir] of [
+        ['.github/scripts/interaction-legs.mjs', '.github/scripts/'],
+        ['scripts/lib/duration-split.mjs', 'scripts/lib/'],
+        ['.github/interaction-durations.json', '.github/'],
+      ])
+        expect(keep.run).toContain(
+          `cp .test-scope/${file} "$RUNNER_TEMP/interaction-legs/${dir}"`,
+        );
       expect(plan.run).toContain(
-        `node .test-scope/.github/scripts/interaction-legs.mjs plan --project ${lane.project}`,
+        `node "$RUNNER_TEMP/interaction-legs/.github/scripts/interaction-legs.mjs" plan --project ${lane.project}`,
       );
       expect(plan.run).toContain(
-        '--durations .test-scope/.github/interaction-durations.json',
+        '--durations "$RUNNER_TEMP/interaction-legs/.github/interaction-durations.json"',
       );
       expect(plan.run).not.toMatch(/git (fetch|show)/);
       expect(plan.run).toContain(

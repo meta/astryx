@@ -17,8 +17,9 @@
  * job's scope step names it as `requires-head-file` and the step reads
  * `head_file_present`, the step loads it from the workflow's own commit
  * (`git show "$WORKFLOW_SHA:<script>"`, or from the job's `.test-scope`
- * checkout, whose sparse directories hold it), or the step checks for it
- * itself (`[ ! -f ... ]`). A job that does not measure the head takes the default
+ * checkout, whose sparse directories hold it, directly or through a copy an
+ * earlier step made in `$RUNNER_TEMP`), or the step checks for it itself
+ * (`[ ! -f ... ]`). A job that does not measure the head takes the default
  * merge checkout instead, and this test does not apply to it.
  *
  * Scope: `.js`, `.mjs` and `.cjs` scripts named in a step's `run:`.
@@ -121,6 +122,24 @@ export function scopeHolds(job, script) {
   return dirs.some(dir => script.startsWith(`${dir}/`));
 }
 
+/**
+ * Whether the step runs `$RUNNER_TEMP/<dir>/<script>` that an earlier step of
+ * the job copied there from the scope checkout:
+ * `cp .test-scope/<script> "$RUNNER_TEMP/<dir>/<script's directory>/"`.
+ */
+export function copiedFromScope(job, step, script) {
+  const escaped = script.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const used = new RegExp(`\\$RUNNER_TEMP/([\\w.-]+)/${escaped}`).exec(
+    String(step.run ?? ''),
+  );
+  if (!used || !scopeHolds(job, script)) return false;
+  const copy = `cp .test-scope/${script} "$RUNNER_TEMP/${used[1]}/${script.slice(0, script.lastIndexOf('/') + 1)}"`;
+  const steps = job.steps ?? [];
+  return steps
+    .slice(0, steps.indexOf(step))
+    .some(earlier => String(earlier.run ?? '').includes(copy));
+}
+
 export function unguardedScripts(job) {
   const scope = (job.steps ?? []).find(step =>
     String(step.uses ?? '').includes('test-scope'),
@@ -135,9 +154,11 @@ export function unguardedScripts(job) {
       if (condition.includes(`hashFiles('${script}') != ''`)) continue;
       // Loaded from the workflow's own commit, not the head.
       if (run.includes(`$WORKFLOW_SHA:${script}`)) continue;
-      // Run from the job's scope checkout, also the workflow's own commit.
+      // Read from the job's scope checkout, also the workflow's own commit.
       if (run.includes(`.test-scope/${script}`) && scopeHolds(job, script))
         continue;
+      // Run from a copy an earlier step took from that scope checkout.
+      if (copiedFromScope(job, step, script)) continue;
       // The step skips a head without this script on its own.
       if (skipsWhenMissing(run, script)) continue;
       if (

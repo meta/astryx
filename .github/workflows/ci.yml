@@ -2343,6 +2343,17 @@ jobs:
         if: steps.scope.outputs.applies != 'true'
         run: echo "No interaction proofs for this change."
 
+      # The head checkout below replaces the workspace, scope checkout
+      # included, so the leg planner, the shared splitter it imports and the
+      # recorded times move to the runner's temporary directory first.
+      - name: Keep the leg planner from the workflow's commit
+        if: steps.scope.outputs.applies == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/interaction-legs/.github/scripts" "$RUNNER_TEMP/interaction-legs/scripts/lib"
+          cp .test-scope/.github/scripts/interaction-legs.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
+          cp .test-scope/scripts/lib/duration-split.mjs "$RUNNER_TEMP/interaction-legs/scripts/lib/"
+          cp .test-scope/.github/interaction-durations.json "$RUNNER_TEMP/interaction-legs/.github/"
+
       # The caps step comes from the merge commit, not the pull request's
       # head: a head that predates the step does not have it. The head
       # checkout below replaces this directory.
@@ -2395,15 +2406,15 @@ jobs:
       # This leg's share of the spec files, by their recorded times. Every
       # spec file is in exactly one leg; one with no recorded time counts the
       # median. The planner, the shared splitter it imports and the times come
-      # from the scope checkout, the workflow's own commit: a head cut before
-      # them has none.
+      # from the scope checkout, the workflow's own commit (kept above): a
+      # head cut before them has none.
       - name: Plan this leg's interaction proofs
         id: plan
         if: steps.scope.outputs.applies == 'true'
         run: |
-          node .test-scope/.github/scripts/interaction-legs.mjs plan --project chromium \
+          node "$RUNNER_TEMP/interaction-legs/.github/scripts/interaction-legs.mjs" plan --project chromium \
             --leg ${{ matrix.leg }} --of ${{ strategy.job-total }} \
-            --durations .test-scope/.github/interaction-durations.json \
+            --durations "$RUNNER_TEMP/interaction-legs/.github/interaction-durations.json" \
             --out "$RUNNER_TEMP/interaction-leg.txt"
 
       - name: Run interaction proofs
@@ -2489,6 +2500,17 @@ jobs:
         if: steps.scope.outputs.applies != 'true'
         run: echo "No WebKit interaction proofs for this change (it touches no gesture, motion, touch or press code, and none of their shared setup)."
 
+      # The head checkout below replaces the workspace, scope checkout
+      # included, so the leg planner, the shared splitter it imports and the
+      # recorded times move to the runner's temporary directory first.
+      - name: Keep the leg planner from the workflow's commit
+        if: steps.scope.outputs.applies == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/interaction-legs/.github/scripts" "$RUNNER_TEMP/interaction-legs/scripts/lib"
+          cp .test-scope/.github/scripts/interaction-legs.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
+          cp .test-scope/scripts/lib/duration-split.mjs "$RUNNER_TEMP/interaction-legs/scripts/lib/"
+          cp .test-scope/.github/interaction-durations.json "$RUNNER_TEMP/interaction-legs/.github/"
+
       # The caps step comes from the merge commit, not the pull request's
       # head: a head that predates the step does not have it. The head
       # checkout below replaces this directory.
@@ -2547,9 +2569,9 @@ jobs:
         id: plan
         if: steps.scope.outputs.applies == 'true'
         run: |
-          node .test-scope/.github/scripts/interaction-legs.mjs plan --project webkit \
+          node "$RUNNER_TEMP/interaction-legs/.github/scripts/interaction-legs.mjs" plan --project webkit \
             --leg ${{ matrix.leg }} --of ${{ strategy.job-total }} \
-            --durations .test-scope/.github/interaction-durations.json \
+            --durations "$RUNNER_TEMP/interaction-legs/.github/interaction-durations.json" \
             --out "$RUNNER_TEMP/interaction-leg.txt" -- \
             packages/core/src/gestures/ \
             packages/core/src/motion/__tests__/animatedLayout.interaction \
