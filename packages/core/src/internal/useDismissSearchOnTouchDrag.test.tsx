@@ -6,20 +6,27 @@ import userEvent from '@testing-library/user-event';
 import {describe, expect, it, vi} from 'vitest';
 import {useDismissSearchOnTouchDrag} from './useDismissSearchOnTouchDrag';
 
-function Harness({hasSecondSearch = false}: {hasSecondSearch?: boolean}) {
+function Harness({
+  hasSecondSearch = false,
+  hasFocusTarget = false,
+}: {
+  hasSecondSearch?: boolean;
+  hasFocusTarget?: boolean;
+}) {
   const firstRef = useRef<HTMLInputElement>(null);
   const secondRef = useRef<HTMLInputElement>(null);
-  const dragProps = useDismissSearchOnTouchDrag(() => [
-    firstRef.current,
-    secondRef.current,
-  ]);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const dragProps = useDismissSearchOnTouchDrag(
+    () => [firstRef.current, secondRef.current],
+    hasFocusTarget ? () => panelRef.current : undefined,
+  );
   return (
-    <>
+    <div ref={panelRef} tabIndex={-1} aria-label="Panel">
       <input ref={firstRef} aria-label="First search" />
       {hasSecondSearch && <input ref={secondRef} aria-label="Second search" />}
       <input aria-label="Unrelated field" />
       <div role="group" aria-label="Results" {...dragProps} />
-    </>
+    </div>
   );
 }
 
@@ -34,6 +41,17 @@ function setup() {
 }
 
 describe('useDismissSearchOnTouchDrag', () => {
+  it("moves focus to the caller's target at the drag threshold, so focus never lands on the page body behind an open modal", () => {
+    render(<Harness hasFocusTarget />);
+    const search = screen.getByRole('textbox', {name: 'First search'});
+    const results = screen.getByRole('group', {name: 'Results'});
+    search.focus();
+    fireEvent.touchStart(results, {touches: touches(100)});
+    fireEvent.touchMove(results, {touches: touches(108)});
+    expect(screen.getByLabelText('Panel')).toHaveFocus();
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
   it('preserves typing across programmatic result scrolling', async () => {
     const {search, results} = setup();
     fireEvent.scroll(results, {target: {scrollTop: 300}});

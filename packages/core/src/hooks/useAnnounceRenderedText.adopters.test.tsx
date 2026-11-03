@@ -65,8 +65,7 @@ const {Selector} = await import('../Selector');
 const {MultiSelector} = await import('../MultiSelector');
 const {CommandPalette} = await import('../CommandPalette');
 const {BaseTypeahead} = await import('../Typeahead/BaseTypeahead');
-const {TokenizerWithPresentation} =
-  await import('../internal/tokenizer-presentation');
+const {Tokenizer} = await import('../Tokenizer/Tokenizer');
 const {createStaticSource} = await import('../Typeahead/createStaticSource');
 const {TooltipWithTriggerBehavior} = await import('../Tooltip/Tooltip');
 
@@ -189,7 +188,7 @@ const ADOPTERS: Record<string, () => Promise<void>> = {
     // module's load alone outlasts it.
     await import('../Tokenizer/TokenizerBottomSheet');
     render(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={source}
         value={[]}

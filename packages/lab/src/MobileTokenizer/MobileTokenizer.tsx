@@ -5,7 +5,7 @@
 /**
  * @file MobileTokenizer.tsx
  * @input Public @astryxdesign/core components and hooks, plus private Lab
- *   mobile-sheet confirmation and search-drag dismissal owners
+ *   touch-sheet confirmation and search-drag dismissal from Core's internal entry
  * @output Exports MobileTokenizer — Lab prototype of the touch Tokenizer
  *   flow with the inline-compatible closed trigger, a searchable draft-selection
  *   sheet, persistent Clear all / Save footer, dirty-dismiss confirmation,
@@ -72,8 +72,13 @@ import {
   sizeVars,
   spacingVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
-import {MobileSheetConfirmation} from '../internal/MobileSheetConfirmation';
-import {useDismissSearchOnTouchDrag} from '../internal/useDismissSearchOnTouchDrag';
+import {
+  SheetConfirmation,
+  hasSameSelection,
+  nameSheetDraftChange,
+  useDismissSearchOnTouchDrag,
+  type SheetDraftChange,
+} from '@astryxdesign/core/internal/touch-sheet';
 
 export type MobileTokenizerChange<T extends SearchableItem> =
   | {item: T; type: 'add'}
@@ -129,18 +134,6 @@ const LIST_LOAD_MORE_THRESHOLD_PX = 200;
 // concentric with the field's (radius-2) when inset = radius-2 − radius-1 −
 // border = 3px. The same number is the row gap, so wrapped rows read evenly.
 const TOKEN_ROW_INSET = `calc(${spacingVars['--spacing-1']} - 1px)`;
-
-type SheetDraftChange<T> = {
-  item: T;
-  type: 'add' | 'create' | 'remove';
-};
-
-function hasSameSelection<T extends SearchableItem>(a: T[], b: T[]): boolean {
-  return (
-    a.length === b.length &&
-    a.every(item => b.some(candidate => candidate.id === item.id))
-  );
-}
 
 const styles = stylex.create({
   // The closed trigger is the inline Tokenizer field's own control box, as a
@@ -1018,39 +1011,15 @@ function MobileTokenizerSheetContent<T extends SearchableItem>({
     if (isDraftOverMax) {
       return;
     }
-    if (isDraftDirty) {
-      const added = draftValue.find(
-        item => !valueAtOpen.some(openItem => openItem.id === item.id),
-      );
-      const removed = valueAtOpen.find(
-        item => !draftValue.some(draftItem => draftItem.id === item.id),
-      );
-      const lastDraftChange = lastDraftChangeRef.current;
-      const lastChangeIsNet =
-        lastDraftChange != null &&
-        (lastDraftChange.type === 'remove'
-          ? valueAtOpen.some(item => item.id === lastDraftChange.item.id) &&
-            !draftValue.some(item => item.id === lastDraftChange.item.id)
-          : draftValue.some(item => item.id === lastDraftChange.item.id) &&
-            !valueAtOpen.some(item => item.id === lastDraftChange.item.id));
-      let change: SheetDraftChange<T> | null = null;
-      if (lastChangeIsNet) {
-        change = lastDraftChange;
-      } else if (lastDraftChange?.type === 'remove' && removed != null) {
-        change = {item: removed, type: 'remove'};
-      } else if (added != null) {
-        const type: SheetDraftChange<T>['type'] =
-          lastDraftChange?.item.id === added.id &&
-          lastDraftChange.type === 'create'
-            ? 'create'
-            : 'add';
-        change = {item: added, type};
-      } else if (removed != null) {
-        change = {item: removed, type: 'remove'};
-      }
-      if (change != null) {
-        onCommit([...draftValue], change);
-      }
+    const change = isDraftDirty
+      ? nameSheetDraftChange(
+          valueAtOpen,
+          draftValue,
+          lastDraftChangeRef.current,
+        )
+      : null;
+    if (change != null) {
+      onCommit([...draftValue], change);
     }
     onCloseSheet();
   };
@@ -1058,7 +1027,12 @@ function MobileTokenizerSheetContent<T extends SearchableItem>({
   const searchLabel = t('@astryx.tokenizer.search', {label});
   const noResultsTitle =
     emptySearchResultsText ?? t('@astryx.typeahead.emptySearchResults');
-  const listDragProps = useDismissSearchOnTouchDrag(() => [searchRef.current]);
+  // A drag moves focus to the sheet's panel, never to the page body behind
+  // the open modal.
+  const listDragProps = useDismissSearchOnTouchDrag(
+    () => [searchRef.current],
+    () => searchRef.current?.closest<HTMLElement>('[tabindex="-1"]'),
+  );
 
   return (
     <div {...stylex.props(styles.sheetBody)}>
@@ -1245,7 +1219,7 @@ function MobileTokenizerSheetContent<T extends SearchableItem>({
         />
       </div>
       {isClearConfirmationOpen && (
-        <MobileSheetConfirmation
+        <SheetConfirmation
           isOpen
           onOpenChange={next => {
             if (!next) {
@@ -1270,7 +1244,7 @@ function MobileTokenizerSheetContent<T extends SearchableItem>({
         />
       )}
       {isDiscardConfirmationOpen && (
-        <MobileSheetConfirmation
+        <SheetConfirmation
           isOpen
           onOpenChange={next => {
             if (!next) {

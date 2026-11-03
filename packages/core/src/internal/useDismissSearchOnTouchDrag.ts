@@ -4,14 +4,17 @@
 
 /**
  * @file useDismissSearchOnTouchDrag.ts
- * @input Caller-owned search inputs and touch events from a separate results list
- * @output Private touch handlers shared by the Lab mobile search sheets
- * @position One owner for results-drag keyboard dismissal; not a public export
+ * @input Caller-owned search inputs, a focus target, and touch events from a
+ *   separate results list
+ * @output useDismissSearchOnTouchDrag — touch handlers for the results list
+ * @position Core-internal, shared by the touch sheets; not a public export
  *
- * A direct vertical touch drag dismisses only a focused caller-owned search.
- * Scroll events are deliberately not observed: filtering can clamp scrollTop
- * and fire scroll while someone is typing. Small moves, taps and multi-touch
- * gestures leave focus alone. The hook acquires no external resource.
+ * A direct vertical touch drag on the results moves focus off a focused
+ * search input. The on-screen keyboard then leaves and the rows come into
+ * view; the query stays. Focus goes to the caller's target (the sheet's
+ * panel), never to the page body behind an open modal. Scroll events are not
+ * observed: filtering can clamp scrollTop and fire scroll while someone is
+ * typing. Small moves, taps and multi-touch gestures leave focus alone.
  */
 
 import {useRef, type TouchEvent} from 'react';
@@ -21,7 +24,8 @@ const DRAG_THRESHOLD_PX = 8;
 type SearchInput = HTMLInputElement | null | undefined;
 
 export function useDismissSearchOnTouchDrag(
-  getSearchInputs: () => readonly SearchInput[],
+  getSearchInputs: () => ReadonlyArray<SearchInput>,
+  getFocusTarget?: () => HTMLElement | null | undefined,
 ) {
   const startYRef = useRef<number | null>(null);
   const reset = () => {
@@ -49,7 +53,15 @@ export function useDismissSearchOnTouchDrag(
       const focusedSearch = getSearchInputs().find(
         input => input != null && input === document.activeElement,
       );
-      focusedSearch?.blur();
+      if (focusedSearch == null) {
+        return;
+      }
+      const target = getFocusTarget?.();
+      if (target != null) {
+        target.focus({preventScroll: true});
+      } else {
+        focusedSearch.blur();
+      }
     },
     onTouchEnd: reset,
     onTouchCancel: reset,
