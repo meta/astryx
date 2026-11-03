@@ -790,6 +790,7 @@
     "/templates/useListFocusHookUsage/",
     "/templates/useOutlineFromMarkdownHookUsage/",
     "/templates/useOverflowHookUsage/",
+    "/templates/usePowerSearchConfigPeopleDirectory/",
     "/templates/usePressFeedbackHookUsage/",
     "/templates/useStreamingTextHookUsage/",
     "/templates/useThemeHookUsage/",
