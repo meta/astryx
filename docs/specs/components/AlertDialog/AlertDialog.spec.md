@@ -108,7 +108,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 - A press that slides across the actions acts on the lifted one, as
   `family:action-groups` owns (FR8).
 - Modal presentation, focus return, backdrop, and dismissal mechanics — owned by
-  `component:Dialog` and `architecture:layer-runtime`.
+  `component:Dialog` and `architecture:layer-runtime`; AlertDialog inherits
+  Dialog's backdrop (`component:Dialog` FR9).
 - Button variants and loading — owned by `component:Button`.
 
 ## Public concepts
