@@ -234,18 +234,18 @@ implementation; this record states only the motion and its limits.
 
 Rejected: a one-step relayout that jumps after the keyboard settles; and overriding the app's viewport setting.
 
-### DEC-3 — Simulators gate merge; physical phones gate release
+### DEC-3 — Simulators gate merge; a physical iPhone gates release
 
 **Reference:** `spec:AST-099/DEC-3`
 **Decider:** `cixzhang`, `2026-10-24`
 
 Simulator and emulator evidence in a top-level document, with Gboard on the
 Android emulator, is enough to merge keyboard work, so it is not blocked on
-hardware, while a pass on a physical iPhone and a physical Android phone,
-including Samsung Keyboard and the phone's real refresh timing, is required
-before the keyboard module ships in a release, because keyboard timing and viewport behavior differ on
-real devices. `spec:AST-094` DEC-27 replaces the physical Android phone with
-emulator evidence: Android claims need no human device check.
+hardware, while a pass on a physical iPhone, including the phone's real
+refresh timing, is required before the keyboard module ships in a release,
+because keyboard timing and viewport behavior differ on real devices. Android
+claims rest on emulator evidence and need no human device check
+(`spec:AST-094` DEC-27).
 
 Rejected: physical devices as a merge gate, which blocks work on hardware; and physical devices as optional follow-up, which can ship untested keyboard behavior.
 

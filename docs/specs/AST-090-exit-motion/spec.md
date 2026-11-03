@@ -338,11 +338,12 @@ Rejected: holding the live layer in the top layer with an `overlay` transition, 
 **Reference:** `spec:AST-090/DEC-5`
 **Decider:** `cixzhang`, `2026-10-28`
 
-On a touch device a surface moves the way its native counterpart does, by
-default and with no opt-in (`spec:AST-094`), and that record leaves pointer
-presentations' timing and easing to the theme's tokens. The switches here
-therefore govern pointer presentations only, and a touch presentation keeps
-its native exit whatever they resolve to. A touch exit that a tap, a key or
+On a touch device a surface keeps the look of its native counterpart, by
+default and with no opt-in (`spec:AST-094`). That record springs only motion
+a gesture drives and gives every other motion, under every pointer, the
+theme's tokens (`spec:AST-094` FR45). The switches here govern whether a
+pointer presentation's exit plays, and a touch presentation keeps its exit
+whatever they resolve to. A touch exit that a tap, a key or
 the program starts plays the theme's exit duration and easing,
 `--duration-exit` and `--ease-exit`, and a gesture-driven exit keeps its
 velocity spring (`spec:AST-094` DEC-26).

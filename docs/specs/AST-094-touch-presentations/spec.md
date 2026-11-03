@@ -204,7 +204,7 @@ a measured, sourced difference exists.
   `timing.curves.entrance` and `timing.curves.move`) stay as the measured
   native reference, and no motion plays them: that motion plays the theme's
   duration and easing tokens (FR45), and an exit plays the theme's exit
-  duration and easing (FR7). Two approved motions keep their springs until their own records change: the layout glide (`spec:AST-105` FR4) and the animator's `settleTo` (`spec:AST-107`). A component's own record states which of
+  duration and easing (FR7). Three approved motions keep their springs until their own records change: the layout glide (`spec:AST-105` FR4), the animator's `animate` (`spec:AST-107` FR3), and `useDragToSnapPoints`'s `settleTo` (`spec:AST-107`). A component's own record states which of
   its roles a gesture drives.
 
   Implementation gap: the pager's measured paging motion (its settle
@@ -257,7 +257,7 @@ a measured, sourced difference exists.
   motion, which a tap, a click, a hold, a key or the program starts, MUST
   play the theme's motion tokens, its duration and easing tokens scaled by
   `tempo` (`architecture:theme-tokens`, `spec:AST-108` FR2), under every
-  pointer, a finger included. Two approved motions keep their springs until their own records change: the layout glide (`spec:AST-105` FR4) and the animator's `settleTo` (`spec:AST-107`). A tap has no velocity, so it is not a gesture.
+  pointer, a finger included. Three approved motions keep their springs until their own records change: the layout glide (`spec:AST-105` FR4), the animator's `animate` (`spec:AST-107` FR3), and `useDragToSnapPoints`'s `settleTo` (`spec:AST-107`). A tap has no velocity, so it is not a gesture.
   A touch presentation keeps its own look for that motion (FR13), such as a
   menu that grows from its trigger or a thumb that lifts, and plays it on
   those tokens. A press that starts as a tap or a hold and continues as a
