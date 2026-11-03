@@ -39,6 +39,7 @@ src/
 │   └── chromium.ts    observes DOM + accessibility tree + real browser.
 ├── spoken.ts      how a visible label is compared against a computed name
 ├── storybook.ts   a static server over a built Storybook, for the browser lane
+├── playwright.ts  the base test of every browser spec: contexts stay off remote hosts
 └── patterns/
     ├── radio-group.*        the radio-group pattern, same four files
     ├── checkbox.*           the checkbox pattern, same four files

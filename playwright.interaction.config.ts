@@ -17,6 +17,11 @@
  *   pnpm test:interaction --project chromium
  *   pnpm test:interaction harness.interaction.browser.spec.ts
  *
+ * Specs import `test` from `@astryxdesign/a11y-spec/playwright`, the base test
+ * shared with playwright.config.ts: no context reaches a remote host. The
+ * gesture fixtures and Storybook servers listen on the loopback host, which
+ * passes.
+ *
  * A spec that needs Chromium-only evidence (CDP tracing, scripted touch
  * timestamps) skips itself in WebKit with the reason; see the harness README.
  * Where WebKit cannot launch on the host (missing system libraries on some
