@@ -104,8 +104,7 @@ export const docsDense = {
     bestPractices: [
       {
         guidance: true,
-        description:
-          'Use tokens/token(name) for SVG/canvas/chart config theme colors in React.',
+        description: 'Use tokens/token(name) for SVG/canvas/chart config theme colors in React.',
       },
       {
         guidance: true,
@@ -123,8 +122,7 @@ export const docsDense = {
       },
       {
         guidance: false,
-        description:
-          'Hardcode light/dark chart colors: resolve from current theme.',
+        description: 'Hardcode light/dark chart colors: resolve from current theme.',
       },
       {
         guidance: false,
