@@ -4,7 +4,7 @@
 
 /**
  * @file Outline.tsx
- * @input Uses React, StyleX, Astryx link provider integration, Outline hooks/types, useListFocus
+ * @input Uses React, StyleX, Astryx link provider integration, Outline hooks/types
  * @output Exports Outline component and OutlineProps type
  * @position Core implementation; consumed by index.ts
  *
@@ -35,8 +35,6 @@ import {
   fontWeightVars,
 } from '../theme/tokens.stylex';
 import {useLinkComponent} from '../Link/useLinkComponent';
-import {useListFocus} from '../hooks/useListFocus';
-import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {useScrollSpy} from './useScrollSpy';
@@ -304,10 +302,8 @@ function moveFocusTo(id: string) {
  * scroll root) plus the heading's own `scroll-margin-top`. It defaults to the
  * first item at the top and the last at the bottom.
  *
- * Keyboard: the list is a single tab stop (roving tabindex), seated on the
- * active heading. Arrow keys move between headings, Home/End jump to the ends,
- * and Enter/Space activate — so a long table of contents costs one Tab press,
- * not one per heading.
+ * Keyboard: each link is in the normal Tab order, and Enter/Space activate.
+ * There is no arrow, Home, or End movement between links.
  *
  * @example
  * ```
@@ -367,49 +363,6 @@ export function Outline({
     hasScrollOnClick,
     onNavigateStart,
     onNavigateEnd,
-  });
-
-  // Roving tabindex over the links: the whole outline is one tab stop, and
-  // arrows move between headings. The hook owns `tabindex` on the items.
-  const {
-    listRef,
-    handleKeyDown: handleListKeyDown,
-    handleFocus,
-  } = useListFocus<HTMLUListElement>({
-    itemSelector: 'a[href]',
-    orientation: 'vertical',
-    hasRovingTabIndex: true,
-  });
-
-  // Seat the tab stop on the *active* heading. WAI-ARIA puts the single tab
-  // stop on the current item, so tabbing into a table of contents while
-  // reading section 7 lands on section 7 — not back at section 1, which is
-  // where useListFocus would otherwise leave it (it promotes the first item on
-  // mount and then keeps whichever item already holds the stop).
-  //
-  // Only while focus is outside the list: once the reader has arrowed to an
-  // item, the stop is theirs and scroll-spy must not yank it away. Sets
-  // `tabindex` only — it never steals focus. Registered after useListFocus so
-  // it runs after the hook's own layout effect and wins; on later commits the
-  // hook then finds this item already holding the stop and keeps it.
-  useIsomorphicLayoutEffect(() => {
-    const list = listRef.current;
-    if (list == null || list.contains(document.activeElement)) {
-      return;
-    }
-    const links = Array.from(list.querySelectorAll<HTMLElement>('a[href]'));
-    const active = links.find(
-      link => link.getAttribute('aria-current') === 'location',
-    );
-    if (active == null) {
-      return;
-    }
-    for (const link of links) {
-      const tabIndex = link === active ? '0' : '-1';
-      if (link.getAttribute('tabindex') !== tabIndex) {
-        link.setAttribute('tabindex', tabIndex);
-      }
-    }
   });
 
   /**
@@ -480,12 +433,7 @@ export function Outline({
         className,
         style,
       )}>
-      <ul
-        {...stylex.props(styles.list)}
-        ref={listRef}
-        role="list"
-        onKeyDown={handleListKeyDown}
-        onFocus={handleFocus}>
+      <ul {...stylex.props(styles.list)} role="list">
         {items.map(item => {
           const isActive = item.id === resolvedActiveId;
 

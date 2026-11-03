@@ -62,11 +62,11 @@ interface Receipt {
   readonly browser: string;
   readonly build: string;
   readonly focused: FocusPaint;
-  readonly arrowed: FocusPaint;
+  readonly tabbedNext: FocusPaint;
   readonly pointerFocusVisible: boolean;
   readonly touchFocusVisible: boolean | null;
   readonly restToFocusChangedPixels: number;
-  readonly restToArrowChangedPixels: number;
+  readonly restToNextChangedPixels: number;
   readonly screenshots: ReadonlyArray<string>;
   readonly video: string;
 }
@@ -118,7 +118,7 @@ test.afterAll(async () => {
           selected: 'Outline exposes current location, not selection',
           disabled: 'OutlineItem has no disabled state',
           ariaActiveDescendant:
-            'Outline uses actual DOM focus with roving tabindex instead',
+            'Outline uses actual DOM focus; each link is its own Tab stop',
         },
         receipts,
       },
@@ -372,7 +372,7 @@ async function runScenario(
   const screenshots = {
     rest: path.join(OUTPUT, `${prefix}__rest.png`),
     focus: path.join(OUTPUT, `${prefix}__focus.png`),
-    arrow: path.join(OUTPUT, `${prefix}__arrow.png`),
+    next: path.join(OUTPUT, `${prefix}__next.png`),
     pointer: path.join(OUTPUT, `${prefix}__pointer.png`),
   };
   const videoPath = path.join(OUTPUT, `${prefix}.webm`);
@@ -402,7 +402,9 @@ async function runScenario(
       ),
     );
     expect(currentIndex).toBeGreaterThanOrEqual(0);
-    const nextIndex = (currentIndex + 1) % 6;
+    const linkTexts = await links.evaluateAll(elements =>
+      elements.map(element => element.textContent?.trim() ?? ''),
+    );
 
     if (scenario.pageScaleFactor != null) {
       const cdp = await page.context().newCDPSession(page);
@@ -423,23 +425,21 @@ async function runScenario(
     const focusedPng = await screenshotRegion(page);
     fs.writeFileSync(screenshots.focus, focusedPng);
 
-    await page.keyboard.press('ArrowDown');
-    const arrowed = await focusPaint(page);
-    const arrowPng = await screenshotRegion(page);
-    fs.writeFileSync(screenshots.arrow, arrowPng);
-
-    const prior = await links.nth(currentIndex).getAttribute('tabindex');
-    const current = await links.nth(nextIndex).getAttribute('tabindex');
-    expect(prior).toBe('-1');
-    expect(current).toBe('0');
-
-    // Focus return uses the roving stop the reader last chose, not the old current item.
-    await page.keyboard.press('Shift+Tab');
-    await expect(
-      page.getByRole('button', {name: 'Focus me, then press Tab'}),
-    ).toBeFocused();
+    // Each link is its own Tab stop: the next Tab reaches the second link.
     await page.keyboard.press('Tab');
-    await expect(links.nth(nextIndex)).toBeFocused();
+    const tabbedNext = await focusPaint(page);
+    const nextPng = await screenshotRegion(page);
+    fs.writeFileSync(screenshots.next, nextPng);
+    await expect(links.nth(1)).toBeFocused();
+
+    // Shift+Tab goes back one link; Tab from the last link leaves the list.
+    await page.keyboard.press('Shift+Tab');
+    await expect(links.nth(0)).toBeFocused();
+    await links.nth(5).focus();
+    await page.keyboard.press('Tab');
+    await expect(
+      page.getByRole('button', {name: 'After the outline'}),
+    ).toBeFocused();
 
     // Programmatic focus uses the same actual-DOM-focus model;
     // aria-activedescendant is intentionally absent.
@@ -492,30 +492,30 @@ async function runScenario(
       browser: browser.version(),
       build: target.name === 'current-head' ? storybookSha : 'external-preview',
       focused,
-      arrowed,
+      tabbedNext,
       pointerFocusVisible,
       touchFocusVisible,
       restToFocusChangedPixels: changedPixels(rest, focusedPng),
-      restToArrowChangedPixels: changedPixels(rest, arrowPng),
+      restToNextChangedPixels: changedPixels(rest, nextPng),
       screenshots: Object.values(screenshots).map(file => path.basename(file)),
       video: path.basename(videoPath),
     };
 
     const checks = () => {
       expectVisibleTokenRing(focused);
-      expect(focused.ariaCurrent).toBe('location');
-      expect(focused.tabIndex).toBe('0');
+      expect(focused.text).toBe(linkTexts[0]);
+      expect(focused.tabIndex).toBeNull();
       expect(focused.level).toMatch(/^[1-6]$/);
 
-      expectVisibleTokenRing(arrowed);
-      expect(arrowed.ariaCurrent).toBeNull();
-      expect(arrowed.tabIndex).toBe('0');
-      expect(arrowed.level).toMatch(/^[1-6]$/);
+      expectVisibleTokenRing(tabbedNext);
+      expect(tabbedNext.text).toBe(linkTexts[1]);
+      expect(tabbedNext.tabIndex).toBeNull();
+      expect(tabbedNext.level).toMatch(/^[1-6]$/);
 
       expect(receipt?.pointerFocusVisible).toBe(false);
       expect(receipt?.touchFocusVisible).not.toBe(true);
       expect(receipt?.restToFocusChangedPixels).toBeGreaterThan(0);
-      expect(receipt?.restToArrowChangedPixels).toBeGreaterThan(0);
+      expect(receipt?.restToNextChangedPixels).toBeGreaterThan(0);
     };
     try {
       checks();
