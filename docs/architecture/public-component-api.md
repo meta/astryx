@@ -107,7 +107,15 @@ guidance owns the process used to propose and test APIs.
   shared naming grammar. Component-specific vocabulary stays local. A prop that
   chooses how a component responds to input is named `<thing>Behavior` and takes
   a closed union of behavior names, and its name holds no input word (press,
-  touch, tap, hover, mouse, click) when the values can name the behavior.
+  touch, tap, hover, mouse, click) when the values can name the behavior. A
+  public prop names a system primitive with the system's existing vocabulary:
+  it introduces no new term for a concept the system already names (DEC-1). A
+  positional distance is an `offset` or an `inset`, as `useLayer`'s `offset`,
+  Outline's `offset`, and the `inset` of LayerProvider and ToastViewport are.
+  Depth is `elevation`, which takes `'none' | 'low' | 'med' | 'high'`, as Card,
+  Button, and Banner take it. `lift` names motion under a press, such as
+  Switch's thumb lift, Slider's `springs.sliderLift`, and ContextMenu's
+  `springs.contextMenuLift`, so it does not name a layout distance.
 - **INV3 — One prop controls one independent concept.** A prop does not silently
   suppress an unrelated prop. A parent does not duplicate state already owned by
   a composed child. One interaction behavior is one prop, never parallel touch,
@@ -311,6 +319,9 @@ source. Lab components are not stable public promises until promotion.
   defect does not by itself require consumer-doc changes.
 - A new prop includes the admission argument from `spec:AST-002/DEC-1`; it does
   not get accepted only because it solves one callsite.
+- Public-API review rejects a public prop that names an existing system concept
+  with a new term (INV2, DEC-1); the prop takes the system's word for that
+  concept.
 - Adding a touch presentation or a touch input mode for an open surface to a
   stable component checks INV16: a `presentation` value keeps the fine-pointer
   surface and mode, and every such touch mode is reachable by callers.
@@ -355,6 +366,19 @@ source. Lab components are not stable public promises until promotion.
   that also restores the previous surface and mode.
 - `spec:AST-012/DEC-6` — compact is one definition, the same on every platform.
 
+### DEC-1 — Public props use the system's existing vocabulary
+
+**Decider:** `cixzhang`, `2026-11-03`
+
+A public prop that names a system primitive uses the word the system already
+has for it, so a builder who knows one component reads the same concept the
+same way on the next. Positional distance is `offset` or `inset`, depth is
+`elevation`, and `lift` stays the name of motion under a press. An API for a
+new component, such as a search field, starts from the existing patterns in
+the system and introduces no new term for a concept the system already names.
+
+Rejected: component-local names for shared concepts.
+
 Transition Action sequencing and pending behavior belong to their component or
 family contract. This record links that owner once it is current; it does not
 copy the component matrix.
@@ -365,6 +389,7 @@ copy the component matrix.
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | INV1, INV8              | Export, public-subpath, prop, and ref checks                                                                             | A promised component/type cannot be imported or its ref cannot reach the contract element                                                                                                                                                                                                                                                                                                                                                                                               |
 | INV2                    | Naming and logical-direction lint/tests                                                                                  | Equivalent concepts use conflicting names or physical direction leaks into public API                                                                                                                                                                                                                                                                                                                                                                                                   |
+| INV2, DEC-1             | Public-API review against the system vocabulary                                                                          | A public prop names a concept the system already names, such as a distance, depth, or press motion, with a new term, or uses `lift` for a layout distance                                                                                                                                                                                                                                                                                                                               |
 | INV3, INV4              | Historical API review benchmark and `spec:AST-002` evidence                                                              | A prop combines unrelated axes or exposes a derivable implementation choice; a new interaction-behavior prop that is not a `<thing>Behavior` closed union, carries an input word where its values can name the behavior, splits one behavior across per-input props, or, as a new prop, defaults to anything but the shipped behavior                                                                                                                                                   |
 | INV5, INV6, INV7        | BaseProps/passthrough lint and representative runtime tests                                                              | Consumer ARIA/data/style/events are dropped, clobber component semantics, or fail to compose                                                                                                                                                                                                                                                                                                                                                                                            |
 | INV9                    | Published-surface, Changeset, migration, and public-type checks                                                          | A released API changes without explicit compatibility evidence                                                                                                                                                                                                                                                                                                                                                                                                                          |
