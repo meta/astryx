@@ -926,7 +926,34 @@
     "children": [
       "internationalization/i18n-quick-start",
       "internationalization/i18n-library-integration",
+      "internationalization/i18n-calendars",
+      "internationalization/calendars",
       "internationalization/i18n-rtl-and-testing"
+    ],
+    "mentions": []
+  },
+  "internationalization/calendars": {
+    "type": "docs.node",
+    "children": [
+      "internationalization/calendars/calendar-systems"
+    ],
+    "mentions": []
+  },
+  "internationalization/calendars/calendar-systems": {
+    "type": "docs.detail",
+    "sections": [
+      "choose-a-calendar",
+      "supported-calendars",
+      "load-temporal-where-the-runtime-lacks-it",
+      "chinese-and-korean-calendars",
+      "week-numbers"
+    ],
+    "mentions": []
+  },
+  "internationalization/i18n-calendars": {
+    "type": "docs.detail",
+    "sections": [
+      "show-dates-in-another-calendar"
     ],
     "mentions": []
   },

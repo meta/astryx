@@ -42,7 +42,7 @@ export const docs = {
   blocks: [
     {
       type: 'prose',
-      text: 'Date components show the Gregorian calendar unless the application chooses another one. Values never change with the calendar: they stay Gregorian ISO dates. {@link generic:i18n-calendars} has the short version.',
+      text: '`Calendar` shows the Gregorian calendar unless the application chooses another one; DateInput, DateRangeInput, and DateTimeInput stay Gregorian. Values never change with the calendar: they stay Gregorian ISO dates. {@link generic:i18n-calendars} has the short version.',
     },
   ],
 };

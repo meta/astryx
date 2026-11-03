@@ -98,7 +98,7 @@ import {Calendar} from '@astryxdesign/core/Calendar';
           lang: 'ts',
           label: 'Load the polyfill only where Temporal is missing',
           code: `// temporal-setup.ts: import before your app renders, on the server and in the browser
-if (typeof globalThis.Temporal === 'undefined') {
+if (!('Temporal' in globalThis)) {
   await import('temporal-polyfill/full/global');
 }`,
         },

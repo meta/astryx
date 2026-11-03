@@ -27,7 +27,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: '`Calendar` shows the Gregorian calendar unless you choose another one. Pass `calendar` to `<InternationalizationProvider>` for a subtree, or to `Calendar` itself. Values stay Gregorian ISO dates (`YYYY-MM-DD`) in every calendar.',
+          text: 'Set `calendar` on `<InternationalizationProvider>` for a subtree, or on `Calendar` itself; without it, `Calendar` is Gregorian. Values stay Gregorian ISO dates (`YYYY-MM-DD`) in every calendar.',
         },
         {
           type: 'code',
