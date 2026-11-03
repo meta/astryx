@@ -294,12 +294,14 @@ export interface TrackedFrame {
   /** Marker pixels found (a fading element finds fewer at the same tolerance). */
   readonly pixels: number;
   /**
-   * The cast's position step at this frame, CSS px per axis (`trackMarker`
-   * sets it): one block of the frame's color resolution (`colorBlockPx`) over
-   * the bitmap's scale to the viewport. The marker is found by its color, so
-   * its edges fall on these blocks: 2 px in WebKit's JPEG cast, whose 4:2:0
-   * chroma holds color in 2 by 2 pixel blocks, and 1 px in Chromium's PNG
-   * cast, both at the viewport's size.
+   * The cast's position step at this frame, CSS px per axis: one block of
+   * the frame's color resolution (`colorBlockPx`) over the bitmap's scale to
+   * the viewport. `trackMarker` sets it only for the default marker
+   * (`MARKER_RGB`), whose edges were measured on these blocks: 2 px in
+   * WebKit's JPEG cast, whose 4:2:0 chroma holds color in 2 by 2 pixel
+   * blocks, and 1 px in Chromium's PNG cast, both at the viewport's size.
+   * Another color carries none: a cyan control in the same WebKit frames
+   * moves by odd px.
    */
   readonly step?: {readonly x: number; readonly y: number};
 }
@@ -360,6 +362,7 @@ export async function trackMarker(
     tolerance = 40,
   }: {rgb?: readonly [number, number, number]; tolerance?: number} = {},
 ): Promise<TrackedFrame[]> {
+  const isDefaultMarker = rgb.every((value, i) => value === MARKER_RGB[i]);
   const scratch = await page.context().newPage();
   try {
     const out: TrackedFrame[] = [];
@@ -447,6 +450,10 @@ export async function trackMarker(
         },
       );
       boxes.forEach((result, k) => {
+        if (!isDefaultMarker) {
+          out.push({t: batch[k].t, box: result.box, pixels: result.pixels});
+          return;
+        }
         const block = colorBlockPx(batch[k].data, batch[k].format);
         out.push({
           t: batch[k].t,

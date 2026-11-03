@@ -146,7 +146,8 @@ whole window as one stall). `settledWithin` (2 px) stops judging at the easing
 tail: the screencast rounds to whole pixels, so a tail that still moves shows
 plateaus within a pixel or two of rest. `settledWithinSteps` counts that bound
 in the cast's own position steps, read from the cast (`castStep`, from the
-`step` `trackMarker` gives each frame): 1 px in Chromium's PNG cast and 2 px in
+`step` `trackMarker` gives each frame of the default marker; a control tracked
+by another color carries none, and `castStep` refuses it): 1 px in Chromium's PNG cast and 2 px in
 WebKit's JPEG cast, whose 4:2:0 chroma holds the marker's color in 2 by 2
 pixel blocks and so makes the tail's plateaus longer. Two steps stop at the
 same tail in either engine while a freeze further from rest is still judged. A judged part shorter than four of the

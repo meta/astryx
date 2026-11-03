@@ -446,10 +446,11 @@ function slowStretches(
 /**
  * The cast's position step along `axis`, CSS px, read from the cast: the
  * coarsest `step` the tracked frames carry (`trackMarker` sets it from each
- * frame's color resolution and scale), so 2 px in WebKit's 4:2:0 JPEG cast
- * and 1 px in Chromium's PNG cast. Throws when no frame carries one: a step
- * read from the motion would take a run whose changes are all even on a 1 px
- * cast for a 2 px cast.
+ * frame's color resolution and scale, for the default marker only), so 2 px
+ * in WebKit's 4:2:0 JPEG cast and 1 px in Chromium's PNG cast. Throws when no
+ * frame carries one, as for a control tracked by another color: a step read
+ * from the motion would take a run whose changes are all even on a 1 px cast
+ * for a 2 px cast.
  */
 export function castStep(
   tracked: readonly TrackedFrame[],
