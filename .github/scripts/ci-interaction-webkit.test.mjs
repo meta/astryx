@@ -96,9 +96,10 @@ describe('WebKit interaction proof routing', () => {
     ]);
     for (const candidate of webkit.steps.slice(2)) {
       if (guards.has(candidate.name)) continue;
+      // A leg whose plan holds no spec file runs no proofs.
       expect(candidate.if, candidate.name ?? candidate.uses).toMatch(
         new RegExp(
-          `^(always\\(\\) && )?${applies.replace(/[.()|]/g, '\\$&')}$`,
+          `^(always\\(\\) && )?${applies.replace(/[.()|]/g, '\\$&')}( && steps\\.plan\\.outputs\\.files != '0')?$`,
         ),
       );
     }
@@ -158,7 +159,8 @@ describe('WebKit interaction proof routing', () => {
   });
 
   it('runs only the specs whose code its scope covers', () => {
-    const run = step(webkit, 'Run WebKit interaction proofs').run;
+    // Each leg plans its share from these paths and runs only that share.
+    const run = step(webkit, "Plan this leg's WebKit interaction proofs").run;
     const targets = [
       'packages/core/src/gestures/',
       'packages/core/src/motion/__tests__/animatedLayout.interaction',

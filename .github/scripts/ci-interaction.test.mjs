@@ -70,9 +70,10 @@ describe('interaction proof routing', () => {
     ]);
     for (const candidate of proofs.steps.slice(2)) {
       if (guards.has(candidate.name)) continue;
+      // A leg whose plan holds no spec file runs no proofs.
       expect(candidate.if, candidate.name ?? candidate.uses).toMatch(
         new RegExp(
-          `^(always\\(\\) && )?${applies.replace(/[.()|]/g, '\\$&')}$`,
+          `^(always\\(\\) && )?${applies.replace(/[.()|]/g, '\\$&')}( && steps\\.plan\\.outputs\\.files != '0')?$`,
         ),
       );
     }

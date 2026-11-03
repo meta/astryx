@@ -77,6 +77,11 @@ export function listedFiles(report) {
 const TEST_LINE = /^(\S+Z)\s+\S+\s+\d+\s+\[([\w-]+)\] › ([^:]+):\d+:\d+ › /;
 const RUNNING = /Running \d+ tests? using/;
 
+/** Milliseconds of a log line's timestamp; GitHub writes seven fraction digits. */
+function stamp(line) {
+  return Date.parse(line.split(/\s/, 1)[0].replace(/(\.\d{3})\d*Z$/, '$1Z'));
+}
+
 /**
  * Seconds per spec file from a CI job log of the list reporter: each test's
  * time is the gap from the line before it, so a file's time includes its setup.
@@ -85,14 +90,14 @@ export function recordLog(text, project) {
   const seconds = {};
   let previous = null;
   for (const line of text.split('\n')) {
-    const at = Date.parse(line.slice(0, 28));
+    const at = stamp(line);
     if (previous == null && RUNNING.test(line) && Number.isFinite(at)) {
       previous = at;
       continue;
     }
     const match = TEST_LINE.exec(line);
     if (!match || previous == null || match[2] !== project) continue;
-    const time = Date.parse(match[1]);
+    const time = stamp(match[1]);
     seconds[match[3]] = (seconds[match[3]] ?? 0) + (time - previous) / 1000;
     previous = time;
   }
