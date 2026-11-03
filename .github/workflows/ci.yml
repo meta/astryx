@@ -2292,14 +2292,15 @@ jobs:
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true')) }}
     # Frame evidence measures timing: four cores, one Playwright worker.
     # One runner ran every proof in about ten minutes and passed the job's
-    # fifteen once its checkout was slow. Three legs share the spec files by
-    # their recorded times (interaction-legs.mjs), so each runs in about three
-    # and a half minutes. `test` reads the job's result, which is success only
-    # when every leg passed.
+    # fifteen once its checkout was slow. Two legs share the spec files by
+    # their recorded times (interaction-legs.mjs), so each runs in about five
+    # minutes, and a leg with the slowest checkout seen still ends with about
+    # four minutes to spare. `test` reads the job's result, which is success
+    # only when every leg passed.
     strategy:
       fail-fast: false
       matrix:
-        leg: [1, 2, 3]
+        leg: [1, 2]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -2387,14 +2388,24 @@ jobs:
 
       # This leg's share of the spec files, by their recorded times. Every
       # spec file is in exactly one leg; one with no recorded time counts the
-      # median.
+      # median. The planner, the shared splitter it imports and the times come
+      # from the workflow's own commit: a head cut before them has none.
       - name: Plan this leg's interaction proofs
         id: plan
         if: steps.scope.outputs.applies == 'true'
-        run: >-
-          node .github/scripts/interaction-legs.mjs plan --project chromium
-          --leg ${{ matrix.leg }} --of ${{ strategy.job-total }}
-          --out "$RUNNER_TEMP/interaction-leg.txt"
+        env:
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          legs="$RUNNER_TEMP/interaction-legs"
+          mkdir -p "$legs/.github/scripts" "$legs/scripts/lib"
+          git fetch --quiet --no-tags --depth=1 origin "$WORKFLOW_SHA"
+          git show "$WORKFLOW_SHA:.github/scripts/interaction-legs.mjs" > "$legs/.github/scripts/interaction-legs.mjs"
+          git show "$WORKFLOW_SHA:scripts/lib/duration-split.mjs" > "$legs/scripts/lib/duration-split.mjs"
+          git show "$WORKFLOW_SHA:.github/interaction-durations.json" > "$legs/interaction-durations.json"
+          node "$legs/.github/scripts/interaction-legs.mjs" plan --project chromium \
+            --leg ${{ matrix.leg }} --of ${{ strategy.job-total }} \
+            --durations "$legs/interaction-durations.json" \
+            --out "$RUNNER_TEMP/interaction-leg.txt"
 
       - name: Run interaction proofs
         if: steps.scope.outputs.applies == 'true' && steps.plan.outputs.files != '0'
@@ -2432,7 +2443,7 @@ jobs:
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true')) }}
     # Frame evidence measures timing: four cores, one Playwright worker.
     # Two legs share the spec files by their recorded times, as the Chromium
-    # proofs' three do.
+    # proofs' two do; the harness spec alone fills one.
     strategy:
       fail-fast: false
       matrix:
@@ -2525,19 +2536,29 @@ jobs:
         run: pnpm install --frozen-lockfile && npx playwright install --with-deps webkit
 
       # This leg's share of the WebKit spec files, from the paths the lane
-      # covers, by their recorded times.
+      # covers, by their recorded times. The planner and the times come from
+      # the workflow's own commit, as for the Chromium legs.
       - name: Plan this leg's WebKit interaction proofs
         id: plan
         if: steps.scope.outputs.applies == 'true'
-        run: >-
-          node .github/scripts/interaction-legs.mjs plan --project webkit
-          --leg ${{ matrix.leg }} --of ${{ strategy.job-total }}
-          --out "$RUNNER_TEMP/interaction-leg.txt" --
-          packages/core/src/gestures/
-          packages/core/src/motion/__tests__/animatedLayout.interaction
-          packages/core/src/motion/__tests__/animator.interaction
-          packages/core/src/hooks/__tests__/usePager.interaction
-          internal/interaction-harness/
+        env:
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          legs="$RUNNER_TEMP/interaction-legs"
+          mkdir -p "$legs/.github/scripts" "$legs/scripts/lib"
+          git fetch --quiet --no-tags --depth=1 origin "$WORKFLOW_SHA"
+          git show "$WORKFLOW_SHA:.github/scripts/interaction-legs.mjs" > "$legs/.github/scripts/interaction-legs.mjs"
+          git show "$WORKFLOW_SHA:scripts/lib/duration-split.mjs" > "$legs/scripts/lib/duration-split.mjs"
+          git show "$WORKFLOW_SHA:.github/interaction-durations.json" > "$legs/interaction-durations.json"
+          node "$legs/.github/scripts/interaction-legs.mjs" plan --project webkit \
+            --leg ${{ matrix.leg }} --of ${{ strategy.job-total }} \
+            --durations "$legs/interaction-durations.json" \
+            --out "$RUNNER_TEMP/interaction-leg.txt" -- \
+            packages/core/src/gestures/ \
+            packages/core/src/motion/__tests__/animatedLayout.interaction \
+            packages/core/src/motion/__tests__/animator.interaction \
+            packages/core/src/hooks/__tests__/usePager.interaction \
+            internal/interaction-harness/
 
       # WebKit renders through Mesa's llvmpipe, which sizes its thread pool
       # from the CPUs the process may run on. A container's CPU quota is not

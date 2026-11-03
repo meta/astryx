@@ -20,47 +20,29 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
-const ROOT = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '../..',
-);
+import {costOf, splitByDuration} from '../../scripts/lib/duration-split.mjs';
+
+// CI runs this file from the workflow's own commit, outside the checkout, in
+// the checkout's root.
+const ROOT = process.cwd();
 export const DURATIONS = path.join(ROOT, '.github/interaction-durations.json');
 const CONFIG = 'playwright.interaction.config.ts';
-// Seconds for a spec file with no recorded time and nothing to compare with.
-const FALLBACK_SECONDS = 30;
 
 /**
- * Splits `files` into `legs` lists of about equal estimated time: the longest
- * file first, each onto the leg with the least time so far (the lowest leg on
- * a tie). A file with no recorded time counts the median recorded time. Every
- * file lands in exactly one leg, and the same input always gives the same
- * split.
+ * Splits `files` into `legs` lists of about equal estimated time, with the
+ * shared duration splitter: slowest first, each onto the leg with the least
+ * time so far. A file with no recorded time counts the median recorded time.
+ * Every file lands in exactly one leg.
  */
 export function planLegs(files, durations, legs) {
   if (!Number.isInteger(legs) || legs < 1)
     throw new Error(`legs must be a positive integer, got ${legs}`);
-  const known = Object.values(durations ?? {})
-    .filter(Number.isFinite)
-    .sort((a, b) => a - b);
-  const median = known.length
-    ? known[Math.floor(known.length / 2)]
-    : FALLBACK_SECONDS;
-  const estimate = file =>
-    Number.isFinite(durations?.[file]) ? durations[file] : median;
   const unique = [...new Set(files)];
-  const order = unique.sort(
-    (a, b) => estimate(b) - estimate(a) || (a < b ? -1 : a > b ? 1 : 0),
-  );
-  const out = Array.from({length: legs}, () => ({files: [], seconds: 0}));
-  for (const file of order) {
-    let target = 0;
-    for (let i = 1; i < legs; i += 1)
-      if (out[i].seconds < out[target].seconds) target = i;
-    out[target].files.push(file);
-    out[target].seconds += estimate(file);
-  }
-  for (const leg of out) leg.files.sort();
-  return out;
+  const cost = costOf(unique, durations ?? {});
+  return splitByDuration(unique, legs, cost).map(leg => ({
+    files: leg,
+    seconds: leg.reduce((sum, file) => sum + cost(file), 0),
+  }));
 }
 
 /** The spec files of a Playwright `--list --reporter=json` report. */
@@ -104,10 +86,8 @@ export function recordLog(text, project) {
   return seconds;
 }
 
-function readDurations() {
-  return fs.existsSync(DURATIONS)
-    ? JSON.parse(fs.readFileSync(DURATIONS, 'utf8'))
-    : {};
+function readDurations(file = DURATIONS) {
+  return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
 }
 
 function option(args, name) {
@@ -115,19 +95,8 @@ function option(args, name) {
   return index === -1 ? undefined : args[index + 1];
 }
 
-function plan(args) {
-  const split = args.indexOf('--');
-  const own = split === -1 ? args : args.slice(0, split);
-  const filters = split === -1 ? [] : args.slice(split + 1);
-  const project = option(own, '--project');
-  const leg = Number(option(own, '--leg'));
-  const legs = Number(option(own, '--of'));
-  const out = option(own, '--out');
-  if (!project || !out || !Number.isInteger(leg) || leg < 1 || leg > legs) {
-    throw new Error(
-      'usage: plan --project <name> --leg <i> --of <n> --out <file> [-- <filters...>]',
-    );
-  }
+/** The spec files Playwright lists for a project with these extra arguments. */
+function list(project, out, extra) {
   // The report goes to a file: a spec's own logging can share stdout.
   const reportFile = `${out}.list.json`;
   execFileSync(
@@ -142,7 +111,7 @@ function plan(args) {
       project,
       '--list',
       '--reporter=json',
-      ...filters,
+      ...extra,
     ],
     {
       cwd: ROOT,
@@ -155,12 +124,42 @@ function plan(args) {
   );
   const report = JSON.parse(fs.readFileSync(reportFile, 'utf8'));
   fs.rmSync(reportFile, {force: true});
-  const files = listedFiles(report);
+  return listedFiles(report);
+}
+
+function plan(args) {
+  const split = args.indexOf('--');
+  const own = split === -1 ? args : args.slice(0, split);
+  const filters = split === -1 ? [] : args.slice(split + 1);
+  const project = option(own, '--project');
+  const leg = Number(option(own, '--leg'));
+  const legs = Number(option(own, '--of'));
+  const out = option(own, '--out');
+  const durations = option(own, '--durations') ?? DURATIONS;
+  if (!project || !out || !Number.isInteger(leg) || leg < 1 || leg > legs) {
+    throw new Error(
+      'usage: plan --project <name> --leg <i> --of <n> --out <file> [--durations <file>] [-- <filters...>]',
+    );
+  }
+  const files = list(project, out, filters);
   if (files.length === 0)
     throw new Error(`Playwright listed no ${project} interaction spec files`);
-  const legsPlan = planLegs(files, readDurations()[project] ?? {}, legs);
+  const legsPlan = planLegs(
+    files,
+    readDurations(durations)[project] ?? {},
+    legs,
+  );
   const mine = legsPlan[leg - 1];
   fs.writeFileSync(out, mine.files.map(file => `${file}\n`).join(''));
+  // Playwright runs nothing, and passes, for a test list that matches no
+  // spec, so the leg checks that its list selects exactly its files.
+  if (mine.files.length > 0) {
+    const selected = list(project, out, ['--test-list', out]);
+    if (selected.join('\n') !== mine.files.join('\n'))
+      throw new Error(
+        `The ${project} leg's test list selects ${selected.length} spec files, not its ${mine.files.length}`,
+      );
+  }
   console.log(
     `${project} leg ${leg}/${legs}: ${mine.files.length} of ${files.length} spec files, about ${Math.round(mine.seconds)} s`,
   );

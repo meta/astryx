@@ -65,7 +65,7 @@ describe('planLegs', () => {
       leg.seconds - others.reduce((sum, file) => sum + times[file], 0),
     ).toBe(50);
     expect(planLegs(['x', 'y'], {}, 2).map(each => each.seconds)).toEqual([
-      30, 30,
+      1, 1,
     ]);
   });
 
@@ -111,7 +111,7 @@ describe('the interaction proof legs in ci.yml', () => {
     {
       id: 'pr-interaction',
       project: 'chromium',
-      legs: [1, 2, 3],
+      legs: [1, 2],
       run: 'Run interaction proofs',
       plan: "Plan this leg's interaction proofs",
       evidence: 'interaction-evidence-${{ matrix.leg }}',
@@ -139,8 +139,27 @@ describe('the interaction proof legs in ci.yml', () => {
       const plan = step(job, lane.plan);
       expect(plan.id).toBe('plan');
       expect(plan.if).toBe("steps.scope.outputs.applies == 'true'");
+      // A head cut before the legs has neither the planner nor the times,
+      // so both come from the workflow's own commit.
+      expect(plan.env).toEqual({WORKFLOW_SHA: '${{ github.sha }}'});
       expect(plan.run).toContain(
-        `node .github/scripts/interaction-legs.mjs plan --project ${lane.project}`,
+        'git fetch --quiet --no-tags --depth=1 origin "$WORKFLOW_SHA"',
+      );
+      for (const file of [
+        '.github/scripts/interaction-legs.mjs',
+        'scripts/lib/duration-split.mjs',
+      ])
+        expect(plan.run).toContain(
+          `git show "$WORKFLOW_SHA:${file}" > "$legs/${file}"`,
+        );
+      expect(plan.run).toContain(
+        'git show "$WORKFLOW_SHA:.github/interaction-durations.json" > "$legs/interaction-durations.json"',
+      );
+      expect(plan.run).toContain(
+        `node "$legs/.github/scripts/interaction-legs.mjs" plan --project ${lane.project}`,
+      );
+      expect(plan.run).toContain(
+        '--durations "$legs/interaction-durations.json"',
       );
       expect(plan.run).toContain(
         '--leg ${{ matrix.leg }} --of ${{ strategy.job-total }}',
@@ -172,6 +191,7 @@ describe('the interaction proof legs in ci.yml', () => {
     ).run;
     const filters = plan
       .slice(plan.indexOf(' -- ') + 4)
+      .replaceAll('\\', '')
       .trim()
       .split(/\s+/);
     expect(filters).toEqual([
@@ -244,7 +264,7 @@ describe('the interaction proof legs in ci.yml', () => {
     }
   });
 
-  it('plans from the command line, writing the leg list and its count', () => {
+  it('plans from a copy outside the checkout, run in its root, with the times it is given', () => {
     const out = path.join(
       fs.mkdtempSync(path.join(root, 'node_modules/.cache-interaction-legs-')),
       'leg.txt',
@@ -254,14 +274,40 @@ describe('the interaction proof legs in ci.yml', () => {
       // A stand-in pnpm that writes a list report for two spec files.
       fs.writeFileSync(
         fake,
-        `#!/bin/sh\nprintf '%s' '{"suites":[{"specs":[{"file":"x.spec.ts"}]},{"specs":[{"file":"y.spec.ts"}]}]}' > "$PLAYWRIGHT_JSON_OUTPUT_FILE"\n`,
+        // With a test list it lists only the files the list names, unless
+        // the list names z.spec.ts, which matches nothing.
+        [
+          `#!${process.execPath}`,
+          "const fs = require('node:fs');",
+          "const at = process.argv.indexOf('--test-list');",
+          "let files = (process.env.FAKE_FILES || 'x.spec.ts,y.spec.ts').split(',');",
+          "if (at !== -1) files = fs.readFileSync(process.argv[at + 1], 'utf8').split('\\n').filter(f => f && f !== 'z.spec.ts');",
+          'fs.writeFileSync(process.env.PLAYWRIGHT_JSON_OUTPUT_FILE, JSON.stringify({suites: files.map(file => ({specs: [{file}]}))}));',
+          '',
+        ].join('\n'),
         {mode: 0o755},
       );
       const output = path.join(path.dirname(out), 'github-output');
+      // CI runs the workflow commit's copies of the planner and the splitter
+      // it imports, laid out as in the tree, outside the checkout.
+      const copies = path.join(path.dirname(out), 'legs');
+      for (const file of [
+        '.github/scripts/interaction-legs.mjs',
+        'scripts/lib/duration-split.mjs',
+      ]) {
+        fs.mkdirSync(path.dirname(path.join(copies, file)), {recursive: true});
+        fs.copyFileSync(path.join(root, file), path.join(copies, file));
+      }
+      const copy = path.join(copies, '.github/scripts/interaction-legs.mjs');
+      const times = path.join(path.dirname(out), 'durations.json');
+      fs.writeFileSync(
+        times,
+        JSON.stringify({chromium: {'x.spec.ts': 1, 'y.spec.ts': 100}}),
+      );
       execFileSync(
         process.execPath,
         [
-          path.join(root, '.github/scripts/interaction-legs.mjs'),
+          copy,
           'plan',
           '--project',
           'chromium',
@@ -269,10 +315,13 @@ describe('the interaction proof legs in ci.yml', () => {
           '2',
           '--of',
           '2',
+          '--durations',
+          times,
           '--out',
           out,
         ],
         {
+          cwd: root,
           env: {
             ...process.env,
             PATH: `${path.dirname(fake)}:${process.env.PATH}`,
@@ -281,8 +330,38 @@ describe('the interaction proof legs in ci.yml', () => {
           encoding: 'utf8',
         },
       );
-      expect(fs.readFileSync(out, 'utf8')).toBe('y.spec.ts\n');
+      // y is the long file, so it takes leg 1 and x is leg 2's.
+      expect(fs.readFileSync(out, 'utf8')).toBe('x.spec.ts\n');
       expect(fs.readFileSync(output, 'utf8')).toBe('files=1\n');
+      // A leg whose test list matches none of its files fails the plan.
+      expect(() =>
+        execFileSync(
+          process.execPath,
+          [
+            copy,
+            'plan',
+            '--project',
+            'chromium',
+            '--leg',
+            '1',
+            '--of',
+            '1',
+            '--durations',
+            times,
+            '--out',
+            out,
+          ],
+          {
+            cwd: root,
+            env: {
+              ...process.env,
+              PATH: `${path.dirname(fake)}:${process.env.PATH}`,
+              FAKE_FILES: 'z.spec.ts',
+            },
+            stdio: 'pipe',
+          },
+        ),
+      ).toThrow(/selects 0 spec files, not its 1/);
       expect(() =>
         execFileSync(
           process.execPath,
