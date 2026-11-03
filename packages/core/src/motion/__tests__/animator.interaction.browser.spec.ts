@@ -24,7 +24,7 @@
 import {fileURLToPath} from 'node:url';
 import {
   blockMainThread,
-  type BusyWindow,
+  type BlockedWindow,
   busyWindowProof,
   CONTROL_RGB,
   countBetween,
@@ -174,7 +174,7 @@ test('a spring keeps advancing every frame through a 1 s main-thread block, on i
     type: 'busy window',
     description: `${proof.summary} | without the control: ${alone.verdict.failures.join('; ') || 'pass'}`,
   });
-  expect(busy.to - busy.from).toBeGreaterThanOrEqual(1000);
+  expect(busy.spanMs).toBeGreaterThanOrEqual(1000);
   // The harness's verdict against the control: the spring moved on every
   // frame the control moved, and stalled no longer than it (what a
   // main-thread animation never does; see the next test).
@@ -290,14 +290,15 @@ test('a move driven from the main thread freezes through the same block, and the
       frames += 1;
       if (frames === 8) {
         setTimeout(() => {
-          const from = performance.timeOrigin + performance.now();
-          const until = performance.now() + 1000;
-          while (performance.now() < until) {
-            // Busy: nothing else runs.
+          const blockStart = performance.now();
+          let now = blockStart;
+          while (now - blockStart < 1000) {
+            now = performance.now();
           }
-          (window as unknown as {busy: BusyWindow}).busy = {
-            from,
-            to: performance.timeOrigin + performance.now(),
+          (window as unknown as {busy: BlockedWindow}).busy = {
+            from: performance.timeOrigin + blockStart,
+            to: performance.timeOrigin + now,
+            spanMs: now - blockStart,
           };
         }, 0);
       }
@@ -308,12 +309,12 @@ test('a move driven from the main thread freezes through the same block, and the
     requestAnimationFrame(step);
   }, TRAVEL);
   const signal = await page.waitForFunction(
-    () => (window as unknown as {busy?: BusyWindow}).busy,
+    () => (window as unknown as {busy?: BlockedWindow}).busy,
     undefined,
     {polling: 50, timeout: 0},
   );
-  const busy = (await signal.jsonValue()) as BusyWindow;
-  expect(busy.to - busy.from).toBeGreaterThanOrEqual(1000);
+  const busy = (await signal.jsonValue()) as BlockedWindow;
+  expect(busy.spanMs).toBeGreaterThanOrEqual(1000);
   await page.waitForTimeout(200);
   const frames = await cast.stop();
   const tracked = await trackMarker(page, frames);

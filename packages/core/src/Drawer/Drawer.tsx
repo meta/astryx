@@ -77,6 +77,7 @@ import {LayerDepthProvider, useLayerDismissal} from '../Layer';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
+import {useModalOutlet} from '../Layer/modalOutlet';
 import {useBackdropPress} from '../Layer/useBackdropPress';
 import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
@@ -500,6 +501,11 @@ export function Drawer({
     isModal: hasScrim,
     setIsRendered,
   });
+
+  // Toasts outside an open modal are inert, so the open drawer hosts them.
+  // It releases them when its exit starts.
+  // showModal() must run first, so keep this call after useDrawerDialogPresence.
+  useModalOutlet(dialogRef, isOpen && hasScrim);
 
   const handleDismiss = useCallback(() => {
     onOpenChange(false);
