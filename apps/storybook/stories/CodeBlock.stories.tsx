@@ -192,6 +192,8 @@ const runAction = (
     label="Run in terminal"
     tooltip="Run in terminal"
     icon={terminalIcon}
+    // Match Copy's muted header glyph colour.
+    style={{color: 'var(--color-syntax-comment)'}}
   />
 );
 
@@ -222,7 +224,14 @@ export const EndContentTall: Story = {
     language: 'bash',
     hasLanguageLabel: false,
     endContent: (
-      <IconButton label="Run in terminal" variant="ghost" icon={terminalIcon} />
+      <IconButton
+        label="Run in terminal"
+        variant="ghost"
+        tooltip="Run in terminal"
+        icon={terminalIcon}
+        // Match Copy's muted header glyph colour.
+        style={{color: 'var(--color-syntax-comment)'}}
+      />
     ),
     width: '360px',
   },
