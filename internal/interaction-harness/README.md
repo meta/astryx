@@ -187,9 +187,9 @@ late on a loaded runner, too late to wait on before blocking. Only a hold that
 starts before the block, on two frames at least, is excused, and every frame
 after its first change is judged, so a freeze later in the block still fails.
 Any other element already moving is judged from the block's start. WebKit's
-casts are 2 px quantized: the frames come at the
-viewport's size, but the page in them is captured at half resolution, so
-positions move in 2 CSS px steps (Chromium's in 1). With under two steps of
+casts are 2 px quantized: their JPEG frames hold the
+marker's color in 2 by 2 pixel chroma blocks (4:2:0, which the frame header
+reports), so positions move in 2 CSS px steps (Chromium's in 1). With under two steps of
 motion per frame, a frame delivered a few ms early shows no step and reads as
 not moved. The proof reports `stepPx` and `pxPerFrame` and notes each stretch
 that moves under two steps per frame, read over four frames at a time so a
