@@ -32,6 +32,11 @@ export function isLocaleDayFirst(locale: Locale = 'en'): boolean {
   return dayIndex < monthIndex;
 }
 
+// Built at run time: a Unicode property escape in a literal fails a source
+// build whose Babel lacks the Unicode data.
+const LETTER_FREE = new RegExp('^[^\\p{L}]+$', 'u');
+const YEAR_FIRST = new RegExp('^\\d{4}[^\\p{L}\\d]', 'u');
+
 /**
  * Parses user input into a PlainDate.
  *
@@ -138,14 +143,14 @@ export function parseDateInput(
   if (/^\d+$/.test(trimmed)) {
     return null;
   }
-  // In a day-first locale, text with no letters outside the locale-ordered
-  // forms above is not a date. Native `Date` reads `a/b/c` month first. It also
-  // takes a year of one to three digits. So "12/01/2" gives a wrong date.
-  // A four-digit year written first is not ambiguous.
+  // In a day-first locale, letter-free text that no form above matched is not
+  // a date. Native `Date` reads `a/b/c` month first. It also takes a year of
+  // one to three digits. So "12/01/2" gives a wrong date. A four-digit year
+  // written first is not ambiguous.
   if (
     isLocaleDayFirst(locale) &&
-    /^[^\p{L}]+$/u.test(trimmed) &&
-    !/^\d{4}[^\p{L}\d]/u.test(trimmed)
+    LETTER_FREE.test(trimmed) &&
+    !YEAR_FIRST.test(trimmed)
   ) {
     return null;
   }
