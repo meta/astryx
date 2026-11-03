@@ -192,11 +192,14 @@ describe('packageExists', () => {
     ]);
   });
 
-  it('answers true for 200, false for 404, and unknown otherwise', async () => {
+  it('answers true for 200, false only for 404, and unknown otherwise, a 401 included', async () => {
     const name = '@astryxdesign/vega';
     expect(await packageExists({name, fetchImpl: respond(200)})).toBe(true);
     expect(await packageExists({name, fetchImpl: respond(404)})).toBe(false);
     expect(await packageExists({name, fetchImpl: respond(503)})).toBeNull();
+    // npm answers 401 on a missing scoped package's dist-tags; a 401 is
+    // never read as absence.
+    expect(await packageExists({name, fetchImpl: respond(401)})).toBeNull();
     expect(
       await packageExists({
         name,
