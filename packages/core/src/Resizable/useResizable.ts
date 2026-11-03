@@ -382,7 +382,8 @@ type MultiResizableArgument<Config extends UseResizableMultiConfig> =
 
 interface ResizableEntry {
   readonly resizable: ResizableController;
-  readonly createdWith: CreateResizableOptions;
+  /** The options the factory has now: those it was created with, or updated to. */
+  passed: CreateResizableOptions;
 }
 
 /**
@@ -519,9 +520,9 @@ function useResizableController(
       readResizableInternals(entry.resizable)?.resume();
       return;
     }
-    const createdWith = optionsRef.current;
-    const resizable = createResizableAs('useResizable', createdWith);
-    slot.set({resizable, createdWith});
+    const passed = optionsRef.current;
+    const resizable = createResizableAs('useResizable', passed);
+    slot.set({resizable, passed});
   }, [slot]);
   useIsomorphicLayoutEffect(() => {
     follow();
@@ -548,7 +549,8 @@ function useResizableController(
   );
   useIsomorphicLayoutEffect(() => {
     const entry = slot.get();
-    if (entry != null && options !== entry.createdWith) {
+    if (entry != null && options !== entry.passed) {
+      entry.passed = options;
       entry.resizable.update(options);
     }
   }, [slot, options]);
@@ -593,10 +595,10 @@ function useResizableController(
     if (entry != null) {
       return entry.resizable;
     }
-    const createdWith = optionsRef.current;
-    const resizable = createResizableAs('useResizable', createdWith);
+    const passed = optionsRef.current;
+    const resizable = createResizableAs('useResizable', passed);
     readResizableInternals(resizable)?.suspend();
-    slot.set({resizable, createdWith});
+    slot.set({resizable, passed});
     return resizable;
   }, [slot]);
   const collapse = useCallback(() => {
