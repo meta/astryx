@@ -45,6 +45,7 @@ import {
   TYPESCRIPT_FIX,
   unusableTypeScriptReason,
 } from './project-typescript.mjs';
+import {keepSourceFiles} from './source-file-cache.mjs';
 
 /**
  * @typedef {'components' | 'hooks' | 'templates' | 'docs' | 'docs-overlay' | 'themes' | 'icon-sets'} DocRoot
@@ -1035,8 +1036,9 @@ export async function checkDocTypes(files, options) {
     paths: {[AUTHORING]: [AUTHORING_TYPES]},
   };
   const host = ts.createCompilerHost(options_);
-  const getSourceFile = host.getSourceFile.bind(host);
-  // Every other file is parsed once, so a later pass reuses it.
+  // Every other file is parsed once, so a later pass reuses it; and once per
+  // process for these options, so a later check does too.
+  const getSourceFile = keepSourceFiles(ts, host, options_);
   /** @type {Map<string, any>} */
   const parsed = new Map();
   host.getSourceFile = (

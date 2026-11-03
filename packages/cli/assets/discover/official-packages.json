@@ -134,10 +134,6 @@
         },
         {
           "kind": "component",
-          "name": "InfoTip"
-        },
-        {
-          "kind": "component",
           "name": "ListInput"
         },
         {
@@ -163,6 +159,10 @@
         {
           "kind": "component",
           "name": "Schedule"
+        },
+        {
+          "kind": "component",
+          "name": "SelectableCardGroup"
         },
         {
           "kind": "component",

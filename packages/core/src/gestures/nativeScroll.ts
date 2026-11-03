@@ -4,7 +4,8 @@
  * @file nativeScroll.ts
  * @input An element a touch landed on
  * @output Exports createNativeScrollProbe (the NativeScrollProbe a host gives
- *   each touch) and parseTouchAction
+ *   each touch, and each wheel gesture without the touch-action narrowing)
+ *   and parseTouchAction
  * @position DOM half of the scroll coordination in packages/core/src/gestures
  *
  * Answers one question for a recognizer without letting it touch the DOM:
@@ -82,7 +83,7 @@ interface Chain {
   readonly allowsPan: boolean;
 }
 
-function buildChain(target: Element): Chain {
+function buildChain(target: Element, readsTouchAction: boolean): Chain {
   const doc = target.ownerDocument;
   const view = doc.defaultView;
   if (view == null) {
@@ -103,9 +104,11 @@ function buildChain(target: Element): Chain {
       continue;
     }
     const style = view.getComputedStyle(node);
-    const pans = parseTouchAction(style.touchAction || 'auto');
-    allowX &&= pans.x;
-    allowY &&= pans.y;
+    if (readsTouchAction) {
+      const pans = parseTouchAction(style.touchAction || 'auto');
+      allowX &&= pans.x;
+      allowY &&= pans.y;
+    }
     const isRoot = node === root || node === doc.documentElement;
     if (isRoot) {
       reachedRoot = true;
@@ -196,7 +199,10 @@ function canMoveY(element: Element, dy: number): boolean {
         element.scrollHeight - element.clientHeight - EDGE_TOLERANCE + 0.5;
 }
 
-function canMoveX(entry: ChainEntry, dx: number): boolean {
+function canMoveX(
+  entry: Pick<ChainEntry, 'element' | 'isRtl'>,
+  dx: number,
+): boolean {
   const {element} = entry;
   const overflow = element.scrollWidth - element.clientWidth;
   if (overflow <= EDGE_TOLERANCE) {
@@ -210,13 +216,47 @@ function canMoveX(entry: ChainEntry, dx: number): boolean {
     : element.scrollLeft < max - EDGE_TOLERANCE + 0.5;
 }
 
-/** A probe of the native scrollers under `target`. */
-export function createNativeScrollProbe(target: unknown): NativeScrollProbe {
+/**
+ * Whether `element` itself scrolls natively now for a finger moving by
+ * (dx, dy). It uses the probe's own test of each scroller: overflow that
+ * scrolls on that axis, and room past the edge tolerance. The position must
+ * also be short of the end it moves toward, a right-to-left range included.
+ * A wheel moves the content the other way, so pass its deltas negated.
+ */
+export function canElementScroll(
+  element: Element,
+  dx: number,
+  dy: number,
+): boolean {
+  const view = element.ownerDocument.defaultView;
+  if (view == null) {
+    return false;
+  }
+  const style = view.getComputedStyle(element);
+  if (dy !== 0 && SCROLLABLE.has(style.overflowY) && canMoveY(element, dy)) {
+    return true;
+  }
+  return (
+    dx !== 0 &&
+    SCROLLABLE.has(style.overflowX) &&
+    canMoveX({element, isRtl: isRtlElement(element as HTMLElement)}, dx)
+  );
+}
+
+/**
+ * A probe of the native scrollers under `target`. A wheel scrolls whatever
+ * `touch-action` says, which narrows only a finger's pan: a wheel's probe
+ * passes `readsTouchAction: false`.
+ */
+export function createNativeScrollProbe(
+  target: unknown,
+  {readsTouchAction = true}: {readsTouchAction?: boolean} = {},
+): NativeScrollProbe {
   let chain: Chain | null = null;
   const getChain = (): ChainEntry[] => {
     chain ??=
       target instanceof Element
-        ? buildChain(target)
+        ? buildChain(target, readsTouchAction)
         : {entries: [], allowsPan: false};
     return chain.entries;
   };

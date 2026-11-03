@@ -3,16 +3,16 @@
 /**
  * @file textEntryTraits.ts
  * @input The keyboard-trait props a text field accepts
- * @output Exports the closed value unions EnterKeyHint, InputMode and
- *   AutoCapitalize (the package entry exports these three), the fields' prop
- *   mixin TextEntryTraitProps, and textEntryTraitAttributes, which maps the
- *   props onto the native attributes of the editable element
- * @position Shared by TextInput and TextArea: the one place that says how a
- *   field tells a touch keyboard what it holds
+ * @output EnterKeyHint, InputMode and AutoCapitalize (the package entry exports
+ *   these), TextEntryTraitProps and textEntryTraitAttributes
+ * @position Shared by TextInput, TextArea and the search inputs: the one place
+ *   that says how a field tells a touch keyboard what it holds
  *
  * SYNC: When modified, update:
  * - /packages/core/src/TextInput/TextInput.tsx and TextInput.doc.mjs
  * - /packages/core/src/TextArea/TextArea.tsx and TextArea.doc.mjs
+ * - /packages/core/src/Typeahead/BaseTypeahead.tsx, Field/PanelSearchInput.tsx
+ *   and CommandPalette/CommandPaletteInput.tsx (the search inputs)
  * - /packages/core/src/Field/index.ts (type exports)
  */
 

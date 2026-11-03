@@ -7,7 +7,8 @@
  *   `Screencast` domain)
  * @output `startScreencast` (timestamped composited frames), `markElement`
  *   (a marker outline the frames can find), `trackMarker` (per-frame marker
- *   box), `sampleRects` (per-rAF rect sampling), `frameStats`.
+ *   box and the cast's position step), `colorBlockPx` (a frame's color
+ *   resolution), `sampleRects` (per-rAF rect sampling), `frameStats`.
  * @position Frame evidence for motion proofs. The screencast is captured off
  *   the page's main thread, from what the compositor presents, so it keeps
  *   delivering frames while a script blocks the main thread: that is what makes
@@ -292,6 +293,61 @@ export interface TrackedFrame {
   readonly box: Box | null;
   /** Marker pixels found (a fading element finds fewer at the same tolerance). */
   readonly pixels: number;
+  /**
+   * The cast's position step at this frame, CSS px per axis: one block of
+   * the frame's color resolution (`colorBlockPx`) over the bitmap's scale to
+   * the viewport. `trackMarker` sets it only for the default marker
+   * (`MARKER_RGB`), whose edges were measured on these blocks: 2 px in
+   * WebKit's JPEG cast, whose 4:2:0 chroma holds color in 2 by 2 pixel
+   * blocks, and 1 px in Chromium's PNG cast, both at the viewport's size.
+   * Another color carries none: a cyan control in the same WebKit frames
+   * moves by odd px.
+   */
+  readonly step?: {readonly x: number; readonly y: number};
+}
+
+/**
+ * The bitmap pixels per block of a cast frame's color resolution, per axis:
+ * 1 for a PNG; for a JPEG, its chroma subsampling, read from the frame header
+ * (4:2:0 holds color in 2 by 2 blocks, 4:2:2 in 2 by 1, 4:4:4 in 1 by 1).
+ */
+export function colorBlockPx(
+  data: string,
+  format: 'png' | 'jpeg',
+): {x: number; y: number} {
+  if (format === 'png') {
+    return {x: 1, y: 1};
+  }
+  const bytes = Buffer.from(data, 'base64');
+  // Segments follow the start-of-image marker, each FF, a marker byte and a
+  // big-endian length that counts itself, up to a frame header (SOF0-SOF15,
+  // which leave out C4, C8 and CC).
+  let i = 2;
+  while (i + 4 <= bytes.length && bytes[i] === 0xff) {
+    const marker = bytes[i + 1];
+    if (
+      marker >= 0xc0 &&
+      marker <= 0xcf &&
+      marker !== 0xc4 &&
+      marker !== 0xc8 &&
+      marker !== 0xcc
+    ) {
+      const count = bytes[i + 9];
+      const factors = Array.from(
+        {length: count},
+        (_, k) => bytes[i + 11 + 3 * k],
+      );
+      const horizontal = factors.map(f => f >> 4);
+      const vertical = factors.map(f => f & 15);
+      // The most subsampled component sets the color's resolution.
+      return {
+        x: Math.max(...horizontal) / Math.min(...horizontal),
+        y: Math.max(...vertical) / Math.min(...vertical),
+      };
+    }
+    i += 2 + bytes.readUInt16BE(i + 2);
+  }
+  throw new Error('colorBlockPx: the JPEG has no frame header (SOF)');
 }
 
 /**
@@ -306,6 +362,7 @@ export async function trackMarker(
     tolerance = 40,
   }: {rgb?: readonly [number, number, number]; tolerance?: number} = {},
 ): Promise<TrackedFrame[]> {
+  const isDefaultMarker = rgb.every((value, i) => value === MARKER_RGB[i]);
   const scratch = await page.context().newPage();
   try {
     const out: TrackedFrame[] = [];
@@ -317,6 +374,7 @@ export async function trackMarker(
           const results: {
             box: {x: number; y: number; width: number; height: number} | null;
             pixels: number;
+            scale: number;
           }[] = [];
           for (const item of items) {
             const blob = await (
@@ -376,6 +434,7 @@ export async function trackMarker(
                       height: (maxY - minY + 1) / scale,
                     },
               pixels,
+              scale,
             });
           }
           return results;
@@ -390,9 +449,19 @@ export async function trackMarker(
           tol: tolerance,
         },
       );
-      boxes.forEach((result, k) =>
-        out.push({t: batch[k].t, box: result.box, pixels: result.pixels}),
-      );
+      boxes.forEach((result, k) => {
+        if (!isDefaultMarker) {
+          out.push({t: batch[k].t, box: result.box, pixels: result.pixels});
+          return;
+        }
+        const block = colorBlockPx(batch[k].data, batch[k].format);
+        out.push({
+          t: batch[k].t,
+          box: result.box,
+          pixels: result.pixels,
+          step: {x: block.x / result.scale, y: block.y / result.scale},
+        });
+      });
     }
     return out;
   } finally {
@@ -433,27 +502,35 @@ export async function sampleRects(
           window as unknown as {
             __harnessTimerGate?: {
               frame?: typeof requestAnimationFrame;
+              now?: () => number;
             };
           }
         ).__harnessTimerGate;
         const frame = gate?.frame ?? window.requestAnimationFrame.bind(window);
+        // The deadline reads the real clock, which a page freeze does not stop.
+        const realNow = gate?.now ?? (() => performance.now());
         const samples: {
           t: number;
           box: {x: number; y: number; width: number; height: number} | null;
           transform: string;
           opacity: number;
         }[] = [];
-        const end = performance.now() + duration;
+        // A frame's time is the page's. After a page freeze it trails real
+        // time by the frozen span, which the stamp adds back.
+        const freeze = (
+          window as unknown as {__harnessFreeze?: {offset: number}}
+        ).__harnessFreeze;
+        const end = realNow() + duration;
         const tick = (now: number) => {
           const rect = element.getBoundingClientRect();
           const style = getComputedStyle(element);
           samples.push({
-            t: performance.timeOrigin + now,
+            t: performance.timeOrigin + now + (freeze?.offset ?? 0),
             box: {x: rect.x, y: rect.y, width: rect.width, height: rect.height},
             transform: style.transform,
             opacity: Number(style.opacity),
           });
-          if (now < end) {
+          if (realNow() < end) {
             frame(tick);
           } else {
             resolve(samples);

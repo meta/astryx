@@ -237,8 +237,10 @@ const FILE_MODULE_SUBPATH_EXPORTS = [
   // Internal entries for Astryx's own packages: undocumented, outside the
   // public API, and allowed by lint only in Core and Lab
   // (architecture:react-component-runtime INV13).
+  'internal/indicatorPress.stylex',
   'internal/touch',
-  'internal/tokenizer-presentation',
+  'internal/touch-sheet',
+  'internal/selectable-card',
 ];
 
 /**

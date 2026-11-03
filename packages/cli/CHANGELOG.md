@@ -1,5 +1,47 @@
 # @xds/cli
 
+# 0.7.6
+
+#### New Features
+
+- When a template imports Astryx's docs-only demo content, `astryx template <name> <path>`, `astryx template <name>`, `astryx template <name> --skeleton`, and `astryx component <Name> --showcase` replace each demo-content element with a marked `<Text>Card content</Text>` placeholder and remove the demo-content import, so the code they hand out never imports a module that only Astryx's own previews have. The placeholder uses the file's own Astryx `Text` import when that import is in scope, and otherwise imports `Text`, under an alias when the file already uses that name. `template.copy` and `template.show` gain `demoContentReplaced` (0 when the template carried none), their text output says how many elements became placeholders, and the `components` that `template.show` and `template.skeleton` list are the components of the returned source. No shipped template uses demo content yet, so every current template is copied, shown, and outlined exactly as before. The docsite's shadcn install of a block or page applies the same replacement and also replaces demo media, each with a marked placeholder: a placeholder image for an image and a `data:,placeholder-video-add-your-own` source for a video. The item's description says how many references and elements were replaced. The adjacent `.astryx/<item>.json` receipt keeps its current shape, so every released `astryx upgrade` still reads it. (#9430)
+- A theme's `motion` takes two knobs beside the duration scale: `tempo` (0.75–1.5) scales every motion duration, and `character` (`'crisp'`, `'standard'` or `'expressive'`) sets the new `--ease-entrance` and `--ease-move` tokens; `--ease-exit` stays the same at every character. Their types, `ThemeMotionConfig`, `ThemeMotionKnobs` and `MotionCharacter`, are exported. A theme without them renders exactly as before; a duration scale and explicit tokens win over the knobs, Spinner's and Skeleton's loops keep their timing under every tempo, and the press release fade follows tempo up to the 200 ms Reduce Motion cap under the person's setting. Springs don't read the knobs yet. The motion, token and theme-authoring docs and the theme template describe the knobs. (#8661)
+
+#### Fixes
+
+- BottomSheet checklist examples use CheckboxList so the whole row toggles, not just the label (#9533)
+- The motion guide now says that under Reduce Motion, components cross-fade under a finger and change at once under a mouse, and that a value changing in place, such as a progress fill, takes its new value at once under any pointer (design:reduced-motion DR1–DR3). (#8615)
+- Published packages no longer include repository test and benchmark files, reducing install size without changing exports. (#9153)
+
+#### Performance
+
+- Calling `integrationComponentConflicts()` or `integrationCheck()` from `@astryxdesign/cli/api` more than once in one process now reads each TypeScript file a package's `tsconfig.json` includes once while the file is unchanged, instead of on every call. A single `astryx doctor integration components` or `astryx integration check` run is unchanged. (#9422)
+- `search()` shares a catalog gather that is still running: searches that start together in one long-running process, such as a docs site's search right after it starts, now gather once instead of once each (#9460)
+
+#### Documentation
+
+- A new `useCollator — Locale-aware Name Sort` example block sorts a list of names with the compare function from `useCollator`: accented and lowercase names land where a reader expects, and switching the provider locale to Swedish moves Å and Ö after Z. Copy it with `astryx template useCollatorHookUsage <path>`. (#9510)
+- A new `usePressFeedback — Pressable Card` example block shows the hook on an Astryx Card: the hook's marker and the `interactionOverlayStyles.backgroundImage` overlay go straight on the Card, so pressing the card darkens it the way every Astryx pressable does, under a finger or a mouse (Enter or Space flips it), and `focusOutlineStyles.focusVisible` gives keyboard users the shared Astryx focus ring on it. Copy it with `astryx template usePressFeedbackHookUsage <path>`; the docs-only playing card it shows becomes a `<Text>` placeholder for your own content. (#9431)
+- A new `useToast — Settings Saved` example block calls the function from `useToast` on a settings form: Save shows a "Settings saved" toast with an Undo action, its `uniqueID` makes a second Save replace the toast instead of stacking another, and a failed save shows an error toast instead. Copy it with `astryx template useToastHookUsage <path>`. (#9512)
+- A new `useTranslator — Load More Footer` example block gets a list footer's "Load more" label and its "Showing 3 of 9" count from the function `useTranslator` returns. The app's own message keys are supplied per locale through `InternationalizationProvider`, so switching the provider to French changes both strings. Copy it with `astryx template useTranslatorHookUsage <path>`. (#9573)
+
+#### Other Changes
+
+- Preserved the v0.7.5 upgrade codemod registry when the release outputs returned to main (#9086), so the v0.7.6 CLI continues to offer that migration.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @divyanshudhruv
+- @kyu-rong
+- @MannXo
+- @parinith-web
+- @vjeux
+
+---
+
 # 0.7.5
 
 #### Experimental APIs

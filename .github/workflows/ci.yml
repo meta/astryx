@@ -152,11 +152,13 @@ jobs:
     permissions:
       actions: read
       contents: read
+    outputs:
+      full: ${{ steps.rest.outputs.full }}
     steps:
       - name: Stop when CI is full
         if: needs.room.outputs.full == 'true'
         run: |
-          echo "::error title=CI is full::CI is full: re-run all jobs or push later. Ten pull-request runs were already waiting for room."
+          echo "::error title=CI is full::CI is full: re-run all jobs or push later. The run found no room under the CI ceiling."
           exit 1
 
       - name: Check out the admission action
@@ -167,6 +169,7 @@ jobs:
           persist-credentials: false
 
       - name: Wait for room under the CI ceiling
+        id: rest
         uses: ./.ci-admission/.github/actions/ci-admission
         continue-on-error: true
         timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 16 || 13 }}
@@ -182,14 +185,24 @@ jobs:
           max-looks: ${{ github.event_name == 'workflow_dispatch' && 8 || 2 }}
           label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 3}'
 
-  # Stops a pull-request run that CI is full for (room found no room and ten
-  # other pull-request runs waiting), with the reason, so it builds nothing.
-  # It cancels the run when its token can. A fork's read-only token cannot;
-  # then admission fails, the jobs behind it skip, and build, test and
+      # A pull-request run that waited its longest while another started at
+      # its longest wait is turned away (spec:AST-030 DEC-16): ci-full stops
+      # the run, and the jobs behind admission skip.
+      - name: Stop when CI is full at the longest wait
+        if: steps.rest.outputs.full == 'true'
+        run: |
+          echo "::error title=CI is full::CI is full: re-run all jobs or push later. The run found no room under the CI ceiling."
+          exit 1
+
+  # Stops a pull-request run that CI is full for, with the reason, so it builds
+  # nothing: room found no room and ten other pull-request runs waiting, or the
+  # run waited its longest while another started at its longest wait. It
+  # cancels the run when its token can. A fork's read-only token cannot; then
+  # admission fails, the jobs behind it skip or stop, and build, test and
   # docsite-test fail with the same reason, never skip or pass.
   ci-full:
-    needs: [room]
-    if: github.event_name == 'pull_request' && needs.room.outputs.full == 'true'
+    needs: [room, admission]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (github.event_name == 'pull_request' && !cancelled() && (needs.room.outputs.full == 'true' || needs.admission.outputs.full == 'true')) }}
     runs-on: ubuntu-slim
     timeout-minutes: 5
     permissions:
@@ -200,7 +213,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          echo "::error title=CI is full::CI is full: re-run all jobs or push later. Ten pull-request runs were already waiting for room."
+          echo "::error title=CI is full::CI is full: re-run all jobs or push later. The run found no room under the CI ceiling."
           gh run cancel "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" || true
           exit 1
 
@@ -562,9 +575,9 @@ jobs:
       # reads the PR's file list and the base's trusted classifier, and
       # everything is in scope when it cannot decide.
       - name: Stop when CI is full
-        if: needs.room.outputs.full == 'true'
+        if: needs.room.outputs.full == 'true' || needs.admission.outputs.full == 'true'
         run: |
-          echo "::error title=CI is full::CI is full: re-run all jobs or push later. Ten pull-request runs were already waiting for room."
+          echo "::error title=CI is full::CI is full: re-run all jobs or push later. The run found no room under the CI ceiling."
           exit 1
 
       # An agent lane's push defers the heavy suites (spec:AST-030 FR20): the
@@ -1118,6 +1131,7 @@ jobs:
     needs:
       [
         room,
+        admission,
         heavy-ci,
         release-bump,
         test-ui,
@@ -1142,9 +1156,9 @@ jobs:
       # reads the PR's file list and the base's trusted classifier, and
       # everything is in scope when it cannot decide.
       - name: Stop when CI is full
-        if: needs.room.outputs.full == 'true'
+        if: needs.room.outputs.full == 'true' || needs.admission.outputs.full == 'true'
         run: |
-          echo "::error title=CI is full::CI is full: re-run all jobs or push later. Ten pull-request runs were already waiting for room."
+          echo "::error title=CI is full::CI is full: re-run all jobs or push later. The run found no room under the CI ceiling."
           exit 1
 
       # The PR report says why the heavy checks did not run. Recorded here,
@@ -1682,7 +1696,7 @@ jobs:
   # so a type error still fails both.
   typecheck:
     needs: [room, admission]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check') && always() && !cancelled() && needs.room.outputs.full != 'true') }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && ((github.event_name != 'workflow_dispatch' || inputs.operation == 'release-check') && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true') }}
     runs-on: ${{ (github.event_name == 'workflow_dispatch' && inputs.operation == 'release-check' && github.triggering_actor != 'github-actions[bot]') && '2-core-ubuntu-arm' || 'ubuntu-24.04-arm' }}
     timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 360 || 15 }}
     permissions:
@@ -1754,7 +1768,7 @@ jobs:
   # gate passes. A skipped build-storybook job (a draft) skips this gate too;
   # a fork pull request without `ci:run` still reports here.
   build:
-    needs: [room, heavy-ci, build-storybook, typecheck]
+    needs: [room, admission, heavy-ci, build-storybook, typecheck]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && !cancelled() && (needs.build-storybook.result != 'skipped' || needs.room.outputs.full == 'true' || needs.heavy-ci.outputs.deferred == 'true' || github.event_name == 'pull_request' && !(github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))) }}
     runs-on: ubuntu-slim
     permissions: {}
@@ -1765,9 +1779,9 @@ jobs:
           echo "::error::Waiting for a maintainer's ci:run label: an outside contributor's pull request runs CI once a maintainer adds it (spec:AST-030 FR17)."
           exit 1
       - name: Stop when CI is full
-        if: needs.room.outputs.full == 'true'
+        if: needs.room.outputs.full == 'true' || needs.admission.outputs.full == 'true'
         run: |
-          echo "::error title=CI is full::CI is full: re-run all jobs or push later. Ten pull-request runs were already waiting for room."
+          echo "::error title=CI is full::CI is full: re-run all jobs or push later. The run found no room under the CI ceiling."
           exit 1
 
       # An agent lane's push defers the heavy suites (spec:AST-030 FR20): the
@@ -2274,7 +2288,7 @@ jobs:
 
   pr-interaction:
     needs: [room, admission, heavy-ci, build-storybook]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true')) }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true')) }}
     # Frame evidence measures timing: four cores, one Playwright worker.
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -2392,7 +2406,7 @@ jobs:
   # in WebKit.
   pr-interaction-webkit:
     needs: [room, admission, heavy-ci, build-storybook]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true')) }}
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true')) }}
     # Frame evidence measures timing: four cores, one Playwright worker.
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -2416,7 +2430,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform|flatTree|inputStream|clickGuard|selectionLock|coarsePointer|sharedResizeObserver)|packages/core/src/privateAttributes/hapticSwitch\.stylex\.ts$|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback|isRtlElement|useIsomorphicLayoutEffect|usePager|__tests__/(usePager|pagerBundle))|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/actions/test-scope/)'
+          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform|flatTree|inputStream|clickGuard|selectionLock|coarsePointer|sharedResizeObserver)|packages/core/src/privateAttributes/(hapticSwitch|reducedMotion)\.stylex\.ts$|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback|isRtlElement|useIsomorphicLayoutEffect|useAttachment|usePager|__tests__/(usePager|pagerBundle))|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/actions/test-scope/)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
 
@@ -2716,11 +2730,19 @@ jobs:
   # Audit and interaction fixtures stay with their existing browser checks.
   pr-visual:
     name: Stable visual regression
-    needs: [build-storybook, maintenance-request, visual-scout, run-labels]
+    needs:
+      [
+        admission,
+        build-storybook,
+        maintenance-request,
+        visual-scout,
+        run-labels,
+      ]
     if: >-
       (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() &&
       ((github.event_name == 'pull_request' &&
-        needs.build-storybook.result == 'success') ||
+        needs.build-storybook.result == 'success' &&
+        needs.admission.outputs.full != 'true') ||
        (github.event_name == 'workflow_dispatch' &&
         ((inputs.operation == 'release-check' &&
           needs.build-storybook.result == 'success') ||
@@ -3475,8 +3497,8 @@ jobs:
   # pull-request comment. No required context depends on it.
   pr-touched-components:
     name: Touched components (visual, accessibility, RTL)
-    needs: [build-storybook, pr-visual]
-    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && github.event_name == 'pull_request' && needs.build-storybook.result == 'success' && needs.build-storybook.outputs.lab_only != 'true') }}
+    needs: [admission, build-storybook, pr-visual]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && github.event_name == 'pull_request' && needs.build-storybook.result == 'success' && needs.build-storybook.outputs.lab_only != 'true' && needs.admission.outputs.full != 'true') }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 15
     permissions:
