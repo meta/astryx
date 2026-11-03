@@ -59,17 +59,22 @@ const cases = [
  * The open layer's entrance: its animation name and the properties its
  * keyframes animate (read from the page's style sheets).
  */
+/** Core Animation's easeInOut, as the source writes it or as a build names it. */
+const EASE_IN_OUT = ['ease-in-out', 'cubic-bezier(0.42, 0, 0.58, 1)'];
+
 async function entranceOf(page: Page, selector: string) {
   await expect(page.locator(`${selector}:popover-open`)).toHaveCount(1);
   return page.evaluate(sel => {
     const layer = document.querySelector<HTMLElement>(`${sel}:popover-open`);
     if (layer == null) {
-      return {name: 'missing', properties: [], duration: NaN};
+      return {name: 'missing', properties: [], duration: NaN, easing: ''};
     }
     const computed = getComputedStyle(layer);
     const name = computed.animationName;
     // Seconds; the first animation's duration.
     const duration = parseFloat(computed.animationDuration.split(',')[0]);
+    // A curve set in the first keyframe overrides the element's.
+    let easing = computed.animationTimingFunction.split(/,(?![^(]*\))/)[0];
     const properties = new Set<string>();
     for (const sheet of Array.from(document.styleSheets)) {
       let rules: CSSRuleList;
@@ -82,9 +87,20 @@ async function entranceOf(page: Page, selector: string) {
         for (const rule of Array.from(list)) {
           if (rule instanceof CSSKeyframesRule && rule.name === name) {
             for (const frame of Array.from(rule.cssRules)) {
-              const style = (frame as CSSKeyframeRule).style;
+              const keyframe = frame as CSSKeyframeRule;
+              const style = keyframe.style;
               for (let i = 0; i < style.length; i += 1) {
-                properties.add(style.item(i));
+                const property = style.item(i);
+                if (property === 'animation-timing-function') {
+                  if (
+                    keyframe.keyText === '0%' ||
+                    keyframe.keyText === 'from'
+                  ) {
+                    easing = style.getPropertyValue(property).trim();
+                  }
+                } else {
+                  properties.add(property);
+                }
               }
             }
           } else if ('cssRules' in rule) {
@@ -94,7 +110,7 @@ async function entranceOf(page: Page, selector: string) {
       };
       visit(rules);
     }
-    return {name, properties: Array.from(properties).sort(), duration};
+    return {name, properties: Array.from(properties).sort(), duration, easing};
   }, selector);
 }
 
@@ -124,6 +140,9 @@ for (const {name, story, trigger, layer} of cases) {
       // design:reduced-motion DR2: a cross-fade of 200 ms or less.
       expect(entrance.duration).toBeGreaterThan(0);
       expect(entrance.duration).toBeLessThanOrEqual(0.2);
+      // The motion foundation's cross-fade: Core Animation's easeInOut.
+      // Chromium reports the curve as written, so accept either spelling.
+      expect(EASE_IN_OUT).toContain(entrance.easing);
     });
   });
 
@@ -145,6 +164,9 @@ for (const {name, story, trigger, layer} of cases) {
       expect(entrance.properties).toEqual(['opacity']);
       expect(entrance.duration).toBeGreaterThan(0);
       expect(entrance.duration).toBeLessThanOrEqual(0.2);
+      // The motion foundation's cross-fade: Core Animation's easeInOut.
+      // Chromium reports the curve as written, so accept either spelling.
+      expect(EASE_IN_OUT).toContain(entrance.easing);
     });
   });
 
@@ -168,6 +190,10 @@ for (const {name, story, trigger, layer} of cases) {
       await page.goto(
         `${storybook.origin}/iframe.html?id=${story}&viewMode=story`,
       );
+      // A fine primary pointer in this context.
+      expect(
+        await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+      ).toBe(false);
       await page.getByText(trigger, {exact: true}).hover();
       const entrance = await entranceOf(page, layer);
       expect(entrance.name).toBe('none');
