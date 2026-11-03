@@ -25,6 +25,7 @@ import userEvent from '@testing-library/user-event';
 import {Tokenizer} from './Tokenizer';
 import {TokenizerItemRemovableContext} from './TokenizerItemRemovableContext';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import type {SearchSource, SearchableItem} from '../Typeahead/types';
 import {TestIcon} from '../__tests__/TestIcon';
 import {InternationalizationProvider} from '../i18n';
@@ -369,6 +370,240 @@ describe('Tokenizer', () => {
     expect(onChange).toHaveBeenCalledWith([users[1]], {
       item: users[0],
       type: 'remove',
+    });
+  });
+
+  // A touch keyboard rises when the field focuses its input during a tap. So
+  // a finger that only removes a token with the keyboard down leaves focus
+  // where it was. Every other removal keeps focusing the input.
+  describe('focus after a removal', () => {
+    beforeEach(() => {
+      __resetInteractionModalityForTest();
+    });
+
+    // A mouse case runs under a fine primary pointer (no pointer media at
+    // all counts as fine), asserted in the test's own context.
+    function expectFinePrimaryPointer() {
+      expect(window.matchMedia?.('(pointer: coarse)').matches ?? false).toBe(
+        false,
+      );
+    }
+
+    function renderPair(onChange = vi.fn()) {
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1]]}
+          onChange={onChange}
+        />,
+      );
+      return {
+        input: screen.getByRole('combobox'),
+        remove: screen.getByRole('button', {name: 'Remove Alice'}),
+        onChange,
+      };
+    }
+
+    it('leaves the input unfocused after a finger removes a token with the keyboard down', () => {
+      const {input, remove, onChange} = renderPair();
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      fireEvent.click(remove);
+      expect(onChange).toHaveBeenCalledWith([users[1]], {
+        item: users[0],
+        type: 'remove',
+      });
+      expect(input).not.toHaveFocus();
+    });
+
+    it('leaves the input unfocused after a pen removes a token with the keyboard down', () => {
+      const {input, remove, onChange} = renderPair();
+      fireEvent.pointerDown(remove, {pointerType: 'pen'});
+      act(() => remove.focus());
+      fireEvent.click(remove);
+      expect(onChange).toHaveBeenCalledWith([users[1]], {
+        item: users[0],
+        type: 'remove',
+      });
+      expect(input).not.toHaveFocus();
+    });
+
+    it('keeps the input focused after a finger removes a token while typing', () => {
+      const {input, remove} = renderPair();
+      act(() => input.focus());
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      // Chrome focuses the tapped button before the click.
+      act(() => remove.focus());
+      fireEvent.click(remove);
+      expect(input).toHaveFocus();
+    });
+
+    it('keeps a finger tap on a token’s × from taking focus while the keyboard is down, so an unfocusedInline field stays collapsed', () => {
+      const onChange = vi.fn();
+      const onFocus = vi.fn();
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1]]}
+          onChange={onChange}
+          onFocus={onFocus}
+          tokenOverflowBehavior="unfocusedInline"
+        />,
+      );
+      const remove = screen.getByRole('button', {name: 'Remove Alice'});
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      // The tap's compatibility mouse press has its default cancelled. That
+      // default is Chrome focusing the pressed button, which would expand the
+      // field and remount the button under the finger.
+      expect(fireEvent.mouseDown(remove)).toBe(false);
+      fireEvent.click(remove);
+      expect(onChange).toHaveBeenCalledWith([users[1]], {
+        item: users[0],
+        type: 'remove',
+      });
+      expect(onFocus).not.toHaveBeenCalled();
+      expect(screen.getByRole('combobox')).not.toHaveFocus();
+    });
+
+    it('leaves other controls in the field alone: an endContent button keeps its press and the redirect', () => {
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1]]}
+          onChange={vi.fn()}
+          endContent={<button type="button">Filters</button>}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      const filters = screen.getByRole('button', {name: 'Filters'});
+      fireEvent.pointerDown(filters, {pointerType: 'touch'});
+      // Its press default (focusing it) is not cancelled…
+      expect(fireEvent.mouseDown(filters)).toBe(true);
+      // …and focus that lands on it moves on to the input, as before.
+      act(() => filters.focus());
+      expect(input).toHaveFocus();
+    });
+
+    it('still lets a mouse press, and a tap while typing, focus as before', () => {
+      expectFinePrimaryPointer();
+      const {input, remove} = renderPair();
+      fireEvent.pointerDown(remove, {pointerType: 'mouse'});
+      expect(fireEvent.mouseDown(remove)).toBe(true);
+      act(() => input.focus());
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      expect(fireEvent.mouseDown(remove)).toBe(true);
+    });
+
+    it('lets go of the tapped × before it unmounts, so the field blurs', () => {
+      const onBlur = vi.fn();
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1]]}
+          onChange={vi.fn()}
+          onBlur={onBlur}
+        />,
+      );
+      const remove = screen.getByRole('button', {name: 'Remove Alice'});
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      // Chrome focuses the tapped button before the click.
+      act(() => remove.focus());
+      fireEvent.click(remove);
+      expect(onBlur).toHaveBeenCalled();
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('keeps the old refocus for a custom renderToken remove button: the input keeps focus, with no blur', () => {
+      const onBlur = vi.fn();
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1]]}
+          onChange={vi.fn()}
+          onBlur={onBlur}
+          renderToken={(item, onRemove) => (
+            <span>
+              {item.label}
+              <button type="button" onClick={onRemove}>
+                Drop {item.label}
+              </button>
+            </span>
+          )}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      const drop = screen.getByRole('button', {name: 'Drop Alice'});
+      fireEvent.pointerDown(drop, {pointerType: 'touch'});
+      // Its press default stays, and focus that lands on it moves on to the
+      // input (Chrome focuses the pressed button).
+      expect(fireEvent.mouseDown(drop)).toBe(true);
+      act(() => drop.focus());
+      expect(input).toHaveFocus();
+      // The removal leaves focus there, as before.
+      fireEvent.click(drop);
+      expect(input).toHaveFocus();
+      expect(onBlur).not.toHaveBeenCalled();
+    });
+
+    it('leaves focus on another control in the field when a finger removes a token with the keyboard down', () => {
+      const onBlur = vi.fn();
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1]]}
+          onChange={vi.fn()}
+          onBlur={onBlur}
+          endContent={<button type="button">Filters</button>}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      const filters = screen.getByRole('button', {name: 'Filters'});
+      // Keyboard focus resting on a control in the field (Tab from the input).
+      act(() => input.focus());
+      act(() => filters.focus());
+      expect(filters).toHaveFocus();
+      const remove = screen.getByRole('button', {name: 'Remove Alice'});
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      expect(fireEvent.mouseDown(remove)).toBe(false);
+      fireEvent.click(remove);
+      expect(filters).toHaveFocus();
+      expect(onBlur).not.toHaveBeenCalled();
+    });
+
+    it('focuses the input after a mouse removes a token', () => {
+      expectFinePrimaryPointer();
+      const {input, remove} = renderPair();
+      fireEvent.pointerDown(remove, {pointerType: 'mouse'});
+      fireEvent.click(remove);
+      expect(input).toHaveFocus();
+    });
+
+    it('focuses the input after a key press removes a token, even after an earlier touch', () => {
+      const {input, remove} = renderPair();
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      fireEvent.keyDown(remove, {key: 'Enter'});
+      fireEvent.click(remove, {detail: 0});
+      expect(input).toHaveFocus();
+    });
+
+    it('does not pull focus onto the input when a finger focuses a remove button', () => {
+      const {input, remove} = renderPair();
+      fireEvent.pointerDown(remove, {pointerType: 'touch'});
+      act(() => remove.focus());
+      expect(remove).toHaveFocus();
+      expect(input).not.toHaveFocus();
+    });
+
+    it('still moves keyboard focus that lands on a remove button to the input', () => {
+      const {input, remove} = renderPair();
+      fireEvent.keyDown(document.body, {key: 'Tab'});
+      act(() => remove.focus());
+      expect(input).toHaveFocus();
     });
   });
 

@@ -89,6 +89,9 @@ import type {
 import {composeEventHandlers, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import {isFocusDetached} from '../utils/focusReturn';
+import {removeControlOf} from '../privateAttributes/tokenRemove.stylex';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {useTapStop} from '../Layer/useTouchTrigger';
 import {themeProps} from '../utils/themeProps';
 import type {SheetDraftChange} from '../internal/sheetDraft';
 import type {TokenizerBottomSheetProps} from './TokenizerBottomSheet';
@@ -807,6 +810,57 @@ export function Tokenizer<T extends SearchableItem>({
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
+  // The last press that started inside the field. A touch keyboard rises
+  // whenever the field focuses its input during a tap. So a tap on a token's
+  // remove button moves focus to the input only if the input already had it.
+  // `readModality()` tells whether that press is still the latest interaction
+  // in the field's document; a key press since then restores the keyboard
+  // rules.
+  const {ref: modalityRef, readModality} = useInteractionModalityTracking();
+  const lastPressRef = useRef<{
+    inputHadFocus: boolean;
+    pressedTokenRemove: Element | null;
+  } | null>(null);
+  // The touch keyboard is down while the input is unfocused.
+  const wasKeyboardDown = useCallback(() => {
+    const press = lastPressRef.current;
+    return (
+      press != null && !press.inputHadFocus && readModality() === 'pointer'
+    );
+  }, [readModality]);
+  // A finger's tap on a token's remove button with the keyboard down keeps
+  // focus out of the field. Chrome focuses a pressed button on the tap's
+  // compatibility mouse events. That focus would expand an `unfocusedInline`
+  // field and remount the control under the finger. Cancelling the press's
+  // focus, as InputClearButton does, leaves the field as it was. The tap's
+  // click still removes the token. Custom `renderToken` controls and
+  // `endContent` keep the default focus rules.
+  const stopsTap = useCallback(
+    (mouse: React.MouseEvent) =>
+      removeControlOf(mouse.target) != null && wasKeyboardDown(),
+    [wasKeyboardDown],
+  );
+  const {
+    onPointerDown: recordTap,
+    onMouseDown: handleMouseDownCapture,
+    isTap,
+  } = useTapStop('mousedown', {shouldStop: stopsTap});
+  const handlePointerDownCapture = useCallback(
+    (e: React.PointerEvent) => {
+      recordTap(e);
+      lastPressRef.current = {
+        inputHadFocus:
+          inputRef.current != null &&
+          inputRef.current.ownerDocument.activeElement === inputRef.current,
+        pressedTokenRemove: removeControlOf(e.target),
+      };
+    },
+    [recordTap],
+  );
+  const isTouchPressWithKeyboardDown = useCallback(
+    () => isTap() && wasKeyboardDown(),
+    [isTap, wasKeyboardDown],
+  );
   // Experimental presentation (`component:Tokenizer` DEC-3). `adaptive`
   // resolves through the policy the selection controls share; an open sheet
   // keeps its presentation until it closes, so a resolution change mid-task
@@ -976,6 +1030,7 @@ export function Tokenizer<T extends SearchableItem>({
     (el: HTMLDivElement | null) => {
       wrapperRef.current = el;
       tooltipAnchorRef(el);
+      modalityRef(el);
       if (el == null) {
         return;
       }
@@ -985,9 +1040,10 @@ export function Tokenizer<T extends SearchableItem>({
         }
         wrapperRef.current = null;
         tooltipAnchorRef(null);
+        modalityRef(null);
       };
     },
-    [tooltipAnchorRef],
+    [tooltipAnchorRef, modalityRef],
   );
 
   // The sheet presentation has no input; the public ref reaches the trigger,
@@ -1089,13 +1145,24 @@ export function Tokenizer<T extends SearchableItem>({
           onFocus?.(e);
         }
         // Redirect to the input so the user doesn't have to tab through
-        // every token remove button.
-        if (e.target !== inputRef.current) {
+        // every token remove button. A finger's tap on a remove button with
+        // the keyboard down is the exception: focusing the input would raise
+        // the keyboard for a removal.
+        if (
+          e.target !== inputRef.current &&
+          !(removeControlOf(e.target) != null && isTouchPressWithKeyboardDown())
+        ) {
           inputRef.current?.focus();
         }
       }
     },
-    [isLayerMode, layer, isFocusInTokenizer, onFocus],
+    [
+      isLayerMode,
+      layer,
+      isFocusInTokenizer,
+      onFocus,
+      isTouchPressWithKeyboardDown,
+    ],
   );
 
   const handleBlurCapture = useCallback(
@@ -1291,10 +1358,36 @@ export function Tokenizer<T extends SearchableItem>({
       if (!options?.silent) {
         announce(t('@astryx.tokenizer.tokenRemoved', {label: item.label}));
       }
-      inputRef.current?.focus();
+      // Focusing the input inside a keyboard-down tap would raise the
+      // keyboard. The sheet's own removals (`silent`) leave focus to the
+      // sheet.
+      const pressed =
+        !options?.silent && isTouchPressWithKeyboardDown()
+          ? (lastPressRef.current?.pressedTokenRemove ?? null)
+          : null;
+      if (pressed == null) {
+        inputRef.current?.focus();
+        return true;
+      }
+      // Chrome focuses the pressed × on a tap, and that × unmounts with its
+      // token. A focused element that unmounts drops focus without a blur, so
+      // the field would stay focused-within. Let go of that button first.
+      // Focus anywhere else stays where it is.
+      const active = pressed.ownerDocument.activeElement;
+      if (active != null && pressed.contains(active) && 'blur' in active) {
+        (active as HTMLElement).blur();
+      }
       return true;
     },
-    [value, onChange, isDisabled, canRemoveItem, announce, t],
+    [
+      value,
+      onChange,
+      isDisabled,
+      canRemoveItem,
+      announce,
+      t,
+      isTouchPressWithKeyboardDown,
+    ],
   );
 
   // A composing component that words its own Clear all (PowerSearch) provides
@@ -1405,6 +1498,8 @@ export function Tokenizer<T extends SearchableItem>({
       role="group"
       aria-label={label}
       onClick={handleWrapperClick}
+      onPointerDownCapture={handlePointerDownCapture}
+      onMouseDownCapture={handleMouseDownCapture}
       onFocusCapture={handleFocusCapture}
       onBlurCapture={handleBlurCapture}
       // Keys on the field's other controls (clear button, tokens) reach a

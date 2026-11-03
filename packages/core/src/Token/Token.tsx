@@ -46,6 +46,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Token/Token.generated';
+import {tokenRemoveProps} from '../privateAttributes/tokenRemove.stylex';
 
 registerEnglishFallback(english);
 
@@ -328,6 +329,7 @@ export function Token({
     <button
       type="button"
       aria-label={t('@astryx.token.remove', {label})}
+      {...tokenRemoveProps}
       onClick={e => {
         e.stopPropagation();
         onRemove(e);
