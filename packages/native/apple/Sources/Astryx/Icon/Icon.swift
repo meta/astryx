@@ -11,6 +11,7 @@ import SwiftUI
 /// Icon(.success, color: .success, label: "Completed")
 /// ```
 public struct Icon: View {
+  @Environment(\.astryxAvatarSide) private var avatarSide
   /// The contract the view draws, the same for both initializers.
   public let props: IconProps
   @Environment(\.astryx) private var astryx
@@ -33,15 +34,19 @@ public struct Icon: View {
 
   public var body: some View {
     if props.base.isHidden != true {
-      if let symbol = Icon.symbol(for: props.icon, themeIcons: astryx.icons) {
+      if let source = Icon.symbol(for: props.icon, themeIcons: astryx.icons) {
         let side = Icon.points(for: resolvedSize) * astryx.textScale
-        Image(systemName: symbol)
+        // An asset the app does not ship draws nothing (IconImage.image).
+        source.image?
           .resizable()
           .scaledToFit()
           .frame(width: side, height: side)
           .modifier(IconTint(color: tint))
           .modifier(IconAccessibility(label: accessibilityLabel))
           .modifier(IconIdentifier(id: props.base.id))
+          // In an avatar's status slot a labeled icon names the status, as
+          // core reads the `label` of the element passed as `status`.
+          .preference(key: AvatarStatusLabelKey.self, value: avatarSide == nil ? nil : accessibilityLabel.map { AvatarStatusLabel(text: $0, isDot: false) })
       } else {
         // AST-082 FR17: a name nothing maps draws nothing, never a substitute.
         let _ = assertionFailure("Astryx has no icon named \"\(props.icon.rawValue)\"")
@@ -84,9 +89,10 @@ public struct Icon: View {
     case .secondary, .tertiary: tokens.color.iconSecondary
     case .disabled: tokens.color.iconDisabled
     case .accent: tokens.color.accent
-    case .success: tokens.color.success
-    case .error: tokens.color.error
-    case .warning: tokens.color.warning
+    case .info: tokens.color.iconInfo
+    case .success: tokens.color.iconSuccess
+    case .error: tokens.color.iconError
+    case .warning: tokens.color.iconWarning
     case .inherit: nil
     }
   }
@@ -94,8 +100,8 @@ public struct Icon: View {
   /// The SF Symbol a name draws: the theme's mapping (which also registers a
   /// `<library>:<name>` name), else the platform default; `nil` for a name
   /// neither maps.
-  nonisolated static func symbol(for name: IconName, themeIcons: [String: String]) -> String? {
-    themeIcons[name.rawValue] ?? astryxDefaultIcons[name.rawValue]
+  nonisolated static func symbol(for name: IconName, themeIcons: [String: IconImage]) -> IconImage? {
+    themeIcons[name.rawValue] ?? astryxDefaultIcons[name.rawValue].map(IconImage.systemName)
   }
 }
 

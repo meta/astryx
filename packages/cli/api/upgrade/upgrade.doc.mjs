@@ -128,7 +128,7 @@ export const doc = {
     {
       type: 'upgrade.run',
       description:
-        'The terminal run receipt: from, to, codemods (count), integrations, agentDocs, agentDocsRefreshed, registryCompositions (when receipts are found), sourcePathFound (false when the resolved `path` does not exist, so nothing was scanned), filesChanged, transformsApplied, modifiedFiles, protectedFiles, declinedCandidates, errors, and complete. When a protected file still requires a change, complete is false and errorCode is ERR_CODEMOD_PROTECTED; the CLI exits nonzero while preserving the structured receipt. A run that fails after its codemods ran throws instead (see throws), and the thrown AstryxError carries the same receipt on `receipt`, with complete false and errorCode set to its code. When the installed Core is newer than the CLI, it also carries cliBehindCore ({cliVersion, command}): codemods for the releases after cliVersion did not run, and command runs the same upgrade with the matching CLI.',
+        'The terminal run receipt: from, to, codemods (count), integrations, agentDocs, agentDocsRefreshed, registryCompositions (when receipts are found), sourcePathFound (false when the resolved `path` does not exist, so nothing was scanned), filesChanged, transformsApplied, modifiedFiles, protectedFiles, declinedCandidates (left unchanged for manual review, including code a codemod identified but cannot migrate; never incomplete), regenerate (generated files to rebuild, with their commands), errors, and complete. When a protected file still requires a change, including a protected file in regenerate, complete is false and errorCode is ERR_CODEMOD_PROTECTED; the CLI exits nonzero while preserving the structured receipt. A run that fails after its codemods ran throws instead (see throws), and the thrown AstryxError carries the same receipt on `receipt`, with complete false and errorCode set to its code. A file in regenerate that nothing protects is such a failure: it is also in errors, and the run throws ERR_CODEMOD_FAILED. When the installed Core is newer than the CLI, it also carries cliBehindCore ({cliVersion, command}): codemods for the releases after cliVersion did not run, and command runs the same upgrade with the matching CLI.',
     },
   ],
   throws: [
@@ -155,7 +155,7 @@ export const doc = {
     },
     {
       code: 'ERR_CODEMOD_FAILED',
-      when: "one or more codemods failed, or a post-codemod hook failed, and no protected file still needs a change (otherwise an upgrade.run receipt with complete: false is returned). The error carries the run's receipt on `receipt`: the files already changed, each failure in errors, complete: false",
+      when: "one or more codemods failed (including a generated file to regenerate that nothing protects), or a post-codemod hook failed, and no protected file still needs a change (otherwise an upgrade.run receipt with complete: false is returned). The error carries the run's receipt on `receipt`: the files already changed, each failure in errors, complete: false",
     },
     {
       code: 'ERR_CODEMOD_PROTECTION_SOURCE',

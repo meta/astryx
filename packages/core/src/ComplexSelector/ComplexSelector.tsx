@@ -20,6 +20,7 @@ import React, {
   useCallback,
   useId,
   useImperativeHandle,
+  useInsertionEffect,
   useOptimistic,
   useRef,
   useTransition,
@@ -36,14 +37,14 @@ import {useDevWarning} from '../hooks/useDevWarning';
 import {mergeRefs} from '../utils/mergeRefs';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
-import {Field, inputWrapperStyles, type FieldStatusVariant} from '../Field';
+import {Field, inputWrapperStyles} from '../Field';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {Spinner} from '../Spinner';
-import {useTranslator} from '../i18n';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {usePopover} from '../Popover/usePopover';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
+import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
 import {
   colorVars,
   durationVars,
@@ -55,15 +56,35 @@ import {
   typographyVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {isRenderable, mergeProps} from '../utils';
 import {composeEventHandlers} from '../utils/composeEventHandlers';
-import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
+import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/ComplexSelector/ComplexSelector.generated';
+
+registerEnglishFallback(english);
+
+// The popup content's own block-size cap; the viewport cap is the layer
+// runtime's.
+const CONTENT_BLOCK_CAP = '480px';
 
 const styles = stylex.create({
+  // The tooltip-placement status info-tip sits beside the chevron and keeps
+  // its size when the trigger text is long.
+  statusTip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
   triggerContainer: {
     position: 'relative',
     display: 'flex',
@@ -198,7 +219,12 @@ const styles = stylex.create({
   // rotation through a single selector. The wrapper keeps only layout.
   triggerIconRotation: {
     transitionProperty: 'transform',
-    transitionDuration: durationVars['--duration-fast'],
+    // Under reduced motion the chevron turns at once: an in-place state
+    // change moves nothing (design:reduced-motion DR1–DR3).
+    transitionDuration: {
+      default: durationVars['--duration-fast'],
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
     transformOrigin: 'center',
   },
@@ -210,7 +236,14 @@ const styles = stylex.create({
   },
   content: {
     boxSizing: 'border-box',
-    maxHeight: 'min(480px, calc(100vh - 32px))',
+    // The content's own cap, under the layer runtime's viewport cap: the
+    // viewport minus its gutters and any bar the app declares through
+    // LayerProvider's `inset` (spec:AST-059 FR2, FR6), so the last rows never
+    // paint under that bar.
+    maxHeight: stylex.firstThatWorks(
+      `min(${CONTENT_BLOCK_CAP}, ${layerViewportInset.maxBlockSize})`,
+      `min(${CONTENT_BLOCK_CAP}, ${layerViewportInset.maxBlockSizeFallback})`,
+    ),
     overflow: 'auto',
     padding: spacingVars['--spacing-3'],
   },
@@ -378,7 +411,7 @@ export interface ComplexSelectorProps<Value> extends Omit<
   isOptional?: boolean;
   /** Marks the field required. */
   isRequired?: boolean;
-  /** Disables the selector. */
+  /** Blocks opening and value commits, including from an already-open popup. */
   isDisabled?: boolean;
   /** Shows loading state on the trigger. */
   isLoading?: boolean;
@@ -391,7 +424,7 @@ export interface ComplexSelectorProps<Value> extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    * @default 'attached' for input selectors; 'detached' for secondary and ghost selectors
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
   /** Tooltip text displayed next to the label. */
   labelTooltip?: string;
   /** Trigger and field size. */
@@ -455,6 +488,11 @@ export interface ComplexSelectorProps<Value> extends Omit<
   contentXstyle?: StyleXStyles;
   /** Test ID for the trigger button. */
   'data-testid'?: string;
+}
+
+/** Keeps a click from reaching the control box's open-the-popup handler. */
+function stopPropagation(event: React.MouseEvent) {
+  event.stopPropagation();
 }
 
 /**
@@ -540,7 +578,7 @@ export function ComplexSelector<Value>({
         controlClassName != null ||
         controlStyle != null),
   );
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const pressable = usePressFeedback();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder = placeholderFromProps ?? t('@astryx.selector.placeholder');
@@ -556,10 +594,24 @@ export function ComplexSelector<Value>({
   const contentId = useId();
   const descriptionId = useId();
   const statusMessageId = useId();
+  // With `tooltip` placement Field renders no message box, so the status
+  // lives in an info-tip button on the trigger row (family:input-fields FR8).
+  // Only that placement renders an on-field status affordance here.
+  const isTooltipStatus = effectiveStatusVariant === 'tooltip';
+  const {statusIcon: statusTip, describedBy: statusTipDescribedBy} =
+    useInputStatusIcon({
+      status: isTooltipStatus ? status : undefined,
+      statusVariant: effectiveStatusVariant,
+      size: 'sm',
+    });
   const ariaDescribedBy =
     [
       description ? descriptionId : null,
-      status?.message ? statusMessageId : null,
+      isTooltipStatus
+        ? statusTipDescribedBy
+        : status?.message
+          ? statusMessageId
+          : null,
     ]
       .filter((id): id is string => id != null)
       .join(' ') || undefined;
@@ -687,8 +739,24 @@ export function ComplexSelector<Value>({
     [isDisabled, popover],
   );
 
+  // The helper reads the selector's availability when it runs, not the
+  // render it came from: content may keep a helper from an earlier render
+  // (after an await, say) across a change either way. The insertion effect
+  // runs before any layout effect of the content, so a commit from the
+  // content's own layout effect in the render that changes it sees the new
+  // availability too.
+  const isDisabledRef = useRef(isDisabled);
+  useInsertionEffect(() => {
+    isDisabledRef.current = isDisabled;
+  }, [isDisabled]);
+
   const commitValue = useCallback(
     (nextValue: Value) => {
+      // Caller-owned popup controls may remain mounted after disablement.
+      // Guard the supplied commit boundary, not just the trigger.
+      if (isDisabledRef.current) {
+        return;
+      }
       onChange?.(nextValue);
       if (changeAction) {
         startTransition(async () => {
@@ -792,8 +860,10 @@ export function ComplexSelector<Value>({
             // The ring belongs to the wrapper (the focusable `<button>` sits
             // inside it), but it must still be a KEYBOARD ring: `:focus-within`
             // matched a mouse click on the trigger and drew the outline for
-            // pointer users too. `focusWithin` here is `:has(:focus-visible)`.
-            focusOutlineStyles.focusWithin,
+            // pointer users too. It keys off the trigger alone, so the status
+            // info-tip beside it rings itself and the box does not ring too
+            // (architecture:interaction-modality INV3).
+            focusOutlineStyles.focusWithinCombobox,
             variant === 'secondary' && styles.triggerSecondary,
             variant === 'ghost' && styles.triggerGhost,
             variant !== 'input' && interactionOverlayStyles.backgroundImage,
@@ -823,7 +893,13 @@ export function ComplexSelector<Value>({
             [ariaDescribedByProp, ariaDescribedBy].filter(Boolean).join(' ') ||
             undefined
           }
-          aria-labelledby={labelId}
+          // The field's label names the trigger unless the selector was
+          // given a name: a caller's `aria-label` or `aria-labelledby`
+          // replaces it (family:input-fields FR10), as on `renderTrigger`.
+          aria-labelledby={
+            rest['aria-labelledby'] ??
+            (rest['aria-label'] != null ? undefined : labelId)
+          }
           aria-required={isEffectivelyRequired ? 'true' : undefined}
           aria-invalid={status?.type === 'error' ? 'true' : undefined}
           aria-busy={isBusy || undefined}
@@ -836,6 +912,14 @@ export function ComplexSelector<Value>({
           {...stylex.props(styles.trigger)}>
           <span {...stylex.props(styles.triggerText)}>{triggerContent}</span>
         </button>
+        {isRenderable(statusTip) && (
+          // The info-tip is its own control: a press on it, or on its message
+          // bubble (portaled, so outside this span in the DOM but inside it in
+          // React), shows the message without opening the popup.
+          <span onClick={stopPropagation} {...stylex.props(styles.statusTip)}>
+            {statusTip}
+          </span>
+        )}
         {isBusy && <Spinner size="sm" aria-hidden="true" />}
         <Icon
           icon="chevronDown"

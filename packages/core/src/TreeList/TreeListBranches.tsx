@@ -19,12 +19,14 @@ import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
 
 const LINE_WIDTH = 1;
+const GUIDE_COLUMN_WIDTH = spacingVars['--spacing-5'];
 
 /**
- * Branch margin from the left edge. No exact spacing token for 10px,
- * so we use calc(--spacing-2 + --spacing-0-5) = 8 + 2 = 10.
+ * The guide owns its alignment to the chevron column. Its 20px container starts
+ * where centering it on the natural 16px chevron leaves it after the row's 8px
+ * inline padding: 8px + 16px / 2 - 20px / 2 = 6px.
  */
-const BRANCH_MARGIN = `calc(${spacingVars['--spacing-2']} + ${spacingVars['--spacing-0-5']})`;
+const GUIDE_COLUMN_START = `calc(${spacingVars['--spacing-2']} + ${spacingVars['--spacing-4']} / 2 - ${GUIDE_COLUMN_WIDTH} / 2)`;
 
 /** Per-level indent width. Reads the public, themeable `--tree-list-indent`
  * lever set on the tree-list root (default `--spacing-4`, 16px), so the guide
@@ -39,7 +41,7 @@ const styles = stylex.create({
   container: {
     height: '100%',
     position: 'absolute',
-    width: spacingVars['--spacing-5'],
+    width: GUIDE_COLUMN_WIDTH,
     zIndex: 1,
     pointerEvents: 'none',
   },
@@ -103,7 +105,7 @@ export function TreeListBranches({
   return (
     <>
       {ancestorsIsLast.map((ancestorIsLast, level) => {
-        const branchOffset = `calc(${BRANCH_MARGIN} + ${level} * ${LEVEL_INDENT})`;
+        const branchOffset = `calc(${GUIDE_COLUMN_START} + ${level} * ${LEVEL_INDENT})`;
         return (
           // Skip the level that the current-item connector occupies
           // (nestedLevel - 1), since that position is rendered below
@@ -132,7 +134,7 @@ export function TreeListBranches({
         <div
           {...mergeProps(stylex.props(styles.container), {
             style: {
-              insetInlineStart: `calc(${BRANCH_MARGIN} + ${nestedLevel - 1} * ${LEVEL_INDENT})`,
+              insetInlineStart: `calc(${GUIDE_COLUMN_START} + ${nestedLevel - 1} * ${LEVEL_INDENT})`,
             },
           })}>
           <div

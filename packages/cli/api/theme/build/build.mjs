@@ -12,8 +12,10 @@
  * build emits the exact CSS the `<Theme>` runtime does), writes:
  * - A CSS file with token overrides and component styles
  * - A CSS declaration module for strict side-effect imports
- * - A JS module that re-exports the built theme (+ icon registry)
- * - A .d.ts (plus an optional .variants.d.ts for custom prop values)
+ * - A JS module that re-exports the built theme (+ icon registry); function
+ *   icon entries stay functions for `Icon`, beside a node view of the registry
+ * - A .d.ts (plus an optional .variants.d.ts for custom prop values and the
+ *   theme's icon variant names)
  *
  * It performs the writes and returns a `theme.build` receipt — its `warnings`
  * carry override problems and every declaration core's generator dropped
@@ -58,7 +60,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {isBuiltin} from 'node:module';
+import {createRequire, isBuiltin} from 'node:module';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {parse} from '@babel/parser';
 import {createJiti} from 'jiti';
@@ -306,7 +308,9 @@ function realLocation(target) {
  * Core, so building with it keeps the CSS identical; and a CLI run one-off
  * (`npx @astryxdesign/cli`) has no Core beside it at all. Null when there is
  * nothing better than the CLI's own import: no installed Core (the Astryx
- * repository, a bare directory), the same Core, or one that does not load.
+ * repository, a bare directory) or the same Core. A Core that is there but
+ * does not load, or lacks the functions the build calls, throws, naming it:
+ * building with another Core would not match the app's `<Theme>`.
  *
  * @param {string} cwd
  * @param {CoreBindings} cliCore - The CLI's own Core, from {@link loadCliCore}.
@@ -316,29 +320,36 @@ function realLocation(target) {
  */
 async function loadProjectCore(cwd, cliCore, {projectOnly = false} = {}) {
   // Outside a project, the Core the answering copy carries (spec AST-081 FR3).
-  const dir =
-    findInstalledPackage(cwd, '@astryxdesign/core') ??
-    (projectOnly ? null : fetchCarriedThemeCoreDir(cwd));
+  const installed = findInstalledPackage(cwd, '@astryxdesign/core');
+  const dir = installed ?? (projectOnly ? null : fetchCarriedThemeCoreDir(cwd));
   const themeFile = dir ? importTarget(dir, './theme') : null;
   if (!dir || !themeFile) return null;
   if (cliCore.themeModule) {
-    try {
-      const own = fileURLToPath(
-        import.meta.resolve('@astryxdesign/core/theme'),
-      );
-      if (realOrSelf(own) === realOrSelf(themeFile)) return null;
-    } catch {
-      // The CLI's own Core cannot be located; load the project's.
-    }
+    const own = cliCoreThemeFile();
+    if (own != null && realOrSelf(own) === realOrSelf(themeFile)) return null;
   }
   let themeModule;
   try {
     themeModule = await import(pathToFileURL(themeFile).href);
-  } catch {
-    return null;
+  } catch (error) {
+    throw new AstryxError(
+      installed == null
+        ? carriedCoreMessage(dir, /** @type {Error} */ (error))
+        : coreUnavailableMessage(cwd, /** @type {Error} */ (error)),
+      undefined,
+      ERROR_CODES.ERR_CORE_NOT_FOUND,
+    );
   }
-  if (!themeModule.defineTheme || !themeModule.generateThemeRulesSplit)
-    return null;
+  const missing = ['defineTheme', 'generateThemeRulesSplit'].filter(
+    name => typeof themeModule[name] !== 'function',
+  );
+  if (missing.length > 0) {
+    throw new AstryxError(
+      `The @astryxdesign/core at ${path.relative(cwd, dir) || '.'} does not export ${missing.join(' or ')} from its \`./theme\` entry, which \`${formatCliCommand('theme build')}\` calls. Update it.`,
+      undefined,
+      ERROR_CODES.ERR_CORE_INCOMPATIBLE,
+    );
+  }
   let rootModule = null;
   const rootFile = importTarget(dir, '.');
   if (rootFile) {
@@ -357,6 +368,40 @@ async function loadProjectCore(cwd, cliCore, {projectOnly = false} = {}) {
     generateOnMediaCSS: themeModule.generateOnMediaCSS,
     generateAdaptationCSS: themeModule.generateAdaptationCSS,
   };
+}
+
+/**
+ * The file the CLI's own `@astryxdesign/core/theme` resolves to, or null when
+ * the CLI has no Core of its own (a one-off `npx` run).
+ * @returns {string | null}
+ */
+function cliCoreThemeFile() {
+  try {
+    return fileURLToPath(import.meta.resolve('@astryxdesign/core/theme'));
+  } catch (error) {
+    const {code} = /** @type {NodeJS.ErrnoException} */ (error);
+    if (
+      code === 'ERR_MODULE_NOT_FOUND' ||
+      code === 'ERR_PACKAGE_PATH_NOT_EXPORTED'
+    ) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+/**
+ * The error for a Core the answering copy carries (outside a project) that
+ * does not load.
+ * @param {string} dir
+ * @param {Error} importError
+ * @returns {string}
+ */
+function carriedCoreMessage(dir, importError) {
+  return (
+    `Could not load the @astryxdesign/core this CLI release carries, at ${dir}.` +
+    `\n  Import error: ${importError.message}`
+  );
 }
 
 /** @type {Map<string, Awaited<ReturnType<typeof loadProjectCore>>>} */
@@ -379,7 +424,7 @@ async function selectCore(cwd, {projectOnly = false} = {}) {
   // A global or cached copy's own Core is the carried one.
   if (projectOnly && !projectCore && carriesCore() && !cliCoreIsProjects(cwd)) {
     throw new AstryxError(
-      "The project's Core isn't installed or does not load.",
+      "The project's Core isn't installed.",
       undefined,
       ERROR_CODES.ERR_CORE_NOT_FOUND,
     );
@@ -405,13 +450,11 @@ function carriesCore() {
 function cliCoreIsProjects(cwd) {
   const dir = findProjectCoreDir(cwd);
   if (!dir) return false;
-  try {
-    const own = fileURLToPath(import.meta.resolve('@astryxdesign/core/theme'));
-    const theirs = importTarget(dir, './theme');
-    return theirs != null && realOrSelf(own) === realOrSelf(theirs);
-  } catch {
-    return false;
-  }
+  const own = cliCoreThemeFile();
+  const theirs = importTarget(dir, './theme');
+  return (
+    own != null && theirs != null && realOrSelf(own) === realOrSelf(theirs)
+  );
 }
 
 /**
@@ -1104,6 +1147,28 @@ function componentHasAugmentableInterface(pascalName, interfaceName) {
 }
 
 /**
+ * Public augmentable maps whose axis requests artwork instead of styling.
+ * `Icon.variant` selects a theme's icon artwork, so it has no component styling
+ * map (architecture:component-theming-surface INV14): a `components` key on it
+ * never enrolls a value or generates an augmentation of its map.
+ */
+const ARTWORK_REQUEST_MAPS = new Set(['IconVariantMap']);
+
+/**
+ * Whether a theme's component styling keys may enroll values in `interfaceName`
+ * on `@astryxdesign/core/<Component>`.
+ * @param {string} pascalName
+ * @param {string} interfaceName
+ * @returns {boolean}
+ */
+function isComponentValueAugmentationPoint(pascalName, interfaceName) {
+  return (
+    !ARTWORK_REQUEST_MAPS.has(interfaceName) &&
+    componentHasAugmentableInterface(pascalName, interfaceName)
+  );
+}
+
+/**
  * Adaptation values from resolved runtime rules, raw input, or normalized built
  * metadata. Built modules intentionally omit `__adaptationRules`, so every CLI
  * diagnostic that reads rule intent must also understand `__adaptations`.
@@ -1410,7 +1475,7 @@ async function classifyComponentValue(component, prop, value) {
   const propPascal = prop.charAt(0).toUpperCase() + prop.slice(1);
   const target = (await resolveAugmentationTargetCandidates(component)).find(
     candidate =>
-      componentHasAugmentableInterface(
+      isComponentValueAugmentationPoint(
         candidate.moduleName,
         `${candidate.interfacePrefix}${propPascal}Map`,
       ),
@@ -1514,12 +1579,21 @@ async function validateAdaptationEnrollment(themeDef) {
  * generating a `declare module` block for them would be dead code — those are
  * skipped.
  *
- * @param {{components?: Record<string, Record<string, Record<string, unknown>>>}} themeDef - Theme definition (resolved by defineTheme)
+ * A theme that lists `iconVariants` also augments `IconVariantMap` in
+ * `@astryxdesign/core/Icon` with those names, when the installed core declares
+ * it, so `<Icon variant>` accepts them (spec:AST-087 FR3).
+ *
+ * @param {{components?: Record<string, Record<string, Record<string, unknown>>>, iconVariants?: readonly string[]}} themeDef - Theme definition (resolved by defineTheme)
  * @returns {Promise<string|null>} TypeScript declaration content, or null if no augmentations needed
  */
 async function generateVariantDeclarationsAsync(themeDef) {
   const componentLayers = getThemeComponentLayers(themeDef);
-  if (componentLayers.length === 0) {
+  const iconVariantNames =
+    Array.isArray(themeDef.iconVariants) &&
+    componentHasAugmentableInterface('Icon', 'IconVariantMap')
+      ? [...new Set(themeDef.iconVariants)]
+      : [];
+  if (componentLayers.length === 0 && iconVariantNames.length === 0) {
     return null;
   }
 
@@ -1555,7 +1629,7 @@ async function generateVariantDeclarationsAsync(themeDef) {
   const hasCustom = Object.values(customValues).some(props =>
     Object.values(props).some(values => values.size > 0),
   );
-  if (!hasCustom) return null;
+  if (!hasCustom && iconVariantNames.length === 0) return null;
 
   const sections = ['// Generated by astryx theme build', 'export {};', ''];
 
@@ -1567,7 +1641,7 @@ async function generateVariantDeclarationsAsync(themeDef) {
       const target = (
         await resolveAugmentationTargetCandidates(component)
       ).find(candidate =>
-        componentHasAugmentableInterface(
+        isComponentValueAugmentationPoint(
           candidate.moduleName,
           `${candidate.interfacePrefix}${propPascal}Map`,
         ),
@@ -1593,6 +1667,17 @@ async function generateVariantDeclarationsAsync(themeDef) {
       sections.push('}');
       sections.push('');
     }
+  }
+
+  if (iconVariantNames.length > 0) {
+    sections.push(`declare module '@astryxdesign/core/Icon' {`);
+    sections.push('  interface IconVariantMap {');
+    for (const name of iconVariantNames) {
+      sections.push(`    ${tsStringLiteral(name)}: true;`);
+    }
+    sections.push('  }');
+    sections.push('}');
+    sections.push('');
   }
 
   // If every custom value targeted a non-augmentable prop, there's nothing to
@@ -1833,23 +1918,86 @@ async function importThemeModule(filePath, interception, /** @type {any} */ load
       commonJsPatch.undo();
     }
   } else {
-    mod = await jiti.import(filePath, {default: true});
+    mod = await jiti.import(filePath);
   }
 
-  if (isThemeObject(mod)) return {theme: mod, exportName: 'default', degraded};
-
-  if (mod && typeof mod === 'object') {
-    if (isThemeObject(mod.default)) {
-      return {theme: mod.default, exportName: 'default', degraded};
-    }
+  // Both loads hand back the module. The theme is read from the module's own
+  // exports, never from the module object itself: jiti's interop answers a
+  // property the module lacks from its default export (and a missing
+  // `default` with the module), so the module can pass for the theme while
+  // its own keys hide the theme's fields.
+  const isModule = mod != null && typeof mod === 'object';
+  const hasDefault = isModule && Object.hasOwn(mod, 'default');
+  const defaultExport = hasDefault ? mod.default : undefined;
+  if (isThemeObject(defaultExport)) {
+    return {theme: defaultExport, exportName: 'default', degraded};
+  }
+  if (isModule) {
     for (const [exportName, value] of Object.entries(mod)) {
+      if (exportName === 'default' || exportName === 'module.exports') continue;
       if (isThemeObject(value)) return {theme: value, exportName, degraded};
+    }
+  }
+  // A plain-object default export is the module's theme even when it has
+  // no tokens of its own (local tokens, typography or component styles may
+  // be all it defines), or no name: the build's validation says what it
+  // lacks.
+  if (isPlainObject(defaultExport)) {
+    return {theme: defaultExport, exportName: 'default', degraded};
+  }
+  // A CommonJS module whose exports are the theme (`module.exports =
+  // theme`) has no default of its own: interop answers `default` with
+  // those exports, and without interop (a family build's loader) the module
+  // is them.
+  if (isModule && !hasDefault) {
+    const exportsObject = mod.default ?? mod;
+    if (isThemeObject(exportsObject)) {
+      return {theme: exportsObject, exportName: 'default', degraded};
     }
   }
 
   throw new Error(
     `Could not find a defineTheme() result in ${filePath}.\n` +
       `Expected an export like: export const myTheme = defineTheme({ name: '...', tokens: {...} })`,
+  );
+}
+
+/**
+ * Whether the theme file's own folder resolves Core's theme entry, as the
+ * theme's own `import ... from '@astryxdesign/core/theme'` would. A theme
+ * outside any project (an empty folder, a fresh clone) does not, and is
+ * handed the Core the CLI answers with instead, as a new project with that
+ * Core would build it (`theme build` runs the same outside a project, spec
+ * AST-081 FR3). Only a Core not installed there (MODULE_NOT_FOUND) reads as
+ * no: an installed Core whose entry does not resolve is the theme's own, and
+ * its load reports that.
+ * @param {string} filePath
+ * @returns {boolean}
+ */
+function themeFolderResolvesCore(filePath) {
+  try {
+    createRequire(filePath).resolve('@astryxdesign/core/theme');
+    return true;
+  } catch (error) {
+    const {code} = /** @type {NodeJS.ErrnoException} */ (error);
+    if (code === 'MODULE_NOT_FOUND') return false;
+    if (code === 'ERR_PACKAGE_PATH_NOT_EXPORTED') return true;
+    throw error;
+  }
+}
+
+/**
+ * A plain object, not an array or a module namespace: a theme module's
+ * default export, read as its theme.
+ * @param {any} value
+ * @returns {boolean}
+ */
+function isPlainObject(value) {
+  return (
+    value != null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    value[Symbol.toStringTag] !== 'Module'
   );
 }
 
@@ -1868,12 +2016,9 @@ function isThemeObject(value) {
 }
 
 /**
- * Extract the theme definition from a JS/TS file.
- * Tries jiti first (full TS support), falls back to regex+eval.
- *
- * The legacy fallback needs no interception: it evaluates the `defineTheme()`
- * ARGUMENT, so what it returns is raw authored input with `adaptations` still
- * on it — nothing has erased anything yet. It is therefore never degraded.
+ * Extract the theme definition from a JS/TS file, through jiti (full TS
+ * support). A module that does not load fails with its own error: the theme
+ * is never read from the file's text instead.
  *
  * @param {string} filePath
  * @param {import('./core-interception.mjs').CoreInterception} [interception]
@@ -1884,18 +2029,12 @@ async function extractThemeDefinition(filePath, interception, /** @type {any} */
   try {
     return await importThemeModule(filePath, interception, loader);
   } catch (jitiError) {
-    try {
-      return {
-        theme: extractThemeDefinitionLegacy(filePath),
-        degraded: {topLevelAwait: false, commonJs: false},
-      };
-    } catch {
-      const je = /** @type {Error} */ (jitiError);
-      throw new Error(
-        `Failed to load theme from ${filePath}: ${je.message}\n` +
-          `Make sure all imports in the theme file are resolvable.`,
-      );
-    }
+    const je = /** @type {Error} */ (jitiError);
+    throw new Error(
+      `Failed to load theme from ${filePath}: ${je.message}\n` +
+        `Make sure all imports in the theme file are resolvable.`,
+      {cause: jitiError},
+    );
   }
 }
 
@@ -1942,45 +2081,6 @@ export async function validateThemePrivateInputs(
 }
 
 /**
- * Fallback extraction via regex + eval.
- * Only works for plain object literals — can't follow imports or variables.
- * Never erase icon references: an unresolved registry must preserve the loader
- * error instead of turning an incomplete theme into a successful build.
- * @param {string} filePath
- * @returns {any}
- */
-function extractThemeDefinitionLegacy(filePath) {
-  const content = fs.readFileSync(filePath, 'utf8');
-
-  const defineMatch = content.match(/defineTheme\s*\(\s*({[\s\S]*?})\s*\)/);
-  if (!defineMatch) {
-    const defaultMatch = content.match(/export\s+default\s+({[\s\S]*?});/);
-    if (!defaultMatch) {
-      throw new Error(
-        `Could not find defineTheme() call or default export in ${filePath}.\n` +
-          `Expected: defineTheme({ name: '...', tokens: {...} })`,
-      );
-    }
-
-    return eval(`(${defaultMatch[1]})`);
-  }
-
-  let objStr = defineMatch[1];
-  objStr = objStr.replace(/\s+as\s+const/g, '');
-
-  try {
-    return eval(`(${objStr})`);
-  } catch (e) {
-    const err = /** @type {Error} */ (e);
-    throw new Error(
-      `Failed to parse theme definition in ${filePath}: ${err.message}\n` +
-        `Make sure the defineTheme() argument is a plain object literal.`,
-      {cause: e},
-    );
-  }
-}
-
-/**
  * Extract a family member's named registry import from its source file.
  * Returns { importPath, exportName } or null when the theme names none.
  * Standalone builds resolve icons through `resolveIconImports` instead.
@@ -2021,6 +2121,53 @@ function extractRegistryInfo(filePath, field) {
 }
 
 /**
+ * Whether a theme's icon entries include a function of `{size, variant}`.
+ * @param {Record<string, unknown> | null | undefined} entries
+ * @returns {boolean}
+ */
+function hasFunctionIconEntry(entries) {
+  return Object.values(entries ?? {}).some(
+    entry => typeof entry === 'function',
+  );
+}
+
+/**
+ * A built theme's icon entries: a theme from defineTheme keeps them in
+ * `__icons` when any is a function (its `icons` is the node view); otherwise
+ * `icons` holds them.
+ * @param {any} theme
+ * @returns {Record<string, unknown> | undefined}
+ */
+function themeIconEntries(theme) {
+  return theme?.__icons ?? theme?.icons;
+}
+
+/**
+ * The generated code that reads a registry's entries as React nodes, each
+ * function entry read at `{size: 'md'}` like core's public reads. It never
+ * passes the registry to a call, so a theme extending the built module can
+ * still trace the registry through its `__icons` field, and it reads no
+ * global, which a registry import could shadow. The registry expression runs
+ * where only `entriesName` and `nodesName` are declared, both names the
+ * registry imports cannot use.
+ * @param {string} entries - Expression for the registry's entries.
+ * @param {string} entriesName - A reserved local name.
+ * @param {string} nodesName - A reserved local name.
+ * @returns {string}
+ */
+function iconNodesExpression(entries, entriesName, nodesName) {
+  return `(() => {
+  const ${entriesName} = ${entries};
+  const ${nodesName} = {};
+  for (const name in ${entriesName}) {
+    const entry = ${entriesName}[name];
+    ${nodesName}[name] = typeof entry === 'function' ? entry({size: 'md'}) : entry;
+  }
+  return ${nodesName};
+})()`;
+}
+
+/**
  * Generate a minimal JS module for a built theme.
  * Includes the theme name, marker, and re-exports the icon registry.
  * All styling is in the CSS file.
@@ -2040,6 +2187,11 @@ function extractRegistryInfo(filePath, field) {
  * will emit and under what name, so `iconsSpecifier` lets it say. When it is
  * not given, direct registry specifiers are preserved, and inherited relative
  * imports are rebased from the base module to the theme entry's directory.
+ *
+ * When an icon entry is a function of `{size, variant}`, the module keeps the
+ * registry as `__icons`, which `Icon` resolves at the size and variant it
+ * renders, and the theme's `icons` and the re-exported registry are the node
+ * view, each function read at `{size: 'md'}` as `DefinedTheme['icons']` is.
  *
  * @param {any} themeDef
  * @param {import('./icon-imports.mjs').IconImports | null} iconInfo
@@ -2089,12 +2241,28 @@ function generateBuiltModule(
       ? `const ${iconInfo.exportName} = ${iconInfo.expression};\n`
       : '';
   const iconsExpression = moduleOptions.iconsExpression ?? iconInfo?.exportName;
-  const iconsField = iconsExpression ? `  icons: ${iconsExpression},` : '';
+  const iconNodes =
+    iconsExpression && hasFunctionIconEntry(themeIconEntries(themeDef))
+      ? `${themeBinding}IconNodes`
+      : null;
+  const iconNodesDeclaration =
+    iconNodes && iconsExpression
+      ? `const ${iconNodes} = ${iconNodesExpression(iconsExpression, `${themeBinding}IconEntries`, iconNodes)};\n`
+      : '';
+  const iconsField = iconNodes
+    ? `  icons: ${iconNodes},\n  __icons: ${iconsExpression},`
+    : iconsExpression
+      ? `  icons: ${iconsExpression},`
+      : '';
   const indicatorsField = moduleOptions.indicatorsExpression
     ? `\n  indicators: ${moduleOptions.indicatorsExpression},`
     : '';
   const iconReExport =
-    iconInfo && exportIcons ? `\nexport { ${iconInfo.exportName} };\n` : '';
+    iconInfo && exportIcons
+      ? iconNodes
+        ? `\nexport { ${iconNodes} as ${iconInfo.exportName} };\n`
+        : `\nexport { ${iconInfo.exportName} };\n`
+      : '';
 
   // Resolve token values — tuples become light-dark() strings
   /** @type {Record<string, unknown>} */
@@ -2151,9 +2319,24 @@ function generateBuiltModule(
     serializeField('__onDark', themeDef.__onDark) +
     serializeField('__onLight', themeDef.__onLight) +
     serializeField('__adaptations', themeDef.__adaptations) +
-    serializeField('__axes', themeDef.__axes ?? {}, true);
+    serializeField('__axes', themeDef.__axes ?? {}, true) +
+    // An explicit empty list replaces an inherited one, so keep `[]`.
+    serializeField('iconVariants', themeDef.iconVariants, true) +
+    // Each inherited function entry keeps its defining theme's list. JSON
+    // drops `undefined`, so a defining theme with no list is written as `[]`,
+    // which no variant matches either.
+    serializeField(
+      '__iconEntryVariants',
+      themeDef.__iconEntryVariants &&
+        Object.fromEntries(
+          Object.entries(themeDef.__iconEntryVariants).map(([name, list]) => [
+            name,
+            list ?? [],
+          ]),
+        ),
+    );
 
-  return `${iconImport}${iconDeclaration}/**
+  return `${iconImport}${iconDeclaration}${iconNodesDeclaration}/**
  * ${themeDef.name} theme — built by \`${getCliInvocation()} theme build\`
  * Import the CSS file alongside this module:
  *
@@ -2203,7 +2386,39 @@ export declare const ${iconInfo.exportName}: IconRegistry;
     (typeOptions.includeThemeImport ?? true)
       ? `import type { DefinedTheme } from '@astryxdesign/core/theme';\n`
       : '';
-  return `${variantsRef}${themeImport}${iconType}export declare const ${themeBinding}: DefinedTheme;\n`;
+  return `${variantsRef}${themeImport}${iconType}export declare const ${themeBinding}: ${builtThemeType(themeDef)};\n`;
+}
+
+/**
+ * A TypeScript string literal type for `value`.
+ * @param {string} value
+ * @returns {string}
+ */
+function tsStringLiteral(value) {
+  const inner = JSON.stringify(value)
+    .slice(1, -1)
+    .replace(/\\"/g, '"')
+    .replace(/'/g, "\\'");
+  return `'${inner}'`;
+}
+
+/**
+ * The declared type of a built theme. A theme that lists icon variants
+ * carries core's type-only `__iconVariant` marker with those names, so a theme
+ * that extends the built one types its icon entries' `variant` by the list,
+ * exactly as it would extending the source theme.
+ * SYNC: packages/core/src/theme/defineTheme.ts (ResolvedDefinedTheme)
+ * @param {any} themeDef
+ * @returns {string}
+ */
+function builtThemeType(themeDef) {
+  const names = themeDef.iconVariants;
+  if (!Array.isArray(names)) return 'DefinedTheme';
+  const variant =
+    names.length > 0
+      ? [...new Set(names)].map(tsStringLiteral).join(' | ')
+      : 'never';
+  return `DefinedTheme & { __iconVariant?(variant: ${variant}): void }`;
 }
 
 // =============================================================================
@@ -2580,13 +2795,15 @@ async function themeBuildInternal(
   }
   await selectCore(cwd, {projectOnly: projectCore});
 
-  // Standalone builds only need interception when an older Core could erase
-  // adaptations. Family preparation always supplies the same recorder as its
+  // Standalone builds need interception when an older Core could erase
+  // adaptations, and when the theme's folder has no Core of its own: its
+  // imports of Core are then handed the Core this build selected, as family
+  // builds' are. Family preparation always supplies the same recorder as its
   // shared loader so exact authored parent identity stays CLI-private instead
   // of becoming a public DefinedTheme field.
   const interception =
     options.__familyInterception ??
-    (_generateAdaptationCSS
+    (_generateAdaptationCSS && themeFolderResolvesCore(filePath)
       ? undefined
       : interceptCore(_coreThemeModule, _coreRootModule));
 
@@ -2675,10 +2892,26 @@ async function themeBuildInternal(
   // Family preparation keeps its own named-import registry contract, which
   // themeBuildFamily checks against the selected members' graph.
   const standaloneIcons = !options.__prepareFamily;
+  // Function icon entries stay functions in the built module, beside a node
+  // view bound to `<theme>IconNodes` and computed from `<theme>IconEntries`.
+  const functionEntries =
+    hasFunctionIconEntry(themeIconEntries(themeDef)) ||
+    hasFunctionIconEntry(themeIconEntries(themeDef.extends));
+  /** @param {boolean} reserveIconNodes */
+  const reservedNames = reserveIconNodes => [
+    `${toIdentifier(themeDef.name)}Theme`,
+    ...(reserveIconNodes
+      ? [
+          `${toIdentifier(themeDef.name)}ThemeIconNodes`,
+          `${toIdentifier(themeDef.name)}ThemeIconEntries`,
+        ]
+      : []),
+  ];
   const iconResolution = {
     readSource: (/** @type {string} */ file) => fs.readFileSync(file, 'utf8'),
     resolveModule: resolveThemeModule,
-    reservedNames: [`${toIdentifier(themeDef.name)}Theme`],
+    reservedNames: reservedNames(functionEntries),
+    functionEntries,
     rawInput: 'extends' in themeDef,
     hasIcons:
       Object.keys(themeDef.icons ?? {}).length > 0 ||
@@ -2802,9 +3035,14 @@ async function themeBuildInternal(
       !iconInfo &&
       Object.keys(resolvedTheme.icons ?? {}).length > 0
     ) {
+      const resolvedFunctionEntries = hasFunctionIconEntry(
+        themeIconEntries(resolvedTheme),
+      );
       iconInfo = await resolveIconImports(filePath, themeExportName, {
         ...iconResolution,
         hasIcons: true,
+        functionEntries: resolvedFunctionEntries,
+        reservedNames: reservedNames(resolvedFunctionEntries),
       });
     }
     // An opaque package base can legitimately have no icons. Its .icons
@@ -2870,10 +3108,15 @@ async function themeBuildInternal(
     /** @type {string[]} */
     const droppedDeclarations = [];
 
-    const {component, prose} = _generateThemeRulesSplit(
-      resolvedTheme,
-      droppedDeclarations,
-    );
+    let themeRules;
+    try {
+      themeRules = _generateThemeRulesSplit(resolvedTheme, droppedDeclarations);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Theme normalization failed.';
+      throw new AstryxError(message, undefined, ERROR_CODES.ERR_THEME_INVALID);
+    }
+    const {component, prose} = themeRules;
     const cssParts = [];
     // Prose element defaults always ship — the `<Theme>` runtime
     // (generateThemeCSS) always emits them, so the build must too, or the
@@ -3062,7 +3305,7 @@ async function themeBuildInternal(
     );
   const dtsContent =
     generatedHeader(sourceRelative, 'ts', buildCommand, versions) +
-    generateBuiltTypes(themeDef, iconInfo, variantsFileName);
+    generateBuiltTypes(resolvedTheme || themeDef, iconInfo, variantsFileName);
 
   const unloadedFonts = [
     ...new Set([
@@ -3509,8 +3752,16 @@ export async function themeBuildFamily(
       ['icons', member.iconInfo],
       ['indicators', member.indicatorInfo],
     ]) {
-      const value = member.theme[field];
-      const inherited = member.sourceParent?.[field];
+      // A theme with a function entry gets its own node view of `icons`, so
+      // an inherit-only member is recognized by its entries.
+      const value =
+        field === 'icons'
+          ? themeIconEntries(member.theme)
+          : member.theme[field];
+      const inherited =
+        field === 'icons'
+          ? themeIconEntries(member.sourceParent)
+          : member.sourceParent?.[field];
       if (
         value &&
         Object.keys(value).length > 0 &&
@@ -3581,7 +3832,14 @@ export async function themeBuildFamily(
       // prettier-ignore
       for (const registry of [icon, indicator]) if (registry.info) registryImports.push({specifier: registry.specifier ?? registry.info.importPath, exportName: registry.info.exportName});
       const ownIcons = icon.info ? `${themeBinding}Icons` : null;
-      const inheritedIcons = parentBinding ? `${parentBinding}.icons` : null;
+      // A parent with function entries keeps them in `__icons`; its `icons`
+      // is the node view.
+      const parent = members.find(
+        other => other.theme.name === member.parentName,
+      );
+      const inheritedIcons = parentBinding
+        ? `${parentBinding}.${hasFunctionIconEntry(themeIconEntries(parent?.theme)) ? '__icons' : 'icons'}`
+        : null;
       const ownIndicators = indicator.info ? `${themeBinding}Indicators` : null;
       const inheritedIndicators = parentBinding
         ? `${parentBinding}.indicators`

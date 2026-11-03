@@ -30,7 +30,13 @@ import type {LayerAlignment, LayerPlacement} from '../Layer';
 import type {ButtonVariant, ButtonSize} from '../Button';
 import type {BaseProps} from '../BaseProps';
 import {stableClassName} from '../naming';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/MoreMenu/MoreMenu.generated';
+
+registerEnglishFallback(english);
 
 export interface MoreMenuProps extends Pick<
   BaseProps,
@@ -144,7 +150,7 @@ export function MoreMenu({
   'data-testid': testId,
   ref,
 }: MoreMenuProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.moreMenu.label');
   const size = useSize(sizeProp, 'md');
   const moreIcon = useIcon('moreHorizontal');

@@ -6,20 +6,42 @@ name: CLI Smoke Test
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: ['main']
-    paths-ignore:
-      - 'apps/docsite/**'
+    # Runs only when something the CLI reads or the smoke scripts run can
+    # change (spec:AST-030 FR14): every package (the CLI discovers Core, Lab,
+    # Charts, Rich Text and the themes from the workspace), the workspace's
+    # dependency and TypeScript configuration, the setup action and the smoke
+    # scripts themselves. A merge-group entry, which cannot filter by path,
+    # keeps running.
+    paths:
+      - 'packages/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'tsconfig*.json'
+      - '.nvmrc'
+      - '.github/actions/setup/**'
+      - '.github/scripts/cli-smoke-test.mjs'
+      - '.github/scripts/cli-json-smoke-test.mjs'
+      - '.github/scripts/api-cli-parity-test.mjs'
+      - '.github/scripts/cdn-template-smoke-test.mjs'
+      - '.github/scripts/lib/cdn-*.mjs'
+      - '.github/workflows/cli-smoke-test.yml'
   merge_group:
 
 permissions: {}
 
 concurrency:
-  group: 'cli-smoke-${{ github.event.merge_group.head_sha || github.head_ref }}'
+  group: 'cli-smoke-${{ github.event.pull_request.number || github.event.merge_group.head_sha }}'
   cancel-in-progress: true
 
 jobs:
   smoke-test:
-    runs-on: 2-core-ubuntu-arm
+    if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))
+    runs-on: ubuntu-24.04-arm
+    # PR CI's budget is 15 minutes (see ci.yml).
+    timeout-minutes: 15
     permissions:
       contents: read
     steps:

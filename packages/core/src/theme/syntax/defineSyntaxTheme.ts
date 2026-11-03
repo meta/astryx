@@ -8,7 +8,7 @@
  * @output defineSyntaxTheme, SyntaxTheme, syntaxThemeStyle
  * @position Syntax theme definition API; consumed by presets, SyntaxTheme, defineTheme
  *
- * @see https://github.com/facebook/astryx/issues/1148
+ * @see https://github.com/meta/astryx/issues/1148
  */
 
 import {

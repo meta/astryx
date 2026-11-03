@@ -273,7 +273,7 @@ export const InheritColor: Story = {
       </span>
       <span
         style={{
-          color: 'red',
+          color: 'var(--color-text-error)',
           display: 'flex',
           alignItems: 'center',
           gap: '4px',

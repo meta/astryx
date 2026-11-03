@@ -4,7 +4,7 @@
 
 /**
  * @file Button.tsx
- * @input Uses React, ButtonHTMLAttributes, ReactNode, i18n (useTranslator), group contexts
+ * @input Uses React, ButtonHTMLAttributes, ReactNode, i18n (useComponentTranslator), group contexts
  * @output Exports Button component, ButtonProps, ButtonVariant types
  * @position Core implementation; consumed by index.ts, tested by Button.test.tsx
  *
@@ -19,6 +19,7 @@
  */
 
 import {
+  use,
   useEffect,
   useRef,
   useState,
@@ -42,8 +43,8 @@ import {
   shadowVars,
   focusVars,
 } from '../theme/tokens.stylex';
-import {Spinner} from '../Spinner';
-import {VisuallyHidden} from '../VisuallyHidden';
+import {Spinner} from '../Spinner/Spinner';
+import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {IconDefaultSizeProvider} from '../Icon/IconDefaultSizeContext';
 import {iconBoxSizeStyles, type IconSize} from '../Icon/IconSize.stylex';
 
@@ -51,8 +52,12 @@ import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {useButtonGroup} from '../ButtonGroup/ButtonGroupContext';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
-import {groupStyles as inputGroupStyles} from '../InputGroup/groupStyles';
-import {mergeProps} from '../utils';
+import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
+import {
+  groupStyles as inputGroupStyles,
+  inputGroupItemProps,
+} from '../InputGroup/groupStyles';
+import {mergeProps} from '../utils/mergeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
@@ -60,8 +65,15 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {useTranslator} from '../i18n';
 import type {ButtonVariantMap} from './index';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Button/Button.generated';
+import {isRenderable} from '../utils/isRenderable';
+
+registerEnglishFallback(english);
 
 /**
  * Base button styles
@@ -235,10 +247,22 @@ const variants = stylex.create({
   destructive: {
     backgroundColor: colorVars['--color-error'],
     color: colorVars['--color-on-error'],
+    // Forced colors replace the fill with ButtonFace; a border keeps the
+    // destructive fill's shape visible (architecture:theme-tokens INV11). A
+    // border, not an outline, leaves the shared focus ring intact.
+    borderWidth: {default: 0, '@media (forced-colors: active)': '1px'},
+    borderStyle: {default: 'none', '@media (forced-colors: active)': 'solid'},
+    borderColor: {
+      default: null,
+      '@media (forced-colors: active)': 'CanvasText',
+    },
     // The ring matches the variant it rings: an accent-colored outline on a
     // red button reads as another control's focus. Only the color differs —
     // width, style and offset come from the shared outline.
-    outlineColor: {default: null, ':focus-visible': colorVars['--color-error']},
+    outlineColor: {
+      default: null,
+      ':focus-visible': colorVars['--color-error'],
+    },
   },
 });
 
@@ -446,8 +470,14 @@ const loadingStyles = stylex.create({
  * popover is never an in-flow member — it is `display: none` until shown, then
  * promoted to the top layer. Context layers also retain an inert `<template>`
  * marker so they can re-resolve their JSX position. Neither element is a group
- * member, so "last member" is: no following element sibling besides those two
- * pieces of layer infrastructure.
+ * member, so "last member" is: no following element sibling besides those
+ * pieces of layer infrastructure — the last sibling that is not one of them.
+ *
+ * Written as `:nth-last-child(1 of …)`, not `:not(:has(~ …))`: the stylesheet
+ * is global, and WebKit re-evaluates a sibling-relative `:has()` against every
+ * earlier sibling on each insertion, so filling any container on the page
+ * became quadratic (ButtonGroup FR3). A member is never layer infrastructure,
+ * so being the last such sibling is the same as having none after it.
  *
  * Reading it the other way round — marking the *buttons* and testing for a
  * marked sibling — is the trap: it silently reclassifies anything it doesn't
@@ -463,7 +493,8 @@ const loadingStyles = stylex.create({
  * The leading edge still uses `:first-child` — a member's button always precedes
  * its own layer, so the first button is genuinely `:first-child`.
  */
-const IS_LAST_ITEM = ':not(:has(~ *:not([popover]):not(template):not(dialog)))';
+const IS_LAST_ITEM =
+  ':nth-last-child(1 of :not([popover]):not(template):not(dialog))';
 
 const groupStyles = stylex.create({
   horizontal: {
@@ -581,7 +612,7 @@ export function Button({
   ...props
 }: ButtonProps): ReactNode {
   const pressFeedback = usePressFeedback();
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const size = useSize(sizeProp, 'md');
   const buttonGroup = useButtonGroup();
   const inputGroup = useInputGroup();
@@ -615,7 +646,9 @@ export function Button({
   // the consumer is deliberately showing it.
   const delaySpinner = isPending || isInterruptible;
   const groupDisabled = buttonGroup?.isDisabled ?? false;
-  const isTrueDisabled = isDisabled || groupDisabled;
+  const inputGroupState = use(InputGroupInternalContext);
+  const isTrueDisabled =
+    isDisabled || groupDisabled || inputGroupState.isDisabled;
   // Busy-only: the button can't fire again purely because an action is in
   // flight, not because it's genuinely isDisabled/group-disabled. Per the API
   // Conventions "Disabled vs Busy" rule, busy is visual-only (aria-busy +
@@ -771,7 +804,7 @@ export function Button({
               : loadingStyles.hiddenContent),
         )}
         aria-hidden={isLoadingState || undefined}>
-        {icon && (
+        {isRenderable(icon) && (
           <span
             {...stylex.props(styles.iconWrapper, iconBoxSizeStyles[iconSize])}>
             <IconDefaultSizeProvider value={iconSize}>
@@ -782,7 +815,7 @@ export function Button({
         {isIconOnly ? null : (
           <span {...stylex.props(styles.labelText)}>{children ?? label}</span>
         )}
-        {!isIconOnly && endContent && (
+        {!isIconOnly && isRenderable(endContent) && (
           <span {...stylex.props(styles.endContentWrapper)}>{endContent}</span>
         )}
       </span>
@@ -832,6 +865,9 @@ export function Button({
         href={href}
         target={target}
         rel={rel}
+        {...(inputGroup != null && buttonGroup == null
+          ? inputGroupItemProps
+          : undefined)}
         {...sharedMergedProps}
         {...pressFeedback}
         {...props}
@@ -853,6 +889,9 @@ export function Button({
         ref={mergedButtonRef}
         type={type}
         disabled={useAriaDisabled ? undefined : buttonDisabled}
+        {...(inputGroup != null && buttonGroup == null
+          ? inputGroupItemProps
+          : undefined)}
         {...sharedMergedProps}
         {...pressFeedback}
         {...props}

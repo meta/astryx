@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y audit DropdownMenuRadioItem
 
 /**
  * @file DropdownMenuRadioItemAudit.a11y.chromium.spec.ts

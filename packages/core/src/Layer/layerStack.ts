@@ -6,8 +6,8 @@
  * @file layerStack.ts
  * @input Uses the isImeKeyEvent predicate from utils/ime
  * @output Exports the shared layer dismissal stack: registration, top-most
- *   ordering, the document-level Escape listener, and its internal local-event
- *   dispatcher
+ *   ordering, the Escape listener on each document that holds a layer, and its
+ *   internal local-event dispatcher
  * @position Internal to the Layer system; consumed by useLayerDismissal, which
  *   is what overlays actually call. Not exported from the package root.
  *
@@ -26,11 +26,26 @@
  *
  * ## Only the top layer acts
  *
- * The stack owns ONE `keydown` listener on `document` and routes the press to
+ * The stack owns ONE `keydown` listener per document and routes the press to
  * the top-most layer itself. Overlays do not listen; they register and say what
  * they want done. The alternative — every layer listens and filters itself out
  * — is what forces `stopPropagation()` choreography between element-level and
  * document-level listeners, and it silently breaks whenever a layer forgets.
+ *
+ * ## One listener per document
+ *
+ * A layer can live in a document other than the one this module was loaded
+ * in: an app may render into a same-origin iframe or a Document
+ * Picture-in-Picture window through a portal. A key press reaches only the
+ * document it happened in, so the listener goes on the layer's own document —
+ * its container's `ownerDocument` — with that document's first layer, and comes
+ * off with its last. A layer that names no container counts as the global
+ * `document`'s.
+ *
+ * The top-most layer is chosen among the layers of the document the press
+ * arrived in, the way each document keeps its own browser top layer. A press in
+ * one window never reaches past it to dismiss a layer in another, and one press
+ * still dismisses exactly one layer.
  *
  * ## Bubble phase, not capture
  *
@@ -114,10 +129,11 @@ export interface LayerStackEntry {
   seq: number;
   behavior: LayerEscapeBehavior;
   /**
-   * The layer's container element, read lazily at press time. Used only to
-   * break ties between layers the React tree reports at the same depth — a raw
+   * The layer's container element, read lazily at press time. Used to break
+   * ties between layers the React tree reports at the same depth — a raw
    * `useFocusTrap` cannot wrap its content in a depth provider (it renders
-   * nothing), so DOM containment is the only nesting signal those have.
+   * nothing), so DOM containment is the only nesting signal those have — and,
+   * once at registration, to find the document the layer lives in.
    */
   getContainer?: () => HTMLElement | null;
   /**
@@ -133,7 +149,13 @@ export interface LayerStackEntry {
   dismiss: () => void;
 }
 
-const entries: LayerStackEntry[] = [];
+/** An entry and the document it was registered in. */
+interface DocumentEntry extends LayerStackEntry {
+  /** The layer's document; null only where there is no DOM at all. */
+  ownerDocument: Document | null;
+}
+
+const entries: DocumentEntry[] = [];
 // Registration order per layer identity. `useLayerDismissal` keeps one token
 // through effect re-registration while an active layer changes depth or behavior
 // — a Dialog whose `purpose` flips while open, a focus trap that moves — and
@@ -143,7 +165,9 @@ const entries: LayerStackEntry[] = [];
 // the browser top layer's show order.
 let seqByToken = new WeakMap<object, number>();
 let nextSeq = 0;
-let isListening = false;
+// How many registered layers live in each document: the listeners go on a
+// document with its first layer and come off with its last.
+const layerCountByDocument = new Map<Document, number>();
 
 function seqFor(token: object): number {
   const existing = seqByToken.get(token);
@@ -204,9 +228,9 @@ function isPresentEntry(entry: LayerStackEntry): boolean {
   return entry.isPresent?.() ?? true;
 }
 
-// Whether a text composition is running anywhere on the page. Tracked from
+// The documents in which a text composition is running. Tracked from
 // composition events because the DOM offers no way to ask.
-let isComposing = false;
+const composingDocuments = new Set<Document>();
 
 /**
  * Whether the user is part-way through composing text with an IME.
@@ -225,29 +249,35 @@ let isComposing = false;
  * recover from, and the alternative — matching the composing element against
  * a layer's container — cannot work for the layers that do not have one.
  *
- * A composition already running when the first layer registers is invisible
- * here: the listeners go on with the stack's own.
+ * A composition already running when a document's first layer registers is
+ * invisible here: the listeners go on with the stack's own. Page-wide means
+ * every document that holds a layer.
  */
 export function isTextComposing(): boolean {
-  return isComposing;
+  return composingDocuments.size > 0;
 }
 
-function handleCompositionStart(): void {
-  isComposing = true;
+// The listeners sit on documents, so the current target is the document the
+// composition runs in.
+function handleCompositionStart(event: Event): void {
+  composingDocuments.add(event.currentTarget as Document);
 }
 
 // Focus leaving the field ends the composition too. Clearing on blur as well
 // means a compositionend this listener never sees cannot leave the flag stuck
 // on, swallowing every later close request.
-function handleCompositionEnd(): void {
-  isComposing = false;
+function handleCompositionEnd(event: Event): void {
+  composingDocuments.delete(event.currentTarget as Document);
 }
 
-/** The top-most present layer, or null when nothing is on screen. */
-function topPresentEntry(): LayerStackEntry | null {
-  let top: LayerStackEntry | null = null;
+/**
+ * The top-most present layer of `doc`, or null when nothing is on screen
+ * there.
+ */
+function topPresentEntry(doc: Document | null): DocumentEntry | null {
+  let top: DocumentEntry | null = null;
   for (const entry of entries) {
-    if (!isPresentEntry(entry)) {
+    if (entry.ownerDocument !== doc || !isPresentEntry(entry)) {
       continue;
     }
     if (top == null || compareEntries(entry, top) > 0) {
@@ -258,17 +288,41 @@ function topPresentEntry(): LayerStackEntry | null {
 }
 
 /**
- * Whether `token` identifies the top-most layer. Overlays that still own a
- * dismissal channel the stack does not model yet (outside-press, swipe) can
- * gate on this so every channel agrees on who is on top.
+ * Whether `token` identifies the top-most layer of its own document. Overlays
+ * that still own a dismissal channel the stack does not model yet
+ * (outside-press, swipe) can gate on this so every channel agrees on who is on
+ * top.
  */
 export function isTopmostLayer(token: object): boolean {
-  return topPresentEntry()?.token === token;
+  const entry = entries.find(candidate => candidate.token === token);
+  return entry != null && topPresentEntry(entry.ownerDocument) === entry;
 }
 
-/** Resolve an Escape press against the stack. Returns whether it was handled. */
-function dispatchEscape(): boolean {
-  const top = topPresentEntry();
+/** The global document, or null where there is no DOM. */
+function globalDocument(): Document | null {
+  return typeof document === 'undefined' ? null : document;
+}
+
+/**
+ * The document a key press happened in: its target's, or the target itself
+ * when the press was dispatched at a document. Read from `nodeType` rather
+ * than `instanceof`, which names this module's window and so misses a node
+ * of another one.
+ */
+function documentOfEvent(event: Event): Document | null {
+  const target = event.target as Node | null;
+  if (target == null) {
+    return null;
+  }
+  return target.nodeType === 9 ? (target as Document) : target.ownerDocument;
+}
+
+/**
+ * Resolve an Escape press against the layers of `doc`. Returns whether it was
+ * handled.
+ */
+function dispatchEscape(doc: Document | null): boolean {
+  const top = topPresentEntry(doc);
   if (top == null) {
     return false;
   }
@@ -292,6 +346,7 @@ export function dispatchLayerEscapeKeyDown(event: KeyboardEvent): void {
   if (event.key !== 'Escape') {
     return;
   }
+  const doc = documentOfEvent(event) ?? globalDocument();
   // An IME user pressing Escape is cancelling a composition, not dismissing a
   // layer. Claim the press anyway, then stand down: left unclaimed, the browser
   // raises its own close request, which arrives at a layer's `cancel` handler
@@ -299,7 +354,7 @@ export function dispatchLayerEscapeKeyDown(event: KeyboardEvent): void {
   // guard that only returns behaves exactly like no guard at all. Claim it only
   // while a layer is on screen; with nothing to protect, the press is not ours.
   if (isImeKeyEvent(event)) {
-    if (topPresentEntry() != null) {
+    if (topPresentEntry(doc) != null) {
       event.preventDefault();
     }
     return;
@@ -309,7 +364,7 @@ export function dispatchLayerEscapeKeyDown(event: KeyboardEvent): void {
   if (event.defaultPrevented) {
     return;
   }
-  if (dispatchEscape()) {
+  if (dispatchEscape(doc)) {
     // Suppress the browser's own close-watcher so it cannot dismiss a second
     // layer behind our back. Propagation is left alone: consumers may
     // legitimately listen for Escape on window, and the stack's decision is
@@ -318,31 +373,19 @@ export function dispatchLayerEscapeKeyDown(event: KeyboardEvent): void {
   }
 }
 
-function startListening(): void {
-  if (isListening || typeof document === 'undefined') {
-    return;
-  }
-  document.addEventListener('keydown', dispatchLayerEscapeKeyDown);
-  document.addEventListener('compositionstart', handleCompositionStart, true);
-  document.addEventListener('compositionend', handleCompositionEnd, true);
-  document.addEventListener('blur', handleCompositionEnd, true);
-  isListening = true;
+function startListening(doc: Document): void {
+  doc.addEventListener('keydown', dispatchLayerEscapeKeyDown);
+  doc.addEventListener('compositionstart', handleCompositionStart, true);
+  doc.addEventListener('compositionend', handleCompositionEnd, true);
+  doc.addEventListener('blur', handleCompositionEnd, true);
 }
 
-function stopListening(): void {
-  if (!isListening || typeof document === 'undefined') {
-    return;
-  }
-  document.removeEventListener('keydown', dispatchLayerEscapeKeyDown);
-  document.removeEventListener(
-    'compositionstart',
-    handleCompositionStart,
-    true,
-  );
-  document.removeEventListener('compositionend', handleCompositionEnd, true);
-  document.removeEventListener('blur', handleCompositionEnd, true);
-  isComposing = false;
-  isListening = false;
+function stopListening(doc: Document): void {
+  doc.removeEventListener('keydown', dispatchLayerEscapeKeyDown);
+  doc.removeEventListener('compositionstart', handleCompositionStart, true);
+  doc.removeEventListener('compositionend', handleCompositionEnd, true);
+  doc.removeEventListener('blur', handleCompositionEnd, true);
+  composingDocuments.delete(doc);
 }
 
 /**
@@ -350,26 +393,50 @@ function stopListening(): void {
  * function; callers own calling it.
  */
 export function registerLayer(entry: Omit<LayerStackEntry, 'seq'>): () => void {
-  const full: LayerStackEntry = {...entry, seq: seqFor(entry.token)};
+  // The document the layer lives in: its container's, else the global one.
+  const ownerDocument =
+    entry.getContainer?.()?.ownerDocument ?? globalDocument();
+  const full: DocumentEntry = {
+    ...entry,
+    seq: seqFor(entry.token),
+    ownerDocument,
+  };
   entries.push(full);
-  startListening();
+  if (ownerDocument != null) {
+    const count = layerCountByDocument.get(ownerDocument) ?? 0;
+    layerCountByDocument.set(ownerDocument, count + 1);
+    if (count === 0) {
+      startListening(ownerDocument);
+    }
+  }
 
   return () => {
     const index = entries.indexOf(full);
-    if (index !== -1) {
-      entries.splice(index, 1);
+    if (index === -1) {
+      return;
     }
-    if (entries.length === 0) {
-      stopListening();
+    entries.splice(index, 1);
+    if (ownerDocument == null) {
+      return;
     }
+    const count = layerCountByDocument.get(ownerDocument) ?? 1;
+    if (count > 1) {
+      layerCountByDocument.set(ownerDocument, count - 1);
+      return;
+    }
+    layerCountByDocument.delete(ownerDocument);
+    stopListening(ownerDocument);
   };
 }
 
-/** Test-only: drop all entries and detach the listener. */
+/** Test-only: drop all entries and detach every listener. */
 export function resetLayerStackForTests(): void {
   entries.length = 0;
   seqByToken = new WeakMap();
   nextSeq = 0;
-  isComposing = false;
-  stopListening();
+  for (const doc of layerCountByDocument.keys()) {
+    stopListening(doc);
+  }
+  layerCountByDocument.clear();
+  composingDocuments.clear();
 }

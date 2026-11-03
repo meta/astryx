@@ -18,17 +18,66 @@ describe('spec-only change scope', () => {
       {filename: 'docs/families/input-fields.md'},
       {filename: 'docs/design/selection-inputs.md'},
       {filename: 'packages/themes/neutral/neutral.spec.md'},
-      {filename: 'packages/core/src/Selector/Selector.spec.md'},
+      {filename: 'docs/specs/components/Selector/Selector.spec.md'},
       {
         filename:
-          'packages/core/src/Table/plugins/rowStatus/useTableRowStatus.spec.md',
+          'docs/specs/components/Table/plugins/rowStatus/useTableRowStatus.spec.md',
       },
-      {filename: 'packages/lab/src/FutureInput/FutureInput.spec.md'},
-      {filename: 'packages/charts/src/Chart.spec.md'},
-      {filename: 'packages/richtext/src/RichTextView.spec.md'},
-      {filename: 'packages/vega/src/VegaChart.spec.md'},
+      {filename: 'docs/specs/components/FutureInput/FutureInput.spec.md'},
+      {filename: 'docs/specs/components/Chart/Chart.spec.md'},
+      {filename: 'docs/specs/components/RichTextView/RichTextView.spec.md'},
+      {filename: 'docs/specs/components/VegaChart/VegaChart.spec.md'},
     ]);
     expect(result.specOnly).toBe(true);
+  });
+
+  it('treats a platform record beside the core record as a component record', () => {
+    const result = classifyChanges([
+      {filename: 'docs/specs/components/TextInput/TextInput.swift.spec.md'},
+    ]);
+    expect(result.touchesKnowledgeRecords).toBe(true);
+    expect(result.specOnly).toBe(true);
+    expect(result.surfaces).toEqual([SURFACES.KNOWLEDGE]);
+  });
+
+  it('owner-gates a platform record changed with its Swift view', () => {
+    const result = classifyChanges([
+      {filename: 'docs/specs/components/Button/Button.swift.spec.md'},
+      {filename: 'packages/native/apple/Sources/Astryx/Button/Button.swift'},
+    ]);
+    expect(result.touchesKnowledgeRecords).toBe(true);
+    expect(result.specOnly).toBe(false);
+  });
+
+  it('does not owner-gate a Swift view change that leaves its platform record alone', () => {
+    const result = classifyChanges([
+      {filename: 'packages/native/apple/Sources/Astryx/Button/Button.swift'},
+    ]);
+    expect(result.touchesKnowledgeRecords).toBe(false);
+  });
+
+  it('does not treat an unsupported language or a misplaced platform file as a record', () => {
+    for (const filename of [
+      'docs/specs/components/Button/Button.kotlin.spec.md',
+      'docs/specs/components/Button/modules/Button.swift.spec.md',
+    ]) {
+      expect(classifyChanges([{filename}]).specOnly).toBe(false);
+    }
+  });
+
+  it('owner-gates a package architecture record like docs/architecture/', () => {
+    const result = classifyChanges([
+      {filename: 'packages/native/specs/swift/slots.spec.md'},
+    ]);
+    expect(result.touchesKnowledgeRecords).toBe(true);
+    expect(result.specOnly).toBe(false);
+    // Every Markdown file under a package's specs/ is owner-gated, a README
+    // too, though only records count toward a spec-only change.
+    const readme = classifyChanges([
+      {filename: 'packages/native/specs/README.md'},
+    ]);
+    expect(readme.touchesKnowledgeRecords).toBe(true);
+    expect(readme.specOnly).toBe(false);
   });
 
   it('owner-gates architecture records without granting the spec-only fast path', () => {
@@ -168,16 +217,47 @@ describe('spec-only change scope', () => {
   });
 
   it.each([
-    'packages/core/src/__tests__/TopLevel.spec.md',
-    'packages/core/src/Selector/__fixtures__/fixture.spec.md',
-    'packages/core/src/Selector/.hidden/Hidden.spec.md',
-    'packages/core/src/Selector/.Hidden.spec.md',
-    'packages/core/src/Selector/generated/fake.spec.md',
-    'packages/core/src/Selector/plugins/fake.generated.spec.md',
+    'docs/specs/components/__tests__/TopLevel.spec.md',
+    'docs/specs/components/Selector/__fixtures__/fixture.spec.md',
+    'docs/specs/components/Selector/.hidden/Hidden.spec.md',
+    'docs/specs/components/Selector/.Hidden.spec.md',
+    'docs/specs/components/Selector/generated/fake.spec.md',
+    'docs/specs/components/Selector/plugins/fake.generated.spec.md',
   ])('ignores non-record component spec path %s consistently', filename => {
     const result = classifyChanges([{filename}]);
     expect(result.specOnly).toBe(false);
     expect(result.touchesKnowledgeRecords).toBe(false);
+  });
+
+  it.each([
+    ['packages/core/src/Selector/Selector.spec.md', ['runtime:core']],
+    [
+      'packages/core/src/Table/plugins/rowStatus/useTableRowStatus.spec.md',
+      ['runtime:core'],
+    ],
+    ['packages/charts/src/ChartAxis.spec.md', ['runtime:charts']],
+    [
+      'packages/native/apple/Sources/Astryx/Button/Button.spec.md',
+      ['shared-or-unknown'],
+    ],
+  ])(
+    'owner-gates a spec left at its old path, %s, without the spec-only fast path',
+    (filename, surfaces) => {
+      const result = classifyChanges([{filename}]);
+      expect(result.specOnly).toBe(false);
+      expect(result.touchesKnowledgeRecords).toBe(true);
+      expect(result.surfaces).toEqual(surfaces);
+    },
+  );
+
+  it.each([
+    'packages/core/src/__tests__/TopLevel.spec.md',
+    'packages/core/src/Selector/__fixtures__/fixture.spec.md',
+    'packages/core/src/Selector/plugins/fake.generated.spec.md',
+    'packages/cli/src/Prompt.spec.md',
+    'packages/core/src/Button/Button.a11y.chromium.spec.ts',
+  ])('does not owner-gate %s as an old-path record', filename => {
+    expect(classifyChanges([{filename}]).touchesKnowledgeRecords).toBe(false);
   });
 
   it('fails closed for an empty change set', () => {
@@ -205,7 +285,7 @@ describe('spec-only change scope', () => {
     expect(
       classifyChanges([
         {
-          filename: 'packages/core/src/Selector/Selector.spec.md',
+          filename: 'docs/specs/components/Selector/Selector.spec.md',
           previous_filename: 'packages/core/src/Selector/Selector.tsx',
         },
       ]).specOnly,
@@ -257,7 +337,7 @@ describe('positive CI surfaces', () => {
 
   it('keeps pure specification records in the knowledge singleton', () => {
     const result = classifyChanges([
-      {filename: 'packages/core/src/Button/Button.spec.md'},
+      {filename: 'docs/specs/components/Button/Button.spec.md'},
     ]);
     expect(result.specOnly).toBe(true);
     expect(result.toolingOnly).toBe(false);
@@ -268,7 +348,7 @@ describe('positive CI surfaces', () => {
     {
       name: 'component spec plus component code',
       files: [
-        'packages/core/src/Button/Button.spec.md',
+        'docs/specs/components/Button/Button.spec.md',
         'packages/core/src/Button/Button.tsx',
       ],
       surfaces: [SURFACES.KNOWLEDGE, 'runtime:core'],
@@ -276,7 +356,7 @@ describe('positive CI surfaces', () => {
     {
       name: 'module spec plus Table plugin code',
       files: [
-        'packages/core/src/Table/plugins/rowStatus/useTableRowStatus.spec.md',
+        'docs/specs/components/Table/plugins/rowStatus/useTableRowStatus.spec.md',
         'packages/core/src/Table/plugins/rowStatus/useTableRowStatus.tsx',
       ],
       surfaces: [SURFACES.KNOWLEDGE, 'runtime:core'],
@@ -355,5 +435,162 @@ describe('positive CI surfaces', () => {
       expect(result.specOnly).toBe(false);
       expect(result.surfaces).toContain(SURFACES.SHARED_OR_UNKNOWN);
     }
+  });
+});
+
+describe('full-suite scope', () => {
+  const full = files =>
+    classifyChanges(files.map(filename => ({filename}))).fullSuite;
+
+  it('scopes component, shared-module, docs and spec changes to the import graph', () => {
+    expect(full(['packages/core/src/Button/Button.tsx'])).toBe(false);
+    expect(full(['packages/core/src/motion/animator.ts'])).toBe(false);
+    expect(full(['packages/lab/src/Sketch/Sketch.tsx'])).toBe(false);
+    expect(full(['apps/docsite/src/app/page.tsx'])).toBe(false);
+    expect(full(['docs/specs/AST-001-overlay-policy/spec.md'])).toBe(false);
+    expect(full(['apps/storybook/stories/Button.stories.tsx'])).toBe(false);
+    // A Changeset beside the change is release notes, not infrastructure.
+    expect(
+      full([
+        'packages/core/src/Layer/useLayer.tsx',
+        '.changeset/layer-slot-second-render.md',
+      ]),
+    ).toBe(false);
+  });
+
+  it('runs everything for shared infrastructure', () => {
+    for (const file of [
+      'package.json',
+      'pnpm-lock.yaml',
+      'vitest.config.ts',
+      '.github/workflows/ci.yml',
+      '.github/scripts/change-scope.cjs',
+      'internal/interaction-harness/src/busy.ts',
+      'scripts/build-css.mjs',
+      'packages/themes/neutral/src/index.ts',
+      'packages/build/src/index.ts',
+      'packages/core/src/theme/tokens.stylex.ts',
+      'packages/core/package.json',
+      'packages/core/tsconfig.json',
+      'packages/core/vite.config.ts',
+      'packages/core/src/test-utils/render.tsx',
+      'packages/core/src/testing/fixtures.ts',
+      'packages/core/src/__mocks__/matchMedia.ts',
+      'packages/core/src/setupTests.ts',
+      'packages/lab/src/vitest.setup.ts',
+      'packages/core/babel-plugin-add-extensions.cjs',
+      'packages/lab/babel-plugin-add-extensions.cjs',
+      'apps/storybook/.storybook/preview.tsx',
+      // Node tooling keeps its whole Node project (FR8), internal/ included.
+      'internal/scripts/lib/a-future-strategy.mjs',
+      'scripts/score-ledger.mjs',
+    ]) {
+      expect(full(['packages/core/src/Button/Button.tsx', file]), file).toBe(
+        true,
+      );
+    }
+  });
+
+  it('runs everything when the changed-file list is incomplete', () => {
+    expect(
+      classifyChanges([{filename: 'packages/core/src/Button/Button.tsx'}], {
+        expectedCount: 2,
+      }).fullSuite,
+    ).toBe(true);
+    expect(classifyChanges([], {expectedCount: 1}).fullSuite).toBe(true);
+  });
+
+  it('runs everything when there are no paths to scope from', () => {
+    expect(classifyChanges([]).fullSuite).toBe(true);
+    expect(classifyChanges([], {expectedCount: 0}).fullSuite).toBe(true);
+  });
+});
+
+describe('Lab-only change scope (spec:AST-030 FR26)', () => {
+  const lab = [
+    'packages/lab/src/Tour/Tour.tsx',
+    'packages/lab/src/Tour/__tests__/Tour.test.tsx',
+    'packages/lab/src/Tour/Tour.doc.mjs',
+  ];
+
+  it('is Lab-only when every changed path is in the Lab package', () => {
+    const result = classifyChanges(lab.map(filename => ({filename})));
+    expect(result).toMatchObject({
+      labOnly: true,
+      specOnly: false,
+      docsiteOnly: false,
+      toolingOnly: false,
+    });
+    expect(result.reason).toBe('only the Lab package changed');
+    // Its manifest and build configuration are the Lab package's too.
+    expect(
+      classifyChanges([{filename: 'packages/lab/package.json'}]).labOnly,
+    ).toBe(true);
+  });
+
+  it('stays Lab-only beside its release notes, but a Changeset alone is not Lab', () => {
+    expect(
+      classifyChanges(
+        [...lab, '.changeset/tour-steps.md'].map(filename => ({filename})),
+      ).labOnly,
+    ).toBe(true);
+    expect(
+      classifyChanges([{filename: '.changeset/tour-steps.md'}]).labOnly,
+    ).toBe(false);
+  });
+
+  it('runs full CI for any other path beside a Lab change', () => {
+    for (const other of [
+      'packages/core/src/Button/Button.tsx',
+      'packages/core/src/internal/touch.ts',
+      'packages/cli/api/search/search.mjs',
+      'scripts/sync-exports.js',
+      'tsconfig.json',
+      'packages/charts/src/index.ts',
+      'apps/storybook/stories/Tour.stories.tsx',
+      'apps/docsite/src/app/page.tsx',
+      'apps/sandbox/src/main.tsx',
+      '.github/workflows/ci.yml',
+      'pnpm-lock.yaml',
+      'package.json',
+      'vitest.config.mts',
+      'internal/lab-readiness/audit.mjs',
+      'docs/specs/AST-030/spec.md',
+      'packages/labels/src/index.ts',
+    ]) {
+      expect(
+        classifyChanges([...lab, other].map(filename => ({filename}))).labOnly,
+        other,
+      ).toBe(false);
+    }
+  });
+
+  it('checks both sides of a rename into or out of the Lab package', () => {
+    const graduated = classifyChanges([
+      {
+        filename: 'packages/core/src/Tour/Tour.tsx',
+        previous_filename: 'packages/lab/src/Tour/Tour.tsx',
+        status: 'R100',
+      },
+    ]);
+    expect(graduated.labOnly).toBe(false);
+    const parked = classifyChanges([
+      {
+        filename: 'packages/lab/src/Tour/Tour.tsx',
+        previous_filename: 'packages/core/src/Tour/Tour.tsx',
+        status: 'R100',
+      },
+    ]);
+    expect(parked.labOnly).toBe(false);
+  });
+
+  it('is never Lab-only for an incomplete or empty file list', () => {
+    expect(
+      classifyChanges(
+        lab.map(filename => ({filename})),
+        {expectedCount: 4},
+      ).labOnly,
+    ).toBe(false);
+    expect(classifyChanges([]).labOnly).toBe(false);
   });
 });

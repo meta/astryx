@@ -38,9 +38,20 @@ import {mergeProps} from '../utils';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {useMenuHover} from '../hooks/useMenuHover';
+import {useMenuPress} from '../hooks/useMenuPress';
+import {pressOnItemsOnly} from '../hooks/menuPressOnItems';
+import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
+import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {NavHeadingCloseContext} from '../NavMenu/NavMenuContext';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/TopNav/TopNavHeading.generated';
+import {isRenderable} from '../utils/isRenderable';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Styles
@@ -329,7 +340,7 @@ export function TopNavHeading({
   ref,
   ...props
 }: TopNavHeadingProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const LinkComponent = useLinkComponent(as);
   // When the logo is wrapped in a link it needs its own accessible name (the
   // logo image itself is decorative). Prefer an explicit logoLabel, fall back
@@ -360,6 +371,27 @@ export function TopNavHeading({
     isEnabled: !!menu,
     showDelay: 0,
   });
+
+  // A press that slides across the product menu's items acts on the item it
+  // lifts on, the highlight following the pointer (`family:action-groups`
+  // FR1-FR3, FR5); a mouse released outside closes it. Only the role="menu"
+  // region is tracked, not the heading above it.
+  const productMenuRef = useRef<HTMLDivElement>(null);
+  const productMenuPress = useMenuPress({
+    menuRef: productMenuRef,
+    itemSelector: '[role="menuitem"]:not([aria-disabled="true"])',
+    onDismiss: closeMenu,
+    isEnabled: !!menu,
+  });
+  const productMenuPointerDown = pressOnItemsOnly(
+    productMenuPress.menuProps.onPointerDown,
+    '[role="menuitem"]:not([aria-disabled="true"])',
+  );
+  const productMenuTouch = stylex.props(
+    useMenuOverflow(productMenuRef, menu, popover.isOpen)
+      ? menuTouchActionStyles.scrolls
+      : menuTouchActionStyles.fits,
+  );
 
   const closeMenuCtx = useMemo(() => ({closeMenu}), [closeMenu]);
 
@@ -432,7 +464,7 @@ export function TopNavHeading({
     />
   );
 
-  const headerEndContentElement = headerEndContent && (
+  const headerEndContentElement = isRenderable(headerEndContent) && (
     <span {...stylex.props(styles.headerEndContent)}>{headerEndContent}</span>
   );
 
@@ -444,7 +476,7 @@ export function TopNavHeading({
       {...stylex.props(styles.popoverHeading)}
       // A close affordance, not the trigger: dismiss only.
       onClick={closeMenu}>
-      {logo && <span {...stylex.props(styles.logo)}>{logo}</span>}
+      {isRenderable(logo) && <span {...stylex.props(styles.logo)}>{logo}</span>}
       {renderTextContent(
         <Icon
           icon="chevronDown"
@@ -476,7 +508,9 @@ export function TopNavHeading({
           style,
         )}
         {...props}>
-        {logo && <span {...stylex.props(styles.logo)}>{logo}</span>}
+        {isRenderable(logo) && (
+          <span {...stylex.props(styles.logo)}>{logo}</span>
+        )}
       </Element>
     );
   }
@@ -495,7 +529,9 @@ export function TopNavHeading({
           style,
         )}
         {...(props as React.AnchorHTMLAttributes<HTMLAnchorElement>)}>
-        {logo && <span {...stylex.props(styles.logo)}>{logo}</span>}
+        {isRenderable(logo) && (
+          <span {...stylex.props(styles.logo)}>{logo}</span>
+        )}
         {renderTextContent()}
         {headerEndContentElement}
         {chevronElement}
@@ -517,14 +553,19 @@ export function TopNavHeading({
             className,
             style,
           )}>
-          {logo && <span {...stylex.props(styles.logo)}>{logo}</span>}
+          {isRenderable(logo) && (
+            <span {...stylex.props(styles.logo)}>{logo}</span>
+          )}
           {renderTextContent(
             // Stays a <button>: this box is the popover trigger, so it carries
             // the accessible name and handlers — only the glyph moves to Icon.
             <button
               ref={setTriggerEl}
               type="button"
-              aria-label={t('@astryx.topNav.heading.openMenu')}
+              aria-label={t('@astryx.topNav.heading.openMenu', {
+                heading: heading ?? '',
+                hasHeading: heading ? 'true' : 'false',
+              })}
               onClick={e => {
                 e.stopPropagation();
                 triggerProps.onClick();
@@ -551,8 +592,12 @@ export function TopNavHeading({
                 heading button above stays a valid sibling, not an invalid
                 child of a role="menu" element. */}
             <div
+              ref={productMenuRef}
               role="menu"
-              aria-label={heading ?? t('@astryx.topNav.heading.dialogLabel')}>
+              aria-label={heading ?? t('@astryx.topNav.heading.dialogLabel')}
+              {...productMenuPress.menuProps}
+              onPointerDown={productMenuPointerDown}
+              {...productMenuTouch}>
               <NavHeadingCloseContext value={closeMenuCtx}>
                 {menu}
               </NavHeadingCloseContext>
@@ -582,7 +627,7 @@ export function TopNavHeading({
             className,
             style,
           )}>
-          {logo &&
+          {isRenderable(logo) &&
             (headingHref ? (
               <LinkComponent
                 href={headingHref}
@@ -602,7 +647,10 @@ export function TopNavHeading({
               <button
                 ref={setTriggerEl}
                 type="button"
-                aria-label={t('@astryx.topNav.heading.openMenu')}
+                aria-label={t('@astryx.topNav.heading.openMenu', {
+                  heading: heading ?? '',
+                  hasHeading: heading ? 'true' : 'false',
+                })}
                 onClick={e => {
                   e.stopPropagation();
                   triggerProps.onClick();
@@ -630,8 +678,12 @@ export function TopNavHeading({
                 heading button above stays a valid sibling, not an invalid
                 child of a role="menu" element. */}
             <div
+              ref={productMenuRef}
               role="menu"
-              aria-label={heading ?? t('@astryx.topNav.heading.dialogLabel')}>
+              aria-label={heading ?? t('@astryx.topNav.heading.dialogLabel')}
+              {...productMenuPress.menuProps}
+              onPointerDown={productMenuPointerDown}
+              {...productMenuTouch}>
               <NavHeadingCloseContext value={closeMenuCtx}>
                 {menu}
               </NavHeadingCloseContext>
@@ -660,7 +712,7 @@ export function TopNavHeading({
           style,
         )}
         {...props}>
-        {logo &&
+        {isRenderable(logo) &&
           (headingHref ? (
             <LinkComponent
               href={headingHref}
@@ -714,7 +766,7 @@ export function TopNavHeading({
         style,
       )}
       {...props}>
-      {logo && <span {...stylex.props(styles.logo)}>{logo}</span>}
+      {isRenderable(logo) && <span {...stylex.props(styles.logo)}>{logo}</span>}
       {renderTextContent()}
       {headerEndContentElement}
       {chevronElement}

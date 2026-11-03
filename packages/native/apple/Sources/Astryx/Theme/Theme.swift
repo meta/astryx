@@ -16,14 +16,16 @@ import AppKit
 public struct Theme: Equatable, Sendable {
   public var light: Tokens
   public var dark: Tokens
-  /// SF Symbols that replace the defaults for shared icon names, such as
-  /// `["success": "checkmark.seal.fill"]` (AST-082 FR17).
-  public var icons: [String: String]
+  /// Images that replace the defaults for shared icon names, or register a
+  /// `<library>:<name>` name (AST-082 FR17): an SF Symbol, such as
+  /// `["success": "checkmark.seal.fill"]`, or an app asset, such as
+  /// `["close": .assetName("brand.close")]`.
+  public var icons: [String: IconImage]
   /// Native visual intent from `defineNativeTheme`. Reserved: empty until a
   /// component reads it.
   public var native: NativeIntent
 
-  public init(light: Tokens, dark: Tokens, icons: [String: String] = [:], native: NativeIntent = .init()) {
+  public init(light: Tokens, dark: Tokens, icons: [String: IconImage] = [:], native: NativeIntent = .init()) {
     self.light = light
     self.dark = dark
     self.icons = icons
@@ -48,12 +50,12 @@ public struct AstryxStyle: Sendable {
   /// How much Dynamic Type grows text at the person's setting (1 at Large).
   public let textScale: CGFloat
   /// The theme's replacements for shared icon names.
-  public let icons: [String: String]
+  public let icons: [String: IconImage]
   /// Whether the person turned on Bold Text (`legibilityWeight == .bold`).
   public let isBoldText: Bool
 
   public init(
-    tokens: Tokens, textScale: CGFloat = 1, icons: [String: String] = [:], isBoldText: Bool = false
+    tokens: Tokens, textScale: CGFloat = 1, icons: [String: IconImage] = [:], isBoldText: Bool = false
   ) {
     self.tokens = tokens
     self.textScale = textScale
@@ -63,31 +65,31 @@ public struct AstryxStyle: Sendable {
 
   /// A token color by its CSS name, for code that only has the name. A name
   /// the theme does not define draws clear. New code reads the typed members.
-  public func color(_ token: String) -> Color {
+  func color(_ token: String) -> Color {
     tokens.color.value(named: token) ?? .clear
   }
 
   /// A token size in points by its CSS name, or `fallback` when the theme does
   /// not define it. New code reads the typed members.
-  public func size(_ token: String, _ fallback: CGFloat) -> CGFloat {
+  func size(_ token: String, _ fallback: CGFloat) -> CGFloat {
     tokens.space.value(named: token) ?? tokens.radius.value(named: token)
       ?? tokens.size.value(named: token) ?? tokens.font.number(named: token) ?? fallback
   }
 
   /// A step on the spacing ladder: `space(4)` reads `spacing-4`.
-  public func space(_ step: Int) -> CGFloat {
+  func space(_ step: Int) -> CGFloat {
     size("spacing-\(step)", CGFloat(step) * 4)
   }
 
   /// A token font size grown by Dynamic Type.
-  public func fontSize(_ token: String, _ fallback: CGFloat) -> CGFloat {
+  func fontSize(_ token: String, _ fallback: CGFloat) -> CGFloat {
     size(token, fallback) * textScale
   }
 
   /// The theme's font family at a token size and a token weight. The first
   /// family in the stack that the device has wins; a system family, such as
   /// `-apple-system` or `sans-serif`, is the system font.
-  public func font(
+  func font(
     size token: String,
     _ fallback: CGFloat,
     weight: String,
@@ -101,11 +103,12 @@ public struct AstryxStyle: Sendable {
     )
   }
 
-  /// The SF Symbol for a shared icon name (AST-082 FR17): the theme's
-  /// replacement, else the default. An unknown name stops a development
-  /// build with a message that names it, and draws nothing in a release build.
-  public func icon(_ name: String) -> String? {
-    if let symbol = icons[name] ?? astryxDefaultIcons[name] { return symbol }
+  /// The image for a shared icon name (AST-082 FR17): the theme's
+  /// replacement, else the default SF Symbol. An unknown name stops a
+  /// development build with a message that names it, and draws nothing in a
+  /// release build.
+  public func icon(_ name: String) -> IconImage? {
+    if let image = icons[name] ?? astryxDefaultIcons[name].map(IconImage.systemName) { return image }
     assertionFailure("Astryx has no icon named \"\(name)\"")
     return nil
   }
@@ -119,38 +122,6 @@ public struct AstryxStyle: Sendable {
     case 650..<750: .bold
     default: .heavy
     }
-  }
-}
-
-extension Color {
-  /// A color from `0xRRGGBBAA` in sRGB, the form the generated themes use.
-  public init(astryxRGBA value: UInt32) {
-    self.init(
-      .sRGB,
-      red: Double((value >> 24) & 0xFF) / 255,
-      green: Double((value >> 16) & 0xFF) / 255,
-      blue: Double((value >> 8) & 0xFF) / 255,
-      opacity: Double(value & 0xFF) / 255
-    )
-  }
-
-  /// A color from `#RRGGBBAA`. `#RRGGBB` and `#RGB` also read; anything else
-  /// is clear.
-  public init(astryxHex hex: String) {
-    var digits = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
-    if digits.count == 3 { digits = digits.map { "\($0)\($0)" }.joined() }
-    if digits.count == 6 { digits += "FF" }
-    guard digits.count == 8, let value = UInt32(digits, radix: 16) else {
-      self = .clear
-      return
-    }
-    self.init(
-      .sRGB,
-      red: Double((value >> 24) & 0xFF) / 255,
-      green: Double((value >> 16) & 0xFF) / 255,
-      blue: Double((value >> 8) & 0xFF) / 255,
-      opacity: Double(value & 0xFF) / 255
-    )
   }
 }
 
@@ -263,8 +234,85 @@ func astryxTokens(_ theme: Theme, scheme: ColorScheme, contrast: ColorSchemeCont
 
 extension View {
   /// Paints this subtree with a theme. Components follow the color scheme and
-  /// the person's text size either way.
+  /// the person's text size either way. The theme also sets SwiftUI's tint
+  /// where it stays legible, so stock controls in the subtree carry the brand
+  /// (theme environment spec, E2).
   public func astryxTheme(_ theme: Theme = .default) -> some View {
-    environment(\.astryxTheme, theme)
+    modifier(AstryxThemeModifier(theme: theme))
   }
+}
+
+/// Sets the theme and writes the SwiftUI values a theme has an equivalent for,
+/// only where they stay legible (theme environment spec, E2). The colors
+/// resolve where they are drawn, so a subtree with its own color scheme gets
+/// that mode's colors (E3).
+private struct AstryxThemeModifier: ViewModifier {
+  let theme: Theme
+
+  func body(content: Content) -> some View {
+    content
+      // Only the tint: an inherited foreground style would override stock
+      // controls' own label colors (a link's tint, a prominent button's white).
+      .tint(AstryxThemeColor(theme: theme, role: .tint))
+      .environment(\.astryxTheme, theme)
+      // A single-mode theme sets its subtree's color scheme, so stock controls
+      // inside draw the appearance its grounds belong to. Written without a
+      // view branch, so switching themes at run time keeps the subtree's state.
+      .transformEnvironment(\.colorScheme) { scheme in
+        if let mode = theme.singleMode { scheme = mode }
+      }
+  }
+}
+
+extension Theme {
+  /// The mode a single-mode theme belongs to, by its page ground: dark for a
+  /// dark ground. A theme is single-mode when its page ground, card ground,
+  /// primary text, and accent are the same in light and dark; core still fills
+  /// a few tokens such a theme leaves out with per-mode defaults, so the whole
+  /// token set never matches. Nil for a theme with both modes.
+  var singleMode: ColorScheme? {
+    let (l, d) = (light.color, dark.color)
+    guard l.backgroundBody == d.backgroundBody, l.backgroundCard == d.backgroundCard,
+      l.textPrimary == d.textPrimary, l.accent == d.accent
+    else { return nil }
+    return astryxLuminance(l.backgroundBody) < 0.5 ? .dark : .light
+  }
+}
+
+/// A theme color that picks light or dark from the color scheme where it is
+/// drawn.
+struct AstryxThemeColor: ShapeStyle {
+  enum Role: Sendable {
+    case tint
+  }
+
+  let theme: Theme
+  let role: Role
+
+  func resolve(in environment: EnvironmentValues) -> Color {
+    let color = (environment.colorScheme == .dark ? theme.dark : theme.light).color
+    switch role {
+    case .tint: return astryxStockTint(color.accent)
+    }
+  }
+}
+
+/// The tint stock controls get from an accent: the accent where the white
+/// those controls draw on their tint meets 3:1 against it, as the system's own
+/// dark-mode blue does, and the system tint otherwise.
+func astryxStockTint(_ accent: Color) -> Color {
+  astryxContrast(.white, accent) >= 3 ? accent : .accentColor
+}
+
+/// WCAG relative luminance of an opaque sRGB color.
+func astryxLuminance(_ color: Color) -> Double {
+  let resolved = color.resolve(in: EnvironmentValues())
+  return 0.2126 * Double(resolved.linearRed) + 0.7152 * Double(resolved.linearGreen)
+    + 0.0722 * Double(resolved.linearBlue)
+}
+
+/// WCAG contrast ratio between two opaque colors.
+func astryxContrast(_ a: Color, _ b: Color) -> Double {
+  let (la, lb) = (astryxLuminance(a), astryxLuminance(b))
+  return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
 }

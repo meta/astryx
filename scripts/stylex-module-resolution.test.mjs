@@ -182,15 +182,15 @@ describe('the browser check', () => {
     const install = steps.findIndex(
       step => step.run === 'npx playwright install chromium',
     );
-    const check = steps.findIndex(
-      step => step.name === 'Run cross-package StyleX marker browser check',
-    );
+    const check = steps.findIndex(step => step.run === 'pnpm test:build');
     expect(install).toBeGreaterThanOrEqual(0);
     expect(check).toBeGreaterThan(install);
-    expect(steps[check].env).toEqual({ASTRYX_STYLEX_BROWSER: '1'});
-    expect(steps[check].run).toContain(
-      'scripts/stylex-module-resolution.browser.test.mjs',
-    );
     expect(steps[check]['continue-on-error']).toBeUndefined();
+    const {scripts} = JSON.parse(
+      fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'),
+    );
+    expect(scripts['test:build']).toContain(
+      'ASTRYX_STYLEX_BROWSER=1 vitest run scripts/stylex-module-resolution.browser.test.mjs',
+    );
   });
 });
