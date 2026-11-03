@@ -23,6 +23,8 @@
 
 import {useEffect, useRef, type RefObject} from 'react';
 
+import {claimFocusMoves} from '../utils/claimFocusMoves';
+
 const MOBILE_KEYBOARD_INSET_VAR = '--_sheet-keyboard-inset';
 const NON_TEXT_INPUT_TYPES = new Set([
   'button',
@@ -258,27 +260,19 @@ export function useMobileKeyboard({
       body.style.setProperty(MOBILE_KEYBOARD_INSET_VAR, `${inset}px`);
     };
 
-    // Take the focus transition over before the browser performs it.
-    //
-    // `blur` is dispatched in the capture phase ahead of the browser's own
-    // focus step, and it names the destination in `relatedTarget`. Focusing it
-    // here with preventScroll settles the transition: the browser's step finds
-    // the element already active, so it dispatches nothing further and has
+    // Claim the focus move before the browser performs it (claimFocusMoves).
+    // The browser's step then finds the element already active, so it has
     // nothing to reveal.
-    const claimFocusTransition = (event: FocusEvent) => {
+    const pickFocusMove = (event: FocusEvent): HTMLElement | null => {
       if (!isFullyExpandedRef.current) {
-        return;
+        return null;
       }
       const destination = findTextEntryControl(event.relatedTarget, body);
       if (destination) {
-        if (destination !== document.activeElement) {
-          // Revealing the field is not this handler's job: focusing it raises
-          // focusin, and the viewport resize that follows the keyboard raises
-          // another — both already schedule the reveal below, which knows the
-          // safe area and scrolls only the sheet's own body.
-          destination.focus({preventScroll: true});
-        }
-        return;
+        // This handler does not reveal the field. The focus raises focusin,
+        // and the keyboard's viewport resize raises another. Both schedule
+        // the reveal below, which scrolls only the sheet's body.
+        return destination;
       }
 
       // Focus left for nothing — the keyboard's Done button parks it on the
@@ -294,6 +288,7 @@ export function useMobileKeyboard({
       if (isOpenRef.current && origin && !event.relatedTarget) {
         sheet?.focus({preventScroll: true});
       }
+      return null;
     };
 
     const revealFocusedControl = () => {
@@ -485,12 +480,9 @@ export function useMobileKeyboard({
     };
 
     const viewport = window.visualViewport;
-    if (ownsFocusTransitions) {
-      // `blur` does not bubble, so the capture phase is the only place to hear
-      // every one of them — and it runs before the browser's own focus step,
-      // which is the only window in which the transition can still be claimed.
-      document.addEventListener('blur', claimFocusTransition, true);
-    }
+    const stopClaimingFocusMoves = ownsFocusTransitions
+      ? claimFocusMoves(document, pickFocusMove)
+      : null;
     body.addEventListener('focusin', handleFocusIn);
     body.addEventListener('focusout', handleFocusOut);
     sheet?.addEventListener('transitionend', handleSheetTransitionEnd);
@@ -511,9 +503,7 @@ export function useMobileKeyboard({
 
     return () => {
       cancelAnimationFrame(animationFrame);
-      if (ownsFocusTransitions) {
-        document.removeEventListener('blur', claimFocusTransition, true);
-      }
+      stopClaimingFocusMoves?.();
       body.removeEventListener('focusin', handleFocusIn);
       body.removeEventListener('focusout', handleFocusOut);
       sheet?.removeEventListener('transitionend', handleSheetTransitionEnd);

@@ -28,6 +28,29 @@ describe('internal/touch', () => {
     for (const name of ['TapGestureRecognizer', 'LongPressGestureRecognizer']) {
       expect(typeof entry[name], name).toBe('function');
     }
+    const hook = await import('../gestures/useGestureRecognizer');
+    const presentation = await import('../utils/touchPresentation');
+    const direction = await import('../hooks/isRtlElement');
+    const focusMoves = await import('../utils/claimFocusMoves');
+    const animator = await import('../motion/animator');
+    const bezier = await import('../motion/bezier');
+    const uikitTiming = await import('../motion/uikit/timing');
+    expect(entry.useGestureRecognizer).toBe(hook.useGestureRecognizer);
+    expect(entry.useTouchPresentation).toBe(presentation.useTouchPresentation);
+    expect(entry.isRtlElement).toBe(direction.isRtlElement);
+    expect(entry.claimFocusMoves).toBe(focusMoves.claimFocusMoves);
+    expect(entry.createMotionAnimator).toBe(animator.createAnimator);
+    expect(entry.cubicBezier).toBe(bezier.cubicBezier);
+    expect(entry.timing).toBe(uikitTiming.timing);
+    // No internal factory shares a public factory's name
+    // (architecture:react-component-runtime INV13, spec:AST-107 FR6).
+    for (const name of [
+      'createAnimator',
+      'createPanGesture',
+      'createDragToSnapPoints',
+    ]) {
+      expect(entry, name).not.toHaveProperty(name);
+    }
     // Named re-exports only: no gathering object a component would carry
     // whole (architecture:component-style-authoring INV6).
     expect(entry).not.toHaveProperty('touchModule');
