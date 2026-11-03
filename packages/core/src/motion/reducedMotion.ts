@@ -116,8 +116,9 @@ export interface ReducedMotionDip {
  * full opacity, however late the main thread runs. A timer at the middle can
  * fire after the fade-in has begun.
  *
- * `from` is the opacity the fade-out starts at: a leaving element fades out
- * from where it is.
+ * `land` must apply the change before it returns: the fade-in starts right
+ * after it. `from` is the opacity the fade-out starts at: a leaving element
+ * fades out from where it is.
  *
  * @example
  * ```

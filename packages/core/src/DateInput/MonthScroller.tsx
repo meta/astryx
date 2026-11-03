@@ -38,6 +38,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {useCalendarDays} from '../Calendar';
 import {useDirection, useLocale} from '../i18n';
@@ -510,7 +511,10 @@ export function MonthScroller({
         // show the month changing at full opacity.
         dipRef.current = playReducedMotionDip(scroller, fade, () => {
           dipRef.current = null;
-          land();
+          // The fade-in starts as soon as this returns. So render now: the
+          // scroll lands in the layout effect, before the fade-in.
+          // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the month must change before the dip's fade-in starts
+          flushSync(land);
         });
         return;
       }
