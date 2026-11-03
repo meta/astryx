@@ -3687,6 +3687,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-outline-from-markdown-docs-article",
+      "path": "examples/use-outline-from-markdown/docs-article",
+      "aliases": []
+    },
+    {
       "name": "example-use-overflow-editor-toolbar",
       "path": "examples/use-overflow/editor-toolbar",
       "aliases": []
@@ -3939,6 +3944,11 @@
     {
       "name": "hook-use-multi-combobox",
       "path": "hooks/use-multi-combobox",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-outline-from-markdown",
+      "path": "hooks/use-outline-from-markdown",
       "aliases": []
     },
     {
