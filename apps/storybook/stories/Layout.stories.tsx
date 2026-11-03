@@ -613,6 +613,50 @@ export const DualPanels: Story = {
   ),
 };
 
+export const ResponsiveHiddenPanels: Story = {
+  name: 'Responsive Hidden Panels (hideBelow)',
+  render: () => (
+    <div {...stylex.props(styles.pageWrapper, styles.pageWrapperTall)}>
+      <Card width="100%" maxWidth={900} height={400}>
+        <Layout
+          header={
+            <LayoutHeader hasDivider>
+              <h3 {...stylex.props(styles.heading)}>Messages</h3>
+            </LayoutHeader>
+          }
+          start={
+            <LayoutPanel hasDivider hideBelow="md" role="navigation">
+              <p {...stylex.props(styles.sectionLabel)}>Channels</p>
+              <NavItem active>General</NavItem>
+              <NavItem>Random</NavItem>
+              <NavItem>Support</NavItem>
+            </LayoutPanel>
+          }
+          content={
+            <LayoutContent>
+              <p {...stylex.props(styles.bodyText)}>
+                Resize the viewport: the start panel hides below 768px
+                (hideBelow=&quot;md&quot;) and the end panel hides below 1024px
+                (hideBelow=&quot;lg&quot;). No useMediaQuery in page code, the
+                panels own their breakpoint behavior via CSS media queries, so
+                server rendering and hydration stay in sync.
+              </p>
+            </LayoutContent>
+          }
+          end={
+            <LayoutPanel hasDivider hideBelow="lg" width={260}>
+              <p {...stylex.props(styles.sectionLabel)}>Thread</p>
+              <p {...stylex.props(styles.bodyText)}>
+                Thread details appear here on wide viewports.
+              </p>
+            </LayoutPanel>
+          }
+        />
+      </Card>
+    </div>
+  ),
+};
+
 export const NoDividers: Story = {
   name: 'Without Dividers',
   render: () => (

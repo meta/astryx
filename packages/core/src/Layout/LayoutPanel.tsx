@@ -33,6 +33,28 @@ import {
   containerPaddingBlockEndVarStyles,
 } from './padding.stylex';
 
+// =============================================================================
+// Responsive visibility breakpoints for the `hideBelow` prop
+// =============================================================================
+
+// Media queries are compile-time literals (StyleX cannot read var() inside
+// at-rule conditions). Values align with AppShell's BREAKPOINT_VALUES
+// (sm: 640, md: 768, lg: 1024) plus an xl step, and match the max-width
+// queries templates previously hand-rolled with useMediaQuery.
+const HIDE_BELOW_SM = '@media (max-width: 640px)';
+const HIDE_BELOW_MD = '@media (max-width: 768px)';
+const HIDE_BELOW_LG = '@media (max-width: 1024px)';
+const HIDE_BELOW_XL = '@media (max-width: 1280px)';
+
+// Pure CSS visibility toggle: the panel stays mounted, so server-rendered
+// HTML and client hydration always agree (no useMediaQuery flash).
+const hideBelowStyles = stylex.create({
+  sm: {display: {default: null, [HIDE_BELOW_SM]: 'none'}},
+  md: {display: {default: null, [HIDE_BELOW_MD]: 'none'}},
+  lg: {display: {default: null, [HIDE_BELOW_LG]: 'none'}},
+  xl: {display: {default: null, [HIDE_BELOW_XL]: 'none'}},
+});
+
 const styles = stylex.create({
   panel: {
     boxSizing: 'border-box',
@@ -175,6 +197,30 @@ export interface LayoutPanelProps extends BaseProps<HTMLDivElement> {
    * ```
    */
   resizable?: ResizableProps;
+
+  /**
+   * Hides the panel below the given viewport-width breakpoint via a CSS
+   * media query (no runtime measurement). The panel stays mounted, so
+   * server-rendered HTML and client hydration always agree; use this
+   * instead of a hand-rolled useMediaQuery + conditional render.
+   *
+   * Breakpoints: `sm` = 640px, `md` = 768px, `lg` = 1024px, `xl` = 1280px.
+   *
+   * When combined with `resizable`, hiding wins below the breakpoint.
+   *
+   * @example
+   * ```
+   * <Layout
+   *   content={<LayoutContent>Main content</LayoutContent>}
+   *   end={
+   *     <LayoutPanel width={340} hideBelow="lg">
+   *       <Inspector />
+   *     </LayoutPanel>
+   *   }
+   * />
+   * ```
+   */
+  hideBelow?: 'sm' | 'md' | 'lg' | 'xl';
 }
 
 /**
@@ -214,6 +260,7 @@ export function LayoutPanel({
   role,
   width,
   resizable,
+  hideBelow,
   xstyle,
   className,
   style,
@@ -276,6 +323,7 @@ export function LayoutPanel({
           padding != null && containerPaddingBlockEndVarStyles[padding],
           hasDivider && dividerStyle,
           shouldCollapseSpacing && collapseStyle,
+          hideBelow != null && hideBelowStyles[hideBelow],
           xstyle,
         ),
         className,
