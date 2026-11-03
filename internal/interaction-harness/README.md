@@ -192,8 +192,11 @@ before the block until its first presented change inside it: WebKit presents
 a just-started compositor animation late (a sheet's release held on screen for
 130 to 300 ms while its timeline ran), and its cast reaches Node about 0.7 s
 late on a loaded runner, too late to wait on before blocking. Only a hold that
-starts before the block, on two frames at least, is excused, and every frame
-after its first change is judged, so a freeze later in the block still fails.
+starts before the block, on two frames at least, at the position the page last
+set before the block is excused. Pass that position as `setBeforeBlock`, such
+as the drag's last position at the release. An animation frozen at the block's
+start holds a position of its own, and is judged as a stall. Every frame after
+its first change is judged, so a freeze later in the block still fails.
 Any other element already moving is judged from the block's start. WebKit's
 casts are 2 px quantized: their JPEG frames hold the
 marker's color in 2 by 2 pixel chroma blocks (4:2:0, which the frame header
