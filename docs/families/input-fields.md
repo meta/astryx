@@ -260,9 +260,9 @@ another implementation helper.
   above it, wherever the member renders: in the page, a sheet, a bottom bar, or
   a fixed toolbar. A member docked at the bottom of the viewport rides the
   keyboard: its docked container moves up and back with it, including an
-  app-owned container docked to the viewport's bottom edge, by the part the
-  keyboard still covers. This covers TextInput, TextArea, NumberInput, the typed
-  fields of DateInput, DateTimeInput, and TimeInput, the inputs of Typeahead and
+  app-owned container docked to the viewport's bottom edge, as `spec:AST-099`
+  FR9 defines. This covers TextInput, TextArea, NumberInput, the typed fields of
+  DateInput, DateTimeInput, and TimeInput, the inputs of Typeahead and
   Tokenizer, and the search row of Selector and MultiSelector. It is internal
   behavior with no prop or other public API, as `spec:AST-099` FR9 requires;
   that record owns the observable rule and the full list of covered fields,
