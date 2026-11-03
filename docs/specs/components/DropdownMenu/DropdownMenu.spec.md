@@ -372,6 +372,9 @@ than adding a DropdownMenu-owned heading target.
 - **Delegated Trigger Button gaps (FR3).** The Trigger button scales on a press
   under reduced motion and holds a fixed height, as `component:Button` records,
   against `design:reduced-motion` DR1 and `spec:AST-102` FR4.
+- **Rich sheet heading for caller-rendered triggers (OQ2).** With
+  `renderTrigger`, the bottom-sheet heading shows only the flattened text of
+  the trigger's accessible name, and a trigger with no name gets no heading.
 
 ## Decision log
 
@@ -554,6 +557,14 @@ closing on Tab past either end, which leaves a modal dialog by Tab.
   and DropdownMenu's enabled-only focus-on-open and navigation tests depend on
   that result. The requirement is objective; choosing a menu-specific hook policy
   or a DropdownMenu-owned path changes a shared API and ownership boundary.
+- **OQ2 — Rich sheet heading for caller-rendered triggers.** (`human-api`)
+  With `renderTrigger`, the bottom-sheet heading and the dialog's name come from
+  the trigger's accessible name read from the page, so a rich trigger (an avatar
+  and a name, an icon and a label) shows only flattened text in the sheet
+  heading, and a trigger with no name gets no heading. Open: whether
+  DropdownMenu takes an explicit heading (a node), reuses the trigger's rendered
+  content, or keeps the plain-text name; and whether that name should come from
+  an explicit source rather than a read from the page.
 
 ## Content boundary
 

@@ -52,6 +52,7 @@ import {LayerContentBoundary} from '../Layer/layerScopedContext';
 import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
+import {useBackdropPress} from '../Layer/useBackdropPress';
 import {useModalOutlet} from '../Layer/modalOutlet';
 import {
   colorVars,
@@ -80,10 +81,12 @@ import {themeProps} from '../utils/themeProps';
 import type {DialogVariantMap} from './index';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
-import {focusForLastInput} from '../utils/focusReturn';
+import {focusForLastInput, isFocusLost} from '../utils/focusReturn';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+
+type PointerHandler = (event: React.PointerEvent<HTMLDialogElement>) => void;
 /**
  * Calculate a directional translate offset for dialog entry animation.
  * Returns a normalized vector from the trigger element toward the viewport
@@ -634,6 +637,42 @@ export function Dialog({
     }
   }, [isOpen, isInline]);
 
+  // A dialog that unmounts while open (rendered only while open, or removed
+  // with the rest of a view) never runs the close branch above, and removing a
+  // <dialog> does not run the browser's own focus return. Focus left inside
+  // it, or dropped to the body by the removal, goes back to the opener.
+  useEffect(() => {
+    if (isInline) {
+      return;
+    }
+    const dialog = dialogRef.current;
+    // Read now: a removed iframe's document has no window, so its frame
+    // element can no longer be found once the dialog is gone.
+    const host = dialog?.ownerDocument.defaultView?.frameElement ?? null;
+    return () => {
+      const trigger = triggerElementRef.current;
+      if (dialog == null || trigger == null) {
+        return;
+      }
+      // Checked once the commit has finished: StrictMode's simulated unmount
+      // leaves the dialog in the document, and only a real removal returns
+      // focus.
+      queueMicrotask(() => {
+        if (dialog.isConnected || !trigger.isConnected) {
+          return;
+        }
+        // isFocusLost reads the dialog's own document. For a dialog in an
+        // iframe, the document that hosts the frame must also have lost focus
+        // or keep it on that frame, wherever the opener is: a control the
+        // user pressed outside the frame to remove the dialog, or the frame
+        // itself, keeps its focus.
+        if (isFocusLost(dialog) && (host == null || isFocusLost(host))) {
+          focusForLastInput(trigger);
+        }
+      });
+    };
+  }, [isInline]);
+
   // Host app-global surfaces (toasts) inside this modal while it is open, so
   // they stay visible and operable above it.
   useModalOutlet(dialogRef, isOpen && !isInline);
@@ -687,16 +726,16 @@ export function Dialog({
     }
   }, [isOpen, isInline, hasConsumerName, titleId]);
 
-  // Handle backdrop click — when the user clicks the ::backdrop pseudo-element,
-  // the event target is the <dialog> element itself; clicks on child content
-  // always target the child. This avoids false positives from native browser
+  // A press on the ::backdrop targets the <dialog> itself, so native browser
   // popups (date pickers, selects, color pickers) that render outside the
-  // dialog's bounding rect.
-  const handleClick = (event: React.MouseEvent<HTMLDialogElement>) => {
-    if (event.target === event.currentTarget && allowBackdropClick) {
-      onOpenChange(false);
-    }
-  };
+  // dialog's rect never count. The press must start and end there.
+  const handleBackdropPress = useCallback(() => {
+    onOpenChange(false);
+  }, [onOpenChange]);
+  const backdropPress = useBackdropPress(
+    handleBackdropPress,
+    allowBackdropClick,
+  );
 
   // The native `cancel` event is the browser's own close-watcher firing: an
   // Android back gesture, or a close request the stack never saw a press for.
@@ -854,8 +893,20 @@ export function Dialog({
       // written.
       {...layerClickBoundary({
         ...safeProps,
-        onClick: chainEventHandlers(handleClick, onClickProp),
+        onClick: chainEventHandlers(backdropPress.onClick, onClickProp),
       })}
+      onPointerDownCapture={chainEventHandlers(
+        backdropPress.onPointerDownCapture,
+        safeProps.onPointerDownCapture as PointerHandler | undefined,
+      )}
+      onPointerUpCapture={chainEventHandlers(
+        backdropPress.onPointerUpCapture,
+        safeProps.onPointerUpCapture as PointerHandler | undefined,
+      )}
+      onPointerCancelCapture={chainEventHandlers(
+        backdropPress.onPointerCancelCapture,
+        safeProps.onPointerCancelCapture as PointerHandler | undefined,
+      )}
       onCancel={handleCancel}
       aria-modal={isHydrating ? undefined : 'true'}
       // The default aria-labelledby (from a DialogHeader title) is set

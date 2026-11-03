@@ -9,7 +9,7 @@
  * @output Exports useHighlightedOptionScroll: keeps the highlighted option
  *   scrolled into view for keyboard navigation while hover-driven highlights
  *   never scroll, and a hover after a keyboard move waits for the pointer to
- *   move
+ *   move; the hover callback is stable while `setHighlightedIndex` is
  * @position Internal hook; used by useCombobox, useMultiCombobox,
  *   BaseTypeahead, and DateTimeInput — the owners of combobox highlight state
  */
@@ -58,7 +58,9 @@ export function useHighlightedOptionScroll({
   getOptionId,
   itemCount,
 }: UseHighlightedOptionScrollOptions): HighlightFromHover {
-  const hoverHighlightRef = useRef(false);
+  // The callback reads no render state, so memoized rows keep one function.
+  const hoveredIndexRef = useRef<number | null>(null);
+  const shownIndexRef = useRef(highlightedIndex);
   // Set by a keyboard move, cleared by the next real pointer move.
   const isKeyAnchoredRef = useRef(false);
   // The hover that came while the keyboard held the highlight.
@@ -74,14 +76,13 @@ export function useHighlightedOptionScroll({
         waitingHoverRef.current = {index, onHighlight};
         return;
       }
-      if (index !== highlightedIndex) {
-        hoverHighlightRef.current = true;
-      }
+      hoveredIndexRef.current = index;
       setHighlightedIndex(index);
       onHighlight?.();
     },
-    [highlightedIndex, setHighlightedIndex],
+    [setHighlightedIndex],
   );
+
   // Effect: subscribes to the document's pointer moves while the list is
   // open. Movement is read by screen coordinates: a scroll moves the rows,
   // not the pointer. The browser reports a row as entered before the move
@@ -118,16 +119,20 @@ export function useHighlightedOptionScroll({
   }, [isOpen, highlightFromHover]);
 
   useEffect(() => {
-    if (hoverHighlightRef.current) {
-      hoverHighlightRef.current = false;
-      return;
-    }
+    // Only a move to the hovered row came from the hover. A hover on the row
+    // already highlighted changes nothing, so a later run for the same row
+    // (a new list) still scrolls it into view.
+    const hasMoved = shownIndexRef.current !== highlightedIndex;
+    shownIndexRef.current = highlightedIndex;
+    const isFromHover =
+      hasMoved && hoveredIndexRef.current === highlightedIndex;
+    hoveredIndexRef.current = null;
     if (!isOpen) {
       isKeyAnchoredRef.current = false;
       waitingHoverRef.current = null;
       return;
     }
-    if (highlightedIndex < 0) {
+    if (isFromHover || highlightedIndex < 0) {
       return;
     }
     isKeyAnchoredRef.current = true;

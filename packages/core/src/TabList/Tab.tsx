@@ -42,6 +42,7 @@ import {useDevWarning} from '../hooks/useDevWarning';
 import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {isRenderable} from '../utils/isRenderable';
 
 export interface TabProps extends BaseProps<HTMLButtonElement> {
   /**
@@ -304,7 +305,8 @@ export function Tab({
   const isTabsPattern = tabListCtx.pattern === 'tabs';
   const isLink = href != null && !isTabsPattern;
   const isTabRole = isTabsPattern && !isLink;
-  const displayIcon = isSelected && selectedIcon ? selectedIcon : icon;
+  const displayIcon =
+    isSelected && isRenderable(selectedIcon) ? selectedIcon : icon;
   const hasVisibleLabel = !isLabelHidden && label !== '';
 
   const isDisabled =
@@ -353,7 +355,7 @@ export function Tab({
     !isTabsPattern && panelId != null,
   );
 
-  const iconElement = displayIcon ? (
+  const iconElement = isRenderable(displayIcon) ? (
     <span {...stylex.props(styles.icon, iconSizeStyles[size])}>
       {displayIcon}
     </span>
@@ -439,7 +441,7 @@ export function Tab({
     </span>
   ) : null;
 
-  const endContentElement = endContent ? (
+  const endContentElement = isRenderable(endContent) ? (
     <span {...stylex.props(styles.endContentWrapper)}>{endContent}</span>
   ) : null;
 

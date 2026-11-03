@@ -846,6 +846,30 @@ export const WithBanner: Story = {
 };
 
 /**
+ * Auto height with a banner and a side nav but no top nav. Below the mobile
+ * breakpoint, the side nav shows as the phone top bar under the banner. Both
+ * stick to the top as the page scrolls.
+ */
+export const AutoHeightSideNavBanner: Story = {
+  render: () => (
+    <AppShell
+      contentPadding={6}
+      sideNav={<SideNavWithHeader />}
+      height="auto"
+      banner={
+        <Banner
+          status="info"
+          container="section"
+          title="System maintenance scheduled"
+          description="The system will undergo maintenance tonight at 10pm UTC."
+        />
+      }>
+      <MockContent paragraphs={20} />
+    </AppShell>
+  ),
+};
+
+/**
  * A layout root (FR18): a With Banner shell at the page root (`host: root`)
  * or placed in a padded Card that clips overflow, as a docs example card
  * does (`card`), in an outer Layout's content area (`layout`), or in a

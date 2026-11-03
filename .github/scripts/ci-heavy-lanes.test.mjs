@@ -67,7 +67,7 @@ describe('visual, accessibility and RTL owners', () => {
     const visual = ci.jobs['pr-visual'];
     const condition = ungated(visual.if);
     expect(condition).toContain(
-      "(github.event_name == 'pull_request' &&\n  needs.build-storybook.result == 'success')",
+      "(github.event_name == 'pull_request' &&\n  needs.build-storybook.result == 'success' &&\n  needs.admission.outputs.full != 'true')",
     );
     expect(visual.needs).toContain('run-labels');
     const step = name =>

@@ -21,6 +21,11 @@
 // page adds later (AST-057, AST-094). If only the gesture host arms it, the
 // click listener stays only while the guard is armed.
 //
+// An arm at a claimed touch's lift also takes that touch's late `mousedown`
+// and `mouseup`. WebKit sends them a few ms after a held tap's cancelled
+// `touchend`, aimed at whatever is under the finger by then. They go with
+// the click, the next `pointerdown` or the window, as the guard does.
+//
 // Some clicks always pass:
 // - a click with `detail` 0: a keyboard's, a screen reader's, or one that the
 //   page dispatches;
@@ -45,6 +50,12 @@ export interface ClickGuardOptions {
    * @default false
    */
   readonly staysInstalled?: boolean;
+  /**
+   * The gesture host's arm at a claimed touch's lift: the guard also takes
+   * that touch's late `mousedown` and `mouseup` while it is armed.
+   * @default false
+   */
+  readonly takesLateMouse?: boolean;
 }
 
 interface Guard {
@@ -78,7 +89,7 @@ function listenForClicks(view: Window): () => void {
 /** Swallow the browser's next click on `doc` (see the file header). */
 export function armClickGuard(
   doc: Document,
-  {staysInstalled = false}: ClickGuardOptions = {},
+  {staysInstalled = false, takesLateMouse = false}: ClickGuardOptions = {},
 ): void {
   const view = doc.defaultView;
   if (view == null) {
@@ -98,6 +109,13 @@ export function armClickGuard(
     // The next press is a new gesture: its click must never be eaten.
     subscribeInput(view, 'pointerdown', () => disarmClickGuard(doc)),
   );
+  if (takesLateMouse) {
+    for (const type of ['mousedown', 'mouseup'] as const) {
+      guard.unsubscribers.push(
+        subscribeInput(view, type, swallowLateMouse, {cancels: true}),
+      );
+    }
+  }
   guard.timer = setTimeout(() => disarmClickGuard(doc), CLICK_GUARD_WINDOW_MS);
 }
 
@@ -147,6 +165,15 @@ export function __resetClickGuardForTest(): void {
     stayingClickListeners.get(window)?.();
     stayingClickListeners.delete(window);
   }
+}
+
+/** Swallows a claimed touch's late `mousedown` or `mouseup`. */
+function swallowLateMouse(event: MouseEvent): void {
+  if (isExempt(event)) {
+    return;
+  }
+  event.preventDefault();
+  event.stopImmediatePropagation();
 }
 
 function isExempt(event: MouseEvent): boolean {

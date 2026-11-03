@@ -1,5 +1,27 @@
 # @astryxdesign/richtext
 
+# 0.7.6
+
+#### Fixes
+
+- RichTextEditor's `toolbar` now treats `''` as empty, as it already treated `null`, `undefined` and booleans, so `toolbar=""` no longer adds the toolbar's top border to the editing surface. RichTextEditorToolbar's `endContent` treats `''`, `false` and `true` as empty, so it no longer adds a trailing separator. `0` still counts as content and shows "0". (#9265)
+- Published packages no longer include repository test and benchmark files, reducing install size without changing exports. (#9153)
+
+#### Other Changes
+
+- RichTextEditor: `statusVariant` names `'tooltip'` in its own type, so it keeps accepting `statusVariant="tooltip"` after FieldStatus drops its deprecated `tooltip` variant in the next minor release. No behavior change. (#9196)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @ernestt
+- @parinith-web
+- @potatowagon
+
+---
+
 # 0.7.5
 
 #### New Features

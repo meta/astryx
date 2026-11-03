@@ -31,6 +31,7 @@ import {
   type TokenizerOverflowBehavior,
 } from '../Tokenizer';
 import {TokenizerClearAllMessageContext} from '../Tokenizer/TokenizerClearAllMessageContext';
+import {TokenizerItemRemovableContext} from '../Tokenizer/TokenizerItemRemovableContext';
 import {TypeaheadItem} from '../Typeahead/TypeaheadItem';
 import {Token} from '../Token';
 import {Avatar} from '../Avatar';
@@ -751,6 +752,10 @@ export function PowerSearch({
     [config, filters, onChange, setPopoverState],
   );
 
+  // Tokenizer's Backspace does not go through renderToken. This predicate
+  // locks every token of a read-only field.
+  const isItemRemovable = useCallback(() => !isReadOnly, [isReadOnly]);
+
   // Handle clicking a token to edit
   const handleTokenClick = useCallback(
     (index: number) => {
@@ -1117,37 +1122,39 @@ export function PowerSearch({
         {/* The field's Clear all announces PowerSearch's own words
             (component:PowerSearch; component:Tokenizer AR7). */}
         <TokenizerClearAllMessageContext value={clearAllMessage}>
-          <Tokenizer
-            handleRef={tokenizerRef}
-            label={label}
-            isLabelHidden={isLabelHidden}
-            searchSource={searchSource}
-            value={tokenizerValue}
-            onChange={handleTokenizerChange}
-            renderToken={renderToken}
-            renderItem={renderItem}
-            maxMenuItems={MAX_BROWSE_MENU_ITEMS}
-            menuWidth={menuWidth}
-            placeholder={filters.length === 0 ? placeholder : ''}
-            hasAutoFocus={hasAutoFocus}
-            hasClear={hasClear && !isReadOnly}
-            startIcon={startIcon}
-            endContent={combinedEndContent}
-            isDisabled={isDisabled}
-            disabledMessage={disabledMessage}
-            size={size}
-            tokenOverflowBehavior={tokenOverflowBehavior}
-            hasEntriesOnFocus
-            debounceMs={0}
-            status={status}
-            statusVariant={statusVariant}
-            onFocus={onFocus}
-            onBlur={onBlur}
-            containerXstyle={xstyle}
-            containerClassName={className}
-            containerStyle={style}
-            data-testid={testId}
-          />
+          <TokenizerItemRemovableContext value={isItemRemovable}>
+            <Tokenizer
+              handleRef={tokenizerRef}
+              label={label}
+              isLabelHidden={isLabelHidden}
+              searchSource={searchSource}
+              value={tokenizerValue}
+              onChange={handleTokenizerChange}
+              renderToken={renderToken}
+              renderItem={renderItem}
+              maxMenuItems={MAX_BROWSE_MENU_ITEMS}
+              menuWidth={menuWidth}
+              placeholder={filters.length === 0 ? placeholder : ''}
+              hasAutoFocus={hasAutoFocus}
+              hasClear={hasClear && !isReadOnly}
+              startIcon={startIcon}
+              endContent={combinedEndContent}
+              isDisabled={isDisabled}
+              disabledMessage={disabledMessage}
+              size={size}
+              tokenOverflowBehavior={tokenOverflowBehavior}
+              hasEntriesOnFocus
+              debounceMs={0}
+              status={status}
+              statusVariant={statusVariant}
+              onFocus={onFocus}
+              onBlur={onBlur}
+              containerXstyle={xstyle}
+              containerClassName={className}
+              containerStyle={style}
+              data-testid={testId}
+            />
+          </TokenizerItemRemovableContext>
         </TokenizerClearAllMessageContext>
       </div>
       {popover.render(popoverContent, {
