@@ -455,6 +455,40 @@ describe('ResizeHandle', () => {
     warn.mockRestore();
   });
 
+  it('limits the grab zone to the length of the short pane its bound useResizable(handleRef) region sizes', () => {
+    function RefHarness() {
+      const handleRef = useRef<HTMLDivElement>(null);
+      useResizable(handleRef, {defaultSize: 12, minSize: 6});
+      return <ResizeHandle ref={handleRef} label="Resize" />;
+    }
+    render(<RefHarness />);
+    const hitArea = getSeparator().firstElementChild as HTMLElement;
+    expect(hitArea.getAttribute('style') ?? '').toContain('12px');
+  });
+
+  it('warns once when its direction disagrees with the axis of the useResizable(handleRef) region bound to it', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    function RefHarness() {
+      const handleRef = useRef<HTMLDivElement>(null);
+      useResizable(handleRef, {defaultSize: 200, direction: 'vertical'});
+      return <ResizeHandle ref={handleRef} label="Resize" />;
+    }
+    const view = render(<RefHarness />);
+    view.rerender(<RefHarness />);
+    expect(
+      warn.mock.calls.filter(([message]) =>
+        String(message).includes('They must match'),
+      ),
+    ).toEqual([
+      [
+        'ResizeHandle: direction="horizontal" but its useResizable region is ' +
+          '"vertical". They must match: the hook measures one axis and the ' +
+          'handle drags the other.',
+      ],
+    ]);
+    warn.mockRestore();
+  });
+
   it('collapses on Enter when the region is collapsible', () => {
     render(
       <Harness

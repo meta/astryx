@@ -1612,6 +1612,24 @@ describe('useResizable percentage configuration (AST-010)', () => {
       expect(result.current.props._maxSizePx).toBe(399);
     });
 
+    it('follows a container swapped behind the ref with the same options in the ref form', () => {
+      const first = makeSized(398);
+      const second = makeSized(798);
+      const containerRef: {current: HTMLElement | null} = {current: first};
+      const handleRef = {current: document.createElement('div')};
+      const options = {containerRef, defaultSize: 100, minSize: '50%'} as const;
+      const {result, rerender} = renderHook(() =>
+        useResizable(handleRef, options),
+      );
+      expect(result.current.size).toBe(199);
+
+      act(() => {
+        containerRef.current = second;
+      });
+      rerender();
+      expect(result.current.size).toBe(399);
+    });
+
     it('stops observing the element it left behind', () => {
       const first = makeSized(398);
       const second = makeSized(798);
@@ -1705,6 +1723,60 @@ describe('useResizable percentage configuration (AST-010)', () => {
         JSON.stringify({size: 240, isCollapsed: false}),
       );
       localStorage.clear();
+    });
+
+    it('resolves a percentage default against its container once measured, when the handle attaches before then (the ref form)', () => {
+      content = 0;
+      const containerRef = makeContainer();
+      const handleRef: {current: HTMLDivElement | null} = {current: null};
+      const options = {
+        containerRef,
+        defaultSize: '30%',
+        autoSaveId: 'pct-late',
+      };
+      const {result, rerender} = renderHook(() =>
+        useResizable(handleRef, options),
+      );
+      expect(result.current.size).toBe(360);
+      handleRef.current = document.createElement('div');
+      rerender();
+      content = 800;
+      act(() => {
+        StubResizeObserver.resizeAll();
+      });
+      expect(result.current.size).toBe(240);
+      expect(localStorage.getItem('astryx-resizable:pct-late')).toBe(
+        JSON.stringify({size: 240, isCollapsed: false}),
+      );
+      localStorage.clear();
+    });
+
+    it('keeps the size a region was resized to when its handle attaches before its container measures (the ref form)', () => {
+      // The new factory takes the region's size as its selection. As a
+      // default, the caller's own defaultSize would replace it while the
+      // container measures 0.
+      content = 0;
+      const containerRef = makeContainer();
+      const handleRef: {current: HTMLDivElement | null} = {current: null};
+      const {result, rerender} = renderHook(() =>
+        useResizable(handleRef, {
+          containerRef,
+          defaultSize: 200,
+          maxSize: '50%',
+        }),
+      );
+      act(() => {
+        result.current.resize(300);
+      });
+      expect(result.current.size).toBe(300);
+      handleRef.current = document.createElement('div');
+      rerender();
+      expect(result.current.size).toBe(300);
+      content = 1000;
+      act(() => {
+        StubResizeObserver.resizeAll();
+      });
+      expect(result.current.size).toBe(300);
     });
 
     it('still persists for a pixel-only region that supplies a container', () => {
