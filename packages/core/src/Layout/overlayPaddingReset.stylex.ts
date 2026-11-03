@@ -28,7 +28,7 @@ import * as stylex from '@stylexjs/stylex';
  * a fixed/top-layer `<dialog>` is a DOM descendant of the padded page while
  * being nowhere near it on screen. It inherits values describing padding that
  * is not there, and its content compensates against phantom space: a `Section`
- * inside a 640px sheet rendered 672px wide and hung off both edges (#5208).
+ * inside a 640px sheet rendered 672px wide and hung off both edges.
  *
  * Two families leak, and they need opposite treatments:
  *
