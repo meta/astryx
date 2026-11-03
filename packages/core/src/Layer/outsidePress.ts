@@ -4,7 +4,7 @@
 
 /**
  * @file outsidePress.ts
- * @input Listens for pointerdown, pointerup and pointercancel on a document
+ * @input Listens for pointer presses on a document
  * @output Exports watchOutsidePress and useOutsidePress, which owns one watch
  *   for a component: start on show, stop on hide, stop on unmount;
  *   noteOutsideDismissal and outsideDismissalCount, a per-document count of
@@ -24,6 +24,25 @@
  */
 
 import {useCallback, useEffect, useMemo, useRef} from 'react';
+import {UIKIT_PAN} from '../motion/uikit/gestures';
+import {subscribeInput} from '../utils/inputStream';
+
+export interface OutsidePressOptions {
+  /** The pointer types the watch follows; every type when omitted. */
+  readonly pointerTypes?: ReadonlyArray<string>;
+  /**
+   * A press outside also closes the layer as it begins to pan, or when the
+   * browser takes it. An anchored menu closes so under a finger. Only the
+   * first pointer counts, and a second one waits for it.
+   */
+  readonly closesOnPan?: boolean;
+  /**
+   * The shadow root the layer renders in. The document sees a press inside a
+   * closed shadow root as a press on its host, so the root judges it too,
+   * after the document.
+   */
+  readonly root?: Node | null;
+}
 
 // A modal host's backdrop press reads this. A press that closed a layer above
 // the host is that layer's, so the host stays open.
@@ -53,31 +72,88 @@ export function watchOutsidePress(
   owner: Element,
   isInside: (path: ReadonlyArray<EventTarget>) => boolean,
   onOutside: () => void,
+  {pointerTypes, closesOnPan = false, root = null}: OutsidePressOptions = {},
 ): () => void {
   const doc = owner.ownerDocument;
   let startedOutside = false;
+  // The pointer a pan follows, and where it went down.
+  let pointer: {id: number; x: number; y: number} | null = null;
+  const follows = (event: PointerEvent) =>
+    pointerTypes == null || pointerTypes.includes(event.pointerType);
+  const close = () => {
+    startedOutside = false;
+    pointer = null;
+    onOutside();
+  };
 
   // Capture phase, so a press whose target stops propagation is still seen.
+  // The root's listener runs after the document's, so its judgment stands.
   const handleDown = (event: PointerEvent) => {
+    if (!follows(event)) {
+      return;
+    }
+    if (closesOnPan && pointer != null && pointer.id !== event.pointerId) {
+      return;
+    }
     startedOutside = !isInside(event.composedPath());
+    if (closesOnPan) {
+      pointer = startedOutside
+        ? {id: event.pointerId, x: event.clientX, y: event.clientY}
+        : null;
+    }
+  };
+  const handleMove = (event: PointerEvent) => {
+    if (
+      pointer?.id === event.pointerId &&
+      Math.max(
+        Math.abs(event.clientX - pointer.x),
+        Math.abs(event.clientY - pointer.y),
+      ) >= UIKIT_PAN.hysteresis.value
+    ) {
+      close();
+    }
   };
   const handleUp = (event: PointerEvent) => {
+    if (!follows(event) || (closesOnPan && pointer?.id !== event.pointerId)) {
+      return;
+    }
     const wasOutside = startedOutside;
     startedOutside = false;
+    pointer = null;
     if (wasOutside && !isInside(event.composedPath())) {
       noteOutsideDismissal(doc);
       onOutside();
     }
   };
-  const handleCancel = () => {
-    startedOutside = false;
+  const handleCancel = (event: PointerEvent) => {
+    if (closesOnPan && pointer?.id === event.pointerId) {
+      close();
+    } else if (!closesOnPan) {
+      startedOutside = false;
+    }
   };
 
-  doc.addEventListener('pointerdown', handleDown, true);
+  const judges: EventTarget[] =
+    root != null && root !== doc ? [doc, root] : [doc];
+  for (const target of judges) {
+    target.addEventListener('pointerdown', handleDown as EventListener, true);
+  }
+  const view = doc.defaultView;
+  const stopMoves =
+    closesOnPan && view != null
+      ? subscribeInput(view, 'pointermove', handleMove)
+      : null;
   doc.addEventListener('pointerup', handleUp, true);
   doc.addEventListener('pointercancel', handleCancel, true);
   return () => {
-    doc.removeEventListener('pointerdown', handleDown, true);
+    for (const target of judges) {
+      target.removeEventListener(
+        'pointerdown',
+        handleDown as EventListener,
+        true,
+      );
+    }
+    stopMoves?.();
     doc.removeEventListener('pointerup', handleUp, true);
     doc.removeEventListener('pointercancel', handleCancel, true);
   };
@@ -89,6 +165,7 @@ export interface OutsidePressWatch {
     owner: Element,
     isInside: (path: ReadonlyArray<EventTarget>) => boolean,
     onOutside: () => void,
+    options?: OutsidePressOptions,
   ) => void;
   /** Stop watching; does nothing when no watch is running. */
   stop: () => void;
@@ -107,9 +184,9 @@ export function useOutsidePress(): OutsidePressWatch {
     stopRef.current = null;
   }, []);
   const start = useCallback<OutsidePressWatch['start']>(
-    (owner, isInside, onOutside) => {
+    (owner, isInside, onOutside, options) => {
       stopRef.current?.();
-      stopRef.current = watchOutsidePress(owner, isInside, onOutside);
+      stopRef.current = watchOutsidePress(owner, isInside, onOutside, options);
     },
     [],
   );
