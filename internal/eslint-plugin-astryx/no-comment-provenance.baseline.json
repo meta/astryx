@@ -852,14 +852,12 @@
     "#1107"
   ],
   "packages/core/src/ProgressBar/ProgressBar.tsx": [
-    "DR1",
     "INV11",
     "INV11",
     "INV11",
     "architecture:theme-tokens",
     "architecture:theme-tokens",
     "architecture:theme-tokens",
-    "design:reduced-motion",
     "spec quote"
   ],
   "packages/core/src/RadioList/RadioListItem.tsx": [

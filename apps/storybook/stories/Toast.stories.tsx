@@ -832,6 +832,54 @@ export const AppToastOverDrawer: StoryObj = {
   },
 };
 
+export const AppToastOverNonModalDrawer: StoryObj = {
+  render: function AppToastOverNonModalDrawerStory() {
+    const [isOpen, setIsOpen] = useState(false);
+    const [status, setStatus] = useState('The filters are saved.');
+    const toast = useToast();
+    return (
+      <ToastViewport>
+        <Stack gap={2}>
+          <p>{status}</p>
+          <Button
+            label="Save filters"
+            onClick={() =>
+              toast({
+                body: 'Filters saved',
+                isAutoHide: false,
+                endContent: (
+                  <Button
+                    label="Undo"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setStatus('The save is undone.')}
+                  />
+                ),
+              })
+            }
+          />
+          <Button label="Open filters" onClick={() => setIsOpen(true)} />
+        </Stack>
+        <Drawer
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          hasScrim={false}
+          label="Filters">
+          <p>Filter options</p>
+        </Drawer>
+      </ToastViewport>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "The app's own `ToastViewport` and a `Drawer` without its scrim: a toast shown before the drawer opens stays above it, so its action stays clickable while the drawer covers its corner.",
+      },
+    },
+  },
+};
+
 function SheetToastContent({openLabel}: {openLabel: string}) {
   const [isOpen, setIsOpen] = useState(false);
   const [status, setStatus] = useState('The item is in your inbox.');
