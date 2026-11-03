@@ -36,7 +36,10 @@
  *   browser (the default), not a remote `connect()`.
  *
  * SYNC: Keep the engine limits above equal to the README's table and to the
- *   harness self-test (../src/harness.interaction.browser.spec.ts).
+ *   harness self-test (../src/harness.interaction.browser.spec.ts). Keep
+ *   `coreRelease` equal to Core's filter
+ *   (/packages/core/src/gestures/VelocityTracker.ts); Core's
+ *   VelocityTracker.harness.test.ts compares the two.
  */
 
 import type {CDPSession, JSHandle, Page} from '@playwright/test';
@@ -94,11 +97,12 @@ export interface PlayOptions {
    * without scripted timestamps the page reads the velocity from when events
    * arrive, and a burst after a stalled command reads as a much faster
    * finger. There, a paced play reads the release as the page did once its
-   * last event is out (the lift's `PlayedEvent.release`), and throws when
-   * the page read a resting finger, or, given `releaseTolerance`, a release
-   * that strays from the script's by more than that share of it:
-   * `TouchPageStallError` when the page's own touch and pointer listeners held an event
-   * back, `TouchPacingError` otherwise (see `touchPacingFault`).
+   * last event is out (the lift's `PlayedEvent.release`). It throws when the
+   * page read a resting finger where the script moves, a throw where the
+   * script rests, or fewer than two moves. Given `releaseTolerance`, it also
+   * throws when the page's release strays further than that share. The error
+   * is `TouchPageStallError` when the page's own touch and pointer listeners
+   * held an event back, else `TouchPacingError` (see `touchPacingFault`).
    */
   readonly pacing?: TouchPacing;
   /**
@@ -214,9 +218,13 @@ export interface TouchArrival {
 
 /** Where the release a paced play's page read strays from the script's. */
 export interface TouchPacingFault {
-  /** `'rest'`: the page read a resting finger; `'release'`: another speed. */
-  readonly kind: 'rest' | 'release';
-  /** The release the page read, px/s (0 for a rest). */
+  /**
+   * `'rest'`: the page read a resting finger; `'throw'`: a throw where the
+   * script rests; `'moves'`: fewer than two moves; `'release'`: another
+   * speed.
+   */
+  readonly kind: 'rest' | 'throw' | 'moves' | 'release';
+  /** The release the page read, px/s (0 for a rest or too few moves). */
   readonly pageReleasePxPerS: number;
   /** The script's release, px/s. */
   readonly scriptReleasePxPerS: number;
@@ -235,18 +243,117 @@ export interface TouchPacingFault {
 }
 
 /** The lifting finger's release, read from the page's stamps and the script's. */
-interface ReleaseReading {
+export interface ReleaseReading {
   readonly pagePxPerS: number;
   readonly scriptPxPerS: number;
   /** The page read a resting finger. */
   readonly rests: boolean;
+  /**
+   * The script rests before the lift, but the page read a throw: its last
+   * move reached the page within the stillness interval of the lift.
+   */
+  readonly throws: boolean;
+  /**
+   * The page read fewer than two moves where the script makes more: its
+   * moves arrived at one time, so it reads no release.
+   */
+  readonly fewMoves: boolean;
   /** The page's release strays from the script's by this share of it. */
   readonly strayShare: number;
   /** The events whose gaps the release reads (each gap ends at one). */
   readonly span: readonly number[];
 }
 
-function readRelease(
+/** One sample of the lifting finger: its position and when it was read. */
+interface FingerSample {
+  readonly index: number;
+  readonly x: number;
+  readonly y: number;
+  readonly time: number;
+}
+
+/** What Core's velocity tracker reads from a finger's samples at its lift. */
+interface CoreReading {
+  readonly x: number;
+  readonly y: number;
+  /** Moved samples after the touch-down. */
+  readonly moves: number;
+  /** The finger was still for longer than the stillness interval. */
+  readonly rests: boolean;
+  /** The moved samples the release reads, oldest first (up to three). */
+  readonly moved: readonly FingerSample[];
+}
+
+/**
+ * The release Core's velocity tracker reads, px/s. It copies that filter:
+ * Core's `VelocityTracker` is internal to the core package, so the harness
+ * cannot call it. Keep the two equal (`add`, `releases`, `panVelocity`):
+ * Core's VelocityTracker.harness.test.ts reads the same samples with both.
+ * Only a sample that moves
+ * counts, and a sample at the newest moved sample's time replaces it. The
+ * newest interval weighs 0.2 and the one before it 0.8, and an interval
+ * across no time reads 0. The release is 0 with fewer than two moves after
+ * the touch-down, or after a rest longer than the stillness interval.
+ */
+function coreRelease(
+  samples: readonly FingerSample[],
+  liftTime: number,
+): CoreReading {
+  const moved: FingerSample[] = [];
+  let moves = 0;
+  let newest = Number.NEGATIVE_INFINITY;
+  for (const sample of samples) {
+    if (sample.time < newest) {
+      continue;
+    }
+    newest = sample.time;
+    const last = moved[moved.length - 1];
+    if (last != null && sample.x === last.x && sample.y === last.y) {
+      continue;
+    }
+    if (last != null && sample.time === last.time) {
+      moved[moved.length - 1] = sample;
+    } else {
+      moved.push(sample);
+      if (moved.length > 3) {
+        moved.shift();
+      }
+      if (last != null) {
+        moves += 1;
+      }
+    }
+  }
+  const last = moved[moved.length - 1];
+  const rests = last != null && liftTime - last.time > TOUCH_STILLNESS_MS;
+  if (moves < 2 || last == null || rests) {
+    return {x: 0, y: 0, moves, rests, moved};
+  }
+  const pair = (a: FingerSample, b: FingerSample) => {
+    const seconds = (b.time - a.time) / 1000;
+    return seconds > 0
+      ? {x: (b.x - a.x) / seconds, y: (b.y - a.y) / seconds}
+      : {x: 0, y: 0};
+  };
+  const n = moved.length;
+  const current = pair(moved[n - 2], moved[n - 1]);
+  const before = n === 3 ? pair(moved[0], moved[1]) : current;
+  const w = TOUCH_RELEASE_NEWEST_WEIGHT;
+  return {
+    x: w * current.x + (1 - w) * before.x,
+    y: w * current.y + (1 - w) * before.y,
+    moves,
+    rests,
+    moved,
+  };
+}
+
+/**
+ * Reads a paced play's release as Core's velocity tracker reads it, from the
+ * page's stamps and from the script's times. Both read the same positions,
+ * rounded once: WebKit delivers whole pixels. Each reading has its own rest,
+ * so a page that does not rest where the script does fails the play.
+ */
+export function readRelease(
   steps: readonly TouchEventStep[],
   arrivals: readonly TouchArrival[],
 ): ReleaseReading | null {
@@ -256,70 +363,55 @@ function readRelease(
   if (id == null || arrivals.length !== steps.length) {
     return null;
   }
-  const marks: {index: number; x: number; y: number}[] = [];
-  for (let i = lift - 1; i >= 0 && marks.length < 3; i--) {
-    const step = steps[i];
+  const positions: {index: number; x: number; y: number}[] = [];
+  steps.forEach((step, index) => {
     const finger =
       step.type === 'touchStart' || step.type === 'touchMove'
         ? step.changed.find(f => f.id === id)
         : undefined;
     if (finger != null) {
-      marks.unshift({index: i, x: finger.x, y: finger.y});
+      positions.push({index, x: Math.round(finger.x), y: Math.round(finger.y)});
     }
-  }
-  if (marks.length < 2) {
+  });
+  if (positions.length === 0) {
     return null;
   }
-  const releaseFrom = (time: (i: number) => number) => {
-    const velocity = (a: (typeof marks)[0], b: (typeof marks)[0]) => {
-      const seconds = (time(b.index) - time(a.index)) / 1000;
-      return seconds > 0
-        ? {x: (b.x - a.x) / seconds, y: (b.y - a.y) / seconds}
-        : {x: Infinity, y: Infinity};
-    };
-    const newest = velocity(marks[marks.length - 2], marks[marks.length - 1]);
-    const before =
-      marks.length === 3 ? velocity(marks[0], marks[1]) : {x: 0, y: 0};
-    const w = TOUCH_RELEASE_NEWEST_WEIGHT;
-    return {
-      x: w * newest.x + (1 - w) * before.x,
-      y: w * newest.y + (1 - w) * before.y,
-    };
-  };
-  const last = marks[marks.length - 1].index;
-  const scriptRests = steps[lift].t - steps[last].t > TOUCH_STILLNESS_MS;
-  const rests =
-    !scriptRests &&
-    arrivals[lift].stamp - arrivals[last].stamp > TOUCH_STILLNESS_MS;
-  const script = scriptRests ? {x: 0, y: 0} : releaseFrom(i => steps[i].t);
-  const page =
-    rests || scriptRests ? script : releaseFrom(i => arrivals[i].stamp);
+  const script = coreRelease(
+    positions.map(p => ({...p, time: steps[p.index].t})),
+    steps[lift].t,
+  );
+  const page = coreRelease(
+    positions.map(p => ({...p, time: arrivals[p.index].stamp})),
+    arrivals[lift].stamp,
+  );
   const scriptPxPerS = Math.hypot(script.x, script.y);
-  const pageRead = rests ? {x: 0, y: 0} : page;
+  const first = page.moved[0]?.index ?? positions[0].index;
   return {
-    pagePxPerS: Math.hypot(pageRead.x, pageRead.y),
+    pagePxPerS: Math.hypot(page.x, page.y),
     scriptPxPerS,
-    rests,
+    // One move releases at 0 for the script and the page alike, so a late
+    // lift after it changes nothing.
+    rests: script.moves >= 2 && !script.rests && page.rests,
+    throws: script.rests && !page.rests && page.moves >= 2,
+    fewMoves:
+      !script.rests && !page.rests && page.moves < 2 && script.moves >= 2,
     strayShare:
       scriptPxPerS > 0
-        ? Math.hypot(pageRead.x - script.x, pageRead.y - script.y) /
-          scriptPxPerS
+        ? Math.hypot(page.x - script.x, page.y - script.y) / scriptPxPerS
         : 0,
-    span: Array.from(
-      {length: lift - marks[0].index},
-      (_, k) => marks[0].index + 1 + k,
-    ),
+    span: Array.from({length: lift - first}, (_, k) => first + 1 + k),
   };
 }
 
 /**
- * Reads a paced play's release as the page did and returns where the page
- * read a resting finger or, given `tolerance`, a release that strays from
- * the script's by more than that share of it; null otherwise. The release
- * blends the lifting finger's last two move intervals (its touch-down counts
- * as the first event) and is 0 once the finger has not moved for longer than
- * the stillness interval before it lifts, so only those gaps decide it: an
- * earlier stall leaves it intact. A rest the script makes is the script's.
+ * Reads a paced play's release as the page did and returns its fault, or
+ * null. The kinds: `rest`, a resting finger where the script moves; `throw`,
+ * a throw where the script rests; `moves`, fewer than two moves. Given
+ * `tolerance`, `release` is a release that strays further than that share.
+ * The release blends the lifting finger's last two move intervals (its
+ * touch-down counts as the first event). It is 0 once the finger was still
+ * past the stillness interval before it lifts. So only those gaps decide it,
+ * and an earlier stall leaves it intact. Each reading keeps its own rest.
  * WebKit dispatches a touch only once the page's main thread is free, so a
  * gap is the page's when the page's listeners spent longer on the event
  * before it than the script's interval to the next, and that handling
@@ -337,7 +429,12 @@ export function touchPacingFault(
   const reading = readRelease(steps, arrivals);
   if (
     reading == null ||
-    !(reading.rests || (tolerance != null && reading.strayShare > tolerance))
+    !(
+      reading.rests ||
+      reading.throws ||
+      reading.fewMoves ||
+      (tolerance != null && reading.strayShare > tolerance)
+    )
   ) {
     return null;
   }
@@ -356,7 +453,13 @@ export function touchPacingFault(
     }
   });
   return {
-    kind: reading.rests ? 'rest' : 'release',
+    kind: reading.rests
+      ? 'rest'
+      : reading.throws
+        ? 'throw'
+        : reading.fewMoves
+          ? 'moves'
+          : 'release',
     pageReleasePxPerS: reading.pagePxPerS,
     scriptReleasePxPerS: reading.scriptPxPerS,
     gapsMs,
@@ -367,9 +470,16 @@ export function touchPacingFault(
 
 function describeFault(fault: TouchPacingFault): string {
   const gaps = `gaps ${fault.gapsMs.map(g => g.toFixed(0)).join(', ')} ms where the script spaces ${fault.scriptedGapsMs.map(g => g.toFixed(0)).join(', ')} ms`;
-  return fault.kind === 'rest'
-    ? `the page read a resting finger: the lift reached it more than ${TOUCH_STILLNESS_MS} ms after the last move (${gaps})`
-    : `the page read a release of ${fault.pageReleasePxPerS.toFixed(0)} px/s where the script throws ${fault.scriptReleasePxPerS.toFixed(0)} px/s (${gaps})`;
+  if (fault.kind === 'rest') {
+    return `the page read a resting finger: the lift reached it more than ${TOUCH_STILLNESS_MS} ms after the last move (${gaps})`;
+  }
+  if (fault.kind === 'throw') {
+    return `the page read a throw of ${fault.pageReleasePxPerS.toFixed(0)} px/s where the script rests more than ${TOUCH_STILLNESS_MS} ms before the lift (${gaps})`;
+  }
+  if (fault.kind === 'moves') {
+    return `the page read fewer than two moves, so no release, where the script throws ${fault.scriptReleasePxPerS.toFixed(0)} px/s: its moves reached it at one time (${gaps})`;
+  }
+  return `the page read a release of ${fault.pageReleasePxPerS.toFixed(0)} px/s where the script throws ${fault.scriptReleasePxPerS.toFixed(0)} px/s (${gaps})`;
 }
 
 /**

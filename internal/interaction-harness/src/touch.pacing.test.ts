@@ -10,10 +10,11 @@
  *   interval. The page's release (the last two move intervals, blended as
  *   core blends them) decides a paced play: an early stall leaves it
  *   intact; a short stall or a bunched pair at the end changes it, a fault
- *   only under a tolerance; a lift more than the stillness interval after
- *   the last move reads as rest, always a fault; a scripted rest is the
- *   script's own. A gap the page's own listeners held is the page's; a late
- *   send is the runner's.
+ *   only under a tolerance. A lift more than the stillness interval after
+ *   the last move reads as rest, a fault unless the script rests too. A
+ *   throw where the script rests is a fault, and so are fewer than two
+ *   moves. A gap the page's own listeners held is the page's; a late send is
+ *   the runner's.
  * @position Node unit tests beside the harness's browser self-tests.
  *
  * SYNC: When modified, update touch.ts (pacedDeadline, touchPacingFault,
@@ -25,6 +26,7 @@ import {describe, expect, it} from 'vitest';
 import type {TouchEventStep} from './scripts';
 import {
   pacedDeadline,
+  readRelease,
   touchArrivalsFrom,
   TOUCH_STILLNESS_MS,
   touchPacingFault,
@@ -222,6 +224,47 @@ describe("touchPacingFault on a paced play's arrivals", () => {
       i === 3 ? {...a, handledAt: a.stamp + 30} : a,
     );
     expect(touchPacingFault(FLICK, stalled, TOLERANCE)?.heldByPage).toBeNull();
+  });
+});
+
+describe("the release a paced play's page reads, as Core's velocity tracker reads it", () => {
+  it('reads two moves that share a stamp as one, the later replacing the earlier, never Infinity', () => {
+    // The fourth move arrives 16 ms late, at the fifth's stamp. Core keeps
+    // the later sample: 16 px in 16 ms, then 32 px in 32 ms, 1,000 px/s.
+    const arrivals = at([0, 16, 32, 48, 80, 80, 96]);
+    expect(readRelease(FLICK, arrivals)?.pagePxPerS).toBeCloseTo(1000, 6);
+    expect(touchPacingFault(FLICK, arrivals, TOLERANCE)).toBeNull();
+  });
+
+  it('reads 0 after a single move, for the page and the script alike', () => {
+    const steps = [FLICK[0], FLICK[1], {...FLICK[6], t: 32}];
+    const reading = readRelease(steps, at([0, 16, 32]));
+    expect(reading?.pagePxPerS).toBe(0);
+    expect(reading?.scriptPxPerS).toBe(0);
+  });
+
+  it('reads no fault for a single move, however late the lift: one move releases at 0 either way', () => {
+    const steps = [FLICK[0], FLICK[1], {...FLICK[6], t: 32}];
+    expect(touchPacingFault(steps, at([0, 16, 80]))).toBeNull();
+  });
+
+  it('fails a page that read a throw where the script rests before the lift', () => {
+    // The flick lifts 50 ms after its last move, a rest. That move reaches
+    // the page 15 ms late, 35 ms before the lift. So the page reads a throw:
+    // 0.2 × 16 px in 31 ms + 0.8 × 16 px in 16 ms.
+    const steps = [...FLICK.slice(0, 6), {...FLICK[6], t: 130}];
+    const arrivals = at([0, 16, 32, 48, 64, 95, 130]);
+    expect(readRelease(steps, arrivals)?.pagePxPerS).toBeCloseTo(903.2, 1);
+    const fault = touchPacingFault(steps, arrivals);
+    expect(fault?.kind).toBe('throw');
+    expect(fault?.scriptReleasePxPerS).toBe(0);
+  });
+
+  it('fails a page that read every move at one stamp: with fewer than two moves it reads 0', () => {
+    const fault = touchPacingFault(FLICK, at([0, 80, 80, 80, 80, 80, 96]));
+    expect(fault?.kind).toBe('moves');
+    expect(fault?.pageReleasePxPerS).toBe(0);
+    expect(fault?.scriptReleasePxPerS).toBeCloseTo(1000, 6);
   });
 });
 
