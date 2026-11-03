@@ -2611,7 +2611,7 @@ component Token(props: TokenProps)
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component Tokenizer(props: TokenizerProps)
-  overload <T extends SearchableItem>(props: Omit<TokenizerProps<T>, 'ref' | 'experimental'> & { experimental: NonNullable<TokenizerProps<T>['experimental']>; ref?: React.Ref<HTMLInputElement | HTMLButtonElement> }) => React.JSX.Element @experimental
+  overload <T extends SearchableItem>(props: Omit<TokenizerProps<T>, 'ref'> & { ref?: React.Ref<HTMLInputElement | HTMLButtonElement> }) => React.JSX.Element
   prop containerClassName?: string
   prop containerStyle?: CSSProperties
   prop containerXstyle?: StyleXStyles
@@ -2623,7 +2623,7 @@ component Tokenizer(props: TokenizerProps)
   prop disabledMessage?: string
   prop emptySearchText?: ReactNode = 'No results found'
   prop endContent?: ReactNode
-  prop experimental?: { presentation?: 'popover' | 'bottom-sheet' | 'adaptive' } @experimental
+  prop experimental?: { presentation?: TokenizerPresentation } @experimental
   prop handleRef?: React.Ref<TokenizerHandle>
   prop hasAutoFocus?: boolean = false
   prop hasClear?: boolean = false
@@ -2646,6 +2646,7 @@ component Tokenizer(props: TokenizerProps)
   prop onFocus?: (e: React.FocusEvent) => void
   prop onKeyDown?: React.KeyboardEventHandler<HTMLElement>
   prop placeholder?: string
+  prop presentation?: TokenizerPresentation = 'adaptive'
   prop ref?: React.Ref<HTMLInputElement>
   prop renderItem?: (item: T) => ReactNode
   prop renderToken?: (item: T, onRemove: () => void) => ReactNode
@@ -5664,6 +5665,7 @@ interface TokenizerHandle
   blur: () => void
   focus: () => void
 type TokenizerOverflowBehavior = 'none' | 'unfocusedInline' | 'unfocusedLayer'
+type TokenizerPresentation = AdaptivePresentation
 interface TokenizerProps<T extends SearchableItem> extends Omit<FieldInputBaseProps<HTMLInputElement>, 'onChange' | 'onFocus' | 'onBlur' | 'onKeyDown'> (props of Tokenizer)
 type TokenizerSize = 'sm' | 'md' | 'lg'
 interface TokenizerStatus
@@ -8918,6 +8920,7 @@ Tokenizer (.)
 TokenizerChange (.)
 TokenizerHandle (.)
 TokenizerOverflowBehavior (.)
+TokenizerPresentation (.)
 TokenizerProps (.)
 TokenizerSize (.)
 TokenizerStatus (.)

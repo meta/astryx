@@ -268,7 +268,7 @@ function StringListEditor({
       hasCreate={hasCreate}
       maxMenuItems={maxMenuItems}
       width={isSheet ? '100%' : undefined}
-      experimental={isSheet ? {presentation: 'bottom-sheet'} : undefined}
+      presentation={isSheet ? 'bottom-sheet' : 'popover'}
     />
   );
 }
@@ -815,6 +815,7 @@ function EnumListEditor({
       // all of them instead of BaseTypeahead's 10-suggestion default, which
       // would silently drop valid choices with no way to reach them.
       maxMenuItems={items.length}
+      presentation="popover"
     />
   );
 }
@@ -892,7 +893,7 @@ function EntityListEditor({
       debounceMs={operatorValue.searchSource ? 150 : 0}
       maxMenuItems={maxMenuItems}
       width={isSheet ? '100%' : undefined}
-      experimental={isSheet ? {presentation: 'bottom-sheet'} : undefined}
+      presentation={isSheet ? 'bottom-sheet' : 'popover'}
     />
   );
 }
