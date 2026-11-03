@@ -214,6 +214,9 @@ const GESTURE_USERS = new Set([
   'TopNav',
   // The public pan, which the root's createPanGesture shares.
   'hooks: usePanGesture',
+  // Snap paging: the pager, under a finger and on a trackpad swipe. Carousel
+  // imports none of it.
+  'SnapPaging',
 ]);
 
 /** Public imports that carry no gesture code, whatever the list above says. */

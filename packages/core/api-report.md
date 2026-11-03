@@ -337,7 +337,7 @@ component Carousel(props: CarouselProps)
   prop hasButtons?: boolean = true
   prop hasEdgeFade?: boolean = true
   prop hasLoop?: boolean = false
-  prop hasSnap?: boolean = false
+  prop hasSnap?: boolean | SnapPaging = false
   prop padding?: SpacingStep = undefined (no padding)
   prop ref?: React.Ref<HTMLDivElement>
   prop xstyle?: StyleXStyles
@@ -2945,6 +2945,7 @@ hook useSelectedItemOffset: ({…}: UseSelectedItemOffsetOptions) => UseSelected
 hook useSideNavCollapse: () => SideNavCollapseState
 hook useSideNavRenderMode: () => SideNavRenderMode
 hook useSize: <T extends string = ElementSize>(sizeProp?: T, defaultSize?: T) => T
+hook useSnapPaging: (options?: SnapPagingOptions) => SnapPaging
 hook useSpeechRecognition: (options?: UseSpeechRecognitionOptions) => UseSpeechRecognitionReturn
 hook useStepperContext: () => StepperContextValue
 hook useStreamingText: (targetText: string, isStreaming: boolean, options?: UseStreamingTextOptions) => string
@@ -5292,6 +5293,10 @@ interface SliderSingleProps extends SliderBaseProps
   valueDisplay?: 'tooltip' | 'text' | 'none' = "tooltip"
   width?: SizeValue
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
+interface SnapPaging
+  [snapPagingBrand]: true
+interface SnapPagingOptions
+  pages?: 'view' | 'item' = 'view'
 type SourceRange
   end: number
   start: number
@@ -8515,6 +8520,16 @@ SliderBaseProps (.)
 SliderProps (.)
 SliderRangeProps (.)
 SliderSingleProps (.)
+```
+
+## `./SnapPaging`
+
+### Also exported from an earlier entry point
+
+```text
+SnapPaging (.)
+SnapPagingOptions (.)
+useSnapPaging (.)
 ```
 
 ## `./Spinner`
