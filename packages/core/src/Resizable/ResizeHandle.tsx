@@ -511,6 +511,8 @@ export function ResizeHandle({
         return;
       }
       if (previous != null) {
+        // A gesture the bound factory runs ends as the element lets go.
+        claim.get()?.gesture.interrupt();
         releaseResizeHandle(previous, claim);
       }
       claimedElementRef.current = element;
@@ -621,15 +623,6 @@ export function ResizeHandle({
       regionGesture.interrupt();
     };
   }, [hasRegion, regionGesture]);
-  // A factory bound to this handle drives its own gesture: it ends as this
-  // handle unmounts.
-  const gestureRef = useRef(gesture);
-  gestureRef.current = gesture;
-  useEffect(() => {
-    return () => {
-      gestureRef.current?.interrupt();
-    };
-  }, []);
 
   // --- ARIA ---
   const sizeNow = resizable?._size ?? view?.size;
