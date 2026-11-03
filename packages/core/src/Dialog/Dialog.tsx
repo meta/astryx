@@ -616,11 +616,18 @@ export function Dialog({
         dialog.showModal();
         // React's autoFocus calls .focus() during commit, before showModal()
         // makes the dialog visible, so the focus silently fails.
-        // Focus the first element with data-autofocus inside the dialog.
+        // Focus the first element with data-autofocus inside the dialog;
+        // without one, a DialogHeader title is the default target, focused
+        // here rather than by the header so it lands only once the dialog
+        // is modal (FR1, FR2).
         const autofocusTarget =
           dialog.querySelector<HTMLElement>('[data-autofocus]');
         if (autofocusTarget) {
           focusForLastInput(autofocusTarget);
+        } else {
+          dialog
+            .querySelector<HTMLElement>(`#${CSS.escape(titleId)}[tabindex]`)
+            ?.focus();
         }
       }
     } else {
@@ -635,7 +642,7 @@ export function Dialog({
       }
       triggerElementRef.current = null;
     }
-  }, [isOpen, isInline]);
+  }, [isOpen, isInline, titleId]);
 
   // A dialog that unmounts while open (rendered only while open, or removed
   // with the rest of a view) never runs the close branch above, and removing a
