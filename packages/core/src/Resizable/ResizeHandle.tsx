@@ -511,9 +511,15 @@ export function ResizeHandle({
         return;
       }
       if (previous != null) {
-        // A gesture the bound factory runs ends as the element lets go.
-        claim.get()?.gesture.interrupt();
+        // A gesture the bound factory runs ends when the element really lets
+        // go. A new `ref` lets go of it and takes it back in one commit.
+        const bound = claim.get();
         releaseResizeHandle(previous, claim);
+        queueMicrotask(() => {
+          if (claimedElementRef.current !== previous) {
+            bound?.gesture.interrupt();
+          }
+        });
       }
       claimedElementRef.current = element;
       if (element != null) {
