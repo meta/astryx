@@ -811,8 +811,8 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     prevSearchSourceRef.current.cancel?.();
     prevSearchSourceRef.current = searchSource;
     sourceGenRef.current = ++searchGenRef.current;
-    // The abandoned read can no longer end the busy state. The render that
-    // replaced the source cleared the state, and this clears the lane.
+    // The abandoned read cannot end the busy state. The replacing render
+    // cleared the state. This clears the ref and the lane.
     if (loadingRef.current) {
       loadingRef.current = false;
       onLoadingChangeRef.current?.(false);
