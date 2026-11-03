@@ -154,6 +154,16 @@ export interface ToastProps {
 
 interface ToastSurfaceProps extends ToastProps {
   gestureDirection: ToastGestureDirection;
+  /**
+   * Changes when a uniqueID overwrite updates this card in place: the new
+   * toast's auto-hide timer starts over.
+   */
+  timerKey?: string;
+  /**
+   * False when the viewport announces the toast: the card then carries no
+   * live region of its own, so an update in place is announced once.
+   */
+  isLiveRegion?: boolean;
 }
 
 /**
@@ -193,6 +203,8 @@ export function ToastSurface({
   onDismiss,
   renderContent,
   gestureDirection,
+  timerKey,
+  isLiveRegion = true,
 }: ToastSurfaceProps) {
   const t = useComponentTranslator();
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -226,34 +238,28 @@ export function ToastSurface({
     }, remainingRef.current);
   }, [isAutoHide]);
 
-  const pauseTimer = useCallback(
-    (source: PauseSource) => {
-      if (!isAutoHide) {
-        return;
-      }
-      const sources = pauseSourcesRef.current;
-      const wasRunning = sources.size === 0;
-      sources.add(source);
-      if (!wasRunning) {
-        return;
-      }
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-      if (startTimeRef.current != null) {
-        const elapsed = Date.now() - startTimeRef.current;
-        remainingRef.current = Math.max(remainingRef.current - elapsed, 1000);
-      }
-    },
-    [isAutoHide],
-  );
+  // Pointer, focus and gesture holds are tracked whatever isAutoHide is: an
+  // overwrite can turn a toast that does not auto-hide into one that does
+  // while a hold is in place. The window hold leaves with its listeners.
+  const pauseTimer = useCallback((source: PauseSource) => {
+    const sources = pauseSourcesRef.current;
+    const wasRunning = sources.size === 0;
+    sources.add(source);
+    if (!wasRunning) {
+      return;
+    }
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    if (startTimeRef.current != null) {
+      const elapsed = Date.now() - startTimeRef.current;
+      remainingRef.current = Math.max(remainingRef.current - elapsed, 1000);
+    }
+  }, []);
 
   const resumeTimer = useCallback(
     (source: PauseSource) => {
-      if (!isAutoHide) {
-        return;
-      }
       const sources = pauseSourcesRef.current;
       if (!sources.delete(source)) {
         return;
@@ -271,20 +277,31 @@ export function ToastSurface({
       }
       startTimer();
     },
-    [isAutoHide, startTimer],
+    [startTimer],
   );
 
   useEffect(() => {
     remainingRef.current = autoHideDuration;
+    // An update in place can remove the focused control, which fires no blur:
+    // a focus hold whose focus has left the card is stale.
+    const root = cardRootRef.current?.current;
+    if (
+      pauseSourcesRef.current.has('focus') &&
+      root != null &&
+      !root.contains(root.ownerDocument.activeElement)
+    ) {
+      pauseSourcesRef.current.delete('focus');
+    }
     startTimer();
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
       }
     };
-    // startTimer's identity is stable per isAutoHide, so this runs on mount
-    // and on a genuine duration change — not on unrelated viewport renders.
-  }, [autoHideDuration, startTimer]);
+    // startTimer's identity is stable per isAutoHide, so this runs on mount,
+    // on a genuine duration change and on an overwrite (timerKey), not on
+    // unrelated viewport renders.
+  }, [autoHideDuration, startTimer, timerKey]);
 
   // Pause the auto-hide timer while the window is not focused, so a toast
   // doesn't silently expire while the user is in another window or tab.
@@ -292,6 +309,7 @@ export function ToastSurface({
     if (!isAutoHide) {
       return;
     }
+    const pauseSources = pauseSourcesRef.current;
     const pauseForWindow = () => pauseTimer('window');
     const resumeForWindow = () => resumeTimer('window');
     window.addEventListener('blur', pauseForWindow);
@@ -304,6 +322,8 @@ export function ToastSurface({
     return () => {
       window.removeEventListener('blur', pauseForWindow);
       window.removeEventListener('focus', resumeForWindow);
+      // With the listeners gone, no focus event would clear the window hold.
+      pauseSources.delete('window');
     };
   }, [isAutoHide, pauseTimer, resumeTimer]);
 
@@ -368,9 +388,9 @@ export function ToastSurface({
   return (
     <div
       ref={rootRef}
-      role={isError ? 'alert' : 'status'}
-      aria-live={isError ? 'assertive' : 'polite'}
-      aria-atomic="true"
+      role={isLiveRegion ? (isError ? 'alert' : 'status') : undefined}
+      aria-live={isLiveRegion ? (isError ? 'assertive' : 'polite') : undefined}
+      aria-atomic={isLiveRegion ? 'true' : undefined}
       onMouseEnter={pauseForPointer}
       onMouseLeave={resumeForPointer}
       onFocusCapture={pauseForFocus}

@@ -30,6 +30,11 @@ import {
   integrationTemplateConflicts,
   shellArg,
 } from './authoring-checks.mjs';
+import {warmIntegrationChecks} from '../../test-utils/warm-integration-checks.mjs';
+
+// The checks' one-time start in this file (TypeScript and its lib files) runs
+// here, while the file is collected, so no test carries it.
+await warmIntegrationChecks();
 
 let tmpDir;
 

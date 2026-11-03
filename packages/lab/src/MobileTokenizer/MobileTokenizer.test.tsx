@@ -185,6 +185,9 @@ describe('MobileTokenizer (Lab, single-sheet flow)', () => {
     let discard = await screen.findByRole('alertdialog', {
       name: 'Discard changes?',
     });
+    // A scrim press starts and ends on the dialog itself.
+    fireEvent.pointerDown(discard);
+    fireEvent.pointerUp(discard);
     fireEvent.click(discard);
     await waitFor(() =>
       expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument(),
@@ -1245,6 +1248,7 @@ describe('MobileTokenizer Core-sheet parity', () => {
       );
     }
     render(<Flow />);
+    const trigger = screen.getByRole('button', {name: /Tags/});
     const sheet = await openSheet();
     // Pending from open until the bootstrap settles.
     expect(within(sheet).getByRole('img', {name: 'Loading'})).toBeTruthy();
@@ -1261,11 +1265,8 @@ describe('MobileTokenizer Core-sheet parity', () => {
     // The field becomes disabled while open: the sheet closes and the query
     // is kept; re-enabled and reopened, it starts from "en", settled.
     fireEvent.click(screen.getByRole('button', {name: 'Toggle'}));
-    expect(screen.getByRole('button', {name: /Tags/})).toHaveAttribute(
-      'aria-expanded',
-      'false',
-    );
-    act(() => screen.getByRole('button', {name: /Tags/}).focus());
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    act(() => trigger.focus());
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     fireEvent.click(screen.getByRole('button', {name: 'Toggle'}));
     const reopened = await openSheet();

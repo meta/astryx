@@ -21,7 +21,7 @@ import {
   webInputDriver,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
-import {BROWSER_CLICK_WAIT_MS} from '../switchTouch';
+import {BROWSER_CLICK_WAIT_MS} from '../../utils/browserClickWait';
 
 const storybook = withStorybook(test);
 

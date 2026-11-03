@@ -34,6 +34,7 @@ system_specs:
     spec:AST-094/FR41,
     spec:AST-094/FR42,
     spec:AST-094/FR43,
+    spec:AST-094/FR45,
   ]
 ---
 

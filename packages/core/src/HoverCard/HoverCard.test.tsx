@@ -29,7 +29,7 @@ import {
 } from '@testing-library/react';
 import {renderToString} from 'react-dom/server';
 import {hydrateRoot} from 'react-dom/client';
-import {StrictMode, type ComponentProps} from 'react';
+import {StrictMode, useState, type ComponentProps} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button/Button';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
@@ -167,6 +167,118 @@ describe('useHoverCard closing while the pointer is on the card', () => {
     await waitFor(() => expect(state).toHaveTextContent('closed'));
 
     await expectNextOpenClosesOnLeave(state);
+  });
+});
+
+describe('useHoverCard — focusTrigger="auto" decides when focus arrives', () => {
+  it('opens on focus of a trigger that was tabindex="-1" when it attached', async () => {
+    const onShow = vi.fn();
+    function RovingMember() {
+      const card = useHoverCard({onShow, delay: 0});
+      return (
+        <div>
+          {/* A roving-tabindex member that is not the tab stop when the
+              card attaches. */}
+          <button type="button" tabIndex={-1} ref={card.ref}>
+            Filter
+          </button>
+          {card.renderHoverCard(<span>Card</span>)}
+        </div>
+      );
+    }
+    render(<RovingMember />);
+    const member = screen.getByRole('button', {name: 'Filter'});
+    // The roving hook moves the tab stop, then focus, as an arrow key does.
+    member.setAttribute('tabindex', '0');
+    fireEvent.focusIn(member);
+    await waitFor(() => expect(onShow).toHaveBeenCalledTimes(1));
+  });
+
+  it('opens on focus of a focusable trigger it does not list, such as a summary', async () => {
+    const onShow = vi.fn();
+    function SummaryTrigger() {
+      const card = useHoverCard({onShow, delay: 0});
+      return (
+        <details>
+          <summary ref={card.ref}>More</summary>
+          {card.renderHoverCard(<span>Card</span>)}
+        </details>
+      );
+    }
+    render(<SummaryTrigger />);
+    fireEvent.focusIn(screen.getByText('More'));
+    await waitFor(() => expect(onShow).toHaveBeenCalledTimes(1));
+  });
+
+  it('ignores focus inside a plain wrapper trigger', async () => {
+    const onShow = vi.fn();
+    function WrapperTrigger() {
+      const card = useHoverCard({onShow, delay: 0});
+      return (
+        <div>
+          <div ref={card.ref}>
+            <input aria-label="Amount" />
+          </div>
+          {card.renderHoverCard(<span>Card</span>)}
+        </div>
+      );
+    }
+    render(<WrapperTrigger />);
+    fireEvent.focusIn(screen.getByRole('textbox', {name: 'Amount'}));
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 20));
+    });
+    expect(onShow).not.toHaveBeenCalled();
+  });
+
+  it('hides on blur from inside a focusable trigger that left the tab order', async () => {
+    const onShow = vi.fn();
+    const onHide = vi.fn();
+    function FocusableRow() {
+      const card = useHoverCard({onShow, onHide, delay: 0, hideDelay: 0});
+      return (
+        <div>
+          <div tabIndex={0} ref={card.ref} data-testid="row">
+            <button type="button">Inside</button>
+          </div>
+          {card.renderHoverCard(<span>Card</span>)}
+        </div>
+      );
+    }
+    render(<FocusableRow />);
+    const inside = screen.getByRole('button', {name: 'Inside'});
+    // Focus inside a focusable trigger counts.
+    fireEvent.focusIn(inside);
+    await waitFor(() => expect(onShow).toHaveBeenCalledTimes(1));
+    // The trigger leaves the tab order before focus moves on: the focus that
+    // counted still hides the card.
+    screen.getByTestId('row').setAttribute('tabindex', '-1');
+    fireEvent.focusOut(inside);
+    await waitFor(() => expect(onHide).toHaveBeenCalledTimes(1));
+  });
+
+  it('hides on blur of a trigger that left the tab order while focused', async () => {
+    const onShow = vi.fn();
+    const onHide = vi.fn();
+    function RovingMember() {
+      const card = useHoverCard({onShow, onHide, delay: 0, hideDelay: 0});
+      return (
+        <div>
+          <button type="button" ref={card.ref}>
+            Filter
+          </button>
+          {card.renderHoverCard(<span>Card</span>)}
+        </div>
+      );
+    }
+    render(<RovingMember />);
+    const member = screen.getByRole('button', {name: 'Filter'});
+    fireEvent.focusIn(member);
+    await waitFor(() => expect(onShow).toHaveBeenCalledTimes(1));
+    // The roving hook takes the tab stop away before focus moves on.
+    member.setAttribute('tabindex', '-1');
+    fireEvent.focusOut(member);
+    await waitFor(() => expect(onHide).toHaveBeenCalledTimes(1));
   });
 });
 
@@ -744,6 +856,111 @@ describe('HoverCard', () => {
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(false);
       });
+    });
+  });
+
+  describe('a replaced trigger element', () => {
+    function SwapsItsRoot() {
+      const [isLink, setIsLink] = useState(false);
+      return isLink ? (
+        <a href="#profile">Profile link</a>
+      ) : (
+        <button type="button" onClick={() => setIsLink(true)}>
+          Profile button
+        </button>
+      );
+    }
+
+    it('wires the new element when the children change', async () => {
+      const onOpenChange = vi.fn();
+      const {rerender} = render(
+        <HoverCard
+          label="Profile"
+          content={<span>Card</span>}
+          onOpenChange={onOpenChange}
+          delay={0}>
+          <button type="button">First</button>
+        </HoverCard>,
+      );
+      rerender(
+        <HoverCard
+          label="Profile"
+          content={<span>Card</span>}
+          onOpenChange={onOpenChange}
+          delay={0}>
+          <a href="#second">Second</a>
+        </HoverCard>,
+      );
+      const second = screen.getByRole('link', {name: 'Second'});
+      await waitFor(() =>
+        expect(second).toHaveAttribute('aria-haspopup', 'dialog'),
+      );
+      fireEvent.mouseEnter(second);
+      await waitFor(() => expect(onOpenChange).toHaveBeenLastCalledWith(true));
+    });
+
+    it('wires the new element when a child component swaps its own root', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <HoverCard
+          label="Profile"
+          content={<span>Card</span>}
+          onOpenChange={onOpenChange}
+          delay={0}>
+          <SwapsItsRoot />
+        </HoverCard>,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Profile button'}));
+      const link = screen.getByRole('link', {name: 'Profile link'});
+      await waitFor(() =>
+        expect(link).toHaveAttribute('aria-haspopup', 'dialog'),
+      );
+      fireEvent.mouseEnter(link);
+      await waitFor(() => expect(onOpenChange).toHaveBeenLastCalledWith(true));
+    });
+
+    it('releases the old element when the children are reordered', async () => {
+      const first = (
+        <button key="a" type="button">
+          Alpha
+        </button>
+      );
+      const second = (
+        <button key="b" type="button">
+          Beta
+        </button>
+      );
+      const {rerender} = render(
+        <HoverCard label="Profile" content={<span>Card</span>}>
+          {[first, second]}
+        </HoverCard>,
+      );
+      const alpha = screen.getByRole('button', {name: 'Alpha'});
+      expect(alpha).toHaveAttribute('aria-haspopup', 'dialog');
+
+      rerender(
+        <HoverCard label="Profile" content={<span>Card</span>}>
+          {[second, first]}
+        </HoverCard>,
+      );
+      const beta = screen.getByRole('button', {name: 'Beta'});
+      await waitFor(() =>
+        expect(beta).toHaveAttribute('aria-haspopup', 'dialog'),
+      );
+      // The old element stays in the DOM, released.
+      expect(alpha).toBeInTheDocument();
+      expect(alpha).not.toHaveAttribute('aria-haspopup');
+    });
+
+    it('describes the new element of an unnamed card', async () => {
+      render(
+        <HoverCard content={<span>Card</span>} delay={0}>
+          <SwapsItsRoot />
+        </HoverCard>,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Profile button'}));
+      const link = screen.getByRole('link', {name: 'Profile link'});
+      await waitFor(() => expect(link).toHaveAttribute('aria-describedby'));
     });
   });
 

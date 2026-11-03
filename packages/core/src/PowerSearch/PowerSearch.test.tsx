@@ -218,7 +218,7 @@ describe('PowerSearch', () => {
     expect(screen.getAllByRole('button', {name: /^Remove /})).toHaveLength(2);
 
     await user.click(
-      screen.getAllByRole('button', {name: 'Remove Status: is'})[0],
+      screen.getAllByRole('button', {name: 'Remove Status: is Open'})[0],
     );
 
     expect(screen.getAllByRole('button', {name: /^Remove /})).toHaveLength(1);
@@ -274,6 +274,74 @@ describe('PowerSearch', () => {
     await user.click(screen.getByRole('combobox', {name: 'Search'}));
     await user.keyboard('{Backspace}');
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  describe('read-only filters', () => {
+    const readOnlyFilter: PowerSearchFilter = {
+      field: 'status',
+      operator: 'is',
+      value: {type: 'enum', value: 'open'},
+      isReadOnly: true,
+    };
+    const titleFilter: PowerSearchFilter = {
+      field: 'title',
+      operator: 'contains',
+      value: {type: 'string', value: 'login'},
+    };
+    const closedFilter: PowerSearchFilter = {
+      field: 'status',
+      operator: 'is',
+      value: {type: 'enum', value: 'closed'},
+    };
+    const politeRegion = () =>
+      document.querySelector('[data-astryx-live-region="polite"]');
+
+    it('Clear all keeps a read-only filter and reports the first removed index', async () => {
+      const onChange = vi.fn();
+      render(
+        <PowerSearch
+          config={config}
+          filters={[readOnlyFilter, titleFilter, closedFilter]}
+          onChange={onChange}
+        />,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Clear all'}));
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenCalledWith([readOnlyFilter], 'remove', 1);
+      await waitFor(() => {
+        expect(politeRegion()).toHaveTextContent('Editable filters removed');
+      });
+      expect(politeRegion()).not.toHaveTextContent('All filters removed');
+    });
+
+    it('has no Clear all when every filter is read-only', () => {
+      render(
+        <PowerSearch
+          config={config}
+          filters={[readOnlyFilter]}
+          onChange={() => {}}
+        />,
+      );
+      expect(
+        screen.queryByRole('button', {name: 'Clear all'}),
+      ).not.toBeInTheDocument();
+    });
+
+    it('Backspace on an empty input keeps a read-only last filter', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <PowerSearch
+          config={config}
+          filters={[titleFilter, readOnlyFilter]}
+          onChange={onChange}
+        />,
+      );
+      await user.click(screen.getByRole('combobox', {name: 'Search'}));
+      await user.keyboard('{Backspace}');
+      expect(onChange).not.toHaveBeenCalled();
+      expect(politeRegion()?.textContent ?? '').not.toMatch(/removed/i);
+    });
   });
 
   describe('token value truncation (#4759)', () => {
@@ -476,6 +544,23 @@ describe('PowerSearch', () => {
       expect(input).not.toBeDisabled();
       expect(input).toHaveAttribute('aria-disabled', 'true');
     });
+  });
+
+  it('keeps hasAutoFocus on the combobox across re-renders in the popover presentation, so a Dialog that opens later still finds data-autofocus', () => {
+    const field = (count: number) => (
+      <PowerSearch
+        config={config}
+        filters={[]}
+        onChange={() => {}}
+        hasAutoFocus
+        resultCount={count}
+      />
+    );
+    const {rerender} = render(field(1));
+    expect(screen.getByRole('combobox')).toHaveAttribute('data-autofocus');
+    rerender(field(2));
+    rerender(field(3));
+    expect(screen.getByRole('combobox')).toHaveAttribute('data-autofocus');
   });
 
   describe('result count announcements', () => {
@@ -689,7 +774,7 @@ describe('filter token focus', () => {
 
     await user.tab({shift: true}); // Remove button
     await user.tab({shift: true}); // Token label
-    expect(screen.getByRole('button', {name: 'Status: is'})).toHaveFocus();
+    expect(screen.getByRole('button', {name: 'Status: is Open'})).toHaveFocus();
     await user.keyboard('{Enter}');
     expect(
       await screen.findByRole('button', {name: 'Apply', hidden: true}),
@@ -776,7 +861,7 @@ describe('maxOperatorMenuItems', () => {
       />,
     );
 
-    await user.click(screen.getByRole('button', {name: 'Person: is any of'}));
+    await user.click(screen.getByRole('button', {name: /^Person: is any of /}));
     const inputs = screen.getAllByRole('combobox', {hidden: true});
     const valueInput = inputs[inputs.length - 1];
     await user.type(valueInput, 'Person');
@@ -1004,6 +1089,7 @@ describe('field menu highlight under a resting pointer', () => {
       name: 'Status',
       hidden: true,
     });
+    fireEvent.pointerMove(status, {screenX: 30, screenY: 40});
     fireEvent.mouseMove(status);
     expect(input.getAttribute('aria-activedescendant')).toBe(status.id);
   });

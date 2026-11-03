@@ -9,8 +9,17 @@
  * SYNC: When AlertDialog.tsx changes, update tests to match new behavior
  */
 
-import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  beforeEach,
+  afterEach,
+} from 'vitest';
+import {
+  cleanup,
   render,
   screen,
   fireEvent,
@@ -18,8 +27,27 @@ import {
   within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import {getGestureHost} from '../gestures/GestureHost';
+import {isTrackedByGroup} from '../privateAttributes/pressGroupItem.stylex';
 import {AlertDialog} from './AlertDialog';
 import {useImperativeAlertDialog} from './useImperativeAlertDialog';
+
+// The gesture host reads `(pointer: coarse)` once per document and keeps that
+// query for the document's life: it gets this live one (see beforeAll), whose
+// answer each test's media stub sets.
+let isCoarsePrimaryPointer = false;
+const hostCoarseQuery = {
+  get matches() {
+    return isCoarsePrimaryPointer;
+  },
+  media: '(pointer: coarse)',
+  onchange: null,
+  addEventListener: () => {},
+  removeEventListener: () => {},
+  addListener: () => {},
+  removeListener: () => {},
+  dispatchEvent: () => false,
+};
 
 function stubAlertDialogMedia({
   smallScreen,
@@ -32,6 +60,7 @@ function stubAlertDialogMedia({
   noHover: boolean;
   reduceMotion?: boolean;
 }): void {
+  isCoarsePrimaryPointer = coarsePointer;
   vi.stubGlobal(
     'matchMedia',
     vi.fn((query: string) => {
@@ -68,6 +97,15 @@ function stubAlertDialogMedia({
   );
 }
 
+beforeAll(() => {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn(() => hostCoarseQuery),
+  );
+  getGestureHost(document);
+  vi.unstubAllGlobals();
+});
+
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = vi.fn(function (
     this: HTMLDialogElement,
@@ -81,6 +119,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  isCoarsePrimaryPointer = false;
 });
 
 describe('AlertDialog', () => {
@@ -145,6 +184,39 @@ describe('AlertDialog', () => {
     expect(onOpenChange).not.toHaveBeenCalled();
   });
 
+  it("runs onAction for a user-event click on the action and leaves Cancel alone, as a consumer's test clicks it", async () => {
+    const user = userEvent.setup();
+    const onAction = vi.fn();
+    const onOpenChange = vi.fn();
+    render(
+      <AlertDialog
+        {...defaultProps}
+        onAction={onAction}
+        onOpenChange={onOpenChange}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: 'Delete'}));
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    await user.click(screen.getByRole('button', {name: 'Cancel'}));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(onAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens under a fine pointer with no console warning', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      render(<AlertDialog {...defaultProps} />);
+      expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+      expect(warn).not.toHaveBeenCalled();
+      expect(error).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+      error.mockRestore();
+    }
+  });
+
   it('does not render when isOpen is false', () => {
     render(<AlertDialog {...defaultProps} isOpen={false} />);
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
@@ -169,7 +241,8 @@ describe('AlertDialog', () => {
       render(<AlertDialog {...defaultProps} />);
 
       expect(window.matchMedia).toHaveBeenCalledWith('(max-width: 640px)');
-      expect(window.matchMedia).not.toHaveBeenCalledWith('(pointer: coarse)');
+      // The layout reads the width alone. The pointer query only turns the
+      // touch layer on, never the order or the stacking.
       expect(window.matchMedia).not.toHaveBeenCalledWith('(hover: none)');
       const dialog = screen.getByRole('alertdialog');
       const buttons = within(dialog).getAllByRole('button');
@@ -230,7 +303,8 @@ describe('AlertDialog', () => {
       );
 
       expect(window.matchMedia).toHaveBeenCalledWith('(max-width: 640px)');
-      expect(window.matchMedia).not.toHaveBeenCalledWith('(pointer: coarse)');
+      // The layout reads the width alone. The pointer query only turns the
+      // touch layer on, never the order or the stacking.
       expect(window.matchMedia).not.toHaveBeenCalledWith('(hover: none)');
       const dialog = screen.getByRole('alertdialog');
       const buttons = within(dialog).getAllByRole('button');
@@ -264,7 +338,8 @@ describe('AlertDialog', () => {
       );
 
       expect(window.matchMedia).toHaveBeenCalledWith('(max-width: 640px)');
-      expect(window.matchMedia).not.toHaveBeenCalledWith('(pointer: coarse)');
+      // The layout reads the width alone. The pointer query only turns the
+      // touch layer on, never the order or the stacking.
       expect(window.matchMedia).not.toHaveBeenCalledWith('(hover: none)');
       const dialog = screen.getByRole('alertdialog');
       const buttons = within(dialog).getAllByRole('button');
@@ -430,6 +505,145 @@ describe('AlertDialog', () => {
         );
       });
     });
+  });
+});
+
+/**
+ * Touch tracking: a finger is tracked across both actions as one group, as
+ * UIKit tracks an alert's actions (measured on iOS 26.2). The tracking hook's
+ * own contract is covered in hooks/useActionGroupTracking.test.tsx; these
+ * cover AlertDialog's wiring of it.
+ */
+describe('AlertDialog action tracking', () => {
+  let touchClock = 10_000;
+  let touchId = 500;
+
+  function touch(
+    type: 'touchstart' | 'touchmove' | 'touchend',
+    target: Element,
+    point: {x: number; y: number},
+    id: number,
+  ): void {
+    touchClock += 16;
+    const event = new Event(type, {bubbles: true, cancelable: true});
+    const entry = {identifier: id, clientX: point.x, clientY: point.y, target};
+    Object.defineProperty(event, 'changedTouches', {value: [entry]});
+    Object.defineProperty(event, 'touches', {
+      value: type === 'touchend' ? [] : [entry],
+    });
+    Object.defineProperty(event, 'timeStamp', {value: touchClock});
+    target.dispatchEvent(event);
+  }
+
+  function place(element: Element, left: number, top: number): void {
+    const rect = DOMRect.fromRect({x: left, y: top, width: 120, height: 32});
+    element.getBoundingClientRect = () => rect;
+  }
+
+  function renderOpen(props: {isInline?: boolean; coarse?: boolean} = {}) {
+    const isCoarse = props.coarse ?? true;
+    stubAlertDialogMedia({
+      smallScreen: true,
+      coarsePointer: isCoarse,
+      noHover: isCoarse,
+    });
+    const onOpenChange = vi.fn();
+    const onAction = vi.fn();
+    render(
+      <AlertDialog
+        isOpen
+        isInline={props.isInline}
+        onOpenChange={onOpenChange}
+        title="Delete item?"
+        description="This cannot be undone."
+        actionLabel="Delete"
+        onAction={onAction}
+      />,
+    );
+    const cancel = screen.getByRole('button', {name: 'Cancel'});
+    const action = screen.getByRole('button', {name: 'Delete'});
+    // Stacked on a narrow screen: the action above Cancel.
+    place(action, 16, 100);
+    place(cancel, 16, 140);
+    return {onOpenChange, onAction, cancel, action};
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('marks both actions as tracked group items from the first render, keeping their pressable marker', () => {
+    const {cancel, action} = renderOpen();
+    for (const button of [cancel, action]) {
+      // The document press controller leaves a pointer's press on a marked
+      // item to the group's tracker, its one painter; it still records the
+      // touch for the scroll brake, through the pressable marker.
+      expect(isTrackedByGroup(button)).toBe(true);
+      expect(button).toHaveAttribute('data-astryx-pressable');
+    }
+  });
+
+  it('leaves the actions to the document press controller in the inline preview, which is not tracked', () => {
+    const {cancel, action} = renderOpen({isInline: true});
+    for (const button of [cancel, action]) {
+      expect(isTrackedByGroup(button)).toBe(false);
+      expect(button).toHaveAttribute('data-astryx-pressable');
+    }
+  });
+
+  it('runs the action a finger lifts on: from the action to Cancel cancels, from Cancel to the action runs it', () => {
+    const {onOpenChange, onAction, cancel, action} = renderOpen();
+    let id = touchId++;
+    touch('touchstart', action, {x: 60, y: 116}, id);
+    expect(action).toHaveAttribute('data-astryx-press', 'on');
+    touch('touchmove', action, {x: 60, y: 156}, id);
+    expect(action).not.toHaveAttribute('data-astryx-press');
+    expect(cancel).toHaveAttribute('data-astryx-press', 'on');
+    touch('touchend', action, {x: 60, y: 156}, id);
+    expect(onOpenChange).toHaveBeenCalledTimes(1);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(onAction).not.toHaveBeenCalled();
+    id = touchId++;
+    touch('touchstart', cancel, {x: 60, y: 156}, id);
+    touch('touchmove', cancel, {x: 60, y: 116}, id);
+    touch('touchend', cancel, {x: 60, y: 116}, id);
+    expect(onAction).toHaveBeenCalledTimes(1);
+    expect(onOpenChange).toHaveBeenCalledTimes(1);
+  });
+  it('keeps the keyboard on the buttons under every pointer: Enter runs the action and Space cancels (FR8)', async () => {
+    for (const coarse of [true, false]) {
+      const user = userEvent.setup();
+      const {onOpenChange, onAction, cancel, action} = renderOpen({coarse});
+      action.focus();
+      await user.keyboard('{Enter}');
+      expect(onAction).toHaveBeenCalledTimes(1);
+      cancel.focus();
+      await user.keyboard(' ');
+      expect(onOpenChange).toHaveBeenCalledTimes(1);
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+      expect(onAction).toHaveBeenCalledTimes(1);
+      cleanup();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('tracks only the actions: a press that lands on the title, the message or the backdrop and slides onto an action runs nothing', () => {
+    const {onOpenChange, onAction, cancel} = renderOpen();
+    const dialog = screen.getByRole('alertdialog');
+    // A touch on ::backdrop targets the dialog element itself.
+    for (const start of [
+      screen.getByText('Delete item?'),
+      screen.getByText('This cannot be undone.'),
+      dialog,
+    ]) {
+      const id = touchId++;
+      touch('touchstart', start, {x: 60, y: 40}, id);
+      touch('touchmove', start, {x: 60, y: 156}, id);
+      expect(cancel).not.toHaveAttribute('data-astryx-press');
+      touch('touchend', start, {x: 60, y: 156}, id);
+    }
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(onAction).not.toHaveBeenCalled();
   });
 });
 

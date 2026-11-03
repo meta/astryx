@@ -1098,12 +1098,14 @@ describe('Dialog', () => {
       const focus = vi.spyOn(HTMLElement.prototype, 'focus');
 
       fireEvent.pointerDown(invoker);
+      fireEvent.pointerUp(invoker);
       fireEvent.click(invoker);
       const cancel = screen.getByRole('button', {name: 'Cancel'});
       expect(cancel).toHaveFocus();
       expect(focusCallsOn(focus, cancel)).toEqual([[{focusVisible: false}]]);
 
       fireEvent.pointerDown(cancel);
+      fireEvent.pointerUp(cancel);
       fireEvent.click(cancel);
       expect(invoker).toHaveFocus();
       expect(focusCallsOn(focus, invoker)).toEqual([[{focusVisible: false}]]);
@@ -1131,6 +1133,7 @@ describe('Dialog', () => {
       const invoker = screen.getByRole('button', {name: 'Open dialog'});
       invoker.focus();
       fireEvent.pointerDown(invoker);
+      fireEvent.pointerUp(invoker);
       fireEvent.click(invoker);
 
       // WebKit's native close restores focus to the invoker with a ring before
@@ -1155,6 +1158,7 @@ describe('Dialog', () => {
 
       const cancel = screen.getByRole('button', {name: 'Cancel'});
       fireEvent.pointerDown(cancel);
+      fireEvent.pointerUp(cancel);
       fireEvent.click(cancel);
 
       expect(blur).toHaveBeenCalledTimes(1);
@@ -1626,6 +1630,8 @@ describe('Dialog', () => {
       </Dialog>,
     );
 
+    fireEvent.pointerDown(screen.getByTestId('click-dialog'));
+    fireEvent.pointerUp(screen.getByTestId('click-dialog'));
     fireEvent.click(screen.getByTestId('click-dialog'));
 
     expect(onClick).toHaveBeenCalledTimes(1);

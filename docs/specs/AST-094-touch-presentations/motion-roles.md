@@ -2,13 +2,14 @@
 
 # Motion roles
 
-Every motion role a registered table lists (`spec:AST-094` FR4, DEC-5): its kind, its default as the table measures it, and the record that names it. A role FR4 lists is named by FR4; any other role is one a component's own record measures, named by the current component records that carry its id.
+Every motion role a registered table lists (`spec:AST-094` FR4, DEC-5): its kind, its default as the table measures it, and the record that names it. A role FR4 lists is named by FR4; any other role is one a component's own record measures, named by the current component records that carry its id. A role plays only for motion a gesture drives and for a touch presentation's exit (`spec:AST-094` FR45, FR7). Motion that a tap, a click, a hold, a key or the program starts plays the theme's duration and easing tokens, and a role measured for that motion stays as the native reference. Measured input timings, such as gesture thresholds, hold durations and flick speeds, are not motion roles.
 
 | Role                            | Kind     | Default                                                         | Named by                |
 | ------------------------------- | -------- | --------------------------------------------------------------- | ----------------------- |
 | `progress.curves.fill`          | curve    | cubic-bezier(0, 0, 1, 1)                                        | `component:ProgressBar` |
 | `progress.fillTrackMs`          | duration | 1000 ms                                                         | `component:ProgressBar` |
 | `progress.reducedMotionPulseMs` | duration | 2000 ms                                                         | `component:ProgressBar` |
+| `segmented.selectionSpring`     | spring   | response 0.4 s, damping ratio 0.85                              | `spec:AST-094` FR4      |
 | `springs.contextMenuDismiss`    | spring   | response 0.35 s, damping ratio 0.85                             | `spec:AST-094` FR4      |
 | `springs.contextMenuLift`       | spring   | response 0.32 s, damping ratio 0.8                              | `spec:AST-094` FR4      |
 | `springs.contextMenuMorph`      | spring   | response 0.3 s, damping ratio 0.8                               | `spec:AST-094` FR4      |

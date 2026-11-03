@@ -25,8 +25,8 @@ import {
   fireEvent,
   waitFor,
 } from '@testing-library/react';
-import {useRef} from 'react';
-import {Tooltip} from './Tooltip';
+import {useRef, type ComponentProps} from 'react';
+import {Tooltip, TooltipWithTriggerBehavior} from './Tooltip';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
 import {Item} from '../Item/Item';
 import {Token} from '../Token/Token';
@@ -979,12 +979,12 @@ describe('Tooltip surface press', () => {
   });
 });
 
-describe('Tooltip triggerBehavior on every input (component:Tooltip FR5, FR9)', () => {
+describe('Tooltip, and its press-to-pin path, on every input (component:Tooltip FR5, FR9)', () => {
   beforeEach(() => {
     __resetInteractionModalityForTest();
   });
 
-  type Behavior = 'adaptive' | 'hover' | 'toggle';
+  type Behavior = 'adaptive' | 'toggle';
 
   /** An info-only trigger: a span, or under the toggle the button it pins. */
   function setup(
@@ -994,7 +994,7 @@ describe('Tooltip triggerBehavior on every input (component:Tooltip FR5, FR9)', 
   ) {
     const onOpenChange = vi.fn<(open: boolean) => void>();
     render(
-      <Tooltip
+      <TooltipWithTriggerBehavior
         content="Billed monthly"
         delay={0}
         onOpenChange={onOpenChange}
@@ -1005,7 +1005,7 @@ describe('Tooltip triggerBehavior on every input (component:Tooltip FR5, FR9)', 
         ) : (
           <span tabIndex={0}>Billing</span>
         )}
-      </Tooltip>,
+      </TooltipWithTriggerBehavior>,
     );
     const opened = () => onOpenChange.mock.calls.some(([open]) => open);
     return {trigger: screen.getByText('Billing'), opened};
@@ -1029,7 +1029,6 @@ describe('Tooltip triggerBehavior on every input (component:Tooltip FR5, FR9)', 
   describe.each([
     ['adaptive by default', undefined, true],
     ['adaptive', 'adaptive', true],
-    ['hover', 'hover', false],
     ['toggle', 'toggle', true],
   ] as const)('%s', (_, behavior, tapOpens) => {
     it('a mouse hover previews it', async () => {
@@ -1082,7 +1081,6 @@ describe('Tooltip triggerBehavior on every input (component:Tooltip FR5, FR9)', 
   it.each([
     ['adaptive', 'none', 'span', 'decides: no tap opens it', false],
     ['adaptive', 'tap', 'button', 'decides: every tap opens it', true],
-    ['hover', 'tap', 'button', 'is ignored: no tap opens it', false],
     ['toggle', 'none', 'button', 'is ignored: a tap pins it', true],
   ] as const)(
     'beside triggerBehavior="%s", touchTrigger="%s" on a %s %s',
@@ -1096,4 +1094,23 @@ describe('Tooltip triggerBehavior on every input (component:Tooltip FR5, FR9)', 
       }
     },
   );
+});
+
+describe('Tooltip keeps press-to-pin internal', () => {
+  it('a spread props object that carries triggerBehavior at runtime pins nothing', () => {
+    const props = {
+      content: 'Billed monthly',
+      triggerBehavior: 'toggle',
+    } as unknown as ComponentProps<typeof Tooltip>;
+    render(
+      <Tooltip {...props}>
+        <button type="button">Billing</button>
+      </Tooltip>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Billing'});
+    fireEvent.pointerDown(trigger, {pointerType: 'mouse'});
+    fireEvent.pointerUp(trigger, {pointerType: 'mouse'});
+    fireEvent.click(trigger, {detail: 1});
+    expect(trigger).not.toHaveAttribute('aria-expanded');
+  });
 });

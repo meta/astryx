@@ -30,7 +30,8 @@
  *   the property.
  */
 export function declaredValue(el: Element, property: string): string | null {
-  const classes = new Set(el.className.split(' '));
+  // `classList`, not `className`: an svg element's `className` is not a string.
+  const classes = new Set(Array.from(el.classList));
   let value: string | null = null;
   for (const sheet of Array.from(document.styleSheets)) {
     for (const rule of Array.from(sheet.cssRules)) {

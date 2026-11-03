@@ -15,11 +15,11 @@
  * that will confirm or replace them (MEASUREMENTS.md lists them all).
  * uikit.test.ts enforces both.
  *
- * Most springs are measured on iOS 26.2 or documented by Apple; two are still
- * GUESSES (`segmentedThumb`, `banner`). `switchThumbMove` is the switch's
- * measured travel, which uikit/switch.ts reads. A guess starts from the
- * nearest sourced spring and names it. A component built on the table gets
- * the measured value the moment it lands, without changing.
+ * Most springs are measured on iOS 26.2 or documented by Apple; one is still
+ * a GUESS (`banner`). `switchThumbMove` is the switch's measured travel,
+ * which uikit/switch.ts reads. A guess starts from the nearest sourced
+ * spring and names it. A component built on the table gets the measured
+ * value the moment it lands, without changing.
  *
  * Press highlight in/out are fades, not springs: see timing.ts.
  *
@@ -400,21 +400,6 @@ export const SWITCH_THUMB_MOVE_SPRING = {
   dampingRatio: 1,
 } as const;
 
-/**
- * UISegmentedControl selection thumb sliding to a new segment.
- * @source GUESS — WebKit's UIKit-matched switch thumb spring
- *   (RenderThemeCocoa.mm `thumbMoveSpring`: response 0.30 s, ratio 0.75),
- *   kept only until UISegmentedControl's measured spring replaces it;
- *   UISwitch's measured travel (`SWITCH_THUMB_MOVE_SPRING`)
- *   belongs to another control
- * @measure M-SG02
- * @measure M-SG03
- */
-export const SEGMENTED_THUMB_SPRING = {
-  response: 0.3,
-  dampingRatio: 0.75,
-} as const;
-
 // ---------------------------------------------------------------------
 // System
 // ---------------------------------------------------------------------
@@ -504,7 +489,6 @@ export const springs = {
   contextMenuMorph: CONTEXT_MENU_MORPH_SPRING,
   menuReducedMotion: MENU_REDUCED_MOTION_SPRING,
   switchThumbMove: SWITCH_THUMB_MOVE_SPRING,
-  segmentedThumb: SEGMENTED_THUMB_SPRING,
   keyboard: KEYBOARD_SPRING,
   banner: BANNER_SPRING,
   sliderRelease: SLIDER_RELEASE_SPRING,

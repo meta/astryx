@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope ^packages/core/src/Table/ ^packages/core/src/ContextMenu/ ^apps/storybook/stories/TableRowExpansion
+// @pr-a11y scope ^packages/core/src/Table/ ^packages/core/src/ContextMenu/ ^packages/core/src/hooks/useLongPress ^apps/storybook/stories/TableRowExpansion
 
 /**
  * @file TableCellMenus.a11y.browser.spec.ts
@@ -9,7 +9,9 @@
  *   cell), and that the first right-click, keyboard open and long press still
  *   open it as before: at the pointer, at the trigger's corner, or at the
  *   finger, focus moving into it and back, and its close and a second open
- *   unchanged
+ *   unchanged; and that a long press held through a busy main thread still
+ *   opens it (spec:AST-094 FR16: the hold is timed on the touch events' own
+ *   clock, so a late lift reports the press first)
  * @position Regression proof for ContextMenu mounting its layer at its first
  *   open (row expansion gives every body cell a context menu)
  */
@@ -178,6 +180,48 @@ test.describe('on a touch screen', () => {
     const driver = await touchDriver(page);
     await driver.play(tap(point, {holdMs: 800}));
     await expect(page.getByRole('menu')).toBeVisible();
+    const anchor = await cell
+      .locator('span[aria-hidden="true"][style*="anchor-name"]')
+      .boundingBox();
+    expect(Math.abs((anchor?.x ?? 0) - point.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs((anchor?.y ?? 0) - point.y)).toBeLessThanOrEqual(1);
+  });
+
+  test('a long press held through a busy main thread still opens the menu at the finger (spec:AST-094 FR16)', async ({
+    page,
+  }) => {
+    await mount(page, 'gliding-rows');
+    const cell = nameCell(page);
+    const box = await cell.boundingBox();
+    if (box == null) {
+      throw new Error('the cell has no rendered bounds');
+    }
+    const point = {x: Math.round(box.x) + 14, y: Math.round(box.y) + 10};
+    // The page's main thread is busy for 1,200 ms from just after the touch
+    // starts, through the 800 ms hold: a listener on the window, which runs
+    // after the cell's own touch handlers, so the long press is timed by then.
+    // The lift and the press's timer both wait behind that task.
+    await page.evaluate(() => {
+      window.addEventListener(
+        'touchstart',
+        () => {
+          const end = performance.now() + 1200;
+          while (performance.now() < end) {
+            // Busy.
+          }
+        },
+        {once: true, passive: true},
+      );
+    });
+    const driver = await touchDriver(page);
+    await driver.play(tap(point, {holdMs: 800}));
+    // The menu is there and painted before anything is measured on it.
+    const menu = page.getByRole('menu');
+    await expect(menu).toHaveCount(1);
+    await expect(menu).toBeVisible();
+    const menuBox = await menu.boundingBox();
+    expect(menuBox?.width ?? 0).toBeGreaterThan(0);
+    expect(menuBox?.height ?? 0).toBeGreaterThan(0);
     const anchor = await cell
       .locator('span[aria-hidden="true"][style*="anchor-name"]')
       .boundingBox();

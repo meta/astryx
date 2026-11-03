@@ -12,6 +12,8 @@
  * SYNC: When modified, update actionGroupTracker.test.ts
  */
 
+import {clickAndReport, clickForLift} from '../utils/browserClickWait';
+import {armClickGuard} from '../utils/clickGuard';
 import {PRESSED_ATTRIBUTE} from '../utils/pressFeedback';
 import {PRESS_FADE_MS} from '../utils/pressGesture';
 
@@ -55,7 +57,8 @@ export interface ActionGroupTrackerOptions {
    * target past the group's ends commits the lift there wherever the finger
    * lifts.
    * @default the target whose rect, grown by `highlightExpansion`, holds the
-   *   point; none between or outside them
+   *   point, the one the press landed on where several do; none between or
+   *   outside them
    */
   resolveTarget?: (
     x: number,
@@ -70,9 +73,9 @@ export interface ActionGroupTrackerOptions {
    */
   onActivated?: (item: HTMLElement, cancelled: boolean) => void;
   /**
-   * After the lift ran an action, take the browser's own click for that
-   * touch (left to it by a recognizer that did not claim the touch), so the
-   * action runs once. @default false
+   * After the lift ran an action, the shared click guard takes the browser's
+   * own click for that touch, so the action runs once. A recognizer that did
+   * not claim the touch leaves that click to the browser. @default false
    */
   swallowsNativeClick?: boolean;
 }
@@ -81,8 +84,13 @@ export interface ActionGroupTracker {
   /**
    * A press began at viewport (x, y): read the actions' rects once and
    * highlight the one under it. An inert press is taken but tracks nothing.
+   * `landed` is the node the press landed on.
    */
-  begin(x: number, y: number, options?: {inert?: boolean}): void;
+  begin(
+    x: number,
+    y: number,
+    options?: {inert?: boolean; landed?: Node | null},
+  ): void;
   /** The finger moved to viewport (x, y). */
   move(x: number, y: number): void;
   /**
@@ -127,54 +135,6 @@ interface TrackedAction {
 }
 
 /**
- * Swallow the browser's own click for a touch that the lift already acted
- * on. The listeners exist only from that lift until the click, the next
- * press, or the next key. An activation with `detail === 0` (a key or
- * assistive technology) always passes, and the swallower keeps waiting
- * (`AST-094`).
- */
-function swallowNextClick(view: Window): void {
-  const disarm = () => {
-    view.removeEventListener('click', onClick, true);
-    view.removeEventListener('pointerdown', disarm, true);
-    view.removeEventListener('keydown', disarm, true);
-  };
-  const onClick = (event: MouseEvent) => {
-    if (!event.isTrusted || event.detail === 0) {
-      return;
-    }
-    disarm();
-    event.preventDefault();
-    event.stopImmediatePropagation();
-  };
-  view.addEventListener('click', onClick, true);
-  view.addEventListener('pointerdown', disarm, true);
-  view.addEventListener('keydown', disarm, true);
-}
-
-/**
- * Click `element` (its own `click()`, so its activation behavior and every
- * handler run as for any click) and report whether a handler cancelled it.
- * The event is read from a capture listener that exists only for the call.
- */
-function clickAndReport(element: HTMLElement): boolean {
-  const view = element.ownerDocument.defaultView;
-  let clicked: Event | null = null;
-  const grab = (event: Event) => {
-    if (clicked == null && event.target === element) {
-      clicked = event;
-    }
-  };
-  view?.addEventListener('click', grab, true);
-  try {
-    element.click();
-  } finally {
-    view?.removeEventListener('click', grab, true);
-  }
-  return (clicked as Event | null)?.defaultPrevented === true;
-}
-
-/**
  * Create a tracker. `getOptions` is read on every call, so a hook can pass
  * the latest props without recreating it.
  *
@@ -196,6 +156,7 @@ export function createActionGroupTracker(
   let actions: TrackedAction[] = [];
   let highlighted: HTMLElement | null = null;
   let beganOn: HTMLElement | null = null;
+  let landedOn: Node | null = null;
   let isTracking = false;
   let isInert = false;
   // The finger's last position: `remeasure` resolves it again.
@@ -287,6 +248,9 @@ export function createActionGroupTracker(
     if (resolveTarget != null) {
       return actions.length === 0 ? null : resolveTarget(x, y, actions);
     }
+    // Rects that share an edge, or that have no layout (a test renderer), can
+    // both hold the point: the one the press landed on wins.
+    let first: HTMLElement | null = null;
     for (const action of actions) {
       if (
         x >= action.left - margin &&
@@ -294,22 +258,26 @@ export function createActionGroupTracker(
         y >= action.top - margin &&
         y <= action.bottom + margin
       ) {
-        return action.element;
+        if (landedOn != null && action.element.contains(landedOn)) {
+          return action.element;
+        }
+        first ??= action.element;
       }
     }
-    return null;
+    return first;
   };
 
   const reset = () => {
     actions = [];
     highlighted = null;
     beganOn = null;
+    landedOn = null;
     isTracking = false;
     isInert = false;
   };
 
   return {
-    begin(x, y, {inert = false} = {}) {
+    begin(x, y, {inert = false, landed = null} = {}) {
       // A press can begin while another is tracked, when a second recognizer
       // takes over the finger (a trigger's held press, then the menu's): the
       // action the first one lit loses its paint.
@@ -322,6 +290,7 @@ export function createActionGroupTracker(
       highlighted = null;
       isTracking = true;
       isInert = inert;
+      landedOn = landed;
       lastX = x;
       lastY = y;
       getOptions().onMove?.(x, y);
@@ -358,13 +327,15 @@ export function createActionGroupTracker(
       const {onActivate, onActivated, swallowsNativeClick} = getOptions();
       if (onActivate != null) {
         onActivate(lifted);
+        if (swallowsNativeClick === true) {
+          armClickGuard(lifted.ownerDocument);
+        }
       } else {
-        const cancelled = clickAndReport(lifted);
+        const cancelled =
+          swallowsNativeClick === true
+            ? clickForLift(lifted)
+            : clickAndReport(lifted);
         onActivated?.(lifted, cancelled);
-      }
-      const view = lifted.ownerDocument.defaultView;
-      if (swallowsNativeClick === true && view != null) {
-        swallowNextClick(view);
       }
       return lifted;
     },
