@@ -272,17 +272,21 @@ export interface IconProps extends Omit<
  *
  * - Non-empty `label` → meaningful image: `role="img"` + `aria-label`, and no
  *   `aria-hidden` (an `aria-hidden` element is removed from the accessibility
- *   tree, so its accessible name would be ignored).
+ *   tree, so its accessible name would be ignored). `aria-hidden` is passed as
+ *   `undefined` because many icon components, such as Heroicons, write
+ *   `aria-hidden="true"` unless a prop replaces it.
  * - Omitted or empty `label` → decorative default: `aria-hidden="true"`.
  *
  * The result is spread BEFORE `{...props}` in both render modes so an explicit
  * `aria-hidden` / `role` / `aria-label` from the consumer always wins.
  */
-function getIconA11yProps(
-  label: string | undefined,
-): {role: 'img'; 'aria-label': string} | {'aria-hidden': 'true'} {
+type IconA11yProps =
+  | {role: 'img'; 'aria-label': string; 'aria-hidden': undefined}
+  | {'aria-hidden': 'true'};
+
+function getIconA11yProps(label: string | undefined): IconA11yProps {
   return label != null && label !== ''
-    ? {role: 'img', 'aria-label': label}
+    ? {role: 'img', 'aria-label': label, 'aria-hidden': undefined}
     : {'aria-hidden': 'true'};
 }
 
@@ -392,7 +396,7 @@ function IconFromRegistry({
   color: IconColor;
   size: IconSize;
   variant: IconVariant | undefined;
-  a11yProps: {role: 'img'; 'aria-label': string} | {'aria-hidden': 'true'};
+  a11yProps: IconA11yProps;
   className?: string;
   style?: React.CSSProperties;
   xstyle?: StyleXStyles;

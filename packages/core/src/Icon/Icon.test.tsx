@@ -13,6 +13,7 @@
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
+import {CheckCircleIcon} from '@heroicons/react/24/outline';
 import {TestIcon} from '../__tests__/TestIcon';
 import {unthemedLength} from '../__tests__/unthemedLength';
 import {Theme} from '../theme/Theme';
@@ -838,6 +839,19 @@ describe('Icon', () => {
       expect(icon).toHaveAttribute('role', 'img');
       expect(icon).toHaveAttribute('aria-label', 'Completed');
       expect(icon).not.toHaveAttribute('aria-hidden');
+    });
+
+    it('exposes a labelled icon component that hides itself by default', () => {
+      // Heroicons render aria-hidden="true" unless the caller overrides it.
+      render(<Icon icon={CheckCircleIcon} label="Completed" />);
+      const icon = screen.getByRole('img', {name: 'Completed'});
+      expect(icon).not.toHaveAttribute('aria-hidden');
+    });
+
+    it('keeps an icon component that hides itself decorative without a label', () => {
+      render(<Icon icon={CheckCircleIcon} data-testid="icon" />);
+      expect(screen.getByTestId('icon')).toHaveAttribute('aria-hidden', 'true');
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
     });
 
     it('keeps the decorative default when label is omitted (component mode)', () => {

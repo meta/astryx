@@ -240,7 +240,8 @@ async function observe(page: Page, colorToken: Record<string, string>) {
         .querySelector('[data-astryx-theme]')
         ?.getAttribute('data-astryx-theme'),
       mode: document.documentElement.getAttribute('data-theme'),
-      direction: getComputedStyle(root).direction,
+      direction: getComputedStyle(root.querySelector('.astryx-icon') ?? root)
+        .direction,
       rootFontSize: getComputedStyle(document.documentElement).fontSize,
       viewport: {width: innerWidth, height: innerHeight},
       dpr: devicePixelRatio,
