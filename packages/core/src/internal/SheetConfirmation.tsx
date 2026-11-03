@@ -3,28 +3,32 @@
 'use client';
 
 /**
- * @file MobileSheetConfirmation.tsx
- * @input Public Core Dialog, layout, text and action primitives; caller-owned copy
- * @output Private confirmation shared by MobileTokenizer and MobilePowerSearch
- * @position Lab-only mobile sheet confirmation owner; not a public export
+ * @file SheetConfirmation.tsx
+ * @input Dialog, Layout, Heading, Text, Button; caller-owned copy
+ * @output SheetConfirmation — the confirmation a touch sheet opens over
+ *   itself for Clear all and for discarding a changed draft
+ * @position Core-internal, shared by the Tokenizer sheet and the PowerSearch
+ *   sheets; not a public export
  *
- * Core AlertDialog fixes its purpose to form and its safe action to ghost.
- * These Lab flows instead allow scrim dismissal and use separated, full-width
- * large actions with the secondary safe action focused first. Keep that
- * difference here, while preserving the existing alert-dialog theme target.
+ * AlertDialog fixes its purpose to form and its safe action to ghost. A touch
+ * sheet's confirmation allows scrim dismissal. Its two full-width large
+ * actions are stacked and separated: the destructive action first in reading
+ * order, the safe action focused first. The alert-dialog theme target stays.
  */
 
 import {useId} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {Button} from '@astryxdesign/core/Button';
-import {Dialog} from '@astryxdesign/core/Dialog';
-import {Heading} from '@astryxdesign/core/Heading';
-import {Layout, LayoutContent, LayoutFooter} from '@astryxdesign/core/Layout';
-import {Stack} from '@astryxdesign/core/Stack';
-import {Text} from '@astryxdesign/core/Text';
-import {themeProps} from '@astryxdesign/core/utils';
+import {Button} from '../Button/Button';
+import {Dialog} from '../Dialog/Dialog';
+import {Heading} from '../Heading/Heading';
+import {Layout} from '../Layout/Layout';
+import {LayoutContent} from '../Layout/LayoutContent';
+import {LayoutFooter} from '../Layout/LayoutFooter';
+import {Stack} from '../Stack/Stack';
+import {Text} from '../Text/Text';
+import {themeProps} from '../utils/themeProps';
 
-interface MobileSheetConfirmationProps {
+export interface SheetConfirmationProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   title: string;
@@ -38,7 +42,7 @@ const styles = stylex.create({
   action: {width: '100%'},
 });
 
-export function MobileSheetConfirmation({
+export function SheetConfirmation({
   isOpen,
   onOpenChange,
   title,
@@ -46,7 +50,7 @@ export function MobileSheetConfirmation({
   cancelLabel,
   actionLabel,
   onAction,
-}: MobileSheetConfirmationProps) {
+}: SheetConfirmationProps) {
   const titleId = useId();
   const descriptionId = useId();
   return (
