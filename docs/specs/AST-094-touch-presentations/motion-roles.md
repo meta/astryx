@@ -4,28 +4,30 @@
 
 Every motion role a registered table lists (`spec:AST-094` FR4, DEC-5): its kind, its default as the table measures it, and the record that names it. A role FR4 lists is named by FR4; any other role is one a component's own record measures, named by the current component records that carry its id.
 
-| Role                         | Kind     | Default                             | Named by           |
-| ---------------------------- | -------- | ----------------------------------- | ------------------ |
-| `springs.contextMenuDismiss` | spring   | response 0.35 s, damping ratio 0.85 | `spec:AST-094` FR4 |
-| `springs.contextMenuLift`    | spring   | response 0.32 s, damping ratio 0.8  | `spec:AST-094` FR4 |
-| `springs.contextMenuMorph`   | spring   | response 0.3 s, damping ratio 0.8   | `spec:AST-094` FR4 |
-| `springs.directChange`       | spring   | response 0.5 s, damping ratio 0.825 | `spec:AST-094` FR4 |
-| `springs.emphasis`           | spring   | duration 0.5 s, bounce 0.3          | `spec:AST-094` FR4 |
-| `springs.fingerTracking`     | spring   | response 0.15 s, damping ratio 0.86 | `spec:AST-094` FR4 |
-| `springs.menuClose`          | spring   | response 0.35 s, damping ratio 0.85 | `spec:AST-094` FR4 |
-| `springs.menuOpen`           | spring   | response 0.32 s, damping ratio 0.8  | `spec:AST-094` FR4 |
-| `springs.quickChange`        | spring   | duration 0.5 s, bounce 0.15         | `spec:AST-094` FR4 |
-| `springs.settle`             | spring   | duration 0.5 s, bounce 0            | `spec:AST-094` FR4 |
-| `springs.sliderDrop`         | spring   | response 0.5 s, damping ratio 0.7   | `component:Slider` |
-| `springs.sliderLift`         | spring   | response 0.215 s, damping ratio 0.6 | `component:Slider` |
-| `springs.sliderRelease`      | spring   | response 0.4 s, damping ratio 1     | `component:Slider` |
-| `springs.stateChange`        | spring   | response 0.55 s, damping ratio 1    | `spec:AST-094` FR4 |
-| `springs.subMenuBack`        | spring   | response 0.4 s, damping ratio 1     | `spec:AST-094` FR4 |
-| `springs.subMenuOpen`        | spring   | response 0.4 s, damping ratio 0.85  | `spec:AST-094` FR4 |
-| `springs.timedChange`        | spring   | duration 0.5 s, bounce 0            | `spec:AST-094` FR4 |
-| `springs.viewChange`         | spring   | mass 3, stiffness 1000, damping 500 | `spec:AST-094` FR4 |
-| `timing.curves.entrance`     | curve    | cubic-bezier(0, 0, 0.58, 1)         | `spec:AST-094` FR4 |
-| `timing.curves.exit`         | curve    | cubic-bezier(0.42, 0, 1, 1)         | `spec:AST-094` FR4 |
-| `timing.curves.move`         | curve    | cubic-bezier(0.42, 0, 0.58, 1)      | `spec:AST-094` FR4 |
-| `timing.curves.viewChange`   | curve    | cubic-bezier(0.25, 0.1, 0.25, 1)    | `spec:AST-094` FR4 |
-| `timing.stateChangeMs`       | duration | 250 ms                              | `spec:AST-094` FR4 |
+| Role                         | Kind     | Default                             | Named by                |
+| ---------------------------- | -------- | ----------------------------------- | ----------------------- |
+| `progress.curves.fill`       | curve    | cubic-bezier(0, 0, 1, 1)            | `component:ProgressBar` |
+| `progress.fillTrackMs`       | duration | 1000 ms                             | `component:ProgressBar` |
+| `springs.contextMenuDismiss` | spring   | response 0.35 s, damping ratio 0.85 | `spec:AST-094` FR4      |
+| `springs.contextMenuLift`    | spring   | response 0.32 s, damping ratio 0.8  | `spec:AST-094` FR4      |
+| `springs.contextMenuMorph`   | spring   | response 0.3 s, damping ratio 0.8   | `spec:AST-094` FR4      |
+| `springs.directChange`       | spring   | response 0.5 s, damping ratio 0.825 | `spec:AST-094` FR4      |
+| `springs.emphasis`           | spring   | duration 0.5 s, bounce 0.3          | `spec:AST-094` FR4      |
+| `springs.fingerTracking`     | spring   | response 0.15 s, damping ratio 0.86 | `spec:AST-094` FR4      |
+| `springs.menuClose`          | spring   | response 0.35 s, damping ratio 0.85 | `spec:AST-094` FR4      |
+| `springs.menuOpen`           | spring   | response 0.32 s, damping ratio 0.8  | `spec:AST-094` FR4      |
+| `springs.quickChange`        | spring   | duration 0.5 s, bounce 0.15         | `spec:AST-094` FR4      |
+| `springs.settle`             | spring   | duration 0.5 s, bounce 0            | `spec:AST-094` FR4      |
+| `springs.sliderDrop`         | spring   | response 0.5 s, damping ratio 0.7   | `component:Slider`      |
+| `springs.sliderLift`         | spring   | response 0.215 s, damping ratio 0.6 | `component:Slider`      |
+| `springs.sliderRelease`      | spring   | response 0.4 s, damping ratio 1     | `component:Slider`      |
+| `springs.stateChange`        | spring   | response 0.55 s, damping ratio 1    | `spec:AST-094` FR4      |
+| `springs.subMenuBack`        | spring   | response 0.4 s, damping ratio 1     | `spec:AST-094` FR4      |
+| `springs.subMenuOpen`        | spring   | response 0.4 s, damping ratio 0.85  | `spec:AST-094` FR4      |
+| `springs.timedChange`        | spring   | duration 0.5 s, bounce 0            | `spec:AST-094` FR4      |
+| `springs.viewChange`         | spring   | mass 3, stiffness 1000, damping 500 | `spec:AST-094` FR4      |
+| `timing.curves.entrance`     | curve    | cubic-bezier(0, 0, 0.58, 1)         | `spec:AST-094` FR4      |
+| `timing.curves.exit`         | curve    | cubic-bezier(0.42, 0, 1, 1)         | `spec:AST-094` FR4      |
+| `timing.curves.move`         | curve    | cubic-bezier(0.42, 0, 0.58, 1)      | `spec:AST-094` FR4      |
+| `timing.curves.viewChange`   | curve    | cubic-bezier(0.25, 0.1, 0.25, 1)    | `spec:AST-094` FR4      |
+| `timing.stateChangeMs`       | duration | 250 ms                              | `spec:AST-094` FR4      |
