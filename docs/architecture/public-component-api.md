@@ -110,10 +110,11 @@ guidance owns the process used to propose and test APIs.
   touch, tap, hover, mouse, click) when the values can name the behavior. A
   public prop names a system primitive with the system's existing vocabulary:
   it introduces no new term for a concept the system already names (DEC-1). A
-  positional distance is an `offset` or an `inset`, as `useLayer`'s `offset`,
-  Outline's `offset`, and the `inset` of LayerProvider and ToastViewport are.
-  Depth is `elevation`, which takes `'none' | 'low' | 'med' | 'high'`, as Card,
-  Button, and Banner take it. `lift` names motion under a press, such as
+  gap between an element and its anchor is an `offset`, as `useLayer`'s
+  `offset` is; a distance in from a container's or the viewport's edge is an
+  `inset`, as LayerProvider's and ToastViewport's `inset` are. Depth is
+  `elevation`, which takes values from `Elevation`, as Card, Button, and Banner
+  take it. `lift` names motion under a press, such as
   Switch's thumb lift, Slider's `springs.sliderLift`, and ContextMenu's
   `springs.contextMenuLift`, so it does not name a layout distance.
 - **INV3 — One prop controls one independent concept.** A prop does not silently
@@ -366,22 +367,23 @@ source. Lab components are not stable public promises until promotion.
   that also restores the previous surface and mode.
 - `spec:AST-012/DEC-6` — compact is one definition, the same on every platform.
 
+Transition Action sequencing and pending behavior belong to their component or
+family contract. This record links that owner once it is current; it does not
+copy the component matrix.
+
 ### DEC-1 — Public props use the system's existing vocabulary
 
 **Decider:** `cixzhang`, `2026-11-03`
 
 A public prop that names a system primitive uses the word the system already
 has for it, so a builder who knows one component reads the same concept the
-same way on the next. Positional distance is `offset` or `inset`, depth is
-`elevation`, and `lift` stays the name of motion under a press. An API for a
-new component, such as a search field, starts from the existing patterns in
-the system and introduces no new term for a concept the system already names.
+same way on the next. A gap from an anchor is `offset`, a distance in from an
+edge is `inset`, depth is `elevation`, and `lift` stays the name of motion
+under a press. An API for a new component, such as a search field, starts from
+the existing patterns in the system and introduces no new term for a concept
+the system already names.
 
 Rejected: component-local names for shared concepts.
-
-Transition Action sequencing and pending behavior belong to their component or
-family contract. This record links that owner once it is current; it does not
-copy the component matrix.
 
 ## Verification
 
