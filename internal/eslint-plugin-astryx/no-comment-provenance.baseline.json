@@ -852,14 +852,12 @@
     "#1107"
   ],
   "packages/core/src/ProgressBar/ProgressBar.tsx": [
-    "DR1",
     "INV11",
     "INV11",
     "INV11",
     "architecture:theme-tokens",
     "architecture:theme-tokens",
     "architecture:theme-tokens",
-    "design:reduced-motion",
     "spec quote"
   ],
   "packages/core/src/RadioList/RadioListItem.tsx": [
@@ -2530,7 +2528,6 @@
     "spec:AST-086"
   ],
   "packages/lab/src/DiffViewer/DiffViewer.tsx": ["FR13", "FR3", "FR3"],
-  "packages/lab/src/InfoTip/InfoTip.tsx": ["#5168"],
   "packages/lab/src/LogStream/LogStream.tsx": ["FR3"],
   "packages/lab/src/MobilePowerSearch/MobilePowerSearch.tsx": [
     "AST-086",

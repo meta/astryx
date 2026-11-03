@@ -296,6 +296,11 @@ export function ToastSurface({
     const resumeForWindow = () => resumeTimer('window');
     window.addEventListener('blur', pauseForWindow);
     window.addEventListener('focus', resumeForWindow);
+    // A toast raised while the window is already blurred gets no blur event,
+    // so it starts held, and the window's next focus resumes it.
+    if (!document.hasFocus()) {
+      pauseForWindow();
+    }
     return () => {
       window.removeEventListener('blur', pauseForWindow);
       window.removeEventListener('focus', resumeForWindow);

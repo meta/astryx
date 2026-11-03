@@ -194,6 +194,8 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-full'],
     width: '16px',
     height: '16px',
+    // A token cut by its width shrinks only its label, not the button.
+    flexShrink: 0,
     color: 'inherit',
     '::after': {
       content: '""',

@@ -170,6 +170,34 @@ describe('a PowerSearch filter token', () => {
     expect(screen.queryByRole('dialog', {hidden: true})).toBeNull();
   });
 
+  it('offers no editor on a token whose press commits it', () => {
+    const emptyConfig: PowerSearchConfig = {
+      name: 'Messages',
+      fields: [
+        {
+          key: 'unread',
+          label: 'Unread',
+          defaultOperator: 'only',
+          operators: [{key: 'only', label: 'only', value: {type: 'empty'}}],
+        },
+      ],
+    };
+    render(
+      <PowerSearch
+        config={emptyConfig}
+        filters={[{field: 'unread', operator: 'only', value: {type: 'empty'}}]}
+        onChange={() => {}}
+      />,
+    );
+
+    const token = screen
+      .getAllByRole('button', {name: /Unread/})
+      .find(button => !button.textContent?.startsWith('Remove'));
+    expect(token).toBeDefined();
+    expect(token).not.toHaveAttribute('aria-haspopup');
+    expect(token).not.toHaveAttribute('aria-expanded');
+  });
+
   it('offers no editor on a read-only token', () => {
     render(
       <PowerSearch

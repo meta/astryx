@@ -13,11 +13,13 @@
  *   highlight callback (with the target it replaces) and the opt-out of the
  *   paint; an owner's own target resolution (a row of segments, past its
  *   ends), the finger's raw moves, the begin target, remeasure, a cancelled
- *   click reported, and the browser's own click swallowed once
+ *   click reported, and the browser's own click taken once by the shared
+ *   click guard
  * @position jsdom tests of packages/core/src/hooks/actionGroupTracker.ts
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {__resetClickGuardForTest, isClickGuardArmed} from '../utils/clickGuard';
 import {PRESSED_ATTRIBUTE} from '../utils/pressFeedback';
 import {PRESS_FADE_MS} from '../utils/pressGesture';
 import {
@@ -67,6 +69,7 @@ beforeEach(() => {
 
 afterEach(() => {
   root.remove();
+  __resetClickGuardForTest();
   vi.useRealTimers();
 });
 
@@ -383,128 +386,49 @@ describe('createActionGroupTracker: options for other trackers', () => {
     expect(onActivated).toHaveBeenCalledTimes(2);
   });
 
-  it('swallows the browser\u2019s own click after the lift once, listening only until then', () => {
-    const add = vi.spyOn(window, 'addEventListener');
-    const remove = vi.spyOn(window, 'removeEventListener');
-    try {
-      const group = tracker({swallowsNativeClick: true});
-      group.begin(50, 10);
-      add.mockClear();
-      group.end();
-      // The tracker's own click ran inside end, before the swallower.
-      expect(left.onClick).toHaveBeenCalledTimes(1);
-      // Listening now: what end added and did not take off again (the
-      // capture that reads its own click comes and goes inside the call).
-      const gone = new Set(remove.mock.calls.map(([, listener]) => listener));
-      const armed = add.mock.calls.filter(
-        ([, listener, capture]) => capture === true && !gone.has(listener),
-      );
-      expect(armed.map(([type]) => type).sort()).toEqual([
-        'click',
-        'keydown',
-        'pointerdown',
-      ]);
-      remove.mockClear();
-      // A script's click is not the browser's: it passes.
-      const onDocumentClick = vi.fn();
-      document.addEventListener('click', onDocumentClick);
-      left.button.click();
-      expect(onDocumentClick).toHaveBeenCalledTimes(1);
-      // The browser's click for the touch is taken once, and the swallower goes.
-      const swallow = armed.find(([type]) => type === 'click')?.[1] as (
-        event: unknown,
-      ) => void;
-      const trusted = {
-        isTrusted: true,
-        preventDefault: vi.fn(),
-        stopImmediatePropagation: vi.fn(),
-      };
-      swallow(trusted);
-      expect(trusted.preventDefault).toHaveBeenCalled();
-      expect(trusted.stopImmediatePropagation).toHaveBeenCalled();
-      const removed = remove.mock.calls
-        .filter(([, , capture]) => capture === true)
-        .map(([type]) => type)
-        .sort();
-      expect(removed).toEqual(['click', 'keydown', 'pointerdown']);
-      document.removeEventListener('click', onDocumentClick);
-    } finally {
-      add.mockRestore();
-      remove.mockRestore();
-    }
+  it('with swallowsNativeClick the lift clicks once, and the shared click guard takes the browser\u2019s own click', () => {
+    const group = tracker({swallowsNativeClick: true});
+    group.begin(50, 10);
+    group.end();
+    // The tracker's own click ran inside end and passed the guard.
+    expect(left.onClick).toHaveBeenCalledTimes(1);
+    expect(isClickGuardArmed(document)).toBe(true);
+    // The browser's click for the touch (a pointer's, detail 1) is taken once.
+    left.button.dispatchEvent(
+      new MouseEvent('click', {bubbles: true, cancelable: true, detail: 1}),
+    );
+    expect(left.onClick).toHaveBeenCalledTimes(1);
+    expect(isClickGuardArmed(document)).toBe(false);
   });
 
-  it('lets an activation with detail 0 (keyboard, assistive technology) through while it waits for the browser\u2019s click (spec:AST-094 FR21)', () => {
-    const add = vi.spyOn(window, 'addEventListener');
-    const remove = vi.spyOn(window, 'removeEventListener');
-    try {
-      const group = tracker({swallowsNativeClick: true});
-      group.begin(50, 10);
-      add.mockClear();
-      group.end();
-      const gone = new Set(remove.mock.calls.map(([, listener]) => listener));
-      const swallow = add.mock.calls.find(
-        ([type, listener, capture]) =>
-          type === 'click' && capture === true && !gone.has(listener),
-      )?.[1] as (event: unknown) => void;
-      remove.mockClear();
-      // A screen reader's or a key's activation is not the touch's click: it
-      // passes, and the swallower keeps waiting for the touch's own.
-      const activation = {
-        isTrusted: true,
-        detail: 0,
-        preventDefault: vi.fn(),
-        stopImmediatePropagation: vi.fn(),
-      };
-      swallow(activation);
-      expect(activation.preventDefault).not.toHaveBeenCalled();
-      expect(activation.stopImmediatePropagation).not.toHaveBeenCalled();
-      expect(remove).not.toHaveBeenCalled();
-      // The touch's own click (detail 1) is still taken once.
-      const touchClick = {
-        isTrusted: true,
-        detail: 1,
-        preventDefault: vi.fn(),
-        stopImmediatePropagation: vi.fn(),
-      };
-      swallow(touchClick);
-      expect(touchClick.preventDefault).toHaveBeenCalled();
-      expect(touchClick.stopImmediatePropagation).toHaveBeenCalled();
-    } finally {
-      add.mockRestore();
-      remove.mockRestore();
-    }
+  it('lets an activation with detail 0 (keyboard, assistive technology) through while the guard waits for the browser\u2019s click (spec:AST-094 FR21)', () => {
+    const group = tracker({swallowsNativeClick: true});
+    group.begin(50, 10);
+    group.end();
+    left.button.dispatchEvent(
+      new MouseEvent('click', {bubbles: true, cancelable: true, detail: 0}),
+    );
+    expect(left.onClick).toHaveBeenCalledTimes(2);
+    expect(isClickGuardArmed(document)).toBe(true);
   });
 
-  it('a press or a key before the browser\u2019s click ends the swallowing; without the option nothing stays listening', () => {
-    const add = vi.spyOn(window, 'addEventListener');
-    const remove = vi.spyOn(window, 'removeEventListener');
-    const listening = () => {
-      const gone = new Set(remove.mock.calls.map(([, listener]) => listener));
-      return add.mock.calls
-        .filter(([, listener]) => !gone.has(listener))
-        .map(([type]) => type)
-        .sort();
-    };
-    try {
-      const plain = tracker();
-      plain.begin(50, 10);
-      plain.end();
-      expect(listening()).toEqual([]);
-      const group = tracker({swallowsNativeClick: true});
-      group.begin(50, 10);
-      group.end();
-      expect(listening()).toEqual(['click', 'keydown', 'pointerdown']);
-      // The next press comes first (the browser gave no click): disarmed.
-      window.dispatchEvent(new PointerEvent('pointerdown'));
-      expect(listening()).toEqual([]);
-      group.begin(50, 10);
-      group.end();
-      window.dispatchEvent(new KeyboardEvent('keydown', {key: 'Tab'}));
-      expect(listening()).toEqual([]);
-    } finally {
-      add.mockRestore();
-      remove.mockRestore();
-    }
+  it('the next press ends the guard; without the option nothing is armed, and an owner\u2019s onActivate gets the guard too', () => {
+    const plain = tracker();
+    plain.begin(50, 10);
+    plain.end();
+    expect(isClickGuardArmed(document)).toBe(false);
+    const group = tracker({swallowsNativeClick: true});
+    group.begin(50, 10);
+    group.end();
+    expect(isClickGuardArmed(document)).toBe(true);
+    // The next press comes first (the browser gave no click): disarmed.
+    window.dispatchEvent(new PointerEvent('pointerdown'));
+    expect(isClickGuardArmed(document)).toBe(false);
+    const onActivate = vi.fn();
+    const owned = tracker({swallowsNativeClick: true, onActivate});
+    owned.begin(50, 10);
+    owned.end();
+    expect(onActivate).toHaveBeenCalledWith(left.button);
+    expect(isClickGuardArmed(document)).toBe(true);
   });
 });

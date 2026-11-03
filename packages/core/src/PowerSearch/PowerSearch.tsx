@@ -31,6 +31,7 @@ import {
   type TokenizerOverflowBehavior,
 } from '../Tokenizer';
 import {TokenizerClearAllMessageContext} from '../Tokenizer/TokenizerClearAllMessageContext';
+import {TokenizerItemRemovableContext} from '../Tokenizer/TokenizerItemRemovableContext';
 import {TypeaheadItem} from '../Typeahead/TypeaheadItem';
 import {Token} from '../Token';
 import {TokenNamingContext} from '../Token/TokenNamingContext';
@@ -62,6 +63,7 @@ import {themeProps} from '../utils/themeProps';
 import {truncateCharacters} from '../utils/characters';
 import {useLocale} from '../i18n/useLocale';
 import type {Locale} from '../i18n/types';
+import type {SearchableItem} from '../Typeahead/types';
 import type {
   PowerSearchConfig,
   PowerSearchFilter,
@@ -74,6 +76,7 @@ import type {
   OperatorValue,
   EnumItem,
   PowerSearchComponents,
+  PowerSearchOperator,
 } from './types';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -408,6 +411,20 @@ type PopoverState =
 // =============================================================================
 
 /**
+ * Whether a press on a token with this operator commits the filter instead of
+ * opening its editor: an `empty` operator with no `empty` Editor override.
+ */
+function commitsWithoutEditor(
+  operator: PowerSearchOperator | undefined,
+  componentOverrides: PowerSearchComponents | undefined,
+): boolean {
+  return (
+    operator?.value.type === 'empty' &&
+    componentOverrides?.empty?.Editor == null
+  );
+}
+
+/**
  * Structured filter bar where each token represents a filter (field + operator + value).
  *
  * Users select a field from a typeahead dropdown, then configure the operator
@@ -704,17 +721,37 @@ export function PowerSearch({
             value: undefined,
           },
         });
-      } else if (change.type === 'remove' && change.item) {
-        const auxData = change.item.auxiliaryData as PowerSearchAuxData;
-        if (auxData?.filterIndex != null) {
-          const newFilters = filters.filter((_, i) =>
-            _items.some(item => item.auxiliaryData?.filterIndex === i),
+      } else if (change.type === 'remove') {
+        const keptIndices = new Set(
+          _items.map(item => item.auxiliaryData?.filterIndex),
+        );
+        const firstRemovedIndex = filters.findIndex(
+          (_, i) => !keptIndices.has(i),
+        );
+        if (firstRemovedIndex >= 0) {
+          onChange(
+            filters.filter((_, i) => keptIndices.has(i)),
+            'remove',
+            firstRemovedIndex,
           );
-          onChange(newFilters, 'remove', auxData.filterIndex);
         }
       }
     },
     [config, filters, onChange, setPopoverState],
+  );
+
+  // Tokenizer's Backspace and Clear all do not go through renderToken. This
+  // predicate locks each read-only filter, and every token of a read-only
+  // field.
+  const isItemRemovable = useCallback(
+    (item: SearchableItem) => {
+      if (isReadOnly) {
+        return false;
+      }
+      const filterIndex = (item as PowerSearchItem).auxiliaryData?.filterIndex;
+      return filterIndex == null || !filters[filterIndex]?.isReadOnly;
+    },
+    [filters, isReadOnly],
   );
 
   // Handle clicking a token to edit
@@ -733,10 +770,7 @@ export function PowerSearch({
       // edit: commit it as that editor's save would, the way adding one does,
       // instead of opening it. A consumer's `empty` Editor override still opens.
       const operator = config.getOperator(filter.field, filter.operator);
-      if (
-        operator?.value.type === 'empty' &&
-        componentOverrides?.empty?.Editor == null
-      ) {
+      if (commitsWithoutEditor(operator, componentOverrides)) {
         const newFilters = [...filters];
         newFilters[index] = {
           field: filter.field,
@@ -867,7 +901,8 @@ export function PowerSearch({
       // A token that opens its editor says that it opens a dialog, and the
       // naming context names it by all its visible text.
       const editorProps =
-        handleClick != null
+        handleClick != null &&
+        !commitsWithoutEditor(operator, componentOverrides)
           ? {
               'aria-haspopup': 'dialog' as const,
               'aria-expanded':
@@ -1051,9 +1086,13 @@ export function PowerSearch({
   const announce = useAnnounce();
   // PowerSearch words its Clear all as its record does; the field announces
   // these words instead of Tokenizer's (component:Tokenizer AR7).
+  const hasReadOnlyFilter = filters.some(filter => filter.isReadOnly);
   const clearAllMessage = useMemo(
-    () => t('@astryx.powersearch.allFiltersRemoved'),
-    [t],
+    () =>
+      hasReadOnlyFilter
+        ? t('@astryx.powersearch.editableFiltersRemoved')
+        : t('@astryx.powersearch.allFiltersRemoved'),
+    [hasReadOnlyFilter, t],
   );
   const announcedResultCountRef = useRef(resultCountText);
   useEffect(() => {
@@ -1096,37 +1135,39 @@ export function PowerSearch({
         {/* The field's Clear all announces PowerSearch's own words
             (component:PowerSearch; component:Tokenizer AR7). */}
         <TokenizerClearAllMessageContext value={clearAllMessage}>
-          <Tokenizer
-            handleRef={tokenizerRef}
-            label={label}
-            isLabelHidden={isLabelHidden}
-            searchSource={searchSource}
-            value={tokenizerValue}
-            onChange={handleTokenizerChange}
-            renderToken={renderToken}
-            renderItem={renderItem}
-            maxMenuItems={MAX_BROWSE_MENU_ITEMS}
-            menuWidth={menuWidth}
-            placeholder={filters.length === 0 ? placeholder : ''}
-            hasAutoFocus={hasAutoFocus}
-            hasClear={hasClear && !isReadOnly}
-            startIcon={startIcon}
-            endContent={combinedEndContent}
-            isDisabled={isDisabled}
-            disabledMessage={disabledMessage}
-            size={size}
-            tokenOverflowBehavior={tokenOverflowBehavior}
-            hasEntriesOnFocus
-            debounceMs={0}
-            status={status}
-            statusVariant={statusVariant}
-            onFocus={onFocus}
-            onBlur={onBlur}
-            containerXstyle={xstyle}
-            containerClassName={className}
-            containerStyle={style}
-            data-testid={testId}
-          />
+          <TokenizerItemRemovableContext value={isItemRemovable}>
+            <Tokenizer
+              handleRef={tokenizerRef}
+              label={label}
+              isLabelHidden={isLabelHidden}
+              searchSource={searchSource}
+              value={tokenizerValue}
+              onChange={handleTokenizerChange}
+              renderToken={renderToken}
+              renderItem={renderItem}
+              maxMenuItems={MAX_BROWSE_MENU_ITEMS}
+              menuWidth={menuWidth}
+              placeholder={filters.length === 0 ? placeholder : ''}
+              hasAutoFocus={hasAutoFocus}
+              hasClear={hasClear && !isReadOnly}
+              startIcon={startIcon}
+              endContent={combinedEndContent}
+              isDisabled={isDisabled}
+              disabledMessage={disabledMessage}
+              size={size}
+              tokenOverflowBehavior={tokenOverflowBehavior}
+              hasEntriesOnFocus
+              debounceMs={0}
+              status={status}
+              statusVariant={statusVariant}
+              onFocus={onFocus}
+              onBlur={onBlur}
+              containerXstyle={xstyle}
+              containerClassName={className}
+              containerStyle={style}
+              data-testid={testId}
+            />
+          </TokenizerItemRemovableContext>
         </TokenizerClearAllMessageContext>
       </div>
       {popover.render(popoverContent, {
