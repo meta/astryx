@@ -358,11 +358,8 @@ export function Timestamp({
       : format;
 
   // Absolute text uses `timezoneID`, else the viewer's zone. A named zone makes
-  // the text the same on the server and the client. The pre-hydration
-  // placeholder stays in UTC with its label, so every zone writes the same markup.
-  //
-  // A named zone makes absolute text the same on the server and the client.
-  // It does not reach the placeholder, the default card row or the relative name.
+  // the text the same on the server and the client. It does not reach the UTC
+  // placeholder, the default card row or the relative name.
   const timezoneID = resolveTimezoneID(timezoneIDProp, 'timezoneID');
   const displayText = !isValidDate
     ? ''
