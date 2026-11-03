@@ -72,7 +72,7 @@ import {
   isDivider,
   isSection,
   normalizeOption,
-  getSelectableOptions,
+  getSelectableOptionEntries,
 } from './utils';
 import {useCombobox, useSelectedItemOffset} from './hooks';
 import {useMenuPress} from '../hooks/useMenuPress';
@@ -918,8 +918,8 @@ interface SelectorOptionRowProps {
 }
 
 /**
- * One option row, memoized. Keep each prop stable across renders that do not
- * change this row. A new `onSelect` or `renderOption` re-renders every row.
+ * Keep each prop stable across renders that do not change this row. A new
+ * `onSelect` or `renderOption` re-renders every row.
  */
 const SelectorOptionRow = memo(function SelectorOptionRow({
   item,
@@ -1206,25 +1206,19 @@ export function Selector<T extends SelectorOptionType>(
       : ariaLabelledBy;
 
   // Flatten options for keyboard navigation
-  const selectableItems = useMemo(
-    () => getSelectableOptions(options),
+  const selectableEntries = useMemo(
+    () => getSelectableOptionEntries(options),
     [options],
   );
+  const selectableItems = useMemo(
+    () => selectableEntries.map(entry => entry.item),
+    [selectableEntries],
+  );
   // Rows need the same item object on every render, or their memo fails.
-  const normalizedOf = useMemo(() => {
-    const map = new Map<string | SelectorOptionData, SelectorOptionData>();
-    let index = 0;
-    for (const option of options) {
-      if (isOptionData(option)) {
-        map.set(option, selectableItems[index++]);
-      } else if (isSection(option)) {
-        for (const opt of option.options) {
-          map.set(opt, selectableItems[index++]);
-        }
-      }
-    }
-    return map;
-  }, [options, selectableItems]);
+  const normalizedOf = useMemo(
+    () => new Map(selectableEntries.map(entry => [entry.source, entry.item])),
+    [selectableEntries],
+  );
 
   // `action` is declared on the shared option type for `MultiSelector`;
   // this listbox has not adopted it, so it renders the option without the

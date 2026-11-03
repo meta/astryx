@@ -62,24 +62,37 @@ export function normalizeOption(
   };
 }
 
+/** A selectable option as given, and its normalized data. */
+export interface SelectableOptionEntry {
+  readonly source: string | SelectorOptionData;
+  readonly item: SelectorOptionData;
+}
+
+/**
+ * Every selectable option (sections flattened, dividers skipped), each with
+ * the option it was given as.
+ */
+export function getSelectableOptionEntries(
+  options: SelectorOptionType[],
+): SelectableOptionEntry[] {
+  const result: SelectableOptionEntry[] = [];
+  for (const option of options) {
+    if (isOptionData(option)) {
+      result.push({source: option, item: normalizeOption(option)});
+    } else if (isSection(option)) {
+      for (const opt of option.options) {
+        result.push({source: opt, item: normalizeOption(opt)});
+      }
+    }
+  }
+  return result;
+}
+
 /**
  * Get all selectable options (flattening sections)
  */
 export function getSelectableOptions(
   options: SelectorOptionType[],
 ): SelectorOptionData[] {
-  const result: SelectorOptionData[] = [];
-
-  for (const option of options) {
-    if (isOptionData(option)) {
-      result.push(normalizeOption(option));
-    } else if (isSection(option)) {
-      for (const opt of option.options) {
-        result.push(normalizeOption(opt));
-      }
-    }
-    // Skip dividers
-  }
-
-  return result;
+  return getSelectableOptionEntries(options).map(entry => entry.item);
 }

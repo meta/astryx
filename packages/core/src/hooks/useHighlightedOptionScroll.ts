@@ -8,7 +8,7 @@
  *   option-id resolver for the owning listbox
  * @output Exports useHighlightedOptionScroll: keeps the highlighted option
  *   scrolled into view for keyboard navigation while hover-driven highlights
- *   never scroll; the hover callback it returns is stable
+ *   never scroll; the hover callback is stable while `setHighlightedIndex` is
  * @position Internal hook; used by useCombobox, useMultiCombobox,
  *   BaseTypeahead, and DateTimeInput — the owners of combobox highlight state
  */
@@ -42,10 +42,9 @@ export function useHighlightedOptionScroll({
   getOptionId,
   itemCount,
 }: UseHighlightedOptionScrollOptions): (index: number) => void {
-  // The index the last hover asked for. The callback reads no render state,
-  // so it stays the same function while the highlight moves: owners pass it
-  // to memoized rows.
+  // The callback reads no render state, so memoized rows keep one function.
   const hoveredIndexRef = useRef<number | null>(null);
+  const shownIndexRef = useRef(highlightedIndex);
 
   const highlightFromHover = useCallback(
     (index: number) => {
@@ -56,7 +55,13 @@ export function useHighlightedOptionScroll({
   );
 
   useEffect(() => {
-    const isFromHover = hoveredIndexRef.current === highlightedIndex;
+    // Only a move to the hovered row came from the hover. A hover on the row
+    // already highlighted changes nothing, so a later run for the same row
+    // (a new list) still scrolls it into view.
+    const hasMoved = shownIndexRef.current !== highlightedIndex;
+    shownIndexRef.current = highlightedIndex;
+    const isFromHover =
+      hasMoved && hoveredIndexRef.current === highlightedIndex;
     hoveredIndexRef.current = null;
     if (isFromHover || !isOpen || highlightedIndex < 0) {
       return;
