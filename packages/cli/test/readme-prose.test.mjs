@@ -9,10 +9,25 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {describe, it, expect} from 'vitest';
+import {afterAll, beforeAll, describe, it, expect} from 'vitest';
 import {program, JSON_SUPPORTED} from '../clients/cli/index.mjs';
 import {buildManifest} from '../clients/cli/lib/manifest.mjs';
 import {runCli} from '../test-utils/run-cli.mjs';
+
+/**
+ * Every temporary folder these tests make lives here, removed once they
+ * finish. It is made in beforeAll, not when the module loads: Vitest skips
+ * both hooks when a run filters out every test here.
+ */
+let TEMP_ROOT = '';
+beforeAll(() => {
+  TEMP_ROOT = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'astryx-readme-prose-test-'),
+  );
+});
+afterAll(() => {
+  fs.rmSync(TEMP_ROOT, {recursive: true, force: true});
+});
 
 const README = fs
   .readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../README.md'), 'utf8')
@@ -98,7 +113,7 @@ describe('README envelope shapes', () => {
   });
 
   it('real envelopes carry exactly the documented keys', async () => {
-    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-readme-'));
+    const cwd = fs.mkdtempSync(path.join(TEMP_ROOT, 'astryx-readme-'));
     const success = JSON.parse((await runCli(['--json', 'docs'], {cwd})).stdout);
     const failure = JSON.parse((await runCli(['--json', 'docs', 'no-such-topic'], {cwd})).stdout);
     for (const [kind, envelope] of /** @type {const} */ ([

@@ -47,7 +47,22 @@ const OFFLINE = 'http://127.0.0.1:9/';
 beforeAll(() => {
   packedCli();
 }, 120_000);
-afterEach(cleanupFixtures);
+/**
+ * Every private computer the running test made, settled before cleanup.
+ * @type {ReturnType<typeof computer>[]}
+ */
+const computers = [];
+// The hook's own limit is above the wait's 60 s, so a stuck step fails with
+// the message below and its folders are still removed.
+afterEach(async () => {
+  const busy = await settleBackgroundSteps(computers.splice(0));
+  cleanupFixtures();
+  if (busy.length > 0) {
+    throw new Error(
+      `A background step was still writing into ${busy.join(', ')} 60 s after the test: it is stuck.`,
+    );
+  }
+}, 90_000);
 afterAll(() => {
   fs.rmSync(path.dirname(packedCli()), {recursive: true, force: true});
 });
@@ -68,13 +83,53 @@ function computer(options = {}) {
   if (POSIX && npm.prefix.length > 0) {
     fs.symlinkSync(npm.prefix[0], path.join(nodeBin, 'npm'));
   }
-  return {
+  const pc = {
     home,
     cache,
     /** The `astryx` cache folder global mode uses. */
     astryxCache: path.join(cache, 'astryx'),
     path: [...(options.path ?? []), nodeBin],
   };
+  computers.push(pc);
+  return pc;
+}
+
+/**
+ * Wait until no background step a run started still writes into these
+ * computers' home folders: one that outlived its test would put the removed
+ * home folder back, left behind in the system temp directory. A step is done
+ * once it has released the state file's locks and, for the computer-level
+ * agent text, recorded the release it wrote. The CLI starts each step
+ * detached and keeps no handle to it, so this reads what the step records.
+ * @param {ReturnType<typeof computer>[]} pcs
+ * @returns {Promise<string[]>} the home folders a step still writes into
+ *   after 60 s
+ */
+async function settleBackgroundSteps(pcs) {
+  const deadline = Date.now() + 60_000;
+  /** @type {string[]} */
+  const busy = [];
+  for (const pc of pcs) {
+    const stateDir = path.join(pc.home, '.config', 'astryx');
+    const writing = () => {
+      if (
+        fs.existsSync(path.join(stateDir, '.lock-check')) ||
+        fs.existsSync(path.join(stateDir, '.lock-state'))
+      ) {
+        return true;
+      }
+      const {agentText} = readState(pc);
+      return (
+        agentText?.attemptFor !== undefined &&
+        agentText.writtenBy !== agentText.attemptFor
+      );
+    };
+    while (writing() && Date.now() < deadline) {
+      await new Promise(done => setTimeout(done, 50));
+    }
+    if (writing()) busy.push(pc.home);
+  }
+  return busy;
 }
 
 /**
@@ -438,6 +493,8 @@ describe.skipIf(!POSIX)(
       globalState(pc, {
         latest: '9.0.7',
         checkOkAt: Date.now(),
+        // Checked just now, so no run starts an update check.
+        checkedAt: Date.now(),
         firstRunAt: Date.now() - 2 * 24 * 60 * 60_000,
       });
       const app = makeProject({core: '9.0.1'});
@@ -508,6 +565,8 @@ describe.skipIf(!POSIX)(
       globalState(pc, {
         latest: '9.0.7',
         checkOkAt: Date.now(),
+        // Checked just now, so no run starts an update check.
+        checkedAt: Date.now(),
         firstRunAt: Date.now() - 2 * 24 * 60 * 60_000,
       });
       writeJson(path.join(pc.home, 'package.json'), {
@@ -555,6 +614,8 @@ describe.skipIf(!POSIX)(
       globalState(pc, {
         latest: '9.0.7',
         checkOkAt: Date.now(),
+        // Checked just now, so no run starts an update check.
+        checkedAt: Date.now(),
         firstRunAt: Date.now() - 2 * 24 * 60 * 60_000,
       });
       const tool = tempDir('tool');
@@ -586,6 +647,8 @@ describe.skipIf(!POSIX)(
       globalState(pc, {
         latest: '9.0.7',
         checkOkAt: Date.now(),
+        // Checked just now, so no run starts an update check.
+        checkedAt: Date.now(),
         firstRunAt: Date.now() - 2 * 24 * 60 * 60_000,
       });
       const root = makeProject({core: '9.0.1'});
@@ -660,6 +723,8 @@ describe.skipIf(!POSIX)(
       globalState(pc2, {
         latest: '9.0.7',
         checkOkAt: Date.now(),
+        // Checked just now, so no run starts an update check.
+        checkedAt: Date.now(),
         firstRunAt: Date.now() - 2 * 24 * 60 * 60_000,
       });
       const app = makeProject({core: '9.0.1'});
@@ -1269,6 +1334,8 @@ describe.skipIf(!POSIX)(
       globalState(pc, {
         latest: '9.0.5',
         checkOkAt: Date.now(),
+        // Checked just now, so no run starts an update check.
+        checkedAt: Date.now(),
         firstRunAt: Date.now() - 2 * 24 * 60 * 60_000,
       });
       const dir = makeProject({core: '9.0.0'});
@@ -1579,7 +1646,13 @@ describe.skipIf(!POSIX)(
       // A failed command prints no notice.
       const pc = computer();
       const g = globalCli('npm', '9.0.0', {root: pc.home});
-      globalState(pc, {latest: '9.0.5', checkOkAt: Date.now(), firstRunAt: 0});
+      globalState(pc, {
+        latest: '9.0.5',
+        checkOkAt: Date.now(),
+        // Checked just now, so no run starts an update check.
+        checkedAt: Date.now(),
+        firstRunAt: 0,
+      });
       const failed = run(g.bin, ['no-such-command'], {
         cwd: tempDir('empty'),
         pc,
@@ -2072,7 +2145,13 @@ describe.skipIf(!POSIX)(
       fs.symlinkSync(cli.bin, path.join(prefix, 'bin', 'astryx'));
       pc.path.unshift(path.join(prefix, 'bin'));
       acmeWidgets(path.join(prefix, 'lib'), {topic: 'acme-prefix'});
-      globalState(pc, {latest: '9.0.5', checkOkAt: Date.now(), firstRunAt: 0});
+      globalState(pc, {
+        latest: '9.0.5',
+        checkOkAt: Date.now(),
+        // Checked just now, so no run starts an update check.
+        checkedAt: Date.now(),
+        firstRunAt: 0,
+      });
       const empty = tempDir('empty');
       const docs = run(cli.bin, ['docs', '--json'], {cwd: empty, pc});
       expect(
@@ -2644,7 +2723,11 @@ describe.skipIf(!POSIX)(
               "const log = process.cwd() + '/interrupts.log';",
               "fs.writeFileSync(log, '');",
               onInterrupt,
-              "fs.writeFileSync(process.cwd() + '/child.pid', String(process.pid));",
+              // Written whole under another name, then renamed into place:
+              // a reader never finds the file empty.
+              "const pidFile = process.cwd() + '/child.pid';",
+              "fs.writeFileSync(pidFile + '.tmp', String(process.pid));",
+              "fs.renameSync(pidFile + '.tmp', pidFile);",
               'setInterval(() => {}, 1000);',
             ].join('\n'),
           );
@@ -2668,11 +2751,21 @@ describe.skipIf(!POSIX)(
             detached: true,
           });
           const pidFile = path.join(dir, 'child.pid');
-          for (let i = 0; i < 100 && !fs.existsSync(pidFile); i++) {
-            await new Promise(resolve => setTimeout(resolve, 100));
+          // The CLI writes its pid once it handles interrupts. Wait for that,
+          // or for the run to end without it, however long a busy machine
+          // takes to get there.
+          while (
+            !fs.existsSync(pidFile) &&
+            child.exitCode === null &&
+            child.signalCode === null
+          ) {
+            await new Promise(resolve => setTimeout(resolve, 50));
           }
           expect(fs.existsSync(pidFile)).toBe(true);
           const childPid = Number(fs.readFileSync(pidFile, 'utf8'));
+          // A pid of 0 would make the checks below ask about this process's
+          // own process group.
+          expect(childPid).toBeGreaterThan(0);
           const started = Date.now();
           if (target === 'group') {
             process.kill(-(/** @type {number} */ (child.pid)), 'SIGINT');

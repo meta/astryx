@@ -219,6 +219,13 @@ Bookmarks sheet.
 | M-SG18 | iPad S1 (touch; pointer if available)                                                                                                       | tap, hold, drag; hover                                                                                                                                                                                                                                                                                                                                                                            | differences from iPhone                                                                                                                               | B      |
 | M-SG19 | Safari showing the segmented stories vs S1                                                                                                  | the segmented storyboards side by side                                                                                                                                                                                                                                                                                                                                                            | synced recordings (parity proof)                                                                                                                      | B      |
 
+Done (UIKit lab, iOS 26.2 simulator, Oct 23–24 2026; in the segmented control's
+own table, `uikit/segmented.ts`, tagged `measured:`): M-SG02 (the selection
+spring and the drag clamp; the tracking spring is the shared
+`springs.fingerTracking`; the lift was measured too and is not in the table,
+since a pressed thumb's lift is a theme's) and M-SG03 (the tap's frames,
+fitted per frame).
+
 ## Sheets (UISheetPresentationController)
 
 Probe app "SheetProbe" on an iPhone 16 Pro (iPad Pro 11" for M-SH11 / M-SH20 /
