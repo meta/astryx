@@ -375,10 +375,12 @@ export function useTableActivation<T extends Record<string, unknown>>(
 
         // Imperative active-state reflection, subscribed to the store: a
         // controlled-key change reaches mounted rows without re-rendering
-        // the table, touching at most the rows whose state flips. The
-        // applies reuse the eligibility resolved above, so the caller
-        // predicate runs exactly once per row update; the live controlled
-        // key is read from the store on every apply.
+        // the table, touching at most the rows whose state flips. Eligibility
+        // re-resolves live on every apply and every press, so flipping the
+        // caller predicate takes effect without waiting for a row update;
+        // the render-time value below only decides the static affordances.
+        const isEligibleNow = () =>
+          store.getConfig().getIsItemActivatable?.(item) ?? true;
         const activationRef: React.RefCallback<HTMLTableRowElement> = row => {
           if (!row) {
             return;
@@ -386,7 +388,7 @@ export function useTableActivation<T extends Record<string, unknown>>(
           const applyStyle = () => {
             applyRowActivationStyle(
               row,
-              eligible && key === store.getConfig().activeKey,
+              isEligibleNow() && key === store.getConfig().activeKey,
             );
           };
           applyStyle();
@@ -404,10 +406,29 @@ export function useTableActivation<T extends Record<string, unknown>>(
           };
         };
 
+        // Declarative snapshot of the active state for this render; the
+        // imperative applies above keep it fresh between renders.
+        const activeNow = eligible && key === store.getConfig().activeKey;
+
         return {
           ...props,
           htmlProps: {
             ...props.htmlProps,
+            // Declarative reflection alongside the imperative applies above:
+            // a row re-render (a TableContext change rewrites the className
+            // React owns) recomputes these from the live key, so the wash
+            // never goes stale between store notifications.
+            ...(activeNow
+              ? {
+                  className: [
+                    props.htmlProps.className,
+                    ...getActiveWashClassNames(),
+                  ]
+                    .filter(Boolean)
+                    .join(' '),
+                  'data-active': 'true' as const,
+                }
+              : null),
             tabIndex,
             'aria-keyshortcuts': keyShortcuts,
             onClick: (event: React.MouseEvent<HTMLTableRowElement>) => {
@@ -417,6 +438,9 @@ export function useTableActivation<T extends Record<string, unknown>>(
               // effects are preserved either way.
               priorOnClick?.(event);
               if (event.defaultPrevented) {
+                return;
+              }
+              if (!isEligibleNow()) {
                 return;
               }
               // Primary-button presses only; auxiliary clicks stay with
@@ -432,6 +456,9 @@ export function useTableActivation<T extends Record<string, unknown>>(
             onKeyDown: (event: React.KeyboardEvent<HTMLTableRowElement>) => {
               priorOnKeyDown?.(event);
               if (event.defaultPrevented) {
+                return;
+              }
+              if (!isEligibleNow()) {
                 return;
               }
               const isEnter = event.key === 'Enter';

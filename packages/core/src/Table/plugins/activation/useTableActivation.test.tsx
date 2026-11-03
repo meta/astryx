@@ -172,8 +172,9 @@ describe('plugin identity', () => {
     expect(result.current).toBe(first);
   });
 
-  it('invokes the eligibility predicate at most once per row on mount', () => {
-    const getIsItemActivatable = vi.fn(() => true);
+  it('re-resolves eligibility when the controlled key changes, and honors flips', () => {
+    let eligible = true;
+    const getIsItemActivatable = vi.fn(() => eligible);
     function Harness({activeKey}: {activeKey: string | null}) {
       const plugin = useTableActivation<Member>({
         activeKey,
@@ -190,12 +191,17 @@ describe('plugin identity', () => {
       );
     }
     const {rerender} = render(<Harness activeKey={null} />);
-    expect(getIsItemActivatable).toHaveBeenCalledTimes(3);
-    // A controlled-key change reaches rows through the store without
-    // re-resolving eligibility.
+    const mountCalls = getIsItemActivatable.mock.calls.length;
+    expect(mountCalls).toBeGreaterThan(0);
+    // A controlled-key change reaches rows through the store, re-resolving
+    // eligibility on apply.
     rerender(<Harness activeKey="1" />);
-    expect(getIsItemActivatable).toHaveBeenCalledTimes(3);
+    expect(getIsItemActivatable.mock.calls.length).toBeGreaterThan(mountCalls);
     expect(bodyRows()[0].getAttribute('data-active')).toBe('true');
+    // Flipping the predicate clears the active paint without a row update.
+    eligible = false;
+    rerender(<Harness activeKey="1" />);
+    expect(bodyRows()[0].getAttribute('data-active')).toBeNull();
   });
 });
 
