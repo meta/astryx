@@ -19,6 +19,8 @@ export interface FakeAnimation {
   /** Settles `finished`, as the animation's own timeline would at its end. */
   finish(): void;
   readonly cancel: ReturnType<typeof vi.fn>;
+  /** The animation itself: its start time (ms), which a test or the code sets. */
+  readonly animation: {startTime: number | null};
 }
 
 /**
@@ -56,14 +58,20 @@ export function fakeAnimate(): {
       const cancel = vi.fn(() => {
         reject(new DOMException('The animation was cancelled.', 'AbortError'));
       });
+      const animation = {
+        finished,
+        cancel,
+        startTime: null as number | null,
+      };
       animations.push({
         keyframes: (keyframes ?? []) as Keyframe[],
         options:
           typeof options === 'number' ? {duration: options} : (options ?? {}),
         finish: () => resolve(),
         cancel,
+        animation,
       });
-      return {finished, cancel} as unknown as Animation;
+      return animation as unknown as Animation;
     },
   );
   return {animate, animations};

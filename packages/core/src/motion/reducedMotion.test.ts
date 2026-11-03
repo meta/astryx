@@ -123,6 +123,45 @@ describe('playReducedMotionDip', () => {
     expect(animations[0].cancel).toHaveBeenCalled();
   });
 
+  /** A dip whose fade-out started at 1000 ms, and the clock its landing reads. */
+  async function landAt(clockAfterLanding: number) {
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(1100);
+    const element = document.createElement('div');
+    const {animate, animations} = fakeAnimate();
+    element.animate = animate;
+    // The landing's own work moves the clock.
+    playReducedMotionDip(element, fade, () => {
+      clock.mockReturnValue(clockAfterLanding);
+    });
+    animations[0].animation.startTime = 1000;
+    animations[0].finish();
+    await Promise.resolve();
+    clock.mockRestore();
+    return animations;
+  }
+
+  it('starts the fade-in where the fade-out ended, counting the landing', async () => {
+    // Due at 1100 ms; the landing ran until 1140 ms. The fade-in is 40 ms in.
+    const animations = await landAt(1140);
+    expect(animations[1].animation.startTime).toBe(1100);
+  });
+
+  it('starts an on-time fade-in on time, and after a long stall still plays half of it', async () => {
+    expect((await landAt(1100))[1].animation.startTime).toBe(1100);
+    const stalled = await landAt(1500);
+    expect(stalled[1].animation.startTime).toBe(1450);
+    // That start is after the frame that runs the landing: until then, the
+    // fade-in holds 0, so the change does not show.
+    expect(stalled[1].options).toMatchObject({fill: 'backwards'});
+  });
+
+  it('leaves a fade-in to start on its own when the fade-out has no start time', async () => {
+    const {animations} = startDip();
+    animations[0].finish();
+    await Promise.resolve();
+    expect(animations[1].animation.startTime).toBeNull();
+  });
+
   it('starts the fade-out where the element is (DR2)', () => {
     const {animations} = startDip(0.5);
     expect(animations[0].keyframes.map(frame => frame.opacity)).toEqual([
