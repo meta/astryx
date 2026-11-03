@@ -20,6 +20,9 @@ import {
   __resetMenuPressForTest,
   useDropdownMenuPress,
   useMenuPress,
+  useMenuSurfacePress,
+  type DropdownMenuPressReturn,
+  type UseMenuPressReturn,
 } from './useMenuPress';
 import {isInScrollView} from './menuScrollView';
 import {MENU_PRESS_HANDOFF_PX, MENU_PRESS_SETTLE_MS} from './menuPressGesture';
@@ -82,6 +85,8 @@ interface HarnessProps {
   onHighlight?: (row: HTMLElement | null) => void;
   touchModel?: 'pointer' | 'uikit';
   longPressDelayMs?: number;
+  /** Receives the hook's return, for calls the trigger does not make. */
+  pressRef?: {current: DropdownMenuPressReturn | null};
 }
 
 function Harness({
@@ -93,6 +98,7 @@ function Harness({
   onHighlight,
   touchModel,
   longPressDelayMs,
+  pressRef,
 }: HarnessProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -123,6 +129,9 @@ function Harness({
     touchModel,
     longPressDelayMs,
   });
+  if (pressRef != null) {
+    pressRef.current = press;
+  }
   return (
     <>
       <button
@@ -543,6 +552,184 @@ describe('useMenuPress — the trigger', () => {
     expect(row('C')).not.toHaveFocus();
     fireEvent.pointerMove(row('C'), {...touch(), clientX: 0, clientY: 40});
     expect(row('C')).toHaveFocus();
+  });
+
+  describe('a pointer that went down elsewhere is the opening press (continueGesture, module FR11)', () => {
+    /** Hand pointer 7 to the menu, as a context menu's long press does. */
+    const continueAt = (
+      press: {current: DropdownMenuPressReturn | null},
+      pointerType: 'touch' | 'mouse',
+    ) => {
+      act(() => {
+        press.current?.continueGesture({
+          pointerId: 7,
+          pointerType,
+          time: Date.now(),
+        });
+      });
+    };
+    const finger = {pointerType: 'touch', pointerId: 7};
+
+    it("with the 'uikit' touch model (a finger, on every device: FR43), a finger picks only after the handoff distance from the first position the menu sees", () => {
+      const onSelect = vi.fn();
+      const press: {current: DropdownMenuPressReturn | null} = {current: null};
+      render(
+        <Harness touchModel="uikit" onSelect={onSelect} pressRef={press} />,
+      );
+      continueAt(press, 'touch');
+      fireEvent.pointerMove(row('B'), {...finger, clientX: 0, clientY: 4});
+      expect(row('B')).not.toHaveFocus();
+      fireEvent.pointerMove(row('B'), {...finger, clientX: 0, clientY: 20});
+      expect(row('B')).toHaveFocus();
+      fireEvent.pointerUp(row('B'), {...finger, clientX: 0, clientY: 20});
+      expect(onSelect).toHaveBeenCalledTimes(1);
+      expect(onSelect).toHaveBeenCalledWith('B');
+    });
+
+    it('with the \'pointer\' touch model too (presentation="popover"), a handed finger picks only after the handoff distance', () => {
+      const onSelect = vi.fn();
+      const press: {current: DropdownMenuPressReturn | null} = {current: null};
+      render(<Harness onSelect={onSelect} pressRef={press} />);
+      continueAt(press, 'touch');
+      fireEvent.pointerMove(row('B'), {...finger, clientX: 0, clientY: 4});
+      expect(row('B')).not.toHaveFocus();
+      fireEvent.pointerMove(row('B'), {...finger, clientX: 0, clientY: 20});
+      expect(row('B')).toHaveFocus();
+      fireEvent.pointerUp(row('B'), {...finger, clientX: 0, clientY: 20});
+      expect(onSelect).toHaveBeenCalledTimes(1);
+      expect(onSelect).toHaveBeenCalledWith('B');
+    });
+
+    it('a handed mouse is the opening press under the settle rule: no handoff distance', () => {
+      const onSelect = vi.fn();
+      const press: {current: DropdownMenuPressReturn | null} = {current: null};
+      render(<Harness onSelect={onSelect} pressRef={press} />);
+      const mouse = {pointerType: 'mouse', pointerId: 7};
+      // Released at once, it acts on nothing and the menu stays.
+      continueAt(press, 'mouse');
+      fireEvent.pointerUp(row('A'), {...mouse, clientX: 0, clientY: 0});
+      expect(onSelect).not.toHaveBeenCalled();
+      // Moved onto a row, however little, it lights it and its lift picks it.
+      continueAt(press, 'mouse');
+      fireEvent.pointerMove(row('B'), {...mouse, clientX: 0, clientY: 4});
+      expect(row('B')).toHaveFocus();
+      fireEvent.pointerUp(row('B'), {...mouse, clientX: 0, clientY: 4});
+      expect(onSelect).toHaveBeenCalledTimes(1);
+      expect(onSelect).toHaveBeenCalledWith('B');
+    });
+
+    it('the distance counts from the first position the menu sees, not from where the finger was as it opened', () => {
+      const press: {current: DropdownMenuPressReturn | null} = {current: null};
+      render(<Harness touchModel="uikit" pressRef={press} />);
+      continueAt(press, 'touch');
+      const handoff = UIKIT_GESTURES.menuPress.handoff.value;
+      // However far it went before the menu saw it, the first sample only
+      // marks where the distance starts.
+      fireEvent.pointerMove(row('C'), {...finger, clientX: 0, clientY: 40});
+      expect(row('C')).not.toHaveFocus();
+      fireEvent.pointerMove(row('C'), {
+        ...finger,
+        clientX: 0,
+        clientY: 40 + handoff - 1,
+      });
+      expect(row('C')).not.toHaveFocus();
+      fireEvent.pointerMove(row('C'), {
+        ...finger,
+        clientX: 0,
+        clientY: 40 + handoff,
+      });
+      expect(row('C')).toHaveFocus();
+    });
+
+    it('a finger lifted before the handoff acts on nothing, and its click is spent', () => {
+      const onSelect = vi.fn();
+      const press: {current: DropdownMenuPressReturn | null} = {current: null};
+      render(
+        <Harness touchModel="uikit" onSelect={onSelect} pressRef={press} />,
+      );
+      continueAt(press, 'touch');
+      fireEvent.pointerMove(row('B'), {...finger, clientX: 0, clientY: 3});
+      fireEvent.pointerUp(row('B'), {...finger, clientX: 0, clientY: 3});
+      fireEvent.click(row('B'), {detail: 1});
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it('a mouse follows the settle rule: released at once it acts on nothing; moved onto a row it picks it', () => {
+      const onSelect = vi.fn();
+      const press: {current: DropdownMenuPressReturn | null} = {current: null};
+      render(<Harness onSelect={onSelect} pressRef={press} />);
+      const pointer = {pointerType: 'mouse', pointerId: 7, button: 0};
+      continueAt(press, 'mouse');
+      fireEvent.pointerUp(row('A'), pointer);
+      expect(onSelect).not.toHaveBeenCalled();
+      continueAt(press, 'mouse');
+      fireEvent.pointerMove(row('B'), pointer);
+      expect(row('B')).toHaveFocus();
+      fireEvent.pointerUp(row('B'), pointer);
+      expect(onSelect).toHaveBeenCalledWith('B');
+    });
+
+    it("a menu with no trigger takes the touch model: under 'uikit' the finger it is handed picks only past the handoff (a context menu\u2019s long press)", () => {
+      const onSelect = vi.fn<(label: string) => void>();
+      const press: {current: ReturnType<typeof useMenuSurfacePress> | null} = {
+        current: null,
+      };
+      function SurfaceHarness() {
+        const menuRef = useRef<HTMLDivElement>(null);
+        press.current = useMenuSurfacePress({
+          menuRef,
+          itemSelector: ITEM_SELECTOR,
+          touchModel: 'uikit',
+          // The row under the finger by an injected hit test.
+          hitTest: () => row('B'),
+        });
+        return (
+          <div
+            ref={menuRef}
+            role="menu"
+            tabIndex={-1}
+            {...press.current.menuProps}>
+            {['A', 'B', 'C'].map(label => (
+              <div
+                key={label}
+                role="menuitem"
+                tabIndex={-1}
+                onClick={() => onSelect(label)}>
+                {label}
+              </div>
+            ))}
+          </div>
+        );
+      }
+      render(<SurfaceHarness />);
+      act(() => {
+        press.current?.continueGesture({
+          pointerId: 7,
+          pointerType: 'touch',
+          time: Date.now(),
+        });
+      });
+      fireEvent.pointerMove(row('B'), {...finger, clientX: 0, clientY: 4});
+      expect(row('B')).not.toHaveFocus();
+      fireEvent.pointerMove(row('B'), {...finger, clientX: 0, clientY: 20});
+      expect(row('B')).toHaveFocus();
+      fireEvent.pointerUp(row('B'), {...finger, clientX: 0, clientY: 20});
+      expect(onSelect).toHaveBeenCalledTimes(1);
+      expect(onSelect).toHaveBeenCalledWith('B');
+    });
+
+    it('is ignored while another gesture is live', () => {
+      const onSelect = vi.fn();
+      const press: {current: DropdownMenuPressReturn | null} = {current: null};
+      render(<Harness onSelect={onSelect} pressRef={press} />);
+      fireEvent.pointerDown(row('A'), touch(1));
+      continueAt(press, 'touch');
+      fireEvent.pointerMove(row('C'), {...finger, clientX: 0, clientY: 40});
+      expect(row('C')).not.toHaveFocus();
+      fireEvent.pointerUp(row('A'), touch(1));
+      expect(onSelect).toHaveBeenCalledTimes(1);
+      expect(onSelect).toHaveBeenCalledWith('A');
+    });
   });
 
   it('the pointer model (the default) keeps the released trigger: a held finger opens at 500 ms, or longPressDelayMs; the touch model opens on the press', () => {
@@ -1046,6 +1233,18 @@ describe('useMenuPress — the public hook takes no touch model option', () => {
       button: 0,
     });
     expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it('returns no continuation: continueGesture is core-internal', () => {
+    const seen: {current: UseMenuPressReturn | null} = {current: null};
+    function Probe() {
+      const menuRef = useRef<HTMLDivElement>(null);
+      seen.current = useMenuPress({menuRef, itemSelector: ITEM_SELECTOR});
+      return <div ref={menuRef} role="menu" />;
+    }
+    render(<Probe />);
+    expect(seen.current).not.toBeNull();
+    expect('continueGesture' in (seen.current as object)).toBe(false);
   });
 });
 

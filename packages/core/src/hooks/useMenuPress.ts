@@ -198,17 +198,46 @@ export interface UseMenuPressReturn {
 }
 
 /**
- * What core's own menus get from {@link useDropdownMenuPress}: the public
- * return. Not exported from the hooks entry point.
+ * An in-flight pointer handed to
+ * {@link DropdownMenuPressReturn.continueGesture}.
  *
  * @internal
  */
-export type DropdownMenuPressReturn = UseMenuPressReturn;
+export interface MenuPressContinuation {
+  pointerId: number;
+  pointerType: MenuPressPointerType;
+  /** `Date.now()` of the moment the menu opened under it. */
+  time: number;
+}
+
+/**
+ * What core's own menus get from {@link useDropdownMenuPress}: the public
+ * return, and the continuation of a pointer that went down elsewhere. Not
+ * exported from the hooks entry point.
+ *
+ * @internal
+ */
+export interface DropdownMenuPressReturn extends UseMenuPressReturn {
+  /**
+   * Continue a pointer that went down elsewhere into the menu that just
+   * opened under it. The pointer may come from a context menu's long press,
+   * or from a trigger this hook does not own. The pointer is tracked from
+   * here as the opening press. With the `'uikit'` touch model, a finger on
+   * every device picks only after UIMenu's handoff distance from the first
+   * position the menu sees. That matches a trigger's opening finger, and its
+   * lift before that acts on nothing and leaves the menu open. Otherwise, and
+   * for a mouse, the opening press follows the settle rule. Ignored while
+   * another gesture is live or the hook is disabled. A menu with no trigger
+   * (a context menu) passes the touch model to `useMenuSurfacePress`, so the
+   * finger it hands over keeps the handoff.
+   */
+  continueGesture: (pointer: MenuPressContinuation) => void;
+}
 
 /**
  * Where a pointer is, for a finger's handoff distance. Positions reach the
- * machine only under `touchModel: 'uikit'`. Without them, it keeps the settle
- * rule.
+ * machine under the `'uikit'` touch model, and for a continued finger or pen
+ * under either. Without them, the settle rule decides.
  */
 function handoffPosition(
   event: PointerEvent,
@@ -305,11 +334,13 @@ interface ResolvedPoint {
  * ```
  */
 export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
-  // The touch model is DropdownMenu's alone; an untyped caller's
-  // `touchModel` does not reach the model.
   const {touchModel: _touchModel, ...publicOptions} =
     options as DropdownMenuPressOptions;
-  return useDropdownMenuPress({...publicOptions, touchModel: 'pointer'});
+  const press = useDropdownMenuPress({...publicOptions, touchModel: 'pointer'});
+  return useMemo(() => {
+    const {continueGesture: _continueGesture, ...publicPress} = press;
+    return publicPress;
+  }, [press]);
 }
 
 /**
@@ -352,7 +383,7 @@ export type MenuSurfacePressReturn = Omit<
  * @internal
  */
 export function useMenuSurfacePress(
-  options: UseMenuPressOptions,
+  options: DropdownMenuPressOptions,
 ): MenuSurfacePressReturn {
   return useMenuPressModel(options).surface;
 }
@@ -413,6 +444,9 @@ function useMenuPressModel(options: DropdownMenuPressOptions): {
   );
   const lastPointerEventRef = useRef<PointerEvent | null>(null);
   const triggerGestureRef = useRef<number | null>(null);
+  // A finger or pen handed to the menu as it opened: it takes the handoff
+  // under either touch model.
+  const isContinuedFingerRef = useRef(false);
   // The second pointer that ended a gesture must not start the next one.
   const ignoredPointerIdRef = useRef<number | null>(null);
 
@@ -470,6 +504,7 @@ function useMenuPressModel(options: DropdownMenuPressOptions): {
   }, [autoscroll]);
 
   const endGesture = useCallback(() => {
+    isContinuedFingerRef.current = false;
     longPressApiRef.current?.cancel();
     touchMovePreventerRef.current?.();
     touchMovePreventerRef.current = null;
@@ -710,7 +745,8 @@ function useMenuPressModel(options: DropdownMenuPressOptions): {
             time: Date.now(),
             ...handoffPosition(
               event,
-              optionsRef.current.touchModel === 'uikit',
+              optionsRef.current.touchModel === 'uikit' ||
+                isContinuedFingerRef.current,
             ),
           },
           event,
@@ -731,7 +767,8 @@ function useMenuPressModel(options: DropdownMenuPressOptions): {
             time: Date.now(),
             ...handoffPosition(
               event,
-              optionsRef.current.touchModel === 'uikit',
+              optionsRef.current.touchModel === 'uikit' ||
+                isContinuedFingerRef.current,
             ),
           },
           event,
@@ -897,6 +934,30 @@ function useMenuPressModel(options: DropdownMenuPressOptions): {
     );
   }, []);
 
+  const continueGesture = useCallback(
+    (pointer: MenuPressContinuation) => {
+      const {isEnabled = true} = optionsRef.current;
+      if (!isEnabled || gestureRef.current.phase !== 'idle') {
+        return;
+      }
+      attach(pointer.pointerId);
+      // The menu opened under this pointer: the gesture is the opening press.
+      // A finger or pen picks only after the handoff distance, under either
+      // touch model, counted from the first position the menu sees. A mouse
+      // follows the settle rule.
+      isContinuedFingerRef.current = pointer.pointerType !== 'mouse';
+      gestureRef.current = {
+        phase: 'open',
+        pointerType: pointer.pointerType,
+        openedAt: pointer.time,
+      };
+      if (pointer.pointerType !== 'mouse') {
+        installTouchMovePreventer();
+      }
+    },
+    [attach, installTouchMovePreventer],
+  );
+
   const cancel = useCallback(() => {
     // The host closed the menu under the gesture: end it with no effect of
     // its own.
@@ -919,8 +980,9 @@ function useMenuPressModel(options: DropdownMenuPressOptions): {
       },
       isTriggerClickFromPress,
       cancel,
+      continueGesture,
     }),
-    [handleMenuPointerDown, isTriggerClickFromPress, cancel],
+    [handleMenuPointerDown, isTriggerClickFromPress, cancel, continueGesture],
   );
   return {surface, triggerContext};
 }
