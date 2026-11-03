@@ -139,7 +139,7 @@ describe('watchOutsidePress, closing on a pan', () => {
     composed: true,
   });
 
-  function setup(root?: Node) {
+  function setup(root?: Node, closesOnPan = true) {
     const owner = document.createElement('div');
     const layer = document.createElement('div');
     const item = document.createElement('button');
@@ -152,7 +152,7 @@ describe('watchOutsidePress, closing on a pan', () => {
       owner,
       path => path.includes(layer),
       onOutside,
-      {closesOnPan: true, pointerTypes: ['touch'], root},
+      {closesOnPan, pointerTypes: ['touch'], root},
     );
     return {item, outside, onOutside, stop};
   }
@@ -207,6 +207,29 @@ describe('watchOutsidePress, closing on a pan', () => {
     fireEvent.pointerUp(outside, touch(3));
     expect(onOutside).not.toHaveBeenCalled();
     fireEvent.pointerUp(outside, touch(2));
+    expect(onOutside).toHaveBeenCalledOnce();
+    stop();
+  });
+
+  it.each([true, false])(
+    'keeps the layer open for a press that starts outside and lifts on it, in a closed shadow root too (closesOnPan: %s)',
+    closesOnPan => {
+      const host = document.createElement('div');
+      document.body.append(host);
+      const shadow = host.attachShadow({mode: 'closed'});
+      const {item, outside, onOutside, stop} = setup(shadow, closesOnPan);
+      fireEvent.pointerDown(outside, touch(1));
+      fireEvent.pointerUp(item, touch(1));
+      expect(onOutside).not.toHaveBeenCalled();
+      stop();
+    },
+  );
+
+  it('leaves a followed press alone when a pointer type it does not follow is cancelled', () => {
+    const {outside, onOutside, stop} = setup(undefined, false);
+    fireEvent.pointerDown(outside, touch(1));
+    fireEvent.pointerCancel(outside, {pointerType: 'pen', pointerId: 7});
+    fireEvent.pointerUp(outside, touch(1));
     expect(onOutside).toHaveBeenCalledOnce();
     stop();
   });

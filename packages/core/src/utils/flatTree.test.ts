@@ -1,7 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {afterEach, describe, expect, it} from 'vitest';
-import {containsAlongFlatTree, deepActiveElement} from './flatTree';
+import {
+  containsAlongFlatTree,
+  deepActiveElement,
+  shadowHostOf,
+} from './flatTree';
 
 afterEach(() => {
   document.body.innerHTML = '';
@@ -64,5 +68,18 @@ describe('deepActiveElement', () => {
     // The document sees only the outermost host.
     expect(document.activeElement).toBe(outer);
     expect(deepActiveElement(document)).toBe(button);
+  });
+});
+
+describe('shadowHostOf', () => {
+  it('is the host of an open or closed shadow root, and null for any other node', () => {
+    const open = document.createElement('div');
+    const closed = document.createElement('div');
+    document.body.append(open, closed);
+    expect(shadowHostOf(open.attachShadow({mode: 'open'}))).toBe(open);
+    expect(shadowHostOf(closed.attachShadow({mode: 'closed'}))).toBe(closed);
+    expect(shadowHostOf(document)).toBeNull();
+    expect(shadowHostOf(document.createDocumentFragment())).toBeNull();
+    expect(shadowHostOf(open)).toBeNull();
   });
 });
