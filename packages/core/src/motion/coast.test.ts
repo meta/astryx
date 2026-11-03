@@ -82,6 +82,18 @@ describe('coast', () => {
     expect(reads).toEqual([1234, 1234]);
   });
 
+  it('ends an edge spring that never settles at the animator\u2019s limit', () => {
+    const {animator} = at({x: 60});
+    const {x} = coast(
+      animator,
+      {x: 400},
+      {bounds: {x: {min: -500, max: 0}}, bounce: {duration: 0.5, bounce: 1}},
+    );
+    expect(x!.duration).toBeLessThanOrEqual(30);
+    expect(x!.at(x!.duration)).toBe(0);
+    expect(x!.velocity(x!.duration)).toBe(0);
+  });
+
   it('coasts at the given rate', () => {
     const {animator} = at({x: 0});
     const {x} = coast(

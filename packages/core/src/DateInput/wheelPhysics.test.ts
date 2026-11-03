@@ -16,12 +16,15 @@
  */
 
 import {describe, expect, it} from 'vitest';
+import type {Animator} from '../motion/animator';
+import {coast} from '../motion/coast';
 import {picker} from '../motion/uikit/picker';
 import {timing} from '../motion/uikit/timing';
 import {
   MAX_PLAN_SECONDS,
   coastCurve,
   dragOffset,
+  offsetBounds,
   planRelease,
   projectRelease,
   reachesRow,
@@ -405,5 +408,35 @@ describe('the bounce spring it is handed', () => {
         expect(curve.velocity(curve.duration)).toBe(0);
       }
     }
+  });
+});
+
+// A wheel's end is a scroll view's edge: it plays the same curve, and it rests
+// where UIPickerView selects, within 1/6 pt.
+describe('the edge motion it shares with a scroll view', () => {
+  /** A scroll view's animator at rest on `offset`. */
+  const restingAt = (offset: number) =>
+    ({get: () => offset}) as unknown as Animator;
+  const bounds = offsetBounds(MINUTES);
+
+  it('springs back from past an end on the curve a scroll view plays, and rests at its own threshold', () => {
+    const plan = planRelease(-37.33, -147.8, MINUTES);
+    const {y} = coast(restingAt(-37.33), {y: -147.8}, {bounds: {y: bounds}});
+    expect(plan.kind).toBe('return');
+    for (const t of [0, 0.05, 0.2, 0.5]) {
+      expect(plan.curve.value(t)).toBeCloseTo(y!.at(t), 9);
+    }
+    expect(plan.curve.duration).toBeLessThan(y!.duration);
+  });
+
+  it('coasts into an end on the curve a scroll view plays, and rests when UIPickerView selects', () => {
+    const {offset, velocity, didSelect} = SWIPE_200_IN_100MS;
+    const plan = planRelease(offset, velocity, MINUTES);
+    const {y} = coast(restingAt(offset), {y: velocity}, {bounds: {y: bounds}});
+    expect(plan.kind).toBe('edge');
+    for (const t of [0, 0.3, 0.7, 1]) {
+      expect(plan.curve.value(t)).toBeCloseTo(y!.at(t), 9);
+    }
+    expect(Math.abs(plan.curve.duration * 1000 - didSelect)).toBeLessThan(50);
   });
 });
