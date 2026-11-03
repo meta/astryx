@@ -18,7 +18,7 @@ interface Routable {
   route(
     url: string,
     handler: (route: import('@playwright/test').Route) => Promise<void>,
-  ): Promise<void>;
+  ): Promise<unknown>;
 }
 
 export const STAND_IN_IMAGE: Buffer;

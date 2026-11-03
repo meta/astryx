@@ -23,6 +23,10 @@ const PAGE = `<!doctype html>
   window.localStatus = fetch('/local.json').then(response => response.status);
 </script>`;
 
+// A request the route aborts fails as blocked by the client; one that reached
+// the network would fail with a name error instead.
+const BLOCKED = expect.stringContaining('net::ERR_BLOCKED_BY_CLIENT');
+
 let server: http.Server;
 let origin: string;
 
@@ -68,7 +72,7 @@ test('the page fixture answers remote images locally and blocks other remote req
   expect(await loadAndObserve(page)).toEqual({
     photoWidth: 400,
     localStatus: 200,
-    stylesheetError: 'net::ERR_BLOCKED_BY_CLIENT',
+    stylesheetError: BLOCKED,
   });
 });
 
@@ -80,7 +84,7 @@ test('a context the spec makes from the browser has the same rule', async ({
     expect(await loadAndObserve(await context.newPage())).toEqual({
       photoWidth: 400,
       localStatus: 200,
-      stylesheetError: 'net::ERR_BLOCKED_BY_CLIENT',
+      stylesheetError: BLOCKED,
     });
   } finally {
     await context.close();
