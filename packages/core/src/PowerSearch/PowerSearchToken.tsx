@@ -42,6 +42,7 @@ export function PowerSearchToken({
   onClick,
   onRemove,
   isDisabled,
+  timezoneID,
 }: PowerSearchTokenProps) {
   const config = useInternalConfig(configProp);
   const t = useComponentTranslator();
@@ -59,6 +60,11 @@ export function PowerSearchToken({
     10,
   );
 
+  // A value with a time of day keeps its reading in the viewer's zone; only
+  // a calendar day reads in `timezoneID`.
+  const isDateTime =
+    operator.value.type === 'date_absolute' &&
+    operator.value.isDateOnly === false;
   const valueStr = formatFilterValue(
     config,
     operator.value,
@@ -66,6 +72,7 @@ export function PowerSearchToken({
     adjustedMaxLength,
     t,
     locale,
+    isDateTime ? undefined : timezoneID,
   );
 
   const valueContent = valueStr ? (

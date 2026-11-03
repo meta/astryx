@@ -1856,6 +1856,7 @@ component PowerSearchToken(props: PowerSearchTokenProps)
   prop onClick?: () => void
   prop onRemove?: () => void
   prop operator: PowerSearchOperator
+  prop timezoneID?: string
 component ProgressBar(props: ProgressBarProps)
   prop data-testid?: string
   prop formatValueLabel?: (value: number, max: number) => string = (value, max) => `${Math.round((value / max) * 100)}%`
@@ -2610,7 +2611,7 @@ component Token(props: TokenProps)
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component Tokenizer(props: TokenizerProps)
-  overload <T extends SearchableItem>(props: Omit<TokenizerProps<T>, 'ref' | 'experimental'> & { experimental: NonNullable<TokenizerProps<T>['experimental']>; ref?: React.Ref<HTMLInputElement | HTMLButtonElement> }) => React.JSX.Element @experimental
+  overload <T extends SearchableItem>(props: Omit<TokenizerProps<T>, 'ref'> & { ref?: React.Ref<HTMLInputElement | HTMLButtonElement> }) => React.JSX.Element
   prop containerClassName?: string
   prop containerStyle?: CSSProperties
   prop containerXstyle?: StyleXStyles
@@ -2622,7 +2623,7 @@ component Tokenizer(props: TokenizerProps)
   prop disabledMessage?: string
   prop emptySearchText?: ReactNode = 'No results found'
   prop endContent?: ReactNode
-  prop experimental?: { presentation?: 'popover' | 'bottom-sheet' | 'adaptive' } @experimental
+  prop experimental?: { presentation?: TokenizerPresentation } @experimental
   prop handleRef?: React.Ref<TokenizerHandle>
   prop hasAutoFocus?: boolean = false
   prop hasClear?: boolean = false
@@ -2645,6 +2646,7 @@ component Tokenizer(props: TokenizerProps)
   prop onFocus?: (e: React.FocusEvent) => void
   prop onKeyDown?: React.KeyboardEventHandler<HTMLElement>
   prop placeholder?: string
+  prop presentation?: TokenizerPresentation = 'adaptive'
   prop ref?: React.Ref<HTMLInputElement>
   prop renderItem?: (item: T) => ReactNode
   prop renderToken?: (item: T, onRemove: () => void) => ReactNode
@@ -5663,6 +5665,7 @@ interface TokenizerHandle
   blur: () => void
   focus: () => void
 type TokenizerOverflowBehavior = 'none' | 'unfocusedInline' | 'unfocusedLayer'
+type TokenizerPresentation = AdaptivePresentation
 interface TokenizerProps<T extends SearchableItem> extends Omit<FieldInputBaseProps<HTMLInputElement>, 'onChange' | 'onFocus' | 'onBlur' | 'onKeyDown'> (props of Tokenizer)
 type TokenizerSize = 'sm' | 'md' | 'lg'
 interface TokenizerStatus
@@ -5899,8 +5902,8 @@ interface UseGridFocusOptions
   isCellFocusable?: (cell: HTMLElement) => boolean
   onNavigateAfter?: (column: number, offset: number) => void
   onNavigateBefore?: (column: number, offset: number) => void
-  onPageDown?: () => void
-  onPageUp?: () => void
+  onPageDown?: (event: React.KeyboardEvent) => void
+  onPageUp?: (event: React.KeyboardEvent) => void
 interface UseGridFocusReturn<T extends HTMLElement = HTMLElement>
   focusCell: (index: number) => void
   focusFirst: () => void
@@ -5977,8 +5980,8 @@ interface UseListFocusReturn<T extends HTMLElement = HTMLElement>
 interface UseLongPressHandlers
   cancel: () => void
   moveTo: (point: { x: number; y: number }) => boolean
-  onTouchCancel: () => void
-  onTouchEnd: () => void
+  onTouchCancel: (e?: React.TouchEvent) => void
+  onTouchEnd: (e?: React.TouchEvent) => void
   onTouchMove: (e: React.TouchEvent) => void
   onTouchStart: (e: React.TouchEvent) => void
   start: (point: { x: number; y: number }) => void
@@ -8917,6 +8920,7 @@ Tokenizer (.)
 TokenizerChange (.)
 TokenizerHandle (.)
 TokenizerOverflowBehavior (.)
+TokenizerPresentation (.)
 TokenizerProps (.)
 TokenizerSize (.)
 TokenizerStatus (.)

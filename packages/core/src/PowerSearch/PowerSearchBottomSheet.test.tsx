@@ -3509,13 +3509,14 @@ describe('PowerSearch value step (FR14–FR16)', () => {
     tapRow('Status');
     // The same props, with the same meaning, as the popover passes: the
     // caller's config, the partial filter, the mode, the save label, the
-    // read-only flag, and the two callbacks; no sheet-only `timezoneID`.
+    // read-only flag, the field's zone, and the two callbacks.
     expect(seenProps).toHaveBeenLastCalledWith({
       config,
       filter: {field: 'status', operator: 'is', value: undefined},
       mode: 'create',
       saveButtonLabel: 'Keep',
       isReadOnly: false,
+      timezoneID: 'Asia/Tokyo',
       onSave: expect.any(Function),
       onCancel: expect.any(Function),
     });
@@ -4333,6 +4334,64 @@ describe('PowerSearch sheet value types (FR17)', () => {
     expect(input).toHaveValue('March 10, 2024');
   });
 
+  it.each([
+    ['Asia/Tokyo', 'March 10, 2024', '2024-03-10T15:00:00Z'],
+    ['Pacific/Honolulu', 'March 9, 2024', '2024-03-11T10:00:00Z'],
+    [undefined, 'March 10, 2024', '2024-03-11T00:00:00Z'],
+  ])(
+    "date_absolute: the value step's date input opens on the day in timezoneID %s and stores a picked day as that zone's midnight",
+    (timezoneID, opensOn, storedAfterPickingMarch11) => {
+      const dateFilter: PowerSearchFilter = {
+        field: 'created',
+        operator: 'after',
+        // 2024-03-10T03:00:00Z: March 10 in Tokyo, March 9 in Honolulu.
+        value: {type: 'date_absolute', unixSeconds: 1710039600},
+      };
+      const {onChange} = setupValues({filters: [dateFilter], timezoneID});
+      openEditFlow(/^Created is after/);
+      const input = within(sheet()).getByRole('combobox', {name: 'Date'});
+      expect(input).toHaveValue(opensOn);
+      fireEvent.change(input, {target: {value: '03/11/2024'}});
+      fireEvent.blur(input);
+      apply();
+      expect(onChange).toHaveBeenCalledWith(
+        [
+          {
+            field: 'created',
+            operator: 'after',
+            value: {
+              type: 'date_absolute',
+              unixSeconds: Date.parse(storedAfterPickingMarch11) / 1000,
+            },
+          },
+        ],
+        'edit',
+        0,
+      );
+    },
+  );
+
+  it("date_absolute: a components Editor override in the value step receives the field's timezoneID (FR14, FR25)", () => {
+    const seen: (string | undefined)[] = [];
+    function Editor(props: PowerSearchEditorProps) {
+      seen.push(props.timezoneID);
+      return <div>custom editor</div>;
+    }
+    const dateFilter: PowerSearchFilter = {
+      field: 'created',
+      operator: 'after',
+      value: {type: 'date_absolute', unixSeconds: 1710039600},
+    };
+    setupValues({
+      filters: [dateFilter],
+      timezoneID: 'Asia/Tokyo',
+      components: {date_absolute: {Editor}},
+    });
+    openEditFlow(/^Created is after/);
+    expect(within(sheet()).getByText('custom editor')).toBeTruthy();
+    expect(seen).toContain('Asia/Tokyo');
+  });
+
   it('date_relative: rows stage a single relative value', () => {
     const {onChange} = setupValues();
     openAddFlow();
@@ -4538,18 +4597,17 @@ describe('PowerSearch sheet value text', () => {
     },
   );
 
-  it('reads a date into the editor as the popover presentation does (FR17)', () => {
+  it('reads a date into the editor as the popover presentation does (FR17, FR25)', () => {
     setup({
       config: valueTypesConfig,
       filters: [dateFilter],
       timezoneID: 'Pacific/Honolulu',
     });
     openEditFlow(/^Created is after/);
-    // Both presentations' date editors read the instant's UTC day; the
-    // token and row may name a neighbouring day in an off-UTC zone (the
-    // record's known gap).
+    // Both presentations' date editors read the instant's day in
+    // `timezoneID`, the day the token and the row name.
     expect(within(sheet()).getByRole('combobox', {name: 'Date'})).toHaveValue(
-      'March 10, 2024',
+      'March 9, 2024',
     );
   });
 

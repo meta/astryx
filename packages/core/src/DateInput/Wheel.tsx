@@ -462,6 +462,8 @@ export function Wheel({
   // useScrollSettle. The settle handler re-checks the position afterwards, so
   // a correction that is genuinely needed still happens, just at rest.
   const parkedRef = useRef(false);
+  // Syncs the wheel's scroll position with the selected index while the wheel
+  // is active.
   useEffect(() => {
     if (!isActive) {
       parkedRef.current = false;
@@ -492,6 +494,8 @@ export function Wheel({
   // Highlight follows the finger. rAF-throttled: a scroll can fire far more
   // often than the display refreshes, and this only feeds a repaint.
   const frameRef = useRef<number | undefined>(undefined);
+  // Syncs a scroll listener with the active wheel. It updates the highlighted
+  // row.
   useEffect(() => {
     const scroller = scrollerRef.current;
     if (scroller == null || !isActive) {

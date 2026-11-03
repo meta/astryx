@@ -4354,3 +4354,38 @@ describe('the presented offset iOS hit testing reads', () => {
     animator.dispose();
   });
 });
+
+describe("a theme's reduced-motion mark", () => {
+  // The person's setting is off and the pointer is fine: only the mark can
+  // reduce the motion.
+  function underMark(marked: boolean) {
+    stubMedia(false, false);
+    const theme = document.createElement('div');
+    if (marked) {
+      theme.setAttribute('data-astryx-reduced-motion', '');
+    }
+    const element = document.createElement('div');
+    theme.append(element);
+    document.body.append(theme);
+    const animator = createMotionAnimator(element, {
+      now: () => clock,
+      requestFrame,
+    });
+    return {theme, animator};
+  }
+
+  it('counts as the Reduce Motion setting: a move lands at once on a fine pointer', () => {
+    const {theme, animator} = underMark(true);
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    expect(recorded).toHaveLength(0);
+    expect(animator.get('x')).toBe(100);
+    theme.remove();
+  });
+
+  it('without the mark, the same move springs', () => {
+    const {theme, animator} = underMark(false);
+    animator.animate({x: 100}, {spring: springs.navigationPush});
+    expect(recorded.length).toBeGreaterThan(0);
+    theme.remove();
+  });
+});

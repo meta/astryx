@@ -141,7 +141,8 @@ export const docs = {
     {
       name: 'timezoneID',
       type: 'string',
-      description: 'Timezone ID for date formatting (e.g. "America/New_York").',
+      description:
+        'IANA zone a date-only date_absolute value, and each absolute part of a date_range, is read and written in: the day shows, edits and stores (as that midnight) in it; unset, a day is its UTC day. A date_absolute with isDateOnly: false formats its label in it. E.g. "America/New_York".',
     },
     {
       name: 'handleRef',
@@ -448,7 +449,8 @@ export const docsZh = {
     {
       name: 'timezoneID',
       type: 'string',
-      description: '用于日期格式化的时区 ID（例如 "America/New_York"）。',
+      description:
+        '仅日期的 date_absolute 值及 date_range 的每个绝对端点读写所用的 IANA 时区：该日在此时区显示、编辑并以其午夜存储；未设置时为 UTC 日。isDateOnly: false 的 date_absolute 值的标签也在此时区格式化。例如 "America/New_York"。',
     },
     {
       name: 'handleRef',
@@ -569,7 +571,8 @@ export const docsDense = {
       'Max ranked results for a non-empty query; excludes value editors.',
     menuWidth: 'Main field/search menu width in pixels.',
     popoverSaveButtonLabel: 'Label for save button in edit popover.',
-    timezoneID: 'Timezone ID for date formatting (e.g. "America/New_York").',
+    timezoneID:
+      'IANA zone a date-only value reads and writes in; unset, its UTC day.',
     handleRef:
       'Imperative handle w/ focusTypeahead() + blurTypeahead() methods.',
     endContent:
