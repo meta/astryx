@@ -24,6 +24,6 @@ export const docs = {
     'catalog',
   ],
   slots: {
-    guides: {title: 'Guides', accepts: {kinds: ['generic']}},
+    guides: {title: 'Guides', accepts: {kinds: ['generic', 'namespace']}},
   },
 };

@@ -1,9 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs calendars/calendar-systems`: choosing a calendar, the
- * supported calendars, loading Temporal on the server and in the browser, the
- * Chinese and Korean calendars, and week numbers.
+ * @file `astryx docs internationalization/calendars/calendar-systems`:
+ * choosing a calendar, the supported calendars, loading Temporal on the server
+ * and in the browser, the Chinese and Korean calendars, and week numbers.
  */
 
 /** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */

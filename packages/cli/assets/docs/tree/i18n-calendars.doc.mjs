@@ -2,8 +2,8 @@
 
 /**
  * @file `astryx docs internationalization/i18n-calendars`: the short version of
- * showing dates in another calendar. The `calendars` namespace holds the
- * detail.
+ * showing dates in another calendar. The `internationalization/calendars`
+ * namespace beside it holds the detail.
  */
 
 /** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */

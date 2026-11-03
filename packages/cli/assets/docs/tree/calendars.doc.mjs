@@ -1,19 +1,22 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file `astryx docs calendars`: calendar systems in detail. Which calendars
- * date components show, how to load Temporal, server rendering, and the
- * Chinese and Korean calendars. The internationalization guide has the short
- * version.
+ * @file `astryx docs internationalization/calendars`: calendar systems in
+ * detail. Which calendars date components show, how to load Temporal, server
+ * rendering, and the Chinese and Korean calendars. The `i18n-calendars` guide
+ * beside it has the short version.
  */
 
 /** @type {import('@astryxdesign/cli/authoring').NamespaceDoc} */
 export const docs = {
   type: 'namespace',
   name: 'calendars',
-  // The docsite lists guide pages by title, so this one sorts directly below
-  // Internationalization, the page that links here.
-  title: 'Internationalization: calendars',
+  placement: {
+    parent: 'namespace:internationalization',
+    slot: 'guides',
+    order: 26,
+  },
+  title: 'Calendars',
   summary:
     'Show dates in the Persian, Hebrew, Islamic, Buddhist, Japanese, Chinese, and other calendars while values stay Gregorian ISO dates.',
   keywords: [
