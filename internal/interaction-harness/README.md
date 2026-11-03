@@ -152,7 +152,9 @@ WebKit's JPEG cast, whose 4:2:0 chroma holds the marker's color in 2 by 2
 pixel blocks and so makes the tail's plateaus longer. Two steps stop at the
 same tail in either engine while a freeze further from rest is still judged. A judged part shorter than four of the
 screencast's intervals fails: the animation under test was not moving during
-the block. With
+the block. One that had already settled when the judged part began (nothing in
+the window to judge) throws `BusyWindowTooLateError`, with the numbers: the
+block ran too late, which is no reading of the component. With
 `during`, `blockMainThread` starts the loop from a task queued in the frame
 that saw the animation, after that frame's rendering update: WebKit hands a
 newly started animation to its compositor there, and a loop inside the rAF
@@ -160,7 +162,12 @@ callback would freeze even a compositor animation. Call it before the release
 that starts a settle and await it after, so the page is already waiting when
 the settle begins. An animation counts once it is no longer pending and has
 run at least one frame: a `minProgressMs` under 16 is raised to 16, since one
-created in the frame the page looks is not on the compositor yet. The `verdict` judges the
+created in the frame the page looks is not on the compositor yet. It counts
+only before its curve's held tail (keyframes that end in a run of identical
+values, read as `waitForRest` reads them): when the only animation running
+there started while the page waited, or the wait times out with only such
+animations, the page looked too late, and the wait rejects with
+`BusyWindowTooLateError`. The `verdict` judges the
 frames the screencast delivered, whatever its rate (a loaded machine's can
 deliver one frame in five or six), and tolerates nothing a frozen animation
 does: at least one frame in the judged part, no stall longer than three of the
