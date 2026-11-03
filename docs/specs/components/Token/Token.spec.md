@@ -142,15 +142,15 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Representative states
 
-| State              | Required invariant                                                                                      | Allowed variation           |
-| ------------------ | ------------------------------------------------------------------------------------------------------- | --------------------------- |
-| Static             | `span` root; Token adds no focusable element except a Remove button.                                    | Tone, size, slots.          |
-| Clickable          | One inner button named by the label, or by a caller `aria-labelledby`; container click calls `onClick`. | End content.                |
-| Link               | Root is the link; focus outline on the link itself.                                                     | Router link component.      |
-| Link and remove    | Container holds a link and a sibling Remove button; surface click activates the link.                   | Modified and middle clicks. |
-| Removable          | Remove button named "Remove {label}" with a 24 by 24 CSS pixel target.                                  | Locale wording.             |
-| Disabled clickable | Buttons focusable with `aria-disabled="true"`; no callback fires; half opacity.                         | Tone.                       |
-| Hidden label       | Label text visually hidden; the root's `aria-label` equals the label.                                   | Structure.                  |
+| State              | Required invariant                                                                                                                                                        | Allowed variation           |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| Static             | `span` root; Token adds no focusable element except a Remove button.                                                                                                      | Tone, size, slots.          |
+| Clickable          | One inner button named by the label, by a caller `aria-labelledby`, or inside PowerSearch by the filter token's full visible text (AR2); container click calls `onClick`. | End content.                |
+| Link               | Root is the link; focus outline on the link itself.                                                                                                                       | Router link component.      |
+| Link and remove    | Container holds a link and a sibling Remove button; surface click activates the link.                                                                                     | Modified and middle clicks. |
+| Removable          | Remove button named "Remove {label}" (inside PowerSearch, over the full visible text, AR2) with a 24 by 24 CSS pixel target.                                              | Locale wording.             |
+| Disabled clickable | Buttons focusable with `aria-disabled="true"`; no callback fires; half opacity.                                                                                           | Tone.                       |
+| Hidden label       | Label text visually hidden; the root's `aria-label` equals the label.                                                                                                     | Structure.                  |
 
 ### Transformation and precedence order
 
