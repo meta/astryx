@@ -61,7 +61,8 @@ export const docs = {
     {
       name: 'tooltip',
       type: 'string',
-      description: 'Tooltip text shown on hover.',
+      description:
+        "Tooltip text shown on hover and keyboard focus. It also describes the button, unless it repeats the button's accessible name.",
     },
     {
       name: 'onClick',
@@ -77,7 +78,7 @@ export const docs = {
       name: 'isInterruptible',
       type: 'boolean',
       description:
-        'Keep the button clickable while a clickAction is pending: the spinner and aria-busy still show, but the button is not disabled and the action is not deduped, so a re-click lands and interrupts the in-flight action with a fresh one.',
+        'Keep the button clickable while a clickAction is pending: the spinner and aria-busy still show, but the button is not disabled and the action is not deduped, so a re-click lands and interrupts the in-flight action with a fresh one. Use it for interruptible actions, not fire-once actions (submit, save, pay).',
       default: 'false',
     },
     {
@@ -249,11 +250,12 @@ export const docsDense = {
     isLoading:
       'shows loading spinner, blocks re-activation but stays focusable (aria-disabled, not native disabled)',
     isDisabled: 'disables button; uses aria-disabled when tooltip present',
-    tooltip: 'tooltip text shown on hover',
+    tooltip:
+      'tooltip on hover + keyboard focus; also describes the button unless it repeats the accessible name',
     onClick: 'standard click handler',
     clickAction: 'async click handler w/ automatic loading state',
     isInterruptible:
-      'keeps button clickable while clickAction pending; a re-click interrupts it',
+      'keeps button clickable while clickAction pending; a re-click interrupts it. Not for fire-once actions (submit/save/pay)',
     width:
       'button width; numbers=pixels, strings=as-is; without it keeps the icon-only aspect (square by default)',
     type: 'HTML button type; defaults to "button"',

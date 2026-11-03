@@ -42,8 +42,11 @@ type AuditCase = {
   story: Story;
   mode: Mode;
   theme: Theme;
-  // Reach the button by keyboard before the capture.
-  focus: boolean;
+  // Reach the button by keyboard, or hover or press it, before the capture.
+  interaction: 'none' | 'focus' | 'hover' | 'press';
+  // Story args set through the Storybook channel before the capture.
+  args?: Record<string, unknown>;
+  variant?: string;
 };
 
 type AuditReceipt = {
@@ -82,17 +85,29 @@ const STORY: Record<
 const cases: AuditCase[] = [];
 function add(
   story: Story,
-  options: {theme?: Theme; focus?: boolean; modes?: Mode[]} = {},
+  options: {
+    theme?: Theme;
+    interaction?: AuditCase['interaction'];
+    modes?: Mode[];
+    args?: Record<string, unknown>;
+    variant?: string;
+  } = {},
 ) {
   const theme = options.theme ?? 'neutral';
-  const focus = options.focus ?? false;
+  const interaction = options.interaction ?? 'none';
   for (const mode of options.modes ?? ['light', 'dark']) {
+    const parts = [story, options.variant, theme];
+    if (interaction !== 'none') {
+      parts.push(interaction);
+    }
     cases.push({
-      key: `${story}-${theme}${focus ? '-focus' : ''}-${mode}`,
+      key: `${parts.filter(Boolean).join('-')}-${mode}`,
       story,
       mode,
       theme,
-      focus,
+      interaction,
+      args: options.args,
+      variant: options.variant,
     });
   }
 }
@@ -106,9 +121,12 @@ add('large', {theme: 'butter'});
 add('ghost');
 add('primary');
 add('destructive');
-add('default', {focus: true});
-add('destructive', {focus: true, modes: ['light']});
-add('with-tooltip', {focus: true});
+add('default', {interaction: 'focus'});
+add('destructive', {interaction: 'focus', modes: ['light']});
+add('with-tooltip', {interaction: 'focus'});
+add('default', {interaction: 'hover', modes: ['light']});
+add('primary', {interaction: 'press', modes: ['light']});
+add('default', {variant: 'elevated', args: {elevation: 'med'}});
 add('loading');
 add('disabled');
 add('emoji-icon', {modes: ['light']});
@@ -199,6 +217,14 @@ async function observe(page: Page) {
             ariaDisabled: button.getAttribute('aria-disabled'),
             ariaBusy: button.getAttribute('aria-busy'),
             focused: document.activeElement === button,
+            hovered: button.matches(':hover'),
+            pressed:
+              button.matches(':active') ||
+              button.getAttribute('data-astryx-press') === 'on',
+            dataElevation: button.getAttribute('data-elevation'),
+            boxShadow: style?.boxShadow,
+            transform: style?.transform,
+            backgroundColor: style?.backgroundColor,
             focusVisible: button.matches(':focus-visible'),
             outlineStyle: style?.outlineStyle,
             outlineWidth: style?.outlineWidth,
@@ -258,7 +284,35 @@ for (const item of cases) {
     await page.goto(storyUrl(item), {waitUntil: 'load'});
     await page.locator('#storybook-root .astryx-button').first().waitFor();
     await settle(page);
-    if (item.focus) {
+    if (item.args) {
+      await page.evaluate(async args => {
+        const channel = (
+          window as unknown as {
+            __STORYBOOK_ADDONS_CHANNEL__: {
+              emit: (event: string, payload: unknown) => void;
+              once: (event: string, listener: () => void) => void;
+            };
+          }
+        ).__STORYBOOK_ADDONS_CHANNEL__;
+        const storyId = new URLSearchParams(location.search).get('id');
+        await new Promise<void>(resolve => {
+          channel.once('storyRendered', () => resolve());
+          channel.emit('updateStoryArgs', {storyId, updatedArgs: args});
+        });
+      }, item.args);
+      await settle(page);
+    }
+    const target = page.locator('#storybook-root .astryx-button').first();
+    if (item.interaction === 'hover') {
+      await target.hover();
+      await settle(page);
+    }
+    if (item.interaction === 'press') {
+      await target.hover();
+      await page.mouse.down();
+      await settle(page);
+    }
+    if (item.interaction === 'focus') {
       await page.keyboard.press('Tab');
       if (item.story === 'with-tooltip') {
         await page
@@ -360,15 +414,49 @@ for (const item of cases) {
       } else if (spec.state !== 'loading') {
         check(false, 'no icon');
       }
+      // An Astryx-sized SVG icon follows the button size: sm in sm and md
+      // buttons, md in lg buttons (16px and 20px at the neutral theme).
+      if (
+        item.theme === 'neutral' &&
+        item.story !== 'emoji-icon' &&
+        spec.state !== 'loading' &&
+        observed.glyph
+      ) {
+        const expected = spec.size === 'lg' ? 20 : 16;
+        check(
+          near(observed.glyph.width, expected) &&
+            near(observed.glyph.height, expected),
+          `icon ${observed.glyph.width}x${observed.glyph.height}, expected ${expected}`,
+        );
+      }
       if (spec.state === 'loading') {
         check(button.ariaBusy === 'true', `aria-busy ${button.ariaBusy}`);
         check(button.ariaDisabled === 'true', 'loading is not aria-disabled');
         check(!button.disabled, 'loading uses native disabled');
       }
       if (spec.state === 'disabled') {
-        check(button.disabled, 'disabled is not native disabled');
+        check(
+          button.disabled || button.ariaDisabled === 'true',
+          'disabled button is still available',
+        );
       }
-      if (item.focus) {
+      if (item.interaction === 'hover') {
+        check(button.hovered, 'not hovered');
+      }
+      if (item.interaction === 'press') {
+        check(button.pressed, 'not pressed');
+      }
+      if (item.args?.elevation) {
+        check(
+          button.dataElevation === item.args.elevation,
+          `elevation ${button.dataElevation}`,
+        );
+        check(
+          button.boxShadow != null && button.boxShadow !== 'none',
+          `no shadow: ${button.boxShadow}`,
+        );
+      }
+      if (item.interaction === 'focus') {
         check(button.focused && button.focusVisible, 'not keyboard focused');
         check(
           button.outlineStyle !== 'none' && button.outlineWidth !== '0px',
@@ -398,14 +486,15 @@ for (const item of cases) {
         mode: item.mode,
         theme: item.theme,
         viewport: VIEWPORT,
-        focus: item.focus,
+        interaction: item.interaction,
+        args: item.args ?? null,
         ...spec,
         anatomy:
           'one native button named by aria-label with no visible label text, carrying the button target with data-variant and data-size, square with a centered icon and, at the neutral theme, zero padding',
         target:
           'at least 24 by 24 CSS px; at least 28 by 28 for sm at the neutral theme',
         state:
-          'loading: aria-busy and aria-disabled, not native disabled; disabled: native disabled; focus: keyboard focus-visible with an outline; tooltip: described by and showing the tooltip text',
+          'loading: aria-busy and aria-disabled, not native disabled; disabled: unavailable (native disabled or aria-disabled); focus: keyboard focus-visible with an outline; hover and press: the button matches the state (the press transform is recorded, not asserted); elevation: data-elevation and a shadow; tooltip: described by and showing the tooltip text',
       },
       observed: {
         build: storybookSha,
