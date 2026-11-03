@@ -84,6 +84,7 @@ describe('docs sidebar groups', () => {
         ?.children.map(c => [c.topic, c.title]);
     expect(childrenOf(groups.foundations, 'icons')).toEqual([
       ['cli-experimental-icon-set-files', 'Icon set files'],
+      ['cli-experimental-icon-sets', 'Icon sets'],
     ]);
     expect(childrenOf(groups.guide, 'styling-overview')).toEqual([
       ['styling', 'Styling components'],
@@ -91,5 +92,6 @@ describe('docs sidebar groups', () => {
     const topLevel = groups.guide.map(({page: p}) => p.topic);
     expect(topLevel).not.toContain('styling');
     expect(topLevel).not.toContain('cli-experimental-icon-set-files');
+    expect(topLevel).not.toContain('cli-experimental-icon-sets');
   });
 });

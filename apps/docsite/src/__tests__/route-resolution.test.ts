@@ -96,7 +96,8 @@ describe('route resolution', () => {
     // `use-integrations` is the guide for apps that install one;
     // `cli-experimental-render-pages` is the experimental render guide.
     // `styling` shows under `styling-overview`, and
-    // `cli-experimental-icon-set-files` under Icons in Foundations;
+    // `cli-experimental-icon-sets` and `cli-experimental-icon-set-files`
+    // under Icons in Foundations;
     // `internationalization-calendars` is the calendar systems page, under
     // Internationalization.
     const sidebarGuides = docsSidebarGroups(docTopics)
@@ -108,7 +109,6 @@ describe('route resolution', () => {
         'authoring',
         'browser-support',
         'cli-component-lookups',
-        'cli-experimental-icon-sets',
         'cli-experimental-render-pages',
         'cli-host-entry',
         'global',

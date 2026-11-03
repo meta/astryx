@@ -354,6 +354,7 @@ describe('sidebar parents', () => {
       expect(docTopics.some(topic => topic.topic === parent)).toBe(true);
       expect(docRedirects).not.toHaveProperty(child);
     }
+    expect(SIDEBAR_PARENTS.get('cli-experimental-icon-sets')).toBe('icons');
     expect(SIDEBAR_PARENTS.get('cli-experimental-icon-set-files')).toBe(
       'icons',
     );
