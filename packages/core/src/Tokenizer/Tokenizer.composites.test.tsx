@@ -72,7 +72,7 @@ describe('Tokenizer in Core composites on a compact coarse-pointer screen', () =
         config={config}
         filters={[]}
         onChange={() => {}}
-        experimental={{presentation: 'popover'}}
+        presentation="popover"
       />,
     );
     expect(screen.getByRole('combobox')).toBeInTheDocument();

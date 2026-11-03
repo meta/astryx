@@ -3,7 +3,7 @@
 /**
  * @file PowerSearchBottomSheet.test.tsx
  * @input Uses vitest, @testing-library/react, PowerSearch with
- *   `experimental.presentation`, and the sheet helpers
+ *   `presentation`, and the sheet helpers
  * @output Unit tests for the touch presentation (`component:PowerSearch`
  *   FR10–FR21, AR4–AR6): presentation resolution, the trigger, the Filters
  *   sheet, Add filter, the operator step, each value type (list values
@@ -348,9 +348,7 @@ const valueTypesConfig: PowerSearchConfig = {
   ],
 };
 
-type Presentation = NonNullable<
-  NonNullable<PowerSearchProps['experimental']>['presentation']
->;
+type Presentation = NonNullable<PowerSearchProps['presentation']>;
 
 function setup(
   props: Partial<PowerSearchProps> & {presentation?: Presentation} = {},
@@ -362,7 +360,7 @@ function setup(
       config={config}
       filters={[]}
       onChange={onChange}
-      experimental={{presentation}}
+      presentation={presentation}
       {...rest}
     />,
   );
@@ -556,23 +554,25 @@ afterEach(() => {
 // =============================================================================
 
 describe('PowerSearch presentation resolution (FR10)', () => {
-  it('keeps the tokenizer field when experimental is omitted', () => {
-    render(<PowerSearch config={config} filters={[]} onChange={vi.fn()} />);
+  const plain = (props: Partial<PowerSearchProps> = {}) => (
+    <PowerSearch config={config} filters={[]} onChange={vi.fn()} {...props} />
+  );
+
+  it('keeps the tokenizer field by default on a screen that is not compact coarse-pointer', () => {
+    render(plain());
     expect(screen.getByRole('combobox')).toBeInTheDocument();
     expect(document.querySelector(SHEET_TRIGGER)).toBeNull();
   });
 
-  it('keeps the tokenizer field for an empty experimental object and for popover', () => {
-    const {unmount} = render(
-      <PowerSearch
-        config={config}
-        filters={[]}
-        onChange={vi.fn()}
-        experimental={{}}
-      />,
-    );
-    expect(screen.getByRole('combobox')).toBeInTheDocument();
-    unmount();
+  it('defaults to adaptive: the sheet trigger on a compact coarse-pointer screen', () => {
+    stubMatchMedia(query => query === COMPACT_TOUCH_PRESENTATION_QUERY);
+    render(plain());
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(document.querySelector(SHEET_TRIGGER)).not.toBeNull();
+  });
+
+  it('keeps the tokenizer field with presentation="popover" on a compact coarse-pointer screen', () => {
+    stubMatchMedia(query => query === COMPACT_TOUCH_PRESENTATION_QUERY);
     setup({presentation: 'popover'});
     expect(screen.getByRole('combobox')).toBeInTheDocument();
     expect(document.querySelector(SHEET_TRIGGER)).toBeNull();
@@ -703,7 +703,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
         config={config}
         filters={[openFilter]}
         onChange={vi.fn()}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
         isDisabled
       />,
     );
@@ -717,7 +717,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
         config={config}
         filters={[openFilter]}
         onChange={vi.fn()}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     expect(isSheetOpen()).toBe(false);
@@ -830,7 +830,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
           config={config}
           filters={[]}
           onChange={vi.fn()}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
           resultCount={12}
         />
       </StrictMode>,
@@ -846,7 +846,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
           config={config}
           filters={[]}
           onChange={vi.fn()}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
           resultCount={1}
         />
       </StrictMode>,
@@ -868,7 +868,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
           config={config}
           filters={[openFilter]}
           onChange={vi.fn()}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
           resultCount={3}
         />,
       );
@@ -884,7 +884,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
           config={config}
           filters={[openFilter]}
           onChange={vi.fn()}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
           resultCount={1}
         />,
       );
@@ -949,7 +949,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
               filters={filters}
               onChange={onChange}
               resultCount={resultCount}
-              experimental={{presentation}}
+              presentation={presentation}
             />
           </Dialog>
         );
@@ -1172,7 +1172,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
           onChange={() => {}}
           hasAutoFocus
           onFocus={onFocus}
-          experimental={{presentation: 'adaptive'}}
+          presentation="adaptive"
         />
       </>,
     );
@@ -1313,7 +1313,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
             // The count follows the filters, so Clear all changes it in the
             // same commit as the removal.
             resultCount={filters.length === 0 ? 240 : 12}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         );
       }
@@ -1367,7 +1367,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
             filters={filters}
             onChange={next => setFilters(next)}
             resultCount={resultCount}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         );
       }
@@ -1453,7 +1453,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
           config={config}
           filters={filters}
           onChange={next => setFilters(next)}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -1571,7 +1571,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
             onChange(next, type, index);
             setFilters(next);
           }}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -1664,7 +1664,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
         config={config}
         filters={[openFilter]}
         onChange={vi.fn()}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
         isDisabled
       />,
     );
@@ -1695,7 +1695,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
               setFilters(next);
               setIsDisabled(true);
             }}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         </>
       );
@@ -1779,7 +1779,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
               setFilters(next);
             }}
             isReadOnly={readOnly}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         );
       }
@@ -1864,7 +1864,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
           config={config}
           filters={[openFilter]}
           onChange={vi.fn()}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       </div>,
     );
@@ -2042,7 +2042,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
             onChange(next, type, index);
             setFilters(next);
           }}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -2106,7 +2106,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
           config={config}
           filters={filters}
           onChange={() => {}}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -2142,7 +2142,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
           config={cfg}
           filters={[]}
           onChange={() => {}}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -2212,7 +2212,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
           filters={filters}
           onChange={() => {}}
           hasClear={hasClear}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -2617,7 +2617,7 @@ describe('PowerSearch Add filter (FR13)', () => {
           config={config}
           filters={filters}
           onChange={next => setFilters(next)}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -2654,7 +2654,7 @@ describe('PowerSearch Add filter (FR13)', () => {
               onChange(next, type, index);
               setFilters(next);
             }}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         );
       }
@@ -2777,7 +2777,7 @@ describe('PowerSearch Add filter (FR13)', () => {
         config={config}
         filters={[]}
         onChange={vi.fn()}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
         isReadOnly
       />,
     );
@@ -3221,7 +3221,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
           config={config}
           filters={filters}
           onChange={next => setFilters(next)}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -3270,7 +3270,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
           config={withNested}
           filters={filters}
           onChange={next => setFilters(next)}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -3292,7 +3292,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
           config={config}
           filters={filters}
           onChange={next => setFilters(next)}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -3312,7 +3312,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
         config={config}
         filters={[openFilter, authorFilter]}
         onChange={onChange}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     openEditFlow('Status is Open');
@@ -3321,7 +3321,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
         config={config}
         filters={[{...authorFilter}, {...openFilter}]}
         onChange={onChange}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     tapRow('Closed');
@@ -3347,7 +3347,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
         config={config}
         filters={[openFilter]}
         onChange={onChange}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     openEditFlow('Status is Open');
@@ -3356,7 +3356,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
         config={config}
         filters={[authorFilter]}
         onChange={onChange}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     tapRow('Closed');
@@ -3389,7 +3389,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
               onChange(next, type, index);
               setFilters(next);
             }}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         );
       }
@@ -3442,7 +3442,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
         config={config}
         filters={[openFilter]}
         onChange={onChange}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     openEditFlow('Status is Open');
@@ -3459,7 +3459,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
         }}
         filters={[openFilter]}
         onChange={onChange}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     expect(
@@ -3808,7 +3808,7 @@ describe('PowerSearch step sheets (retained stack, FR15a)', () => {
           config={stale}
           filters={[openFilter, authorFilter]}
           onChange={vi.fn()}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />,
       );
       await new Promise(resolve => setTimeout(resolve, 40));
@@ -4568,7 +4568,7 @@ describe('PowerSearch sheet value text', () => {
               filters={filters}
               onChange={next => setFilters(next)}
               timezoneID={timezoneID}
-              experimental={{presentation: 'bottom-sheet'}}
+              presentation="bottom-sheet"
             />
           );
         }
@@ -4686,7 +4686,7 @@ describe('PowerSearch sheet value text', () => {
             config={valueTypesConfig}
             filters={filters}
             onChange={next => setFilters(next)}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         );
       }
@@ -4727,7 +4727,7 @@ describe('PowerSearch sheet value text', () => {
               config={config}
               filters={filters}
               onChange={next => setFilters(next)}
-              experimental={{presentation: 'bottom-sheet'}}
+              presentation="bottom-sheet"
             />
           </InternationalizationProvider>
         );
@@ -4766,7 +4766,7 @@ describe('PowerSearch sheet value text', () => {
               filters={filters}
               onChange={next => setFilters(next)}
               resultCount={filters.length === 0 ? 240 : 12}
-              experimental={{presentation: 'bottom-sheet'}}
+              presentation="bottom-sheet"
             />
           </InternationalizationProvider>
         );
@@ -4831,7 +4831,7 @@ describe('PowerSearch sheet value text', () => {
             },
           ]}
           onChange={() => {}}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       </InternationalizationProvider>,
     );
@@ -4878,7 +4878,7 @@ describe('PowerSearch sheet value text', () => {
               config={valueTypesConfig}
               filters={current}
               onChange={next => setCurrent(next)}
-              experimental={{presentation: 'bottom-sheet'}}
+              presentation="bottom-sheet"
             />
           </InternationalizationProvider>
         );
@@ -4940,7 +4940,7 @@ describe('PowerSearch sheet value text', () => {
               },
             ]}
             onChange={() => {}}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         </InternationalizationProvider>,
       );

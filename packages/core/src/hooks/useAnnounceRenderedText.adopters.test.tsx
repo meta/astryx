@@ -231,7 +231,7 @@ const ADOPTERS: Record<string, () => Promise<void>> = {
         label="Filters"
         isLabelHidden={false}
         onChange={() => {}}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     fireEvent.click(screen.getByRole('button', {name: /^Filters/}));
