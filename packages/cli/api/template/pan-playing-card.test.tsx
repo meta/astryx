@@ -76,12 +76,12 @@ describe('the plain-JavaScript pan block', () => {
     await act(async () => {
       root.render(createElement(PanPlayingCardVanilla));
     });
-    expect(container.querySelector('[aria-label="Top card"]')).not.toBeNull();
+    expect(container.querySelector('[role="img"]')).not.toBeNull();
     const destroyed = pan.destroyed;
     await act(async () => {
       root.unmount();
     });
-    expect(container.querySelector('[aria-label="Top card"]')).toBeNull();
+    expect(container.querySelector('[role="img"]')).toBeNull();
     expect(pan.destroyed).toBe(destroyed + 1);
   });
 });
@@ -98,9 +98,7 @@ describe('the playing-card pan blocks', () => {
       await act(async () => {
         root.render(createElement(Block));
       });
-      const card = container.querySelector<HTMLElement>(
-        '[aria-label="Top card"]',
-      );
+      const card = container.querySelector<HTMLElement>('[role="img"]');
       if (card == null) {
         throw new Error('the block renders no top card');
       }
@@ -125,9 +123,7 @@ describe('the playing-card pan blocks', () => {
         root.render(createElement(Block));
       });
       const button = container.querySelector('button');
-      const card = container.querySelector<HTMLElement>(
-        '[aria-label="Top card"]',
-      );
+      const card = container.querySelector<HTMLElement>('[role="img"]');
       if (button == null || card == null) {
         throw new Error('the block renders no Discard button or top card');
       }
@@ -214,9 +210,7 @@ describe('the playing-card pan blocks', () => {
         root.render(createElement(Block));
       });
       const button = container.querySelector('button');
-      const card = container.querySelector<HTMLElement>(
-        '[aria-label="Top card"]',
-      );
+      const card = container.querySelector<HTMLElement>('[role="img"]');
       if (button == null || card == null) {
         throw new Error('the block renders no Discard button or top card');
       }
@@ -253,6 +247,31 @@ describe('the playing-card pan blocks', () => {
       });
     });
 
+    it(`names the top card by its rank and suit, as an image, and announces each discard by name (${name})`, async () => {
+      const {root, button, card} = await renderBlock();
+      expect({
+        role: card.getAttribute('role'),
+        name: card.getAttribute('aria-label'),
+        face: card.textContent,
+      }).toEqual({role: 'img', name: 'Ace of spades', face: 'A\u2660'});
+      await act(async () => {
+        button.click();
+        card.dispatchEvent(new Event('transitionend'));
+      });
+      expect({
+        name: card.getAttribute('aria-label'),
+        face: card.textContent,
+        announced: document.querySelector('[aria-live="polite"]')?.textContent,
+      }).toEqual({
+        name: 'King of hearts',
+        face: 'K\u2665',
+        announced: 'Ace of spades discarded',
+      });
+      await act(async () => {
+        root.unmount();
+      });
+    });
+
     it(`deals one card for a second Discard pressed while the first throw runs (${name})`, async () => {
       const container = document.createElement('div');
       document.body.append(container);
@@ -261,7 +280,7 @@ describe('the playing-card pan blocks', () => {
         root.render(createElement(Block));
       });
       const button = container.querySelector('button');
-      const card = container.querySelector('[aria-label="Top card"]');
+      const card = container.querySelector('[role="img"]');
       if (button == null || card == null) {
         throw new Error('the block renders no Discard button or top card');
       }

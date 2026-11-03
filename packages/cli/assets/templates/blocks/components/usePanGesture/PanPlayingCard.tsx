@@ -5,7 +5,12 @@
 import {useRef, useState} from 'react';
 import {usePanGesture} from '@astryxdesign/core/hooks';
 
-const DECK = ['A\u2660', 'K\u2665', 'Q\u2663', 'J\u2666'];
+const DECK = [
+  {face: 'A\u2660', name: 'Ace of spades'},
+  {face: 'K\u2665', name: 'King of hearts'},
+  {face: 'Q\u2663', name: 'Queen of clubs'},
+  {face: 'J\u2666', name: 'Jack of diamonds'},
+];
 /** A release faster than this (px/s) throws the card away. */
 const THROW_SPEED = 1000;
 /** How far a thrown card travels before the next one is dealt, px. */
@@ -48,7 +53,7 @@ export default function PanPlayingCard() {
     element.style.opacity = '0';
     const deal = () => {
       throwing.current = false;
-      setAnnouncement(`${DECK[top % DECK.length]} discarded`);
+      setAnnouncement(`${DECK[top % DECK.length].name} discarded`);
       setTop(value => value + 1);
       moveTo(0, 0, 'none');
       element.style.opacity = '1';
@@ -92,7 +97,10 @@ export default function PanPlayingCard() {
         }}>
         <div
           ref={card}
-          aria-label="Top card"
+          // An image's name is all a screen reader announces, so it names the
+          // card.
+          role="img"
+          aria-label={DECK[top % DECK.length].name}
           style={{
             width: 120,
             height: 170,
@@ -106,7 +114,7 @@ export default function PanPlayingCard() {
             cursor: 'grab',
             userSelect: 'none',
           }}>
-          {DECK[top % DECK.length]}
+          {DECK[top % DECK.length].face}
         </div>
       </div>
       {/* The drag's keyboard and assistive-technology path (WCAG 2.5.7). */}

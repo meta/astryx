@@ -4,7 +4,12 @@
 
 import {createPanGesture} from '@astryxdesign/core';
 
-const DECK = ['A\u2660', 'K\u2665', 'Q\u2663', 'J\u2666'];
+const DECK = [
+  {face: 'A\u2660', name: 'Ace of spades'},
+  {face: 'K\u2665', name: 'King of hearts'},
+  {face: 'Q\u2663', name: 'Queen of clubs'},
+  {face: 'J\u2666', name: 'Jack of diamonds'},
+];
 /** A release faster than this (px/s) throws the card away. */
 const THROW_SPEED = 1000;
 /** How far a thrown card travels before the next one is dealt, px. */
@@ -25,8 +30,10 @@ function mountDeck(table: HTMLElement, discardButton: HTMLButtonElement) {
   let isIgnoringDrag = false;
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const card = document.createElement('div');
-  card.textContent = DECK[0];
-  card.setAttribute('aria-label', 'Top card');
+  card.textContent = DECK[0].face;
+  // An image's name is all a screen reader announces, so it names the card.
+  card.setAttribute('role', 'img');
+  card.setAttribute('aria-label', DECK[0].name);
   Object.assign(card.style, {
     width: '120px',
     height: '170px',
@@ -71,9 +78,10 @@ function mountDeck(table: HTMLElement, discardButton: HTMLButtonElement) {
     card.style.opacity = '0';
     const deal = () => {
       isThrowing = false;
-      status.textContent = `${DECK[top % DECK.length]} discarded`;
+      status.textContent = `${DECK[top % DECK.length].name} discarded`;
       top += 1;
-      card.textContent = DECK[top % DECK.length];
+      card.textContent = DECK[top % DECK.length].face;
+      card.setAttribute('aria-label', DECK[top % DECK.length].name);
       moveTo(0, 0, 'none');
       card.style.opacity = '1';
     };
