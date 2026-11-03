@@ -49,7 +49,11 @@ import {
   durationVars,
 } from '../theme/tokens.stylex';
 import {focusOutlineStyles} from '../utils';
-import {reducedMotionFade} from '../motion/reducedMotion';
+import {
+  playReducedMotionDip,
+  reducedMotionFade,
+  type ReducedMotionDip,
+} from '../motion/reducedMotion';
 import {dateInputTouchSizes, dateInputTouchGeometry} from './tokens.stylex';
 import {useOwnScrollGesture} from './useOwnScrollGesture';
 import {usePointerDragScroll} from './usePointerDragScroll';
@@ -331,19 +335,19 @@ export function Wheel({
   // once on a fine one.
   const lastPointerRef = useRef<string | null>(null);
 
-  // A reduced-motion dip whose rows have not landed yet: its timer and the
-  // row it lands on. While one is pending the rows stay put for it, so they
-  // never move at full opacity, and a further step retargets it.
-  const pendingFadeRef = useRef<{timer: number; top: number} | null>(null);
+  // A reduced-motion dip whose rows have not landed yet: the row they land
+  // on. While one is pending the rows stay put for it, so they never move at
+  // full opacity, and a further step retargets it.
+  const pendingFadeRef = useRef<{top: number} | null>(null);
   // The running dip, so a step during its fade-in starts the next one where
   // the column is.
-  const dipRef = useRef<Animation | null>(null);
+  const dipRef = useRef<ReducedMotionDip | null>(null);
+  // Synchronizes with the dip's animations: an unmounted wheel lands nothing.
   useEffect(
     () => () => {
-      if (pendingFadeRef.current != null) {
-        window.clearTimeout(pendingFadeRef.current.timer);
-        pendingFadeRef.current = null;
-      }
+      pendingFadeRef.current = null;
+      dipRef.current?.cancel();
+      dipRef.current = null;
     },
     [],
   );
@@ -368,19 +372,15 @@ export function Wheel({
           ? reducedMotionFade(scroller, {touchRelease})
           : null;
       const pending = pendingFadeRef.current;
+      // A change that lands now replaces a pending landing. Its dip goes on
+      // and fades back in.
       if (fadeTiming == null) {
-        if (pending != null) {
-          window.clearTimeout(pending.timer);
-          pendingFadeRef.current = null;
-        }
+        pendingFadeRef.current = null;
         scroller.scrollTo({top, behavior});
         return;
       }
       if (fadeTiming.duration === 0 || typeof scroller.animate !== 'function') {
-        if (pending != null) {
-          window.clearTimeout(pending.timer);
-          pendingFadeRef.current = null;
-        }
+        pendingFadeRef.current = null;
         scroller.scrollTo({top, behavior: 'auto'});
         return;
       }
@@ -389,26 +389,26 @@ export function Wheel({
         pending.top = top;
         return;
       }
-      const {duration, easing} = fadeTiming;
       // A step during the last dip's fade-in starts the new dip at the
       // column's current opacity, not at full opacity. A leaving element fades
       // out from where it is.
       const shown = Number.parseFloat(getComputedStyle(scroller).opacity);
       dipRef.current?.cancel();
-      dipRef.current = scroller.animate(
-        [
-          {opacity: Number.isFinite(shown) ? shown : 1, easing},
-          {opacity: 0, easing},
-          {opacity: 1},
-        ],
-        {duration, easing: 'linear'},
-      );
-      const landing = {top, timer: 0};
-      landing.timer = window.setTimeout(() => {
-        pendingFadeRef.current = null;
-        scroller.scrollTo({top: landing.top, behavior: 'auto'});
-      }, duration / 2);
+      const landing = {top};
       pendingFadeRef.current = landing;
+      // The rows land when the fade-out ends on the dip's own timeline, so a
+      // late frame cannot show them moving at full opacity.
+      dipRef.current = playReducedMotionDip(
+        scroller,
+        fadeTiming,
+        () => {
+          if (pendingFadeRef.current === landing) {
+            pendingFadeRef.current = null;
+            scroller.scrollTo({top: landing.top, behavior: 'auto'});
+          }
+        },
+        Number.isFinite(shown) ? shown : 1,
+      );
     },
     [itemBlockSize],
   );

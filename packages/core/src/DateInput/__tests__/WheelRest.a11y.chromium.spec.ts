@@ -118,6 +118,12 @@ function expectAnimatedTurn(
   expect(between.length, record).toBeGreaterThan(0);
 }
 
+/** A frame the page drew: where the rows sit in the column, and its opacity. */
+interface RowFrame {
+  at: number;
+  opacity: number;
+}
+
 const selectedHour = (hours: Locator) =>
   hours.locator('[role="option"][aria-selected="true"]');
 
@@ -164,38 +170,54 @@ test('under reduced motion an arrow key step lands under its cross-fade, never a
   await page.emulateMedia({reducedMotion: 'reduce'});
   const {field, hours} = await openHourWheel(page);
   await hours.focus();
-  // Record every frame from before the key until well after the 200 ms dip.
-  // Each frame holds where the rows are drawn and how opaque they are. The
-  // rows are the band copy's strip where the column has one, and its first
-  // row otherwise.
-  const frames = hours.evaluate(
-    async column =>
-      new Promise<{at: number; opacity: number}[]>(resolve => {
-        const seen: {at: number; opacity: number}[] = [];
-        const sample = () => {
-          const strip = column.querySelector<HTMLElement>('[data-wheel-strip]');
-          const rows =
-            strip ?? column.querySelector<HTMLElement>('[role="option"]');
-          const faded = strip?.parentElement ?? column;
-          seen.push({
-            at: Math.round(
-              (rows?.getBoundingClientRect().top ?? 0) -
-                column.getBoundingClientRect().top,
-            ),
-            opacity: Number(getComputedStyle(faded).opacity),
-          });
-          if (seen.length < 45) {
-            requestAnimationFrame(sample);
-          } else {
-            resolve(seen);
-          }
-        };
+  // Record every frame the page draws, from before the key until the column
+  // is at rest again. Each frame holds where the rows are drawn and how
+  // opaque they are. The rows are the band copy's strip where the column has
+  // one, and its first row otherwise.
+  await hours.evaluate(column => {
+    const recorder = {seen: [] as RowFrame[], isDone: false};
+    (window as unknown as {stepFrames: typeof recorder}).stepFrames = recorder;
+    const sample = () => {
+      const strip = column.querySelector<HTMLElement>('[data-wheel-strip]');
+      const rows =
+        strip ?? column.querySelector<HTMLElement>('[role="option"]');
+      const faded = strip?.parentElement ?? column;
+      recorder.seen.push({
+        at: Math.round(
+          (rows?.getBoundingClientRect().top ?? 0) -
+            column.getBoundingClientRect().top,
+        ),
+        opacity: Number(getComputedStyle(faded).opacity),
+      });
+      if (!recorder.isDone) {
         requestAnimationFrame(sample);
-      }),
-  );
+      }
+    };
+    requestAnimationFrame(sample);
+  });
   await sleep(50);
   await page.keyboard.press('ArrowDown');
-  const seen = await frames;
+  await expect(selectedHour(hours)).toHaveText('11');
+  await expect(field).toHaveValue('11:00 AM');
+  // The record ends on a drawn frame with the rows moved and the column fully
+  // visible again. A loaded page may draw only a few frames before it.
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const {seen} = (window as unknown as {stepFrames: {seen: RowFrame[]}})
+          .stepFrames;
+        const last = seen.at(-1);
+        return last != null && last.at !== seen[0].at && last.opacity === 1;
+      }),
+    )
+    .toBe(true);
+  const seen = await page.evaluate(() => {
+    const recorder = (
+      window as unknown as {stepFrames: {seen: RowFrame[]; isDone: boolean}}
+    ).stepFrames;
+    recorder.isDone = true;
+    return recorder.seen;
+  });
 
   // The rows never move while they are fully visible: they land under the
   // dip (design:reduced-motion DR2), then fade back in on 11.
@@ -203,9 +225,6 @@ test('under reduced motion an arrow key step lands under its cross-fade, never a
   const moved = seen.find(frame => frame.at !== start);
   expect(moved, JSON.stringify(seen)).toBeDefined();
   expect(moved?.opacity, JSON.stringify(seen)).toBeLessThan(1);
-  expect(seen.at(-1)?.opacity).toBe(1);
-  await expect(selectedHour(hours)).toHaveText('11');
-  await expect(field).toHaveValue('11:00 AM');
 });
 
 test('a meridiem change past the maximum turns the hour wheel onto it, frame by frame (component:DateInput FR14)', async ({

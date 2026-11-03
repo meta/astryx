@@ -4,7 +4,7 @@
  * @file reducedMotion.ts
  * @input The Reduced Motion preference, the primary pointer, the motion tables
  * @output reducedMotionFade (the fade the animator would play, for motion it
- *   does not drive) and the two media queries a StyleX transition spells
+ *   does not drive), playReducedMotionDip, and the queries a transition spells
  * @position The one Reduced Motion policy (design:reduced-motion) for code
  *   beside the animator: a raw Web Animations fade, a CSS transition
  *
@@ -100,5 +100,66 @@ export function reducedMotionFade(
   return {
     duration: reducedMotionCrossFade.durationMs,
     easing: `cubic-bezier(${curve.join(', ')})`,
+  };
+}
+
+/** A running Reduced Motion dip. */
+export interface ReducedMotionDip {
+  /** Stops the dip. A change that has not landed yet never lands. */
+  cancel(): void;
+}
+
+/**
+ * Plays `fade` on `element` as a dip, and runs `land` at its middle: the
+ * fade-out, the change, then the fade-in. The fade-out holds at 0 until `land`
+ * has run, and the fade-in starts only after it. So the change never shows at
+ * full opacity, however late the main thread runs. A timer at the middle can
+ * fire after the fade-in has begun.
+ *
+ * `from` is the opacity the fade-out starts at: a leaving element fades out
+ * from where it is.
+ *
+ * @example
+ * ```
+ * const dip = playReducedMotionDip(scroller, fade, () => scroller.scrollTo({top}));
+ * // A newer change replaces it:
+ * dip.cancel();
+ * ```
+ */
+export function playReducedMotionDip(
+  element: Element,
+  fade: ReducedMotionFade,
+  land: () => void,
+  from = 1,
+): ReducedMotionDip {
+  const half = fade.duration / 2;
+  let isCancelled = false;
+  let fadeIn: Animation | null = null;
+  const fadeOut = element.animate(
+    [{opacity: from, easing: fade.easing}, {opacity: 0}],
+    {duration: half, fill: 'forwards'},
+  );
+  fadeOut.finished.then(
+    () => {
+      if (isCancelled) {
+        return;
+      }
+      land();
+      fadeIn = element.animate(
+        [{opacity: 0, easing: fade.easing}, {opacity: 1}],
+        {duration: half},
+      );
+      // The fade-in now holds the opacity, so the held 0 can go.
+      fadeOut.cancel();
+    },
+    // A cancelled fade-out rejects `finished`: nothing lands.
+    () => {},
+  );
+  return {
+    cancel() {
+      isCancelled = true;
+      fadeOut.cancel();
+      fadeIn?.cancel();
+    },
   };
 }
