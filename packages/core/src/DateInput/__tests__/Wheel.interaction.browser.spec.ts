@@ -103,7 +103,7 @@ async function openWheel(page: Page): Promise<OpenWheel> {
   // The column fades its rows toward its edges with a mask, which washes out
   // the colour a proof tracks. So the proofs read it unmasked. The mask is
   // static, and the motion is the same either way.
-  await minutes.evaluate(element => {
+  await minutes.locator('[data-wheel-fade]').evaluate(element => {
     element.style.setProperty('mask-image', 'none');
     element.style.setProperty('-webkit-mask-image', 'none');
   });

@@ -1200,6 +1200,14 @@ describe('PickerWheel — mechanics for its owners', () => {
 describe('PickerWheel — markup', () => {
   // Written before the listbox wiring moved into useWheelListbox: the
   // snapshot holds the touch column to its markup.
+  it('fades its rows on a layer inside the column, so the focus ring the column draws stays whole', () => {
+    const {column} = renderWheel();
+    const fade = column.querySelector('[data-wheel-fade]');
+    expect(fade).not.toBeNull();
+    expect(fade?.parentElement).toBe(column);
+    expect(fade?.querySelector('[data-wheel-strip]')).not.toBeNull();
+  });
+
   it('keeps the touch column’s markup', () => {
     const {column} = renderWheel();
     // React's generated ids depend on how many renders ran before.

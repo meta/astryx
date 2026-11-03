@@ -275,6 +275,31 @@ test('under reduced motion an arrow key step lands under its cross-fade, never a
   expect(moved?.opacity, JSON.stringify(seen)).toBeLessThan(1);
 });
 
+test('a focused wheel under a finger shows its whole focus ring, and its rows still fade', async ({
+  page,
+}) => {
+  const {hours} = await openHourWheel(page);
+  // A key makes the focus visible, as a keyboard user's would.
+  await hours.focus();
+  await page.keyboard.press('ArrowDown');
+  const column = await hours.evaluate(element => {
+    const style = getComputedStyle(element);
+    return {
+      focusVisible: element.matches(':focus-visible'),
+      outlineStyle: style.outlineStyle,
+      mask: style.maskImage,
+    };
+  });
+  expect(column.focusVisible).toBe(true);
+  expect(column.outlineStyle).not.toBe('none');
+  // A mask on the column would clip the ring it draws outside its box.
+  expect(column.mask).toBe('none');
+  const fade = await hours
+    .locator('[data-wheel-fade]')
+    .evaluate(element => getComputedStyle(element).maskImage);
+  expect(fade).toContain('linear-gradient');
+});
+
 test('a meridiem change past the maximum turns the hour wheel onto it, frame by frame (component:DateInput FR14)', async ({
   page,
 }) => {

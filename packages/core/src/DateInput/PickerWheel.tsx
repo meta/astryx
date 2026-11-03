@@ -65,7 +65,7 @@ const UIKIT_SCALE = ROW_HEIGHT / picker.geometry.rowHeight;
 const RUBBER_BAND_DIMENSION = picker.geometry.rubberBandDimension * UIKIT_SCALE;
 
 const styles = stylex.create({
-  // Today's column (Wheel.tsx): the same box, band and rows, moved by the
+  // The scrolling column's box, band and rows (Wheel.tsx), moved by the
   // gesture system and the compositor instead of a native scroller.
   column: {
     position: 'relative',
@@ -74,16 +74,22 @@ const styles = stylex.create({
     blockSize: dateInputTouchGeometry.paneBlockSize,
     overflow: 'hidden',
     outline: 'none',
-    // The rows fade toward the column's edges, from the scrolling column's 0.3
-    // to fully opaque at the band and back. The scrolling column fades them the
-    // same way under reduced motion. A static mask: nothing paints it again as
-    // the strip moves.
-    maskImage:
-      'linear-gradient(to bottom, rgb(0 0 0 / 0.3), rgb(0 0 0) 50%, rgb(0 0 0 / 0.3))',
     WebkitTapHighlightColor: 'transparent',
   },
+  // The rows fade toward the column's edges, from the scrolling column's 0.3
+  // to fully opaque at the band and back. The scrolling column fades them the
+  // same way under reduced motion. A static mask: nothing paints it again as
+  // the strip moves. It sits inside the column, so it never clips the
+  // column's focus ring.
+  fade: {
+    position: 'absolute',
+    inset: 0,
+    pointerEvents: 'none',
+    maskImage:
+      'linear-gradient(to bottom, rgb(0 0 0 / 0.3), rgb(0 0 0) 50%, rgb(0 0 0 / 0.3))',
+  },
   /**
-   * Today's selection band: a centred row-height plate behind the rows.
+   * The selection band: a centred row-height plate behind the rows.
    * Decorative: the committed value is announced by `aria-selected`.
    */
   band: {
@@ -696,26 +702,28 @@ export function PickerWheel({
       {...listboxProps}
       data-wheel=""
       {...stylex.props(styles.column, focusOutlineStyles.focusVisible)}>
-      <div aria-hidden="true" {...stylex.props(styles.band)} />
-      <div
-        ref={attachStrip}
-        data-wheel-strip=""
-        {...stylex.props(styles.strip)}>
-        {options.map((option, index) => (
-          <div
-            key={option.value}
-            {...optionProps(option, index)}
-            data-wheel-row=""
-            data-label={option.label}
-            {...stylex.props(
-              styles.row,
-              styles.rowAt(`${index * ROW_HEIGHT}px`),
-              index === selectedIndex && styles.rowActive,
-              option.isDisabled && styles.rowDisabled,
-            )}>
-            {option.label}
-          </div>
-        ))}
+      <div data-wheel-fade="" {...stylex.props(styles.fade)}>
+        <div aria-hidden="true" {...stylex.props(styles.band)} />
+        <div
+          ref={attachStrip}
+          data-wheel-strip=""
+          {...stylex.props(styles.strip)}>
+          {options.map((option, index) => (
+            <div
+              key={option.value}
+              {...optionProps(option, index)}
+              data-wheel-row=""
+              data-label={option.label}
+              {...stylex.props(
+                styles.row,
+                styles.rowAt(`${index * ROW_HEIGHT}px`),
+                index === selectedIndex && styles.rowActive,
+                option.isDisabled && styles.rowDisabled,
+              )}>
+              {option.label}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

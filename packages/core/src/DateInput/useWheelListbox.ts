@@ -41,7 +41,7 @@ export interface WheelListboxProps {
 /**
  * The listbox and option props of one wheel column: ids, ARIA, the keys and
  * a click on a row. `aria-activedescendant` marks the active row, and a click
- * reaches every row. Today's column steps from the row under its band. The
+ * reaches every row. The scrolling column steps from the row under its band. The
  * touch column steps from the row it is heading to.
  *
  * @example
