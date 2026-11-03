@@ -19,7 +19,12 @@
 
 import React, {useMemo, useCallback, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {colorVars, spacingVars, radiusVars} from '../theme/tokens.stylex';
+import {
+  colorVars,
+  spacingVars,
+  radiusVars,
+  shadowVars,
+} from '../theme/tokens.stylex';
 import {SegmentedControlContext} from './SegmentedControlContext';
 import {useInternalListFocus} from '../hooks/useListFocus';
 import {isSegmentDisabledOnItsOwn} from '../privateAttributes/segmentDisabled.stylex';
@@ -145,6 +150,11 @@ const styles = stylex.create({
   // a moving lens could paint over their titles. WebKit's overlap test can
   // miss what a moving layer covers.
   lens: {
+    // The lifted lens's edge: the theme's low elevation, as on Switch's
+    // lifted thumb. The lens copies the selected surface, which can be the
+    // page's own colour, so without an edge a lifted lens would hide the
+    // track around it.
+    '--_segmented-lifted-shadow': shadowVars['--shadow-low'],
     '::before': {
       content: '""',
       position: 'absolute',

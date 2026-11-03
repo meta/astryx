@@ -205,6 +205,11 @@ export function useSegmentedTouchTracking(
   const attachRef = isEnabled ? trackRef : DETACHED;
   usePressTracker(attachRef, {
     isEnabled: () => isEnabled,
+    onHighlightChange: isHighlighted => {
+      if (isHighlighted) {
+        motion.highlighted();
+      }
+    },
     onControlEvent: (event, touch) => {
       const track = trackRef.current;
       if (track == null) {
