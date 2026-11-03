@@ -48,7 +48,9 @@ import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
 import {LONG_PRESS_DURATION_MS} from '../motion/uikit/longPress';
 import {
   clearMenuPressLit,
+  holdMenuPressPaint,
   markMenuPressLit,
+  releaseMenuPressPaint,
 } from '../privateAttributes/menuPressLit.stylex';
 import {
   __resetClickGuardForTest,
@@ -435,11 +437,16 @@ export function useDropdownMenuPress(
   }, [autoscroll]);
 
   const litRowRef = useRef<HTMLElement | null>(null);
+  const heldMenuRef = useRef<HTMLElement | null>(null);
   const endGesture = useCallback(() => {
     longPressApiRef.current?.cancel();
     if (litRowRef.current != null) {
       clearMenuPressLit(litRowRef.current);
       litRowRef.current = null;
+    }
+    if (heldMenuRef.current != null) {
+      releaseMenuPressPaint(heldMenuRef.current);
+      heldMenuRef.current = null;
     }
     touchMovePreventerRef.current?.();
     touchMovePreventerRef.current = null;
@@ -456,10 +463,9 @@ export function useDropdownMenuPress(
       // A held finger or pen marks the row it lights, for the row's pressed
       // paint. A held mouse keeps the hover tint, as on a desktop.
       const gesture = gestureRef.current;
-      const lit =
-        gesture.phase !== 'idle' && gesture.pointerType !== 'mouse'
-          ? row
-          : null;
+      const isHeld =
+        gesture.phase !== 'idle' && gesture.pointerType !== 'mouse';
+      const lit = isHeld ? row : null;
       if (litRowRef.current !== lit) {
         if (litRowRef.current != null) {
           clearMenuPressLit(litRowRef.current);
@@ -470,6 +476,18 @@ export function useDropdownMenuPress(
         }
       }
       const {onHighlight, menuRef} = optionsRef.current;
+      // The row the press began on stays :active where a pointer hovers, so
+      // the menu holds every row but the lit one off that paint.
+      const held = isHeld ? menuRef.current : null;
+      if (heldMenuRef.current !== held) {
+        if (heldMenuRef.current != null) {
+          releaseMenuPressPaint(heldMenuRef.current);
+        }
+        heldMenuRef.current = held;
+        if (held != null) {
+          holdMenuPressPaint(held);
+        }
+      }
       if (onHighlight != null) {
         onHighlight(row);
         return;

@@ -24,7 +24,10 @@ import {
   useMenuPress,
 } from './useMenuPress';
 import {MENU_PRESS_HANDOFF_PX, MENU_PRESS_SETTLE_MS} from './menuPressGesture';
-import {isMenuPressLit} from '../privateAttributes/menuPressLit.stylex';
+import {
+  isMenuPressLit,
+  isMenuPressPaintHeld,
+} from '../privateAttributes/menuPressLit.stylex';
 
 const ITEM_SELECTOR = '[role="menuitem"]:not([aria-disabled="true"])';
 
@@ -273,6 +276,34 @@ describe('useMenuPress — the row a held press lights (spec:AST-094 FR27, FR43)
     },
   );
 
+  it.each([
+    ['finger', touch()],
+    ['pen', {pointerType: 'pen', pointerId: 1}],
+  ])(
+    'holds the rows off their own pressed paint while a held %s presses, and gives it back once the press ends',
+    (_name, pointer) => {
+      render(<Harness />);
+      const menu = screen.getByRole('menu');
+      expect(isMenuPressPaintHeld(menu)).toBe(false);
+      fireEvent.pointerDown(row('A'), pointer);
+      expect(isMenuPressPaintHeld(menu)).toBe(true);
+      fireEvent.pointerMove(screen.getByTestId('divider'), pointer);
+      expect(isMenuPressPaintHeld(menu)).toBe(true);
+      fireEvent.pointerUp(screen.getByTestId('outside'), pointer);
+      expect(isMenuPressPaintHeld(menu)).toBe(false);
+    },
+  );
+
+  it('leaves the rows their own pressed paint under a held mouse', () => {
+    render(<Harness />);
+    const menu = screen.getByRole('menu');
+    fireEvent.pointerDown(row('A'), mouse());
+    fireEvent.pointerMove(row('B'), mouse());
+    expect(isMenuPressPaintHeld(menu)).toBe(false);
+    fireEvent.pointerUp(screen.getByTestId('outside'), mouse());
+    expect(isMenuPressPaintHeld(menu)).toBe(false);
+  });
+
   it('lights the row under a held mouse with focus alone, so it keeps the hover tint', () => {
     render(<Harness />);
     fireEvent.pointerDown(row('A'), mouse());
@@ -318,6 +349,12 @@ describe('useMenuPress — the row a held press lights (spec:AST-094 FR27, FR43)
       expect(source).toContain('menuPressLitRowStyle,');
       expect(source).toContain('var(--_menu-row-focus-paint, ');
     }
+    // The one family with an :active background reads its variable there.
+    const item = readFileSync(
+      resolve(__dirname, '../DropdownMenu/DropdownMenuItem.tsx'),
+      'utf8',
+    );
+    expect(item).toContain('var(--_menu-row-active-paint, ');
   });
 });
 

@@ -11,7 +11,8 @@
  *   leaves the menu. Under a finger or a pen, the lit row is painted
  *   stronger than a row the keyboard focuses. Under a mouse, it keeps that
  *   hover tint. Under a desktop mouse, a press that begins on one row and
- *   drags onto another leaves the row under it told apart from the first
+ *   drags onto another leaves the row under it told apart from the first.
+ *   Under a desktop pen, only the row under it keeps the pressed overlay
  * @position Evidence for the lit row's paint in DropdownMenu's rows; the
  *   press model's mark on that row is unit-tested in useMenuPress.test.tsx
  */
@@ -322,5 +323,86 @@ test.describe('under a desktop mouse', () => {
     // The row the release acts on must not share the paint of the row the
     // press began on.
     expect(paints.Duplicate).not.toBeCloseTo(paints.Edit, 3);
+  });
+});
+
+test.describe('under a desktop pen', () => {
+  // A desktop pointer hovers, so a row a press began on would keep its own
+  // `:active` paint while a pen drags on.
+  test.use({
+    isMobile: false,
+    hasTouch: false,
+    viewport: {width: 1280, height: 720},
+    deviceScaleFactor: 1,
+  });
+
+  test('a press that begins on a row and drags onto another leaves only the row under it at the pressed overlay', async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), 'core-dropdownmenu--default');
+    const pen = await webInputDriver(page);
+    test.skip(!pen.pens, PEN_SKIP);
+    const trigger = page.getByRole('button', {name: 'Actions'});
+    await trigger.click();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await waitForRest(page.locator('[popover]:has([role="menu"])').first());
+    const centerOf = async (name: string) => {
+      const box = await boxOf(page.getByRole('menuitem', {name}));
+      return {x: box.x + box.width / 2, y: box.y + box.height / 2};
+    };
+    const edit = await centerOf('Edit');
+    const duplicate = await centerOf('Duplicate');
+    // Each frame's paints until the lift, which ends every row's `:active`.
+    await page.evaluate(() => {
+      const state = {isDown: true, frames: [] as [number, number][]};
+      (window as unknown as {__pen: typeof state}).__pen = state;
+      window.addEventListener(
+        'pointerup',
+        () => {
+          state.isDown = false;
+        },
+        {capture: true, once: true},
+      );
+      const alpha = (name: string) => {
+        const row = [
+          ...document.querySelectorAll<HTMLElement>('[role="menuitem"]'),
+        ].find(each => each.textContent?.trim() === name);
+        const parts =
+          (row ? getComputedStyle(row).backgroundColor : '')
+            .match(/[\d.]+/g)
+            ?.map(Number) ?? [];
+        return parts.length >= 4 ? parts[3] : parts.length === 3 ? 1 : 0;
+      };
+      const tick = () => {
+        if (!state.isDown) {
+          return;
+        }
+        state.frames.push([alpha('Edit'), alpha('Duplicate')]);
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    const points = [
+      {x: edit.x, y: edit.y, t: 0},
+      {x: edit.x, y: edit.y, t: 300},
+    ];
+    for (let step = 1; step <= 12; step++) {
+      points.push({
+        x: edit.x + ((duplicate.x - edit.x) * step) / 12,
+        y: edit.y + ((duplicate.y - edit.y) * step) / 12,
+        t: 300 + step * 33,
+      });
+    }
+    points.push({x: duplicate.x, y: duplicate.y, t: 300 + 12 * 33 + 500});
+    await pen.pen(points);
+    const frames = await page.evaluate(
+      () =>
+        (window as unknown as {__pen: {frames: [number, number][]}}).__pen
+          .frames,
+    );
+    // The last frame before the lift: the pen rests on Duplicate.
+    const [editAlpha, duplicateAlpha] = frames.at(-1) ?? [Number.NaN, 0];
+    expect(duplicateAlpha).toBeGreaterThan(0);
+    expect(editAlpha).toBe(0);
   });
 });

@@ -15,7 +15,10 @@
 
 import {MENU_PRESS_HANDOFF_PX as UIKIT_MENU_PRESS_HANDOFF_PX} from './menuPressValues';
 
-/** How long a mouse's opening press must last before its release may act. */
+/**
+ * How long the opening press must last before its release may act, unless a
+ * finger's handoff applies.
+ */
 export const MENU_PRESS_SETTLE_MS = 300;
 
 /**

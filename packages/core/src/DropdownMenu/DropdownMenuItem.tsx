@@ -72,11 +72,11 @@ const menuItemStyles = stylex.create({
       ':focus': `var(--_menu-row-focus-paint, ${colorVars['--color-overlay-hover']})`,
       // The pressed look only where hover exists. Under a finger the row a
       // press BEGAN on would otherwise stay painted while the highlight (focus)
-      // moves to the row under the finger — two rows lit.
+      // moves to the row under the finger — two rows lit. A held finger or pen
+      // sets the variable on the menu. Then only the lit row keeps the look.
       '@media (hover: hover)': {
         default: null,
-        ':active:where(:not(:disabled,[aria-disabled="true"]))':
-          colorVars['--color-overlay-pressed'],
+        ':active:where(:not(:disabled,[aria-disabled="true"]))': `var(--_menu-row-active-paint, ${colorVars['--color-overlay-pressed']})`,
       },
     },
     borderWidth: 0,
