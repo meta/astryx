@@ -142,6 +142,43 @@ defineTheme({
   docs, the theme template, the theme-authoring guide, and
   `architecture:theme-authoring-contract` describe the three knobs, the fixed
   list, and the precedence before the implementation lands.
+- **FR8 (proposed) — The fluid character presets the spring tables.**
+  `character` also takes `'fluid'`, beside `'crisp'`, `'standard'`, and
+  `'expressive'` (FR1). At `'fluid'`, every timed motion takes the shape of a
+  measured spring (`spec:AST-094` FR4): a motion the animator plays runs the
+  spring itself, and a CSS motion takes a curve fitted to it. Each motion
+  role plays this table:
+
+  | Motion                                                                                                                                                             | At `'standard'`                                          | At `'fluid'`                                                                                                                                      |
+  | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | CSS entrance (`--ease-entrance`)                                                                                                                                   | `--ease-standard`                                        | `cubic-bezier(0.31, 0.35, 0.12, 1.12)`, the curve of `springs.menuOpen` (response 0.32 s, damping ratio 0.8), over the component's duration token |
+  | CSS move (`--ease-move`)                                                                                                                                           | `--ease-standard`                                        | `cubic-bezier(0.23, 0.17, 0.2, 0.99)`, the curve of `springs.settle` (duration 0.5 s, bounce 0), over the component's duration token              |
+  | CSS exit (`--ease-exit`)                                                                                                                                           | `cubic-bezier(0.3, 0, 0.6, 0.6)`                         | Unchanged (FR2)                                                                                                                                   |
+  | CSS fade and state change (`--ease-standard`)                                                                                                                      | `cubic-bezier(0.24, 1, 0.4, 1)`                          | Unchanged (FR2)                                                                                                                                   |
+  | Duration tokens (`--duration-*`)                                                                                                                                   | Base value times `tempo`                                 | Unchanged: base value times `tempo`                                                                                                               |
+  | Animated-layout glide, in-place swap, and edge reveal (`spec:AST-105` FR4, FR8, FR9)                                                                               | `--ease-move` over `--duration-medium-min`               | `springs.settle` at `tempo`; a CSS part paired with it lasts the spring's computed settle time (FR4a)                                             |
+  | Touch entrances: `springs.menuOpen`, `springs.subMenuOpen`, `springs.contextMenuLift`, `springs.contextMenuMorph`, `springs.emphasis`                              | Measured spring                                          | Measured spring, unchanged                                                                                                                        |
+  | Touch moves and state changes: `springs.settle`, `springs.quickChange`, `springs.viewChange`, `springs.timedChange`, `springs.stateChange`, `springs.directChange` | Measured spring                                          | Measured spring, unchanged                                                                                                                        |
+  | Touch exits: `springs.menuClose`, `springs.subMenuBack`, `springs.contextMenuDismiss`                                                                              | Measured spring                                          | Measured spring, unchanged                                                                                                                        |
+  | Touch curves and durations (`timing.*`) and component roles (Slider, Switch, ProgressBar)                                                                          | Measured value                                           | Measured value, unchanged                                                                                                                         |
+  | Press feedback                                                                                                                                                     | Press clocks fixed (FR4); the release fade times `tempo` | Unchanged                                                                                                                                         |
+  | The fixed list (FR4)                                                                                                                                               | Fixed                                                    | Fixed                                                                                                                                             |
+  - A fluid curve is its spring's travel from rest, timed over the spring's
+    99 % settle time (the time after which it stays within 1 % of its
+    travel: 347 ms for `springs.menuOpen`, 528 ms for `springs.settle`), as
+    a cubic Bézier within 2 % of the travel at every point. Its damping ratio
+    gives the shape; the component's duration token gives the length.
+  - `character` adds no bounce at `'fluid'`, as at `'standard'`: every
+    animator role plays its measured spring exactly (FR3), so the touch
+    roles of `spec:AST-094` FR4 are the same at `'fluid'` and `'standard'`.
+  - `tempo` scales every spring's duration and every duration token by the
+    same factor and leaves each damping ratio and curve unchanged.
+  - Reduce Motion is the same at every character: no spring plays
+    (`design:reduced-motion` DR1); a coarse primary pointer gets a cross-fade
+    of 200 ms or less (DR2), and any other pointer an immediate change (DR3).
+    Without Reduce Motion, timed motion under a mouse plays the theme's
+    timing, so a fluid glide under a mouse plays `springs.settle`, and motion
+    that follows a pointer follows every pointer (`spec:AST-094` FR43).
 
 ## Current-state impact
 
@@ -171,18 +208,26 @@ defineTheme({
   providers), `architecture:theme-authoring-contract` (the internal motion resolver),
   `component:Button` FR15 (its release fade follows `tempo`), the draft `design:motion` DR3, and `spec:AST-090` are amended to
   match.
+- `character: 'fluid'` is proposed (FR8). `defineTheme` does not accept it
+  yet; it needs `spec:AST-105` FR4 to time the glide from the theme's
+  `character`, the animator to read the theme's knobs at each motion's start
+  (FR3), and the character's curve table to set `--ease-entrance` and
+  `--ease-move` to different values. Until then, the glide plays
+  `springs.settle` at every character, no spring reads the knobs, and no Core
+  component reads `--ease-entrance` or `--ease-move`.
 
 ## Verification
 
-| Contract | Verification                                                                         | Representative states                                                                                                                                                                                                         | Mutation or failure expectation                                                                                                                                                                                                                                                        |
-| -------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1, FR2 | Theme unit tests over generated CSS                                                  | each `tempo` bound and 1; each `character`; `reducedMotion` both values; no `motion`                                                                                                                                          | a token off its formula, the released tokens changed at the defaults, an exit curve that changes, or a value outside a clamp fails                                                                                                                                                     |
-| FR3      | Tests that the CSS tokens and the animator's tables derive from the same knob values | each role at the defaults and at each knob value; an adaptation rule that sets `tempo` or `character`                                                                                                                         | a role off its measured value at the defaults, a role that ignores a knob it follows, or a weight-0 role whose bounce changes with `character` fails                                                                                                                                   |
-| FR4a     | Browser tests of each paired animation at each knob value                            | an element and gliding siblings, an element's entrance and exit, a sheet and its scrim, a menu's grow and content, a CSS fade with a spring                                                                                   | paired animations that end more than one frame apart fail                                                                                                                                                                                                                              |
-| FR4      | Unit tests of each fixed item                                                        | finger tracking, momentum, rubber band, keyboard, press and hover clocks, loops, Reduce Motion cap; Spinner and Skeleton loops at each tempo                                                                                  | a fixed item that moves with `tempo` or `character`, or a cross-fade longer than 200 ms, fails                                                                                                                                                                                         |
-| FR5      | Theme tests with the released configurations                                         | a `MotionScaleConfig` theme, explicit tokens, an extending theme; an adaptation rule that sets `tempo` or `character`                                                                                                         | changed output for an existing theme, or a knob that beats an explicit field, fails                                                                                                                                                                                                    |
-| FR6      | Server-render tests and import checks                                                | a server render with each `reducedMotion`; importing the theme and motion modules; `'always'` with the person's setting off, across components that key on `prefers-reduced-motion`; a nested theme under an `'always'` theme | a DOM access at import or on the server, theme CSS emitted for `'system'`, a hydration change, or a component style, script reader, or `when: {motion}` rule that ignores the root mark under `'always'`, or a nested theme that restores motion under an ancestor's `'always'`, fails |
-| FR7      | Docs review                                                                          | each listed doc                                                                                                                                                                                                               | a doc without the knobs, the fixed list, or the precedence fails                                                                                                                                                                                                                       |
+| Contract       | Verification                                                                         | Representative states                                                                                                                                                                                                         | Mutation or failure expectation                                                                                                                                                                                                                                                        |
+| -------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1, FR2       | Theme unit tests over generated CSS                                                  | each `tempo` bound and 1; each `character`; `reducedMotion` both values; no `motion`                                                                                                                                          | a token off its formula, the released tokens changed at the defaults, an exit curve that changes, or a value outside a clamp fails                                                                                                                                                     |
+| FR3            | Tests that the CSS tokens and the animator's tables derive from the same knob values | each role at the defaults and at each knob value; an adaptation rule that sets `tempo` or `character`                                                                                                                         | a role off its measured value at the defaults, a role that ignores a knob it follows, or a weight-0 role whose bounce changes with `character` fails                                                                                                                                   |
+| FR4a           | Browser tests of each paired animation at each knob value                            | an element and gliding siblings, an element's entrance and exit, a sheet and its scrim, a menu's grow and content, a CSS fade with a spring                                                                                   | paired animations that end more than one frame apart fail                                                                                                                                                                                                                              |
+| FR4            | Unit tests of each fixed item                                                        | finger tracking, momentum, rubber band, keyboard, press and hover clocks, loops, Reduce Motion cap; Spinner and Skeleton loops at each tempo                                                                                  | a fixed item that moves with `tempo` or `character`, or a cross-fade longer than 200 ms, fails                                                                                                                                                                                         |
+| FR5            | Theme tests with the released configurations                                         | a `MotionScaleConfig` theme, explicit tokens, an extending theme; an adaptation rule that sets `tempo` or `character`                                                                                                         | changed output for an existing theme, or a knob that beats an explicit field, fails                                                                                                                                                                                                    |
+| FR6            | Server-render tests and import checks                                                | a server render with each `reducedMotion`; importing the theme and motion modules; `'always'` with the person's setting off, across components that key on `prefers-reduced-motion`; a nested theme under an `'always'` theme | a DOM access at import or on the server, theme CSS emitted for `'system'`, a hydration change, or a component style, script reader, or `when: {motion}` rule that ignores the root mark under `'always'`, or a nested theme that restores motion under an ancestor's `'always'`, fails |
+| FR7            | Docs review                                                                          | each listed doc                                                                                                                                                                                                               | a doc without the knobs, the fixed list, or the precedence fails                                                                                                                                                                                                                       |
+| FR8 (proposed) | Theme unit tests over generated CSS, resolver tests, and browser frame capture       | `'fluid'` at each `tempo` bound and 1; each table row; a glide under a mouse and a finger; Reduce Motion under a coarse and a fine pointer                                                                                    | a fluid curve more than 2 % of the travel off its spring, a CSS exit, fade, or duration token that differs from `'standard'`, a touch role off its measured value, a glide that plays a curve, or a spring under Reduce Motion fails                                                   |
 
 ## Decision log
 
@@ -198,6 +243,25 @@ per-role values stay internal. This supersedes `spec:AST-094` DEC-11's "all
 internal" for exactly these three knobs.
 
 Rejected: a public token per motion group.
+
+### DEC-3 (proposed) — The fluid character presets the spring tables
+
+**Reference:** `spec:AST-108/DEC-3`
+**Decider:** proposed, `2026-11-02`; pending owner review
+**Basis:** owner direction, `2026-11-02`: a character presets the motion
+tables; a spring-table preset with a descriptive name is welcome; its name is
+`fluid`; the tokens and motion tables are designed around it.
+
+A theme that wants the measured springs sets one knob, and its CSS motion
+takes the springs' shape, so CSS and the animator feel the same under one
+theme. The fluid curves change only `--ease-entrance` and `--ease-move`, the
+tokens a character may set (FR2), so exits stay quiet and fades and state
+changes keep `--ease-standard`. The entrance takes the touch menu's spring,
+so a menu that opens under a mouse and one that opens under a finger share
+one shape. This amends DEC-1's three character steps.
+
+Rejected: duration tokens taken from the springs' settle times, which would
+lengthen every motion under a mouse.
 
 ## Open questions
 
