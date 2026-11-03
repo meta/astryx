@@ -281,11 +281,14 @@ These requirements apply to the text fields of `DateInput` and
 - **AR1 — Spoken dates match the visible calendar.** Day-button names, grid
   names, selection and navigation announcements, error messages, and the bounds
   in error messages use the calendar.
-- **AR2 — The field describes its format.** With a calendar other than
-  `gregory` or `iso8601`, an empty focused field without a caller `placeholder` shows an example date in the calendar's numeric pattern; a caller's `placeholder` always wins. The field's description names its calendar only
-  when that calendar differs from its provider's calendar, so a page in one
-  calendar does not repeat it and a page that mixes calendars says which field
-  uses which.
+- **AR2 — The field describes its format.** With a calendar other than `gregory`
+  or `iso8601`, an empty focused field without a caller `placeholder` shows an
+  example date in the calendar's numeric pattern: today when the field accepts
+  it, else the nearest date it accepts within `min`, `max`, and
+  `dateConstraints`. A caller's `placeholder` always wins. The field's
+  description names its calendar only when that calendar differs from its
+  provider's calendar, so a page in one calendar does not repeat it and a page
+  that mixes calendars says which field uses which.
 - **AR3 — Each rejection has its own message.** Unreadable text, a date the
   calendar does not have, and an out-of-range date each announce a different
   message.
