@@ -1552,13 +1552,26 @@ describe('BaseTypeahead hasEntriesOnFocus', () => {
 
   it('keeps a read that the replacement source starts earlier in the commit that replaces it', async () => {
     let settleBootstrap: (items: SearchableItem[]) => void = () => {};
-    const firstSource: SearchSource = {search: () => [], bootstrap: () => []};
+    // Both sources share one request controller, so cancelling the replaced
+    // source aborts whatever request is pending.
+    let abortPending: (() => void) | null = null;
+    const cancel = () => {
+      abortPending?.();
+      abortPending = null;
+    };
+    const firstSource: SearchSource = {
+      search: () => [],
+      bootstrap: () => [],
+      cancel,
+    };
     const replacementSource: SearchSource = {
       search: () => [],
       bootstrap: async () =>
-        new Promise<SearchableItem[]>(resolve => {
+        new Promise<SearchableItem[]>((resolve, reject) => {
           settleBootstrap = resolve;
+          abortPending = () => reject(new Error('aborted'));
         }),
+      cancel,
     };
 
     // A component committed before the field focuses it when the scope

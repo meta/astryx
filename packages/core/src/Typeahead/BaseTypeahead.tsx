@@ -804,29 +804,28 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // replacement and then discard it, for example when a transition suspends
   // and a newer update replaces it. The source that stays then keeps its read.
   // An insertion effect runs before every layout effect and ref callback of
-  // its commit, so a read that one of them starts against the replacement
-  // gets a later generation and stays current.
+  // its commit. A read that one of them starts against the replacement gets a
+  // later generation, after the replaced source stopped its requests.
   const prevSearchSourceRef = useRef(searchSource);
-  const replacedSourceRef = useRef<SearchSource<T> | null>(null);
+  const isSourceReplacedRef = useRef(false);
   useInsertionEffect(() => {
     if (prevSearchSourceRef.current === searchSource) {
       return;
     }
-    replacedSourceRef.current = prevSearchSourceRef.current;
+    prevSearchSourceRef.current.cancel?.();
     prevSearchSourceRef.current = searchSource;
     sourceGenRef.current = ++searchGenRef.current;
     // The replacing render cleared the busy state.
     loadingRef.current = false;
+    isSourceReplacedRef.current = true;
   }, [searchSource]);
-  // Syncs the replaced source's requests and the wrapper's busy lane. A read
-  // of the replacement that already started keeps the lane busy.
+  // Syncs the wrapper's busy lane. A read of the replacement that already
+  // started keeps the lane busy.
   useIsomorphicLayoutEffect(() => {
-    const replacedSource = replacedSourceRef.current;
-    if (replacedSource == null) {
+    if (!isSourceReplacedRef.current) {
       return;
     }
-    replacedSourceRef.current = null;
-    replacedSource.cancel?.();
+    isSourceReplacedRef.current = false;
     if (!loadingRef.current) {
       onLoadingChangeRef.current?.(false);
     }
