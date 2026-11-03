@@ -382,6 +382,9 @@ describe('parseDateInput', () => {
         '12/01/20',
         '12/01/202',
         '12/01/90',
+        '12,01',
+        '12,01,2026',
+        '12;01;2026',
       ]) {
         expect(parseDateInput(text, 'en-GB')).toBeNull();
       }
