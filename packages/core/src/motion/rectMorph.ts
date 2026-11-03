@@ -443,9 +443,12 @@ export function createRectMorph(
       // of the layer its presentation promoted, in this task. Kept, the
       // promotion would end its linger after the element's last motion: a
       // style write on an element that no longer paints, landing inside the
-      // dismissal's frames. The next present attaches the element again.
+      // dismissal's frames. The next present attaches the element again. A
+      // handed-in animator stays on the element: its owner still drives it.
       restoreElement();
-      animator.attach(null);
+      if (given == null) {
+        animator.attach(null);
+      }
     }
     const closing = onElement
       ? animator

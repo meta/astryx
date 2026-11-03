@@ -320,6 +320,34 @@ describe('createRectMorph', () => {
     expect(stage.get('x')).toBe(12);
   });
 
+  it('leaves a handed-in animator on the element through a dismissal onto a copy', async () => {
+    const element = document.createElement('div');
+    document.body.appendChild(element);
+    stubMedia(false, true);
+    const stage = createMotionAnimator(element, {
+      now: () => clock,
+      requestFrame,
+    });
+    const morph = createRectMorph(element, {
+      animator: stage,
+      now: () => clock,
+      requestFrame,
+    });
+    const path = lerpPath(SQUARE, BOX, {opacity: [0, 1]});
+    morph.present(path, {spring: SPRING});
+    await playFrame();
+    const copy = element.cloneNode(true) as HTMLElement;
+    element.after(copy);
+    morph.dismiss(path, {spring: SPRING}, {target: copy});
+    await playFrame();
+    clock += 2000;
+    await vi.advanceTimersByTimeAsync(2000);
+    // The owner's own write still reaches the element.
+    stage.set({x: 12});
+    expect(element.style.getPropertyValue('translate')).toContain('12px');
+    morph.dispose();
+  });
+
   it('holds the element at its first values until two frames present it, when asked for the presented start', async () => {
     const {element, morph} = setup();
     const path = lerpPath(SQUARE, BOX, {opacity: [0, 1]});
