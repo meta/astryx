@@ -1348,3 +1348,75 @@ describe('CheckboxListItem ARIA props', () => {
     });
   });
 });
+
+describe('CheckboxList error status', () => {
+  it('makes every checkbox aria-invalid', () => {
+    render(
+      <CheckboxList
+        label="Toppings"
+        status={{type: 'error', message: 'Choose at least one topping'}}>
+        <CheckboxListItem value="cheese" label="Cheese" />
+        <CheckboxListItem value="olives" label="Olives" />
+      </CheckboxList>,
+    );
+    for (const checkbox of screen.getAllByRole('checkbox')) {
+      expect(checkbox).toHaveAttribute('aria-invalid', 'true');
+    }
+    // The message still renders once, from the list.
+    expect(screen.getAllByText('Choose at least one topping')).toHaveLength(1);
+  });
+
+  it('leaves checkboxes valid for a warning or no status', () => {
+    const {rerender} = render(
+      <CheckboxList
+        label="Toppings"
+        status={{type: 'warning', message: 'Few left'}}>
+        <CheckboxListItem value="cheese" label="Cheese" />
+      </CheckboxList>,
+    );
+    expect(screen.getByRole('checkbox')).not.toHaveAttribute('aria-invalid');
+    rerender(
+      <CheckboxList label="Toppings">
+        <CheckboxListItem value="cheese" label="Cheese" />
+      </CheckboxList>,
+    );
+    expect(screen.getByRole('checkbox')).not.toHaveAttribute('aria-invalid');
+  });
+});
+
+describe('CheckboxList group disabled state', () => {
+  it('marks a disabled group aria-disabled', () => {
+    render(
+      <CheckboxList label="Toppings" isDisabled>
+        <CheckboxListItem value="cheese" label="Cheese" />
+      </CheckboxList>,
+    );
+    expect(screen.getByRole('group', {name: 'Toppings'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+
+  it('leaves an enabled group without aria-disabled', () => {
+    render(
+      <CheckboxList label="Toppings">
+        <CheckboxListItem value="cheese" label="Cheese" />
+      </CheckboxList>,
+    );
+    expect(screen.getByRole('group', {name: 'Toppings'})).not.toHaveAttribute(
+      'aria-disabled',
+    );
+  });
+
+  it("keeps a caller's own aria-disabled on an enabled group (FR15)", () => {
+    render(
+      <CheckboxList label="Toppings" aria-disabled="true">
+        <CheckboxListItem value="cheese" label="Cheese" />
+      </CheckboxList>,
+    );
+    expect(screen.getByRole('group', {name: 'Toppings'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+});

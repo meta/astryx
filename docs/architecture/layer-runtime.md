@@ -398,7 +398,8 @@ separate React root under `document.body` and mirrors root theme attributes onto
 it.
 
 ToastViewport uses `popover="manual"` for top-layer promotion. Each open modal
-Dialog and each open scrim BottomSheet supplies its `<dialog>` as an outlet
+Dialog, each open modal Drawer, and each open scrim BottomSheet supplies its
+`<dialog>` as an outlet
 through the private `Layer/modalOutlet.ts` registry (`spec:AST-003` FR18:
 every active native modal supplies one, a covered sheet included); a modal
 BottomSheetSwitcher flow supplies its active step's dialog, following each
@@ -413,7 +414,8 @@ sheet it reveals is the latest again and takes the host back; a sheet is
 raised only among sheet outlets, so a Dialog opened from a sheet and
 supplied later stays the latest until it closes. A BottomSheet releases its
 outlet when it starts closing: its dialog stays modal through the exit
-animation, but inert. A top-layer viewport renders into a host element
+animation, but inert. A closing BottomSheet with focus inside is not yet inert or hidden (`component:BottomSheet` FR9); it becomes inert and hidden when focus leaves it or its exit ends. A modal Drawer also releases its outlet when it starts closing, so toasts
+do not slide out with it. A top-layer viewport renders into a host element
 it owns, moves that host into the latest open outlet, returns it to the
 viewport's tree position when no outlet is open, and enters the top layer again
 after each move. Toasts therefore paint above the modal and stay operable inside
@@ -424,14 +426,14 @@ outlets, and a non-modal top-layer surface that blocks nothing and announces
 itself — a `hasScrim={false}` BottomSheet in the top layer with no backdrop
 (while a modal that does not contain it is open it stays beneath that modal,
 outside the top layer, and enters — announcing then — once that modal has
-gone). How such a surface is put in the top layer is the component's own
-today, inside the INV14 gap below; the rule here is only that it announces
-its entry through the same registry, and that the viewport then leaves and
-re-enters the top layer in place, keeping focus inside it, so toasts paint
-above it too. A non-modal top-layer surface that does not announce itself is
-outside the rule: a `hasScrim={false}` Drawer (`popover="manual"`,
-`showPopover()`) shown after the viewport covers toasts raised while it is
-open; the rule does not cover it. In a stack of scrim BottomSheets the latest
+gone), and a `hasScrim={false}` Drawer, which announces once its
+`showPopover()` has put it in the top layer. How such a surface is put in the
+top layer is the component's own today, inside the INV14 gap below; the rule
+here is only that it announces its entry through the same registry, and that
+the viewport then leaves and re-enters the top layer in place, keeping focus
+inside it, so toasts paint above it too. A non-modal surface shown with
+`show()` below the Popover API support floor is not in the top layer and
+announces nothing. In a stack of scrim BottomSheets the latest
 outlet is the top sheet, so toasts paint above the whole stack. Toast state
 lives inside the viewport. A viewport rendered with `isTopLayer={false}` stays
 in place.

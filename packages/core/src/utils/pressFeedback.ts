@@ -2,8 +2,8 @@
 
 /**
  * @file pressFeedback.ts
- * @input The press state machine (pressGesture.ts), the menu-press marker
- *   (hooks/menuPressMarker.ts) and the document's pointer, keyboard, scroll and
+ * @input The press state machine (pressGesture.ts), the menu-press and
+ *   press-group markers and the document's pointer, keyboard, scroll and
  *   visibility events
  * @output PRESSABLE_ATTRIBUTE, PRESSED_ATTRIBUTE, pressableProps and
  *   installPressFeedback
@@ -45,6 +45,8 @@ import {
 import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
 import {subscribeInput} from './inputStream';
 import {TOUCH_QUERY} from './touchPresentation';
+import {holdsPressThroughDrag} from '../privateAttributes/pressHoldsDrag.stylex';
+import {isTrackedByGroup} from '../privateAttributes/pressGroupItem.stylex';
 
 /**
  * The marker the controller finds with `closest()`. Every Astryx component
@@ -324,8 +326,9 @@ function stylesheetDroppedActive(): boolean {
 
 /**
  * The surface a mouse button's or the Space key's press paints, if any: the
- * innermost marked surface, outside a menu. A key's press paints only a
- * focused element that is itself the surface, as `:active` does.
+ * innermost marked surface, outside a menu and off a tracked action. A key's
+ * press paints only a focused element that is itself the surface, as
+ * `:active` does.
  */
 function buttonSurfaceAt(
   target: EventTarget | null,
@@ -333,6 +336,10 @@ function buttonSurfaceAt(
 ): HTMLElement | null {
   const element = surfaceAt(target);
   if (element == null || element.closest(MENU_PRESS_ROOT) != null) {
+    return null;
+  }
+  // A group's tracker follows pointers only, so a key's press stays here.
+  if (pointerId != null && isTrackedByGroup(element)) {
     return null;
   }
   if (pointerId == null && element !== target) {
@@ -413,7 +420,9 @@ function onPointerDown(event: PointerEvent): void {
   const braking = element != null && scrollerIsBraking(element);
   lastTouchAt = Date.now();
   lastTouchTarget = event.target instanceof Node ? event.target : null;
-  if (element == null || braking) {
+  // A group's tracker paints a tracked action, so two writers would erase each
+  // other's paint. The touch still counts for the brake above.
+  if (element == null || braking || isTrackedByGroup(element)) {
     return;
   }
   takeOver(button, element);
@@ -439,6 +448,10 @@ function onPointerMove(event: PointerEvent): void {
     live == null ||
     (live.pointerId != null && event.pointerId !== live.pointerId)
   ) {
+    return;
+  }
+  // The finger drags the surface's own control: its travel keeps the press.
+  if (holdsPressThroughDrag(live.element)) {
     return;
   }
   apply(
@@ -555,6 +568,11 @@ function activatesOnSpace(target: EventTarget | null): boolean {
   );
 }
 
+/** A tracked action takes no `:active` paint, so a key's press paints here. */
+function isTrackedAction(target: EventTarget | null): boolean {
+  return target instanceof Element && isTrackedByGroup(target);
+}
+
 /**
  * Space went down on a focused button that is itself a pressable surface.
  * Heard in the BUBBLE phase, after the page's own handlers, so a press the
@@ -568,7 +586,7 @@ function onKeyDown(event: KeyboardEvent): void {
     event.isComposing ||
     event.defaultPrevented ||
     !activatesOnSpace(event.target) ||
-    !stylesheetDroppedActive()
+    !(stylesheetDroppedActive() || isTrackedAction(event.target))
   ) {
     return;
   }

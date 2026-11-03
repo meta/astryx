@@ -19,6 +19,12 @@ neutral yellow "waiting" signal, not a red failure).
 - **Design review is advisory** — it labels the PR and requests design owners,
   but does not block the merge.
 - An entitled owner's **approval clears the gate automatically** (no manual step).
+- **On a fork pull request, also post the owner command.** GitHub can hold a
+  fork's review event until a maintainer approves the run (a first-time
+  contributor, for example), so the approval alone may not reach the gate. An
+  engineering owner who approves a fork pull request also posts
+  `/approve-spec <full-sha>`: the command re-evaluates both halves of
+  `review-required` from the current head, the code review included.
 - **Write-access authors can also clear it with the review app.** When the PR
   author has write or admin permission on the repository (internal
   contributors, including designers and partners who are not owners), the

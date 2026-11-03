@@ -354,6 +354,55 @@ describe('ChatComposerInput', () => {
     });
   });
 
+  describe('touch keyboard Return key', () => {
+    it('labels the Return key Send by default, since Enter sends', () => {
+      render(<ChatComposerInput onSubmit={() => {}} />);
+      expect(screen.getByRole('textbox')).toHaveAttribute(
+        'enterkeyhint',
+        'send',
+      );
+    });
+
+    it('takes enterKeyHint for a composer whose Enter inserts a line break', () => {
+      render(<ChatComposerInput onSubmit={() => {}} enterKeyHint="enter" />);
+      expect(screen.getByRole('textbox')).toHaveAttribute(
+        'enterkeyhint',
+        'enter',
+      );
+    });
+
+    it('labels the default input of ChatComposer Send', () => {
+      render(<ChatComposer onSubmit={() => {}} />);
+      expect(screen.getByRole('textbox')).toHaveAttribute(
+        'enterkeyhint',
+        'send',
+      );
+    });
+
+    it.each([
+      'enter',
+      'done',
+      'go',
+      'next',
+      'previous',
+      'search',
+      'send',
+    ] as const)(
+      'only labels the key: Enter still submits under %s',
+      enterKeyHint => {
+        const onSubmit = vi.fn();
+        render(
+          <ChatComposerInput onSubmit={onSubmit} enterKeyHint={enterKeyHint} />,
+        );
+        const textbox = screen.getByRole('textbox');
+        textbox.textContent = 'hello';
+        fireEvent.input(textbox);
+        fireEvent.keyDown(textbox, {key: 'Enter'});
+        expect(onSubmit).toHaveBeenCalledWith('hello');
+      },
+    );
+  });
+
   describe('Enter submit behavior', () => {
     it('does not submit on Enter while IME composition is in progress', () => {
       const onSubmit = vi.fn();
@@ -2032,6 +2081,7 @@ describe('ChatComposerInput', () => {
 
       const options = await getMenuOptions(textbox);
       fireEvent.mouseEnter(options[1]);
+      fireEvent.pointerMove(options[1], {screenX: 107, screenY: 107});
 
       expect(options[1]).toHaveAttribute('aria-selected', 'true');
       expect(spy.mock.calls.length).toBe(callsAfterOpen);

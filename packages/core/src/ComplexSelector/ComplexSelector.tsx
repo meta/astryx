@@ -35,6 +35,7 @@ import {
 } from '../Field/fieldParts';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {mergeRefs} from '../utils/mergeRefs';
+import {isFocusLost} from '../utils/focusReturn';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {Field, inputWrapperStyles} from '../Field';
@@ -347,7 +348,10 @@ export interface ComplexSelectorRenderState {
 export interface ComplexSelectorHandle {
   /** Open the selector surface. No-op when disabled or already open. */
   open(): void;
-  /** Close the selector surface. Restores focus to the trigger. */
+  /**
+   * Close the selector surface. Focus returns to the trigger only when it
+   * would otherwise be lost; a caller-rendered trigger always gets it back.
+   */
   close(): void;
   /** Toggle the selector surface open or closed. */
   toggle(): void;
@@ -630,12 +634,22 @@ export function ComplexSelector<Value>({
     onOpenChange?.(true);
   }, [onOpenChange]);
 
+  // The popup's content element, read when it closes.
+  const popupContentRef = useRef<HTMLElement | null>(null);
+  const hasCallerTrigger = renderTrigger != null;
   const handlePopoverHide = useCallback(() => {
-    // Focus is restored first so a consumer that moves focus elsewhere from
-    // the callback wins, instead of being overwritten a line later.
-    triggerRef.current?.focus();
+    const trigger = triggerRef.current;
+    // A press that moved focus to another control keeps it there. A caller's
+    // control always gets focus back. Focus moves before the callback, so a
+    // consumer that moves it from the callback wins.
+    if (
+      hasCallerTrigger ||
+      isFocusLost(popupContentRef.current, trigger?.ownerDocument)
+    ) {
+      trigger?.focus();
+    }
     onOpenChange?.(false);
-  }, [onOpenChange]);
+  }, [hasCallerTrigger, onOpenChange]);
 
   const popover = usePopover({
     dialogLabel: label,
@@ -645,6 +659,7 @@ export function ComplexSelector<Value>({
     onShow: handlePopoverShow,
     onHide: handlePopoverHide,
   });
+  popupContentRef.current = popover.contentRef.current;
 
   const isOpen = popover.isOpen;
 
