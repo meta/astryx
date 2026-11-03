@@ -581,40 +581,20 @@ describe('pr-touched-components routing', () => {
     expect(checkout.with?.ref).toBeUndefined();
   });
 
-  // spec:AST-030 FR12: a browser accessibility spec the change adds or
-  // modifies is caught on its own pull request, not first on main.
-  it('runs the changed browser accessibility specs, and only on a pull request that changes one', () => {
-    const find = step('Find the changed browser accessibility specs');
-    expect(find.env.FILES_PATH).toBe(
-      '${{ steps.scope.outputs.changed_files_path }}',
-    );
-    // The same spec list playwright.config.ts runs, not a copy of its globs.
-    expect(find.run).toContain(
-      'import {isA11ySpecFile} from "./.github/scripts/lib/a11y-spec-files.mjs";',
-    );
-    expect(find.run).not.toContain('spec\\.ts');
-    const runSpecs = step('Run the changed browser accessibility specs');
-    expect(runSpecs.if).toBe(
-      "always() && steps.playwright.outcome == 'success' && steps.specs.outputs.has_specs == 'true'",
-    );
-    expect(runSpecs.run).toBe(
-      'node .github/scripts/a11y-pr-contracts.mjs --changed-only "$SPECS_PATH"',
-    );
-    // A failing spec turns the job red: no continue-on-error.
-    expect(runSpecs['continue-on-error']).toBeUndefined();
-    // Bounded inside the job's 15 minutes, past the runner's own 8-minute stop.
-    expect(runSpecs['timeout-minutes']).toBe(9);
-    // Setup, Storybook and Playwright run for a spec-only change too.
+  it('runs no accessibility contract: the contracts job owns them', () => {
+    const names = job.steps.map(({name}) => name);
+    expect(names).not.toContain('Find the changed browser accessibility specs');
+    expect(JSON.stringify(job)).not.toContain('a11y-pr-contracts.mjs');
     for (const name of [
       'Setup Node and pnpm',
       'Download Storybook artifact',
       'Install Playwright',
     ]) {
       expect(step(name).if).toBe(
-        "steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'",
+        "steps.touched.outputs.has_components == 'true'",
       );
     }
-    expect(step('Upload touched-components results').with.path).toContain(
+    expect(step('Upload touched-components results').with.path).not.toContain(
       'pr-a11y-evidence/',
     );
     // Still advisory: no required context depends on this job.
@@ -663,8 +643,7 @@ describe('pr-touched-components routing', () => {
     expect(
       step('Skip when no component changed or the change is wide').if,
     ).toBe("steps.touched.outputs.has_components != 'true'");
-    // Every later step runs for touched components, or (setup, Storybook,
-    // Playwright, the spec run and the upload) for a changed browser spec.
+    // Every later step runs for touched components only.
     const skipIndex = job.steps.findIndex(
       candidate =>
         candidate.name ===
@@ -672,7 +651,7 @@ describe('pr-touched-components routing', () => {
     );
     for (const candidate of job.steps.slice(skipIndex + 1)) {
       expect(candidate.if, candidate.name).toMatch(
-        /steps\.touched\.outputs\.has_components == 'true'|steps\.specs\.outputs\.has_specs == 'true'/,
+        /steps\.touched\.outputs\.has_components == 'true'/,
       );
     }
   });
@@ -682,5 +661,110 @@ describe('pr-touched-components routing', () => {
     expect(upload.with.name).toBe('touched-components');
     expect(upload.with.path).toContain('touched-components.json');
     expect(upload.if).toContain("steps.touched.outputs.wide_change == 'true'");
+  });
+});
+
+describe('pr-component-a11y-contracts routing', () => {
+  const contracts = ci.jobs['pr-component-a11y-contracts'];
+  const contractStep = name =>
+    contracts.steps.find(candidate => candidate.name === name);
+  const runStep = contractStep(
+    "Run the touched components' accessibility contracts",
+  );
+  const ran =
+    "steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'";
+
+  it('starts after the Storybook build, beside the test owners, never after pr-visual or the touched check', () => {
+    expect(contracts.needs).toEqual([
+      'room',
+      'admission',
+      'heavy-ci',
+      'build-storybook',
+    ]);
+    // The same gate as the interaction proofs, which the test join also reads.
+    expect(contracts.if).toBe(ci.jobs['pr-interaction'].if);
+    expect(contracts['runs-on']).toBe('ubuntu-latest');
+    expect(contracts['timeout-minutes']).toBeLessThanOrEqual(15);
+    expect(contracts.permissions).toEqual({
+      contents: 'read',
+      'pull-requests': 'read',
+    });
+  });
+
+  it('blocks the merge through the test join, with no new required context', () => {
+    expect(ci.jobs.test.needs).toContain('pr-component-a11y-contracts');
+    const join = ci.jobs.test.steps.find(
+      candidate => candidate.name === 'Require expected test-owner outcomes',
+    );
+    expect(join.env.PR_COMPONENT_A11Y_CONTRACTS_RESULT).toBe(
+      '${{ needs.pr-component-a11y-contracts.result }}',
+    );
+    expect(runStep['continue-on-error']).toBeUndefined();
+    for (const name of Object.keys(ci.jobs)) {
+      if (name === 'test') continue;
+      expect([ci.jobs[name].needs].flat(), name).not.toContain(
+        'pr-component-a11y-contracts',
+      );
+    }
+  });
+
+  it('skips with success outside a pull request, on a specialized lane, and when nothing it owns changed', () => {
+    const scope = contractStep("Decide this job's scope");
+    expect(scope.with).toMatchObject({
+      paths: '^(packages/[^/]+/src/|internal/a11y-spec/)',
+      'outside-pull-request': 'skip',
+      'component-audit': 'true',
+    });
+    expect(contractStep('Skip the contracts outside their scope').if).toBe(
+      "steps.scope.outputs.applies != 'true'",
+    );
+    const skipIndex = contracts.steps.findIndex(
+      candidate => candidate.name === 'Skip the contracts outside their scope',
+    );
+    for (const candidate of contracts.steps.slice(skipIndex + 1)) {
+      expect(candidate.if, candidate.name).toMatch(
+        /steps\.scope\.outputs\.applies == 'true'|steps\.touched\.outputs\.has_components == 'true'|steps\.contracts\.outcome/,
+      );
+    }
+  });
+
+  it('decides the touched components as the touched check does, and finds changed specs from the Playwright list', () => {
+    const decide = contractStep('Decide the touched components');
+    expect(decide.run).toContain('touched-components.mjs scope');
+    expect(decide.run).toContain('--files "$FILES_PATH"');
+    const find = contractStep('Find the changed browser accessibility specs');
+    expect(find.run).toContain(
+      'import {isA11ySpecFile} from "./.github/scripts/lib/a11y-spec-files.mjs";',
+    );
+    const checkout = contractStep('Checkout');
+    expect(checkout.with?.ref).toBeUndefined();
+  });
+
+  it('runs the changed specs and the touched owners, on four workers, inside the job budget', () => {
+    expect(runStep.if).toBe(ran);
+    expect(runStep.run).toBe(
+      'node .github/scripts/a11y-pr-contracts.mjs --changed-only "$SPECS_PATH" --owned-by "$OWNERS"',
+    );
+    // A wide change has no owned specs.
+    expect(runStep.env.OWNERS).toBe(
+      "${{ steps.touched.outputs.has_components == 'true' && steps.touched.outputs.a11y_owners || '' }}",
+    );
+    expect(runStep.env.A11Y_CONTRACT_WORKERS).toBe(4);
+    expect(runStep.env.WORKFLOW_SHA).toBe('${{ github.sha }}');
+    // Past the runner's own eight-minute stop, inside the job's 15 minutes.
+    expect(runStep['timeout-minutes']).toBeGreaterThan(8);
+    expect(runStep['timeout-minutes']).toBeLessThan(
+      contracts['timeout-minutes'],
+    );
+    for (const name of [
+      'Setup Node and pnpm',
+      'Download Storybook artifact',
+      'Install Playwright',
+    ]) {
+      expect(contractStep(name).if, name).toBe(ran);
+    }
+    expect(contractStep('Upload contract evidence').with.path).toContain(
+      'pr-a11y-evidence/',
+    );
   });
 });
