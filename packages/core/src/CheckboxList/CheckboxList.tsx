@@ -298,9 +298,10 @@ export function CheckboxList({
             controlStyle,
           )}
           role="group"
-          // The group is disabled too, so assistive technology announces it as
-          // unavailable and its dimmed label belongs to an inactive control.
-          aria-disabled={isDisabled || undefined}
+          // Screen readers announce the whole group as unavailable. Its dimmed
+          // label then labels a disabled control. An enabled list keeps a
+          // caller's own value.
+          aria-disabled={isDisabled || rest['aria-disabled']}
           // A caller aria-labelledby names the group together with its label.
           aria-labelledby={joinAriaIDs(labelID, ariaLabelledByProp)}
           aria-describedby={

@@ -1164,4 +1164,20 @@ describe('RadioList group disabled state', () => {
       'aria-disabled',
     );
   });
+
+  it("keeps a caller's own aria-disabled on an enabled radiogroup (FR8)", () => {
+    render(
+      <RadioList
+        label="Size"
+        value="small"
+        onChange={() => {}}
+        aria-disabled="true">
+        <RadioListItem value="small" label="Small" />
+      </RadioList>,
+    );
+    expect(screen.getByRole('radiogroup', {name: 'Size'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
 });

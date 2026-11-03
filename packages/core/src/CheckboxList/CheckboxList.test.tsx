@@ -1271,4 +1271,16 @@ describe('CheckboxList group disabled state', () => {
       'aria-disabled',
     );
   });
+
+  it("keeps a caller's own aria-disabled on an enabled group (FR15)", () => {
+    render(
+      <CheckboxList label="Toppings" aria-disabled="true">
+        <CheckboxListItem value="cheese" label="Cheese" />
+      </CheckboxList>,
+    );
+    expect(screen.getByRole('group', {name: 'Toppings'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
 });

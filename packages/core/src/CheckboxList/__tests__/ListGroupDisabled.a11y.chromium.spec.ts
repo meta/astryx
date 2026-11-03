@@ -10,7 +10,7 @@
  * @position Chromium proof for the group-level aria-disabled on both lists
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test, type Page} from '@playwright/test';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -41,14 +41,40 @@ const CASES = [
   },
 ] as const;
 
+/** The disabled state Chromium's own accessibility tree reports for the group. */
+async function axDisabled(
+  page: Page,
+  role: string,
+  name: string,
+): Promise<boolean | null> {
+  const cdp = await page.context().newCDPSession(page);
+  const {nodes} = (await cdp.send('Accessibility.getFullAXTree')) as {
+    nodes: Array<{
+      role?: {value?: string};
+      name?: {value?: string};
+      properties?: Array<{name: string; value: {value?: unknown}}>;
+    }>;
+  };
+  await cdp.detach();
+  const node = nodes.find(
+    n => n.role?.value === role && n.name?.value === name,
+  );
+  if (node == null) {
+    return null;
+  }
+  return (
+    node.properties?.find(p => p.name === 'disabled')?.value.value === true
+  );
+}
+
 for (const {story, role, name} of CASES) {
   test(`${story}: the ${role} is exposed as disabled`, async ({page}) => {
     await page.goto(
       `${storybook.origin}/iframe.html?id=${story}&viewMode=story`,
     );
     await holdMotionStill(page);
-    // Playwright's role query reads the accessibility tree's disabled state.
-    await expect(page.getByRole(role, {name, disabled: true})).toBeVisible();
+    await expect(page.getByRole(role, {name})).toBeVisible();
+    expect(await axDisabled(page, role, name)).toBe(true);
   });
 
   test(`${story} with isDisabled off: the ${role} is not disabled`, async ({
@@ -58,6 +84,7 @@ for (const {story, role, name} of CASES) {
       `${storybook.origin}/iframe.html?id=${story}&viewMode=story&args=isDisabled:!false`,
     );
     await holdMotionStill(page);
-    await expect(page.getByRole(role, {name, disabled: false})).toBeVisible();
+    await expect(page.getByRole(role, {name})).toBeVisible();
+    expect(await axDisabled(page, role, name)).toBe(false);
   });
 }
