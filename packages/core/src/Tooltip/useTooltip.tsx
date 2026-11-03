@@ -133,7 +133,9 @@ export interface TooltipOptions {
    * - `auto`: tap opens the tooltip, unless the trigger performs an action of
    *   its own (a button, a link, a form control) — that tap belongs to the
    *   control, and a hint about a control the user just operated is noise
-   * - `tap`: tap always opens the tooltip, even on a trigger that acts
+   * - `tap`: tap always opens the tooltip, even on a trigger that acts.
+   *   Deprecated: pass `triggerBehavior="toggle"` on a button trigger instead.
+   *   `astryx upgrade` rewrites icon and span triggers and lists the rest.
    * - `none`: touch never opens the tooltip
    *
    * It decides only under `triggerBehavior="adaptive"`, the default.
@@ -295,7 +297,19 @@ function isFocusable(element: HTMLElement): boolean {
  * {tooltip.renderTooltip('Helpful tooltip text')}
  * ```
  */
-
+export function useTooltip(
+  options?: TooltipOptions & {touchTrigger?: 'auto' | 'none'},
+): TooltipReturn;
+/**
+ * @deprecated `touchTrigger="tap"` is deprecated. Pass `triggerBehavior="toggle"`
+ * on a button trigger instead. `astryx upgrade` rewrites icon and span triggers
+ * and lists the rest.
+ */
+export function useTooltip(
+  options: TooltipOptions & {touchTrigger: 'tap'},
+): TooltipReturn;
+/** Any `TooltipOptions`, such as options a wrapper forwards. */
+export function useTooltip(options?: TooltipOptions): TooltipReturn;
 export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   return useTooltipInternal(options);
 }

@@ -72,6 +72,23 @@ vi.mock('../../../assets/codemods/registry.mjs', async importOriginal => {
             },
           },
           {
+            name: 'report-and-rename',
+            meta: {title: 'Report and rename', fileExtensions: ['.ts']},
+            /** @param {{source: string}} file @param {{report: (finding: unknown) => void}} api */
+            transform(file, api) {
+              if (!file.source.includes('REPORTED')) return undefined;
+              api.report(
+                new ManualMigrationRequired('Migrate this site by hand.', {
+                  line: 2,
+                }),
+              );
+              api.report(
+                new ManualMigrationRequired('And this one.', {line: 3}),
+              );
+              return file.source.replace('REPORTED', 'RENAMED');
+            },
+          },
+          {
             name: 'parse-strict',
             meta: {title: 'Parse strictly', fileExtensions: ['.ts']},
             /** @param {{source: string}} file */
@@ -198,6 +215,40 @@ describe('manual migrations in the upgrade receipt', () => {
       'Upgrade complete; 1 manual migration listed above',
     );
     expect(stderr).not.toMatch(/ERR_CODEMOD_FAILED/);
+  });
+});
+
+describe('manual migrations a transform reports through api.report', () => {
+  it('are listed with their lines, and the file keeps the transform’s change', async () => {
+    write(
+      'src/sites.ts',
+      "const a = 1;\nconst b = 'REPORTED';\nconst c = 2;\n",
+    );
+    logger.setSilent(false);
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const result = await upgrade(APPLY, {cwd: dir});
+
+    expect(result.data.complete).toBe(true);
+    expect(result.data.errors).toEqual([]);
+    expect(result.data.modifiedFiles).toContain('src/sites.ts');
+    expect(fs.readFileSync(path.join(dir, 'src/sites.ts'), 'utf8')).toContain(
+      'RENAMED',
+    );
+    const row = result.data.declinedCandidates.find(
+      (/** @type {{file: string}} */ r) => r.file === 'src/sites.ts',
+    );
+    expect(row?.reason).toContain(
+      'manual migration needed (core:report-and-rename): Migrate this site by hand.',
+    );
+    expect(row?.reason).toContain(
+      'manual migration needed (core:report-and-rename): And this one.',
+    );
+    const stderr = err.mock.calls.map(c => c.join(' ')).join('\n');
+    expect(stderr).toContain(
+      'src/sites.ts:2 - manual migration needed (core:report-and-rename): Migrate this site by hand.',
+    );
   });
 });
 

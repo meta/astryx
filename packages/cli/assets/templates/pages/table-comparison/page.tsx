@@ -692,6 +692,20 @@ const styles = stylex.create({
     paddingBlock: spacingVars['--spacing-3'],
     paddingInline: spacingVars['--spacing-4'],
   },
+  // The modality rail's trigger: a button with no chrome of its own, filling
+  // its cell so the icons keep their end alignment.
+  railButton: {
+    appearance: 'none',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    color: 'inherit',
+    cursor: 'pointer',
+    display: 'block',
+    font: 'inherit',
+    margin: 0,
+    padding: 0,
+    width: '100%',
+  },
   // Keep the card inside the content lane so Table's own wrapper, rather than
   // an outer page surface, owns horizontal overflow and sticky positioning.
   tableFrame: {
@@ -807,33 +821,37 @@ function ModalityRail({supported}: {supported: Modality[]}) {
     <Tooltip
       content={explanation}
       hasHoverIndication={false}
-      touchTrigger="tap">
-      <HStack
-        gap={3}
-        vAlign="center"
-        hAlign="end"
-        height={CELL_CONTENT_HEIGHT}
-        tabIndex={0}
-        role="group"
-        aria-label="Model modalities">
-        {MODALITY_ORDER.map(modality => {
-          const has = supported.includes(modality);
-          return (
-            <HStack
-              key={modality}
-              width={20}
-              height={20}
-              hAlign="center"
-              vAlign="center">
-              <Icon
-                icon={MODALITY_ICON[modality]}
-                size="md"
-                color={has ? 'primary' : 'disabled'}
-              />
-            </HStack>
-          );
-        })}
-      </HStack>
+      triggerBehavior="toggle">
+      {/* The rail's explanation lives only in the tooltip, so its trigger is a
+          button: a click, a tap, Enter, or Space pins the explanation. */}
+      <button
+        type="button"
+        aria-label="Model modalities"
+        {...stylex.props(styles.railButton)}>
+        <HStack
+          gap={3}
+          vAlign="center"
+          hAlign="end"
+          height={CELL_CONTENT_HEIGHT}>
+          {MODALITY_ORDER.map(modality => {
+            const has = supported.includes(modality);
+            return (
+              <HStack
+                key={modality}
+                width={20}
+                height={20}
+                hAlign="center"
+                vAlign="center">
+                <Icon
+                  icon={MODALITY_ICON[modality]}
+                  size="md"
+                  color={has ? 'primary' : 'disabled'}
+                />
+              </HStack>
+            );
+          })}
+        </HStack>
+      </button>
     </Tooltip>
   );
 }

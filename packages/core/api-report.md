@@ -1275,7 +1275,7 @@ component Heading(props: HeadingProps)
   prop wordBreak?: WordBreak = 'break-all' for maxLines=1, 'break-word' otherwise
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
-component HoverCard(props: HoverCardProps)
+component HoverCard
   prop alignment?: LayerAlignment = 'center'
   prop children: ReactNode
   prop content: ReactNode
@@ -2660,7 +2660,7 @@ component Toolbar(props: ToolbarProps)
   prop variant?: SectionVariant = 'transparent'
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
-component Tooltip(props: TooltipProps)
+component Tooltip
   prop alignment?: LayerAlignment = 'center'
   prop anchorRef?: React.RefObject<HTMLElement | null>
   prop children?: ReactNode
@@ -2878,7 +2878,10 @@ hook useEntryAnimation: (preset?: EntryAnimationPreset) => StyleXStyles | null
 hook useFocusTrap: <T extends HTMLElement = HTMLElement>(options: UseFocusTrapOptions) => UseFocusTrapReturn<T>
 hook useGridFocus: <T extends HTMLElement = HTMLElement>(options: UseGridFocusOptions) => UseGridFocusReturn<T>
 hook useHotkeys: (hotkeys: Hotkey[]) => void
-hook useHoverCard: (options?: HoverCardOptions) => HoverCardReturn
+hook useHoverCard
+  overload (options?: HoverCardOptions & { touchTrigger?: 'auto' | 'none' }) => HoverCardReturn
+  overload (options: HoverCardOptions & { touchTrigger: 'tap' }) => HoverCardReturn
+  overload (options?: HoverCardOptions) => HoverCardReturn
 hook useIcon: (name: IconName | NamespacedIconName) => ReactNode
 hook useImageMode: (src: string | null | undefined, options?: UseImageModeOptions) => 'dark' | 'light' | null
 hook useImperativeAlertDialog: () => ImperativeAlertDialogReturn
@@ -2950,7 +2953,10 @@ hook useTableTreeState: <T extends Record<string, unknown>>(config: UseTableTree
 hook useTheme: () => UseThemeReturn
 hook useThemeName: () => string | null
 hook useToast: () => ShowToastFn
-hook useTooltip: (options?: TooltipOptions) => TooltipReturn
+hook useTooltip
+  overload (options?: TooltipOptions & { touchTrigger?: 'auto' | 'none' }) => TooltipReturn
+  overload (options: TooltipOptions & { touchTrigger: 'tap' }) => TooltipReturn
+  overload (options?: TooltipOptions) => TooltipReturn
 hook useTopNavRenderMode: () => TopNavRenderMode
 hook useTranslator: () => TranslatorFn
 hook useTreeFocus: <T extends HTMLElement = HTMLElement>(options?: UseTreeFocusOptions) => UseTreeFocusReturn<T>
@@ -4410,7 +4416,24 @@ interface HoverCardOptions
   placement?: LayerPlacement = 'above'
   touchTrigger?: HoverCardTouchTrigger = 'auto'
   triggerBehavior?: HoverCardTriggerBehavior = 'adaptive'
-interface HoverCardProps extends Pick<BaseProps, 'xstyle' | 'className' | 'style'> (props of HoverCard)
+interface HoverCardProps extends Pick<BaseProps, 'xstyle' | 'className' | 'style'>
+  alignment?: LayerAlignment = 'center'
+  children: ReactNode
+  content: ReactNode
+  delay?: number = 300
+  focusTrigger?: HoverCardFocusTrigger = 'auto'
+  hasHoverIndication?: 'auto' | boolean = 'auto'
+  hideDelay?: number = 200
+  isDefaultOpen?: boolean
+  isEnabled?: boolean = true
+  isOpen?: boolean
+  label?: string
+  onOpenChange?: (isOpen: boolean) => void
+  placement?: LayerPlacement = 'above'
+  touchTrigger?: HoverCardTouchTrigger = 'auto'
+  triggerBehavior?: HoverCardTriggerBehavior = 'adaptive'
+  xstyle?: StyleXStyles
+  inherits HTMLAttributes
 interface HoverCardReturn
   anchorId: string
   describedBy: string
@@ -5659,7 +5682,22 @@ interface TooltipOptions
   placement?: LayerPlacement = 'above'
   touchTrigger?: TooltipTouchTrigger = 'auto'
   triggerBehavior?: TooltipTriggerBehavior = 'adaptive'
-interface TooltipProps (props of Tooltip)
+interface TooltipProps
+  alignment?: LayerAlignment = 'center'
+  anchorRef?: React.RefObject<HTMLElement | null>
+  children?: ReactNode
+  content: ReactNode
+  delay?: number = 200
+  focusTrigger?: TooltipFocusTrigger = 'auto'
+  hasHoverIndication?: 'auto' | boolean = 'auto'
+  hideDelay?: number = 0
+  isDefaultOpen?: boolean
+  isEnabled?: boolean = true
+  isOpen?: boolean
+  onOpenChange?: (isOpen: boolean) => void
+  placement?: LayerPlacement = 'above'
+  touchTrigger?: TooltipTouchTrigger = 'auto'
+  triggerBehavior?: TooltipTriggerBehavior = 'adaptive'
 interface TooltipReturn
   anchorId: string
   describedBy: string

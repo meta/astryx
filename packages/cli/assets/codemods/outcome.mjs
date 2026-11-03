@@ -4,7 +4,11 @@
  * @file Codemod outcomes that are not failures.
  *
  * A core transform throws one of these, instead of a plain Error, when a file
- * needs a change the codemod cannot make itself:
+ * needs a change the codemod cannot make itself. A transform that still
+ * changes the file passes each `ManualMigrationRequired` to `api.report`
+ * instead. Such a transform rewrites the sites it can prove and marks the
+ * others with a TODO. Each reported one is listed as a thrown one is, and the
+ * file keeps the transform's result.
  *
  * - `ManualMigrationRequired`: a person must migrate the code (the codemod can
  *   identify it but has no safe rewrite). Reported in the upgrade receipt's

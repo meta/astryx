@@ -163,7 +163,9 @@ export interface HoverCardProps extends Pick<
    * What a tap does on a touch pointer, where there is no hover:
    * - `auto`: tap opens the card, unless the trigger performs an action of its
    *   own (a button, a link, a form control) — that tap belongs to the control
-   * - `tap`: tap always opens the card, even on a trigger that acts
+   * - `tap`: tap always opens the card, even on a trigger that acts.
+   *   Deprecated: pass `triggerBehavior="toggle"` on a button trigger instead.
+   *   `astryx upgrade` rewrites icon and span triggers and lists the rest.
    * - `none`: touch never opens the card
    *
    * It decides only under `triggerBehavior="adaptive"`, the default.
@@ -277,6 +279,19 @@ function mergeIds(...ids: (string | undefined | null)[]): string | undefined {
  * </HoverCard>
  * ```
  */
+export function HoverCard(
+  props: HoverCardProps & {touchTrigger?: 'auto' | 'none'},
+): ReactElement;
+/**
+ * @deprecated `touchTrigger="tap"` is deprecated. Pass `triggerBehavior="toggle"`
+ * on a button trigger instead. `astryx upgrade` rewrites icon and span triggers
+ * and lists the rest.
+ */
+export function HoverCard(
+  props: HoverCardProps & {touchTrigger: 'tap'},
+): ReactElement;
+/** Any `HoverCardProps`, such as props a wrapper forwards. */
+export function HoverCard(props: HoverCardProps): ReactElement;
 export function HoverCard({
   children,
   content,
