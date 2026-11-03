@@ -12,7 +12,7 @@ import type {Meta, StoryObj} from '@storybook/react';
 import {PresentedHitTestingLab} from '../../../packages/core/src/__tests__/PresentedHitTestingLab';
 
 const meta: Meta<typeof PresentedHitTestingLab> = {
-  title: 'Core/Gestures/Presented hit testing',
+  title: 'Core/Gestures',
   component: PresentedHitTestingLab,
   parameters: {
     layout: 'fullscreen',
@@ -29,6 +29,6 @@ export default meta;
 
 type Story = StoryObj<typeof PresentedHitTestingLab>;
 
-export const DeviceCheck: Story = {
-  name: 'Device check',
+export const PresentedHitTesting: Story = {
+  name: 'Presented hit testing',
 };
