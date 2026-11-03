@@ -77,8 +77,8 @@ let checkoutSha = '';
 
 /**
  * Whether the checkout is the PR head itself, or the merge commit CI checks
- * out for a pull request, whose parents include the PR head. The raw commit
- * object lists its parents even in a shallow clone.
+ * out for a pull request: a commit with two parents, one of them the PR head.
+ * The raw commit object lists its parents even in a shallow clone.
  */
 function checksOutHead(checkoutSha: string, headSha: string): boolean {
   if (checkoutSha === headSha) {
@@ -87,7 +87,8 @@ function checksOutHead(checkoutSha: string, headSha: string): boolean {
   const commit = execFileSync('git', ['cat-file', '-p', checkoutSha], {
     encoding: 'utf8',
   });
-  return commit.split('\n').some(line => line === `parent ${headSha}`);
+  const parents = commit.split('\n').filter(line => line.startsWith('parent '));
+  return parents.length >= 2 && parents.includes(`parent ${headSha}`);
 }
 let storybookSha = '';
 

@@ -473,6 +473,23 @@ describe('Outline keyboard navigation', () => {
     cleanup();
   });
 
+  it('does not treat Tab between links as a manual scroll', async () => {
+    const user = userEvent.setup();
+    const cleanup = mountHeadings();
+    const onNavigateEnd = vi.fn();
+
+    render(<Outline items={items} onNavigateEnd={onNavigateEnd} />);
+    await user.click(screen.getByRole('link', {name: 'Installation'}));
+
+    // Tab moves focus and does not scroll the page, so it must not end the
+    // navigation that the click started.
+    screen.getByRole('link', {name: 'Installation'}).focus();
+    await user.tab();
+    expect(onNavigateEnd).not.toHaveBeenCalled();
+
+    cleanup();
+  });
+
   it('leaves the list with Tab after its last link', async () => {
     const user = userEvent.setup();
     render(
