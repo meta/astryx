@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[docs] Source comments above the kept Effects in Core name the external system each one syncs. Nothing a consumer imports or renders changes.
+[docs] Source comments above 88 kept Effects in Core now name the external system each one syncs. Nothing a consumer imports or renders changes.
 
 @cixzhang

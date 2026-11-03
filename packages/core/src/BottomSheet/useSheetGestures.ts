@@ -1031,8 +1031,8 @@ export function useSheetGestures({
     [prepareScrollAreaSettle, resolveDetents],
   );
 
-  // Syncs window blur and page-hide listeners with `isOpen`. Each event cancels
-  // a drag.
+  // Syncs window blur and document visibilitychange listeners with `isOpen`. A
+  // blur or a hidden page cancels a drag.
   useEffect(() => {
     // Only an open sheet can be dragged; a closed one listens to nothing.
     if (!isOpen) {

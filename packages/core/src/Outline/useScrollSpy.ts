@@ -275,8 +275,8 @@ export function useScrollSpy({
     );
   }, [rootRef, scrollContainerRef]);
 
-  // Syncs scroll and resize listeners on the scroll root with this mount. They
-  // choose the active outline item.
+  // Syncs a scroll listener on the scroll root and a window resize listener
+  // with the items and offset. They choose the active outline item.
   useEffect(() => {
     if (isControlled || typeof window === 'undefined') {
       return;
