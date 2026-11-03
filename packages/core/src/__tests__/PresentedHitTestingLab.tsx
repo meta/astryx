@@ -10,7 +10,7 @@
  *   driven by the gesture host and the motion animator, with readouts of what
  *   the engine hit-tested at each touch-down, Done's clicks, the scrim's taps,
  *   the sheet pan's translation and how far the page scrolled in the last
- *   touch. The switch turns the host's presented hit testing off.
+ *   touch. A checkbox turns the host's presented hit testing off.
  * @position A device-check harness for the gesture host's presented hit
  *   testing. The Storybook story "Core/Gestures/Presented hit testing"
  *   renders it, so a phone can open it on a preview. Not exported.
@@ -21,7 +21,6 @@ import * as stylex from '@stylexjs/stylex';
 import {Button} from '../Button/Button';
 import {Heading} from '../Heading/Heading';
 import {HStack} from '../HStack/HStack';
-import {Switch} from '../Switch/Switch';
 import {Text} from '../Text/Text';
 import {VStack} from '../VStack/VStack';
 import {
@@ -153,9 +152,9 @@ export function PresentedHitTestingLab() {
     };
   }, []);
 
-  // The page root sees every touch in the capture phase, before the host
-  // corrects anything. On iOS WebKit a touch on the moving sheet targets the
-  // scrim, so a handler on the sheet would miss it.
+  // The page root logs the engine's own target: no host changes it. On iOS
+  // WebKit a touch on the moving sheet targets the scrim, so a handler on the
+  // sheet would miss it.
   const onTouchStartCapture = (event: TouchEvent<HTMLDivElement>) => {
     const parts = {
       done: doneRef.current,
@@ -257,12 +256,19 @@ export function PresentedHitTestingLab() {
         <HStack gap={3} vAlign="center" hAlign="between" wrap="wrap">
           <Heading level={1}>Presented hit testing</Heading>
           <HStack gap={3} vAlign="center">
-            <Switch
-              label="Correction"
-              value={correction}
-              onChange={setCorrection}
-              size="sm"
-            />
+            {/* A native checkbox, not Core's Switch: the Switch attaches to
+                the document's shared gesture host, which would resolve the
+                moving sheet before this page's host and hide the correction. */}
+            <label>
+              <input
+                type="checkbox"
+                checked={correction}
+                onChange={event => {
+                  setCorrection(event.currentTarget.checked);
+                }}
+              />{' '}
+              Correction
+            </label>
             <Button
               label="Replay"
               variant="primary"
