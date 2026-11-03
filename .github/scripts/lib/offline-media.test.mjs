@@ -19,7 +19,7 @@ describe('isRemoteImage', () => {
     // The story origin and the loopback host pass.
     [{url: `${ORIGIN}/assets/photo.png`, resourceType: 'image'}, false],
     [{url: 'http://127.0.0.1:9000/a.png', resourceType: 'image'}, false],
-    // A remote request that is not an image passes unchanged tonight.
+    // A remote request that is not an image passes unchanged.
     [
       {url: 'https://fonts.example.com/font.woff2', resourceType: 'font'},
       false,
