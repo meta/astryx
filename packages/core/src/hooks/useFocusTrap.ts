@@ -422,7 +422,8 @@ export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
 
   /**
    * Handle Tab key to wrap focus at boundaries. Also tracks that keyboard
-   * navigation is occurring.
+   * navigation is occurring. A Tab whose default is already prevented
+   * belongs to the content that handled it.
    *
    * No Escape here, and no IME guard: the shared stack owns the press, claims
    * a composing Escape so no close request follows, and dismisses the trap
@@ -443,6 +444,15 @@ export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
       }
 
       if (event.key === 'Tab') {
+        if (event.defaultPrevented) {
+          // Content inside the trap handled this press itself, for example a
+          // menu that walks its header and footer stops. When the React root
+          // is the document, a React handler cannot stop the press before it
+          // gets here: both listeners are on that node. A wrap now would undo
+          // the move.
+          return;
+        }
+
         const active = doc.activeElement;
         // Any focused node counts, not only HTML elements: an SVG control
         // inside the container is still inside.

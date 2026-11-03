@@ -333,6 +333,103 @@ describe('useFocusTrap tabbable model (infra-8)', () => {
 
     expect(fireEvent.keyDown(outside, {key: 'Tab'})).toBe(true);
   });
+
+  describe('a Tab that content inside has already handled', () => {
+    // Content that walks its own Tab stops, such as a menu with a footer,
+    // moves focus and cancels the default. When the React root is the
+    // document (a Next.js App Router app), React's listener and the trap's
+    // listener share that node, so stopPropagation does not keep the press
+    // from the trap. A document listener added before the trap stands in for
+    // React's root listener here.
+    let removeContentHandler: (() => void) | null = null;
+
+    function handleTabInContent(move: (event: KeyboardEvent) => void) {
+      const listener = (event: KeyboardEvent) => {
+        if (event.key === 'Tab') {
+          event.preventDefault();
+          event.stopPropagation();
+          move(event);
+        }
+      };
+      document.addEventListener('keydown', listener);
+      removeContentHandler = () =>
+        document.removeEventListener('keydown', listener);
+    }
+
+    afterEach(() => {
+      removeContentHandler?.();
+      removeContentHandler = null;
+    });
+
+    function renderThreeControls() {
+      render(
+        <Trap>
+          <button type="button" data-testid="first">
+            First
+          </button>
+          <button type="button" data-testid="middle">
+            Middle
+          </button>
+          <button type="button" data-testid="last">
+            Last
+          </button>
+        </Trap>,
+      );
+      return {
+        first: screen.getByTestId('first'),
+        middle: screen.getByTestId('middle'),
+        last: screen.getByTestId('last'),
+      };
+    }
+
+    it('still wraps a Tab nothing handled, at either end', () => {
+      const {first, last} = renderThreeControls();
+      last.focus();
+
+      expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+      expect(first).toHaveFocus();
+
+      expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(
+        false,
+      );
+      expect(last).toHaveFocus();
+    });
+
+    it('keeps focus where the content moved it on the last control', () => {
+      handleTabInContent(() => screen.getByTestId('last').focus());
+      const {middle, last} = renderThreeControls();
+      middle.focus();
+
+      fireEvent.keyDown(middle, {key: 'Tab'});
+
+      expect(last).toHaveFocus();
+    });
+
+    it('keeps focus where the content moved it on the first control by Shift+Tab', () => {
+      handleTabInContent(() => screen.getByTestId('first').focus());
+      const {first, middle} = renderThreeControls();
+      middle.focus();
+
+      fireEvent.keyDown(middle, {key: 'Tab', shiftKey: true});
+
+      expect(first).toHaveFocus();
+    });
+
+    it('does not pull in focus that moves outside after the handled press', () => {
+      handleTabInContent(() => screen.getByTestId('middle').focus());
+      const {first, middle} = renderThreeControls();
+      first.focus();
+      fireEvent.keyDown(first, {key: 'Tab'});
+      expect(middle).toHaveFocus();
+
+      // No Tab carried focus out, so a later move outside (a click on the
+      // page) is not an escape to redirect.
+      const outside = screen.getByTestId('outside');
+      outside.focus();
+
+      expect(outside).toHaveFocus();
+    });
+  });
 });
 
 describe('FOCUSABLE_SELECTOR href matching', () => {
