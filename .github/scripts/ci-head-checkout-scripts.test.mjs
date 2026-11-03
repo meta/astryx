@@ -49,6 +49,8 @@ const ESTABLISHED = new Set([
   'scripts/verify-exports.mjs',
   // Builds the packages and Storybook: a head without it has nothing to test.
   '.github/scripts/build-packages-and-storybook.mjs',
+  // The docsite's data generator, on main since the docsite began.
+  'apps/docsite/scripts/generate-data.mjs',
 ]);
 
 /**
@@ -64,7 +66,7 @@ const NOT_ON_STALE_BRANCHES = new Set([
 ]);
 
 const SCRIPT =
-  /(?:\.github\/scripts|scripts|apps\/storybook\/rtl-audit)\/[A-Za-z0-9_./-]+\.(?:mjs|cjs|js)/g;
+  /(?:\.github\/scripts|apps\/docsite\/scripts|scripts|apps\/storybook\/rtl-audit)\/[A-Za-z0-9_./-]+\.(?:mjs|cjs|js)/g;
 
 function checksOutHead(job) {
   return (job.steps ?? []).some(

@@ -699,6 +699,54 @@ describe('a new Lab component (spec:AST-030 FR26)', () => {
     ).toBe('false');
   });
 
+  it('runs full CI for a changed existing story, even one that imports Lab', async () => {
+    const {outputs} = await decide({
+      files: [...component, routes, {...labStory, status: 'modified'}],
+    });
+    expect(outputs.lab_only).toBe('false');
+  });
+
+  it('runs full CI for a new Lab story of a component the change does not carry', async () => {
+    const {outputs} = await decide({
+      files: [
+        ...component,
+        routes,
+        {
+          ...labStory,
+          filename: 'apps/storybook/stories/Drawer.stories.tsx',
+          patch: "@@ -0,0 +1 @@\n+import {Drawer} from '@astryxdesign/lab';",
+        },
+      ],
+    });
+    expect(outputs.lab_only).toBe('false');
+  });
+
+  it('runs full CI for a renamed entry file', async () => {
+    const {outputs} = await decide({
+      files: [
+        ...component,
+        {
+          ...labStory,
+          status: 'renamed',
+          previous_filename: 'apps/storybook/stories/OldPin.stories.tsx',
+        },
+      ],
+    });
+    expect(outputs.lab_only).toBe('false');
+  });
+
+  it('keeps the full suite for a mixed change that carries Lab routes', async () => {
+    const {outputs} = await decide({
+      files: [
+        ...component,
+        routes,
+        {filename: 'packages/core/src/Button/Button.tsx', status: 'modified'},
+      ],
+    });
+    expect(outputs.lab_only).toBe('false');
+    expect(outputs.full_suite).toBe('true');
+  });
+
   it('runs full CI when GitHub leaves out a patch, or the story does not import Lab', async () => {
     const {patch: _omitted, ...noPatch} = routes;
     expect(

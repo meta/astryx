@@ -997,7 +997,8 @@ jobs:
       # committed list must match its generator (spec:AST-030 FR26).
       - name: 'Lab-only: CLI official-packages check'
         if: matrix.shard == 1 && steps.scope.outputs.lab_only == 'true'
-        run: pnpm exec vitest run scripts/check-cli-official-packages.test.mjs --project node --maxWorkers=1
+        # One Node-project test file: Vitest finds its project from the path.
+        run: pnpm exec vitest run scripts/check-cli-official-packages.test.mjs --maxWorkers=1
 
       - name: Install Playwright for theme-family contract
         if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
@@ -1471,16 +1472,17 @@ jobs:
         if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.lab_only == 'true'
         run: pnpm -F @astryxdesign/lab -F @astryxdesign/storybook typecheck
 
-      # A Lab-only change that carries a Lab component's routes checks the
-      # route lock against the registry the docsite builds from these packages
-      # (spec:AST-030 FR26). Without the merge base, it checks anyway.
+      # A Lab-only change whose route lock differs from the merge base checks
+      # the lock against the registry the docsite builds from these packages
+      # (spec:AST-030 FR26). Without a merge base, it checks anyway.
       - name: 'Lab-only: check the ShadCN route lock'
-        if: steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.lab_only == 'true'
+        if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && steps.scope.outputs.lab_only == 'true'
         env:
           DOCSITE_TARGET: canary
+          MERGE_BASE: ${{ steps.merge-base.outputs.sha }}
         run: |
-          if git diff --quiet HEAD^1 HEAD -- internal/shadcn-registry/routes.lock.json 2>/dev/null; then
-            echo "The route lock did not change."
+          if [ -n "$MERGE_BASE" ] && git diff --quiet "$MERGE_BASE" HEAD -- internal/shadcn-registry/routes.lock.json 2>/dev/null; then
+            echo "The route lock matches the merge base."
             exit 0
           fi
           node apps/docsite/scripts/generate-data.mjs
