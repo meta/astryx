@@ -41,3 +41,6 @@ Every motion role a registered table lists (`spec:AST-094` FR4, DEC-5): its kind
 | `timing.curves.move`            | curve    | cubic-bezier(0.42, 0, 0.58, 1)                                  | `spec:AST-094` FR4      |
 | `timing.curves.viewChange`      | curve    | cubic-bezier(0.25, 0.1, 0.25, 1)                                | `spec:AST-094` FR4      |
 | `timing.stateChangeMs`          | duration | 250 ms                                                          | `spec:AST-094` FR4      |
+| `zoomMedia.settle.baseMs`       | duration | 100 ms                                                          | `component:Lightbox`    |
+| `zoomMedia.settle.lnRatioMs`    | duration | 300 ms                                                          | `component:Lightbox`    |
+| `zoomMedia.settle.maxMs`        | duration | 400 ms                                                          | `component:Lightbox`    |

@@ -314,3 +314,18 @@ scroll view coasts with 0.25 × the pan's velocity plus 0.75 × its value one
 event earlier (four HID releases; `velocity.scrollReleaseWeight`, which a
 pan's `scrollVelocity()` reads). On UIKit, Reduce Motion with Prefer Cross-Fade changes
 nothing on a picker; the Wheel follows design:reduced-motion instead.
+
+## Zoom media (UIScrollView zooming, Photos)
+
+Values Lightbox's zoom stage reads (`uikit/zoomMedia.ts`). Done (UIKit lab
+and Photos, iOS 26.2 simulator, Oct 23 2026; tagged `measured:`): the
+overshoot past the limits, the settle curve and its duration law, the absence
+of scale momentum and of a two-finger-tap action, the content point under the
+centroid staying put, Photos' aspect-fill double tap and its maximum zoom on
+3000 × 2000 and 2000 × 3000 photos. M-ZM2 confirms that maximum on two other
+sizes. A zoomed pan flicked into an edge coasts and bounces like any scroll
+view (`scroll.*`).
+
+| ID    | What         | App and gesture                                                      | Extract                                                                   | Method |
+| ----- | ------------ | -------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------ |
+| M-ZM2 | Maximum zoom | Photos: pinch a 4032 × 3024 and a 1200 × 800 photo as far as it goes | the zoom it settles on against the photo's pixel size and the fitted size | B, C   |
