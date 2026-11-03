@@ -140,27 +140,23 @@ describe('the interaction proof legs in ci.yml', () => {
       expect(plan.id).toBe('plan');
       expect(plan.if).toBe("steps.scope.outputs.applies == 'true'");
       // A head cut before the legs has neither the planner nor the times,
-      // so both come from the workflow's own commit.
-      expect(plan.env).toEqual({WORKFLOW_SHA: '${{ github.sha }}'});
+      // so both come from the scope checkout: the workflow's own commit.
+      const scope = job.steps[0];
+      expect(scope.name).toBe('Check out the scope action');
+      expect(scope.with.ref).toBeUndefined();
+      expect(scope.with.path).toBe('.test-scope');
+      expect(scope.with['sparse-checkout'].trim().split('\n')).toEqual([
+        '.github/actions/test-scope',
+        '.github/scripts',
+        'scripts/lib',
+      ]);
       expect(plan.run).toContain(
-        'git fetch --quiet --no-tags --depth=1 origin "$WORKFLOW_SHA"',
-      );
-      for (const file of [
-        '.github/scripts/interaction-legs.mjs',
-        'scripts/lib/duration-split.mjs',
-      ])
-        expect(plan.run).toContain(
-          `git show "$WORKFLOW_SHA:${file}" > "$legs/${file}"`,
-        );
-      expect(plan.run).toContain(
-        'git show "$WORKFLOW_SHA:.github/interaction-durations.json" > "$legs/interaction-durations.json"',
+        `node .test-scope/.github/scripts/interaction-legs.mjs plan --project ${lane.project}`,
       );
       expect(plan.run).toContain(
-        `node "$legs/.github/scripts/interaction-legs.mjs" plan --project ${lane.project}`,
+        '--durations .test-scope/.github/interaction-durations.json',
       );
-      expect(plan.run).toContain(
-        '--durations "$legs/interaction-durations.json"',
-      );
+      expect(plan.run).not.toMatch(/git (fetch|show)/);
       expect(plan.run).toContain(
         '--leg ${{ matrix.leg }} --of ${{ strategy.job-total }}',
       );

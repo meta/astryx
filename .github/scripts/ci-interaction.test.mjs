@@ -59,7 +59,8 @@ describe('interaction proof routing', () => {
   });
 
   it('decides its own scope first, and gates every later step on it', () => {
-    expect(proofs.steps[0].with['sparse-checkout']).toBe(
+    // The scope action first; the leg planner shares the checkout.
+    expect(proofs.steps[0].with['sparse-checkout'].trim().split('\n')[0]).toBe(
       '.github/actions/test-scope',
     );
     expect(decide().uses).toBe('./.test-scope/.github/actions/test-scope');

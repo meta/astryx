@@ -2312,10 +2312,16 @@ jobs:
       # This job decides its own scope (no separate scope job): the step
       # reads the PR's file list and the base's trusted classifier, and
       # everything is in scope when it cannot decide.
+      # The workflow's own commit: the scope action, and the leg planner with
+      # the shared splitter it imports and the recorded times (in .github, a
+      # parent of the action, so the checkout's cone holds it).
       - name: Check out the scope action
         uses: actions/checkout@v7
         with:
-          sparse-checkout: .github/actions/test-scope
+          sparse-checkout: |
+            .github/actions/test-scope
+            .github/scripts
+            scripts/lib
           path: .test-scope
           persist-credentials: false
 
@@ -2389,22 +2395,15 @@ jobs:
       # This leg's share of the spec files, by their recorded times. Every
       # spec file is in exactly one leg; one with no recorded time counts the
       # median. The planner, the shared splitter it imports and the times come
-      # from the workflow's own commit: a head cut before them has none.
+      # from the scope checkout, the workflow's own commit: a head cut before
+      # them has none.
       - name: Plan this leg's interaction proofs
         id: plan
         if: steps.scope.outputs.applies == 'true'
-        env:
-          WORKFLOW_SHA: ${{ github.sha }}
         run: |
-          legs="$RUNNER_TEMP/interaction-legs"
-          mkdir -p "$legs/.github/scripts" "$legs/scripts/lib"
-          git fetch --quiet --no-tags --depth=1 origin "$WORKFLOW_SHA"
-          git show "$WORKFLOW_SHA:.github/scripts/interaction-legs.mjs" > "$legs/.github/scripts/interaction-legs.mjs"
-          git show "$WORKFLOW_SHA:scripts/lib/duration-split.mjs" > "$legs/scripts/lib/duration-split.mjs"
-          git show "$WORKFLOW_SHA:.github/interaction-durations.json" > "$legs/interaction-durations.json"
-          node "$legs/.github/scripts/interaction-legs.mjs" plan --project chromium \
+          node .test-scope/.github/scripts/interaction-legs.mjs plan --project chromium \
             --leg ${{ matrix.leg }} --of ${{ strategy.job-total }} \
-            --durations "$legs/interaction-durations.json" \
+            --durations .test-scope/.github/interaction-durations.json \
             --out "$RUNNER_TEMP/interaction-leg.txt"
 
       - name: Run interaction proofs
@@ -2459,10 +2458,16 @@ jobs:
       # This job decides its own scope (no separate scope job): the step
       # reads the PR's file list and the base's trusted classifier, and
       # everything is in scope when it cannot decide.
+      # The workflow's own commit: the scope action, and the leg planner with
+      # the shared splitter it imports and the recorded times (in .github, a
+      # parent of the action, so the checkout's cone holds it).
       - name: Check out the scope action
         uses: actions/checkout@v7
         with:
-          sparse-checkout: .github/actions/test-scope
+          sparse-checkout: |
+            .github/actions/test-scope
+            .github/scripts
+            scripts/lib
           path: .test-scope
           persist-credentials: false
 
@@ -2537,22 +2542,14 @@ jobs:
 
       # This leg's share of the WebKit spec files, from the paths the lane
       # covers, by their recorded times. The planner and the times come from
-      # the workflow's own commit, as for the Chromium legs.
+      # the scope checkout, as for the Chromium legs.
       - name: Plan this leg's WebKit interaction proofs
         id: plan
         if: steps.scope.outputs.applies == 'true'
-        env:
-          WORKFLOW_SHA: ${{ github.sha }}
         run: |
-          legs="$RUNNER_TEMP/interaction-legs"
-          mkdir -p "$legs/.github/scripts" "$legs/scripts/lib"
-          git fetch --quiet --no-tags --depth=1 origin "$WORKFLOW_SHA"
-          git show "$WORKFLOW_SHA:.github/scripts/interaction-legs.mjs" > "$legs/.github/scripts/interaction-legs.mjs"
-          git show "$WORKFLOW_SHA:scripts/lib/duration-split.mjs" > "$legs/scripts/lib/duration-split.mjs"
-          git show "$WORKFLOW_SHA:.github/interaction-durations.json" > "$legs/interaction-durations.json"
-          node "$legs/.github/scripts/interaction-legs.mjs" plan --project webkit \
+          node .test-scope/.github/scripts/interaction-legs.mjs plan --project webkit \
             --leg ${{ matrix.leg }} --of ${{ strategy.job-total }} \
-            --durations "$legs/interaction-durations.json" \
+            --durations .test-scope/.github/interaction-durations.json \
             --out "$RUNNER_TEMP/interaction-leg.txt" -- \
             packages/core/src/gestures/ \
             packages/core/src/motion/__tests__/animatedLayout.interaction \

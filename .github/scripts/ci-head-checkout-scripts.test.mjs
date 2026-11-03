@@ -16,8 +16,9 @@
  * guarded: the step's condition requires `hashFiles('<script>') != ''`, the
  * job's scope step names it as `requires-head-file` and the step reads
  * `head_file_present`, the step loads it from the workflow's own commit
- * (`git show "$WORKFLOW_SHA:<script>"`), or the step checks for it itself
- * (`[ ! -f ... ]`). A job that does not measure the head takes the default
+ * (`git show "$WORKFLOW_SHA:<script>"`, or from the job's `.test-scope`
+ * checkout, whose sparse directories hold it), or the step checks for it
+ * itself (`[ ! -f ... ]`). A job that does not measure the head takes the default
  * merge checkout instead, and this test does not apply to it.
  *
  * Scope: `.js`, `.mjs` and `.cjs` scripts named in a step's `run:`.
@@ -102,6 +103,24 @@ export function skipsWhenMissing(run, script) {
   );
 }
 
+/**
+ * Whether the job's scope checkout (`path: .test-scope`, the workflow's own
+ * commit) holds the script: a sparse-checkout directory contains it.
+ */
+export function scopeHolds(job, script) {
+  const scope = (job.steps ?? []).find(
+    step =>
+      String(step.uses ?? '').startsWith('actions/checkout@') &&
+      step.with?.path === '.test-scope' &&
+      step.with?.ref == null,
+  );
+  const dirs = String(scope?.with?.['sparse-checkout'] ?? '')
+    .split('\n')
+    .map(line => line.trim().replace(/\/$/, ''))
+    .filter(Boolean);
+  return dirs.some(dir => script.startsWith(`${dir}/`));
+}
+
 export function unguardedScripts(job) {
   const scope = (job.steps ?? []).find(step =>
     String(step.uses ?? '').includes('test-scope'),
@@ -116,6 +135,9 @@ export function unguardedScripts(job) {
       if (condition.includes(`hashFiles('${script}') != ''`)) continue;
       // Loaded from the workflow's own commit, not the head.
       if (run.includes(`$WORKFLOW_SHA:${script}`)) continue;
+      // Run from the job's scope checkout, also the workflow's own commit.
+      if (run.includes(`.test-scope/${script}`) && scopeHolds(job, script))
+        continue;
       // The step skips a head without this script on its own.
       if (skipsWhenMissing(run, script)) continue;
       if (
