@@ -884,10 +884,14 @@ function PointerDateField({
         if (!isEffectivelyDisabled) {
           popover.show({skipAutoFocus: true});
         }
-      } else if (e.key === 'Enter' && pendingInput !== null) {
-        // Only typed text holds Enter back: a form would otherwise submit
-        // the value from before the commit. With nothing typed, Enter does
-        // what it does in any text field and submits the form.
+      } else if (
+        e.key === 'Enter' &&
+        (pendingInput !== null || isEffectivelyDisabled)
+      ) {
+        // Typed text holds Enter back: a form would otherwise submit the
+        // value from before the commit. A disabled or busy field does
+        // nothing on Enter. Otherwise Enter submits the form, as in any
+        // text field.
         e.preventDefault();
         commitPendingInput();
       }
