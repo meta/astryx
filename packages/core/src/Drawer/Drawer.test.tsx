@@ -11,7 +11,7 @@
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {render, screen, fireEvent, act} from '@testing-library/react';
-import {createContext, createRef, use, useState} from 'react';
+import {StrictMode, createContext, createRef, use, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Drawer} from './Drawer';
 import {DrawerHeader} from './DrawerHeader';
@@ -1331,5 +1331,96 @@ describe('Drawer', () => {
         ),
       ).toBe('0px');
     });
+  });
+});
+
+// FR8: a drawer that unmounts while open (rendered only while open, or
+// removed with the rest of a view) returns focus to the element focused before
+// it opened, as a close does.
+describe('Drawer unmounting while open', () => {
+  function Inspector({
+    unmountWith,
+    hasScrim,
+  }: {
+    unmountWith: 'save' | 'view';
+    hasScrim: boolean;
+  }) {
+    const [isEditing, setIsEditing] = useState(false);
+    const [showView, setShowView] = useState(true);
+    return (
+      <>
+        <button type="button" onClick={() => setIsEditing(true)}>
+          Edit
+        </button>
+        <button type="button">Elsewhere</button>
+        {showView && isEditing ? (
+          <Drawer
+            isOpen
+            onOpenChange={setIsEditing}
+            label="Edit row"
+            hasScrim={hasScrim}>
+            <button
+              type="button"
+              onClick={() =>
+                unmountWith === 'save'
+                  ? setIsEditing(false)
+                  : setShowView(false)
+              }>
+              Save
+            </button>
+          </Drawer>
+        ) : null}
+      </>
+    );
+  }
+
+  function openAndFocusSave(): HTMLElement {
+    const edit = screen.getByRole('button', {name: 'Edit'});
+    edit.focus();
+    fireEvent.click(edit);
+    const save = screen.getByRole('button', {name: 'Save'});
+    save.focus();
+    return edit;
+  }
+
+  for (const hasScrim of [false, true]) {
+    for (const unmountWith of ['save', 'view'] as const) {
+      it(`returns focus to the opener (${hasScrim ? 'modal' : 'non-modal'}, ${unmountWith})`, async () => {
+        render(<Inspector unmountWith={unmountWith} hasScrim={hasScrim} />);
+        const edit = openAndFocusSave();
+
+        fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+        await Promise.resolve();
+
+        expect(screen.queryByRole('button', {name: 'Save'})).toBeNull();
+        expect(edit).toHaveFocus();
+      });
+    }
+  }
+
+  it('leaves focus where the user moved it before the unmount', async () => {
+    render(<Inspector unmountWith="save" hasScrim={false} />);
+    openAndFocusSave();
+    const save = screen.getByRole('button', {name: 'Save'});
+    const elsewhere = screen.getByRole('button', {name: 'Elsewhere'});
+    elsewhere.focus();
+
+    // The drawer's own control unmounts it while focus is outside.
+    fireEvent.click(save);
+    await Promise.resolve();
+
+    expect(elsewhere).toHaveFocus();
+  });
+
+  it('a StrictMode remount leaves focus inside the open drawer', async () => {
+    render(
+      <StrictMode>
+        <Inspector unmountWith="save" hasScrim={false} />
+      </StrictMode>,
+    );
+    openAndFocusSave();
+    await Promise.resolve();
+
+    expect(screen.getByRole('button', {name: 'Save'})).toHaveFocus();
   });
 });
