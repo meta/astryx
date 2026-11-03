@@ -357,6 +357,14 @@ describe('DateInput onChange while typing a Gregorian date', () => {
     expect(onChange).toHaveBeenCalledExactlyOnceWith('2026-05-13');
   });
 
+  it('never falls back to a month-first reading in a day-first locale', () => {
+    const {input, onChange} = renderField('en-GB');
+    fireEvent.change(input, {target: {value: '12/01/2026 10:00'}});
+    fireEvent.blur(input);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(input).toHaveValue('');
+  });
+
   it.each(['blur', 'Enter'])(
     'keeps a one-digit year on %s and announces it as invalid',
     commit => {
