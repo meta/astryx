@@ -198,7 +198,8 @@ export function wheelSendGaps(
 /**
  * Sorts a burst's gaps past `maxGapMs` by cause. `stamps` are when the
  * received steps reached the page (`wheelArrivals`); `handledAt` is when the
- * page's wheel listeners had finished with each (NaN where that was not seen);
+ * page's wheel listeners had finished with each (for a step whose propagation
+ * the page stopped, when a task queued at its arrival ran; NaN unseen);
  * `sendGapsMs` is how far apart the harness sent the steps behind each gap
  * (`wheelSendGaps`; `null` where unknown). In WebKit, which dispatches a step
  * only once the page's main thread is free, a gap is the page's when the step
@@ -210,7 +211,8 @@ export function wheelSendGaps(
  * page right after its listeners). Every other gap is the dispatch's, and in
  * Chromium, which stamps a step with its dispatch time, so the page cannot
  * move its stamps, every gap is. Other work on the page's main thread between
- * steps (timers, frame callbacks) counts as the dispatch's.
+ * steps (timers, frame callbacks) counts as the dispatch's, unless it ran
+ * before a stopped step's marking task.
  */
 export function wheelGapCauses(
   engine: Engine,
@@ -371,58 +373,115 @@ async function untilReceived(
   }
 }
 
-interface WheelRun {
+/** What the page saw of each input event of one run (`armInputRun`). */
+export interface InputRun {
+  /** The event types the run records. */
+  types: string[];
+  /** Each event's own `timeStamp`. */
   stamps: number[];
-  /** When the page's first listener received each step. */
+  /** When the page's first listener received each event. */
   receivedAt: number[];
-  /** When the page's wheel listeners had finished with each step; NaN until seen. */
+  /**
+   * When the page's own listeners had finished with each event, NaN until
+   * seen. An event whose propagation the page stops is marked by a task
+   * queued when it arrived, and never later than the next event's arrival.
+   * So page work queued before that task, such as a timer, counts as its
+   * handling.
+   */
   handledAt: number[];
-  /** Each received step's deltas, CSS px: a coalesced step carries the sum. */
+  /** Each event's type. */
+  eventTypes: string[];
+  /** Each event's pointer type, or '' for an event that has none. */
+  pointerTypes: string[];
+  /** Each wheel step's deltas, CSS px: a coalesced step carries the sum. */
   deltas: [number, number][];
   dx: number;
   dy: number;
+  /** Removes the listeners and settles every handling mark. */
   stop: () => void;
 }
 
 /**
- * Arms a passive capture listener that stamps every wheel step the page
- * receives and sums its deltas, before a burst is dispatched, and a passive
- * bubble listener on the window, after the page's own, that notes when the
- * page has finished with each step (a step whose propagation the page stops
- * is never noted, and counts as handled at once).
+ * Arms two passive listeners on the window before a run is dispatched. A
+ * capture listener stamps each trusted event of `types` before the page's
+ * own listeners. A bubble listener, after them, notes when the page has
+ * finished with the event. The wheel and touch drivers share it.
  */
-function armWheelRun(page: Page): Promise<JSHandle<WheelRun>> {
-  return page.evaluateHandle(() => {
-    const first = {capture: true, passive: true};
-    const last = {capture: false, passive: true};
-    const run = {
-      stamps: [] as number[],
-      receivedAt: [] as number[],
-      handledAt: [] as number[],
-      deltas: [] as [number, number][],
-      dx: 0,
-      dy: 0,
-      stop: () => {
-        window.removeEventListener('wheel', received, first);
-        window.removeEventListener('wheel', handled, last);
-      },
-    };
-    const received = (event: Event) => {
-      const wheel = event as WheelEvent;
-      run.stamps.push(wheel.timeStamp);
-      run.receivedAt.push(performance.now());
-      run.handledAt.push(Number.NaN);
-      run.deltas.push([wheel.deltaX, wheel.deltaY]);
-      run.dx += wheel.deltaX;
-      run.dy += wheel.deltaY;
-    };
-    const handled = () => {
-      run.handledAt[run.handledAt.length - 1] = performance.now();
-    };
-    window.addEventListener('wheel', received, first);
-    window.addEventListener('wheel', handled, last);
-    return run;
-  });
+export function armInputRun(
+  page: Page,
+  types: readonly string[],
+): Promise<JSHandle<InputRun>> {
+  return page.evaluateHandle(
+    eventTypes => {
+      const first = {capture: true, passive: true};
+      const last = {capture: false, passive: true};
+      const index = new WeakMap<Event, number>();
+      // A message runs as a task of its own, after the dispatch that queued
+      // it: it marks an event whose bubble listener never ran.
+      const channel = new MessageChannel();
+      const run = {
+        types: [...eventTypes],
+        stamps: [] as number[],
+        receivedAt: [] as number[],
+        handledAt: [] as number[],
+        eventTypes: [] as string[],
+        pointerTypes: [] as string[],
+        deltas: [] as [number, number][],
+        dx: 0,
+        dy: 0,
+        stop: () => {
+          for (const type of eventTypes) {
+            window.removeEventListener(type, received, first);
+            window.removeEventListener(type, handled, last);
+          }
+          channel.port1.onmessage = null;
+          channel.port1.close();
+          for (let i = 0; i + 1 < run.handledAt.length; i++) {
+            run.handledAt[i] = Math.min(
+              run.handledAt[i],
+              run.receivedAt[i + 1],
+            );
+          }
+        },
+      };
+      channel.port1.onmessage = (message: MessageEvent<number>) => {
+        if (Number.isNaN(run.handledAt[message.data])) {
+          run.handledAt[message.data] = performance.now();
+        }
+      };
+      const received = (event: Event) => {
+        if (!event.isTrusted) {
+          return;
+        }
+        const i = run.stamps.length;
+        index.set(event, i);
+        run.stamps.push(event.timeStamp);
+        run.receivedAt.push(performance.now());
+        run.handledAt.push(Number.NaN);
+        run.eventTypes.push(event.type);
+        run.pointerTypes.push(
+          'pointerType' in event ? String(event.pointerType) : '',
+        );
+        const wheel = event.type === 'wheel' ? (event as WheelEvent) : null;
+        run.deltas.push([wheel?.deltaX ?? 0, wheel?.deltaY ?? 0]);
+        run.dx += wheel?.deltaX ?? 0;
+        run.dy += wheel?.deltaY ?? 0;
+        channel.port2.postMessage(i);
+      };
+      const handled = (event: Event) => {
+        const i = index.get(event);
+        if (i != null) {
+          run.handledAt[i] = performance.now();
+        }
+      };
+      for (const type of eventTypes) {
+        window.addEventListener(type, received, first);
+        window.addEventListener(type, handled, last);
+      }
+      return run;
+    },
+    [...types],
+  );
 }
 
 /**
@@ -432,7 +491,7 @@ function armWheelRun(page: Page): Promise<JSHandle<WheelRun>> {
 async function untilRunReceived(
   page: Page,
   engine: Engine,
-  armed: JSHandle<WheelRun>,
+  armed: JSHandle<InputRun>,
   {steps, maxGapMs}: Pick<WheelBurst, 'steps' | 'maxGapMs'>,
   sentAt: readonly number[],
 ): Promise<{receivedSteps: number; receivedGapsMs: number[]}> {
@@ -565,7 +624,7 @@ async function chromiumWebInput(page: Page): Promise<WebInputDriver> {
       const scale = await page.evaluate(
         () => window.devicePixelRatio * (window.visualViewport?.scale ?? 1),
       );
-      const armed = await armWheelRun(page);
+      const armed = await armInputRun(page, ['wheel']);
       const sentAt = await dispatchOnSchedule(
         steps,
         everyMs,
@@ -675,7 +734,7 @@ async function webkitWebInput(page: Page): Promise<WebInputDriver> {
         await page.keyboard.down('Control');
       }
       try {
-        const armed = await armWheelRun(page);
+        const armed = await armInputRun(page, ['wheel']);
         const sentAt = await dispatchOnSchedule(
           steps,
           everyMs,

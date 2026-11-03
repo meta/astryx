@@ -1809,6 +1809,56 @@ test.describe('wheel and pen input', () => {
     }
   });
 
+  test('a page whose wheel listener stops the step and holds its main thread still splits a burst itself: never re-taken', async ({
+    browser,
+    browserName,
+  }) => {
+    const context = await browser.newContext({
+      viewport: {width: 402, height: 714},
+      isMobile: false,
+      hasTouch: false,
+    });
+    try {
+      const page = await context.newPage();
+      // The body's listener stops each step before it reaches the window,
+      // and blocks the main thread for 150 ms, past the 100 ms bound.
+      await page.route('http://wheel-stopping-page.test/', route =>
+        route.fulfill({
+          contentType: 'text/html',
+          body: '<!doctype html><body style="margin:0;height:3000px"><script>document.body.addEventListener("wheel",e=>{e.preventDefault();e.stopPropagation();const end=performance.now()+150;while(performance.now()<end){}},{passive:false});</script>',
+        }),
+      );
+      await page.goto('http://wheel-stopping-page.test/');
+      const driver = await webInputDriver(page);
+      test.skip(!driver.wheels, WHEEL_SKIP);
+      const testInfo = {
+        annotations: [] as {type: string; description?: string}[],
+      };
+      const attempts: number[] = [];
+      const outcome = await retakeOnWheelPacing(testInfo, async n => {
+        attempts.push(n);
+        return driver.wheelBurst({
+          x: 200,
+          y: 300,
+          steps: Array.from({length: 4}, () => ({dx: 10})),
+          maxGapMs: 100,
+        });
+      }).then(
+        () => 'resolved',
+        (error: unknown) => error,
+      );
+      expect(outcome).not.toBeInstanceOf(WheelPacingError);
+      expect(attempts).toEqual([1]);
+      if (browserName === 'webkit') {
+        // The queued task marks the stopped step's handling, so the stall is
+        // the page's.
+        expect(outcome).toBeInstanceOf(WheelPageStallError);
+      }
+    } finally {
+      await context.close();
+    }
+  });
+
   /** A non-passive wheel listener: Chromium then waits for the page itself. */
   const listenNonPassively = (page: Page) =>
     page.evaluate(() =>

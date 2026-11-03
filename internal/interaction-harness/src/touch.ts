@@ -39,7 +39,7 @@
  *   harness self-test (../src/harness.interaction.browser.spec.ts).
  */
 
-import type {CDPSession, Page} from '@playwright/test';
+import type {CDPSession, JSHandle, Page} from '@playwright/test';
 import {
   toTouchEvents,
   type Finger,
@@ -47,7 +47,7 @@ import {
   type TouchEventStep,
   type TouchScript,
 } from './scripts';
-import {HELD_BACK_MS} from './webInput';
+import {armInputRun, HELD_BACK_MS, type InputRun} from './webInput';
 
 export type Engine = 'chromium' | 'webkit';
 
@@ -545,65 +545,39 @@ export function webkitPageSession(page: Page): WebKitPageProxySession {
   return session;
 }
 
+/** The touch events a paced play's probe records. */
+const TOUCH_TYPES = ['touchstart', 'touchmove', 'touchend', 'touchcancel'];
+
 /**
  * Records, for each touch event of a paced play, when it reached the page
- * (its `timeStamp`, read by a capture listener on the window before the
- * page's own) and when the page's own listeners had finished with it (a
- * passive listener on the window after them; an event whose propagation the
- * page stops is never noted, and counts as handled at once).
+ * and when the page's own listeners had finished with it (`armInputRun`).
  */
 function touchArrivalProbe(page: Page): TouchArrivalProbe {
+  let armed: JSHandle<InputRun> | null = null;
   return {
     async arm() {
-      await page.evaluate(() => {
-        type Run = {
-          arrivals: {stamp: number; handledAt: number}[];
-          stop: () => void;
-        };
-        const host = window as unknown as {__harnessTouchRun?: Run};
-        host.__harnessTouchRun?.stop();
-        const types = ['touchstart', 'touchmove', 'touchend', 'touchcancel'];
-        const first = {capture: true, passive: true};
-        const last = {capture: false, passive: true};
-        const run: Run = {arrivals: [], stop: () => {}};
-        const received = (event: Event) => {
-          run.arrivals.push({stamp: event.timeStamp, handledAt: Number.NaN});
-        };
-        const handled = () => {
-          const arrival = run.arrivals[run.arrivals.length - 1];
-          if (arrival != null) {
-            arrival.handledAt = performance.now();
-          }
-        };
-        for (const type of types) {
-          window.addEventListener(type, received, first);
-          window.addEventListener(type, handled, last);
-        }
-        run.stop = () => {
-          for (const type of types) {
-            window.removeEventListener(type, received, first);
-            window.removeEventListener(type, handled, last);
-          }
-        };
-        host.__harnessTouchRun = run;
-      });
+      await armed?.evaluate(run => run.stop());
+      await armed?.dispose();
+      armed = await armInputRun(page, TOUCH_TYPES);
     },
     async read() {
-      return page.evaluate(() => {
-        const host = window as unknown as {
-          __harnessTouchRun?: {
-            arrivals: {stamp: number; handledAt: number}[];
-            stop: () => void;
-          };
+      if (armed == null) {
+        return [];
+      }
+      const run = armed;
+      armed = null;
+      const record = await run.evaluate(recorded => {
+        recorded.stop();
+        return {
+          stamps: recorded.stamps.slice(),
+          handledAt: recorded.handledAt.slice(),
         };
-        const run = host.__harnessTouchRun;
-        if (run == null) {
-          return [];
-        }
-        run.stop();
-        delete host.__harnessTouchRun;
-        return run.arrivals.map(arrival => ({...arrival}));
       });
+      await run.dispose();
+      return record.stamps.map((stamp, i) => ({
+        stamp,
+        handledAt: record.handledAt[i],
+      }));
     },
   };
 }

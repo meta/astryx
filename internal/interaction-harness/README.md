@@ -410,9 +410,11 @@ Otherwise the dispatch stalled before the page (a loaded runner) and it throws
 `WheelPacingError` with the gaps. Wrap such a
 proof in `retakeOnWheelPacing(testInfo, attempt)`: one re-take, only on
 `WheelPacingError`, listed as a `wheel-retake` annotation. The burst times the
-page's handling with a listener on the window that runs after the page's own,
-so a listener that stops the step's propagation, or other main-thread work
-between steps (timers, frames), still counts as the dispatch's stall. Chromium
+page's handling with a listener on the window that runs after the page's own.
+A step whose propagation the page stops is marked by a task queued when it
+arrived, and never later than the next step's arrival. So its handling, with
+any work queued before that task, counts as the page's. Other main-thread work
+between steps (timers, frames) still counts as the dispatch's stall. Chromium
 stamps a step with its dispatch time, so a page that holds its main thread does
 not widen the gaps there, and every gap past `maxGapMs` is a `WheelPacingError`.
 
