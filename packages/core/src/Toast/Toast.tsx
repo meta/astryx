@@ -315,6 +315,8 @@ export function ToastSurface({
     return () => {
       window.removeEventListener('blur', pauseForWindow);
       window.removeEventListener('focus', resumeForWindow);
+      // With the listeners gone, no focus event would clear the window hold.
+      pauseSourcesRef.current.delete('window');
     };
   }, [isAutoHide, pauseTimer, resumeTimer]);
 

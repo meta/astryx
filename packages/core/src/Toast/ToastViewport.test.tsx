@@ -1009,6 +1009,58 @@ describe('ToastViewport keyboard reach + focus', () => {
     }
   });
 
+  // FR2: a window hold taken while the toast auto-hid does not outlive the
+  // listeners an update that turns auto-hide off removes.
+  it('auto-hides again after an update turns auto-hide off and on across a window blur', () => {
+    vi.useFakeTimers();
+    const onHide = vi.fn();
+    try {
+      const status = (body: string, options: Partial<ToastOptions>) => ({
+        body,
+        uniqueID: 'network',
+        ...options,
+      });
+      renderViewport(
+        <>
+          <ShowToastButton
+            options={status('Syncing', {autoHideDuration: 2000})}
+            triggerLabel="Sync"
+          />
+          <ShowToastButton
+            options={status('Offline', {type: 'error'})}
+            triggerLabel="Lose network"
+          />
+          <ShowToastButton
+            options={status('Back online', {autoHideDuration: 2000, onHide})}
+            triggerLabel="Reconnect"
+          />
+        </>,
+      );
+      act(() => {
+        fireEvent.click(screen.getByText('Sync'));
+      });
+      act(() => {
+        fireEvent.blur(window);
+      });
+      act(() => {
+        fireEvent.click(screen.getByText('Lose network'));
+      });
+      act(() => {
+        fireEvent.focus(window);
+      });
+      act(() => {
+        fireEvent.click(screen.getByText('Reconnect'));
+      });
+      act(() => {
+        vi.advanceTimersByTime(2500);
+      });
+
+      expect(onHide).toHaveBeenCalledWith('auto');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // FR9: the viewport is the one announcement owner, so a card updated in
   // place carries no live region of its own and is announced once.
   it('announces an overwrite once, through the viewport only', () => {
