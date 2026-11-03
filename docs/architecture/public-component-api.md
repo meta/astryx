@@ -111,8 +111,9 @@ guidance owns the process used to propose and test APIs.
   public prop names a system primitive with the system's existing vocabulary:
   it introduces no new term for a concept the system already names (DEC-1). A
   gap between an element and its anchor is an `offset`, as `useLayer`'s
-  `offset` is; a distance in from a container's or the viewport's edge is an
-  `inset`, as LayerProvider's and ToastViewport's `inset` are. Depth is
+  `offset` is; a distance a positioned element keeps in from a container's or
+  the viewport's edge is an `inset`, as LayerProvider's and ToastViewport's
+  `inset` are. Depth is
   `elevation`, which takes values from `Elevation`, as Card, Button, and Banner
   take it. `lift` names motion under a press, such as
   Switch's thumb lift, Slider's `springs.sliderLift`, and ContextMenu's
@@ -377,9 +378,9 @@ copy the component matrix.
 
 A public prop that names a system primitive uses the word the system already
 has for it, so a builder who knows one component reads the same concept the
-same way on the next. A gap from an anchor is `offset`, a distance in from an
-edge is `inset`, depth is `elevation`, and `lift` stays the name of motion
-under a press. An API for a new component, such as a search field, starts from
+same way on the next. A gap from an anchor is `offset`, a distance a
+positioned element keeps in from an edge is `inset`, depth is `elevation`, and
+`lift` stays the name of motion under a press. An API for a new component, such as a search field, starts from
 the existing patterns in the system and introduces no new term for a concept
 the system already names.
 
@@ -430,6 +431,10 @@ Known verification gaps:
   and `useResizable` `collapsible` and CodeBlock `isCollapsible`; Calendar
   `mode` and FileInput `isMultiple`; FileInput `mode`; Tokenizer and
   PowerSearch `tokenOverflowBehavior`; OverflowList `behavior`.
+- INV2: a shipped prop that names a concept with a word the system uses for
+  another keeps its name until a minor renames it under INV9. Outline's
+  `offset` is the distance below the top of its scroll root
+  (`component:Outline` FR4), not a gap from an anchor.
 - INV22: known gaps include `useLongPress`, `useMenuPress`,
   `usePressFeedback`, `useClickableContainer`, `useInputContainer`,
   `useOverlay`, `useCombobox`, `useMultiCombobox`, `useResizable`,
