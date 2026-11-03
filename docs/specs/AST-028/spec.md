@@ -169,11 +169,7 @@ published location. The portable source keeps the root-relative fixture path.
 
 The CLI copy path currently recognizes Astryx's fixture namespace and replaces
 images with a self-contained SVG placeholder. It strips recognized video sources
-to an empty string rather than place image data in a video element. This behavior
-established the core preview-versus-copy split, while this record adds the
-previously unwritten requirements for why assets are fixtures, which references
-may be transformed, what a safe fallback means, how unsupported formats fail,
-and why icons are separate.
+to an empty string rather than place image data in a video element.
 
 `template copy` and `template show` replace each demo-content element (FR13)
 with a `<Text>Card content</Text>` placeholder, import Astryx's `Text` for it
@@ -188,10 +184,6 @@ Install item installs block and page source with demo-content elements and
 fixture media both replaced, each as a visibly marked placeholder, and its
 registry item description says how many were replaced. Its
 `.astryx/<item>.json` receipt keeps the v2 shape until CLN-0027.
-
-This specification-only change alters no package, template, asset, preview,
-runtime, or public CLI behavior. Remaining implementation and verification
-follow separately.
 
 ## Verification
 
