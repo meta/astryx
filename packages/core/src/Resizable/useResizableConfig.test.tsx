@@ -117,6 +117,17 @@ describe('useResizable(config) builds on createResizable too, so the region stat
     expect(fake.destroy).toHaveBeenCalledTimes(1);
   });
 
+  it('passes a configuration it was created with to the factory again, after another one came between', () => {
+    const wide: UseResizableSingleConfig = {defaultSize: 300, maxSize: 500};
+    const narrow: UseResizableSingleConfig = {defaultSize: 300, maxSize: 200};
+    const view = render(<ConfigSplit config={wide} onRegion={() => {}} />);
+    view.rerender(<ConfigSplit config={narrow} onRegion={() => {}} />);
+    expect(fake.update).toHaveBeenLastCalledWith(narrow);
+    view.rerender(<ConfigSplit config={wide} onRegion={() => {}} />);
+    expect(fake.update).toHaveBeenLastCalledWith(wide);
+    expect(created).toHaveLength(1);
+  });
+
   it('returns what the factory reports, in its size, collapse state and props, and its methods call the factory', () => {
     let region: ResizableRegion | undefined;
     render(
