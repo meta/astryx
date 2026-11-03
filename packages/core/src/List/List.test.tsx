@@ -54,6 +54,7 @@ import {List} from './List';
 import {ListItem} from './ListItem';
 import {ListMarkerScope} from './ListContext';
 import {HIT_INSET_PROPERTIES} from '../utils/hitArea';
+import {useAnimatedLayout} from '../hooks/useAnimatedLayout';
 
 describe('List', () => {
   it('forwards ListItem align to its Item row unchanged', () => {
@@ -1159,6 +1160,23 @@ describe('List and swipe actions', () => {
     expect(other.filter(rule => rule.includes('isolation'))).toEqual([]);
   });
 
+  it('isolates for every pointer under an animatedLayout handle, since a sliding row rides above its neighbors with a mouse too', () => {
+    function Animated() {
+      const containerRef = useRef<HTMLDivElement | null>(null);
+      const animatedLayout = useAnimatedLayout({containerRef});
+      return (
+        <div ref={containerRef}>
+          <List animatedLayout={animatedLayout}>
+            <ListItem label="A" itemKey="a" onClick={() => {}} />
+          </List>
+        </div>
+      );
+    }
+    render(<Animated />);
+    const {other} = touchGatedRules(screen.getByRole('list'));
+    expect(other.join('\n')).toMatch(/isolation: isolate/);
+  });
+
   it('under a finger, raises a swipeable interactive row above the rows after it: it is a stacking context, so its touch band’s own z-index orders only inside it', () => {
     render(
       <List>
@@ -1193,8 +1211,13 @@ describe('List and swipe actions', () => {
     };
     const swipeable = rowZ(row('Swipeable'));
     expect(swipeable.touch.join('\n')).toMatch(/z-index: 1/);
-    // With a mouse there is no band, and nothing changes.
-    expect(swipeable.other).toEqual([]);
+    // With a mouse there is no band: the row's only z-index is an update's
+    // travelling raise, while it slides across other rows.
+    for (const rule of swipeable.other) {
+      expect(rule.slice(0, rule.indexOf('{'))).toContain(
+        '[data-astryx-travelling]',
+      );
+    }
     // A row that is no stacking context needs no raise (its band's own
     // z-index orders it), and a swipeable row with no band gets none.
     expect(rowZ(row('Pressable')).touch).toEqual([]);

@@ -19,6 +19,7 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {Switch} from '@astryxdesign/core/Switch';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {VStack} from '@astryxdesign/core/Layout';
+import {useAnimatedLayout} from '@astryxdesign/core/hooks';
 import {rtlStyles} from '@astryxdesign/core/utils';
 import {
   Cog6ToothIcon,
@@ -758,6 +759,157 @@ export const HeaderInFlexParent: Story = {
         story:
           'Demonstrates the list with a header inside a flex parent. ' +
           'The header should appear above the list, not beside it.',
+      },
+    },
+  },
+};
+
+function AnimatedChangesDemo() {
+  const [rows, setRows] = useState([
+    'Inbox',
+    'Sent',
+    'Drafts',
+    'Archive',
+    'Spam',
+  ]);
+  const [next, setNext] = useState(1);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const animatedLayout = useAnimatedLayout({containerRef});
+  return (
+    <div ref={containerRef}>
+      <VStack gap={4}>
+        <List animatedLayout={animatedLayout} hasDividers>
+          {rows.map(label => (
+            <ListItem
+              key={label}
+              itemKey={label}
+              label={label}
+              onClick={() => {}}
+            />
+          ))}
+        </List>
+        <Text data-testid="after-list">{`${rows.length} folders`}</Text>
+        <Button
+          label="Insert a row second"
+          onClick={() => {
+            setRows(current => [
+              current[0],
+              `Folder ${next}`,
+              ...current.slice(1),
+            ]);
+            setNext(n => n + 1);
+          }}
+        />
+        <Button
+          label="Remove the second row"
+          onClick={() =>
+            setRows(current => current.filter((_, index) => index !== 1))
+          }
+        />
+        <Button
+          label="Move the last row first"
+          onClick={() =>
+            setRows(current => [
+              current[current.length - 1],
+              ...current.slice(0, -1),
+            ])
+          }
+        />
+      </VStack>
+    </div>
+  );
+}
+
+export const AnimatedChanges: Story = {
+  render: () => <AnimatedChangesDemo />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'With `animatedLayout` (the handle from `useAnimatedLayout`) and ' +
+          'an `itemKey` on each row, an inserted row enters, a removed row ' +
+          'collapses in place, a row crossing rows that move the other way ' +
+          'rides above them with the surface color behind it, and the rows ' +
+          'after a change and the buttons below the list glide to their new ' +
+          'places, all on one shared motion, under every pointer.',
+      },
+    },
+  },
+};
+
+/** The swipe story's row with no swipe actions. */
+const PLAIN_ROW = 'Notes';
+
+function AnimatedChangesSwipeDemo() {
+  const [rows, setRows] = useState([
+    'Inbox',
+    'Sent',
+    'Drafts',
+    'Archive',
+    PLAIN_ROW,
+  ]);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const animatedLayout = useAnimatedLayout({containerRef});
+  const moveFirst = (label: string) =>
+    setRows(current =>
+      current.includes(label)
+        ? [label, ...current.filter(row => row !== label)]
+        : current,
+    );
+  return (
+    <div ref={containerRef}>
+      <List animatedLayout={animatedLayout} hasDividers>
+        {rows.map(label => (
+          <ListItem
+            key={label}
+            itemKey={label}
+            label={label}
+            onClick={() => {}}
+            swipeActions={
+              label === PLAIN_ROW
+                ? undefined
+                : {
+                    trailing: [
+                      {
+                        label: 'Delete',
+                        variant: 'destructive',
+                        hasRemoval: true,
+                        onActivate: () =>
+                          setRows(current =>
+                            current.filter(row => row !== label),
+                          ),
+                      },
+                    ],
+                  }
+            }
+          />
+        ))}
+      </List>
+      <Button
+        label="Move Archive first"
+        variant="secondary"
+        onClick={() => moveFirst('Archive')}
+      />
+      <Button
+        label="Move Notes first"
+        variant="secondary"
+        onClick={() => moveFirst(PLAIN_ROW)}
+      />
+    </div>
+  );
+}
+
+export const AnimatedChangesSwipe: Story = {
+  render: () => <AnimatedChangesSwipeDemo />,
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'With `animatedLayout`, a row swiped away with a removal action ' +
+          'collapses in place, its action showing, while the rows below ' +
+          'glide up into its gap on the shared motion. A row moved up ' +
+          'across the swipeable rows, with swipe actions (Archive) or ' +
+          'without (Notes), rides above the rows it crosses.',
       },
     },
   },

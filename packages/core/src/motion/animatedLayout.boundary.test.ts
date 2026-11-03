@@ -150,6 +150,8 @@ describe('architecture:react-component-runtime INV12 source boundary', () => {
     expect(users).toEqual([
       'AppShell/AppShell.tsx',
       'Collapsible/Collapsible.tsx',
+      'List/List.tsx',
+      'List/listLayoutUpdates.ts',
       'SideNav/railMotion.ts',
       'Table/plugins/rowExpansion/useTableRowExpansion.tsx',
       'TreeList/TreeList.tsx',
