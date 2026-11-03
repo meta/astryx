@@ -555,6 +555,27 @@ the rest of that stream is the page's. A ctrl-wheel pinch keeps its stream,
 so the page never zooms for it, and a pan its lift released keeps its
 momentum latched until the stream ends.
 
+## Context requests
+
+`attachContextRequest(element, {onRequest})` (`contextRequest.ts`, internal)
+is the one request a context menu answers (`spec:AST-094` FR43): a finger or
+a pen held still for UIKit's long press, a pointer's context click (a right
+click, a ctrl-click on macOS, a pen's barrel button), or Shift+F10 and the
+context-menu key. Each gesture makes one request, reporting its `kind`
+(`hold`, `pointer`, `keyboard`), its pointer, and its point (none from
+the keyboard). The hold is an arena participant, so it loses to a claim
+another recognizer made on that finger first (a reorder handle's hold); the
+browser's own menu that a held finger, a held pen or a key also fires is
+refused, never requested again; and a mouse held still makes no request. A
+control that keeps its press for a hold-repeat owns only its hold: its right
+click and Shift+F10 still reach the request. A right click or a ctrl-click on macOS starts no press.
+The request listens on its own element only, and only while enabled.
+
+The hold is UIKit's long press, 500 ms and 10 px as a distance, and it
+requests as it begins; `onHold` reports it committed, then ended at its lift
+or cancelled. A hold disabled before it requests reports nothing, and a held
+key's repeats make no request.
+
 ## Time
 
 Every input carries its own timestamp (`event.timeStamp`), and timers are
