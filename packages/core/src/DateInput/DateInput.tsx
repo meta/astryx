@@ -888,10 +888,9 @@ function PointerDateField({
         e.key === 'Enter' &&
         (pendingInput !== null || isEffectivelyDisabled)
       ) {
-        // Typed text holds Enter back: a form would otherwise submit the
-        // value from before the commit. A disabled or busy field does
-        // nothing on Enter. Otherwise Enter submits the form, as in any
-        // text field.
+        // Typed text holds Enter back, or a form would submit the value from
+        // before the commit. A disabled or busy field must not submit its
+        // form either. Otherwise Enter keeps its default, as in any text field.
         e.preventDefault();
         commitPendingInput();
       }

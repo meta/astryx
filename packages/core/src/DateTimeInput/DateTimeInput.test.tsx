@@ -63,6 +63,25 @@ function expectResponsiveProbeClasses(
 }
 
 describe('DateTimeInput', () => {
+  it('Enter on a busy field does not submit the form', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <DateTimeInput
+          label="Starts"
+          value={'2026-01-12T09:00' as ISODateTimeString}
+          onChange={() => {}}
+          isLoading
+        />
+        <button type="submit">Save</button>
+      </form>,
+    );
+    screen.getAllByRole('combobox')[0].focus();
+    await user.keyboard('{Enter}');
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it('Enter on a disabled field does not submit the form', async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
