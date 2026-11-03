@@ -68,7 +68,7 @@ const {BaseTypeahead} = await import('../Typeahead/BaseTypeahead');
 const {TokenizerWithPresentation} =
   await import('../internal/tokenizer-presentation');
 const {createStaticSource} = await import('../Typeahead/createStaticSource');
-const {Tooltip} = await import('../Tooltip');
+const {TooltipWithTriggerBehavior} = await import('../Tooltip/Tooltip');
 
 const source = createStaticSource([{id: 'apple', label: 'Apple'}]);
 
@@ -169,11 +169,11 @@ const ADOPTERS: Record<string, () => Promise<void>> = {
   'Tooltip/useTooltip.tsx': async () => {
     // A tooltip a press pinned says its own text (component:Tooltip FR10).
     render(
-      <Tooltip
+      <TooltipWithTriggerBehavior
         content="Billed on the first of each month"
         triggerBehavior="toggle">
         <button type="button">About billing</button>
-      </Tooltip>,
+      </TooltipWithTriggerBehavior>,
     );
     fireEvent.click(screen.getByRole('button', {name: 'About billing'}));
     await expectDelegated('Billed on the first of each month');
