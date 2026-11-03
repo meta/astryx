@@ -167,14 +167,79 @@ describe('BottomSheet close order for focus', () => {
     expect(search).toHaveFocus();
   });
 
-  it('goes inert and hidden once focus leaves it during the exit', () => {
+  it('stops every key but Tab during the exit', () => {
+    const keys: string[] = [];
+    function Search() {
+      const [isOpen, setIsOpen] = useState(true);
+      return (
+        <BottomSheet isOpen={isOpen} onOpenChange={setIsOpen} label="Filters">
+          <input
+            aria-label="Search"
+            onKeyDown={event => {
+              keys.push(event.key);
+              if (event.key === 'Enter') {
+                setIsOpen(false);
+              }
+            }}
+          />
+        </BottomSheet>
+      );
+    }
+    render(<Search />);
+    const search = screen.getByRole('textbox', {name: 'Search'});
+    act(() => search.focus());
+    fireEvent.keyDown(search, {key: 'Enter'});
+
+    const letter = fireEvent.keyDown(search, {key: 'a'});
+    const backspace = fireEvent.keyDown(search, {key: 'Backspace'});
+    const arrow = fireEvent.keyDown(search, {key: 'ArrowDown'});
+    const tab = fireEvent.keyDown(search, {key: 'Tab'});
+
+    // fireEvent returns false when the event was cancelled.
+    expect([letter, backspace, arrow]).toEqual([false, false, false]);
+    expect(tab).toBe(true);
+    expect(keys).toEqual(['Enter', 'Tab']);
+  });
+
+  it('goes inert and hidden once its focused control is removed', async () => {
+    function Removing() {
+      const [isOpen, setIsOpen] = useState(true);
+      return (
+        <BottomSheet isOpen={isOpen} onOpenChange={setIsOpen} label="Filters">
+          {isOpen && (
+            <button type="button" onClick={() => setIsOpen(false)}>
+              Done
+            </button>
+          )}
+        </BottomSheet>
+      );
+    }
+    render(<Removing />);
+    const done = screen.getByRole('button', {name: 'Done'});
+    act(() => done.focus());
+    fireEvent.click(done);
+    // jsdom drops focus on removal without the blur a browser sends, so send
+    // it here.
+    await act(async () => {
+      fireEvent.blur(done);
+      await Promise.resolve();
+    });
+
+    expect(sheet()).toHaveAttribute('inert');
+    expect(sheet()).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('goes inert and hidden once focus leaves it during the exit', async () => {
     openFilters();
     const done = screen.getByRole('button', {name: 'Done'});
     act(() => done.focus());
     fireEvent.click(done);
     expect(sheet()).not.toHaveAttribute('inert');
 
-    act(() => screen.getByRole('button', {name: 'Filters'}).focus());
+    await act(async () => {
+      screen.getByRole('button', {name: 'Filters'}).focus();
+      await Promise.resolve();
+    });
 
     expect(sheet()).toHaveAttribute('inert');
     expect(sheet()).toHaveAttribute('aria-hidden', 'true');

@@ -266,11 +266,12 @@ function ignoreActivation(event: React.MouseEvent): void {
 }
 
 /**
- * Stops Enter and Space before they reach the focused control, so a key
- * handler (a search field's Enter, for example) does not run either.
+ * Stops every key except Tab before it reaches the focused control, so no
+ * key handler runs and no text changes (a search field's Enter, a typed
+ * letter, Backspace, an arrow that reopens a list). Tab still moves focus.
  */
-function ignoreActivationKey(event: React.KeyboardEvent): void {
-  if (event.key === 'Enter' || event.key === ' ') {
+function ignoreKeyDuringExit(event: React.KeyboardEvent): void {
+  if (event.key !== 'Tab') {
     event.preventDefault();
     event.stopPropagation();
   }
@@ -801,26 +802,19 @@ function StandaloneBottomSheet({
     isExiting && !isReplaced && (!isCloseSettled || isExitFocusHeld);
   const isInert = (isExiting && !isExitHoldingFocus) || stackView.isBlocked;
 
-  useLayoutEffect(() => {
-    const dialog = dialogRef.current;
-    if (!isExitFocusHeld || dialog == null) {
-      return;
-    }
-    const doc = dialog.ownerDocument;
-    // Focus can leave in the commit that closed the sheet, before this
-    // listener exists.
-    if (!dialog.contains(doc.activeElement)) {
-      setIsExitFocusHeld(false);
-      return;
-    }
-    const releaseWhenFocusLeaves = (event: FocusEvent) => {
-      if (!(event.target instanceof Node) || !dialog.contains(event.target)) {
+  // Ends the hold once focus has left the sheet: moved elsewhere, or dropped
+  // to the page because the focused control was removed or disabled. Read
+  // after the blur, when the new focus is known.
+  const releaseHoldWhenFocusLeaves = (
+    event: React.FocusEvent<HTMLDialogElement>,
+  ) => {
+    const dialog = event.currentTarget;
+    queueMicrotask(() => {
+      if (!dialog.contains(dialog.ownerDocument.activeElement)) {
         setIsExitFocusHeld(false);
       }
-    };
-    doc.addEventListener('focusin', releaseWhenFocusLeaves);
-    return () => doc.removeEventListener('focusin', releaseWhenFocusLeaves);
-  }, [isExitFocusHeld]);
+    });
+  };
 
   return (
     <dialog
@@ -858,11 +852,13 @@ function StandaloneBottomSheet({
       }
       onCancel={handleCancel}
       // A closing sheet that keeps focus takes no activation during its
-      // exit: a repeated Enter or Space on the control that closed it does
-      // not run that control again.
+      // exit: no click and no key but Tab reaches the control that has focus.
       onClickCapture={isExitHoldingFocus ? ignoreActivation : undefined}
-      onKeyDownCapture={isExitHoldingFocus ? ignoreActivationKey : undefined}
-      onKeyUpCapture={isExitHoldingFocus ? ignoreActivationKey : undefined}
+      onKeyDownCapture={isExitHoldingFocus ? ignoreKeyDuringExit : undefined}
+      onKeyUpCapture={isExitHoldingFocus ? ignoreKeyDuringExit : undefined}
+      onBlurCapture={
+        isExitHoldingFocus ? releaseHoldWhenFocusLeaves : undefined
+      }
       // Presses inside the sheet do not reach handlers around where it is
       // written. The dialog, not the panel, is the root, as in a switcher.
       {...layerClickBoundary({onClick: handleClick})}>
