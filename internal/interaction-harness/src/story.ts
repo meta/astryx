@@ -154,7 +154,10 @@ export async function frames(page: Page, count = 2): Promise<void> {
 // A held callback is queued under its timer or frame id, so the page's own
 // clearTimeout and cancelAnimationFrame still cancel it while frozen; a held
 // frame callback gets the time it actually runs at. `frame` stays the real
-// requestAnimationFrame, for the harness's own waits.
+// requestAnimationFrame, for the harness's own waits, and `now` the real clock
+// for their deadlines, which a page freeze does not stop. The gate's freeze() and
+// thaw() are its one way in: freezeTimers and thawTimers call them, and so
+// does a page freeze (freeze.ts), which stops the page's clock too.
 const TIMER_GATE = `(() => {
   if (window.__harnessTimerGate) return;
   const realTimeout = window.setTimeout.bind(window);
@@ -162,17 +165,81 @@ const TIMER_GATE = `(() => {
   const realInterval = window.setInterval.bind(window);
   const realFrame = window.requestAnimationFrame.bind(window);
   const realCancelFrame = window.cancelAnimationFrame.bind(window);
-  const gate = {frozen: false, queue: [], frame: realFrame, timeout: realTimeout};
+  // The page freeze (freeze.ts) installs first and keeps the real clock.
+  const realNow = window.__harnessFreeze ? window.__harnessFreeze.realNow : () => performance.now();
+  // Timeouts not yet due, by the id the page holds: the real timer that runs
+  // it, and when it comes due on the page's clock (performance.now, which a
+  // page freeze stops).
+  const pending = new Map();
+  let isPaused = false;
+  const fire = (id, entry) => {
+    pending.delete(id);
+    if (gate.frozen) gate.queue.push({key: 't' + id, run: entry.run}); else entry.run();
+  };
+  const arm = (id, entry, ms) => { entry.real = realTimeout(() => fire(id, entry), ms); };
+  const gate = {
+    frozen: false,
+    queue: [],
+    frame: realFrame,
+    now: realNow,
+    timeout: realTimeout,
+    // Holds every callback that comes due. With the page's clock stopped as
+    // well, the timeouts not yet due stop counting.
+    freeze(isClockStopped = false) {
+      gate.frozen = true;
+      if (isClockStopped && !isPaused) {
+        isPaused = true;
+        for (const entry of pending.values()) realClearTimeout(entry.real);
+      }
+    },
+    // Holds the stopped timeouts the page's clock has reached, in the order
+    // they came due.
+    catchUp() {
+      if (!isPaused) return;
+      const now = performance.now();
+      const due = [...pending].filter(([, entry]) => entry.due <= now).sort((a, b) => a[1].due - b[1].due);
+      for (const [id, entry] of due) {
+        pending.delete(id);
+        gate.queue.push({key: 't' + id, run: entry.run});
+      }
+    },
+    // Runs the held callbacks in the order they came due, then restarts the
+    // stopped timeouts for what is left of them on the page's clock.
+    thaw() {
+      gate.catchUp();
+      gate.frozen = false;
+      try {
+        // One at a time from the live queue: a callback may cancel a later
+        // one. A callback that throws still leaves the clock running.
+        while (gate.queue.length > 0) gate.queue.shift().run();
+      } finally {
+        if (isPaused) {
+          isPaused = false;
+          const now = performance.now();
+          for (const [id, entry] of pending) arm(id, entry, Math.max(0, entry.due - now));
+        }
+      }
+    },
+  };
   window.__harnessTimerGate = gate;
   const drop = key => { gate.queue = gate.queue.filter(entry => entry.key !== key); };
   window.setTimeout = (fn, ms, ...args) => {
-    const id = realTimeout(() => {
-      const run = () => (typeof fn === 'function' ? fn(...args) : 0);
-      if (gate.frozen) gate.queue.push({key: 't' + id, run}); else run();
-    }, ms);
+    const delay = Math.max(0, Number(ms) || 0);
+    const entry = {due: performance.now() + delay, real: 0, run: () => (typeof fn === 'function' ? fn(...args) : 0)};
+    // The first real timer's id is the one the page holds. A stopped clock
+    // starts it again at the thaw.
+    const id = realTimeout(() => fire(id, entry), delay);
+    entry.real = id;
+    pending.set(id, entry);
+    if (isPaused) realClearTimeout(id);
     return id;
   };
-  window.clearTimeout = id => { realClearTimeout(id); drop('t' + id); };
+  window.clearTimeout = id => {
+    const entry = pending.get(id);
+    pending.delete(id);
+    realClearTimeout(entry == null ? id : entry.real);
+    drop('t' + id);
+  };
   window.setInterval = (fn, ms, ...args) => realInterval(() => { if (!gate.frozen && typeof fn === 'function') fn(...args); }, ms);
   window.requestAnimationFrame = fn => {
     const id = realFrame(time => {
@@ -202,35 +269,22 @@ export async function installTimerGate(page: Page): Promise<void> {
  */
 export async function freezeTimers(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const gate = (window as unknown as {__harnessTimerGate?: {frozen: boolean}})
+    const gate = (window as unknown as {__harnessTimerGate?: {freeze(): void}})
       .__harnessTimerGate;
     if (gate == null) {
       throw new Error(
         'freezeTimers: call installTimerGate before the animation starts',
       );
     }
-    gate.frozen = true;
+    gate.freeze();
   });
 }
 
 /** Releases the gate: held callbacks run now, in the order they came due. */
 export async function thawTimers(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const gate = (
-      window as unknown as {
-        __harnessTimerGate?: {
-          frozen: boolean;
-          queue: {key: string; run: () => void}[];
-        };
-      }
-    ).__harnessTimerGate;
-    if (gate == null) {
-      return;
-    }
-    gate.frozen = false;
-    // One at a time from the live queue: a callback may cancel a later one.
-    while (gate.queue.length > 0) {
-      gate.queue.shift()?.run();
-    }
+    (
+      window as unknown as {__harnessTimerGate?: {thaw(): void}}
+    ).__harnessTimerGate?.thaw();
   });
 }

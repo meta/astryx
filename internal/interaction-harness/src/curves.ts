@@ -77,6 +77,12 @@ function animationRecorder(): void {
   }[] = [];
   // Each recorded animation's entry.
   const entries = new WeakMap<Animation, (typeof log)[number]>();
+  // The times kept below are real: a page time plus the span a page freeze
+  // stood still so far. A later freeze then leaves them where they were.
+  const span = () =>
+    (window as unknown as {__harnessFreeze?: {offset: number}}).__harnessFreeze
+      ?.offset ?? 0;
+  const real = (time: number | null) => (time == null ? null : time + span());
   // Entries whose start time has not resolved yet (still pending when seen).
   let unstarted: (typeof log)[number][] = [];
   let armedAt = performance.now();
@@ -123,13 +129,14 @@ function animationRecorder(): void {
         .endTime ?? 0,
     );
     const speed = Math.abs(animation.playbackRate || 1);
+    // The finish event's timeline time is the engine's own, already real.
     entry.finishStart =
-      playStart(animation) ??
+      real(playStart(animation)) ??
       entry.startedAt ??
       (at == null ? null : at - end / speed);
     entry.finishedAt =
       entry.finishStart == null
-        ? performance.now()
+        ? performance.now() + span()
         : entry.finishStart + end / speed;
     if (entry.startedAt == null) {
       // Cancelled before a frame read its start: back from where it ended.
@@ -144,7 +151,7 @@ function animationRecorder(): void {
       // kept is the one it runs on, which its finish falls back to once the
       // page has cancelled it.
       if (animation.playState === 'running' && animation.startTime != null) {
-        recorded.startedAt = playStart(animation);
+        recorded.startedAt = real(playStart(animation));
       }
       return;
     }
@@ -167,7 +174,7 @@ function animationRecorder(): void {
       animation,
       seenAt: performance.now(),
       finishedAt: null as number | null,
-      startedAt: playStart(animation),
+      startedAt: real(playStart(animation)),
       finishStart: null as number | null,
       ancestors,
     };
@@ -190,7 +197,7 @@ function animationRecorder(): void {
     }
     unstarted = unstarted.filter(entry => {
       if (entry.startedAt == null && entry.animation.startTime != null) {
-        entry.startedAt = playStart(entry.animation);
+        entry.startedAt = real(playStart(entry.animation));
       }
       return entry.startedAt == null && entry.animation.playState !== 'idle';
     });
@@ -709,6 +716,7 @@ export async function armHold(
         ) => unknown[];
         __harnessTimerGate?: {
           frame?: typeof requestAnimationFrame;
+          now?: () => number;
           timeout?: typeof setTimeout;
         };
         __harnessArmed?: Record<number, Promise<unknown[]>>;
@@ -720,7 +728,9 @@ export async function armHold(
         window.requestAnimationFrame.bind(window);
       const later =
         w.__harnessTimerGate?.timeout ?? window.setTimeout.bind(window);
-      const deadline = performance.now() + wait;
+      // The deadline reads the real clock, which a page freeze does not stop.
+      const realNow = w.__harnessTimerGate?.now ?? (() => performance.now());
+      const deadline = realNow() + wait;
       // With `newOnly`, what the document has when armed neither counts nor
       // joins the hold: a motion already running goes on, and the page holds
       // the one that starts after it.
@@ -773,7 +783,7 @@ export async function armHold(
             } catch (error) {
               reject(error);
             }
-          } else if (performance.now() > deadline) {
+          } else if (realNow() > deadline) {
             done = true;
             reject(
               new Error(
@@ -1294,6 +1304,13 @@ export async function waitForAnimation(
             const curveEnd = w.__harnessCurveEnd;
             const recorder = w.__harnessAnimations;
             recorder.record();
+            // The recorder keeps real times. A live start time is a page time.
+            // It trails real time by the span a page freeze stood still, so it
+            // takes that span as it stands now. The stamps then share the trace's
+            // clock.
+            const span =
+              (window as unknown as {__harnessFreeze?: {offset: number}})
+                .__harnessFreeze?.offset ?? 0;
             const describe = (
               a: Animation,
               finishedAt: number | null,
@@ -1316,9 +1333,10 @@ export async function waitForAnimation(
                   ? finishStart
                   : a.startTime == null
                     ? recordedStart
-                    : rate < 0
-                      ? Number(a.startTime) - endTime / speed
-                      : Number(a.startTime);
+                    : span +
+                      (rate < 0
+                        ? Number(a.startTime) - endTime / speed
+                        : Number(a.startTime));
               const startedAt =
                 performance.timeOrigin + Number(start ?? Number.NaN);
               const name =
@@ -1437,9 +1455,12 @@ export async function waitForAnimation(
                 (a.effect as KeyframeEffect | null)?.getComputedTiming()
                   .endTime ?? 0,
               );
-              return a.playbackRate < 0
-                ? Number(a.startTime)
-                : Number(a.startTime) + end / Math.abs(a.playbackRate || 1);
+              return (
+                span +
+                (a.playbackRate < 0
+                  ? Number(a.startTime)
+                  : Number(a.startTime) + end / Math.abs(a.playbackRate || 1))
+              );
             };
             return recorded
               .filter(e => finishedAt(e) != null)
@@ -1591,7 +1612,15 @@ export async function waitForRest(
       await locator.evaluate(
         (element, {ms, need}) =>
           new Promise<void>((resolve, reject) => {
-            const deadline = performance.now() + ms;
+            // The deadline reads the real clock, which a page freeze does not
+            // stop.
+            const realNow =
+              (
+                window as unknown as {
+                  __harnessTimerGate?: {now?: () => number};
+                }
+              ).__harnessTimerGate?.now ?? (() => performance.now());
+            const deadline = realNow() + ms;
             const curveEnd = (
               window as unknown as {__harnessCurveEnd: (a: Animation) => number}
             ).__harnessCurveEnd;
@@ -1639,7 +1668,7 @@ export async function waitForRest(
                   }
                 ).__harnessAnimations?.arm();
                 resolve();
-              } else if (performance.now() > deadline) {
+              } else if (realNow() > deadline) {
                 reject(new Error(`waitForRest: still moving (${now})`));
               } else {
                 frame(tick);
