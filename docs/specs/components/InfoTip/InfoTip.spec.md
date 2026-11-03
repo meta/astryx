@@ -13,6 +13,7 @@ review_triggers: [public-api, behavior, accessibility]
 verified_by:
   [
     packages/core/src/InfoTip/InfoTip.test.tsx,
+    packages/core/src/InfoTip/InfoTip.pin.test.tsx,
     packages/core/src/InfoTip/__tests__/InfoTipTouch.a11y.chromium.spec.ts,
     packages/lab/src/InfoTip/InfoTip.test.tsx,
     packages/core/src/Tooltip/Tooltip.test.tsx,
@@ -42,23 +43,24 @@ system_specs: [spec:AST-017, spec:AST-094]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                                                                   |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Public contract         | `InfoTip` from `@astryxdesign/core` with `content`, `label` (a localized "More information"), `size` (`sm`), a `ref` forwarded to the button, and BaseProps' `xstyle`, `className`, and `style`. The `@astryxdesign/lab` export is a deprecated re-export for one release.                 |
-| Behavior                | A named info-icon button wrapped in `component:Tooltip`, which pins the help through its internal press-to-pin path (not a public prop): hover and focus preview the help, and a click, tap, Enter, or Space pins it open until Escape, a second press, a press outside, or focus leaving. |
-| End-user impact         | People on a mouse, touch, keyboard, or screen reader can open, keep open, and close the help behind an "i", and hear it once when it pins.                                                                                                                                                 |
-| Builder impact          | Use InfoTip for help next to a label, value, or metric instead of composing an icon inside Tooltip. Lab callers change the import.                                                                                                                                                         |
-| Compatibility/readiness | New in Core; the `@astryxdesign/lab` export is a deprecated re-export of it for one release (FR4).                                                                                                                                                                                         |
-| Review checks           | Reject a layer, listener, timer, or dismissal rule of InfoTip's own, a trigger that is not a named button, an untranslated default name, or a prop beyond those FR3 lists.                                                                                                                 |
-| Governing rules         | `component:Tooltip` FR9, FR10, AR6; `architecture:public-component-api` INV21; `spec:AST-094` FR42; `spec:AST-017` (lifecycle).                                                                                                                                                            |
+| Area                    | Contract                                                                                                                                                                                                                                                                                                                                     |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | `InfoTip` from `@astryxdesign/core` with `content`, `label` (a localized "More information"), `size` (`sm`), a `ref` forwarded to the button, and BaseProps' `xstyle`, `className`, and `style`. The `@astryxdesign/lab` export is a deprecated re-export for one release.                                                                   |
+| Behavior                | A named native info-icon button that pins its help through `useTooltip`'s `show()` and `hide()`: hover and focus preview the help, a click, tap, Enter, or Space pins it open until Escape, a second press, a press outside, or focus leaving, and a mouse or pen press on a preview pins it without a blink.                                |
+| End-user impact         | People on a mouse, touch, keyboard, or screen reader can open, keep open, and close the help behind an "i", and hear it once when it pins.                                                                                                                                                                                                   |
+| Builder impact          | Use InfoTip for help next to a label, value, or metric instead of composing an icon inside Tooltip. Lab callers change the import.                                                                                                                                                                                                           |
+| Compatibility/readiness | New in Core; the `@astryxdesign/lab` export is a deprecated re-export of it for one release (FR4).                                                                                                                                                                                                                                           |
+| Review checks           | Reject a layer, document listener, timer, or dismissal rule of InfoTip's own, a wrapper element around the button, a trigger that is not a named native button, a pinning press that reaches a row, card, or label around it, a preview that blinks on a mouse or pen press, an untranslated default name, or a prop beyond those FR3 lists. |
+| Governing rules         | `component:Tooltip` FR9, FR10, FR12, AR6; `architecture:public-component-api` INV21; `spec:AST-094` FR42; `spec:AST-017` (lifecycle).                                                                                                                                                                                                        |
 
 This table is a review projection; the body below is authoritative.
 
 ## Intent
 
-InfoTip is the info-icon preset over Tooltip's internal press-to-pin path. It owns the
-trigger button, its icon, its name, and its default, so every "i" in a product
-reads and behaves the same; Tooltip owns when the help opens and closes.
+InfoTip is the info-icon preset over `useTooltip`'s `show()` and `hide()`. It
+owns the trigger button, its icon, its name, its default, and the press that
+pins and closes the help, so every "i" in a product reads and behaves the
+same; Tooltip owns the preview, the pinned hold, and the announcement.
 Consumer usage lives in `InfoTip.doc.mjs`.
 
 ## Compatibility and migration
@@ -66,7 +68,7 @@ Consumer usage lives in `InfoTip.doc.mjs`.
 - Released default preserved: not yet released in Core; the Lab component's
   props keep their meaning
 - Compatibility class: additive Core export; the Lab component moves to Core
-  with the same props and pins through Tooltip's internal press-to-pin path
+  with the same props and pins through `useTooltip`'s `show()` and `hide()`
   instead of opening through `touchTrigger="tap"`
 - Controlled/uncontrolled behavior: uncontrolled only; open state is Tooltip's
 - Migration decision: DEC-1; the `@astryxdesign/lab` `InfoTip` export stays one
@@ -84,13 +86,15 @@ None.
 
 - The trigger button, its info icon, its accessible name and default, and its
   touch hit area (FR1, AR1).
-- What InfoTip passes to Tooltip (FR2).
+- The press that pins and closes the help through `useTooltip`'s `show()` and
+  `hide()`, and the button's `aria-describedby`, `aria-expanded`, and
+  `aria-controls` (FR2).
 
 **Does not own / non-goals**
 
-- When the help previews, pins, closes, and is announced, its surface, and its
-  Escape order — owned by `component:Tooltip` FR3–FR10 and
-  `family:overlay-dismissal`.
+- When the help previews, how a pinned help closes, its announcement, its
+  surface, and its Escape order — owned by `component:Tooltip` FR3–FR10 and
+  FR12, and `family:overlay-dismissal`.
 - Info artwork resolution — owned by the icon registry
   (`architecture:icon-resolution-and-component-slots`).
 - Rich or interactive help — `component:HoverCard`.
@@ -103,12 +107,12 @@ None.
 
 ## Behavioral and layout contract
 
-| ID  | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Basis                                                                        |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
-| FR1 | InfoTip renders one `<button type="button">` named by `label`, else the translated `@astryx.infoTip.label` ("More information"), containing the registry's `info` icon at `size`.                                                                                                                                                                                                                                                                                              | DEC-1; WCAG 2.2 SC 4.1.2; `architecture:icon-resolution-and-component-slots` |
-| FR2 | InfoTip wraps its button in `component:Tooltip` with `content` and pins its help on a press through Tooltip's internal press-to-pin path (not a public prop). It adds no layer, listener, timer, announcement, or dismissal rule of its own: previewing, pinning, closing, the trigger's `aria-expanded` and `aria-controls`, and the announcement are Tooltip's FR3–FR10. Whether InfoTip moves onto `useTooltip`'s `show()` and `hide()` (`component:Tooltip` DEC-1) is OQ1. | DEC-1; `architecture:public-component-api` INV21                             |
-| FR3 | The public props are `content` (required; short, noninteractive help), `label`, `size`, a `ref` forwarded to the button, and BaseProps' `xstyle`, `className`, and `style`; InfoTip takes no open-state, placement, or trigger props.                                                                                                                                                                                                                                          | DEC-1                                                                        |
-| FR4 | The `@astryxdesign/lab` `InfoTip` export re-exports the Core component, marked deprecated with static metadata, for one release, and is then removed.                                                                                                                                                                                                                                                                                                                          | `spec:AST-017` FR29, FR29a                                                   |
+| ID  | Invariant                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Basis                                                                                 |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| FR1 | InfoTip renders one `<button type="button">` named by `label`, else the translated `@astryx.infoTip.label` ("More information"), containing the registry's `info` icon at `size`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | DEC-1; WCAG 2.2 SC 4.1.2; `architecture:icon-resolution-and-component-slots`          |
+| FR2 | InfoTip renders its button and the layer from one `useTooltip` call with `content`, with no wrapper element; Tooltip's ref and the hit-area ref merge on the button. The button carries `aria-describedby` naming the help, `aria-expanded` (`true` only while pinned), and `aria-controls` naming the surface while the help shows. A click, tap, Enter, or Space pins the help through `show()`, and the same press on pinned help closes it through `hide()`; the press stops in the React tree, so a row, card, or label around the button does not act. A mouse or pen press on a hover preview pins the help at pointer-down, so Tooltip's press-to-close leaves it open and it does not blink (`component:Tooltip` FR6). Touch and keyboard pin only through the click. InfoTip adds no layer, document listener, timer, announcement, or dismissal rule of its own: previewing, how pinned help closes, and the announcement are Tooltip's FR3–FR10 and FR12. | DEC-1; `component:Tooltip` FR9, FR10, FR12; `architecture:public-component-api` INV21 |
+| FR3 | The public props are `content` (required; short, noninteractive help), `label`, `size`, a `ref` forwarded to the button, and BaseProps' `xstyle`, `className`, and `style`; InfoTip takes no open-state, placement, or trigger props.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | DEC-1                                                                                 |
+| FR4 | The `@astryxdesign/lab` `InfoTip` export re-exports the Core component, marked deprecated with static metadata, for one release, and is then removed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | `spec:AST-017` FR29, FR29a                                                            |
 
 ### Allowed variation
 
@@ -129,9 +133,10 @@ None.
 
 ### Performance and resources
 
-- **PR1 — No resource of its own.** InfoTip adds no listener, observer, timer,
-  or layer beyond the shared hit-area watch AR1 requires; Tooltip's are the
-  only others it brings.
+- **PR1 — No resource of its own.** InfoTip adds no document listener,
+  observer, timer, or layer beyond its button's click and pointer-down
+  handlers and the shared hit-area watch AR1 requires; Tooltip's are the only
+  others it brings.
 
 ## Accessibility contract
 
@@ -154,35 +159,36 @@ None.
 
 ## Family and system relationships
 
-- `component:Tooltip` owns the press-to-pin path, preview, announcement, and
-  surface; InfoTip is built entirely on it (DEC-1).
+- `component:Tooltip` owns the preview, the `show()` hold, the announcement,
+  and the surface; InfoTip is built entirely on `useTooltip` (DEC-1).
 - `family:overlay-dismissal` owns Escape order through Tooltip.
 - `architecture:icon-resolution-and-component-slots` owns the `info` artwork.
 - InfoTip and Tooltip are one API, for the reason DEC-1 gives: InfoTip is built
-  entirely on Tooltip's press-to-pin path and adds no layer, listener, or dismissal rule of
-  its own, as `component:MoreMenu` is built on DropdownMenu.
+  entirely on `useTooltip`'s public `show()` and `hide()` and adds no layer,
+  timer, or dismissal rule of its own, as `component:MoreMenu` is built on DropdownMenu.
 
 ## Verification map
 
-| Contract | Verification                                                                                                                                                     | Representative states                                             | Mutation or failure expectation                                                                                                                                                         | Audit section                 |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| FR1, AR1 | `InfoTip.test.tsx` button, name, catalog-default and hit-area cases; `InfoTipTouch.a11y.chromium.spec.ts` coarse-pointer reach, neighbour and fine-pointer cases | Default and custom name; each size                                | A trigger that is not a named button, an untranslated default, or a coarse-pointer hit area that stays under 44 px where its neighbors leave room or reaches a neighbor's target fails. | `audit:InfoTip/accessibility` |
-| FR2, AR2 | `InfoTip.test.tsx` press cases over `component:Tooltip`'s press-to-pin suite                                                                                     | Hover and focus preview; click, tap, Enter, Space pin; Escape     | A press that does not pin, or a listener or layer InfoTip owns, fails.                                                                                                                  | `audit:InfoTip/behavior`      |
-| FR3      | `InfoTip.test.tsx` props cases: the type checker rejects other props, and `ref`, `xstyle`, `className`, and `style` reach the button                             | `content`, `label`, `size`, `ref`, `xstyle`, `className`, `style` | A prop beyond those, or a `ref` that does not reach the button, fails.                                                                                                                  | `audit:InfoTip/api`           |
-| FR4      | Lab `InfoTip.test.tsx` identity and deprecation cases                                                                                                            | Lab import                                                        | A Lab export that is not the Core component, or lacks the deprecation metadata, fails.                                                                                                  | `audit:InfoTip/api`           |
+| Contract | Verification                                                                                                                                                     | Representative states                                                                                                                                                                                                       | Mutation or failure expectation                                                                                                                                                                                                                                                      | Audit section                 |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------- |
+| FR1, AR1 | `InfoTip.test.tsx` button, name, catalog-default and hit-area cases; `InfoTipTouch.a11y.chromium.spec.ts` coarse-pointer reach, neighbour and fine-pointer cases | Default and custom name; each size                                                                                                                                                                                          | A trigger that is not a named button, an untranslated default, or a coarse-pointer hit area that stays under 44 px where its neighbors leave room or reaches a neighbor's target fails.                                                                                              | `audit:InfoTip/accessibility` |
+| FR2, AR2 | `InfoTip.pin.test.tsx`; `InfoTip.test.tsx` press cases                                                                                                           | Hover and focus preview; click, tap, Enter, Space pin; second press, press outside, focus leaving, and Escape close; a mouse or pen press on a hover preview; a button inside a ClickableCard, an Item row, and a `<label>` | A press that does not pin or close, a preview that closes and reopens on a mouse or pen press, a missing or stale `aria-expanded` or `aria-controls`, a press that also activates the card, row, or labelled control, or a wrapper, layer, or document listener InfoTip owns, fails. | `audit:InfoTip/behavior`      |
+| FR3      | `InfoTip.test.tsx` props cases: the type checker rejects other props, and `ref`, `xstyle`, `className`, and `style` reach the button                             | `content`, `label`, `size`, `ref`, `xstyle`, `className`, `style`                                                                                                                                                           | A prop beyond those, or a `ref` that does not reach the button, fails.                                                                                                                                                                                                               | `audit:InfoTip/api`           |
+| FR4      | Lab `InfoTip.test.tsx` identity and deprecation cases                                                                                                            | Lab import                                                                                                                                                                                                                  | A Lab export that is not the Core component, or lacks the deprecation metadata, fails.                                                                                                                                                                                               | `audit:InfoTip/api`           |
 
 ## Decision log
 
-### DEC-1 — InfoTip is a preset over Tooltip's press-to-pin path
+### DEC-1 — InfoTip is a preset over `useTooltip`'s show and hide
 
 **Reference:** `component:InfoTip/DEC-1`
-**Decider:** `cixzhang`, `2026-10-31`
+**Decider:** `cixzhang`, `2026-10-31`; amended `2026-11-03`
 
 Help behind an "i" is the same job as a tooltip that pins on a press, so
-InfoTip supplies only the named button, its icon, and its default, and is
-built entirely on `component:Tooltip` and its internal press-to-pin path,
-which has no public prop. A component
-built entirely on another public API is one API with it
+InfoTip supplies only the named button, its icon, its default, and the press
+that pins, and is built entirely on `useTooltip`'s public `show()` and `hide()`
+(`component:Tooltip` FR12). Tooltip has no toggle option of its own: InfoTip
+pins the way any app's toggle-style button does. A component built entirely
+on another public API is one API with it
 (`architecture:public-component-api` INV21, the reasoning `spec:AST-107` DEC-2
 and DEC-3 apply to a component over a public factory), as `component:MoreMenu`
 is over DropdownMenu, so InfoTip adds no second way to do Tooltip's job.
@@ -192,9 +198,7 @@ HoverCard's previews.
 
 ## Open questions
 
-- **OQ1 — Does InfoTip move onto `useTooltip`'s `show()` and `hide()`?**
-  (`human-api`) Until then it pins through Tooltip's internal press-to-pin
-  path (FR2).
+None.
 
 ## Content boundary
 
