@@ -82,4 +82,12 @@ describe('shadowHostOf', () => {
     expect(shadowHostOf(document.createDocumentFragment())).toBeNull();
     expect(shadowHostOf(open)).toBeNull();
   });
+
+  it('is the host of a shadow root from another window too', () => {
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const host = frame.contentDocument!.createElement('div');
+    frame.contentDocument!.body.append(host);
+    expect(shadowHostOf(host.attachShadow({mode: 'closed'}))).toBe(host);
+  });
 });

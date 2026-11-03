@@ -139,14 +139,14 @@ describe('watchOutsidePress, closing on a pan', () => {
     composed: true,
   });
 
-  function setup(root?: Node, closesOnPan = true) {
-    const owner = document.createElement('div');
-    const layer = document.createElement('div');
-    const item = document.createElement('button');
+  function setup(root?: Node, closesOnPan = true, doc: Document = document) {
+    const owner = doc.createElement('div');
+    const layer = doc.createElement('div');
+    const item = doc.createElement('button');
     layer.append(item);
-    const outside = document.createElement('button');
-    document.body.append(owner, outside);
-    (root ?? document.body).appendChild(layer);
+    const outside = doc.createElement('button');
+    doc.body.append(owner, outside);
+    (root ?? doc.body).appendChild(layer);
     const onOutside = vi.fn();
     const stop = watchOutsidePress(
       owner,
@@ -224,6 +224,48 @@ describe('watchOutsidePress, closing on a pan', () => {
       stop();
     },
   );
+
+  it.each([true, false])(
+    'keeps the layer open for a press that starts outside and lifts on it, in a closed root inside another (closesOnPan: %s)',
+    closesOnPan => {
+      const outerHost = document.createElement('div');
+      document.body.append(outerHost);
+      const outer = outerHost.attachShadow({mode: 'closed'});
+      const innerHost = document.createElement('div');
+      outer.append(innerHost);
+      const inner = innerHost.attachShadow({mode: 'closed'});
+      const {item, outside, onOutside, stop} = setup(inner, closesOnPan);
+      fireEvent.pointerDown(outside, touch(1));
+      fireEvent.pointerUp(item, touch(1));
+      expect(onOutside).not.toHaveBeenCalled();
+      // A lift on the outer root's own content is outside the layer.
+      fireEvent.pointerDown(outside, touch(2));
+      fireEvent.pointerUp(innerHost, touch(2));
+      expect(onOutside).toHaveBeenCalledOnce();
+      stop();
+    },
+  );
+
+  it('keeps the layer open for a press that starts outside and lifts on it, in a closed root of a same-origin iframe', () => {
+    const frame = document.createElement('iframe');
+    document.body.append(frame);
+    const frameDocument = frame.contentDocument!;
+    const host = frameDocument.createElement('div');
+    frameDocument.body.append(host);
+    const shadow = host.attachShadow({mode: 'closed'});
+    // The precondition this guards: another window's shadow root is not this
+    // window's ShadowRoot.
+    expect(shadow instanceof ShadowRoot).toBe(false);
+    const {item, outside, onOutside, stop} = setup(shadow, true, frameDocument);
+    fireEvent.pointerDown(outside, touch(1));
+    fireEvent.pointerUp(item, touch(1));
+    expect(onOutside).not.toHaveBeenCalled();
+    // The watch follows this window's presses: a lift outside closes.
+    fireEvent.pointerDown(outside, touch(2));
+    fireEvent.pointerUp(outside, touch(2));
+    expect(onOutside).toHaveBeenCalledOnce();
+    stop();
+  });
 
   it('leaves a followed press alone when a pointer type it does not follow is cancelled', () => {
     const {outside, onOutside, stop} = setup(undefined, false);
