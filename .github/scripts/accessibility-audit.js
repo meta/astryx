@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-
 /**
  * @description Runs accessibility audits on component stories using axe-core
  * @input --storybook-dir <path> --output <file> [--components <comma-separated>]
@@ -21,8 +20,8 @@
  *   package-qualified ownership with the RTL audit.
  */
 
-const { chromium } = require('playwright');
-const { AxeBuilder } = require('@axe-core/playwright');
+const {chromium} = require('playwright');
+const {AxeBuilder} = require('@axe-core/playwright');
 const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
@@ -38,6 +37,7 @@ const {
   storyKey,
 } = require('./lib/a11y-baseline');
 const {waitForStoryReadiness} = require('./lib/a11y-story-readiness');
+const {routeRemoteImages} = require('./lib/offline-media');
 const {
   mergeA11yShards,
   parseShard,
@@ -52,11 +52,11 @@ const {
 } = require('./lib/a11y-story-identity');
 
 const args = process.argv.slice(2);
-const getArg = (name) => {
+const getArg = name => {
   const idx = args.indexOf(`--${name}`);
   return idx !== -1 ? args[idx + 1] : null;
 };
-const hasFlag = (name) => args.includes(`--${name}`);
+const hasFlag = name => args.includes(`--${name}`);
 
 const storybookDir = getArg('storybook-dir') || 'apps/storybook/dist';
 const outputFile = getArg('output') || 'a11y-report.json';
@@ -119,11 +119,11 @@ const FREEZE_CSS = `
 
 // Rules to disable — these are Storybook-context false positives, not component issues
 const DISABLED_RULES = [
-  'html-has-lang',        // Storybook controls <html>, not the component
-  'document-title',       // iframe has no <title>, irrelevant for components
-  'landmark-one-main',    // component stories are fragments, not full pages
+  'html-has-lang', // Storybook controls <html>, not the component
+  'document-title', // iframe has no <title>, irrelevant for components
+  'landmark-one-main', // component stories are fragments, not full pages
   'page-has-heading-one', // same — not a full page
-  'region',               // content doesn't need to be in landmarks in story isolation
+  'region', // content doesn't need to be in landmarks in story isolation
 ];
 
 // Wait until the story stops moving before scanning it. A story can paint
@@ -158,7 +158,7 @@ async function settleLayout(page) {
 
 // Simple static file server
 function createServer(dir, port) {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     const server = http.createServer((req, res) => {
       let filePath = path.join(dir, req.url === '/' ? 'index.html' : req.url);
       filePath = filePath.split('?')[0];
@@ -187,7 +187,7 @@ function createServer(dir, port) {
           res.end('Not found');
           return;
         }
-        res.writeHead(200, { 'Content-Type': contentTypes[ext] || 'text/plain' });
+        res.writeHead(200, {'Content-Type': contentTypes[ext] || 'text/plain'});
         res.end(data);
       });
     });
@@ -236,9 +236,7 @@ async function routedStoryIds(stories, componentFilters) {
     componentRoutesForFilters,
     storyIdsForComponentFilters,
     unresolvedComponentFilters,
-  } = await import(
-    '../../apps/storybook/rtl-audit/rtl-audit-coverage.mjs'
-  );
+  } = await import('../../apps/storybook/rtl-audit/rtl-audit-coverage.mjs');
   const publicComponentsByPackage = Object.fromEntries(
     COMPONENT_PACKAGES.map(pkg => [
       pkg.name,
@@ -291,13 +289,15 @@ async function runAccessibilityAudit() {
     console.log('No components to audit (--components is empty) — skipping.');
     const report = {
       components: {},
-      summary: { componentsAudited: 0, totalViolations: 0 },
+      summary: {componentsAudited: 0, totalViolations: 0},
     };
     fs.writeFileSync(outputFile, JSON.stringify(report, null, 2));
     return report;
   }
 
-  console.log(`Components to audit: ${components.length > 0 ? components.join(', ') : 'all affected'}`);
+  console.log(
+    `Components to audit: ${components.length > 0 ? components.join(', ') : 'all affected'}`,
+  );
 
   const storybookPath = path.resolve(process.cwd(), storybookDir);
 
@@ -330,8 +330,7 @@ async function runAccessibilityAudit() {
   const relevantStories = storyIds.filter(id => {
     if (id.endsWith('--docs')) return false;
     return (
-      routedIds.has(id) &&
-      (storiesArg === null || requestedStoryIds.has(id))
+      routedIds.has(id) && (storiesArg === null || requestedStoryIds.has(id))
     );
   });
   if (storiesArg !== null) {
@@ -381,12 +380,16 @@ async function runAccessibilityAudit() {
   try {
     const context = scanning
       ? await browser.newContext({
-          viewport: { width: 1280, height: 720 },
+          viewport: {width: 1280, height: 720},
           reducedMotion: 'reduce',
         })
       : null;
     // Animations are frozen from the page's first script on, however far the
     // document has parsed: an adopted stylesheet needs no <head>.
+    // A story's remote photos (picsum.photos and the like) are answered with
+    // a local image, so a slow host never holds the page. The audit reads the
+    // same DOM: the image elements stay, only their bytes are local.
+    if (context) await routeRemoteImages(context, origin);
     if (context) {
       await context.addInitScript(css => {
         const sheet = new CSSStyleSheet();
@@ -453,11 +456,11 @@ async function runAccessibilityAudit() {
         await settleLayout(page);
 
         // Run axe-core accessibility analysis
-        const results = await new AxeBuilder({ page })
+        const results = await new AxeBuilder({page})
           .disableRules(DISABLED_RULES)
           .analyze();
         console.log(
-          `✓ Audited: ${component} / ${story.name} - ${results.violations.length} issues`
+          `✓ Audited: ${component} / ${story.name} - ${results.violations.length} issues`,
         );
         return results.violations;
       } catch (e) {
@@ -499,7 +502,10 @@ async function runAccessibilityAudit() {
           while (!failed && next < items.length) {
             const {component, story} = items[next++];
             try {
-              violationsByStory.set(story.id, await scanStory(component, story));
+              violationsByStory.set(
+                story.id,
+                await scanStory(component, story),
+              );
             } catch (e) {
               failed = true;
               throw e;
@@ -566,10 +572,10 @@ async function runAccessibilityAudit() {
           // Keep first 3 nodes for display (cap to avoid bloat)
           if (agg.nodes.length < 3) {
             agg.nodes.push(
-              ...violation.nodes.slice(0, 3 - agg.nodes.length).map((n) => ({
+              ...violation.nodes.slice(0, 3 - agg.nodes.length).map(n => ({
                 html: n.html.substring(0, 200),
                 target: n.target,
-              }))
+              })),
             );
           }
         }
@@ -618,10 +624,7 @@ async function runAccessibilityAudit() {
   for (const auditedStory of auditedStories) {
     for (const legacyStory of legacyBaselineStoryKeys(auditedStory.storyId)) {
       legacyBaselineAliases[legacyStory] ??= [];
-      const canonicalStory = storyKey(
-        auditedStory.owner,
-        auditedStory.storyId,
-      );
+      const canonicalStory = storyKey(auditedStory.owner, auditedStory.storyId);
       if (!legacyBaselineAliases[legacyStory].includes(canonicalStory)) {
         legacyBaselineAliases[legacyStory].push(canonicalStory);
       }
@@ -657,7 +660,7 @@ async function runAccessibilityAudit() {
 function loadBaselineFile(filePath) {
   if (!fs.existsSync(filePath)) {
     console.warn(`Baseline file not found at ${filePath} — treating as empty`);
-    return { version: 1, entries: [] };
+    return {version: 1, entries: []};
   }
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
@@ -675,7 +678,7 @@ function applyBaselineGate(report) {
       : null;
     fs.writeFileSync(
       baselineFile,
-      JSON.stringify(buildBaseline(report, { existing }), null, 2) + '\n'
+      JSON.stringify(buildBaseline(report, {existing}), null, 2) + '\n',
     );
     console.log(`Baseline written to ${baselineFile}`);
     return 0;
@@ -683,11 +686,11 @@ function applyBaselineGate(report) {
 
   const baseline = loadBaselineFile(baselineFile);
   const diff = diffAgainstBaseline(report, baseline);
-  console.log(formatDiffSummary(diff, { baselinePath: baselineFile }));
+  console.log(formatDiffSummary(diff, {baselinePath: baselineFile}));
 
   if (diff.newViolations.length > 0 && failOnNew) {
     console.error(
-      `\nFailing: ${diff.newViolations.length} accessibility violation(s) not in baseline.`
+      `\nFailing: ${diff.newViolations.length} accessibility violation(s) not in baseline.`,
     );
     return 1;
   }
@@ -695,13 +698,13 @@ function applyBaselineGate(report) {
 }
 
 runAccessibilityAudit()
-  .then((report) => {
+  .then(report => {
     // A shard writes per-story results only; the merge run gates.
     if (report === null) return;
     const code = applyBaselineGate(report);
     if (code !== 0) process.exitCode = code;
   })
-  .catch((e) => {
+  .catch(e => {
     console.error('Accessibility audit failed:', e);
     process.exit(1);
   });
