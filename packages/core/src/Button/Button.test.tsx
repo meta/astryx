@@ -544,6 +544,18 @@ describe('Button', () => {
       expect(button).toHaveAccessibleDescription('Close');
     });
 
+    it('keeps the description when endContent adds to the name', () => {
+      render(
+        <Button
+          label="Messages"
+          tooltip="Messages"
+          endContent={<span>3</span>}
+        />,
+      );
+      const button = screen.getByRole('button', {name: 'Messages 3'});
+      expect(button).toHaveAccessibleDescription('Messages');
+    });
+
     it('compares with a caller aria-label, not the visible text', () => {
       render(
         <Button label="Clear" aria-label="Clear Search" tooltip="Clear" />,
