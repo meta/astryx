@@ -427,8 +427,9 @@ export const docsDense = {
     ],
   },
   propDescriptions: {
-    icon: 'Semantic icon name or SVG component. Valid names: close, chevronDown, chevronLeft, chevronRight, chevronsLeft, chevronsRight, check, success, error, warning, info, calendar, clock, externalLink, menu, moreHorizontal, search, upload, arrowUp, arrowDown, arrowsUpDown, funnel, eyeSlash, viewColumns, copy, checkDouble, wrench, stop, microphone. For others, pass an SVG component.',
-    color: 'Color variant mapped to Astryx icon color tokens.',
+    icon: 'Semantic icon name or SVG component. Valid names: close, chevronDown, chevronLeft, chevronRight, chevronsLeft, chevronsRight, check, success, error, warning, info, calendar, clock, externalLink, menu, moreHorizontal, search, upload, arrowUp, arrowDown, arrowsUpDown, funnel, eyeSlash, viewColumns, copy, checkDouble, wrench, stop, microphone. A namespaced key (`richtext:bold`) names a glyph a component or library registers; an unregistered one renders nothing. For others, pass an SVG component.',
+    color:
+      'Color variant mapped to Astryx icon color tokens; inherit = surrounding text color. Web also accepts the non-semantic palette: blue, red, green, gray, cyan, teal, yellow, orange, pink, purple.',
     size: "xsm/sm/md/lg = 12/16/20/24px at a 16px root, scale w/ root font size; theme sets a size's glyph dimension via width + height (px or rem) on components.icon['size:sm'] etc. Explicit Icon size; otherwise nearest owning-component default, then 'md' when no contextual default exists",
     variant:
       "Requests the active theme's alternate artwork (e.g. 'filled'); names from augmentable IconVariantMap. Reaches the entry only if the active theme's iconVariants lists it (and an inherited entry's defining theme does too); else normal artwork. Ignored by a directly passed component; never in the DOM; no theming selector.",
@@ -436,5 +437,8 @@ export const docsDense = {
       'Accessible name for a meaningful, standalone icon. Sets role="img" + aria-label and drops the default aria-hidden. Omit (default) for decorative icons (stays aria-hidden). Empty string = decorative. The accessible-name/alt-text prop for icons.',
     xstyle:
       'StyleX styles (color, size, opacity) via stylex.create(); composes with the base color/size styles.',
+    className: 'Class added to the rendered glyph beside astryx-icon.',
+    style: "Inline styles merged after Icon's size and color styles.",
+    ref: 'Reaches the SVG only when icon is a component; a semantic or namespaced name renders in a wrapper and gets no ref.',
   },
 };
