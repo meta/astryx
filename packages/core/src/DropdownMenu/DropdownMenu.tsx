@@ -1189,9 +1189,8 @@ function DropdownMenuPopover({
 
   // With a header or footer the popover is a modal dialog: Tab and Shift+Tab
   // walk the header's controls, the menu as one stop, then the footer's
-  // controls, and wrap at either end. The key is handled here in full; its
-  // prevented default tells the popover's own focus trap, which listens on
-  // the document, to leave it alone.
+  // controls, and wrap at either end. This handler owns the key. Its
+  // prevented default tells the popover's focus trap to leave the key alone.
   const moveDialogTab = useCallback(
     (e: React.KeyboardEvent, isFromFlyout = false) => {
       moveRegionsTab(
