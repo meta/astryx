@@ -51,6 +51,7 @@ import {
   castStoryboard,
   blockMainThread,
   busyWindowProof,
+  BusyWindowTooLateError,
   compareCurve,
   countBetween,
   cubicBezier,
@@ -3931,6 +3932,87 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     ).toBe('settled');
     expect(await within(sampleRects(box, 200))).toBe('settled');
     await thawTimers(page);
+  });
+
+  test("blockMainThread with during names a block that would begin in the motion's held tail, and waits past an older run held there", async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // Moves for its first 30%, then holds its end value: its curve ends at
+    // 900 ms of 3 s.
+    const held = [
+      {transform: 'translateX(0px)', offset: 0},
+      {transform: 'translateX(200px)', offset: 0.3},
+      {transform: 'translateX(200px)', offset: 1},
+    ];
+    // Started while the page waits, already 1.5 s in: past its curve, so a
+    // block now would judge a run that has stopped.
+    const late = blockMainThread(page, 100, {during: box, timeout: 2_000}).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    await page.waitForTimeout(100);
+    await box.evaluate((el, keyframes) => {
+      const run = el.animate(keyframes, {duration: 3_000, easing: 'linear'});
+      run.currentTime = 1_500;
+    }, held);
+    const error = await late;
+    expect(error).toBeInstanceOf(BusyWindowTooLateError);
+    const {numbers} = error as BusyWindowTooLateError;
+    expect(numbers.curveEndMs).toBeCloseTo(900, 3);
+    expect(numbers.currentTimeMs).toBeGreaterThanOrEqual(1_500);
+    expect(numbers.startedWhileWaiting).toBe(1);
+    // That run still holds its end when the next wait begins: the page waits
+    // for one that moves, and blocks while it does.
+    const moving = blockMainThread(page, 100, {during: box, timeout: 2_000});
+    await page.waitForTimeout(100);
+    const startedAt = await box.evaluate(el => {
+      el.animate([{translate: '0 0'}, {translate: '0 100px'}], {
+        duration: 1_000,
+        easing: 'linear',
+      });
+      return performance.timeOrigin + performance.now();
+    });
+    const window = await moving;
+    expect(window.from).toBeGreaterThan(startedAt);
+  });
+
+  test('blockMainThread with during names a late block when the run it saw held ends before the wait times out', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // Already in its held tail (its curve ends at 900 ms of 3 s) when the
+    // wait begins, then cancelled, as Core's animator cancels a held run
+    // once its curve ends: nothing runs when the wait times out.
+    await box.evaluate(el => {
+      const run = el.animate(
+        [
+          {transform: 'translateX(0px)', offset: 0},
+          {transform: 'translateX(200px)', offset: 0.3},
+          {transform: 'translateX(200px)', offset: 1},
+        ],
+        {duration: 3_000, easing: 'linear'},
+      );
+      run.currentTime = 1_500;
+      (window as unknown as {heldRun: Animation}).heldRun = run;
+    });
+    await page.waitForTimeout(100);
+    const late = blockMainThread(page, 100, {during: box, timeout: 1_000}).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    await page.waitForTimeout(300);
+    await page.evaluate(() =>
+      (window as unknown as {heldRun: Animation}).heldRun.cancel(),
+    );
+    const error = await late;
+    expect(error).toBeInstanceOf(BusyWindowTooLateError);
+    const {numbers} = error as BusyWindowTooLateError;
+    expect(numbers.curveEndMs).toBeCloseTo(900, 3);
+    expect(numbers.currentTimeMs).toBeGreaterThanOrEqual(1_500);
+    expect(numbers.startedWhileWaiting).toBe(0);
   });
 
   test('the timer gate holds a component timer until the filmstrip is done', async ({
