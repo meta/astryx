@@ -296,14 +296,19 @@ const styles = stylex.create({
   },
   content: {
     // Preserve the body's block formatting (including margin/float isolation)
-    // and its definite percentage-height basis. min-content lets this real
+    // and its definite percentage-height basis. fit-content lets this real
     // observed box grow with async content beyond a fixed-height viewport.
     // This box is also the sheet's container: it carries the padding and
     // publishes it, so a lone Section child escapes it exactly as in Dialog.
     display: 'flow-root',
     boxSizing: 'border-box',
     height: '100%',
-    minHeight: 'min-content',
+    // fit-content, not min-content: they are one size in the block axis, but
+    // WebKit ignores min-content on a block's min-height. There the box keeps
+    // its body's height on a budget-height sheet. Content placed directly in
+    // it then overflows the box, and its block-end padding leaves the scroll
+    // range.
+    minHeight: 'fit-content',
   },
   tallKeyboardBody: {
     scrollPaddingBlockEnd: MOBILE_KEYBOARD_BOTTOM_CLEARANCE,
@@ -675,10 +680,23 @@ export function BottomSheetPanel({
     if (motion == null) {
       return;
     }
-    startedMotionRef.current = null;
+    // React can run this effect again for the same motion, for example when
+    // a Suspense boundary shows this content again. The passive effect below
+    // does not run again then, so the motion it started stays started, and a
+    // completion completes at once instead of waiting for that effect.
+    if (startedMotionRef.current !== motion) {
+      startedMotionRef.current = null;
+    }
     pendingMotionCompleteRef.current = null;
+    const complete = () => {
+      if (startedMotionRef.current === motion) {
+        onMotionCompleteRef.current?.(motion);
+      } else {
+        pendingMotionCompleteRef.current = motion;
+      }
+    };
     if (motion === 'entering' && reactivatedEntranceRef.current) {
-      pendingMotionCompleteRef.current = motion;
+      complete();
       return;
     }
     // What ends a motion: the fade is opacity, and the entrance, alignment and
@@ -690,13 +708,7 @@ export function BottomSheetPanel({
     return waitForTransition(
       elementRef.current,
       motion === 'fading' || crossFadeMotion ? 'opacity' : 'transform',
-      () => {
-        if (startedMotionRef.current === motion) {
-          onMotionCompleteRef.current?.(motion);
-        } else {
-          pendingMotionCompleteRef.current = motion;
-        }
-      },
+      complete,
     );
   }, [motion, isCrossFade]);
   // The snap is transform-only; the layout height reconciles when it lands.

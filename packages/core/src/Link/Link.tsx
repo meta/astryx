@@ -98,6 +98,9 @@ const styles = stylex.create({
     backgroundColor: 'transparent',
     borderStyle: 'none',
     padding: 0,
+    // Browsers centre a button's text; a wrapped label lines up as an
+    // anchor's does.
+    textAlign: 'inherit',
     pointerEvents: 'auto',
     position: 'relative',
   },

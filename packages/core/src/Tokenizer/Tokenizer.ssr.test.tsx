@@ -20,7 +20,7 @@ import type {SearchableItem, SearchSource} from '../Typeahead/types';
 // their whole module graph, which takes seconds, and many times that on a
 // busy machine. Each fresh module graph below runs these modules again
 // without that cost.
-import '../internal/tokenizer-presentation';
+import './Tokenizer';
 import './TokenizerBottomSheet';
 
 const ITEMS: SearchableItem[] = [
@@ -89,10 +89,9 @@ async function hydrateFreshTokenizer(
   options: HydrationOptions,
 ) {
   vi.resetModules();
-  const {TokenizerWithPresentation} =
-    await import('../internal/tokenizer-presentation');
+  const {Tokenizer} = await import('./Tokenizer');
   const tree = (
-    <TokenizerWithPresentation
+    <Tokenizer
       label="Tags"
       searchSource={source}
       value={[ITEMS[0]]}

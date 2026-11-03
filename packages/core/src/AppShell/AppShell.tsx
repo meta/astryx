@@ -471,6 +471,38 @@ const styles = stylex.create({
     top: 0,
     zIndex: 1,
   },
+  // The insets are zero unless the page sets `viewport-fit=cover`. The header
+  // background goes under the status bar and to the screen sides, as a UIKit
+  // bar does.
+  headerSafeAreaTop: {
+    paddingBlockStart: 'env(safe-area-inset-top, 0px)',
+  },
+  // The insets are physical sides, so a right-to-left context swaps them on
+  // the inline sides.
+  headerSafeAreaSides: {
+    paddingInlineStart: {
+      default: 'env(safe-area-inset-left, 0px)',
+      ':is([dir="rtl"] *)': 'env(safe-area-inset-right, 0px)',
+    },
+    paddingInlineEnd: {
+      default: 'env(safe-area-inset-right, 0px)',
+      ':is([dir="rtl"] *)': 'env(safe-area-inset-left, 0px)',
+    },
+  },
+  // In `auto`, the banner's wrapper and the phone top bar both stick. Below a
+  // banner, the bar sticks under the top inset, so its items stay clear of the
+  // status bar.
+  headerStickyBelowTopInset: {
+    top: 'env(safe-area-inset-top, 0px)',
+  },
+  // Main adds the bottom inset to the padding that LayoutContent publishes for
+  // `contentPadding`. The published value excludes the inset, so a bleed child
+  // subtracts only `contentPadding`. Main is border-box, so a child that fills
+  // it ends above the inset.
+  mainSafeAreaEnd: {
+    paddingBlockEnd:
+      'calc(var(--container-padding-block-end, 0px) + env(safe-area-inset-bottom, 0px))',
+  },
   // Sticky sideNav for auto height mode — sticks within the wrapper.
   // This div replaces the panel as the direct flex child of the middle
   // (horizontal) container, so it needs the same flex properties that
@@ -891,7 +923,12 @@ export function AppShell({
       role="banner"
       {...mergeProps(
         themeProps('app-shell-header', {variant}),
-        stylex.props(headerAreaStyle, isAuto && styles.headerSticky),
+        stylex.props(
+          headerAreaStyle,
+          isAuto && styles.headerSticky,
+          styles.headerSafeAreaTop,
+          styles.headerSafeAreaSides,
+        ),
       )}>
       {headerInner}
     </div>
@@ -1184,6 +1221,7 @@ export function AppShell({
         drawsMainFocusRing
           ? [focusOutlineStyles.focusVisible, styles.mainScrollRegionInset]
           : styles.mainFocusTarget,
+        styles.mainSafeAreaEnd,
       ]}>
       {children}
     </LayoutContent>
@@ -1230,7 +1268,15 @@ export function AppShell({
         role={headerContent == null ? 'banner' : undefined}
         {...mergeProps(
           themeProps('app-shell-header', {variant}),
-          stylex.props(headerAreaStyle, isAuto && styles.headerSticky),
+          stylex.props(
+            headerAreaStyle,
+            isAuto && styles.headerSticky,
+            styles.headerSafeAreaSides,
+            // Under a banner, the banner's wrapper pads the top inset. This top
+            // bar takes only the side insets.
+            headerContent == null && styles.headerSafeAreaTop,
+            isAuto && headerContent != null && styles.headerStickyBelowTopInset,
+          ),
         )}>
         <LayoutHeader padding={0} hasDivider={navHasDividers}>
           <div

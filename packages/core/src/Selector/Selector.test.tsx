@@ -1077,6 +1077,30 @@ describe('Selector', () => {
       expect(screen.getByRole('combobox', h)).toBeInTheDocument();
     });
 
+    it('asks a touch keyboard for its Search key and no autocorrection in the search row, and Enter still selects the highlighted option', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Apple"
+          onChange={onChange}
+          hasSearch
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: 'Fruit'}));
+      const search = screen.getByRole('combobox', h);
+      expect(search).toHaveAttribute('enterkeyhint', 'search');
+      expect(search).toHaveAttribute('autocorrect', 'off');
+
+      await user.type(search, 'ban');
+      await user.keyboard('{ArrowDown}');
+      expect(search).toHaveAttribute('aria-activedescendant');
+      fireEvent.keyDown(search, {key: 'Enter'});
+      expect(onChange).toHaveBeenCalledWith('Banana');
+    });
+
     // The search input's expanded state, popup relationship, and active option
     // are bound to the shared Combobox contract (Selector.combobox.a11y.test.tsx,
     // search-active); this keeps only the Selector-specific wiring.
@@ -2028,6 +2052,8 @@ describe('Selector', () => {
         scrollIntoView.mockClear();
 
         const options = screen.getAllByRole('option', {hidden: true});
+        // The mouse moves onto the row: a hover after keyboard use.
+        fireEvent.pointerMove(options[3], {screenX: 40, screenY: 80});
         fireEvent.mouseEnter(options[3]);
 
         const trigger = screen.getByRole('combobox');
@@ -5151,6 +5177,94 @@ describe('Selector press model', () => {
     expect(listbox).toHaveClass(hash(touchStyles.pinchZoom));
     expect(listbox).not.toHaveClass(hash(touchStyles.none));
     expect(listbox).not.toHaveClass(hash(touchStyles.panYPinchZoom));
+  });
+
+  it('a press held still after a key lights the pressed row', async () => {
+    const user = userEvent.setup();
+    const many = Array.from({length: 30}, (_, i) => `Option ${i}`);
+    render(<Selector label="Item" options={many} onChange={() => {}} />);
+    const trigger = screen.getByRole('combobox');
+    trigger.focus();
+    await user.keyboard('{ArrowDown}');
+    const listbox = screen.getByRole('listbox', h);
+    const rows = within(listbox).getAllByRole('option', h);
+    await user.keyboard('{End}');
+    expect(trigger).toHaveAttribute('aria-activedescendant', rows[29].id);
+    // The browser reports the row under the still mouse as entered.
+    fireEvent.mouseOver(rows[20]);
+    expect(trigger).toHaveAttribute('aria-activedescendant', rows[29].id);
+    // The mouse presses without moving: the pressed row lights.
+    fireEvent.pointerDown(rows[20], {
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+    });
+    expect(trigger).toHaveAttribute('aria-activedescendant', rows[20].id);
+  });
+
+  it('a row that scrolls under a still mouse after a key does not take the highlight; a mouse that moves does', async () => {
+    const user = userEvent.setup();
+    const many = Array.from({length: 30}, (_, i) => `Option ${i}`);
+    render(<Selector label="Item" options={many} onChange={() => {}} />);
+    const trigger = screen.getByRole('combobox');
+    trigger.focus();
+    await user.keyboard('{ArrowDown}');
+    const listbox = screen.getByRole('listbox', h);
+    const rows = within(listbox).getAllByRole('option', h);
+    const active = () =>
+      document
+        .querySelector('[aria-activedescendant]')
+        ?.getAttribute('aria-activedescendant');
+    // The mouse rests over row 3.
+    fireEvent.pointerMove(rows[3], {screenX: 100, screenY: 200});
+    fireEvent.mouseOver(rows[3]);
+    expect(active()).toBe(rows[3].id);
+    // End moves the highlight to the last row and scrolls; the browser then
+    // reports whichever row is now under the still mouse as entered.
+    await user.keyboard('{End}');
+    expect(active()).toBe(rows[29].id);
+    fireEvent.pointerMove(rows[20], {screenX: 100, screenY: 200});
+    fireEvent.mouseOver(rows[20]);
+    expect(active()).toBe(rows[29].id);
+    // The mouse moves. The browser reports entering the next row before the
+    // move that reaches it; that row takes the highlight with the move.
+    fireEvent.mouseOver(rows[21]);
+    expect(active()).toBe(rows[29].id);
+    fireEvent.pointerMove(rows[21], {screenX: 100, screenY: 230});
+    expect(active()).toBe(rows[21].id);
+    fireEvent.mouseOver(rows[22]);
+    expect(active()).toBe(rows[22].id);
+  });
+
+  it('re-renders only the rows a highlight move or the open changes, not the whole list', async () => {
+    const user = userEvent.setup();
+    const many = Array.from({length: 50}, (_, i) => `Option ${i}`);
+    // A stable renderOption: it runs once per row render.
+    const rendered: string[] = [];
+    const renderOption = (option: {value: string}) => {
+      rendered.push(option.value);
+      return option.value;
+    };
+    function Harness() {
+      return (
+        <Selector
+          label="Item"
+          options={many}
+          onChange={() => {}}
+          renderOption={renderOption}
+        />
+      );
+    }
+    render(<Harness />);
+    expect(new Set(rendered).size).toBe(50);
+    rendered.length = 0;
+    await user.click(screen.getByRole('combobox'));
+    // Opening highlights the first row; no other row's props change.
+    expect(rendered.length).toBeLessThanOrEqual(2);
+    rendered.length = 0;
+    await user.keyboard('{ArrowDown}');
+    // The highlight moves from row 0 to row 1: those two rows only.
+    expect([...new Set(rendered)].sort()).toEqual(['Option 0', 'Option 1']);
   });
 
   it('a long list renders its scrolling touch-action from the first open, with no class swap after the open measure', async () => {

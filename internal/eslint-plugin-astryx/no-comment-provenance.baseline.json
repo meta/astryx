@@ -123,8 +123,6 @@
   "packages/core/src/Chat/ChatComposer.tsx": [
     "#2072",
     "FR11",
-    "FR11",
-    "FR11",
     "FR2",
     "FR5",
     "FR6",
@@ -133,8 +131,6 @@
     "INV11",
     "architecture:theme-tokens",
     "architecture:theme-tokens",
-    "component:HoverCard",
-    "component:Tooltip",
     "spec:AST-086"
   ],
   "packages/core/src/Chat/ChatComposerDrawer.tsx": ["#1182", "#2072"],
@@ -489,15 +485,7 @@
   "packages/core/src/Indicator/indicatorRegistry.ts": ["#4712"],
   "packages/core/src/Indicator/types.ts": ["#4831", "#4918"],
   "packages/core/src/InputGroup/groupStyles.ts": ["FR3", "spec quote"],
-  "packages/core/src/Item/Item.tsx": [
-    "FR11",
-    "FR11",
-    "FR2",
-    "FR4",
-    "component:HoverCard",
-    "component:Tooltip",
-    "spec:AST-085"
-  ],
+  "packages/core/src/Item/Item.tsx": ["FR2", "FR4", "spec:AST-085"],
   "packages/core/src/Item/ItemDescriptionContext.tsx": [
     "spec quote",
     "spec:AST-002/DEC-1"
@@ -544,13 +532,6 @@
     "FR2",
     "FR3",
     "FR7",
-    "spec quote"
-  ],
-  "packages/core/src/Layer/layerSurfacePress.ts": [
-    "FR11",
-    "FR11",
-    "component:HoverCard",
-    "component:Tooltip",
     "spec quote"
   ],
   "packages/core/src/Layer/layerTextReset.stylex.ts": ["AST-038"],
@@ -852,14 +833,12 @@
     "#1107"
   ],
   "packages/core/src/ProgressBar/ProgressBar.tsx": [
-    "DR1",
     "INV11",
     "INV11",
     "INV11",
     "architecture:theme-tokens",
     "architecture:theme-tokens",
     "architecture:theme-tokens",
-    "design:reduced-motion",
     "spec quote"
   ],
   "packages/core/src/RadioList/RadioListItem.tsx": [
@@ -1204,17 +1183,13 @@
     "FR1",
     "FR1",
     "FR1",
-    "FR11",
-    "FR11",
     "FR2",
     "FR5",
     "FR5",
     "FR5",
     "INV5",
     "architecture:public-component-api",
-    "component:HoverCard",
     "component:Link",
-    "component:Tooltip",
     "spec:AST-085",
     "spec:AST-085",
     "spec:AST-085"
@@ -1446,7 +1421,6 @@
     "FR15",
     "FR15",
     "FR15",
-    "FR15",
     "FR2",
     "FR2",
     "FR2",
@@ -1474,7 +1448,6 @@
     "FR9",
     "architecture:layer-runtime",
     "component:BaseTypeahead",
-    "component:Tokenizer",
     "component:Tokenizer",
     "component:Tokenizer",
     "family:input-fields",
@@ -1611,7 +1584,6 @@
     "FR20",
     "FR20",
     "FR20",
-    "FR20",
     "FR21",
     "FR21",
     "FR21",
@@ -1686,7 +1658,6 @@
     "spec quote",
     "spec quote",
     "spec:AST-017",
-    "spec:AST-094",
     "spec:AST-094",
     "spec:AST-094",
     "spec:AST-094",
@@ -1803,10 +1774,8 @@
     "FR19",
     "FR24",
     "FR43",
-    "FR43",
     "design:bidirectionality",
     "spec quote",
-    "spec:AST-094",
     "spec:AST-094",
     "spec:AST-094",
     "spec:AST-094",
@@ -2227,8 +2196,6 @@
     "DR4",
     "FR34",
     "FR34",
-    "FR4",
-    "FR4",
     "FR8",
     "INV6",
     "architecture:component-style-authoring",
@@ -2236,8 +2203,6 @@
     "spec quote",
     "spec quote",
     "spec quote",
-    "spec:AST-094",
-    "spec:AST-094",
     "spec:AST-094",
     "spec:AST-094",
     "spec:AST-094"
@@ -2540,7 +2505,6 @@
     "spec:AST-086"
   ],
   "packages/lab/src/DiffViewer/DiffViewer.tsx": ["FR13", "FR3", "FR3"],
-  "packages/lab/src/InfoTip/InfoTip.tsx": ["#5168"],
   "packages/lab/src/LogStream/LogStream.tsx": ["FR3"],
   "packages/lab/src/MobilePowerSearch/MobilePowerSearch.tsx": [
     "AST-086",

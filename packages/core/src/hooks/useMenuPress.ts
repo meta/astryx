@@ -483,7 +483,10 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
           // Detach before acting: the activation usually closes the menu.
           endGesture();
           // Once armed, the one swallower stays installed.
-          armClickGuard(doc, {staysInstalled: true});
+          armClickGuard(doc, {
+            staysInstalled: true,
+            cancelsTouchEnd: native?.pointerType === 'touch',
+          });
           if (native != null) {
             activate(effect.row, native);
           }
@@ -492,7 +495,10 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
         case 'settle': {
           endGesture();
           if (effect.stray) {
-            armClickGuard(doc, {staysInstalled: true});
+            armClickGuard(doc, {
+              staysInstalled: true,
+              cancelsTouchEnd: native?.pointerType === 'touch',
+            });
           }
           if (effect.dismiss) {
             optionsRef.current.onDismiss?.();
