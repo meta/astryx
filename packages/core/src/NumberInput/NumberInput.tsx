@@ -53,6 +53,7 @@ import {VisuallyHidden} from '../VisuallyHidden';
 import {useTooltip} from '../Tooltip';
 import {getInputARIA} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
@@ -633,13 +634,7 @@ export function NumberInput({
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   // A disabled field keeps its tab stop but, like a natively disabled one,
   // runs no caller event handler other than focus and blur (`spec:AST-085` FR2).
-  const fieldProps = isDisabled
-    ? Object.fromEntries(
-        Object.entries(rest).filter(
-          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
-        ),
-      )
-    : rest;
+  const fieldProps = withholdCallerHandlers(rest, isDisabled);
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
     // The container div is not naturally focusable; focusin bubbles up from

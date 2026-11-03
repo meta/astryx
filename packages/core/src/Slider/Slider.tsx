@@ -48,6 +48,7 @@ import {VisuallyHidden} from '../VisuallyHidden';
 import type {InputStatus} from '../Field/types';
 import {mergeProps, rtlStyles} from '../utils';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {joinAriaIDs} from '../utils/inputAria';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {isRtlElement} from '../hooks/isRtlElement';
@@ -742,9 +743,8 @@ export function Slider({ref, ...props}: SliderProps) {
 
   const isHorizontal = orientation === 'horizontal';
 
-  // Consumer handlers run after the component's own and always run: the
-  // component's handlers call preventDefault() for their own reasons, which
-  // must not silence a consumer.
+  // Consumer handlers run after the component's own, so the component's
+  // preventDefault() calls never silence an enabled slider's consumer.
   const after =
     <E,>(own: (event: E) => void, consumer?: (event: E) => void) =>
     (event: E) => {
@@ -752,17 +752,9 @@ export function Slider({ref, ...props}: SliderProps) {
       consumer?.(event);
     };
 
-  // A disabled slider keeps its tab stop (aria-disabled, not the native
-  // attribute), so the browser no longer drops its events and the component
-  // withholds the caller's instead. Like a disabled text field, it runs none
-  // other than focus and blur.
-  const callerProps = isDisabled
-    ? Object.fromEntries(
-        Object.entries(rest).filter(
-          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
-        ),
-      )
-    : rest;
+  // A disabled slider keeps its tab stop, so the browser still sends its events.
+  // Drop the caller's handlers, but keep focus and blur.
+  const callerProps = withholdCallerHandlers(rest, isDisabled);
   const callerHandler = <E,>(handler?: (event: E) => void) =>
     isDisabled ? undefined : handler;
   const generatedId = useId();
