@@ -147,9 +147,15 @@ optional `calendar` argument that defaults to `gregory` (FR18).
   Astryx bundles no polyfill. Where `Temporal` is missing, a component that
   resolves one of those calendars renders and accepts Gregorian dates and warns
   once in development, on the server and in the browser, naming the polyfill.
-  The component resolves its calendar before its first render, so a server and
-  a browser that both have `Temporal`, or both lack it, render the same markup,
-  except in FR19's mixed-runtime case.
+  The component resolves its calendar during render, so the server and the
+  browser render the same markup whenever they resolve it the same way: both
+  have a `Temporal` that supports the calendar, native or a polyfill the
+  application loads, or both lack one. An application that renders on the
+  server and shows a calendar that needs `Temporal` loads it on the server too,
+  as on Node.js before 26; a server without it renders Gregorian dates while the
+  browser renders the calendar, which is a hydration mismatch. The
+  internationalization guide documents this setup. FR19 names the one remaining
+  difference.
 
 ### Calendar
 
@@ -185,9 +191,10 @@ These requirements apply to the text fields of `DateInput` and
   ignoring case and Latin diacritics. A typed month number means what the
   locale's numeric month means for that calendar: the month's position in the
   typed year for Hebrew, and the month number with the locale's leap marker for
-  Chinese and Korean. A plain Adar typed for a Hebrew leap year is Adar II. In
-  the Gregorian calendar, text that matches none of these forms still commits on
-  Enter or blur when `parseDateInput` reads it.
+  Chinese and Korean. A plain Adar typed for a Hebrew leap year is Adar II. In the Gregorian calendar, text that matches none of these forms, or that
+  names a date the locale's numeric order does not have, still commits on Enter
+  or blur when `parseDateInput` reads it, so `13/5/2026` in `en-US` commits 13
+  May 2026. Otherwise FR11 applies.
 - **FR10 — Years are years of the calendar.** A typed year is a year of the
   active calendar, never a converted Gregorian year: `2026` in a Buddhist field
   is Buddhist year 2026. The format hint and the committed text show the era,
@@ -257,8 +264,7 @@ These requirements apply to the text fields of `DateInput` and
 ### Chinese and Korean
 
 - **FR19 — Chinese and Korean dates follow the runtime.** `chinese` and `dangi`
-  month starts come from the runtime's `Temporal`. Native Temporal in Chrome and
-  Edge 144 and later, Firefox 139 and later, and Node.js 26 and later agrees with
+  month starts come from the runtime's `Temporal`. Native `Temporal` agrees with
   official observatory data from 1900 through 2100. A polyfill that reads the
   platform's `Intl` data can start nine Chinese and four Korean months in that
   range one day apart, Chinese New Year 2027 among them. When a server and a
@@ -275,9 +281,12 @@ These requirements apply to the text fields of `DateInput` and
 - **AR1 — Spoken dates match the visible calendar.** Day-button names, grid
   names, selection and navigation announcements, error messages, and the bounds
   in error messages use the calendar.
-- **AR2 — The field names its calendar.** With a calendar other than `gregory`
-  or `iso8601`, the field's description names the calendar, and an empty
-  focused field shows an example date in the calendar's numeric pattern.
+- **AR2 — The field describes its format.** With a calendar other than
+  `gregory` or `iso8601`, an empty focused field shows an example date in the
+  calendar's numeric pattern. The field's description names its calendar only
+  when that calendar differs from its provider's calendar, so a page in one
+  calendar does not repeat it and a page that mixes calendars says which field
+  uses which.
 - **AR3 — Each rejection has its own message.** Unreadable text, a date the
   calendar does not have, and an out-of-range date each announce a different
   message.
@@ -286,17 +295,18 @@ These requirements apply to the text fields of `DateInput` and
 
 - Supported feature/engine floor: Gregorian-aligned calendars work in every
   supported browser and renderer. The other calendars need `Temporal`: native in
-  Chrome and Edge 144 and later, Firefox 139 and later, and Node.js 26 and later,
-  or a polyfill that the application loads.
+  the runtime, or a polyfill that the application loads. The
+  internationalization guide lists the runtimes that ship it.
 - Unsupported behavior: without `Temporal`, FR5's Gregorian fallback and
   development warning. Safari on macOS and iOS lacks `Temporal`, and
   `spec:AST-013` FR3 names iOS Safari explicitly, so the `Calendar`, `DateInput`,
   `DateRangeInput`, and `DateTimeInput` component records each record a
   `spec:AST-013` FR12 exception. The exception names the capability (calendars
   that need `Temporal`), the reduction (FR5's fallback unless the application
-  loads a polyfill, and FR19's mixed-runtime hydration for `chinese` and
-  `dangi`), the preserved obligations (`spec:AST-013` FR7 and FR8, and FR9
-  outside that case), the
+  loads a polyfill; an application that renders on the server loads it on the
+  server too), the preserved obligations (`spec:AST-013` FR7 and FR8, and FR9
+  whenever the server and the browser resolve the calendar the same way,
+  outside FR19's Chinese and Korean case), the
   evidence (real-browser runs with `Temporal` removed, with and without a
   polyfill), the owner (`nynexman4464`), and the review condition (Safari ships
   `Temporal`).
@@ -316,12 +326,14 @@ These requirements apply to the text fields of `DateInput` and
   AR1–AR3, and record the `spec:AST-013` FR12 exception.
 - `component:Timestamp` and the PowerSearch, Schedule, and chart formatters
   follow FR18.
-- `spec:AST-043` FR2 names one exception to an explicit `presentation="native"`:
-  under a calendar other than `gregory` or `iso8601`, it uses the Astryx surface
-  (FR15).
+- `spec:AST-043` FR1–FR3 name the calendar exception: under a calendar other
+  than `gregory` or `iso8601`, `adaptive-native`, the deprecated `nativePicker`
+  values, and an explicit `presentation="native"` use the Astryx surface for
+  `DateInput` and `DateTimeInput` (FR15).
 - Gregorian behavior that changes, with its `spec:AST-017` class:
-  - FR7's Shift+PageUp and Shift+PageDown year step conforms the grid to the APG
-    date picker pattern: an accessibility behavior fix (FR53).
+  - FR7's Shift+PageUp and Shift+PageDown year step gives keys with no
+    documented behavior the APG date picker's year step, which
+    `component:Calendar` AR1 names as an exception: nonbreaking (FR3, FR5).
   - FR12's `onChange` timing stops reporting dates for incomplete input, which
     restores `component:DateInput` FR1's next-ISO-date contract: a nonbreaking
     fix (FR5).
@@ -331,8 +343,11 @@ These requirements apply to the text fields of `DateInput` and
     field reverts the text on blur on the latest stable release. The value
     does not change in either case: a nonbreaking interaction change (FR5).
   - `parseDateInput` in `@astryxdesign/core/utils` does not change, and the
-    Gregorian text field still commits any text it reads (FR9), so no caller
-    changes.
+    Gregorian text field still commits any text it reads (FR9).
+  - A two-digit year follows the locale's field order: `1/5/26` in `en-GB`
+    commits 1 May 2026, where the latest stable release commits the
+    month-first 5 January 2026. This restores the locale order that
+    `parseDateInput` applies to four-digit years: a fix (FR5).
   - `formatSharedDate`, `shortDate`, and `monthYear` gain an optional argument:
     additive (FR5).
 - Consumer docs: the internationalization guide covers choosing a calendar,
