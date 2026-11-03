@@ -255,6 +255,10 @@ const styles = stylex.create({
     // surface behind the pill itself, fading out across the lower half so the
     // content emerging below has no visible cut line.
     backgroundImage: `linear-gradient(to bottom, ${colorVars['--color-background-surface']} 60%, transparent)`,
+    // WebKit can draw this bar under the scrolling body's own layer while the
+    // sheet's transform animates, so the pill vanishes until the sheet rests.
+    // A layer of its own keeps it above the body.
+    willChange: 'transform',
     // Drags are the handle's; a pinch still zooms the page (WCAG 1.4.4).
     touchAction: 'pinch-zoom',
     cursor: {

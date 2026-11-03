@@ -144,7 +144,13 @@ new position every frame of the block, and a main-thread animation shows none
 (nothing changed, so no frame is sent at all: `busyWindowProof` counts the
 whole window as one stall). `settledWithin` (2 px) stops judging at the easing
 tail: the screencast rounds to whole pixels, so a tail that still moves shows
-plateaus within a pixel or two of rest. A judged part shorter than four of the
+plateaus within a pixel or two of rest. `settledWithinSteps` counts that bound
+in the cast's own position steps, read from the cast (`castStep`, from the
+`step` `trackMarker` gives each frame of the default marker; a control tracked
+by another color carries none, and `castStep` refuses it): 1 px in Chromium's PNG cast and 2 px in
+WebKit's JPEG cast, whose 4:2:0 chroma holds the marker's color in 2 by 2
+pixel blocks and so makes the tail's plateaus longer. Two steps stop at the
+same tail in either engine while a freeze further from rest is still judged. A judged part shorter than four of the
 screencast's intervals fails: the animation under test was not moving during
 the block. With
 `during`, `blockMainThread` starts the loop from a task queued in the frame
@@ -182,9 +188,9 @@ late on a loaded runner, too late to wait on before blocking. Only a hold that
 starts before the block, on two frames at least, is excused, and every frame
 after its first change is judged, so a freeze later in the block still fails.
 Any other element already moving is judged from the block's start. WebKit's
-casts are 2 px quantized: the frames come at the
-viewport's size, but the page in them is captured at half resolution, so
-positions move in 2 CSS px steps (Chromium's in 1). With under two steps of
+casts are 2 px quantized: their JPEG frames hold the
+marker's color in 2 by 2 pixel chroma blocks (4:2:0, which the frame header
+reports), so positions move in 2 CSS px steps (Chromium's in 1). With under two steps of
 motion per frame, a frame delivered a few ms early shows no step and reads as
 not moved. The proof reports `stepPx` and `pxPerFrame` and notes each stretch
 that moves under two steps per frame, read over four frames at a time so a
@@ -215,10 +221,16 @@ presented too little to judge. A run of frames with no new position counts as
 moved when the change that ends it is a single cast step: the component moves
 under one step a frame there, as on an easing tail, which the cast cannot show
 on every frame. Where it moved under two steps a frame over the frames just
-before the run (a spring's slow tail inside a fast window), a frame delivered
-early can show no step too, so the change may carry the motion of every frame
+before the run (a spring's slow tail inside a fast window), or across the run
+itself (its catch-up over the frames it spans) where the curve slows faster
+than those frames show, a frame delivered early can show no step too, so the change may carry the motion of every frame
 the run held at that pace, to the nearest step. The run must also read as a
-slowing curve, at most one frame longer than the component's run before it. A
+slowing curve, at most one frame longer than the component's run before it.
+Under `settledWithinSteps`, a run under one cast step a frame may instead last
+ceil(step ÷ travel) frames, whatever the run before it. The travel is the
+slower moving pace around the run, never less than its own catch-up per frame.
+The run also lasts at most one frame more than the pace into it allows:
+ceil(step ÷ max(pace before, catch-up per frame)) + 1. A
 freeze ends in a catch-up of more than that, a stall in a frame-counted animation is longer than its runs
 before it, and a run that no change ends stays a miss. The component still has
 to show a new position on at least four of the control's frames. The cast step (`stepPx`)

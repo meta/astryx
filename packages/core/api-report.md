@@ -5978,8 +5978,8 @@ interface UseListFocusReturn<T extends HTMLElement = HTMLElement>
 interface UseLongPressHandlers
   cancel: () => void
   moveTo: (point: { x: number; y: number }) => boolean
-  onTouchCancel: () => void
-  onTouchEnd: () => void
+  onTouchCancel: (e?: React.TouchEvent) => void
+  onTouchEnd: (e?: React.TouchEvent) => void
   onTouchMove: (e: React.TouchEvent) => void
   onTouchStart: (e: React.TouchEvent) => void
   start: (point: { x: number; y: number }) => void

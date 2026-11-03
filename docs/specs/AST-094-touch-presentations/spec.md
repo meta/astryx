@@ -332,7 +332,10 @@ a measured, sourced difference exists.
   four exceptions. While a scroll lock under a modal presentation holds the
   page, it MAY cancel the moves of a one-finger touch that no recognizer owns
   when that pan would scroll the page; a second finger is never cancelled
-  (FR10), and the page keeps pinch-zoom. Once its press is delivered, a
+  (FR10), and the page keeps pinch-zoom. A modal overlay that takes the page
+  scroll lock also stops the page's pull-to-refresh and overscroll bounce
+  while it holds the lock, and releases them with it. Once its press is
+  delivered, a
   control that keeps its press through a drag (FR11) owns its touch and MAY
   cancel that finger's moves. A scroll-edge pan, such as a sheet's pull
   from a scroll area at its edge (FR14), MAY cancel its touch's moves from the

@@ -49,6 +49,13 @@ const hostCoarseQuery = {
   dispatchEvent: () => false,
 };
 
+// The scroll lock's page hold reads the primary pointer as it starts
+// (gestures/pageHold.ts). The stub keeps that hold out of these tests, so the
+// pointer stubs below reach only AlertDialog's own layout and press.
+vi.mock('../gestures/pageHold', () => ({
+  holdPageScroll: () => () => {},
+}));
+
 function stubAlertDialogMedia({
   smallScreen,
   coarsePointer,

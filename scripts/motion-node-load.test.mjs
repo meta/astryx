@@ -66,7 +66,14 @@ describe('the touch motion foundation in plain Node', () => {
   it('reaches no StyleX module and no theme module', async () => {
     const {metafile} = await bundleFoundation();
     const inputs = Object.keys(metafile.inputs);
-    const stylex = inputs.filter(file => /\.stylex\.[cm]?[jt]sx?$/.test(file));
+    // A private attribute's owner module carries the .stylex name by the
+    // private-attribute rule but may call no StyleX at load: the
+    // stylexImports check below holds it to that.
+    const stylex = inputs.filter(
+      file =>
+        /\.stylex\.[cm]?[jt]sx?$/.test(file) &&
+        !/\/src\/privateAttributes\//.test(file),
+    );
     const theme = inputs.filter(file => file.includes('/src/theme/'));
     const stylexImports = inputs.flatMap(file =>
       metafile.inputs[file].imports
