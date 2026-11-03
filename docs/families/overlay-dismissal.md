@@ -204,7 +204,7 @@ this record's current membership snapshot must be updated with it.
   and FR3 apply within that document, so a host and the members nested in it
   keep one order wherever they render. A member of another document is never a
   candidate. An unpinned Tooltip never wins or blocks an Escape press against
-  another member, and a Tooltip or HoverCard pinned open by a press takes Escape
+  another member, and a Tooltip pinned open by a press takes Escape
   first (`spec:AST-003` FR4, DEC-6): Escape closes an unpinned Tooltip only when
   it is the only present member in its document. The stack listens once in each document that holds a
   member and stops when its last member leaves.

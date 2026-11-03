@@ -267,8 +267,8 @@ function isFocusable(element: HTMLElement): boolean {
  */
 
 export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
-  // Pinned, so an options object that carries the internal option at runtime
-  // cannot reach the press-to-pin path.
+  // The option is fixed to `adaptive`, so an options object that carries it at
+  // runtime cannot reach the press-to-pin path.
   return useTooltipWithTriggerBehavior({
     ...options,
     triggerBehavior: 'adaptive',
