@@ -16,7 +16,7 @@ import {Heading} from '../Heading/Heading';
 import {Icon, renderIconSlot} from '../Icon/Icon';
 import {List} from '../List/List';
 import {ListItem} from '../List/ListItem';
-import {useMenuPress} from '../hooks/useMenuPress';
+import {useCoreMenuPress} from '../hooks/useMenuPress';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
 import {rtlStyles} from '../utils/rtlStyles';
@@ -74,7 +74,7 @@ export function MenuBottomSheetActionList({
   // The press model: the row under a finger's RELEASE acts, and the
   // highlight (focus) follows the finger across the rows. The sheet is modal,
   // so a release outside it is the scrim's, not a dismissal of ours.
-  useMenuPress(listRef, {
+  const menuPress = useCoreMenuPress(listRef, {
     itemSelector: SHEET_ROW_SELECTOR,
   });
 
@@ -147,7 +147,11 @@ export function MenuBottomSheetActionList({
   };
 
   return (
-    <List ref={listComposedRef} density="spacious" xstyle={styles.list}>
+    <List
+      ref={listComposedRef}
+      density="spacious"
+      xstyle={styles.list}
+      onPointerDown={menuPress.handleMenuPointerDown}>
       {items.map((option, index) => {
         if ('type' in option && option.type === 'divider') {
           return (

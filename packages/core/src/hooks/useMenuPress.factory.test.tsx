@@ -408,10 +408,8 @@ describe('useMenuPress(menuRef, options) — a thin wrapper over createMenuPress
     rerender();
     expect(create).toHaveBeenCalledTimes(2);
     expect(create.mock.calls[1][0]).toBe(menu);
-    // The modality pair, and the press-down listener.
     expect(modalityListeners(firstRemove.mock.calls)).toEqual([
       'keydown',
-      'pointerdown',
       'pointerdown',
     ]);
     second.dispatchEvent(new Event('pointerdown'));
@@ -424,6 +422,7 @@ describe('useMenuPress(menuRef, options) — a thin wrapper over createMenuPress
       isTriggerClickFromPress: () => false,
       cancel: () => {},
       update: () => {},
+      handleMenuPointerDown: () => {},
       handleTriggerPointerDown: () => {},
       handleTriggerContextMenu: () => {},
       destroy: () => {},

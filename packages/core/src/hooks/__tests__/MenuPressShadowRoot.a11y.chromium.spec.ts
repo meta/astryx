@@ -5,10 +5,11 @@
  * @file MenuPressShadowRoot.a11y.chromium.spec.ts
  * @input The `a11y/Menu press in a shadow root` stories in a built Storybook,
  *   real mouse input, and CDP touch input.
- * @output Real-engine proof that a menu rendered inside a shadow root acts on
- *   the row under a released pointer (module:DropdownMenu/useMenuPress FR1),
- *   and that a ContextMenu there tells a press on its own rows from a press
- *   outside it, a mouse's at once and a finger's on its lift.
+ * @output Real-engine proof that a menu inside a shadow root acts on the row
+ *   under a released pointer (module:DropdownMenu/useMenuPress FR1). A mouse's
+ *   and a finger's slide work alike. A ContextMenu there also tells a press on
+ *   its own rows from a press outside it: a mouse's at once, a finger's on its
+ *   lift.
  * @position Run with `pnpm test:a11y-contract`. Only a real engine resolves a
  *   point inside a shadow root to the shadow host at the document level.
  */
@@ -48,6 +49,51 @@ test('a mouse click on an option inside a shadow root selects it', async ({
   }
 
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+
+  await expect(page.getByTestId('selected-value')).toHaveText('Banana');
+});
+
+test('a finger slide from Apple to Banana inside a shadow root selects Banana', async ({
+  page,
+}) => {
+  await page.goto(`${storybook.origin}/iframe.html?id=${STORY}&viewMode=story`);
+  await page.getByRole('combobox', {name: 'Fruit'}).click();
+  await expect(page.getByRole('option', {name: 'Banana'})).toBeVisible();
+
+  // A real finger slide pans this list, since its touch-action allows it.
+  // Dispatched touch pointer events keep the engine's own hit test and its
+  // retargeting at the shadow host.
+  await page.getByTestId('shadow-host').evaluate(host => {
+    const root = host.shadowRoot;
+    const fire = (type: string, name: string) => {
+      const option = [
+        ...(root?.querySelectorAll('[role="option"]') ?? []),
+      ].find(element => element.textContent?.includes(name));
+      if (root == null || option == null) {
+        throw new Error(`no ${name} option in the shadow root`);
+      }
+      const box = option.getBoundingClientRect();
+      const x = box.x + box.width / 2;
+      const y = box.y + box.height / 2;
+      (root.elementFromPoint(x, y) ?? option).dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+          pointerId: 7,
+          pointerType: 'touch',
+          isPrimary: true,
+          button: type === 'pointermove' ? -1 : 0,
+          buttons: type === 'pointerup' ? 0 : 1,
+          clientX: x,
+          clientY: y,
+        }),
+      );
+    };
+    fire('pointerdown', 'Apple');
+    fire('pointermove', 'Banana');
+    fire('pointerup', 'Banana');
+  });
 
   await expect(page.getByTestId('selected-value')).toHaveText('Banana');
 });

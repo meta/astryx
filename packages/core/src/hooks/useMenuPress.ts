@@ -7,8 +7,8 @@
  * @input The menu's ref, and createMenuPress's options with the trigger as a
  *   ref
  * @output Exports useMenuPress, createMenuPress's React form, and the
- *   internal useDropdownMenuPress entry with its touch model. Re-exports the
- *   marker attributes, the press constants and the activation mark.
+ *   internal entries with DropdownMenu's touch model. Re-exports the marker
+ *   attributes, the press constants and the activation mark.
  * @position Core hook; a thin wrapper over createMenuPress. Every Core menu
  *   uses the ref form; the options form is deprecated.
  *
@@ -21,13 +21,15 @@
  */
 
 import {useEffect, useMemo, useRef, useState, type RefObject} from 'react';
+import {useAttachment} from './useAttachment';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {
-  createCoreMenuPress,
+  createForwardedMenuPress,
+  createMenuPress,
   createMenuPressCore,
   MENU_PRESS_MARKER,
+  type CoreMenuPressOptions,
   type CreateMenuPressOptions,
-  type CoreMenuPressReturn,
   type CreateMenuPressReturn,
   type MenuPressCore,
   type MenuPressTouchModel,
@@ -62,11 +64,15 @@ export interface UseMenuPressRefOptions extends Omit<
   triggerRef?: RefObject<HTMLElement | null>;
 }
 
-/** What the ref form returns: the press's reads; the hook owns its life. */
+/**
+ * What the ref form returns: the press's reads and forwards. The hook owns
+ * its life.
+ */
 export type UseMenuPressRefReturn = Pick<
   CreateMenuPressReturn,
   | 'isTriggerClickFromPress'
   | 'cancel'
+  | 'handleMenuPointerDown'
   | 'handleTriggerPointerDown'
   | 'handleTriggerContextMenu'
 >;
@@ -176,6 +182,14 @@ function factoryOptionsOf(
   };
 }
 
+/** The factory's options with the touch model the entry allows. */
+function coreOptionsOf(latest: {
+  options: UseMenuPressRefOptions;
+  touchModel: MenuPressTouchModel;
+}): CoreMenuPressOptions {
+  return {...factoryOptionsOf(latest.options), touchModel: latest.touchModel};
+}
+
 /**
  * DropdownMenu's options for the press model: everything the public hook
  * takes, plus its touch model. DropdownMenu reaches the touch model through
@@ -203,12 +217,12 @@ export interface DropdownMenuPressOptions extends UseMenuPressOptions {
 export type DropdownMenuPressReturn = UseMenuPressReturn;
 
 /**
- * DropdownMenu's ref form: the ref form's options, plus its touch model
- * ({@link DropdownMenuPressOptions.touchModel}).
+ * Core's menus' ref form: the ref form's options, plus DropdownMenu's touch
+ * model ({@link DropdownMenuPressOptions.touchModel}).
  *
  * @internal
  */
-export interface DropdownMenuPressRefOptions extends UseMenuPressRefOptions {
+export interface CoreMenuPressRefOptions extends UseMenuPressRefOptions {
   /** How the finger that opened the menu from the trigger picks. */
   touchModel?: MenuPressTouchModel;
 }
@@ -254,7 +268,24 @@ export function useMenuPress(
 ): UseMenuPressRefReturn | UseMenuPressReturn {
   // The touch model is DropdownMenu's alone; an untyped caller's
   // `touchModel` does not reach the model.
-  return useMenuPressDriver(first, second, 'pointer');
+  return useMenuPressWith(first, second, createMenuPress, 'pointer');
+}
+
+/**
+ * @internal The ref form for Core's menus. Each forwards a mouse's or pen's
+ * press-down from its React handlers, so the press acts in the options
+ * form's order. DropdownMenu passes its touch model.
+ */
+export function useCoreMenuPress(
+  menuRef: RefObject<HTMLElement | null>,
+  options: CoreMenuPressRefOptions,
+): UseMenuPressRefReturn {
+  return useMenuPressWith(
+    menuRef,
+    options,
+    createForwardedMenuPress,
+    options.touchModel ?? 'pointer',
+  ) as UseMenuPressRefReturn;
 }
 
 /**
@@ -265,25 +296,26 @@ export function useMenuPress(
  * @internal
  */
 export function useDropdownMenuPress(
-  menuRef: RefObject<HTMLElement | null>,
-  options: DropdownMenuPressRefOptions,
-): UseMenuPressRefReturn;
-export function useDropdownMenuPress(
   options: DropdownMenuPressOptions,
-): DropdownMenuPressReturn;
-export function useDropdownMenuPress(
-  first: RefObject<HTMLElement | null> | DropdownMenuPressOptions,
-  second?: DropdownMenuPressRefOptions,
-): UseMenuPressRefReturn | DropdownMenuPressReturn {
-  const {touchModel = 'pointer'} =
-    second ?? (first as DropdownMenuPressOptions);
-  return useMenuPressDriver(first, second, touchModel);
+): DropdownMenuPressReturn {
+  return useMenuPressWith(
+    options,
+    undefined,
+    createMenuPress,
+    options.touchModel ?? 'pointer',
+  ) as DropdownMenuPressReturn;
 }
 
-/** Both forms of the press, with the touch model the entry allows. */
-function useMenuPressDriver(
+/** A ref that never holds a menu, for the options form's attachment. */
+const NO_MENU: RefObject<HTMLElement | null> = {current: null};
+
+function useMenuPressWith(
   first: RefObject<HTMLElement | null> | UseMenuPressOptions,
   second: UseMenuPressRefOptions | undefined,
+  create: (
+    menu: HTMLElement,
+    options: CoreMenuPressOptions,
+  ) => CreateMenuPressReturn,
   touchModel: MenuPressTouchModel,
 ): UseMenuPressRefReturn | UseMenuPressReturn {
   // A call site keeps one form for its life, so both take the same hooks.
@@ -302,48 +334,24 @@ function useMenuPressDriver(
   // The ref form: createMenuPress on the element behind the ref. A new menu or
   // document creates a new factory. Every other change reaches it through
   // update() at commit, so a render that React discards never reaches it.
-  const attachedRef = useRef<{
-    menu: HTMLElement;
-    ownerDocument: Document;
-    press: CoreMenuPressReturn;
-  } | null>(null);
-  // Syncs the factory's listeners with the menu element behind the ref.
-  useIsomorphicLayoutEffect(() => {
-    if (!isRefForm) {
-      return;
-    }
-    const {menuRef: ref, options: latest, touchModel: model} = latestRef.current;
-    const menu = ref.current;
-    const attached = attachedRef.current;
-    if (
-      attached != null &&
-      attached.menu === menu &&
-      attached.ownerDocument === menu.ownerDocument
-    ) {
-      attached.press.update({...factoryOptionsOf(latest), touchModel: model});
-      return;
-    }
-    attached?.press.destroy();
-    attachedRef.current =
-      menu == null
-        ? null
-        : {
-            menu,
-            ownerDocument: menu.ownerDocument,
-            press: createCoreMenuPress(menu, {
-              ...factoryOptionsOf(latest),
-              touchModel: model,
-            }),
-          };
-  });
-  // Removes the factory's listeners at unmount.
-  useIsomorphicLayoutEffect(
-    () => () => {
-      attachedRef.current?.press.destroy();
-      attachedRef.current = null;
+  const attachedRef = useRef<CreateMenuPressReturn | null>(null);
+  useAttachment(
+    isRefForm ? menuRef : NO_MENU,
+    menu => {
+      const press = create(menu, coreOptionsOf(latestRef.current));
+      attachedRef.current = press;
+      return () => {
+        press.destroy();
+        attachedRef.current = null;
+      };
     },
-    [],
+    null,
+    {followsDocument: true},
   );
+  // Syncs the attached factory's options with this commit's.
+  useIsomorphicLayoutEffect(() => {
+    attachedRef.current?.update(coreOptionsOf(latestRef.current));
+  });
 
   // The options form: the same core, driven by the props it returns.
   const [core] = useState<MenuPressCore | null>(() =>
@@ -370,12 +378,14 @@ function useMenuPressDriver(
     if (core == null) {
       return {
         isTriggerClickFromPress: () =>
-          attachedRef.current?.press.isTriggerClickFromPress() ?? false,
-        cancel: () => attachedRef.current?.press.cancel(),
+          attachedRef.current?.isTriggerClickFromPress() ?? false,
+        cancel: () => attachedRef.current?.cancel(),
+        handleMenuPointerDown: event =>
+          attachedRef.current?.handleMenuPointerDown(event),
         handleTriggerPointerDown: event =>
-          attachedRef.current?.press.handleTriggerPointerDown(event),
+          attachedRef.current?.handleTriggerPointerDown(event),
         handleTriggerContextMenu: event =>
-          attachedRef.current?.press.handleTriggerContextMenu(event),
+          attachedRef.current?.handleTriggerContextMenu(event),
       };
     }
     return {

@@ -120,13 +120,19 @@ export const docs = {
       name: 'cancel',
       type: '() => void',
       description:
-        'End the gesture in flight with nothing acting, for when the menu closes under it. Nothing is spread: the press listens for press-downs on the menu and the trigger at their document and marks the menu root with data-astryx-menu-press. Without React, createMenuPress(menu, options) takes the same options with the trigger as an element (trigger) and returns {isTriggerClickFromPress, cancel, update, handleTriggerPointerDown, handleTriggerContextMenu, destroy}; destroy removes every listener it added.',
+        'End the gesture in flight with nothing acting, for when the menu closes under it. Nothing is spread: the press listens on the menu and its trigger itself and marks the menu root with data-astryx-menu-press. Without React, createMenuPress(menu, options) takes the same options with the trigger as an element (trigger) and returns {isTriggerClickFromPress, cancel, update, handleMenuPointerDown, handleTriggerPointerDown, handleTriggerContextMenu, destroy}; destroy removes every listener it added.',
+    },
+    {
+      name: 'handleMenuPointerDown',
+      type: '(event: PointerEvent | React.PointerEvent) => void',
+      description:
+        "Ref form only: hands the press a menu press-down that a handler forwards. The press takes each event once. The menu's own listener runs before any React `onPointerDown` handler and already takes a mouse's or pen's press-down, so a forward does not order it.",
     },
     {
       name: 'handleTriggerPointerDown',
       type: '(event: PointerEvent | React.PointerEvent) => void',
       description:
-        'Ref form only: hands the press a trigger press-down that a handler forwards, such as a trigger that runs its own handler first. The press takes each event once.',
+        'Ref form only: hands the press a trigger press-down that a handler forwards, as above. The press takes each event once.',
     },
     {
       name: 'handleTriggerContextMenu',
@@ -167,7 +173,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          "Use the ref form, useMenuPress(menuRef, {triggerRef, …}): it listens for their press-downs on the menu's document, so nothing is spread; an ancestor that stops a press-down hides it. Its press, the trigger's included, exists only while the menu element is mounted, so a menu that opens on a press of its trigger keeps its element mounted while closed. The options form, useMenuPress({menuRef, …}), is deprecated (DEP-0019) and is removed in 0.8.0; run astryx upgrade to move calls to the ref form.",
+          "Use the ref form, useMenuPress(menuRef, {triggerRef, …}): it listens on the menu and the trigger itself, so nothing is spread. An ancestor that stops a finger's press-down hides it from the press. A mouse's or pen's press-down acts at the menu's or trigger's own listener, before any React `onPointerDown` handler, so a row's React `onPointerDown` that stops its press-down no longer keeps the press from starting. Its press, the trigger's included, exists only while the menu element is mounted, so a menu that opens on a press of its trigger keeps its element mounted while closed. The options form, useMenuPress({menuRef, …}), is deprecated (DEP-0019) and is removed in 0.8.0; run astryx upgrade to move calls to the ref form.",
       },
     ],
   },
@@ -210,7 +216,7 @@ export const docsDense = {
     isTriggerClickFromPress:
       'true = the trigger click belongs to the press that already opened / closed; ignore it.',
     cancel:
-      'end the gesture w/o acting. Nothing to spread. No React: createMenuPress(menu, {trigger, …}) → {isTriggerClickFromPress, cancel, update, handleTriggerPointerDown, handleTriggerContextMenu, destroy}.',
+      'end the gesture w/o acting. Nothing to spread. No React: createMenuPress(menu, {trigger, …}) → {isTriggerClickFromPress, cancel, update, handleMenuPointerDown, handleTriggerPointerDown, handleTriggerContextMenu, destroy}.',
   },
   usage: {
     description:

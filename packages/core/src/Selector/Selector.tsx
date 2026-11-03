@@ -71,7 +71,7 @@ import type {SelectorOptionType, SelectorOptionData} from './types';
 import {isOptionData, isDivider, isSection, normalizeOption} from './utils';
 import {getSelectableOptionEntries} from './selectableOptionEntries';
 import {useCombobox, useSelectedItemOffset} from './hooks';
-import {useMenuPress} from '../hooks/useMenuPress';
+import {useCoreMenuPress} from '../hooks/useMenuPress';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
@@ -1548,7 +1548,7 @@ export function Selector<T extends SelectorOptionType>(
     surface.isOpen,
     filteredItems.length > MOST_ROWS_THAT_FIT,
   );
-  useMenuPress(listboxRef, {
+  const listboxPress = useCoreMenuPress(listboxRef, {
     itemSelector: '[role="option"]:not([aria-disabled="true"])',
     onHighlight: row => {
       if (row == null) {
@@ -1908,6 +1908,7 @@ export function Selector<T extends SelectorOptionType>(
         id={listboxId}
         role="listbox"
         aria-label={label}
+        onPointerDown={listboxPress.handleMenuPointerDown}
         {...stylex.props(
           styles.dropdown,
           listboxHasOverflow
@@ -1925,6 +1926,7 @@ export function Selector<T extends SelectorOptionType>(
       ref={attachListbox}
       id={listboxId}
       role="listbox"
+      onPointerDown={listboxPress.handleMenuPointerDown}
       // The trigger shows the value, so it cannot name the list.
       // A modal sheet removes an outside label from the accessibility tree.
       // The label element also holds the required marker and the tooltip.

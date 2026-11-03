@@ -47,7 +47,7 @@ import {mergeProps} from '../utils';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {BaseProps} from '../BaseProps';
 import {useMenuHover} from '../hooks/useMenuHover';
-import {useMenuPress} from '../hooks/useMenuPress';
+import {useCoreMenuPress} from '../hooks/useMenuPress';
 import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {
@@ -439,7 +439,7 @@ export function SideNavHeading({
   // FR5); a mouse released outside closes it. Only the role="menu" region is
   // tracked, not the heading button above it.
   const headingMenuRef = useRef<HTMLDivElement>(null);
-  useMenuPress(headingMenuRef, {
+  const headingMenuPress = useCoreMenuPress(headingMenuRef, {
     itemSelector: HEADING_MENU_ITEM_SELECTOR,
     onDismiss: closeMenu,
     isEnabled: !!menu,
@@ -576,6 +576,7 @@ export function SideNavHeading({
                 ref={headingMenuRef}
                 role="menu"
                 aria-label={heading}
+                onPointerDown={headingMenuPress.handleMenuPointerDown}
                 {...headingMenuTouch}>
                 <NavHeadingCloseContext value={closeMenuCtx}>
                   {menu}
@@ -808,6 +809,7 @@ export function SideNavHeading({
               ref={headingMenuRef}
               role="menu"
               aria-label={heading}
+              onPointerDown={headingMenuPress.handleMenuPointerDown}
               {...headingMenuTouch}>
               <NavHeadingDismissContext value={dismissCtx}>
                 {menu}
@@ -890,6 +892,7 @@ export function SideNavHeading({
               ref={headingMenuRef}
               role="menu"
               aria-label={heading}
+              onPointerDown={headingMenuPress.handleMenuPointerDown}
               {...headingMenuTouch}>
               <NavHeadingDismissContext value={dismissCtx}>
                 {menu}

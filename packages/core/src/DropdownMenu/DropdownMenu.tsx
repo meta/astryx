@@ -70,7 +70,7 @@ import {
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useListFocus} from '../hooks/useListFocus';
-import {useDropdownMenuPress} from '../hooks/useMenuPress';
+import {useCoreMenuPress} from '../hooks/useMenuPress';
 import type {MenuPressPointerType} from '../hooks/menuPressGesture';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useFocusReturnVisibility} from '../hooks/useFocusReturnVisibility';
@@ -372,18 +372,12 @@ export interface DropdownMenuTriggerProps {
   onClick: (event: React.MouseEvent<HTMLElement>) => void;
   onClickCapture: (event: React.MouseEvent<HTMLElement>) => void;
   /**
-   * @deprecated Forward `ref` to the control instead. The press listens for
-   *   the control's press-down on its document, so an ancestor that stops
-   *   the press-down hides it from the press. `astryx upgrade` removes
-   *   redundant forwards. It is removed in 0.8.0.
+   * The control's forward of a mouse or pen press-down to the menu, so it acts
+   * as it did. Spread it with the other trigger props. A finger's press
+   * reaches the menu through `ref`.
    */
   onPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
-  /**
-   * @deprecated Forward `ref` to the control instead. The press listens for
-   *   the control's press-down on its document, so an ancestor that stops
-   *   the press-down hides it from the press. `astryx upgrade` removes
-   *   redundant forwards. It is removed in 0.8.0.
-   */
+  /** The control's forward of its `contextmenu` to the menu, as above. */
   onContextMenu: (event: React.MouseEvent<HTMLElement>) => void;
   onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
   onFocus: (event: React.FocusEvent<HTMLElement>) => void;
@@ -1386,7 +1380,7 @@ function DropdownMenuPopover({
   // The press model: the row under a release acts, the highlight follows a
   // held pointer. A mouse released outside the menu dismisses it; a finger
   // released outside leaves it open, so the hook never calls onDismiss then.
-  const menuPress = useDropdownMenuPress(listRef, {
+  const menuPress = useCoreMenuPress(listRef, {
     triggerRef: buttonRef,
     itemSelector: MENU_ITEM_SELECTOR,
     onTriggerPress: handleTriggerPress,
@@ -1627,9 +1621,8 @@ function DropdownMenuPopover({
     id: triggerId,
     onClick: handleButtonClick,
     onClickCapture: handleTriggerClickCapture,
-    // The press listens for the trigger's press-down on its document. A caller
-    // that still forwards these hands the same event to it, and it takes the
-    // press once.
+    // A finger's press reaches the press through the trigger's ref. A
+    // mouse's or pen's arrives only through these two handlers.
     onPointerDown: menuPress.handleTriggerPointerDown,
     onContextMenu: menuPress.handleTriggerContextMenu,
     onKeyDown: handleButtonKeyDown,
@@ -1724,6 +1717,7 @@ function DropdownMenuPopover({
                 );
               }
             }}
+            onPointerDown={menuPress.handleMenuPointerDown}
             {...mergeProps(
               themeProps('dropdown-menu', {presentation: 'popover'}),
               stylex.props(

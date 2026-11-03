@@ -76,7 +76,7 @@ import {
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useMenuDrillIn} from '../DropdownMenu/useMenuDrillIn';
 import {useInternalListFocus} from '../hooks/useListFocus';
-import {useMenuPress} from '../hooks/useMenuPress';
+import {useCoreMenuPress} from '../hooks/useMenuPress';
 import {MENU_PRESS_MARKER} from '../hooks/menuPressMarker';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useLongPress} from '../hooks/useLongPress';
@@ -759,7 +759,7 @@ export function ContextMenu({
   // the press attaches. The marker is in the markup, so the menu carries it
   // from its first paint.
   const pressMarker = {[MENU_PRESS_MARKER]: ''};
-  useMenuPress(pressMenuRef, {
+  const menuPress = useCoreMenuPress(pressMenuRef, {
     itemSelector: MENU_ITEM_SELECTOR,
     onDismiss: closeMenu,
     isEnabled: !usesBottomSheet,
@@ -776,6 +776,7 @@ export function ContextMenu({
       aria-label={label}
       onKeyDown={listKeyDown}
       onContextMenu={e => e.preventDefault()}
+      onPointerDown={menuPress.handleMenuPointerDown}
       {...mergeProps(
         themeProps('context-menu'),
         stylex.props(

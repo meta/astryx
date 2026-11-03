@@ -4108,6 +4108,7 @@ interface CreateMenuPressOptions
 interface CreateMenuPressReturn
   cancel: () => void
   destroy: () => void
+  handleMenuPointerDown: (event: MenuPressDownEvent) => void
   handleTriggerContextMenu: (event: { preventDefault: () => void; nativeEvent?: Event }) => void
   handleTriggerPointerDown: (event: MenuPressDownEvent) => void
   isTriggerClickFromPress: () => boolean
@@ -4274,10 +4275,10 @@ interface DropdownMenuTriggerProps
   id: string
   onClick: (event: React.MouseEvent<HTMLElement>) => void
   onClickCapture: (event: React.MouseEvent<HTMLElement>) => void
-  onContextMenu: (event: React.MouseEvent<HTMLElement>) => void @deprecated
+  onContextMenu: (event: React.MouseEvent<HTMLElement>) => void
   onFocus: (event: React.FocusEvent<HTMLElement>) => void
   onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void
-  onPointerDown: (event: React.PointerEvent<HTMLElement>) => void @deprecated
+  onPointerDown: (event: React.PointerEvent<HTMLElement>) => void
   ref: (element: HTMLElement | null) => void
 type DurationVarName = keyof typeof durationDefaults
 type EaseVarName = keyof typeof easeDefaults
@@ -6051,7 +6052,7 @@ interface UseMenuPressRefOptions extends Omit<CreateMenuPressOptions, 'trigger'>
   onTriggerPress?: (pointerType: MenuPressPointerType) => boolean
   startBehavior?: 'menu' | 'items' = 'menu'
   triggerRef?: RefObject<HTMLElement | null>
-type UseMenuPressRefReturn = Pick<CreateMenuPressReturn, 'isTriggerClickFromPress' | 'cancel' | 'handleTriggerPointerDown' | 'handleTriggerContextMenu'>
+type UseMenuPressRefReturn = Pick<CreateMenuPressReturn, 'isTriggerClickFromPress' | 'cancel' | 'handleMenuPointerDown' | 'handleTriggerPointerDown' | 'handleTriggerContextMenu'>
 interface UseMenuPressReturn @deprecated
   cancel: () => void
   isTriggerClickFromPress: () => boolean
