@@ -38,6 +38,12 @@ export interface CheckboxListContextValue {
   disabledMessageID?: string;
   isReadOnly: boolean;
   /**
+   * True when the list has an error `status`. Each checkbox is then
+   * `aria-invalid`. Some screen readers skip a group's invalid state when a
+   * checkbox takes focus.
+   */
+  isInvalid?: boolean;
+  /**
    * Values of the items whose `changeAction` is pending. Each matching item
    * renders an in-checkbox spinner and blocks re-toggling; the list is empty
    * when idle.

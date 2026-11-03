@@ -71,15 +71,16 @@ export const docs = {
   props: [
     {
       name: 'icon',
-      type: 'IconName | ComponentType<SVGProps>',
+      type: 'IconName | NamespacedIconName | ComponentType<SVGProps>',
       description:
-        'Semantic icon name or SVG component. Valid semantic names: close, chevronDown, chevronLeft, chevronRight, chevronsLeft, chevronsRight, check, success, error, warning, info, calendar, clock, externalLink, menu, moreHorizontal, search, upload, arrowUp, arrowDown, arrowsUpDown, funnel, eyeSlash, viewColumns, copy, checkDouble, wrench, stop, microphone. For any icon not in this list, pass an SVG component directly (e.g. import from lucide-react or @heroicons/react). Note: this prop is called `icon`, not `name`.',
+        'Semantic icon name or SVG component. Valid semantic names: close, chevronDown, chevronLeft, chevronRight, chevronsLeft, chevronsRight, check, success, error, warning, info, calendar, clock, externalLink, menu, moreHorizontal, search, upload, arrowUp, arrowDown, arrowsUpDown, funnel, eyeSlash, viewColumns, copy, checkDouble, wrench, stop, microphone. A namespaced key such as `richtext:bold` names a glyph that one component or library registers, and a theme can replace it by key; a namespaced key that nothing registers renders nothing. For any icon not in this list, pass an SVG component directly (e.g. import from lucide-react or @heroicons/react). Note: this prop is called `icon`, not `name`.',
       required: true,
     },
     {
       name: 'color',
       type: "'primary' | 'secondary' | 'tertiary' | 'disabled' | 'accent' | 'info' | 'success' | 'error' | 'warning' | 'inherit'",
-      description: 'Color variant mapped to Astryx icon color tokens.',
+      description:
+        'Color variant mapped to Astryx icon color tokens. Semantic values (primary through warning) follow the role, and inherit uses the surrounding text color. On the web, Icon also accepts the palette values blue, red, green, gray, cyan, teal, yellow, orange, pink, and purple, which pick a non-semantic hue.',
       default: "'inherit'",
     },
     {
@@ -106,6 +107,24 @@ export const docs = {
       type: 'StyleXStyles',
       description:
         "StyleX styles for customization (color, size, opacity). Folded into the icon's own stylex.props() call so it composes with the base color/size styles. Must be a stylex.create() value, not an inline style object like style={{}}.",
+    },
+    {
+      name: 'className',
+      type: 'string',
+      description:
+        'Class name added to the rendered glyph, beside the astryx-icon target class.',
+    },
+    {
+      name: 'style',
+      type: 'CSSProperties',
+      description:
+        "Inline styles merged onto the rendered glyph after Icon's own size and color styles.",
+    },
+    {
+      name: 'ref',
+      type: 'Ref<SVGSVGElement>',
+      description:
+        'Ref to the rendered SVG element when icon is an icon component. A semantic or namespaced name renders inside an internal wrapper, and the ref is not attached.',
     },
   ],
   theming: {
@@ -207,15 +226,16 @@ export const docsZh = {
   props: [
     {
       name: 'icon',
-      type: 'IconName | ComponentType<SVGProps>',
+      type: 'IconName | NamespacedIconName | ComponentType<SVGProps>',
       description:
-        '语义图标名称或 SVG 组件。有效语义名称：close, chevronDown, chevronLeft, chevronRight, chevronsLeft, chevronsRight, check, success, error, warning, info, calendar, clock, externalLink, menu, moreHorizontal, search, upload, arrowUp, arrowDown, arrowsUpDown, funnel, eyeSlash, viewColumns, copy, checkDouble, wrench, stop, microphone。列表之外的图标请直接传入 SVG 组件。',
+        '语义图标名称或 SVG 组件。有效语义名称：close, chevronDown, chevronLeft, chevronRight, chevronsLeft, chevronsRight, check, success, error, warning, info, calendar, clock, externalLink, menu, moreHorizontal, search, upload, arrowUp, arrowDown, arrowsUpDown, funnel, eyeSlash, viewColumns, copy, checkDouble, wrench, stop, microphone。命名空间键（如 `richtext:bold`）指向某个组件或库注册的图标，主题可以按键替换它；没有注册的命名空间键不渲染任何内容。列表之外的图标请直接传入 SVG 组件。',
       required: true,
     },
     {
       name: 'color',
       type: "'primary' | 'secondary' | 'tertiary' | 'disabled' | 'accent' | 'info' | 'success' | 'error' | 'warning' | 'inherit'",
-      description: '映射到 Astryx 图标颜色令牌的颜色变体。',
+      description:
+        '映射到 Astryx 图标颜色令牌的颜色变体。语义值（primary 到 warning）跟随角色，inherit 使用周围文字的颜色。在 Web 上，Icon 还接受调色板值 blue、red、green、gray、cyan、teal、yellow、orange、pink 和 purple，它们选择非语义色相。',
       default: "'inherit'",
     },
     {
@@ -242,6 +262,23 @@ export const docsZh = {
       type: 'StyleXStyles',
       description:
         '用于自定义的 StyleX 样式（颜色、尺寸、不透明度）。会并入图标自身的 stylex.props() 调用，从而与基础的颜色/尺寸样式组合。必须是 stylex.create() 的值，而不是像 style={{}} 这样的内联样式对象。',
+    },
+    {
+      name: 'className',
+      type: 'string',
+      description: '添加到渲染图标上的类名，与 astryx-icon 目标类名并列。',
+    },
+    {
+      name: 'style',
+      type: 'CSSProperties',
+      description:
+        '合并到渲染图标上的内联样式，位于 Icon 自身的尺寸和颜色样式之后。',
+    },
+    {
+      name: 'ref',
+      type: 'Ref<SVGSVGElement>',
+      description:
+        'icon 为图标组件时，指向渲染的 SVG 元素的 ref。语义名称或命名空间名称在内部包装元素中渲染，不会附加 ref。',
     },
   ],
   theming: {
@@ -390,8 +427,9 @@ export const docsDense = {
     ],
   },
   propDescriptions: {
-    icon: 'Semantic icon name or SVG component. Valid names: close, chevronDown, chevronLeft, chevronRight, chevronsLeft, chevronsRight, check, success, error, warning, info, calendar, clock, externalLink, menu, moreHorizontal, search, upload, arrowUp, arrowDown, arrowsUpDown, funnel, eyeSlash, viewColumns, copy, checkDouble, wrench, stop, microphone. For others, pass an SVG component.',
-    color: 'Color variant mapped to Astryx icon color tokens.',
+    icon: 'Semantic icon name or SVG component. Valid names: close, chevronDown, chevronLeft, chevronRight, chevronsLeft, chevronsRight, check, success, error, warning, info, calendar, clock, externalLink, menu, moreHorizontal, search, upload, arrowUp, arrowDown, arrowsUpDown, funnel, eyeSlash, viewColumns, copy, checkDouble, wrench, stop, microphone. A namespaced key (`richtext:bold`) names a glyph a component or library registers; an unregistered one renders nothing. For others, pass an SVG component.',
+    color:
+      'Color variant mapped to Astryx icon color tokens; inherit = surrounding text color. Web also accepts the non-semantic palette: blue, red, green, gray, cyan, teal, yellow, orange, pink, purple.',
     size: "xsm/sm/md/lg = 12/16/20/24px at a 16px root, scale w/ root font size; theme sets a size's glyph dimension via width + height (px or rem) on components.icon['size:sm'] etc. Explicit Icon size; otherwise nearest owning-component default, then 'md' when no contextual default exists",
     variant:
       "Requests the active theme's alternate artwork (e.g. 'filled'); names from augmentable IconVariantMap. Reaches the entry only if the active theme's iconVariants lists it (and an inherited entry's defining theme does too); else normal artwork. Ignored by a directly passed component; never in the DOM; no theming selector.",
@@ -399,5 +437,8 @@ export const docsDense = {
       'Accessible name for a meaningful, standalone icon. Sets role="img" + aria-label and drops the default aria-hidden. Omit (default) for decorative icons (stays aria-hidden). Empty string = decorative. The accessible-name/alt-text prop for icons.',
     xstyle:
       'StyleX styles (color, size, opacity) via stylex.create(); composes with the base color/size styles.',
+    className: 'Class added to the rendered glyph beside astryx-icon.',
+    style: "Inline styles merged after Icon's size and color styles.",
+    ref: 'Reaches the SVG only when icon is a component; a semantic or namespaced name renders in a wrapper and gets no ref.',
   },
 };

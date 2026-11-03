@@ -38,6 +38,7 @@ const {
   storyKey,
 } = require('./lib/a11y-baseline');
 const {waitForStoryReadiness} = require('./lib/a11y-story-readiness');
+const {routeRemoteImages} = require('./lib/offline-media');
 const {
   mergeA11yShards,
   parseShard,
@@ -387,6 +388,10 @@ async function runAccessibilityAudit() {
       : null;
     // Animations are frozen from the page's first script on, however far the
     // document has parsed: an adopted stylesheet needs no <head>.
+    // A story's remote photos (picsum.photos and the like) are answered with
+    // a local image, so no scan depends on a remote image host. The audit
+    // reads the same DOM: the image elements stay, only their bytes are local.
+    if (context) await routeRemoteImages(context, origin);
     if (context) {
       await context.addInitScript(css => {
         const sheet = new CSSStyleSheet();

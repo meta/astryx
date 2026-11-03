@@ -38,6 +38,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {useCalendarDays} from '../Calendar';
 import {useDirection, useLocale} from '../i18n';
@@ -65,6 +66,11 @@ import {
   plainDateToISO,
   DATE_FORMAT_WITH_WEEKDAY,
 } from '../utils';
+import {
+  playReducedMotionDip,
+  reducedMotionFade,
+  type ReducedMotionDip,
+} from '../motion/reducedMotion';
 import {dateInputTouchSizes, dateInputTouchGeometry} from './tokens.stylex';
 import {useOwnScrollGesture} from './useOwnScrollGesture';
 import {useScrollSettle} from './useScrollSettle';
@@ -434,8 +440,21 @@ export function MonthScroller({
     );
   }, [paneSize, initialMonthIndex, minMonthIndex, isRTL]);
 
+  // The Reduced Motion dip of a step on a touch screen, owned here so a
+  // second step or the unmount clears it.
+  const dipRef = useRef<ReducedMotionDip | null>(null);
+  const stopDip = useCallback(() => {
+    dipRef.current?.cancel();
+    dipRef.current = null;
+  }, []);
+  // Synchronizes with the dip's animations: they do not outlive the scroller.
+  useEffect(() => stopDip, [stopDip]);
+
   const scrollToMonth = useCallback(
     (monthIndex: number, behavior: ScrollBehavior = 'smooth') => {
+      // Every step replaces a running dip, whichever way it moves. Otherwise
+      // the dip's landing would undo a jump or an immediate step made after it.
+      stopDip();
       const scroller = scrollerRef.current;
       if (scroller == null || paneSize === 0) {
         return;
@@ -461,13 +480,48 @@ export function MonthScroller({
         recenter(scroller, row);
         return;
       }
+      const left = scrollOffsetForRow(row, paneSize, isRTL);
+      // Under reduced motion the month changes without travel: at once on a fine
+      // primary pointer, under an opacity dip on a coarse one (reducedMotionFade).
+      const fade = behavior === 'smooth' ? reducedMotionFade(scroller) : null;
+      if (fade != null) {
+        // The window mounts around the target first, and the scroll lands in
+        // the layout effect below, as a far jump does. So nothing moves the
+        // window after the jump. If the window followed the jump, WebKit would
+        // re-snap it one pane further on every frame. A scroll that lands on
+        // the centre row reports nothing.
+        const land = () => {
+          // The landing is the newest steer. An earlier steer whose scroll
+          // never arrived would otherwise hide every scroll after it, a
+          // trackpad's included. Closing the wheels makes such a steer: it
+          // re-asserts the month already in view.
+          steeredRowRef.current = null;
+          if (row === centerRowRef.current) {
+            scroller.scrollTo({left, behavior: 'auto'});
+            return;
+          }
+          pendingScrollRef.current = row;
+          centerRowRef.current = row;
+          setCenterRow(row);
+        };
+        if (fade.duration === 0) {
+          land();
+          return;
+        }
+        // A newer step replaces this one: only its scroll lands.
+        dipRef.current = playReducedMotionDip(scroller, fade, () => {
+          dipRef.current = null;
+          // The fade-in starts as soon as this returns. So render now: the
+          // scroll lands in the layout effect, before the fade-in.
+          // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the month must change before the dip's fade-in starts
+          flushSync(land);
+        });
+        return;
+      }
       steeredRowRef.current = row;
-      scroller.scrollTo({
-        left: scrollOffsetForRow(row, paneSize, isRTL),
-        behavior,
-      });
+      scroller.scrollTo({left, behavior});
     },
-    [paneSize, minMonthIndex, rowCount, isRTL, recenter],
+    [paneSize, minMonthIndex, rowCount, isRTL, recenter, stopDip],
   );
 
   // Deliberately un-keyed: it runs after every render, costs a null check, and

@@ -96,15 +96,31 @@ export async function startBusyControl(
         // The harness's own waits run on the real timers (see blockMainThread).
         const gate = (
           window as unknown as {
-            __harnessTimerGate?: {frame?: typeof requestAnimationFrame};
+            __harnessTimerGate?: {
+              frame?: typeof requestAnimationFrame;
+              now?: () => number;
+            };
           }
         ).__harnessTimerGate;
+        // A frozen page holds the control's own animation.
+        if (
+          (window as unknown as {__harnessFreeze?: {frozen: boolean}})
+            .__harnessFreeze?.frozen === true
+        ) {
+          reject(
+            new Error(
+              'startBusyControl: the page is frozen; start the control first',
+            ),
+          );
+          return;
+        }
         const frame = gate?.frame ?? window.requestAnimationFrame.bind(window);
-        const deadline = performance.now() + 5_000;
+        const realNow = gate?.now ?? (() => performance.now());
+        const deadline = realNow() + 5_000;
         const tick = () => {
           if (!animation.pending && Number(animation.currentTime ?? 0) >= 16) {
             resolve();
-          } else if (performance.now() > deadline) {
+          } else if (realNow() > deadline) {
             reject(new Error('startBusyControl: the control did not start'));
           } else {
             frame(tick);
@@ -160,6 +176,15 @@ export interface BusyWindow {
   readonly to: number;
 }
 
+/** The window `blockMainThread` held, with the span its loop measured. */
+export interface BlockedWindow extends BusyWindow {
+  /**
+   * How long the loop held the thread, in ms, between the two clock readings
+   * it started and ended on. It is never less than the time asked for.
+   */
+  readonly spanMs: number;
+}
+
 /**
  * Holds the page's main thread for `ms` (a synchronous loop: no task, frame,
  * rAF, event or microtask runs meanwhile). Resolves with the window it held.
@@ -200,37 +225,56 @@ export async function blockMainThread(
     minProgressMs = 16,
     timeout = 5_000,
   }: {during?: Locator; minProgressMs?: number; timeout?: number} = {},
-): Promise<BusyWindow> {
+): Promise<BlockedWindow> {
   const minProgress = Math.max(minProgressMs, ONE_FRAME_MS);
   if (during == null) {
     return page.evaluate(duration => {
       // The harness's own work: a trace sets it apart (trace.ts HARNESS_READ).
       console.timeStamp('harness-read');
-      const from = performance.timeOrigin + performance.now();
-      const end = performance.now() + duration;
+      // One reading starts the loop and one ends it. A coarsened clock can
+      // step back between two reads, so a separate read would end it early.
+      // The loop tests the span it returns, which a sum rounded down would not.
+      // It reads the timer gate's real clock: a page freeze stops the page's
+      // own, which then trails the frames after the thaw.
+      const read =
+        (
+          window as unknown as {
+            __harnessTimerGate?: {now?: () => number};
+          }
+        ).__harnessTimerGate?.now ?? (() => performance.now());
+      const start = read();
+      let now = start;
       let spins = 0;
-      while (performance.now() < end) {
+      while (now - start < duration) {
+        now = read();
         spins += 1;
       }
-      return {from, to: performance.timeOrigin + performance.now(), spins};
+      return {
+        from: performance.timeOrigin + start,
+        to: performance.timeOrigin + now,
+        spanMs: now - start,
+        spins,
+      };
     }, ms);
   }
   return during.evaluate(
     (element, {duration, minProgress, wait}) =>
-      new Promise<BusyWindow>((resolve, reject) => {
+      new Promise<BlockedWindow>((resolve, reject) => {
         // The harness's own waits run on the real timers: a frozen timer gate
         // (story.ts) holds only the page's.
         const gate = (
           window as unknown as {
             __harnessTimerGate?: {
               frame?: typeof requestAnimationFrame;
+              now?: () => number;
               timeout?: typeof setTimeout;
             };
           }
         ).__harnessTimerGate;
         const frame = gate?.frame ?? window.requestAnimationFrame.bind(window);
         const later = gate?.timeout ?? window.setTimeout.bind(window);
-        const deadline = performance.now() + wait;
+        const realNow = gate?.now ?? (() => performance.now());
+        const deadline = realNow() + wait;
         // The busy-window control animates on its own, inside a dialog with
         // `within`: it never stands for the animation under test.
         const isControl = (a: Animation) => {
@@ -255,14 +299,19 @@ export async function blockMainThread(
             // the animation: it runs once that frame's rendering update has
             // handed the animation to the compositor.
             later(() => {
-              const from = performance.timeOrigin + performance.now();
-              const end = performance.now() + duration;
-              while (performance.now() < end) {
-                // Busy: nothing else runs.
+              const read = realNow;
+              const start = read();
+              let now = start;
+              while (now - start < duration) {
+                now = read();
               }
-              resolve({from, to: performance.timeOrigin + performance.now()});
+              resolve({
+                from: performance.timeOrigin + start,
+                to: performance.timeOrigin + now,
+                spanMs: now - start,
+              });
             }, 0);
-          } else if (performance.now() > deadline) {
+          } else if (realNow() > deadline) {
             reject(new Error('blockMainThread: no animation started'));
           } else {
             frame(tick);

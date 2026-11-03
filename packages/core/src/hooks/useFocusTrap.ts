@@ -228,7 +228,29 @@ export interface UseFocusTrapReturn<T extends HTMLElement = HTMLElement> {
 export function useFocusTrap<T extends HTMLElement = HTMLElement>(
   options: UseFocusTrapOptions,
 ): UseFocusTrapReturn<T> {
-  const {isActive, onEscape} = options;
+  return useFocusTrapInternal<T>(options);
+}
+
+/**
+ * Package-internal options. Not re-exported from the package entry point.
+ */
+interface InternalFocusTrapOptions extends UseFocusTrapOptions {
+  /**
+   * The element to restore focus to on deactivation, read at activation. For
+   * an overlay that may move focus inside before the trap activates (initial
+   * focus within the opening event), the element focused at activation is
+   * already inside, so the overlay names its opener instead. Returning `null`
+   * falls back to the element focused at activation.
+   */
+  getRestoreTarget?: () => HTMLElement | null;
+}
+
+export function useFocusTrapInternal<T extends HTMLElement = HTMLElement>(
+  options: InternalFocusTrapOptions,
+): UseFocusTrapReturn<T> {
+  const {isActive, onEscape, getRestoreTarget} = options;
+  const getRestoreTargetRef = useRef(getRestoreTarget);
+  getRestoreTargetRef.current = getRestoreTarget;
 
   const containerRef = useRef<T | null>(null);
   const lastFocusRef = useRef<Element | null>(null);
@@ -302,7 +324,9 @@ export function useFocusTrap<T extends HTMLElement = HTMLElement>(
     // Snapshot the container now; by cleanup it may be detached or unmounted.
     const container = containerRef.current;
     const doc = trapDocument(container);
-    const previouslyFocused = doc.activeElement as HTMLElement | null;
+    const previouslyFocused =
+      getRestoreTargetRef.current?.() ??
+      (doc.activeElement as HTMLElement | null);
 
     // Whether focus ever entered the trap container while it was active.
     // Initialized from the current active element in case focus was already

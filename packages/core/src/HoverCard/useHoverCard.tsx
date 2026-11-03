@@ -16,9 +16,11 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
   type ReactNode,
   type RefCallback,
 } from 'react';
+import {createTriggerFocusGate} from '../utils/triggerFocus';
 import * as stylex from '@stylexjs/stylex';
 import {
   useLayer,
@@ -60,7 +62,7 @@ const styles = stylex.create({
 });
 
 /**
- * Focus trigger behavior for hover cards
+ * When focus on the trigger opens the hover card
  */
 export type HoverCardFocusTrigger = 'auto' | 'always' | 'never';
 
@@ -96,9 +98,10 @@ export interface HoverCardOptions {
 
   /**
    * When to trigger on focus:
-   * - `auto`: Only if element is naturally focusable
-   * - `always`: Always attach focus listeners
-   * - `never`: Never attach focus listeners (for composite widgets)
+   * - `auto`: focus on the trigger itself, or within a trigger that is
+   *   focusable when focus arrives
+   * - `always`: focus on the trigger or anything inside it
+   * - `never`: never on focus (for composite widgets)
    *
    * @default 'auto'
    */
@@ -233,29 +236,6 @@ export interface HoverCardReturn {
    * Imperatively hide the hover card.
    */
   hide: () => void;
-}
-
-/**
- * Check if an element is naturally focusable
- */
-function isFocusable(element: HTMLElement): boolean {
-  // Elements with explicit tabindex
-  if (element.hasAttribute('tabindex')) {
-    return element.tabIndex >= 0;
-  }
-
-  // Naturally focusable elements
-  const focusableTags = ['A', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA'];
-  if (focusableTags.includes(element.tagName)) {
-    return !(element as HTMLButtonElement).disabled;
-  }
-
-  // Elements with contenteditable
-  if (element.isContentEditable) {
-    return true;
-  }
-
-  return false;
 }
 
 /**
@@ -426,27 +406,44 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
     [handleTouchPointerDown],
   );
 
-  const handleFocusIn = useCallback(() => {
-    if (!isEnabled) {
-      return;
-    }
-    // A tap focuses the trigger it activates. Opening on that focus would
-    // reinstate exactly the behavior the touch path just decided against —
-    // and on an action trigger it covers the thing the user tapped.
-    if (isTouchInteraction()) {
-      return;
-    }
-    // Skip showing if we're in the middle of an Escape dismiss
-    if (isEscapeDismissingRef.current) {
-      isEscapeDismissingRef.current = false;
-      return;
-    }
-    clearTimeouts();
-    showLayer();
-  }, [isEnabled, isTouchInteraction, clearTimeouts, showLayer]);
+  // Under `auto`, whether focus counts is decided when it arrives, and a
+  // focus that counted still hides on blur (utils/triggerFocus.ts).
+  const [focusGate] = useState(createTriggerFocusGate);
+
+  const handleFocusIn = useCallback(
+    (e: Event) => {
+      if (!focusGate.focusIn(e, focusTrigger) || !isEnabled) {
+        return;
+      }
+      // A tap focuses the trigger it activates. Opening on that focus would
+      // reinstate exactly the behavior the touch path just decided against —
+      // and on an action trigger it covers the thing the user tapped.
+      if (isTouchInteraction()) {
+        return;
+      }
+      // Skip showing if we're in the middle of an Escape dismiss
+      if (isEscapeDismissingRef.current) {
+        isEscapeDismissingRef.current = false;
+        return;
+      }
+      clearTimeouts();
+      showLayer();
+    },
+    [
+      focusGate,
+      focusTrigger,
+      isEnabled,
+      isTouchInteraction,
+      clearTimeouts,
+      showLayer,
+    ],
+  );
 
   const handleFocusOut = useCallback(
     (e: FocusEvent) => {
+      if (!focusGate.focusOut(e, focusTrigger)) {
+        return;
+      }
       // Check if focus is moving to the hover card content
       const relatedTarget = e.relatedTarget as HTMLElement | null;
       const popoverElement = document.getElementById(layerId);
@@ -458,7 +455,7 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
 
       scheduleHide();
     },
-    [layerId, scheduleHide],
+    [focusGate, focusTrigger, layerId, scheduleHide],
   );
 
   // Escape dismissal (WCAG 1.4.13) goes through the shared layer stack: a
@@ -558,12 +555,9 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
         el.addEventListener('mouseleave', handleMouseLeave);
         el.addEventListener('pointerdown', handlePointerDown);
 
-        // Attach focus listeners based on focusTrigger option
-        const shouldAttachFocus =
-          focusTrigger === 'always' ||
-          (focusTrigger === 'auto' && isFocusable(el));
-
-        if (shouldAttachFocus) {
+        // Focus listeners unless focus never opens the card; `auto` decides
+        // per event (utils/triggerFocus.ts).
+        if (focusTrigger !== 'never') {
           el.addEventListener('focusin', handleFocusIn);
           el.addEventListener('focusout', handleFocusOut as EventListener);
         }

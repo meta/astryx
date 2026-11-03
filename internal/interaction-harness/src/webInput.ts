@@ -452,18 +452,23 @@ async function untilRunReceived(
       }>(resolve => {
         // The harness's own wait runs on the real timer: a frozen timer gate
         // (story.ts) holds only the page's.
-        const later =
-          (
-            window as unknown as {
-              __harnessTimerGate?: {timeout?: typeof setTimeout};
-            }
-          ).__harnessTimerGate?.timeout ?? window.setTimeout.bind(window);
-        const deadline = performance.now() + ms;
+        const gate = (
+          window as unknown as {
+            __harnessTimerGate?: {
+              now?: () => number;
+              timeout?: typeof setTimeout;
+            };
+          }
+        ).__harnessTimerGate;
+        const later = gate?.timeout ?? window.setTimeout.bind(window);
+        // The deadline reads the real clock, which a page freeze does not stop.
+        const realNow = gate?.now ?? (() => performance.now());
+        const deadline = realNow() + ms;
         const whole = () =>
           Math.abs(run.dx - total.dx) < 0.01 &&
           Math.abs(run.dy - total.dy) < 0.01;
         const check = () => {
-          if (whole() || performance.now() > deadline) {
+          if (whole() || realNow() > deadline) {
             run.stop();
             resolve({
               stamps: run.stamps.slice(),
