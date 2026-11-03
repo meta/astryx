@@ -1834,6 +1834,33 @@ describe('MultiSelector', () => {
   });
 
   describe('keyboard accessibility', () => {
+    it('a row that scrolls under a still mouse after a key does not take the highlight; a mouse that moves does', async () => {
+      const user = userEvent.setup();
+      const many = Array.from({length: 30}, (_, i) => `Option ${i}`);
+      render(
+        <MultiSelector
+          label="Items"
+          options={many}
+          value={[]}
+          onChange={() => {}}
+        />,
+      );
+      const trigger = screen.getByRole('combobox', {name: 'Items'});
+      trigger.focus();
+      await user.keyboard('{ArrowDown}');
+      const rows = screen.getAllByRole('option', {hidden: true});
+      const active = () => trigger.getAttribute('aria-activedescendant');
+      await user.keyboard('{End}');
+      expect(active()).toBe(rows[29].id);
+      // The browser reports the row now under the still mouse as entered.
+      fireEvent.mouseEnter(rows[20]);
+      expect(active()).toBe(rows[29].id);
+      // The mouse moves onto the next row.
+      fireEvent.mouseEnter(rows[21]);
+      fireEvent.pointerMove(rows[21], {screenX: 60, screenY: 90});
+      expect(active()).toBe(rows[21].id);
+    });
+
     it('trigger is focusable via Tab when enabled', async () => {
       const user = userEvent.setup();
       render(
@@ -2005,6 +2032,7 @@ describe('MultiSelector', () => {
 
         const options = screen.getAllByRole('option', {hidden: true});
         fireEvent.mouseEnter(options[3]);
+        fireEvent.pointerMove(options[3], {screenX: 121, screenY: 121});
 
         expect(trigger.getAttribute('aria-activedescendant')).toBe(
           options[3].id,
@@ -4635,6 +4663,7 @@ describe('MultiSelector option actions (grid)', () => {
     const bug = screen.getByRole('row', {name: 'Bug', ...h});
     const actionCell = bug.children[1] as HTMLElement;
     fireEvent.mouseEnter(actionCell);
+    fireEvent.pointerMove(actionCell, {screenX: 210, screenY: 210});
     // The hover moved the highlight onto the action cell, without the ring.
     expect(trigger).toHaveAttribute('aria-activedescendant', actionCell.id);
     for (const token of ringClasses) {
@@ -4759,6 +4788,7 @@ describe('MultiSelector option actions (grid)', () => {
       const {trigger, row} = await openWithKeyboardOnBugAction();
       const docsAction = row('Docs').children[1] as HTMLElement;
       fireEvent.mouseEnter(docsAction);
+      fireEvent.pointerMove(docsAction, {screenX: 149, screenY: 149});
       expect(trigger).toHaveAttribute('aria-activedescendant', docsAction.id);
       expect(hasRing(docsAction)).toBe(true);
     });
@@ -4909,13 +4939,16 @@ describe('MultiSelector option actions (grid)', () => {
     const bug = screen.getByRole('row', {name: 'Bug', ...h});
     const feature = screen.getByRole('row', {name: 'Feature', ...h});
     fireEvent.mouseEnter(feature.children[0]);
+    fireEvent.pointerMove(feature.children[0], {screenX: 128, screenY: 128});
     expect(trigger).toHaveAttribute('aria-activedescendant', feature.id);
     fireEvent.mouseEnter(bug.children[1]);
+    fireEvent.pointerMove(bug.children[1], {screenX: 135, screenY: 135});
     expect(trigger).toHaveAttribute(
       'aria-activedescendant',
       bug.children[1].id,
     );
     fireEvent.mouseEnter(bug.children[0]);
+    fireEvent.pointerMove(bug.children[0], {screenX: 142, screenY: 142});
     expect(trigger).toHaveAttribute('aria-activedescendant', bug.id);
   });
 

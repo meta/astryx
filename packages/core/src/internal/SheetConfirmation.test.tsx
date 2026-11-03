@@ -2,7 +2,7 @@
 
 import {fireEvent, render, screen, within} from '@testing-library/react';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
-import {MobileSheetConfirmation} from './MobileSheetConfirmation';
+import {SheetConfirmation} from './SheetConfirmation';
 
 // jsdom has no native modal presentation; keep the public Dialog path active.
 beforeEach(() => {
@@ -21,7 +21,7 @@ function setup() {
   const onAction = vi.fn();
   const onOpenChange = vi.fn();
   render(
-    <MobileSheetConfirmation
+    <SheetConfirmation
       isOpen
       onOpenChange={onOpenChange}
       title="Discard changes?"
@@ -35,7 +35,7 @@ function setup() {
   return {dialog, onAction, onOpenChange};
 }
 
-describe('MobileSheetConfirmation', () => {
+describe('SheetConfirmation', () => {
   it('keeps the alert-dialog theme target and accessible copy', () => {
     const {dialog} = setup();
     expect(dialog).toHaveClass('astryx-alert-dialog');
