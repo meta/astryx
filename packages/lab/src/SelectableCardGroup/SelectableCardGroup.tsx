@@ -74,7 +74,7 @@ interface MultipleSelection {
   selectionMode: 'multiple';
   /** The chosen cards' values. */
   value: ReadonlyArray<string>;
-  /** Called with the new list of chosen values, in card order of choice. */
+  /** Called with the new list of chosen values. The newest choice is last. */
   onChange: (value: string[]) => void;
 }
 
@@ -123,7 +123,10 @@ export interface SelectableCardGroupItemProps extends Omit<
 
 interface GroupContextValue {
   inputType: 'checkbox' | 'radio';
+  /** The inputs' grouping name. */
   name: string;
+  /** The name the group's value is submitted under. */
+  submitName: string;
   isDisabled: boolean;
   isSelected: (value: string) => boolean;
   change: (value: string, isSelected: boolean) => void;
@@ -172,10 +175,7 @@ export function SelectableCardGroup(props: SelectableCardGroupProps) {
   const inputID = useId();
   const descriptionID = useId();
   const generatedName = useId();
-  const name = htmlName ?? generatedName;
-  // Root styling never reaches the group element, and a development build
-  // warns about it (the input-fields family). `container*` reaches the Field box
-  // only when one renders.
+  const submitName = htmlName ?? generatedName;
   const {rest: groupProps, container} = useFieldInputStyling(
     'SelectableCardGroup',
     rest,
@@ -201,7 +201,8 @@ export function SelectableCardGroup(props: SelectableCardGroupProps) {
       const {value, onChange} = props;
       return {
         inputType: 'checkbox',
-        name,
+        name: submitName,
+        submitName,
         isDisabled,
         isSelected: v => value.includes(v),
         change: (v, isSelected) =>
@@ -213,9 +214,12 @@ export function SelectableCardGroup(props: SelectableCardGroupProps) {
       };
     }
     const {value, onChange} = props;
+    // The radios leave the form, so a page-unique name keeps each group
+    // apart, even from another form's group with the same `htmlName`.
     return {
       inputType: 'radio',
-      name,
+      name: generatedName,
+      submitName,
       isDisabled,
       isSelected: v => value === v,
       change: (v, isSelected) => {
@@ -224,7 +228,14 @@ export function SelectableCardGroup(props: SelectableCardGroupProps) {
         }
       },
     };
-  }, [props.selectionMode, props.value, props.onChange, name, isDisabled]);
+  }, [
+    props.selectionMode,
+    props.value,
+    props.onChange,
+    generatedName,
+    submitName,
+    isDisabled,
+  ]);
 
   return (
     <Field
@@ -303,7 +314,7 @@ export function SelectableCardGroupItem({
       {/* The radio cards stay out of the form, so the chosen, enabled card
           submits the group's value here. */}
       {group.inputType === 'radio' && isSelected && !isCardDisabled ? (
-        <input type="hidden" name={group.name} value={value} />
+        <input type="hidden" name={group.submitName} value={value} />
       ) : null}
     </SelectableCardInputContext>
   );

@@ -135,3 +135,57 @@ export const Disabled: Story = {
     </SelectableCardGroup>
   ),
 };
+
+export const TwoFormsSharedName: Story = {
+  name: 'Two forms, one htmlName',
+  render: () => {
+    const [first, setFirst] = useState<string | null>('pro');
+    const [second, setSecond] = useState<string | null>('team');
+    return (
+      <VStack gap={4}>
+        <form aria-label="First subscription">
+          <SelectableCardGroup
+            label="First plan"
+            htmlName="plan"
+            value={first}
+            onChange={setFirst}>
+            {PLANS.map(p => (
+              <SelectableCardGroupItem
+                key={p.id}
+                value={p.id}
+                label={`First ${p.name}`}
+                width={160}>
+                <PlanContent name={p.name} price={p.price} />
+              </SelectableCardGroupItem>
+            ))}
+          </SelectableCardGroup>
+        </form>
+        <form aria-label="Second subscription">
+          <SelectableCardGroup
+            label="Second plan"
+            htmlName="plan"
+            value={second}
+            onChange={setSecond}>
+            {PLANS.map(p => (
+              <SelectableCardGroupItem
+                key={p.id}
+                value={p.id}
+                label={`Second ${p.name}`}
+                width={160}>
+                <PlanContent name={p.name} price={p.price} />
+              </SelectableCardGroupItem>
+            ))}
+          </SelectableCardGroup>
+        </form>
+      </VStack>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Two single-choice groups in separate forms that share an htmlName stay separate radio groups, and each form submits its own choice.',
+      },
+    },
+  },
+};

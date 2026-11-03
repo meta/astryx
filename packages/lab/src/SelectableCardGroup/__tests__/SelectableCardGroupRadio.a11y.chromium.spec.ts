@@ -97,3 +97,28 @@ test.describe('SelectableCardGroup, single choice', () => {
     expect(await checkedName(page)).toBe('Basic');
   });
 });
+
+test('two groups that share an htmlName in separate forms stay separate', async ({
+  page,
+}) => {
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=lab-selectablecardgroup--two-forms-shared-name&viewMode=story`,
+    {waitUntil: 'load'},
+  );
+  await page.getByRole('radiogroup', {name: 'Second plan'}).waitFor();
+  await expect(page.getByRole('radio', {name: 'First Pro'})).toBeChecked();
+  await expect(page.getByRole('radio', {name: 'Second Team'})).toBeChecked();
+  await page.getByRole('radio', {name: 'Second Team'}).focus();
+  await page.keyboard.press('ArrowRight');
+  // The arrow wraps inside the second group and leaves the first alone.
+  await expect(page.getByRole('radio', {name: 'Second Basic'})).toBeChecked();
+  await expect(page.getByRole('radio', {name: 'First Pro'})).toBeChecked();
+  const submitted = await page.evaluate(() =>
+    Array.from(document.querySelectorAll('form')).map(form =>
+      Array.from(new FormData(form).entries()).map(
+        ([k, v]) => `${k}=${String(v)}`,
+      ),
+    ),
+  );
+  expect(submitted).toEqual([['plan=pro'], ['plan=basic']]);
+});
