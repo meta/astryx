@@ -50,7 +50,10 @@ import {
 } from '../theme/tokens.stylex';
 import {mergeProps, isImeKeyEvent} from '../utils';
 import {useTriggerMenu} from './useTriggerMenu';
-import {useChatComposerTokens, isCustomToken} from './useChatComposerTokens';
+import {
+  useChatComposerTokensInternal,
+  isCustomToken,
+} from './useChatComposerTokens';
 import {
   ensureCaretInside,
   insertTextAtCursor,
@@ -434,6 +437,8 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
   // a later external set back to the same string is never
   // incorrectly skipped.
   const pendingEchoValueRef = useRef<string | undefined>(undefined);
+  // Trigger identity changes must not resync the DOM before a controlled echo.
+  const restoreValueRef = useRef<(value: string) => void>(() => {});
 
   // Stable refs for imperative handle callbacks (avoid re-creating handle on every render)
   const insertTokenRef = useRef<
@@ -529,6 +534,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     };
   }, [inputControlRef, focusEditableAtEnd]);
 
+  // Sync the controlled draft with the contenteditable DOM.
   useEffect(() => {
     if (controlledValue === undefined || !editableRef.current) {
       return;
@@ -548,8 +554,8 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
       // echo before we rewrite the DOM.
       pendingEchoValueRef.current = undefined;
       const wasFocused = document.activeElement === editable;
-      editable.textContent = controlledValue;
-      // Setting `textContent` tears down the existing text node,
+      restoreValueRef.current(controlledValue);
+      // Restoring content tears down the existing text node,
       // which collapses any Selection inside this editable to
       // offset 0. If the user was focused (e.g. a programmatic
       // insert from a slash-menu pick), restore the caret to the
@@ -595,11 +601,12 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
   }, [isDisabled, onChange]);
 
   // --- Token management (via hook) ---
-  const tokens = useChatComposerTokens({
+  const tokens = useChatComposerTokensInternal({
     editableRef,
     onEmitChange: emitChange,
   });
   cleanupPortalsRef.current = tokens.cleanupPortals;
+  restoreValueRef.current = value => tokens.restoreValue(value, triggers);
 
   // --- Paste-as-token (internal default) ---
   const defaultPasteAsToken = useChatPasteAsToken({inputRef: selfRef});
@@ -763,7 +770,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
         // message.
         triggerMenu.reset();
         onSubmit?.(text);
-        editableRef.current.textContent = '';
+        restoreValueRef.current('');
         setIsEmpty(true);
         onChange?.('');
         return;
@@ -814,7 +821,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
               ? history.length - 1
               : Math.max(0, historyIndexRef.current - 1);
           historyIndexRef.current = nextIndex;
-          editableRef.current.textContent = history[nextIndex];
+          restoreValueRef.current(history[nextIndex]);
           selectAll(editableRef.current);
           emitChange();
           e.preventDefault();
@@ -822,13 +829,13 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
           const nextIndex = historyIndexRef.current + 1;
           if (nextIndex >= history.length) {
             historyIndexRef.current = -1;
-            editableRef.current.textContent = currentDraftRef.current;
+            restoreValueRef.current(currentDraftRef.current);
             if (currentDraftRef.current) {
               selectAll(editableRef.current);
             }
           } else {
             historyIndexRef.current = nextIndex;
-            editableRef.current.textContent = history[nextIndex];
+            restoreValueRef.current(history[nextIndex]);
             selectAll(editableRef.current);
           }
           emitChange();

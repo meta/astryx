@@ -581,6 +581,62 @@ describe('ChatComposerInput', () => {
     });
   });
 
+  describe('token deserialization', () => {
+    const deserialize = (value: string) =>
+      value === '@cindy' ? {value, label: 'Cindy Zhang'} : null;
+
+    it('restores a token from an externally supplied value without emitting a change', () => {
+      const handleRef = createRef<ChatComposerInputHandle>();
+      const onChange = vi.fn();
+      const value = 'Hi @cindy  @unknown\n';
+      render(
+        <ChatComposerInput
+          value={value}
+          triggers={[createMentionTrigger({deserialize})]}
+          handleRef={handleRef}
+          onChange={onChange}
+        />,
+      );
+
+      const editor = screen.getByRole('combobox');
+      expect(editor.querySelector('[data-astryx-token]')).toHaveTextContent(
+        'Cindy Zhang',
+      );
+      expect(editor.textContent).toBe('Hi Cindy Zhang  @unknown\n');
+      expect(handleRef.current!.getValue()).toBe(value);
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('restores a submitted token on history recall', () => {
+      const handleRef = createRef<ChatComposerInputHandle>();
+      const onChange = vi.fn();
+      render(
+        <ChatComposerInput
+          triggers={[createMentionTrigger({deserialize})]}
+          handleRef={handleRef}
+          onChange={onChange}
+        />,
+      );
+      const editor = screen.getByRole('combobox');
+      act(() => {
+        handleRef.current!.insertToken({
+          value: '@cindy',
+          label: 'Cindy Zhang',
+        });
+      });
+      fireEvent.keyDown(editor, {key: 'Enter'});
+      editor.focus();
+      window.getSelection()!.collapse(editor, 0);
+      fireEvent.keyDown(editor, {key: 'ArrowUp'});
+
+      expect(editor.querySelector('[data-astryx-token]')).toHaveTextContent(
+        'Cindy Zhang',
+      );
+      expect(handleRef.current!.getValue()).toBe('@cindy');
+      expect(onChange).toHaveBeenLastCalledWith('@cindy');
+    });
+  });
+
   // ArrowUp/ArrowDown recall previously submitted messages, but only at
   // the text boundaries — otherwise the caret can't move between lines
   // of a multi-line draft. ArrowUp recalls at the very start, ArrowDown
