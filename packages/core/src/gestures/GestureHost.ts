@@ -731,6 +731,12 @@ export class GestureHost {
    * lift click (`spec:AST-094` FR28: nothing acts).
    */
   private readonly cancelledFingers = new Set<number>();
+  /**
+   * The pens and pointer-read fingers that the app's lost focus cancelled,
+   * by pointer id. Each is kept until its lift, which must not click either,
+   * or until a new press.
+   */
+  private readonly cancelledPointers = new Map<number, PointerKind>();
   /** Touch.identifier → the element the finger landed on. */
   private readonly touchTargets = new Map<number, EventTarget>();
   /**
@@ -755,6 +761,8 @@ export class GestureHost {
   private readonly processed = new WeakSet<Event>();
   /** pointerId → arena id, for live mouse and pen contacts. */
   private readonly pointerIds = new Map<number, number>();
+  /** Each contact's kind: a blur refuses a pen's or a pointer-read finger's lift, never a mouse's. */
+  private readonly pointerKinds = new Map<number, PointerKind>();
   /**
    * The boxes the host watches for screen-edge pans (syncLayoutWatch): each
    * element with an enabled one, and the root for one whose band moves with
@@ -1820,13 +1828,36 @@ export class GestureHost {
     }
   }
 
-  /** After a contact ends: an armed press that is over stops listening. */
+  /**
+   * A new press is a new gesture, as the click guard reads one, so the lifts
+   * the blur cancelled owe nothing after it. A second finger keeps the other
+   * fingers' refusals, since those fingers may still be down.
+   */
+  private dropCancelledLifts(event: PointerEvent): void {
+    const isSecond = event.pointerType === 'touch' && event.isPrimary === false;
+    for (const [pointerId, kind] of [...this.cancelledPointers]) {
+      if (pointerId === event.pointerId || !(isSecond && kind === 'touch')) {
+        this.cancelledPointers.delete(pointerId);
+      }
+    }
+  }
+
+  /**
+   * After a contact ends: an armed press that is over stops listening. A
+   * contact the lost focus cancelled still owes its lift, so the press is
+   * not over until that lift comes. A lift the page never hears ends it at
+   * the next press, or at a cancel.
+   */
   private releaseArmedPress(): void {
     if (!this.isArmedPress) {
       return;
     }
     queueMicrotask(() => {
-      if (this.isArmedPress && this.arena.touches.length === 0) {
+      if (
+        this.isArmedPress &&
+        this.arena.touches.length === 0 &&
+        this.cancelledPointers.size === 0
+      ) {
         this.isArmedPress = false;
         this.syncKeptPresses();
         this.syncListeners();
@@ -1857,6 +1888,7 @@ export class GestureHost {
         return;
       }
       this.cancelledFingers.clear();
+      this.cancelledPointers.clear();
       this.clearClaimedLifts();
       this.cancelCallerRead?.();
       this.cancelCallerRead = null;
@@ -2934,13 +2966,19 @@ export class GestureHost {
       if (locksSelectionFor('touch')) {
         toLock.push({id, target, consumerElement});
       }
-      // The finger's events keep going to what the engine hit.
+      // The finger's events keep going to what the engine hit. A disabled
+      // participant can never claim, so a scroll never waits on it.
       this.watchTarget(
         touch.identifier,
         native,
-        recognizers.some(claimsWhileMoving) || consumer?.keepsTouch != null,
-        consumer != null ||
-          recognizers.some(recognizer => recognizer.claimsTouches),
+        recognizers.some(
+          recognizer => recognizer.isEnabled && claimsWhileMoving(recognizer),
+        ) ||
+          (consumer?.keepsTouch != null && consumer.isEnabled?.() !== false),
+        (consumer != null && consumer.isEnabled?.() !== false) ||
+          recognizers.some(
+            recognizer => recognizer.isEnabled && recognizer.claimsTouches,
+          ),
       );
       this.lastFed.set(id, {x: touch.clientX, y: touch.clientY, time});
       this.pairTouch(id, {x: touch.clientX, y: touch.clientY, target: native});
@@ -2974,6 +3012,11 @@ export class GestureHost {
     }
     for (const input of untracked) {
       this.arena.untrackedBegan(input);
+    }
+    // Again once the new fingers are delivered: a pinch's second finger may
+    // have landed on another one-finger pan, the next row.
+    if (this.fingerTargets.length > 1 && !this.isFingerClaimed()) {
+      this.failUnclaimedLoneFingerPans();
     }
     // Stamped after the consumers judged the touch: the brake asks whether
     // an EARLIER finger is still driving a scroll.
@@ -3570,6 +3613,7 @@ export class GestureHost {
     if (!isPointerKind(event.pointerType)) {
       return;
     }
+    this.dropCancelledLifts(event);
     if (event.pointerType === 'touch' && this.usesTouchEvents) {
       this.pairPointer(event.pointerId, {
         x: event.clientX,
@@ -3577,6 +3621,13 @@ export class GestureHost {
         target: landedOn(event),
       });
       return;
+    }
+    if (event.pointerType === 'touch' && event.isPrimary === false) {
+      // Fingers from pointer events: a second one, wherever either lands,
+      // leaves the two to the page's pinch, as onTouchStart does. A finger
+      // that is not the primary pointer is a second finger, even where the
+      // host never heard the first.
+      this.failUnclaimedLoneFingerPans();
     }
     // A right click, a pen's barrel button, or a ctrl-click on macOS (its
     // context click) starts no press (FR43).
@@ -3599,6 +3650,7 @@ export class GestureHost {
     }
     const id = this.nextId++;
     this.pointerIds.set(event.pointerId, id);
+    this.pointerKinds.set(event.pointerId, event.pointerType);
     if (target !== landed && target != null) {
       this.retargeted.set(id, {x: event.clientX, y: event.clientY, target});
     }
@@ -3620,6 +3672,15 @@ export class GestureHost {
         consumer,
       },
     ]);
+    if (
+      event.pointerType === 'touch' &&
+      event.isPrimary === false &&
+      !this.isFingerClaimed()
+    ) {
+      // Again once this finger is delivered: it may have landed on another
+      // one-finger pan.
+      this.failUnclaimedLoneFingerPans();
+    }
     if (locksSelectionFor(event.pointerType)) {
       // The presented target: what the pen is on, where the engine's own
       // hit test may still see the motion's start.
@@ -3678,9 +3739,14 @@ export class GestureHost {
     }
     const id = this.pointerIds.get(event.pointerId);
     if (id == null) {
+      // A contact the lost focus cancelled: its lift clicks nothing.
+      if (this.cancelledPointers.delete(event.pointerId)) {
+        this.refuseCancelledLift(event);
+      }
       return;
     }
     this.pointerIds.delete(event.pointerId);
+    this.pointerKinds.delete(event.pointerId);
     this.unlockSelection(id);
     const dispositions = this.arena.ended([
       {id, x: event.clientX, y: event.clientY, time: eventTime(event)},
@@ -3784,9 +3850,12 @@ export class GestureHost {
       }
       return;
     }
+    // A contact that ends in a cancel owes no refused lift.
+    this.cancelledPointers.delete(event.pointerId);
     const id = this.pointerIds.get(event.pointerId);
     if (id != null) {
       this.pointerIds.delete(event.pointerId);
+      this.pointerKinds.delete(event.pointerId);
       this.unlockSelection(id, true);
       this.retargeted.delete(id);
       this.arena.cancelled([id], eventTime(event));
@@ -3991,20 +4060,26 @@ export class GestureHost {
       }
     }
   }
+  /** Whether a finger's drag is claimed: then two fingers make no pinch. */
+  private isFingerClaimed(): boolean {
+    return this.arena.touches.some(
+      touch => touch.pointerType === 'touch' && this.arena.isClaimed(touch.id),
+    );
+  }
 
   private readonly onVisibilityChange = (): void => {
     if (this.doc.visibilityState === 'hidden') {
       this.cancelEverything(this.arena.now());
-      // As at a blur: the press sends no further pointer event, so an armed
-      // press's page listeners go now (FR24).
+      // As at a blur: an armed press's page listeners go once nothing is left
+      // to hear.
       this.releaseArmedPress();
     }
   };
 
   private readonly onBlur = (): void => {
     this.cancelEverything(this.arena.now());
-    // The press a blur ends sends no further pointer event: an armed press's
-    // page listeners go now, as at its lift (FR24).
+    // An armed press's page listeners go once nothing is left to hear. A pen
+    // or a pointer-read finger the blur cancelled still owes its lift.
     this.releaseArmedPress();
   };
 
@@ -4027,8 +4102,27 @@ export class GestureHost {
     );
   }
 
+  /**
+   * The lift of a contact the lost focus cancelled: its click is refused,
+   * and a finger's touchend after it is cancelled.
+   */
+  private refuseCancelledLift(event: PointerEvent): void {
+    armClickGuard(this.doc, {takesLateMouse: event.pointerType === 'touch'});
+    if (event.pointerType === 'touch') {
+      // Noted as a claimed lift is: capped, and gone after its time.
+      this.noteClaimedLift(event);
+    }
+  }
+
   /** The app lost focus: UIKit cancels every touch in flight. */
   private cancelEverything(time: number): void {
+    // The browser may keep a pen or a pointer-read finger down: its lift must
+    // not click. A mouse button held through the blur keeps its click.
+    for (const [pointerId, kind] of this.pointerKinds) {
+      if (kind !== 'mouse') {
+        this.cancelledPointers.set(pointerId, kind);
+      }
+    }
     const ids = [...this.pointerIds.values()];
     for (const id of ids) {
       this.unlockSelection(id, true);
@@ -4042,6 +4136,7 @@ export class GestureHost {
       }
     }
     this.pointerIds.clear();
+    this.pointerKinds.clear();
     this.retargeted.clear();
     this.fingerPointers.clear();
     this.pendingPointers.clear();
