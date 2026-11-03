@@ -1166,11 +1166,12 @@ component FieldLabel(props: FieldLabelProps)
   prop ref?: React.Ref<HTMLLabelElement>
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
-component FieldStatus @deprecated
+component FieldStatus(props: FieldStatusProps)
+  overload (props: FieldStatusProps & { variant: 'tooltip' }) => React.JSX.Element @deprecated
   prop message: string
   prop ref?: React.Ref<HTMLDivElement>
   prop type: InputStatusType
-  prop variant: FieldStatusVariant = 'attached'
+  prop variant?: FieldStatusVariant = 'attached'
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component FileInput(props: FileInputProps)
@@ -2609,6 +2610,7 @@ component Token(props: TokenProps)
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component Tokenizer(props: TokenizerProps)
+  overload <T extends SearchableItem>(props: Omit<TokenizerProps<T>, 'ref' | 'experimental'> & { experimental: NonNullable<TokenizerProps<T>['experimental']>; ref?: React.Ref<HTMLInputElement | HTMLButtonElement> }) => React.JSX.Element @experimental
   prop containerClassName?: string
   prop containerStyle?: CSSProperties
   prop containerXstyle?: StyleXStyles
@@ -2620,6 +2622,7 @@ component Tokenizer(props: TokenizerProps)
   prop disabledMessage?: string
   prop emptySearchText?: ReactNode = 'No results found'
   prop endContent?: ReactNode
+  prop experimental?: { presentation?: 'popover' | 'bottom-sheet' | 'adaptive' } @experimental
   prop handleRef?: React.Ref<TokenizerHandle>
   prop hasAutoFocus?: boolean = false
   prop hasClear?: boolean = false
@@ -4301,13 +4304,7 @@ interface FieldStatusInput
   messageID?: string
   type: FieldStatusType
 type FieldStatusPlacement = keyof FieldStatusVariantMap | 'tooltip'
-interface FieldStatusProps extends BaseProps<HTMLDivElement>
-  message: string
-  ref?: React.Ref<HTMLDivElement>
-  type: InputStatusType
-  variant?: FieldStatusVariant = 'attached'
-  xstyle?: StyleXStyles
-  inherits AriaAttributes, DOMAttributes, HTMLAttributes
+interface FieldStatusProps extends BaseProps<HTMLDivElement> (props of FieldStatus)
 type FieldStatusType = 'warning' | 'error' | 'success'
 type FieldStatusVariant = keyof FieldStatusVariantMap
 interface FieldStatusVariantMap
