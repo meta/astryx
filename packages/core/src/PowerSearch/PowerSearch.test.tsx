@@ -9,7 +9,7 @@
  * SYNC: When PowerSearch.tsx changes, update tests to match
  */
 
-import {StrictMode, useState} from 'react';
+import {StrictMode, useMemo, useState} from 'react';
 import {describe, it, expect, vi, beforeAll, afterAll, afterEach} from 'vitest';
 import {
   render,
@@ -1051,5 +1051,49 @@ describe('field menu after the search source changes', () => {
         screen.getByRole('option', {name: /Owner/, hidden: true}),
       ).toBeInTheDocument();
     });
+  });
+
+  it('settles the busy state when applying a filter replaces the search source while the focus read is pending', async () => {
+    const user = userEvent.setup();
+    // A caller whose config follows its filters hands PowerSearch a new search
+    // source in the same update that commits a filter. Applying the filter
+    // also returns focus to the input, which starts a read of the focus list.
+    function FilterDerivedConfig() {
+      const [filters, setFilters] = useState<PowerSearchFilter[]>([]);
+      const filterConfig = useMemo<PowerSearchConfig>(
+        () => ({...config, name: `TestSearch-${filters.length}`}),
+        [filters],
+      );
+      return (
+        <PowerSearch
+          config={filterConfig}
+          filters={filters}
+          onChange={newFilters => setFilters([...newFilters])}
+        />
+      );
+    }
+    render(<FilterDerivedConfig />);
+    const input = screen.getByRole('combobox');
+
+    await user.click(input);
+    await user.click(
+      await screen.findByRole('option', {name: 'Title', hidden: true}),
+    );
+    const apply = await screen.findByRole('button', {
+      name: 'Apply',
+      hidden: true,
+    });
+    await user.type(screen.getByRole('textbox', {hidden: true}), 'bug');
+    await user.click(apply);
+    expect(input).toHaveFocus();
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(screen.getByText(/bug/)).toBeInTheDocument();
+    expect(input).not.toHaveAttribute('aria-busy');
+    expect(
+      screen.queryByRole('img', {name: 'Loading'}),
+    ).not.toBeInTheDocument();
   });
 });

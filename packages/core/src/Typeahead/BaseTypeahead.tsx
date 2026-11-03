@@ -775,15 +775,6 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // source: they can never be re-shown, so focus bootstraps the new source.
   const sourceGenRef = useRef(0);
 
-  // Results still arriving from a replaced source must not land in the new
-  // one's menu.
-  const prevSearchSourceRef = useRef(searchSource);
-  if (prevSearchSourceRef.current !== searchSource) {
-    prevSearchSourceRef.current.cancel?.();
-    prevSearchSourceRef.current = searchSource;
-    sourceGenRef.current = ++searchGenRef.current;
-  }
-
   // The previous source is remembered in state, not a ref, so a render React
   // discards cannot consume the comparison without its state updates.
   const [sourceOfState, setSourceOfState] = useState(searchSource);
@@ -793,7 +784,6 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       setIsLoading(false);
       setHasSearched(false);
     }
-    loadingRef.current = false;
   }
   // A field that becomes disabled stops showing a search as busy in the same
   // render, and the dropped query shows no outcome, so no empty state; the
@@ -807,16 +797,24 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     }
   }
 
-  // When the search source is replaced, any in-flight load from the previous
-  // source is abandoned (generation bumped above). Notify the wrapper's busy lane
-  // in an effect so external store listeners run safely after commit.
-  const isInitialMountRef = useRef(true);
-  useEffect(() => {
-    if (isInitialMountRef.current) {
-      isInitialMountRef.current = false;
+  // Syncs the replaced source's requests and the wrapper's busy lane. Results
+  // that arrive from a replaced source must not land in the new source's menu,
+  // so the replacement starts a new generation. This runs when the replacement
+  // commits, not in render. React can render a replacement and then discard
+  // it, for example when a transition suspends and a newer update replaces
+  // it. The source that stays then keeps its read.
+  const prevSearchSourceRef = useRef(searchSource);
+  useIsomorphicLayoutEffect(() => {
+    if (prevSearchSourceRef.current === searchSource) {
       return;
     }
-    if (!loadingRef.current) {
+    prevSearchSourceRef.current.cancel?.();
+    prevSearchSourceRef.current = searchSource;
+    sourceGenRef.current = ++searchGenRef.current;
+    // The abandoned read can no longer end the busy state. The render that
+    // replaced the source cleared the state, and this clears the lane.
+    if (loadingRef.current) {
+      loadingRef.current = false;
       onLoadingChangeRef.current?.(false);
     }
   }, [searchSource]);
