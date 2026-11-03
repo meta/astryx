@@ -82,6 +82,42 @@ async function drag(page: Page, wheel: Locator, dy: number) {
   });
 }
 
+/** A frame the page drew: when (ms, shown in a failure) and the wheel's position. */
+interface DrawnFrame {
+  at: number;
+  y: number;
+}
+
+/**
+ * Judges a turn by the frames the page drew, not by how many it drew. A
+ * loaded page draws fewer frames in the same turn, and they all still pass.
+ * The turn starts on `from` and comes to rest on `to`. It moves one way only.
+ * At least two drawn frames carry it: one shows the wheel between the two
+ * rows, and a later one lands. A jump lands on the first frame it draws.
+ */
+function expectAnimatedTurn(
+  frames: ReadonlyArray<DrawnFrame>,
+  from: number,
+  to: number,
+): void {
+  const record = JSON.stringify(frames);
+  const way = Math.sign(to - from);
+  expect(Math.abs(frames[0].y - from), record).toBeLessThan(1);
+  expect(Math.abs(frames[frames.length - 1].y - to), record).toBeLessThan(1);
+  for (let i = 1; i < frames.length; i++) {
+    expect(way * (frames[i].y - frames[i - 1].y), record).toBeGreaterThan(-0.5);
+  }
+  const isOnFrom = (frame: DrawnFrame) => Math.abs(frame.y - from) <= 2;
+  const isOnTo = (frame: DrawnFrame) => Math.abs(frame.y - to) <= 2;
+  let leave = 0;
+  while (leave + 1 < frames.length && isOnFrom(frames[leave + 1])) {
+    leave += 1;
+  }
+  const arrive = frames.findIndex(isOnTo);
+  const between = frames.slice(leave + 1, arrive);
+  expect(between.length, record).toBeGreaterThan(0);
+}
+
 const selectedHour = (hours: Locator) =>
   hours.locator('[role="option"][aria-selected="true"]');
 
@@ -184,13 +220,14 @@ test('a meridiem change past the maximum turns the hour wheel onto it, frame by 
     .evaluate(el => el.getBoundingClientRect().height);
   const from = labels.indexOf('10') * row;
   const to = labels.indexOf('5') * row;
-  // The hour wheel's scroll position on every frame, from before the tap.
+  // The hour wheel's scroll position on every frame the page draws, from
+  // before the tap until the wheel is at rest.
   await hours.evaluate(scroller => {
-    const tops: number[] = [];
-    (window as unknown as {hourTops: number[]}).hourTops = tops;
-    const sample = () => {
-      tops.push(scroller.scrollTop);
-      if (tops.length < 150) {
+    const recorder = {frames: [] as DrawnFrame[], isDone: false};
+    (window as unknown as {hourTurn: typeof recorder}).hourTurn = recorder;
+    const sample = (at: number) => {
+      recorder.frames.push({at, y: scroller.scrollTop});
+      if (!recorder.isDone) {
         requestAnimationFrame(sample);
       }
     };
@@ -199,17 +236,27 @@ test('a meridiem change past the maximum turns the hour wheel onto it, frame by 
   // 10 PM is past the 5 PM maximum: the field clamps to it.
   await meridiem.getByRole('option', {name: 'PM'}).tap();
   await expect(field).toHaveValue('5:00 PM', {timeout: 3000});
-  await sleep(1000);
-  const tops = await page.evaluate(
-    () => (window as unknown as {hourTops: number[]}).hourTops,
-  );
+  // The record ends once a drawn frame shows the wheel at rest on 5.
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {hourTurn: {frames: DrawnFrame[]}}
+          ).hourTurn.frames.at(-1)?.y,
+      ),
+    )
+    .toBeCloseTo(to, 0);
+  const frames = await page.evaluate(() => {
+    const recorder = (
+      window as unknown as {
+        hourTurn: {frames: DrawnFrame[]; isDone: boolean};
+      }
+    ).hourTurn;
+    recorder.isDone = true;
+    return recorder.frames;
+  });
   // From 10 onto 5 through the rows between, as UIDatePicker turns onto its
   // maximum, never a jump, and only ever one way.
-  expect(Math.abs(tops[0] - from)).toBeLessThan(1);
-  expect(Math.abs(tops[tops.length - 1] - to)).toBeLessThan(1);
-  const between = tops.filter(top => top < from - 2 && top > to + 2);
-  expect(between.length).toBeGreaterThanOrEqual(4);
-  for (let i = 1; i < tops.length; i++) {
-    expect(tops[i]).toBeLessThanOrEqual(tops[i - 1] + 0.5);
-  }
+  expectAnimatedTurn(frames, from, to);
 });
