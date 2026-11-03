@@ -79,6 +79,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Typeahead/BaseTypeahead.generated';
+import {textEntryTraitAttributes} from '../Field/textEntryTraits';
 
 registerEnglishFallback(english);
 // =============================================================================
@@ -1723,6 +1724,12 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         autoFocus={hasAutoFocus}
         data-autofocus={hasAutoFocus || undefined}
         autoComplete="off"
+        // Autocorrect would rewrite names and identifiers. The key is only a
+        // label: Enter still commits the highlighted option.
+        {...textEntryTraitAttributes({
+          enterKeyHint: 'search',
+          hasAutoCorrect: false,
+        })}
         {...mergeProps(
           stylex.props(
             styles.input,

@@ -118,9 +118,7 @@ guidance owns the process used to propose and test APIs.
   `component:DropdownMenuSubMenu`); a new behavior prop defaults to the shipped
   behavior, which is the adaptive value when the shipped behavior already
   differs by device, and an existing prop's default moves only under INV16 and
-  INV9.
-  Tooltip and HoverCard `triggerBehavior` (`'adaptive'`, `'hover'`, `'toggle'`)
-  follow this. An `is…` or `has…` boolean names only a true on/off that has no
+  INV9. An `is…` or `has…` boolean names only a true on/off that has no
   third state, and `presentation` names which surface appears and, under INV16,
   the input mode of an open surface.
 - **INV4 — New props express caller-owned intent.** New public props follow

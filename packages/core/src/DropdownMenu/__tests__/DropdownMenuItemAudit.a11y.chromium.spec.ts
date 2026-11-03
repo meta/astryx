@@ -12,7 +12,7 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Locator, type Page} from '@playwright/test';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -22,6 +22,8 @@ import {
 
 const OUTPUT = path.resolve('dropdown-menu-item-audit-evidence');
 const STORY_ID = 'core-dropdownmenuitem--item-states';
+/** The overlay a focused or hovered row paints: its `:focus` background in DropdownMenuItem.tsx. */
+const HIGHLIGHT_TOKEN = '--color-overlay-hover';
 const WIDE = {width: 1024, height: 768};
 const NARROW = {width: 320, height: 720};
 
@@ -146,10 +148,57 @@ function storyUrl(item: AuditCase) {
   return `${server.origin}/iframe.html?id=${STORY_ID}&viewMode=story&globals=colorMode:${item.mode};astryxTheme:${item.theme};direction:${item.direction}`;
 }
 
-async function settle(page: Page) {
-  await holdMotionStill(page);
-  await page.evaluate(async () => document.fonts.ready);
-  await page.waitForTimeout(40);
+/**
+ * Whether the row paints the highlight token, resolved where the row is (its
+ * theme and color scheme). An unresolved token reads transparent and fails.
+ */
+function paintsHighlight(row: Element, token: string): boolean {
+  const probe = document.createElement('span');
+  probe.style.backgroundColor = `var(${token})`;
+  row.append(probe);
+  const expected = getComputedStyle(probe).backgroundColor;
+  probe.remove();
+  return (
+    expected !== 'rgba(0, 0, 0, 0)' &&
+    getComputedStyle(row).backgroundColor === expected
+  );
+}
+
+/**
+ * Waits, without sleeping, until what the capture records is painted. It
+ * waits for fonts and for every finite animation and transition, the menu's
+ * entrance included. It also waits for an interacted row to paint the
+ * highlight. If that poll times out, the receipt's checks decide. Then two
+ * more frames render before the receipt is read.
+ */
+async function settlePaint(page: Page, highlighted: Locator | null) {
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await Promise.all(
+      document
+        .getAnimations()
+        .filter(animation =>
+          Number.isFinite(
+            Number(animation.effect?.getComputedTiming().endTime),
+          ),
+        )
+        .map(async animation => animation.finished.catch(() => undefined)),
+    );
+  });
+  if (highlighted) {
+    // Waits for the highlight without failing here: a row that never paints
+    // still writes its receipt and screenshot, and interactionPaintPass fails.
+    await expect
+      .poll(async () => highlighted.evaluate(paintsHighlight, HIGHLIGHT_TOKEN))
+      .toBe(true)
+      .catch(() => undefined);
+  }
+  await page.evaluate(
+    async () =>
+      new Promise<void>(resolve => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
 }
 
 test.beforeAll(async () => {
@@ -211,13 +260,24 @@ for (const item of cases) {
     await expect(linkRow).toHaveAttribute('role', 'menuitem');
     await expect(menu.locator('button, [role="button"]')).toHaveCount(0);
 
+    // Motion stops before the interaction, so a focus or hover starts no
+    // background transition. Interactive rows transition background-color,
+    // and a running transition keeps its duration whatever a later style sets.
+    await holdMotionStill(page);
     if (item.interaction === 'focus') {
       await defaultRow.focus();
       await expect(defaultRow).toBeFocused();
     } else if (item.interaction === 'hover') {
       await supportingRow.hover();
     }
-    await settle(page);
+    await settlePaint(
+      page,
+      item.interaction === 'focus'
+        ? defaultRow
+        : item.interaction === 'hover'
+          ? supportingRow
+          : null,
+    );
 
     const observed = await menu.evaluate(element => {
       const currentRows = Array.from(

@@ -1052,7 +1052,7 @@ export function createAnimator(
     if (segment == null) {
       return null;
     }
-    if (time >= segment.start + segment.duration) {
+    if (time >= endOf(property, segment)) {
       return null;
     }
     return segment;
@@ -1088,6 +1088,53 @@ export function createAnimator(
     latest == null || segment.group == null
       ? null
       : {latest, start: segment.start + latest - segment.group.provisional};
+
+  /**
+   * When a waiting curve's call had its first frame, which put the curve on
+   * screen. Undefined for a curve that does not wait, or whose call has had
+   * no first frame.
+   */
+  const shownSince = (
+    property: MotionProperty,
+    segment: Segment,
+  ): number | undefined =>
+    segment.group?.resolved === false
+      ? segment.group.latest?.get(CHANNEL_OF[property])
+      : undefined;
+
+  /** A curve's end, dated from its call's first frame while it waits. */
+  const endOf = (property: MotionProperty, segment: Segment): number =>
+    (datedFromLatest(segment, shownSince(property, segment))?.start ??
+      segment.start) + segment.duration;
+
+  /**
+   * Takes a curve on screen out of the call that still waits for the
+   * browser's start. The curve keeps its course, dated from the call's first
+   * frame. A call that has no channel left starts at that frame.
+   */
+  const leaveWaitingCall = (
+    segment: Segment,
+    channel: Channel,
+    latest: number,
+  ) => {
+    const group = segment.group;
+    if (group == null) {
+      return;
+    }
+    const index = group.segments.indexOf(segment);
+    if (index >= 0) {
+      group.segments.splice(index, 1);
+    }
+    segment.start += latest - group.provisional;
+    segment.group = undefined;
+    if (!CHANNELS[channel].some(p => segments.get(p)?.group === group)) {
+      group.latest?.delete(channel);
+      group.channels.delete(channel);
+    }
+    if (group.channels.size === 0 && group.segments.length === 0) {
+      resolveGroup(group, latest);
+    }
+  };
 
   /**
    * The value on screen at `time`. Until the browser reports its start, a
@@ -1316,12 +1363,25 @@ export function createAnimator(
     // Settled curves become resting values.
     for (const property of properties) {
       const segment = segments.get(property);
-      if (segment != null && time >= segment.start + segment.duration) {
+      if (segment != null && time >= endOf(property, segment)) {
         resting[property] = segment.target;
         segments.delete(property);
       }
     }
     const moving = properties.filter(p => segments.has(p));
+    if (callGroup == null) {
+      // A call that starts now rebuilds a channel the compositor has moving
+      // since a first frame without a known start. The channel carries on
+      // from that frame, with a start of its own, instead of starting its
+      // curve again.
+      for (const property of moving) {
+        const segment = segments.get(property) as Segment;
+        const latest = shownSince(property, segment);
+        if (latest != null) {
+          leaveWaitingCall(segment, channel, latest);
+        }
+      }
+    }
     // An explicit call can rebuild a channel while one of its curves still
     // waits for the browser's start. The animation then joins the current
     // call, or else that waiting call, with no start of its own.
@@ -2017,10 +2077,14 @@ export function createAnimator(
     for (const channel of start === 'commit' ? [] : channels) {
       for (const property of CHANNELS[channel]) {
         const segment = segments.get(property);
+        // A call's first frame puts its channels on screen, even before the
+        // browser reports the start. So such a channel is not at rest either.
         if (
           segment != null &&
-          time < segment.start + segment.duration &&
-          (segment.group == null || segment.group.resolved)
+          time < endOf(property, segment) &&
+          (segment.group == null ||
+            segment.group.resolved ||
+            shownSince(property, segment) != null)
         ) {
           return null;
         }
@@ -3739,9 +3803,11 @@ export function createAnimator(
         }
         owners.add(segment.owner);
         // A curve still waiting for the browser's start stays in its call:
-        // it starts with that call's commit.
+        // it starts with that call's commit. A curve whose call had its first
+        // frame is on screen already, so it leaves the call (leaveWaitingCall).
+        const latest = shownSince(property, segment);
         const group =
-          segment.group != null && !segment.group.resolved
+          latest == null && segment.group != null && !segment.group.resolved
             ? segment.group
             : undefined;
         const replace = (next: Segment) => {
@@ -3758,6 +3824,9 @@ export function createAnimator(
         if (segment.spring != null) {
           const from = valueAt(property, time) + delta;
           const velocity = velocityAt(property, time);
+          if (latest != null) {
+            leaveWaitingCall(segment, CHANNEL_OF[property], latest);
+          }
           const curve = solveSpring(toSpring(segment.spring), {
             from,
             to: segment.target,
@@ -3778,6 +3847,9 @@ export function createAnimator(
             spring: segment.spring,
           });
         } else {
+          if (latest != null) {
+            leaveWaitingCall(segment, CHANNEL_OF[property], latest);
+          }
           replace({
             ...segment,
             target: segment.target + delta,

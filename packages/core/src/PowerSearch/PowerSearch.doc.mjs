@@ -65,7 +65,7 @@ export const docs = {
     {
       name: 'hasClear',
       type: 'boolean',
-      description: 'Show a clear-all button for removing all filters.',
+      description: 'Show a clear-all button that removes every editable filter. Read-only filters stay.',
       default: 'true',
     },
     {
@@ -336,7 +336,7 @@ export const docsZh = {
     {
       name: 'hasClear',
       type: 'boolean',
-      description: '显示清除全部按钮以移除所有过滤器。',
+      description: '显示清除全部按钮，移除可编辑的过滤器，保留只读过滤器。',
       default: 'true',
     },
     {
@@ -507,7 +507,7 @@ export const docsDense = {
     isLabelHidden: 'Visually hides label while keeping accessible.',
     placeholder: 'Text shown when no filters selected.',
     hasAutoFocus: 'Auto-focus input on mount.',
-    hasClear: 'Show clear-all button for removing all filters.',
+    hasClear: 'Show clear-all button; removes editable filters, keeps read-only ones.',
     isReadOnly: 'Prevent adding, editing, or removing filters.',
     isDisabled: 'Disables entire component.',
     status: 'Validation status object w/ type + optional message.',

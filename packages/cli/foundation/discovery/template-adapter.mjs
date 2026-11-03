@@ -409,7 +409,11 @@ const TEXT_ALIAS = 'AstryxText';
 /**
  * Replace each JSX element imported from {@link DEMO_CONTENT_MODULE} with a
  * generic `<Text>` placeholder and remove that import, so emitted source never
- * depends on content only Astryx's previews provide.
+ * depends on content only Astryx's previews provide. An element that wraps one
+ * element, such as a hint shown under a demo, is removed instead: its child
+ * takes its place, with the indentation the child would have had without it.
+ * `demoContentReplaced` counts the placeholders, because only they need the
+ * consumer's own content.
  *
  * Every check resolves a name to its binding through the module's scope, so a
  * local declaration or parameter with the same name never counts as the same
@@ -419,12 +423,12 @@ const TEXT_ALIAS = 'AstryxText';
  * writes the name `Text`.
  *
  * Only a plain static use is replaced: a named import used only as a JSX tag
- * whose children, if any, are whitespace, and whose props are literal values or
+ * whose children are whitespace or one element, and whose props are literal values or
  * read only bindings that code outside the replaced elements still reads. So
  * `faceDown={!isOpen}` is safe when the same `isOpen` is also read elsewhere.
  * Anything else (a namespace or type import, a re-export, a dynamic import, the
  * element used as a value or a type, a spread or computed prop, a prop whose
- * binding nothing else reads, children) throws, naming the element, rather than
+ * binding nothing else reads, other children) throws, naming the element, rather than
  * leaving a reference behind, leaving a binding unused, or dropping code the
  * rest of the file relies on. Source that never names the module is returned
  * as is.
@@ -519,6 +523,13 @@ export function replaceDemoContent(source) {
       );
     },
   });
+
+  const wrappers = elements.filter(
+    element => wrappedElement(element.node) !== null,
+  );
+  if (wrappers.length > 0) {
+    return replaceDemoContent(unwrapDemoWrappers(source, wrappers));
+  }
 
   /** @param {any} node */
   const isReplaced = node =>
@@ -639,13 +650,146 @@ function uniqueName(base, written) {
 }
 
 /**
+ * Replace each outermost demo-content wrapper with the element it wraps.
+ * Wrappers inside a kept child go on the next pass, when they are outermost.
+ * Throws when a wrapper's prop reads a binding that nothing outside the
+ * wrappers' opening tags reads, so the removal would leave it unused.
+ * @param {string} source
+ * @param {any[]} wrappers - Element paths whose element wraps one element.
+ * @returns {string}
+ */
+function unwrapDemoWrappers(source, wrappers) {
+  /** @param {any} node */
+  const isInWrapperTag = node =>
+    wrappers.some(
+      wrapper =>
+        wrapper.node.openingElement.start <= node.start &&
+        node.end <= wrapper.node.openingElement.end,
+    );
+  for (const wrapper of wrappers) {
+    for (const variable of staticPropReads(wrapper.node)) {
+      const binding = wrapper.scope.getBinding(variable);
+      if (!binding || isExportedDeclaration(binding)) continue;
+      if (
+        binding.referencePaths.every((/** @type {any} */ ref) =>
+          isInWrapperTag(ref.node),
+        )
+      ) {
+        throw unsafeDemoContent(
+          `<${wrapper.node.openingElement.name.name}> reads ${variable}, and nothing else in the file reads it, so the copy would leave it unused`,
+        );
+      }
+    }
+  }
+  const outermost = wrappers.filter(
+    wrapper =>
+      !wrappers.some(
+        other =>
+          other !== wrapper &&
+          other.node.start <= wrapper.node.start &&
+          wrapper.node.end <= other.node.end,
+      ),
+  );
+  let output = source;
+  for (const wrapper of outermost.sort((a, b) => b.node.start - a.node.start)) {
+    output =
+      output.slice(0, wrapper.node.start) +
+      dedentedChild(source, wrapper) +
+      output.slice(wrapper.node.end);
+  }
+  return output;
+}
+
+/**
+ * The source of the element a wrapper holds, with each of its later lines
+ * moved left by the indent the wrapper added. A line that starts inside a
+ * string keeps its whitespace, because that whitespace is part of the value.
+ * @param {string} source
+ * @param {any} wrapper - An element path whose element wraps one element.
+ * @returns {string}
+ */
+function dedentedChild(source, wrapper) {
+  const child = /** @type {any} */ (wrappedElement(wrapper.node));
+  /** @param {number} offset */
+  const indentOfLine = offset => {
+    const lineStart = source.lastIndexOf('\n', offset - 1) + 1;
+    return /^[ \t]*/u.exec(source.slice(lineStart))?.[0].length ?? 0;
+  };
+  const depth = indentOfLine(child.start) - indentOfLine(wrapper.node.start);
+  /** @type {any[]} */
+  const strings = [];
+  wrapper.traverse({
+    'StringLiteral|TemplateLiteral'(/** @type {any} */ path) {
+      strings.push(path.node);
+    },
+  });
+  const leadingIndent = new RegExp(`^[ \\t]{0,${Math.max(depth, 0)}}`, 'u');
+  let lineStart = child.start;
+  return source
+    .slice(child.start, child.end)
+    .split('\n')
+    .map((line, index) => {
+      const start = lineStart;
+      lineStart += line.length + 1;
+      if (
+        index === 0 ||
+        strings.some(string => string.start < start && start < string.end)
+      ) {
+        return line;
+      }
+      return line.replace(leadingIndent, '');
+    })
+    .join('\n');
+}
+
+/**
+ * The one element a demo-content element wraps, or null when its children are
+ * only whitespace. Throws for any other children.
+ * @param {any} element
+ * @returns {any}
+ */
+function wrappedElement(element) {
+  const content = element.children.filter(
+    (/** @type {any} */ child) =>
+      !(child.type === 'JSXText' && child.value.trim() === ''),
+  );
+  if (content.length === 0) return null;
+  if (
+    content.length === 1 &&
+    (content[0].type === 'JSXElement' || content[0].type === 'JSXFragment')
+  ) {
+    return content[0];
+  }
+  throw unsafeDemoContent(
+    `<${element.openingElement.name.name}> has children other than one element`,
+  );
+}
+
+/**
  * Throw unless a demo-content element can be replaced without dropping code:
- * each prop a literal or a read of variables (see {@link isVariableRead}), and
- * no children but whitespace.
+ * each prop a literal or a read of variables (see {@link staticPropReads}),
+ * and no children but whitespace.
  * @param {any} element
  * @returns {string[]} The variables its props read.
  */
 function assertStaticDemoElement(element) {
+  const variables = staticPropReads(element);
+  for (const child of element.children) {
+    if (child.type === 'JSXText' && child.value.trim() === '') continue;
+    throw unsafeDemoContent(
+      `<${element.openingElement.name.name}> has children`,
+    );
+  }
+  return variables;
+}
+
+/**
+ * Throw unless each prop of a demo-content element is a literal or a read of
+ * variables (see {@link isVariableRead}).
+ * @param {any} element
+ * @returns {string[]} The variables its props read.
+ */
+function staticPropReads(element) {
   const name = element.openingElement.name.name;
   /** @type {string[]} */
   const variables = [];
@@ -665,10 +809,6 @@ function assertStaticDemoElement(element) {
     throw unsafeDemoContent(
       `<${name}> prop ${attribute.name.name ?? ''} is not a literal value or a variable read`,
     );
-  }
-  for (const child of element.children) {
-    if (child.type === 'JSXText' && child.value.trim() === '') continue;
-    throw unsafeDemoContent(`<${name}> has children`);
   }
   return variables;
 }
@@ -715,7 +855,7 @@ function isLiteralExpression(node) {
 /** @param {string} reason */
 function unsafeDemoContent(reason) {
   return new Error(
-    `Demo content from ${DEMO_CONTENT_MODULE} cannot be replaced safely: ${reason}. Use each element as a JSX tag with no children, and give each prop a literal or a variable the file also reads elsewhere.`,
+    `Demo content from ${DEMO_CONTENT_MODULE} cannot be replaced safely: ${reason}. Use each element as a JSX tag with no children or with one element child, and give each prop a literal or a variable the file also reads elsewhere.`,
   );
 }
 

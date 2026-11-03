@@ -14,6 +14,7 @@ verified_by:
   [
     packages/core/src/DateRangeInput/DateRangeInput.test.tsx,
     packages/core/src/theme/themingTargets.test.ts,
+    packages/core/src/DateRangeInput/__tests__/DateRangeInputReflow.interaction.browser.spec.ts,
     scripts/check-knowledge.mjs,
   ]
 modules: []
@@ -21,7 +22,7 @@ families: [family:input-fields, family:overlay-dismissal]
 design_specs: []
 architecture: [architecture:component-theming-surface]
 contributing: []
-system_specs: []
+system_specs: [spec:AST-020]
 ---
 
 # DateRangeInput component contract
@@ -30,7 +31,7 @@ system_specs: []
 
 DateRangeInput presents one controlled date range through a labeled field surface.
 Its trigger opens a Calendar-backed Popover and may include a list of quick-select
-presets beside that calendar.
+presets beside that calendar, or above it when the two do not fit side by side.
 
 ## Compatibility and migration
 
@@ -72,12 +73,13 @@ preset-list anatomy and its additive theming surface.
 
 ## Behavioral and layout contract
 
-| ID  | Candidate invariant                                                                                                                                                                                                                                                                             | Basis                                                     | Review state               |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- | -------------------------- |
-| FR1 | DateRangeInput MUST present the controlled `value` and emit range changes without maintaining a competing selected range.                                                                                                                                                                       | Current source, docs, and focused tests                   | Verified current behavior  |
-| FR2 | When presets are present, each preset remains an independent button in one labeled group; the applied preset reflects current state and a preset whose endpoint violates `min`, `max`, or `dateConstraints`, or whose range violates `minRangeSpan` or `maxRangeSpan`, reflects disabled state. | Current source, accessibility comments, and focused tests | Verified current behavior  |
-| FR3 | The preset group and each preset button expose stable theme targets; selected and disabled are states of the preset-button target rather than separate targets.                                                                                                                                 | `architecture:component-theming-surface`; #5417 demand    | Approved additive contract |
-| FR4 | Adding theme targets MUST NOT change the Popover, Calendar, button, focus, or selection semantics those elements already own.                                                                                                                                                                   | Composition boundary and compatibility goal               | Approved additive contract |
+| ID  | Candidate invariant                                                                                                                                                                                                                                                                                                                                                                                                        | Basis                                                             | Review state               |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | -------------------------- |
+| FR1 | DateRangeInput MUST present the controlled `value` and emit range changes without maintaining a competing selected range.                                                                                                                                                                                                                                                                                                  | Current source, docs, and focused tests                           | Verified current behavior  |
+| FR2 | When presets are present, each preset remains an independent button in one labeled group; the applied preset reflects current state and a preset whose endpoint violates `min`, `max`, or `dateConstraints`, or whose range violates `minRangeSpan` or `maxRangeSpan`, reflects disabled state.                                                                                                                            | Current source, accessibility comments, and focused tests         | Verified current behavior  |
+| FR3 | The preset group and each preset button expose stable theme targets; selected and disabled are states of the preset-button target rather than separate targets.                                                                                                                                                                                                                                                            | `architecture:component-theming-surface`; #5417 demand            | Approved additive contract |
+| FR4 | Adding theme targets MUST NOT change the Popover, Calendar, button, focus, or selection semantics those elements already own.                                                                                                                                                                                                                                                                                              | Composition boundary and compatibility goal                       | Approved additive contract |
+| FR5 | When the preset group and a one-month calendar do not fit side by side in the layer, the preset group stacks above the calendar, and every month grid and the month navigation stay inside the layer (`spec:AST-020` FR1, WCAG 2.2 SC 1.4.10). Visual order matches DOM order. When they fit, the presets stay beside the calendar. When the content is taller than the layer's viewport cap, it scrolls inside the layer. | `spec:AST-020` FR1; 390 px, 390 × 664 px and 440 px reflow checks | Verified current behavior  |
 
 ### Allowed variation
 
@@ -172,11 +174,12 @@ No new performance or resource constraint is introduced.
 
 ## Verification map
 
-| Contract            | Verification                                                                      | Representative states                                                  | Mutation or failure expectation                                             | Audit section                  |
-| ------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------ |
-| FR1, FR2, AR1–AR3   | `DateRangeInput.test.tsx`; disabled-preset focusability (AR3) pending conformance | no match, applied preset, endpoint-invalid preset, span-invalid preset | Semantics or state attributes disappear                                     | `audit:DateRangeInput/presets` |
-| FR3, FR4            | `DateRangeInput.test.tsx`, `themingTargets.test.ts`, generated probe theme        | group target, selected button, disabled button                         | Target class/state is missing, undocumented, or placed on the wrong element | `audit:DateRangeInput/theming` |
-| Theming anatomy map | `scripts/check-knowledge.mjs`                                                     | all documented anatomy                                                 | Target ownership or anatomy names drift                                     | `audit:DateRangeInput/theming` |
+| Contract            | Verification                                                                      | Representative states                                                  | Mutation or failure expectation                                                                                  | Audit section                  |
+| ------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| FR1, FR2, AR1–AR3   | `DateRangeInput.test.tsx`; disabled-preset focusability (AR3) pending conformance | no match, applied preset, endpoint-invalid preset, span-invalid preset | Semantics or state attributes disappear                                                                          | `audit:DateRangeInput/presets` |
+| FR3, FR4            | `DateRangeInput.test.tsx`, `themingTargets.test.ts`, generated probe theme        | group target, selected button, disabled button                         | Target class/state is missing, undocumented, or placed on the wrong element                                      | `audit:DateRangeInput/theming` |
+| FR5                 | `DateRangeInputReflow.interaction.browser.spec.ts`                                | 390 px page with presets and two months; desktop page                  | The calendar or its navigation crosses the layer edge, or the presets leave the calendar's side at desktop width | `audit:DateRangeInput/reflow`  |
+| Theming anatomy map | `scripts/check-knowledge.mjs`                                                     | all documented anatomy                                                 | Target ownership or anatomy names drift                                                                          | `audit:DateRangeInput/theming` |
 
 ## Decision log
 

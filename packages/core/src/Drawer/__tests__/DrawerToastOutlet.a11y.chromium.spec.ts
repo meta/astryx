@@ -6,7 +6,8 @@
  * @input The built Core/Toast AppToastOverDrawer story; real Chromium hit
  *   testing, mouse and keyboard input
  * @output Browser evidence that a toast fired from an open modal Drawer is
- *   hit-testable above the drawer, takes a click, and is reached with Tab
+ *   hit-testable above the drawer, takes a click, and is reached with Tab, and
+ *   that a toast shown before a scrimless Drawer opens stays above it
  * @position Chromium proof for Drawer's modal outlet (Layer/modalOutlet.ts).
  *   jsdom has no top layer and no modal inertness, so
  *   Toast/ToastViewport.modalHost.test.tsx can only check where the viewport
@@ -100,4 +101,37 @@ test('Tab reaches the toast action from inside a modal drawer', async ({
     );
   }
   expect(reached).toBe(true);
+});
+
+// A scrimless drawer is a manual popover that enters the top layer after the
+// viewport: the viewport re-enters above it. Phone width, so the drawer
+// covers the toast's corner.
+test('a toast shown before a scrimless drawer opens stays above it', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 390, height: 844});
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-toast--app-toast-over-non-modal-drawer&viewMode=story`,
+  );
+  await holdMotionStill(page);
+  await page.getByRole('button', {name: 'Save filters', exact: true}).click();
+  const undo = page.locator('[popover] button', {hasText: 'Undo'});
+  await expect(undo).toBeVisible();
+  await page.getByRole('button', {name: 'Open filters', exact: true}).click();
+  await expect(page.getByRole('dialog', {name: 'Filters'})).toBeVisible();
+
+  const box = await undo.boundingBox();
+  if (box == null) {
+    throw new Error('the Undo button has no box');
+  }
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  const hit = await page.evaluate(
+    ([px, py]) =>
+      document.elementFromPoint(px, py)?.closest('button')?.textContent ?? null,
+    [x, y],
+  );
+  expect(hit).toBe('Undo');
+  await page.mouse.click(x, y);
+  await expect(page.getByText('The save is undone.')).toBeVisible();
 });
