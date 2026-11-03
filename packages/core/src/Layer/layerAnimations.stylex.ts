@@ -91,8 +91,7 @@ const fadeIn = stylex.keyframes({
   to: {opacity: 1},
 });
 
-// Under Reduce Motion a coarse pointer gets the shared opacity-only fade,
-// which no theme value lengthens, and any other pointer gets no animation.
+// No theme value lengthens the Reduce Motion fade, so its values are constants.
 // The media keys stay literal: StyleX gives an imported at-rule key a later
 // priority layer (see reducedMotionKeys).
 const animationBase = {

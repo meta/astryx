@@ -7251,7 +7251,7 @@ function isActionTrigger: (element: HTMLElement) => boolean
 
 ```text
 context LayerContext: Context<LayerContextValue | null>
-const layerAnimations: Readonly<{ readonly below: Readonly<{ readonly animationDuration: stylex.StyleXClassNameFor<"animationDuration", string>; readonly animationTimingFunction: styl … #b637e434
+const layerAnimations: Readonly<{ readonly below: Readonly<{ readonly animationDuration: stylex.StyleXClassNameFor<"animationDuration", string>; readonly animationTimingFunction: styl … #638db545
 ```
 
 ### Types
