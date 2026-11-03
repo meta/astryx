@@ -69,6 +69,8 @@ export default function UseGridFocusHookUsage() {
                       width: 28,
                       height: 28,
                       border: 'none',
+                      boxShadow:
+                        'inset 0 0 0 1px var(--color-border-emphasized)',
                       borderRadius: 4,
                       background: swatch.value,
                     }}
