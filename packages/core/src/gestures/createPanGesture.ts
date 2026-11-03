@@ -6,12 +6,7 @@
  * @output Exports createPanGesture and its types: the public pan factory
  * @position Public face of packages/core/src/gestures. It reports a drag as
  *   values and hands out no recognizer; `usePanGesture` is its React layer.
- *
- * Under it is a `PanGestureRecognizer` on the document's gesture host. So the
- * drag claims its touch at UIKit's 10 pt, and the host writes the element's
- * `touch-action` for the axis. `translation` is the recognizer's own, so an
- * element that follows it does not jump. Importing this module does no DOM
- * work; the host is reached only when a pan is created.
+ *   Importing it does no DOM work.
  * SYNC: When modified, update ../hooks/usePanGesture.ts, its .doc.mjs and
  * __tests__/createPanGesture.test.tsx.
  */
@@ -52,7 +47,9 @@ export interface PanGesture {
 const ZERO = {x: 0, y: 0};
 
 /**
- * Report drags on `element` as values.
+ * Report drags on `element` as values. The drag claims its touch at UIKit's
+ * 10 pt, as `UIPanGestureRecognizer` does, so a tap stays a tap. The pan sets
+ * the element's `touch-action` for the axis.
  * @example
  * ```
  * const pan = createPanGesture(card, {
