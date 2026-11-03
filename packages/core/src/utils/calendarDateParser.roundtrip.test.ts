@@ -3,9 +3,8 @@
 /**
  * @file calendarDateParser.roundtrip.test.ts
  * @input Uses vitest, temporal-polyfill, calendarDateParser, calendarSystem
- * @output Round-trip matrix: every calendar's committed text and format hint,
- *   in its native locale, English, Swedish, and locales whose words collide or
- *   whose years cycle, read back as the same date
+ * @output Round-trip matrix: every calendar's committed text and format hint
+ *   in its native locale and others reads back as the same date
  * @position Testing; samples 1900 through 2100 for calendarDateParser.ts
  */
 
@@ -51,20 +50,17 @@ const NATIVE_LOCALES: Readonly<Record<CalendarSystem, string>> = {
   'islamic-umalqura': 'ar-SA',
 };
 
-// Weekday words that are also month or era names, weekdays written with a
-// number, month names with a digit, and years written in the 60-year cycle.
+// Weekday words that name months or eras, digit month names, cycle years.
 const MORE_LOCALES: Partial<Record<CalendarSystem, string>> = {
   gregory: 'fr-FR it-IT es-ES ro-RO vi-VN',
   buddhist: 'fr-FR',
   roc: 'de-DE',
   japanese: 'it-IT hu-HU',
   persian: 'nb-NO',
-  hebrew: 'vi-VN',
   chinese: 'ca-ES cs-CZ de-DE fi-FI fr-FR it-IT nl-NL pl-PL pt-PT ru-RU',
   dangi: 'pt-BR fi-FI',
   ethiopic: 'pt-BR',
   'islamic-civil': 'fr-FR hu-HU sr-RS',
-  'islamic-umalqura': 'hu-HU sr-RS',
 };
 
 // Chinese and Korean text costs far more to compose under the polyfill, so

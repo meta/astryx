@@ -2,8 +2,7 @@
 
 /**
  * @file calendarDateParser.ts
- * @input Typed date text, a locale, and a calendar system; Intl, calendarSystem
- *   and unicodeDigits
+ * @input Date text, locale, calendar; Intl, calendarSystem, unicodeDigits
  * @output Cached per-locale lexicons, a typed-date parser with distinct rejection
  *   kinds, committed display text, the format hint, and calendar display names
  * @position Core utility; reads and writes dates typed in a calendar system
@@ -29,6 +28,7 @@ import {
 import {
   type SharedDateFormat,
   SHARED_DATE_FORMAT_OPTIONS,
+  dateTimeFormatFor,
   formatSharedDate,
   getDaysInMonth,
   plainDateAddDays,
@@ -190,34 +190,12 @@ function textCalendar(calendar: CalendarSystem): CalendarSystem {
 // Intl access
 // =============================================================================
 
-// Keyed by the options object first: callers pass shared constants, so a
-// lookup needs no serialization.
-const formatters = new WeakMap<
-  Intl.DateTimeFormatOptions,
-  Map<string, Intl.DateTimeFormat>
->();
-
 function formatter(
   locale: Locale,
   calendar: CalendarSystem,
   options: Intl.DateTimeFormatOptions,
 ): Intl.DateTimeFormat {
-  let byLocale = formatters.get(options);
-  if (byLocale == null) {
-    byLocale = new Map();
-    formatters.set(options, byLocale);
-  }
-  const key = `${locale}|${calendar}`;
-  let result = byLocale.get(key);
-  if (result == null) {
-    result = new Intl.DateTimeFormat(locale, {
-      ...options,
-      calendar,
-      timeZone: 'UTC',
-    });
-    byLocale.set(key, result);
-  }
-  return result;
+  return dateTimeFormatFor(locale, {...options, calendar, timeZone: 'UTC'});
 }
 
 /** Part types such as `relatedYear` and `yearName` are absent from older TS libs. */

@@ -23,9 +23,8 @@
 const DECIMAL_DIGIT = new RegExp('\\p{Nd}', 'u');
 
 /**
- * Zero-width joiners, bidi marks and isolates (which Intl writes around RTL
- * numbers and day periods), bidi embeddings in pasted text, and the BOM Excel
- * prepends.
+ * Zero-width joiners, bidi marks, embeddings and isolates (Intl writes marks
+ * and isolates around RTL numbers and day periods), and the BOM Excel prepends.
  */
 export const INVISIBLE_CHARS =
   /[\u200B-\u200D\u200E\u200F\u061C\u202A-\u202E\u2066-\u2069\uFEFF]/g;
