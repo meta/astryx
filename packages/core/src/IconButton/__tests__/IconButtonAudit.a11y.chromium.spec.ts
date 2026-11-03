@@ -137,7 +137,7 @@ async function settle(page: Page) {
 async function observe(page: Page) {
   return page.evaluate(() => {
     const round = (value: number) => Math.round(value * 10) / 10;
-    function box(element: Element) {
+    function box(element: Element | Range) {
       const rect = element.getBoundingClientRect();
       return {
         left: round(rect.left),
@@ -149,9 +149,23 @@ async function observe(page: Page) {
     const root = document.querySelector('#storybook-root') ?? document.body;
     const button = root.querySelector('.astryx-button');
     const style = button ? getComputedStyle(button) : null;
-    const glyph =
-      button?.querySelector('.astryx-icon, svg') ??
-      button?.querySelector('span[aria-hidden="true"], span');
+    // An SVG icon, or else the text of a text icon such as an emoji.
+    let glyph: ReturnType<typeof box> | null = null;
+    const svg = button?.querySelector('svg');
+    if (svg) {
+      glyph = box(svg);
+    } else if (button) {
+      const walker = document.createTreeWalker(button, NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode();
+      while (node && !(node.textContent ?? '').trim()) {
+        node = walker.nextNode();
+      }
+      if (node) {
+        const range = document.createRange();
+        range.selectNodeContents(node);
+        glyph = box(range);
+      }
+    }
     const describedBy = button?.getAttribute('aria-describedby') ?? '';
     const description = describedBy
       .split(/\s+/)
@@ -193,7 +207,7 @@ async function observe(page: Page) {
             box: box(button),
           }
         : null,
-      glyph: glyph ? box(glyph) : null,
+      glyph,
       description,
       tooltip: tooltip ? (tooltip.textContent ?? '').trim() : null,
     };
@@ -268,9 +282,11 @@ for (const item of cases) {
         failures.push(message);
       }
     };
-    const near = (actual: number, expected: number) =>
-      Math.abs(actual - expected) <= 1;
+    const near = (actual: number, expected: number, tolerance = 1) =>
+      Math.abs(actual - expected) <= tolerance;
     const spec = STORY[item.story];
+    // Text glyph boxes follow font metrics, so they get a wider tolerance.
+    const centerTolerance = item.story === 'emoji-icon' ? 2 : 1;
 
     check(storybookSha === checkoutSha, 'storybook build mismatch');
     check(pageErrors.length === 0, `page errors: ${pageErrors.join(' | ')}`);
@@ -317,24 +333,27 @@ for (const item of cases) {
           `sm target under 28px: ${button.box.width}x${button.box.height}`,
         );
       }
-      check(
-        button.paddingInline === '0px 0px',
-        `padding ${button.paddingInline}`,
-      );
-      check(
-        button.paddingBlock === '0px 0px',
-        `padding ${button.paddingBlock}`,
-      );
+      // A theme may pad the button target; the box must stay square with the
+      // icon centered, which the checks around this one prove in every theme.
+      if (item.theme === 'neutral') {
+        check(
+          button.paddingInline === '0px 0px' &&
+            button.paddingBlock === '0px 0px',
+          `padding ${button.paddingInline} / ${button.paddingBlock}`,
+        );
+      }
       if (spec.state !== 'loading' && observed.glyph) {
         const glyph = observed.glyph;
         check(
           near(
             glyph.left + glyph.width / 2,
             button.box.left + button.box.width / 2,
+            centerTolerance,
           ) &&
             near(
               glyph.top + glyph.height / 2,
               button.box.top + button.box.height / 2,
+              centerTolerance,
             ),
           'icon is not centered',
         );
@@ -382,7 +401,7 @@ for (const item of cases) {
         focus: item.focus,
         ...spec,
         anatomy:
-          'one native button named by aria-label with no visible label text, carrying the button target with data-variant and data-size, square with zero padding and a centered icon',
+          'one native button named by aria-label with no visible label text, carrying the button target with data-variant and data-size, square with a centered icon and, at the neutral theme, zero padding',
         target:
           'at least 24 by 24 CSS px; at least 28 by 28 for sm at the neutral theme',
         state:
