@@ -3738,6 +3738,14 @@ jobs:
         with:
           persist-credentials: false
 
+      # The changed-spec list and the folder rule both read this list. Without
+      # it, a contract would not run and the job would still pass.
+      - name: Require the changed-file list
+        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == ''
+        run: |
+          echo "::error::The scope step could not list the changed files, so the contracts to run are unknown. Re-run the job."
+          exit 1
+
       - name: Download analysis artifact
         if: steps.scope.outputs.applies == 'true'
         uses: actions/download-artifact@v8

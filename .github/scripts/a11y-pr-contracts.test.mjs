@@ -421,6 +421,45 @@ describe('the default check of the touched components', () => {
     ).toContain('No accessibility contract to run.');
   });
 
+  it('refuses owners without the changed-file list, so no owned contract is dropped silently', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'owned-'));
+    const specsFile = path.join(dir, 'specs.txt');
+    fs.writeFileSync(specsFile, '');
+    const run = args => {
+      try {
+        execFileSync(
+          process.execPath,
+          [path.join(root, '.github/scripts/a11y-pr-contracts.mjs'), ...args],
+          {cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']},
+        );
+        return {status: 0, output: ''};
+      } catch (error) {
+        return {status: error.status, output: String(error.stderr)};
+      }
+    };
+    try {
+      for (const args of [
+        ['--changed-only', specsFile, '--owned-by', 'core/ChatLayout'],
+        [
+          '--changed-only',
+          specsFile,
+          '--changed-files',
+          '',
+          '--owned-by',
+          'core/ChatLayout',
+        ],
+      ]) {
+        const result = run(args);
+        expect(result.status).not.toBe(0);
+        expect(result.output).toContain(
+          '--owned-by needs --changed-files with the list of changed paths',
+        );
+      }
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
   it('is wired into the runner: owners, durations and workers reach the plan', () => {
     const runner = fs.readFileSync(
       path.join(root, '.github/scripts/a11y-pr-contracts.mjs'),

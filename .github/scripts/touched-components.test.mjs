@@ -728,6 +728,19 @@ describe('pr-component-a11y-contracts routing', () => {
     }
   });
 
+  it('fails, never passes, when the scope step cannot list the changed files', () => {
+    const guard = contractStep('Require the changed-file list');
+    expect(guard.if).toBe(
+      "steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == ''",
+    );
+    expect(guard.run).toContain('exit 1');
+    expect(guard['continue-on-error']).toBeUndefined();
+    const names = contracts.steps.map(({name}) => name);
+    expect(names.indexOf('Require the changed-file list')).toBeLessThan(
+      names.indexOf("Run the touched components' accessibility contracts"),
+    );
+  });
+
   it('decides the touched components as the touched check does, and finds changed specs from the Playwright list', () => {
     const decide = contractStep('Decide the touched components');
     expect(decide.run).toContain('touched-components.mjs scope');

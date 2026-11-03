@@ -718,6 +718,13 @@ function main() {
   ) {
     throw new Error('--owned-by and --changed-files need --changed-only');
   }
+  // Without every changed path the folder rule selects nothing, and the
+  // dropped contracts would read as passed.
+  if (ownedBy.length > 0 && !changedFilesFile) {
+    throw new Error(
+      '--owned-by needs --changed-files with the list of changed paths',
+    );
+  }
   const flagValues = new Set([changedOnlyFile, changedFilesFile, ownedByValue]);
   // Outside CI, a run with no base compares with origin/main.
   const base =
