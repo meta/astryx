@@ -50,7 +50,6 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {useIndicatorFocusRing} from '../hooks/useIndicatorFocusRing';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {useIndicator} from '../Indicator/useIndicator';
 import {themeProps} from '../utils/themeProps';
 
@@ -352,10 +351,8 @@ export function CheckboxInput({
   const id = idProp || generatedId;
   const descriptionID = useId();
   const statusMessageID = useId();
-  // Announce the effective required state (form default included) while the
-  // native `required` stays bound to the explicit `isRequired` so a layout
-  // default never switches on browser validation.
-  const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
+  // A form's required default gives this control no required state: an unchecked box is an answer.
+  // Only its own `isRequired` sets `aria-required` and native `required`.
 
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
@@ -484,7 +481,7 @@ export function CheckboxInput({
             onClick={isDisabled ? undefined : rest.onClick}
             readOnly={isReadOnly}
             required={isRequired}
-            aria-required={isEffectivelyRequired ? 'true' : undefined}
+            aria-required={isRequired ? 'true' : undefined}
             onChange={e => {
               if (isDisabled || isBusy || isReadOnly) {
                 // Activation clears the native mixed state; React restores
