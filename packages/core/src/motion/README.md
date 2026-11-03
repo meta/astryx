@@ -138,8 +138,10 @@ await handle.finished; // true if it ran to the end, false if interrupted
   presented call's second frame) runs on over two frames, the start moves to
   the call's first read after it, with every call of that task. Everything
   the call starts shares that start
-  (`handle.started`); a retarget keeps an explicit one, and `{at}` puts
-  several animators on one clock. `{start: 'commit'}` lets the browser date
+  (`handle.started`); a retarget of a curve that still moves keeps an
+  explicit one, while one on a tail that already shows as at rest (within two
+  sample tolerances of its target, and slower than one a frame) counts as a
+  call from rest. `{at}` puts several animators on one clock. `{start: 'commit'}` lets the browser date
   a retarget too; `{start: 'presented'}` waits two frames, until the
   element at rest has been presented. `handle.curve(property)` is the curve
   a call plays, for a companion to follow. `{additive: true}` retargets the

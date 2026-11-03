@@ -584,10 +584,16 @@ describe('animate: keyframes on the compositor', () => {
     clock += firstCurve - 10;
     await vi.advanceTimersByTimeAsync(firstCurve - 10);
     expect(frameQueue.length).toBeGreaterThan(0);
-    // Retargeted before that frame comes; the page then draws no frame until
-    // the new curve is inside its own last frame.
+    // Retargeted before that frame comes. The first curve shows as at rest
+    // by now, so the call waits for the browser's start, as one from rest
+    // does. The frame the old look waits for starts it, and that look leaves
+    // it running. The page then draws no frame until the new curve is inside
+    // its own last frame.
     animator.animate({x: 200}, {spring: springs.settle});
     const second = live('translate').at(-1) as Recorded;
+    expect(second.startTime).toBeNull();
+    await commitFrame(clock);
+    expect(second.cancelled).toBe(false);
     datedPerFrame(second);
     const secondCurve = Number(second.options.duration) - END_HOLD_MS;
     const secondEnd = (second.startTime as number) + secondCurve;
@@ -665,6 +671,48 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
       curve.value(0.1),
       1,
     );
+  });
+
+  it('a call on a settle tail starts at the commit too, so a late first frame skips none of its curve', async () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.settle});
+    const [first] = live('translate');
+    await commitFrame(1000);
+    // A time inside the first curve's tail: within half a pixel of its
+    // target and slower than a quarter pixel a frame, before its end.
+    let t = 0;
+    while (
+      (Math.abs(curve.value(t) - 300) > 0.5 ||
+        Math.abs(curve.velocity(t)) > 15) &&
+      t < 5
+    ) {
+      t += 0.001;
+    }
+    expect(t).toBeLessThan(5);
+    const at = 1000 + Math.ceil(t * 1000);
+    expect(at - 1000).toBeLessThan(
+      Number(first.options.duration) - END_HOLD_MS,
+    );
+    clock = at;
+    const from = animator.get('x');
+    const handle = animator.animate({x: 0}, {spring: springs.settle});
+    const second = live('translate').at(-1) as Recorded;
+    expect(second.startTime).toBeNull();
+    // The main thread is blocked for 80 ms; the first frame shows the new
+    // curve's first value, not 80 ms into it.
+    clock = at + 80;
+    await commitFrame(clock);
+    await expect(handle.started).resolves.toBe(clock);
+    expect(animator.get('x', clock)).toBeCloseTo(from, 6);
+  });
+
+  it('a call while the curve still moves starts at the call, from the value and velocity on screen', async () => {
+    const {animator} = setup();
+    animator.animate({x: 300}, {spring: springs.settle});
+    await commitFrame(1000);
+    clock = 1100;
+    animator.animate({x: 0}, {spring: springs.settle});
+    expect((live('translate').at(-1) as Recorded).startTime).toBe(1100);
   });
 
   it('a start the browser dates before the block (WebKit) moves to after it', async () => {
