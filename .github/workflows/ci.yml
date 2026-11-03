@@ -464,9 +464,11 @@ jobs:
           printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'
           VALIDATOR="$RUNNER_TEMP/release-policy/scripts/release/active-release.mjs"
           ACTIVE_BRANCHES=$(node "$VALIDATOR" list-active --root "$GITHUB_WORKSPACE")
+          # The merge commit's first parent: the main commit it was built on.
+          # A main that moved since would read its new files as deletions.
           node "$VALIDATOR" validate-merge-back \
             --root "$GITHUB_WORKSPACE" \
-            --base origin/main \
+            --base HEAD^1 \
             --release-ref "v$VERSION" \
             --active-branches "$ACTIVE_BRANCHES"
 
