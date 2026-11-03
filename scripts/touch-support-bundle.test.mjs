@@ -206,6 +206,8 @@ const GESTURE_USERS = new Set([
   'SideNav',
   'TimeInput',
   'TopNav',
+  // Toast: its swipe's claim, a one-way pan whose first move decides.
+  'Toast',
 ]);
 
 /** Public imports that carry no gesture code, whatever the list above says. */
