@@ -69,13 +69,14 @@ an additive target for the interactive control surface.
   moves is when a touch flick's `onChangeEnd` fires, about 0.6 s after the
   lift, once the coast settles; an owner that acts at the release keeps doing
   so through `onChangeEnd` and receives it after the coast.
-- A mouse's or a pen's flick (FR7): it coasts as a finger's does, so its
-  `onChangeEnd` fires about 0.6 s after the release, once the coast settles; a
-  slow drag still ends at the release (`spec:AST-094/DEC-26`).
+- A mouse's or a pen's flick (FR7): ships as a patch `[fix]`, the same class
+  as the finger's coast. It coasts as a finger's does, so its `onChangeEnd`
+  fires about 0.6 s after the release, once the coast settles; a slow drag
+  still ends at the release (`spec:AST-094/DEC-26`).
 - Controlled/uncontrolled behavior: unchanged; Slider remains controlled
 - Migration decision: an owner that moves `value` only from `onChangeEnd`
   moves it from `onChange` instead (FR5); an owner that needs the value at a
-  finger's lift reads the last `onChange` instead of waiting for
+  release (finger, mouse or pen) reads the last `onChange` instead of waiting for
   `onChangeEnd` (FR7)
 
 Consumer migration instructions belong in consumer docs and release notes.

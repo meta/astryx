@@ -294,8 +294,7 @@ those contracts.
   lockstep with Core, and limited by lint to Core and Lab (`spec:AST-017`
   FR21).
 - **INV15 — The animator animates a number.** The animator has a value mode:
-  it plays a number, such as a count or a chart value, on the same springs and
-  motion roles as its property channels, and hands the value to an `onUpdate`
+  it plays a number, such as a count or a chart value, on the same timing as its property channels: theme motion tokens for a program-started change, and measured springs only where `spec:AST-094` FR45 keeps them, and hands the value to an `onUpdate`
   callback each frame for the component to format and write. The component owns
   the change size past which it swaps to the new value instead of counting, so
   a jump from twelve to over a million does not spin. Under reduced motion the

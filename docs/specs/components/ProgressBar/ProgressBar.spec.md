@@ -80,10 +80,10 @@ Consumer syntax and examples belong in `ProgressBar.doc.mjs`.
 
 - Released default preserved: `yes` — determinate, `value` 0, `max` 100,
   `accent`, visible label, no value text, no marks.
-- Compatibility class: records shipped behavior plus one motion change with
+- Compatibility class: records shipped behavior plus two motion changes with
   no API, default, or value change: the indeterminate fill under reduced
-  motion (FR6); a determinate fill moves on the theme's eased duration under
-  every pointer (FR4);
+  motion (FR6), and a determinate fill that moves on the theme's eased
+  duration under every pointer (FR4);
   the four canonical `progress-bar*` targets are the only target classes.
 - Controlled/uncontrolled behavior: not applicable; `value` is caller-owned.
 - Migration decision: none
