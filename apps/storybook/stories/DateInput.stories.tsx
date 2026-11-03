@@ -11,6 +11,10 @@ import {InputGroup, InputGroupText} from '@astryxdesign/core/InputGroup';
 import type {ISODateString} from '@astryxdesign/core/Calendar';
 import {Layout, LayoutContent} from '@astryxdesign/core/Layout';
 import {Theme, defineTheme} from '@astryxdesign/core/theme';
+import {
+  type CalendarSystem,
+  InternationalizationProvider,
+} from '@astryxdesign/core/i18n';
 
 const meta: Meta<typeof DateInput> = {
   title: 'Core/DateInput',
@@ -250,6 +254,86 @@ export const Formats: Story = {
       </div>
     );
   },
+};
+
+const CALENDAR_FIELDS: ReadonlyArray<{
+  locale: string;
+  calendar: CalendarSystem;
+  label: string;
+  dir: 'ltr' | 'rtl';
+  min?: ISODateString;
+  max?: ISODateString;
+}> = [
+  {locale: 'fa-IR', calendar: 'persian', label: 'تاریخ شروع', dir: 'rtl'},
+  {locale: 'he', calendar: 'hebrew', label: 'תאריך התחלה', dir: 'rtl'},
+  {locale: 'ja-JP', calendar: 'japanese', label: '開始日', dir: 'ltr'},
+  {
+    locale: 'th-TH',
+    calendar: 'buddhist',
+    label: 'วันที่เริ่มต้น',
+    dir: 'ltr',
+    min: '2020-01-01' as ISODateString,
+    max: '2030-12-31' as ISODateString,
+  },
+  {
+    locale: 'en',
+    calendar: 'hebrew',
+    label: 'Start date (Hebrew calendar)',
+    dir: 'ltr',
+  },
+];
+
+function CalendarField({
+  locale,
+  calendar,
+  label,
+  dir,
+  min,
+  max,
+}: (typeof CALENDAR_FIELDS)[number]) {
+  const [value, setValue] = useState<ISODateString | undefined>(
+    '2026-11-02' as ISODateString,
+  );
+  return (
+    <InternationalizationProvider locale={locale}>
+      <div
+        dir={dir}
+        lang={locale}
+        data-calendar-field={`${locale}-${calendar}`}
+        style={{display: 'flex', flexDirection: 'column', gap: 4}}>
+        <DateInput
+          label={label}
+          calendar={calendar}
+          value={value}
+          onChange={setValue}
+          min={min}
+          max={max}
+          width={320}
+        />
+        <Text type="supporting" color="secondary">
+          <code data-value>{`value: ${value ?? '—'}`}</code>
+        </Text>
+      </div>
+    </InternationalizationProvider>
+  );
+}
+
+/**
+ * `calendar` sets the calendar the field reads and writes typed dates in.
+ * `value` and `onChange` stay Gregorian ISO dates. Type in the locale's
+ * digits or Latin digits; the field reports a date only when it is complete,
+ * and names a date the calendar does not have. The Buddhist field sets `min`
+ * and `max`, so a Gregorian year typed by mistake is caught. Calendars other
+ * than Gregorian, Buddhist, ROC, and Japanese need `Temporal`.
+ */
+export const CalendarSystems: Story = {
+  render: () => (
+    <div style={{display: 'flex', flexDirection: 'column', gap: 24}}>
+      {CALENDAR_FIELDS.map(field => (
+        <CalendarField key={`${field.locale}-${field.calendar}`} {...field} />
+      ))}
+    </div>
+  ),
 };
 
 export const NativePickerModes: Story = {

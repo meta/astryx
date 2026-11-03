@@ -10,6 +10,7 @@
  */
 
 import 'temporal-polyfill/full/global';
+import type {ReactElement} from 'react';
 import {afterEach, describe, expect, it, vi} from 'vitest';
 import {render, screen, waitFor, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -291,7 +292,24 @@ describe('Calendar year paging in the Gregorian calendar', () => {
 });
 
 describe('date inputs under a provider calendar', () => {
-  // Their field text is Gregorian, so their popover calendars stay Gregorian.
+  async function openGridLabel(field: ReactElement): Promise<string> {
+    const user = userEvent.setup();
+    render(
+      <InternationalizationProvider locale="en" calendar="persian">
+        {field}
+      </InternationalizationProvider>,
+    );
+    await user.click(screen.getByRole('button', {name: 'Open calendar'}));
+    // The popover is not shown in jsdom, so the grid is read from the DOM.
+    const grid = await waitFor(() => {
+      const element = document.querySelector('[role="grid"]');
+      expect(element).not.toBeNull();
+      return element as HTMLElement;
+    });
+    return grid.getAttribute('aria-label') ?? '';
+  }
+
+  // Their field text is in the calendar, so their popover calendars are too.
   it.each([
     [
       'DateInput',
@@ -306,30 +324,20 @@ describe('date inputs under a provider calendar', () => {
         onChange={() => {}}
       />,
     ],
-    [
-      'DateRangeInput',
+  ])('%s opens its popover calendar in the calendar', async (_name, field) => {
+    expect(await openGridLabel(field)).toContain('1405');
+  });
+
+  // Its trigger text is Gregorian, so its popover calendar stays Gregorian.
+  it('DateRangeInput keeps a Gregorian popover calendar', async () => {
+    const label = await openGridLabel(
       <DateRangeInput
-        key="r"
         label="Dates"
         value={{start: '2026-10-30', end: '2026-11-02'}}
         onChange={() => {}}
       />,
-    ],
-  ])('%s keeps a Gregorian popover calendar', async (_name, field) => {
-    const user = userEvent.setup();
-    render(
-      <InternationalizationProvider locale="en" calendar="persian">
-        {field}
-      </InternationalizationProvider>,
     );
-    await user.click(screen.getByRole('button', {name: 'Open calendar'}));
-    // The popover is not shown in jsdom, so the grid is read from the DOM.
-    const grid = await waitFor(() => {
-      const element = document.querySelector('[role="grid"]');
-      expect(element).not.toBeNull();
-      return element as HTMLElement;
-    });
-    expect(grid.getAttribute('aria-label')).toContain('2026');
-    expect(grid.getAttribute('aria-label')).not.toContain('1405');
+    expect(label).toContain('2026');
+    expect(label).not.toContain('1405');
   });
 });

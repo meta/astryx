@@ -242,8 +242,9 @@ describe('DateTimeInput', () => {
     const onChange = vi.fn();
     render(<DateTimeInput label="Meeting" onChange={onChange} />);
     const dateInput = screen.getByRole('combobox');
-    fireEvent.change(dateInput, {target: {value: '03/15/2026'}});
-    onChange.mockClear();
+    // A two-digit year commits only on Enter or blur.
+    fireEvent.change(dateInput, {target: {value: '03/15/26'}});
+    expect(onChange).not.toHaveBeenCalled();
 
     // The composing keydown (isComposing / legacy keyCode 229) that commits an
     // IME candidate must not be read as "commit the typed date".

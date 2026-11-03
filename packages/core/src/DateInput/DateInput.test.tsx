@@ -337,7 +337,7 @@ describe('DateInput', () => {
     expect(onChange).toHaveBeenCalledWith('2026-06-15');
   });
 
-  it('reverts on blur when typed date violates constraints', () => {
+  it('keeps a typed date that violates constraints and shows the bounds on blur', () => {
     const onChange = vi.fn();
     render(
       <DateInput
@@ -353,8 +353,12 @@ describe('DateInput', () => {
     fireEvent.change(input, {target: {value: '04/15/2026'}});
     fireEvent.blur(input);
 
-    // Should revert to previous value
-    expect(screen.getByDisplayValue('March 10, 2026')).toBeInTheDocument();
+    // The text stays so the person can correct it; the value does not change.
+    expect(input).toHaveValue('04/15/2026');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(input).toHaveAccessibleDescription(
+      'Enter a date from March 1, 2026 to March 31, 2026',
+    );
     expect(onChange).not.toHaveBeenCalled();
   });
 
@@ -845,8 +849,9 @@ describe('DateInput', () => {
     render(<DateInput label="Date" onChange={onChange} />);
 
     const input = screen.getByRole('combobox');
-    fireEvent.change(input, {target: {value: '03/15/2026'}});
-    onChange.mockClear();
+    // A two-digit year commits only on Enter or blur.
+    fireEvent.change(input, {target: {value: '03/15/26'}});
+    expect(onChange).not.toHaveBeenCalled();
     fireEvent.keyDown(input, {key: 'Enter'});
 
     expect(onChange).toHaveBeenCalledWith('2026-03-15');
@@ -857,8 +862,9 @@ describe('DateInput', () => {
     render(<DateInput label="Date" onChange={onChange} />);
 
     const input = screen.getByRole('combobox');
-    fireEvent.change(input, {target: {value: '03/15/2026'}});
-    onChange.mockClear();
+    // A two-digit year commits only on Enter or blur.
+    fireEvent.change(input, {target: {value: '03/15/26'}});
+    expect(onChange).not.toHaveBeenCalled();
 
     // The composing keydown (isComposing / legacy keyCode 229) that commits an
     // IME candidate fires before compositionend; it must not be read as

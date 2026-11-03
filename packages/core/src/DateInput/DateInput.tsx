@@ -71,13 +71,12 @@ import {
 import {NativeDateField} from './NativeDateField';
 import {TouchDateField} from './TouchDateField';
 import {useTooltip} from '../Tooltip';
-import {getInputARIA, isImeKeyEvent, parseDateInput} from '../utils';
+import {getInputARIA, isImeKeyEvent} from '../utils';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
-import {
-  plainDateFromISO,
-  plainDateToISO,
-  formatSharedDate,
-} from '../utils/plainDate';
+import {plainDateToISO} from '../utils/plainDate';
+import type {CalendarSystem} from '../utils/calendarSystem';
+import {isRenderable} from '../utils/isRenderable';
+import {typedDateError, useTypedDate} from './useTypedDate';
 import type {TimestampFormat} from '../Timestamp';
 import {
   effectivePickerPresentation,
@@ -204,7 +203,6 @@ import {
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
-import {useLocale} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
@@ -391,9 +389,10 @@ export interface DateInputProps extends Omit<
    * - `(value: ISODateString) => string`: fully custom display string
    *
    * Formatting applies only to the committed value — never to text the user is
-   * actively typing. A custom function's output that `parseDateInput` cannot
-   * read back can't be re-committed after an edit; external `value` changes
-   * always recompute the display from the ISO value.
+   * actively typing. Named formats write the date in the field's `calendar`;
+   * `'system_date'` stays the Gregorian ISO date. A custom function's output
+   * that the field cannot read back can't be re-committed after an edit;
+   * external `value` changes always recompute the display from the ISO value.
    *
    * @default 'date_long'
    * @example
@@ -408,6 +407,25 @@ export interface DateInputProps extends Omit<
    * ```
    */
   format?: DateInputFormat | ((value: ISODateString) => string);
+
+  /**
+   * The calendar the text field reads and writes dates in, such as
+   * `'persian'`, `'hebrew'`, or `'buddhist'`. `value`, `onChange`, `min`, and
+   * `max` stay Gregorian ISO dates in every calendar. People type a date the
+   * way the locale writes it in this calendar, and the committed text uses it.
+   * Years are years of this calendar, so a Buddhist field reads `2026` as
+   * Buddhist year 2026; set `min` and `max` to catch a year typed in the
+   * wrong calendar. Calendars other than `gregory`, `iso8601`, `buddhist`,
+   * `roc`, and `japanese` need `Temporal`, native or a polyfill the
+   * application loads; without it the field uses the Gregorian calendar.
+   *
+   * @default the InternationalizationProvider's calendar, else `'gregory'`
+   * @example
+   * ```
+   * <DateInput label="Start date" calendar="persian" value={date} onChange={setDate} />
+   * ```
+   */
+  calendar?: CalendarSystem;
 
   /**
    * When date picking is handed to the browser/OS instead of Astryx's own
@@ -523,6 +541,7 @@ function PointerDateField({
   numberOfMonths = 1,
   weekStartsOn,
   format = 'date_long',
+  calendar,
   width,
   containerXstyle,
   containerClassName,
@@ -544,11 +563,11 @@ function PointerDateField({
     'aria-labelledby': ariaLabelledByProp,
     onBlur: onBlurProp,
     onClick: onClickProp,
+    onFocus: onFocusProp,
     onKeyDown: onKeyDownProp,
     ...controlProps
   } = rest;
   const t = useComponentTranslator();
-  const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
     placeholderFromProps ?? t('@astryx.dateInput.placeholder');
@@ -559,6 +578,7 @@ function PointerDateField({
   const inputLabelID = useId();
   const descriptionID = useId();
   const statusMessageID = useId();
+  const calendarDescriptionID = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const calendarRef = useRef<CalendarHandle | null>(null);
   const lastFiredValueRef = useRef<ISODateString | undefined>(undefined);
@@ -590,10 +610,40 @@ function PointerDateField({
 
   // Constraint checking for text input validation (reuses calendar logic)
   const {isDateDisabled} = useCalendarConstraints({min, max, dateConstraints});
+  const typedDate = useTypedDate({
+    source: 'DateInput',
+    calendar,
+    format,
+    min,
+    max,
+    isDateDisabled,
+  });
+
+  // Pending input while user is typing (null = show formatted value)
+  const [pendingInput, setPendingInput] = useState<string | null>(null);
+  // Set when Enter or blur keeps rejected text so the person can correct it.
+  const [isRejectionCommitted, setIsRejectionCommitted] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+  const typedResult =
+    pendingInput !== null && pendingInput.trim()
+      ? typedDate.parse(pendingInput)
+      : null;
+  const typedError = typedDateError(typedResult, isRejectionCommitted);
+  const typedErrorMessage =
+    typedError != null && typedResult != null
+      ? typedDate.errorMessage(typedResult)
+      : null;
+  // A readable date that cannot commit stays in the field, so its reason is
+  // shown as well as announced.
+  const fieldStatus: InputStatus | undefined =
+    status ??
+    (typedError === 'nonexistent' || typedError === 'outOfRange'
+      ? {type: 'error', message: typedErrorMessage ?? undefined}
+      : undefined);
 
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
     useInputStatusIcon({
-      status,
+      status: fieldStatus,
       statusVariant,
       isInGroup: !!inputGroup,
     });
@@ -602,7 +652,10 @@ function PointerDateField({
     inputLabelID,
     [
       description ? descriptionID : null,
-      statusVariant !== 'tooltip' && status?.message ? statusMessageID : null,
+      typedDate.calendarDescription != null ? calendarDescriptionID : null,
+      statusVariant !== 'tooltip' && fieldStatus?.message
+        ? statusMessageID
+        : null,
       // The tooltip variant renders no message box; describe the input by the
       // tooltip's content instead so the status is still announced.
       statusTooltipDescribedBy,
@@ -611,9 +664,6 @@ function PointerDateField({
     ],
     inputGroup,
   );
-
-  // Pending input while user is typing (null = show formatted value)
-  const [pendingInput, setPendingInput] = useState<string | null>(null);
 
   // Clear pending input when value changes externally (computed during render
   // via prev-value ref instead of useEffect to avoid an extra render cycle)
@@ -624,23 +674,13 @@ function PointerDateField({
       lastFiredValueRef.current = undefined;
       if (pendingInput !== null) {
         setPendingInput(null);
+        setIsRejectionCommitted(false);
       }
     }
   }
 
-  // Format a committed ISO value for display. The default `date_long` renders
-  // the long-month shape (byte-identical to the historical hardcoded
-  // DATE_FORMAT_LONG rendering, so still non-breaking); a function is called
-  // with the ISO value; every other named member reuses Timestamp's shared
-  // date mapping. Applies ONLY to the committed value, never to in-progress
-  // typed input.
-  const formatCommittedValue = useCallback(
-    (iso: ISODateString): string =>
-      typeof format === 'function'
-        ? format(iso)
-        : formatSharedDate(plainDateFromISO(iso), format, locale),
-    [format, locale],
-  );
+  // Applies only to the committed value, never to in-progress typed input.
+  const formatCommittedValue = typedDate.formatCommitted;
 
   // Display value: pending input if typing, otherwise formatted value
   const displayValue =
@@ -650,11 +690,9 @@ function PointerDateField({
         ? formatCommittedValue(optimisticValue)
         : '';
 
-  // Check if current input is valid (for styling purposes)
-  const isInputValid =
-    pendingInput === null || !pendingInput.trim()
-      ? true
-      : parseDateInput(pendingInput, locale) !== null;
+  const isInputValid = typedError == null;
+  const formatHint =
+    isFocused && !displayValue ? typedDate.getFormatHint() : null;
 
   const fieldElementRef = useRef<HTMLDivElement | null>(null);
   // Set just before a close that focus already left the field for, so onHide
@@ -767,6 +805,7 @@ function PointerDateField({
       }
       fireChange(selectedDate);
       setPendingInput(null);
+      setIsRejectionCommitted(false);
       popover.hide();
     },
     [isDisabled, fireChange, popover],
@@ -782,22 +821,22 @@ function PointerDateField({
       }
       const newValue = e.target.value;
       setPendingInput(newValue);
+      setIsRejectionCommitted(false);
 
-      // If the input is valid and passes constraints, update immediately
-      const parsed = parseDateInput(newValue, locale);
-      if (
-        parsed &&
-        plainDateToISO(parsed) !== value &&
-        !isDateDisabled(parsed)
-      ) {
-        const parsedISO = plainDateToISO(parsed);
+      // Report a date only once more typing cannot change it.
+      const result = typedDate.parse(newValue);
+      if (result.kind !== 'value' || !result.isComplete) {
+        return;
+      }
+      const parsedISO = plainDateToISO(result.date);
+      if (parsedISO !== value && parsedISO !== lastFiredValueRef.current) {
         lastFiredValueRef.current = parsedISO;
         fireChange(parsedISO);
         // Navigate calendar to show the parsed date's month
         calendarRef.current?.navigateTo(parsedISO);
       }
     },
-    [value, fireChange, isDateDisabled, isEffectivelyDisabled, locale],
+    [value, fireChange, isEffectivelyDisabled, typedDate],
   );
 
   // Commit pending input (shared by blur and Enter key)
@@ -819,27 +858,32 @@ function PointerDateField({
       return;
     }
 
-    const parsed = parseDateInput(pendingInput, locale);
-    if (parsed && !isDateDisabled(parsed)) {
-      const parsedISO = plainDateToISO(parsed);
-      if (parsedISO !== value) {
+    const result = typedDate.parse(pendingInput);
+    if (result.kind === 'nonexistent' || result.kind === 'outOfRange') {
+      // Keep the text and show why it cannot commit; never adjust the date.
+      setIsRejectionCommitted(true);
+      return;
+    }
+    if (result.kind === 'value') {
+      const parsedISO = plainDateToISO(result.date);
+      if (parsedISO !== value && parsedISO !== lastFiredValueRef.current) {
+        lastFiredValueRef.current = parsedISO;
         fireChange(parsedISO);
       }
     }
     setPendingInput(null);
-  }, [
-    pendingInput,
-    isEffectivelyDisabled,
-    value,
-    fireChange,
-    isDateDisabled,
-    locale,
-  ]);
+  }, [pendingInput, isEffectivelyDisabled, value, fireChange, typedDate]);
 
   // Handle blur - validate, check constraints, and clear pending input.
   const handleBlur = useCallback(() => {
+    setIsFocused(false);
     commitPendingInput();
   }, [commitPendingInput]);
+
+  const handleFocus = useCallback(() => {
+    setIsFocused(true);
+    typedDate.prepare();
+  }, [typedDate]);
 
   // A manual popover has no auto-popover exclusivity, so without this close
   // the next field's calendar would open beside this one. Focus going nowhere
@@ -913,7 +957,7 @@ function PointerDateField({
       {...mergeProps(
         themeProps('date-input', {
           size,
-          status: status?.type ?? null,
+          status: fieldStatus?.type ?? null,
           disabled: isDisabled ? 'disabled' : null,
         }),
         stylex.props(
@@ -924,11 +968,11 @@ function PointerDateField({
           // FR6, family:buttons FR4).
           isDisabled && inputWrapperStyles.disabled,
           isEffectivelyDisabled && inputDisabledFocusStyles.inputFocusRing,
-          status && inputStatusBorderStyles[status.type],
-          status &&
+          fieldStatus && inputStatusBorderStyles[fieldStatus.type],
+          fieldStatus &&
             !isEffectivelyDisabled &&
-            inputStatusHoverShadowStyles[status.type],
-          status && inputStatusFocusWithinStyles[status.type],
+            inputStatusHoverShadowStyles[fieldStatus.type],
+          fieldStatus && inputStatusFocusWithinStyles[fieldStatus.type],
           inputGroup && groupStyles.inGroup,
           controlXstyle,
         ),
@@ -978,13 +1022,14 @@ function PointerDateField({
         value={displayValue}
         onChange={handleInputChange}
         onBlur={chainEventHandlers(handleBlur, onBlurProp)}
+        onFocus={chainEventHandlers(handleFocus, onFocusProp)}
         onClick={
           isEffectivelyDisabled
             ? undefined
             : chainEventHandlers(handleInputClick, onClickProp)
         }
         onKeyDown={chainEventHandlers(handleInputKeyDown, onKeyDownProp)}
-        placeholder={placeholder}
+        placeholder={formatHint ?? placeholder}
         aria-disabled={isEffectivelyDisabled ? 'true' : undefined}
         readOnly={isEffectivelyDisabled || undefined}
         aria-labelledby={
@@ -995,7 +1040,7 @@ function PointerDateField({
         aria-describedby={ariaDescribedBy}
         aria-required={isEffectivelyRequired ? 'true' : undefined}
         aria-invalid={
-          status?.type === 'error' || !isInputValid ? 'true' : undefined
+          fieldStatus?.type === 'error' || !isInputValid ? 'true' : undefined
         }
         aria-busy={isBusy || undefined}
         aria-expanded={popover.isOpen}
@@ -1010,13 +1055,18 @@ function PointerDateField({
         )}
       />
       {/*
-          Live region announcing invalid typed input to assistive technology.
-          The value silently reverts on blur, so without this a screen-reader
-          user would get no feedback that their entry was rejected (WCAG 3.3.1).
+          Live region announcing rejected typed input to assistive technology,
+          with one message for each kind of rejection (WCAG 3.3.1). Unreadable
+          text reverts on blur, so this is its only feedback.
         */}
       <VisuallyHidden as="div" role="alert" aria-live="assertive">
-        {!isInputValid ? t('@astryx.dateInput.invalidDate') : ''}
+        {typedErrorMessage ?? ''}
       </VisuallyHidden>
+      {isRenderable(typedDate.calendarDescription) && (
+        <VisuallyHidden id={calendarDescriptionID}>
+          {typedDate.calendarDescription}
+        </VisuallyHidden>
+      )}
       {hasClear && value !== undefined && !isEffectivelyDisabled && (
         <InputClearButton
           label={t('@astryx.dateInput.clear', {label})}
@@ -1030,9 +1080,8 @@ function PointerDateField({
         // calendar only while it is open; it opens on the current value.
         !popover.isOpen ? null : (
           <Calendar
-            // The field text is Gregorian, so the popover calendar is too.
-            calendar="gregory"
             handleRef={calendarRef}
+            calendar={typedDate.calendar}
             mode="single"
             value={optimisticValue ?? null}
             onChange={handleDateSelect}
@@ -1067,11 +1116,11 @@ function PointerDateField({
       isRequired={isRequired}
       isDisabled={isDisabled}
       status={
-        status
+        fieldStatus
           ? {
-              type: status.type,
-              message: status.message,
-              messageID: status.message ? statusMessageID : undefined,
+              type: fieldStatus.type,
+              message: fieldStatus.message,
+              messageID: fieldStatus.message ? statusMessageID : undefined,
             }
           : undefined
       }
@@ -1147,6 +1196,7 @@ export function DateInput(props: DateInputProps) {
   const {
     presentation: _presentation,
     nativePicker: _nativePicker,
+    calendar,
     ...rest
   } = props;
   switch (surface) {
@@ -1155,7 +1205,13 @@ export function DateInput(props: DateInputProps) {
     case 'sheet':
       return <TouchDateField {...rest} isDisabled={isDisabled} />;
     case 'desktop':
-      return <PointerDateField {...rest} isDisabled={isDisabled} />;
+      return (
+        <PointerDateField
+          {...rest}
+          calendar={calendar}
+          isDisabled={isDisabled}
+        />
+      );
   }
 }
 
