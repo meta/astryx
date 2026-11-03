@@ -178,7 +178,9 @@ and why icons are separate.
 `template copy` and `template show` replace each demo-content element (FR13)
 with a `<Text>Card content</Text>` placeholder, import Astryx's `Text` for it
 when the source does not already import it, and remove the demo-content import.
-Both responses report the count as `demoContentReplaced`.
+They remove a docs-only presentation wrapper, such as a usage hint, and keep
+the component it wraps. Both responses report the placeholder count as
+`demoContentReplaced`.
 `astryx template <name> --skeleton` outlines that replaced source and lists
 its components. `astryx component <Name> --showcase` prints the showcase source
 with each demo-content element replaced and its fixture media kept. The shadcn
@@ -270,7 +272,9 @@ Motion and gesture examples can show docs-only demo contents, such as a
 playing-card face, inside a real Astryx component without a second copy of each
 example to maintain. Those contents are fixtures in the DEC-1 sense: copy
 replaces each demo-content element with a generic placeholder and keeps the
-outer component, and previews render the originals (DEC-2). The shadcn Install
+outer component, removes a wrapper that only adds docs-only presentation (such
+as a usage hint) and keeps what it wraps, and previews render the originals
+(DEC-2). The shadcn Install
 item writes the example into the consumer's project, so it is a copy and
 replaces fixture media and demo-content elements as `template copy` does.
 `template show` returns the same source a copy writes; other surfaces that
