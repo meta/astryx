@@ -335,6 +335,12 @@ export function useTouchTrigger(
  */
 export function useTouchTriggerInternal(
   options: UseTouchTriggerOptions,
+  /**
+   * Called when a press that the outside dismissal watches ends with its
+   * pointer lifted inside the layer: the layer stays open, and useTooltip
+   * ends a hold that the press started.
+   */
+  onReleaseInLayer?: () => void,
 ): UseTouchTriggerInternalReturn {
   const {
     touchTrigger,
@@ -359,6 +365,8 @@ export function useTouchTriggerInternal(
   hideRef.current = hide;
   const layerIdRef = useRef(layerId);
   layerIdRef.current = layerId;
+  const onReleaseInLayerRef = useRef(onReleaseInLayer);
+  onReleaseInLayerRef.current = onReleaseInLayer;
 
   // Whether a tap is what opened the layer. Only a tap-open owes the user an
   // outside-tap dismissal: a hover-opened layer already closes on
@@ -421,6 +429,9 @@ export function useTouchTriggerInternal(
               doc.getElementById(layerIdRef.current)?.contains(target) === true,
           )
         ) {
+          if (event.type === 'pointerup') {
+            onReleaseInLayerRef.current?.();
+          }
           return;
         }
       }

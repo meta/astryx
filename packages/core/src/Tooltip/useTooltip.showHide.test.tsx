@@ -125,6 +125,22 @@ function ToggleTip(
 
 const trigger = () => screen.getByRole('button', {name: 'About billing'});
 
+/** A button that calls show() from an ordinary onPointerDown handler. */
+function PressShowTip(): ReactElement {
+  const tooltip = useTooltip({});
+  return (
+    <>
+      <button
+        type="button"
+        ref={tooltip.ref}
+        onPointerDown={() => tooltip.show()}>
+        About billing
+      </button>
+      {tooltip.renderTooltip(TIP)}
+    </>
+  );
+}
+
 describe('useTooltip show() and hide() (component:Tooltip FR12)', () => {
   it("an app's own button opens the tooltip with show() and closes it with hide()", () => {
     const onShow = vi.fn();
@@ -223,6 +239,30 @@ describe('useTooltip show() and hide() (component:Tooltip FR12)', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Close'}));
     expect(onHide).toHaveBeenCalledTimes(1);
     expect(shows()).toBe(false);
+  });
+
+  it('a show() during a press on the trigger ends with a press released on the tooltip; hover then decides', () => {
+    vi.useFakeTimers();
+    try {
+      render(<PressShowTip />);
+      fireEvent.pointerDown(trigger(), {pointerType: 'mouse', button: 0});
+      expect(shows()).toBe(true);
+      const layer = screen.getByRole('tooltip', {hidden: true});
+      fireEvent.mouseLeave(trigger());
+      fireEvent.mouseEnter(layer);
+      fireEvent.pointerUp(layer, {pointerType: 'mouse', button: 0});
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      expect(shows()).toBe(true);
+      fireEvent.mouseLeave(layer);
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      expect(shows()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('show() does nothing while isEnabled is false', () => {
