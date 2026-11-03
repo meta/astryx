@@ -194,6 +194,30 @@ describe('interactionModality', () => {
     ).toHaveLength(0);
   });
 
+  it("with holdsDocument false holds no element document, and still starts the page's tracking at mount", async () => {
+    const pageDocument = document.implementation.createHTMLDocument();
+    const secondDocument = document.implementation.createHTMLDocument();
+    vi.stubGlobal('document', pageDocument);
+    const tracker = await loadTracker();
+    const pageAdd = vi.spyOn(pageDocument, 'addEventListener');
+    const secondAdd = vi.spyOn(secondDocument, 'addEventListener');
+    const elementRef: {current: Element | null} = {
+      current: secondDocument.createElement('div'),
+    };
+    const {rerender, unmount} = renderHook(() =>
+      tracker.useInteractionModalityTrackingFor(elementRef, false),
+    );
+    rerender();
+    expect(
+      pageAdd.mock.calls
+        .map(([type]) => type)
+        .filter(type => type === 'pointerdown' || type === 'keydown')
+        .sort(),
+    ).toEqual(['keydown', 'pointerdown']);
+    expect(secondAdd).not.toHaveBeenCalled();
+    unmount();
+  });
+
   it('moves the tracking when the element moves to another document', async () => {
     const tracker = await loadTracker();
     const firstDocument = document.implementation.createHTMLDocument();
