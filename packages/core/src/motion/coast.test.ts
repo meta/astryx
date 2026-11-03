@@ -10,7 +10,7 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import type {Animator, MotionProperty} from './animator';
+import {MAX_DURATION_MS, type Animator, type MotionProperty} from './animator';
 import {coast} from './coast';
 import {solveDecay} from './decay';
 import {solveSpring, toSpring} from './spring';
@@ -89,7 +89,7 @@ describe('coast', () => {
       {x: 400},
       {bounds: {x: {min: -500, max: 0}}, bounce: {duration: 0.5, bounce: 1}},
     );
-    expect(x!.duration).toBeLessThanOrEqual(30);
+    expect(x!.duration).toBeLessThanOrEqual(MAX_DURATION_MS / 1000);
     expect(x!.at(x!.duration)).toBe(0);
     expect(x!.velocity(x!.duration)).toBe(0);
   });

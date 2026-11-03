@@ -16,12 +16,11 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import type {Animator} from '../motion/animator';
+import {MAX_DURATION_MS, type Animator} from '../motion/animator';
 import {coast} from '../motion/coast';
 import {picker} from '../motion/uikit/picker';
 import {timing} from '../motion/uikit/timing';
 import {
-  MAX_PLAN_SECONDS,
   coastCurve,
   dragOffset,
   offsetBounds,
@@ -402,7 +401,7 @@ describe('the bounce spring it is handed', () => {
       expect([back.kind, into.kind]).toEqual(['return', 'edge']);
       for (const {curve} of [back, into]) {
         expect(curve.duration, JSON.stringify(bounce)).toBeLessThanOrEqual(
-          MAX_PLAN_SECONDS,
+          MAX_DURATION_MS / 1000,
         );
         expect(curve.value(curve.duration)).toBe(curve.to);
         expect(curve.velocity(curve.duration)).toBe(0);

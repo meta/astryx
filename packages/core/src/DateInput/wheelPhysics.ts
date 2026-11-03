@@ -16,9 +16,9 @@
 
 import {cubicBezier} from '../motion/bezier';
 import {projectDistance} from '../motion/projection';
-import {solveDecay} from '../motion/decay';
 import {rubberBand} from '../motion/rubberBand';
-import {solveSpring, toSpring, type SpringDescription} from '../motion/spring';
+import {edgeMotion} from '../motion/coast';
+import {toSpring, type SpringDescription} from '../motion/spring';
 import {picker} from '../motion/uikit/picker';
 import {scroll} from '../motion/uikit/scroll';
 
@@ -57,13 +57,6 @@ const UIKIT_ROW_HEIGHT = picker.geometry.rowHeight;
 
 /** Below half a device pixel at 3×, a motion is on its row. */
 const AT_REST_PT = 1 / 6;
-
-/**
- * The longest a plan runs, s: the animator's limit (`MAX_DURATION_MS` in
- * motion/animator.ts). A spring that has not settled by then (an undamped
- * one, which never does) snaps onto its end.
- */
-export const MAX_PLAN_SECONDS = 30;
 
 /** The constants' scale for a wheel whose rows are `rowHeight` px tall. */
 export function scaleFor(rowHeight: number): number {
@@ -175,72 +168,6 @@ export function coastCurve(
 }
 
 /**
- * The bounce spring, from `from` with `velocity`, onto `to`. `bounce` is
- * `scroll.bounce`'s spring as its caller resolves it.
- */
-export function bounceCurve(
-  from: number,
-  velocity: number,
-  to: number,
-  scale = 1,
-  bounce: SpringDescription = scroll.bounce,
-): WheelCurve {
-  const spring = solveSpring(toSpring(bounce), {
-    from,
-    to,
-    velocity,
-  });
-  const duration = Math.min(
-    MAX_PLAN_SECONDS,
-    spring.settleTime(AT_REST_PT * scale),
-  );
-  return {
-    duration,
-    to,
-    value: t => (t >= duration ? to : spring.value(t)),
-    velocity: t => (t >= duration ? 0 : spring.velocity(t)),
-  };
-}
-
-/**
- * A coast that runs into an end: the normal decay until the offset reaches
- * `edge`, then the bounce spring with the velocity it has there.
- */
-export function edgeCurve(
-  from: number,
-  velocity: number,
-  edge: number,
-  scale = 1,
-  bounceSpring: SpringDescription = scroll.bounce,
-): WheelCurve {
-  const decay = solveDecay({from, velocity});
-  const hit = decay.timeToReach(edge);
-  if (hit == null) {
-    return bounceCurve(from, velocity, edge, scale, bounceSpring);
-  }
-  const bounce = bounceCurve(
-    edge,
-    decay.velocity(hit),
-    edge,
-    scale,
-    bounceSpring,
-  );
-  const duration = Math.min(MAX_PLAN_SECONDS, hit + bounce.duration);
-  return {
-    duration,
-    to: edge,
-    value: t =>
-      t >= duration ? edge : t < hit ? decay.value(t) : bounce.value(t - hit),
-    velocity: t =>
-      t >= duration
-        ? 0
-        : t < hit
-          ? decay.velocity(t)
-          : bounce.velocity(t - hit),
-  };
-}
-
-/**
  * Where the scroll view projects a release. This is the coast's rest point at
  * the normal rate, short of the stop speed. UIScrollView sums it the same way
  * (`projectDistance`: r ÷ (1 − r) ms of the speed).
@@ -273,8 +200,9 @@ export function projectRelease(
  *   rate into the end, and the bounce takes its velocity there.
  * - A release without velocity eases onto the nearest row at `snapRate`.
  * - A release past an end returns on the bounce spring.
- * - A spring that has not settled by the animator's limit snaps onto its end
- *   there, as the animator's own motion does.
+ * - Both ends play a scroll view's edge motion (`edgeMotion`, coast.ts). They
+ *   rest within 1/6 pt, as UIPickerView selects, and snap at the animator's
+ *   limit.
  *
  * @example
  * ```
@@ -289,13 +217,18 @@ export function planRelease(
   bounce: SpringDescription = scroll.bounce,
 ): WheelPlan {
   const scale = scaleFor(layout.rowHeight);
+  const spring = toSpring(bounce);
+  const rest = AT_REST_PT * scale;
   const {min, max} = offsetBounds(layout);
   if (offset < min || offset > max) {
     const edge = offset < min ? min : max;
     return {
       kind: 'return',
       index: nearestIndex(edge, layout),
-      curve: bounceCurve(offset, velocity, edge, scale, bounce),
+      curve: edgeMotion('y', offset, velocity, edge, spring, {
+        isReturn: true,
+        threshold: rest,
+      }),
     };
   }
   const minimumSpeed = picker.release.minimumSpeed * 1000 * scale;
@@ -306,7 +239,16 @@ export function planRelease(
     return {
       kind: 'edge',
       index: nearestIndex(edge, layout),
-      curve: edgeCurve(offset, speed, edge, scale, bounce),
+      // A coast that stops short of the end springs onto it from where it is.
+      curve:
+        edgeMotion('y', offset, speed, edge, spring, {
+          isReturn: false,
+          threshold: rest,
+        }) ??
+        edgeMotion('y', offset, speed, edge, spring, {
+          isReturn: true,
+          threshold: rest,
+        }),
     };
   }
   const index = nearestIndex(projected, layout);

@@ -667,7 +667,7 @@ const REST_DISTANCE_TOLERANCES = 2;
 const REST_FRAMES_PER_SECOND = 60;
 
 /** A curve that has not settled by then (an undamped spring) snaps. */
-const MAX_DURATION_MS = 30_000;
+export const MAX_DURATION_MS = 30_000;
 
 /**
  * How long a task must run on past its first call from rest before that
