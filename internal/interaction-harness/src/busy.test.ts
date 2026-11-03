@@ -797,6 +797,60 @@ describe('busyWindowProof settledWithinSteps', () => {
     );
   });
 
+  it('under one step a frame, still fails a long hold near rest, where the frames after the change no longer move', () => {
+    // The tail holds 214 px, 4 px from rest, until the change to 218 px. It
+    // holds for 82 ms (to +225 ms) and for 139 ms (to +282 ms). The frames
+    // after the change are the settled plateau, so their pace is 0. The
+    // motion before the hold still bounds how long one position may show.
+    for (const holdTo of [225, 282]) {
+      const tracked = webkit(webkitTail.tracked).map(f =>
+        f.t > 160 && f.t < holdTo - 5 && f.box != null
+          ? ({...f, box: {...f.box, x: 214}} as TrackedFrame)
+          : f,
+      );
+      const proof = busyWindowProof(tracked, webkitTail.block, {
+        axis: 'x',
+        settledWithinSteps: 2,
+        control: webkit(webkitTail.control),
+      });
+      expect(
+        proof.verdict.failures.join('\n'),
+        `held to +${holdTo} ms`,
+      ).toMatch(/longest stall \d+\.\d ms, longer than the control's/);
+    }
+  });
+
+  it('under one step a frame, fails a stall whose slow tail would excuse it: the allowance stays near the pace before the run', () => {
+    // The tail holds 212 px for four more frames, 82 ms in all, then replays
+    // the rest of the coast four frames late. The slow frames after the stall
+    // set no allowance of their own. A pixel bound of the same 4 px fails it
+    // too.
+    const original = webkit(webkitTail.tracked);
+    const held = original.findIndex(f => f.t > 130 && f.t < 135);
+    const tracked = original.map((f, i) => {
+      if (f.box == null || i <= held) {
+        return f;
+      }
+      const x = i <= held + 4 ? 212 : original[i - 4].box?.x;
+      return x == null ? f : ({...f, box: {...f.box, x}} as TrackedFrame);
+    });
+    const control = webkit(webkitTail.control);
+    const inSteps = busyWindowProof(tracked, webkitTail.block, {
+      axis: 'x',
+      settledWithinSteps: 2,
+      control,
+    });
+    expect(inSteps.verdict.failures.join('\n')).toMatch(
+      /longest stall 82\.\d ms, longer than the control's/,
+    );
+    const inPx = busyWindowProof(tracked, webkitTail.block, {
+      axis: 'x',
+      settledWithin: 4,
+      control,
+    });
+    expect(inPx.verdict.failures.join('\n')).toMatch(/longest stall 82\.\d ms/);
+  });
+
   it('under one step a frame, still fails a three-frame freeze whose motion resumes from where it held', () => {
     // 1.2 px a frame on a 2 px cast, the control 3 px a frame. The coast
     // holds three frames, then moves on from where it held, so the change

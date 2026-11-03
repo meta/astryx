@@ -224,7 +224,12 @@ before the run (a spring's slow tail inside a fast window), or across the run
 itself (its catch-up over the frames it spans) where the curve slows faster
 than those frames show, a frame delivered early can show no step too, so the change may carry the motion of every frame
 the run held at that pace, to the nearest step. The run must also read as a
-slowing curve, at most one frame longer than the component's run before it. A
+slowing curve, at most one frame longer than the component's run before it.
+Under `settledWithinSteps`, a run under one cast step a frame may instead last
+ceil(step ÷ travel) frames, whatever the run before it. The travel is the
+slower moving pace around the run, never less than its own catch-up per frame.
+The run also lasts at most one frame more than the pace into it allows:
+ceil(step ÷ max(pace before, catch-up per frame)) + 1. A
 freeze ends in a catch-up of more than that, a stall in a frame-counted animation is longer than its runs
 before it, and a run that no change ends stays a miss. The component still has
 to show a new position on at least four of the control's frames. The cast step (`stepPx`)

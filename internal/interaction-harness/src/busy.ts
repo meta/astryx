@@ -537,7 +537,12 @@ function motionStepPx(values: readonly number[]): number {
  * frames show, a frame delivered early can show no step too, so the change
  * may carry the motion of every frame the run held at that pace, to the
  * nearest step. The run also has to read as a slowing
- * curve, at most one frame longer than the component's run before it. A
+ * curve, at most one frame longer than the component's run before it.
+ * Under `settledWithinSteps`, a run under one cast step a frame may instead
+ * last ceil(step ÷ travel) frames, whatever the run before it. The travel is
+ * the slower moving pace around the run, never less than its own catch-up
+ * per frame. The run also lasts at most one frame more than the pace into it
+ * allows: ceil(step ÷ max(pace before, catch-up per frame)) + 1. A
  * freeze ends in a larger catch-up, a stall in a frame-counted animation is
  * longer than its runs before it, and a run that no change ends stays a miss.
  * The component still has to show a new position on at least
@@ -976,17 +981,35 @@ export function busyWindowProof(
       // every step ÷ pace frames, so a run shows one position for at most
       // ceil(step ÷ pace) frames, and a frame delivered early adds one. Only a
       // longer run is a stall, whatever the run before it was.
-      const paceAfter = pxPerFrameAfter(k);
-      const around =
-        paceBefore == null
-          ? paceAfter
-          : paceAfter == null
-            ? paceBefore
-            : Math.min(paceBefore, paceAfter);
-      if (castStepPx != null && around != null && around < castStepPx) {
+      // Here the pace is the travel at the run. It is the slower of the moving
+      // paces around it, and never less than the run's catch-up per frame. A pace of 0 after the change is the settled plateau, not
+      // motion. So a long hold near rest still fails: the motion before it
+      // bounds how long one position may show.
+      const moving = [paceBefore, pxPerFrameAfter(k)].filter(
+        (value): value is number => value != null && value > 0,
+      );
+      const travel =
+        moving.length === 0
+          ? null
+          : Math.max(
+              Math.min(...moving),
+              runFrames > 0 ? catchUp / runFrames : 0,
+            );
+      if (castStepPx != null && travel != null && travel < castStepPx) {
         // The ratio is read to a millionth: a pace of 0.5 that sums to
         // 0.4999… still allows two frames, not three.
-        return unchanged <= Math.ceil(castStepPx / around - 1e-6);
+        const allowed = Math.ceil(castStepPx / travel - 1e-6);
+        // A slow tail after the run sets no allowance of its own. So the run
+        // may last at most one frame more than the pace into it allows.
+        const into = Math.max(
+          paceBefore ?? 0,
+          runFrames > 0 ? catchUp / runFrames : 0,
+        );
+        const cap =
+          into > 0
+            ? Math.ceil(castStepPx / into - 1e-6) + 1
+            : Number.POSITIVE_INFINITY;
+        return unchanged <= Math.min(allowed, cap);
       }
       // A slowing curve lengthens its runs a frame at a time: a run more than
       // one frame longer than the one before it is a stall.
