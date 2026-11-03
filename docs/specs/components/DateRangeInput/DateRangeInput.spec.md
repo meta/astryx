@@ -33,14 +33,18 @@ system_specs: [spec:AST-013/FR12, spec:AST-020, spec:AST-111]
 
 DateRangeInput presents one controlled date range through a labeled field surface.
 Its trigger opens a Calendar-backed Popover and may include a list of quick-select
-presets beside that calendar, or above it when the two do not fit side by side. The trigger text and the calendar show the
-application's calendar system, and the range stays Gregorian ISO dates.
+presets beside that calendar, or above it when the two do not fit side by side.
+The trigger text and the calendar show the application's calendar system, and
+the range stays Gregorian ISO dates.
 
 ## Compatibility and migration
 
 - Released default preserved: `yes`; canonical DateRangeInput behavior is unchanged
 - The `calendar` prop is additive; it defaults to the provider's calendar, else
-  `gregory`, so a field without a provider calendar keeps its Gregorian text
+  `gregory`, so a field without a provider calendar keeps its Gregorian text. A
+  provider locale with an explicit `-u-ca-` keyword shows that calendar; the
+  keyword is the application's explicit request (`spec:AST-111` DEC-2):
+  nonbreaking; `calendar="gregory"` keeps Gregorian
 - 0.7.0 removes the `date-range-input-clear-icon` alias; the shared clear glyph
   remains available through `input-clear-icon`
 - The preset constraint correction remains unchanged
