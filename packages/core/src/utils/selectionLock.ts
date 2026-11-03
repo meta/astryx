@@ -353,7 +353,7 @@ function isInButton(node: Node): boolean {
 }
 
 /** The caret position the engine puts at a point, by either query. */
-function caretAt(
+export function caretAt(
   doc: Document,
   x: number,
   y: number,

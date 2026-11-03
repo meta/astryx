@@ -7,7 +7,8 @@
  * @output armClickGuard (and its ClickGuardOptions), disarmClickGuard,
  *   isClickGuardArmed, withoutClickGuard and CLICK_GUARD_WINDOW_MS
  * @position The one guard for the browser's click after a gesture that
- *   already acted, shared by hooks/useMenuPress.ts and gestures/GestureHost.ts
+ *   already acted, shared by hooks/useMenuPress.ts, gestures/GestureHost.ts
+ *   and the keyboard module's tap route (keyboard/keyboardHeight.ts)
  *
  * SYNC: When modified, update clickGuard.test.ts, hooks/useMenuPress.ts and
  * gestures/GestureHost.ts.
