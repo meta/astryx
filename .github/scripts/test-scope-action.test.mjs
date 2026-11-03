@@ -162,6 +162,7 @@ describe('per-job scope step', () => {
     expect(Object.keys(action.outputs).sort()).toEqual(
       [
         'applies',
+        'head_file_present',
         'changed_files_path',
         'decided',
         'docsite_only',
@@ -170,6 +171,7 @@ describe('per-job scope step', () => {
         'has_components',
         'has_rtl_components',
         'has_rtl_harness',
+        'lab_only',
         'release_bump',
         'spec_only',
         'tooling_only',
@@ -294,6 +296,53 @@ describe('per-job scope step', () => {
     expect(outputs).toMatchObject({spec_only: 'true', applies: 'false'});
   });
 
+  it('does not apply on the Lab-only lane, and reports it (spec:AST-030 FR26)', async () => {
+    const {outputs} = await decide({
+      files: changed('packages/lab/src/Tour/Tour.tsx', '.changeset/tour.md'),
+      inputs: {paths: INTERACTION_PATHS},
+    });
+    expect(outputs).toMatchObject({
+      lab_only: 'true',
+      applies: 'false',
+      spec_only: 'false',
+    });
+    const mixed = await decide({
+      files: changed(
+        'packages/lab/src/Tour/Tour.tsx',
+        'packages/core/src/Button/Button.tsx',
+      ),
+    });
+    expect(mixed.outputs).toMatchObject({lab_only: 'false', applies: 'true'});
+  });
+
+  it('reports no Lab-only lane when the base classifier predates it', async () => {
+    const old = fs
+      .readFileSync(path.join(root, '.github/scripts/change-scope.cjs'), 'utf8')
+      .replace('\\nlab_only=${result.labOnly}', '');
+    expect(old).not.toContain('lab_only=');
+    const {outputs} = await decide({
+      files: changed('packages/lab/src/Tour/Tour.tsx'),
+      baseOverrides: {'.github/scripts/change-scope.cjs': old},
+    });
+    expect(outputs).toMatchObject({
+      lab_only: 'false',
+      applies: 'true',
+      decided: 'true',
+    });
+  });
+
+  it('reports no Lab-only lane outside a pull request or when undecidable', async () => {
+    const push = await decide({
+      context: {...pullRequestContext(), eventName: 'workflow_dispatch'},
+    });
+    expect(push.outputs.lab_only).toBe('false');
+    const broken = await decide({
+      files: changed('packages/lab/src/Tour/Tour.tsx'),
+      missingBase: ['.github/scripts/change-scope.cjs'],
+    });
+    expect(broken.outputs).toMatchObject({lab_only: 'false', decided: 'false'});
+  });
+
   it('fails when the trusted classifier rejects the change', async () => {
     const {messages} = await decide({
       files: [
@@ -410,6 +459,33 @@ describe('per-job scope step', () => {
       expect(outputs.applies).toBe('true');
     });
 
+    it('reports a head without the file whether or not touches holds', async () => {
+      for (const file of ['packages/core/src/Button/Button.tsx', 'README.md']) {
+        const {outputs} = await decide({files: changed(file), inputs});
+        expect(outputs.head_file_present, file).toBe('false');
+      }
+      const {outputs} = await decide({
+        files: changed('README.md'),
+        headFiles: ['playwright.interaction.config.ts'],
+        inputs,
+      });
+      expect(outputs.head_file_present).toBe('true');
+    });
+
+    it('keeps the file present for a pull request that renames or deletes it', async () => {
+      for (const file of [
+        {
+          filename: 'playwright.old-interaction.config.ts',
+          previous_filename: 'playwright.interaction.config.ts',
+          status: 'renamed',
+        },
+        {filename: 'playwright.interaction.config.ts', status: 'removed'},
+      ]) {
+        const {outputs} = await decide({files: [file], inputs});
+        expect(outputs.head_file_present).toBe('true');
+      }
+    });
+
     it('still applies to a pull request that deletes the file, so the check fails', async () => {
       const {outputs} = await decide({
         files: [
@@ -481,6 +557,16 @@ describe('per-job scope step', () => {
         has_rtl_harness: 'false',
         force_full_component_audits: 'false',
       });
+    });
+
+    it('keeps the component audits for a Lab-only change, so a label still runs its suite (spec:AST-030 FR26)', async () => {
+      const {outputs} = await decide({
+        files: changed('packages/lab/src/Tour/Tour.tsx'),
+        inputs,
+      });
+      expect(outputs.lab_only).toBe('true');
+      expect(outputs.applies).toBe('false');
+      expect(outputs.has_components).toBe('true');
     });
 
     it('runs every audit in full when the base lacks the audit classifier', async () => {

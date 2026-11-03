@@ -56,9 +56,15 @@ describe('WebKit interaction proof routing', () => {
   it('always reports, behind the same pull-request gate as the Chromium proofs', () => {
     expect(webkit.if).toBe(chromium.if);
     expect(ungated(webkit.if)).toBe(
-      "github.event_name != 'workflow_dispatch' && always() && !cancelled()",
+      "github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true'",
     );
-    expect(webkit.needs).toEqual(['build-storybook']);
+    // Admission too: the Storybook build starts beside it (spec:AST-030 FR16).
+    expect(webkit.needs).toEqual([
+      'room',
+      'admission',
+      'heavy-ci',
+      'build-storybook',
+    ]);
   });
 
   it('stays on a standard runner within the 15-minute budget', () => {
@@ -116,12 +122,48 @@ describe('WebKit interaction proof routing', () => {
     expect(run).not.toContain('--project chromium');
   });
 
+  it("caps llvmpipe's threads at the job's cgroup CPU quota before Playwright runs", async () => {
+    const run = step(webkit, 'Run WebKit interaction proofs').run;
+    const setup = run.slice(0, run.indexOf('pnpm exec playwright test'));
+    expect(setup).toContain('export LP_NUM_THREADS');
+    // Run the setup against a quota file: a 2-CPU quota caps a 64-CPU view,
+    // no quota keeps nproc, and the quota never raises the count.
+    const {execFileSync} = await import('node:child_process');
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lp-threads-'));
+    const threads = (cpuMax, cpus) => {
+      const quota = path.join(dir, 'cpu.max');
+      if (cpuMax == null) fs.rmSync(quota, {force: true});
+      else fs.writeFileSync(quota, `${cpuMax}\n`);
+      const script = `nproc() { echo ${cpus}; }\n${setup.replaceAll(
+        '/sys/fs/cgroup/cpu.max',
+        quota,
+      )}\necho "$LP_NUM_THREADS"`;
+      return execFileSync('bash', ['-c', script], {encoding: 'utf8'})
+        .trim()
+        .split('\n')
+        .at(-1);
+    };
+    try {
+      expect(threads('200000 100000', 64)).toBe('2');
+      expect(threads('150000 100000', 64)).toBe('2');
+      expect(threads('max 100000', 64)).toBe('64');
+      expect(threads(null, 4)).toBe('4');
+      expect(threads('800000 100000', 4)).toBe('4');
+    } finally {
+      fs.rmSync(dir, {recursive: true, force: true});
+    }
+  });
+
   it('runs only the specs whose code its scope covers', () => {
     const run = step(webkit, 'Run WebKit interaction proofs').run;
     const targets = [
       'packages/core/src/gestures/',
       'packages/core/src/motion/__tests__/animatedLayout.interaction',
       'packages/core/src/motion/__tests__/animator.interaction',
+      'packages/core/src/hooks/__tests__/usePager.interaction',
       'internal/interaction-harness/',
     ];
     for (const target of targets) {
@@ -133,6 +175,15 @@ describe('WebKit interaction proof routing', () => {
     // SideNav) stay with the Chromium proofs.
     expect(run).not.toContain('animatedLayoutAdopters');
     expect(run).not.toMatch(/motion\/ /);
+    // Carousel paging renders its Storybook story, so it stays there too, and
+    // its files start no WebKit run.
+    expect(run).not.toContain('CarouselPaging');
+    for (const file of [
+      'packages/core/src/Carousel/useCarouselPaging.ts',
+      'packages/core/src/Carousel/__tests__/CarouselPaging.interaction.browser.spec.ts',
+    ]) {
+      expect(inScope(file), file).toBe(false);
+    }
     for (const component of ['DateInput', 'TabList', 'TreeList', 'SideNav']) {
       expect(run).not.toContain(component);
     }
@@ -140,11 +191,7 @@ describe('WebKit interaction proof routing', () => {
 
   // Every source file the WebKit specs bundle into their pages is in scope,
   // so a change that reaches the run always runs it.
-  it.each([
-    'packages/core/src/gestures/__tests__/browser/fixture.ts',
-    'packages/core/src/motion/__tests__/animatedLayoutBundle.ts',
-    'packages/core/src/motion/__tests__/motionBundle.ts',
-  ])('keeps everything %s bundles in scope', async entry => {
+  async function expectBundleInScope(entry) {
     const {metafile} = await build({
       absWorkingDir: root,
       entryPoints: [entry],
@@ -165,7 +212,21 @@ describe('WebKit interaction proof routing', () => {
     for (const source of sources) {
       expect(inScope(source), source).toBe(true);
     }
-  });
+  }
+
+  it.each([
+    'packages/core/src/gestures/__tests__/browser/fixture.ts',
+    'packages/core/src/motion/__tests__/animatedLayoutBundle.ts',
+    'packages/core/src/motion/__tests__/motionBundle.ts',
+  ])('keeps everything %s bundles in scope', expectBundleInScope);
+
+  // The pager's page arrives with the pager; until then there is nothing to
+  // bundle, and from then on its next import is checked like the others.
+  const pagerBundle = 'packages/core/src/hooks/__tests__/pagerBundle.ts';
+  it.skipIf(!fs.existsSync(path.join(root, pagerBundle)))(
+    'keeps everything the pager bundle bundles in scope',
+    () => expectBundleInScope(pagerBundle),
+  );
 
   it('runs for gesture, motion, touch, press-feedback and menu-press code, and their harness', () => {
     for (const touched of [
@@ -184,6 +245,12 @@ describe('WebKit interaction proof routing', () => {
       'packages/core/src/hooks/menuPressGesture.ts',
       'packages/core/src/hooks/useLongPress.ts',
       'packages/core/src/hooks/usePressFeedback.ts',
+      'packages/core/src/hooks/usePager.ts',
+      'packages/core/src/hooks/useIsomorphicLayoutEffect.ts',
+      'packages/core/src/hooks/useAttachment.ts',
+      'packages/core/src/utils/sharedResizeObserver.ts',
+      'packages/core/src/hooks/__tests__/usePager.interaction.browser.spec.ts',
+      'packages/core/src/hooks/__tests__/pagerBundle.ts',
       'internal/interaction-harness/src/webInput.ts',
       'playwright.interaction.config.ts',
       // Shared setup, as pr-interaction keeps (spec:AST-030 FR13): a
@@ -206,7 +273,7 @@ describe('WebKit interaction proof routing', () => {
     for (const untouched of [
       'packages/core/src/Toast/Toast.tsx',
       'packages/core/src/Selector/useSelectorPresentation.ts',
-      'packages/core/src/utils/clickGuard.ts',
+      'packages/core/src/utils/focusReturn.ts',
       'packages/core/src/internal/focus.ts',
       'packages/core/src/DateInput/DateInput.tsx',
       'packages/core/locales/en.json',
@@ -246,7 +313,7 @@ describe('WebKit interaction proof routing', () => {
         '.changeset/toast-pause-sources.md',
         'packages/core/src/Toast/Toast.tsx',
         'packages/core/src/Toast/ToastViewport.test.tsx',
-        'packages/core/src/Toast/Toast.spec.md',
+        'docs/specs/components/Toast/Toast.spec.md',
       ],
       [
         '.changeset/textarea-counter-i18n.md',

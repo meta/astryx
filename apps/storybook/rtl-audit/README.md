@@ -373,7 +373,7 @@ below), so the signal does not hard-block yet.
 
 ## Adding a curated target
 
-Edit `targets.json`. Each entry is:
+Edit `targets.json`, keeping it sorted by `component`, then `storyId`, so parallel pull requests add entries in different places. `node apps/storybook/rtl-audit/sort-targets.mjs --fix` sorts it; the RTL audit's node tests fail on an unsorted file. Each entry is:
 
 ```jsonc
 {

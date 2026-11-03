@@ -64,7 +64,14 @@ async function openStory(page: Page, story: string): Promise<void> {
 
 /** What the frames of one motion showed, sampled every animation frame. */
 interface Frames {
-  readonly frames: number;
+  /**
+   * Positions of the content's glide judged on its own clock, one every 50 ms.
+   * The sampler holds the page's animations and seeks them to each position.
+   * The count does not depend on how many frames a loaded runner draws.
+   */
+  readonly heldPositions: number;
+  /** The content glide's end on its own clock, in ms. */
+  readonly glideEndMs: number;
   /** The largest distance between the rail's shown edge and the content's. */
   readonly maxGap: number;
   /** Whether any running animation changed a width. */
@@ -75,23 +82,29 @@ interface Frames {
   readonly copiesSeen: number;
   /** Other inert copies seen: the content's old wrap. */
   readonly wrapCopiesSeen: number;
-  /** Distinct rail-edge positions seen: more than a few means it moved. */
+  /**
+   * Distinct positions the edge passes through, on the motion's own clock:
+   * more than a few means it moved. Read from the glide's keyframes, not from
+   * the frames sampled, which a loaded runner can deliver too few of.
+   */
   readonly edges: number;
 }
 
 /**
  * Presses the rail's collapse/expand button (`press` runs the press itself:
  * a tap or a click) after `delays` ms each, then samples every frame until
- * `durationMs` after the last press.
+ * the motion has ended on its own clock.
  */
 async function sampleMotion(
   page: Page,
   press: () => Promise<void>,
-  {presses = 1, gapMs = 0, durationMs = 1000} = {},
+  {presses = 1, gapMs = 0} = {},
 ): Promise<Frames> {
   await page.evaluate(() => {
     const state = {
-      frames: 0,
+      heldPositions: 0,
+      glideEndMs: 0,
+      held: false,
       maxGap: 0,
       animatesWidth: false,
       copiesHidden: true,
@@ -100,6 +113,7 @@ async function sampleMotion(
       edges: new Set<number>(),
       running: true,
     };
+
     (window as unknown as {railFrames: typeof state}).railFrames = state;
     const panel = document.querySelector('.astryx-layout-panel');
     const main = document.querySelector('[role="main"]');
@@ -121,14 +135,86 @@ async function sampleMotion(
         element.getBoundingClientRect().right - (inset ? Number(inset[1]) : 0)
       );
     };
+    const railCopies = () =>
+      [...document.querySelectorAll('[inert]')].filter(
+        element => element.querySelector('nav') != null,
+      );
+    // The sampler judges the glide once, on its own clock, as soon as it
+    // rides. It holds every running animation and seeks each one by its own
+    // start. Their offsets then match what a frame at that time shows.
+    const holdAndRead = () => {
+      if (state.held || !state.running) {
+        return;
+      }
+      const glide = column
+        .getAnimations()
+        .find(
+          animation =>
+            animation.playState === 'running' && animation.startTime != null,
+        );
+      const end = Number(glide?.effect?.getComputedTiming().endTime);
+      if (glide == null || !Number.isFinite(end)) {
+        return;
+      }
+      state.held = true;
+      state.glideEndMs = end;
+      const start = Number(glide.startTime);
+      // A script pause overrides a CSS animation's play state permanently, so
+      // the hold skips CSS animations and transitions.
+      const held = document
+        .getAnimations()
+        .filter(
+          animation =>
+            animation.playState === 'running' &&
+            animation.startTime != null &&
+            !('animationName' in animation) &&
+            !('transitionProperty' in animation),
+        )
+        .map(animation => ({
+          animation,
+          startTime: Number(animation.startTime),
+        }));
+      for (const {animation} of held) {
+        animation.pause();
+      }
+      for (let time = 0; time <= end; time += 50) {
+        for (const {animation, startTime} of held) {
+          animation.currentTime = start + time - startTime;
+        }
+        const edge = Math.max(
+          shownRight(panel),
+          ...railCopies().map(shownRight),
+        );
+        state.maxGap = Math.max(
+          state.maxGap,
+          Math.abs(edge - column.getBoundingClientRect().left),
+        );
+        state.heldPositions++;
+      }
+      // Each animation gets its own start time back, so it plays on where it
+      // would have been. The hold does not delay it.
+      for (const {animation, startTime} of held) {
+        animation.startTime = startTime;
+      }
+    };
+    // Read the glide in the press's own task, once the change's animations
+    // ride. On a loaded runner, the collapse's work can hold the main thread
+    // for the whole glide, so the page draws no frame of it. If the glide is
+    // not riding yet, the next frame reads it.
+    window.addEventListener(
+      'click',
+      () => {
+        queueMicrotask(holdAndRead);
+      },
+      {once: true},
+    );
+    const glides = new WeakSet<Animation>();
     const sample = () => {
       if (!state.running) {
         return;
       }
-      state.frames++;
-      const copies = [...document.querySelectorAll('[inert]')].filter(
-        element => element.querySelector('nav') != null,
-      );
+      holdAndRead();
+      const copies = railCopies();
       state.copiesSeen = Math.max(state.copiesSeen, copies.length);
       state.wrapCopiesSeen = Math.max(
         state.wrapCopiesSeen,
@@ -140,7 +226,26 @@ async function sampleMotion(
         }
       }
       const edge = Math.max(shownRight(panel), ...copies.map(shownRight));
-      state.edges.add(Math.round(edge));
+      // The positions the edge passes through, on the motion's own clock: the
+      // content column's glide keyframes, which the compositor plays whether
+      // or not a loaded page samples its frames. The edge stays on the column
+      // on every sampled frame (maxGap), so it passes through them too.
+      for (const animation of column.getAnimations()) {
+        if (glides.has(animation)) {
+          continue;
+        }
+        glides.add(animation);
+        for (const frame of (
+          animation.effect as KeyframeEffect
+        ).getKeyframes()) {
+          const offset = /(-?[\d.]+)px/.exec(
+            String(frame.translate ?? frame.transform ?? ''),
+          );
+          if (offset != null) {
+            state.edges.add(Math.round(Number(offset[1])));
+          }
+        }
+      }
       state.maxGap = Math.max(
         state.maxGap,
         Math.abs(edge - column.getBoundingClientRect().left),
@@ -161,7 +266,32 @@ async function sampleMotion(
     }
     await press();
   }
-  await page.waitForTimeout(durationMs);
+  // Until the motion has ended on its own clock: no animation it runs is still
+  // running, then two more frames, so what its end commits has landed. A
+  // loaded runner changes how long this takes, not what the frames read.
+  await toggleButton(page).evaluate(async toggle => {
+    const frame = async () =>
+      new Promise(resolve => {
+        requestAnimationFrame(resolve);
+      });
+    const running = () =>
+      document.getAnimations().some(animation => {
+        const effect = animation.effect as KeyframeEffect | null;
+        // Animations on the toggle element itself are its press feedback.
+        return (
+          effect != null &&
+          effect.target !== toggle &&
+          animation.playState === 'running' &&
+          Number.isFinite(Number(effect.getComputedTiming().endTime))
+        );
+      });
+    await frame();
+    while (running()) {
+      await frame();
+    }
+    await frame();
+    await frame();
+  });
   return page.evaluate(() => {
     const state = (
       window as unknown as {
@@ -172,11 +302,13 @@ async function sampleMotion(
       }
     ).railFrames;
     state.running = false;
-    const {frames, maxGap, animatesWidth, copiesHidden, copiesSeen} = state;
+    const {heldPositions, glideEndMs, maxGap, animatesWidth} = state;
+    const {copiesHidden, copiesSeen} = state;
     const {wrapCopiesSeen} = state;
     const edges = state.edges.size;
     return {
-      frames,
+      heldPositions,
+      glideEndMs,
       maxGap,
       animatesWidth,
       copiesHidden,
@@ -187,9 +319,14 @@ async function sampleMotion(
   });
 }
 
-/** The rail's width and whether its labels show, at rest. */
+/**
+ * The rail's width, whether its labels show, and what still runs, at rest.
+ * Animations on the toggle element itself are its press feedback, not the
+ * rail's motion, as in `sampleMotion` and `recordMotion`. On a loaded runner,
+ * that feedback can still run after the rail's motion ends.
+ */
 async function railAtRest(page: Page) {
-  return page.evaluate(() => {
+  return toggleButton(page).evaluate(toggle => {
     const panel = document.querySelector('.astryx-layout-panel') as HTMLElement;
     const label = [...panel.querySelectorAll('span, div')].find(
       element =>
@@ -208,7 +345,12 @@ async function railAtRest(page: Page) {
       width: Math.round(panel.getBoundingClientRect().width),
       labelsShown: shown,
       copies: document.querySelectorAll('[inert]').length,
-      running: document.getAnimations().length,
+      running: document
+        .getAnimations()
+        .filter(
+          animation =>
+            (animation.effect as KeyframeEffect | null)?.target !== toggle,
+        ).length,
     };
   });
 }
@@ -372,7 +514,12 @@ test.describe('component:SideNav FR6 and component:AppShell FR17 under a finger'
     const collapse = await sampleMotion(page, async () => {
       await toggleButton(page).tap();
     });
-    expect(collapse.frames).toBeGreaterThan(20);
+    // The sampler judges the whole glide on its own clock, every 50 ms. It
+    // also judges every frame the page draws, however many the runner gets.
+    expect(collapse.glideEndMs).toBeGreaterThan(0);
+    expect(collapse.heldPositions).toBe(
+      Math.floor(collapse.glideEndMs / 50) + 1,
+    );
     expect(collapse.maxGap).toBeLessThanOrEqual(1);
     expect(collapse.edges).toBeGreaterThan(5);
     expect(collapse.animatesWidth).toBe(false);

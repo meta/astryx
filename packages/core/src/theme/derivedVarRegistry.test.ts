@@ -110,6 +110,21 @@ const STRUCTURAL_VARS = new Set([
   // every render and read by the fill's transform. Runtime state, never
   // authored by a theme.
   '--_progress-bar-fill',
+  // ProgressBar's touch layer (ProgressBarTouch) writes these inline on every
+  // render: the touch move's duration and curve, the three-step return offset
+  // and the touch minimum. The duration and curve are the progress table's
+  // motion roles, which no theme sets. Runtime state, never authored by a
+  // theme.
+  '--_progress-bar-move',
+  '--_progress-bar-curve',
+  '--_progress-bar-flip',
+  '--_progress-bar-min',
+  // The reduced-motion pulse's duration, curve and floor, written inline from
+  // the progress table on the indeterminate fill. Runtime state, never
+  // authored by a theme.
+  '--_progress-bar-pulse',
+  '--_progress-bar-pulse-curve',
+  '--_progress-bar-pulse-floor',
 ]);
 
 /**
@@ -265,6 +280,19 @@ const DIR_TO_REGISTRY_KEY: Record<string, string> = {
  * e.g. Carousel and Thumbnail set --_button-radius for their child Buttons,
  * but --_button-radius is documented in Button's doc.
  */
+/**
+ * Private system variables a component sets that are never a theming surface:
+ * no component documents them, and a theme never writes them. Each is named
+ * by the record that requires it.
+ */
+const PRIVATE_SYSTEM_VARS = new Set([
+  // Text and Heading FR3: a container that wraps with `overflow-wrap:
+  // anywhere` passes it to the Text inside it; Text reads it with a
+  // `break-word` fallback. scripts/text-overflow-wrap-anywhere.test.mjs
+  // keeps every such container setting it.
+  '--_astryx-text-overflow-wrap',
+]);
+
 const CROSS_COMPONENT_VARS: Record<string, string[]> = {
   Carousel: ['--_button-radius'],
   Thumbnail: ['--_button-radius'],
@@ -330,6 +358,10 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   '--_toast-swipe-exit-y',
   '--_toast-swipe-opacity',
   '--_toast-swipe-scale',
+  // Set by each ChatMessage article from its own content and read as its
+  // avatar's top margin, so the avatar lines up with a name row. Content
+  // state, not a value a theme author sets.
+  '--_chat-avatar-offset',
   // Indentation and row-spacing metrics: --tree-list-indent is the authorable
   // step, --_tree-indent the per-row distance TreeListItem computes from it.
   // --tree-list-row-gap is applied as half a padding-block on each row wrapper,
@@ -387,7 +419,10 @@ describe('component CSS vars are documented and themeable', () => {
 
     it(`${dir}: all source vars are in doc file`, () => {
       const undocumented = sourceVars.filter(
-        v => !docVars.includes(v) && !crossVars.has(v),
+        v =>
+          !docVars.includes(v) &&
+          !crossVars.has(v) &&
+          !PRIVATE_SYSTEM_VARS.has(v),
       );
       expect(
         undocumented,

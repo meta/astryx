@@ -126,19 +126,21 @@ jobs:
             | tee release-publish-receipt.json
 
       # A release is built from a main commit whose canonical release-check
-      # passed (spec:AST-030 FR12, DEC-11): main is checked about hourly, so
-      # the cut commit's own check is required here, before anything builds.
+      # and full unit run passed (spec:AST-030 FR12, FR21, DEC-11, DEC-15):
+      # main is checked about hourly, so the cut commit's own checks are
+      # required here, before anything builds.
       - name: Require a passing release-check at the exact cut commit
         uses: actions/github-script@v9
         with:
           retries: 3
           script: |
             const {pathToFileURL} = require('node:url');
-            const {requireReleaseCheck} = await import(
+            const {requireReleaseCheck, requireUnitRun} = await import(
               pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/release/release-check-receipt.mjs`).href
             );
             const {cutSha} = require(`${process.env.GITHUB_WORKSPACE}/.release/active.json`);
-            await requireReleaseCheck({github, core, ...context.repo, sha: cutSha});
+            const check = await requireReleaseCheck({github, core, ...context.repo, sha: cutSha});
+            if (check) await requireUnitRun({github, core, ...context.repo, sha: cutSha});
 
       - name: Upload exact release authority receipt
         uses: actions/upload-artifact@v7
@@ -178,6 +180,7 @@ jobs:
         run: |
           set -eu
           published=0
+          FAILED=""
           for pkg_dir in packages/* packages/themes/*; do
             [ -f "$pkg_dir/package.json" ] || continue
             # Stable `latest` never includes canaryOnly packages (e.g. lab):
@@ -195,10 +198,35 @@ jobs:
               echo "[dry-run] Would publish $NAME@$VERSION"
               continue
             fi
+            # A package that depends on (or peers on) a package that failed
+            # here would reach `latest` uninstallable: hold it back as failed
+            # too, so the re-run publishes both together.
+            BLOCKED_BY=$(node -e "
+              const p = require('./$pkg_dir/package.json');
+              const failed = new Set(process.argv[1].split(' ').filter(Boolean));
+              const deps = Object.keys({...p.dependencies, ...p.peerDependencies});
+              process.stdout.write(deps.filter(d => failed.has(d)).join(' '));
+            " "$FAILED")
+            if [ -n "$BLOCKED_BY" ]; then
+              echo "::error::Not publishing $NAME@$VERSION because $BLOCKED_BY failed"
+              FAILED="$FAILED $NAME"
+              continue
+            fi
             echo "Publishing $NAME@$VERSION"
-            pnpm publish "./$pkg_dir" --tag latest --provenance --access public --no-git-checks
-            published=$((published + 1))
+            # At most once, retried while the registry lacks the version (see
+            # scripts/npm/publish-package.mjs). One package that cannot
+            # publish does not stop the rest; the step fails at the end.
+            if node scripts/npm/publish-package.mjs --dir "./$pkg_dir" --tag latest; then
+              published=$((published + 1))
+            else
+              echo "::error::Stable publish failed for $NAME@$VERSION"
+              FAILED="$FAILED $NAME"
+            fi
           done
+          if [ -n "$FAILED" ]; then
+            echo "::error::Stable publish failed for:$FAILED. Re-running this workflow on the same tag publishes only what is missing."
+            exit 1
+          fi
           if [ "$DRY_RUN" = "true" ]; then
             echo "Dry run complete; no packages were published."
           else
@@ -330,7 +358,12 @@ jobs:
                 esac
               fi
               echo "Publishing ${NAME}@${CANARY_VERSION}"
-              if ! pnpm publish "./$pkg_dir" --tag canary --provenance --access public --no-git-checks; then
+              # publish-package.mjs publishes at most once and lets the
+              # registry decide: a version already there is skipped, and a
+              # failed attempt (npm's provenance signing can answer "409 an
+              # equivalent entry already exists") is retried with a new
+              # signature only while the registry does not have the version.
+              if ! node scripts/npm/publish-package.mjs --dir "./$pkg_dir" --tag canary; then
                 echo "::error::Canary publish failed for ${NAME}@${CANARY_VERSION}"
                 FAILED="${FAILED} ${NAME}"
               fi

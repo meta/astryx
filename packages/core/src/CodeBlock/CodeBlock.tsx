@@ -32,7 +32,7 @@ import {
   durationVars,
   easeVars,
 } from '../theme/tokens.stylex';
-import {isRenderable, mergeProps} from '../utils';
+import {isRenderable, mergeProps, rtlStyles} from '../utils';
 import {useClipboard} from '../hooks/useClipboard';
 import {useScrollableArea} from '../hooks/useScrollableArea';
 import {Icon} from '../Icon';
@@ -57,8 +57,14 @@ import {ensureHighlightStyles} from './highlightStyles';
 import {applyHighlightRangesChunked} from './highlightRanges';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
-import {useTranslator} from '../i18n';
 import {SyntaxTheme, type SyntaxThemeDefinition} from '../theme/syntax';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/CodeBlock/CodeBlock.generated';
+
+registerEnglishFallback(english);
 
 // ---------------------------------------------------------------------------
 // Styles
@@ -978,7 +984,7 @@ export function CodeBlock({
   ref,
   ...props
 }: CodeBlockProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   // Owns the clipboard write, the transient copied flag, its reset timer, and
   // the polite copy announcement (a swapped aria-label alone is not reliably
   // announced) — shared with Timestamp via the same hook.
@@ -1159,7 +1165,11 @@ export function CodeBlock({
             stylex.props(styles.headerTitle),
           )}>
           {canCollapse && (
-            <span {...stylex.props(styles.collapseChevron)}>
+            // The collapsed chevron points toward the inline end, so it mirrors
+            // in RTL (design:bidirectionality DR4). The mirror sits on this box
+            // so the glyph's own rotation still eases: rotated down when
+            // expanded, a mirrored glyph still points down.
+            <span {...stylex.props(styles.collapseChevron, rtlStyles.mirror)}>
               <Icon
                 icon="chevronRight"
                 size="xsm"

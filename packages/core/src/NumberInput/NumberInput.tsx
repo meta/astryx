@@ -47,7 +47,6 @@ import {
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
-  type FieldStatusVariant,
 } from '../Field';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
@@ -232,9 +231,17 @@ import {
 } from '../Field/fieldParts';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator, useLocale} from '../i18n';
+import {useLocale} from '../i18n';
 import {formatEditableNumber} from './numberParser';
 import {parseNumberInput, resolveNumberInputCommit} from './numberInputCommit';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/NumberInput/NumberInput.generated';
+
+registerEnglishFallback(english);
 
 interface NumberInputPropsBase extends Omit<
   FieldInputBaseProps,
@@ -324,7 +331,7 @@ interface NumberInputPropsBase extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
   /**
    * The size of the input.
    * - 'sm': Compact size (28px height)
@@ -598,7 +605,7 @@ export function NumberInput({
     containerStyle,
   });
   const pressable = usePressFeedback();
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const size = useSize(sizeProp, 'md');

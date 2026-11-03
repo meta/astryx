@@ -25,17 +25,28 @@ import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
+import {STYLEX_GENERATED_VARIABLE} from '../lib/stylex-generated-variable.mjs';
 
 const require = createRequire(import.meta.url);
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const DISCOVERY = path.join(
-  SCRIPT_DIR,
-  '../../packages/cli/foundation/discovery',
-);
-const PRIVATE_ATTRIBUTE_RULE = path.join(
-  SCRIPT_DIR,
-  '../../internal/eslint-plugin-astryx/no-raw-private-attribute.js',
-);
+const THEMING_TARGETS = 'packages/cli/foundation/discovery/theming-targets.mjs';
+const PRIVATE_ATTRIBUTE_RULE =
+  'internal/eslint-plugin-astryx/no-raw-private-attribute.js';
+
+/**
+ * A module the report reads its lists from, as the reported repository holds
+ * it: a merge base is reported with its own theming targets and public
+ * attributes. A tree without the module (a test fixture) uses this one's.
+ * @param {string} repoRoot
+ * @param {string} file
+ * @returns {string}
+ */
+const listModule = (repoRoot, file) => {
+  const own = path.join(repoRoot, file);
+  return pathToFileURL(
+    fs.existsSync(own) ? own : path.join(SCRIPT_DIR, '../..', file),
+  ).href;
+};
 
 const CODE = /\.(m|c)?(t|j)sx?$/;
 const CSS = /\.css$/;
@@ -57,6 +68,17 @@ const cap = s =>
     : `${s.slice(0, MAX_TYPE - 40)} … #${createHash('sha1').update(s).digest('hex').slice(0, 8)}`;
 const kebabAttr = p =>
   `data-${p.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}`;
+
+const STYLEX_HASHED_NAME = new RegExp(`^${STYLEX_GENERATED_VARIABLE}$`);
+
+/**
+ * Whether a stylesheet's custom property is public: not a private `--_*`
+ * name and not a name StyleX hashed.
+ * @param {string} name
+ * @returns {boolean}
+ */
+const isPublicCustomProperty = name =>
+  !name.startsWith('--_') && !STYLEX_HASHED_NAME.test(name);
 
 /**
  * The file an entry point publishes: its stylesheet for a stylesheet entry,
@@ -525,8 +547,8 @@ export async function generateReport(opts) {
   for (const e of entries.filter(e => e.kind === 'css')) {
     const css = fs.readFileSync(e.abs, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const names = new Set();
-    for (const m of css.matchAll(/(?:^|[;{\s])(--[A-Za-z][\w-]*)\s*:/g))
-      names.add(m[1]);
+    for (const m of css.matchAll(/(?:^|[;{\s])(--[\w-]+)\s*:/g))
+      if (isPublicCustomProperty(m[1])) names.add(m[1]);
     for (const n of [...names].sort(byName))
       cssLines.push(`var ${n} (${e.subpath})`);
   }
@@ -540,7 +562,7 @@ export async function generateReport(opts) {
   if (fs.existsSync(src)) {
     // The CLI's enumeration is the one list theme authors see; reuse it.
     const {collectThemingTargets} = await import(
-      pathToFileURL(path.join(DISCOVERY, 'theming-targets.mjs')).href
+      listModule(repoRoot, THEMING_TARGETS)
     );
     for (const t of await collectThemingTargets(src)) {
       const props = [...t.props].sort(byName);
@@ -574,7 +596,7 @@ export async function generateReport(opts) {
   const haystack = built.join('\n');
   // INV23's list, as the lint rule that enforces it holds it.
   const {PUBLIC_ATTRIBUTES} = await import(
-    pathToFileURL(PRIVATE_ATTRIBUTE_RULE).href
+    listModule(repoRoot, PRIVATE_ATTRIBUTE_RULE)
   );
   const publicAttributes = [...PUBLIC_ATTRIBUTES]
     .map(name => `data-astryx-${name}`)

@@ -50,6 +50,7 @@ import {
   borderVars,
 } from '../theme/tokens.stylex';
 import {focusOutlineStyles} from '../utils';
+import {plainDateFormatStandaloneMonthYear} from '../utils/plainDate';
 import {
   type DayOfWeek,
   type ISODateString,
@@ -59,9 +60,9 @@ import {
   plainDateFormat,
   plainDateIsEqual,
   plainDateToISO,
-  DATE_FORMAT_MONTH_YEAR,
   DATE_FORMAT_WITH_WEEKDAY,
 } from '../utils';
+import {reducedMotionFade} from '../motion/reducedMotion';
 import {dateInputTouchSizes, dateInputTouchGeometry} from './tokens.stylex';
 import {useOwnScrollGesture} from './useOwnScrollGesture';
 import {useScrollSettle} from './useScrollSettle';
@@ -431,8 +432,26 @@ export function MonthScroller({
     );
   }, [paneSize, initialMonthIndex, minMonthIndex, isRTL]);
 
+  // The Reduced Motion dip of a step on a touch screen, owned here so a
+  // second step or the unmount clears it.
+  const dipRef = useRef<{animation: Animation; timer: number} | null>(null);
+  const stopDip = useCallback(() => {
+    const dip = dipRef.current;
+    if (dip != null) {
+      window.clearTimeout(dip.timer);
+      dip.animation.cancel();
+      dipRef.current = null;
+    }
+  }, []);
+  // Synchronizes with the dip's timer and animation: neither outlives the
+  // scroller.
+  useEffect(() => stopDip, [stopDip]);
+
   const scrollToMonth = useCallback(
     (monthIndex: number, behavior: ScrollBehavior = 'smooth') => {
+      // Every step replaces a running dip, whichever way it moves. Otherwise
+      // the dip's landing would undo a jump or an immediate step made after it.
+      stopDip();
       const scroller = scrollerRef.current;
       if (scroller == null || paneSize === 0) {
         return;
@@ -458,13 +477,52 @@ export function MonthScroller({
         recenter(scroller, row);
         return;
       }
+      const left = scrollOffsetForRow(row, paneSize, isRTL);
+      // Under reduced motion the month changes without travel: at once on a fine
+      // primary pointer, under an opacity dip on a coarse one (reducedMotionFade).
+      const fade = behavior === 'smooth' ? reducedMotionFade(scroller) : null;
+      if (fade != null) {
+        // The window mounts around the target first, and the scroll lands in
+        // the layout effect below, as a far jump does. So nothing moves the
+        // window after the jump. If the window followed the jump, WebKit would
+        // re-snap it one pane further on every frame. A scroll that lands on
+        // the centre row reports nothing.
+        const land = () => {
+          // The landing is the newest steer. An earlier steer whose scroll
+          // never arrived would otherwise hide every scroll after it, a
+          // trackpad's included. Closing the wheels makes such a steer: it
+          // re-asserts the month already in view.
+          steeredRowRef.current = null;
+          if (row === centerRowRef.current) {
+            scroller.scrollTo({left, behavior: 'auto'});
+            return;
+          }
+          pendingScrollRef.current = row;
+          centerRowRef.current = row;
+          setCenterRow(row);
+        };
+        if (fade.duration === 0) {
+          land();
+          return;
+        }
+        // A second step within the dip has replaced the first (above): only
+        // its scroll lands, at its own dip's middle.
+        dipRef.current = {
+          animation: scroller.animate(
+            [{opacity: 1}, {opacity: 0}, {opacity: 1}],
+            {duration: fade.duration, easing: fade.easing},
+          ),
+          timer: window.setTimeout(() => {
+            dipRef.current = null;
+            land();
+          }, fade.duration / 2),
+        };
+        return;
+      }
       steeredRowRef.current = row;
-      scroller.scrollTo({
-        left: scrollOffsetForRow(row, paneSize, isRTL),
-        behavior,
-      });
+      scroller.scrollTo({left, behavior});
     },
-    [paneSize, minMonthIndex, rowCount, isRTL, recenter],
+    [paneSize, minMonthIndex, rowCount, isRTL, recenter, stopDip],
   );
 
   // Deliberately un-keyed: it runs after every render, costs a null check, and
@@ -866,9 +924,8 @@ function MonthPane({
     hasVariableRowCount: false,
   });
 
-  const monthLabel = plainDateFormat(
+  const monthLabel = plainDateFormatStandaloneMonthYear(
     {year, month, day: 1},
-    DATE_FORMAT_MONTH_YEAR,
     locale,
   );
 

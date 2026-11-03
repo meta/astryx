@@ -7,11 +7,12 @@
  *   `Screencast` domain)
  * @output `startScreencast` (timestamped composited frames), `markElement`
  *   (a marker outline the frames can find), `trackMarker` (per-frame marker
- *   box), `frameStats`.
+ *   box), `sampleRects` (per-rAF rect sampling), `frameStats`.
  * @position Frame evidence for motion proofs. The screencast is captured off
  *   the page's main thread, from what the compositor presents, so it keeps
  *   delivering frames while a script blocks the main thread: that is what makes
- *   the busy-main-thread proof possible.
+ *   the busy-main-thread proof possible. Rect sampling is the cheap path when
+ *   the main thread is free.
  *
  * Marker tracking needs no image library: frames are decoded and scanned in a
  * scratch page of the same browser (createImageBitmap + canvas), so the
@@ -397,6 +398,79 @@ export async function trackMarker(
   } finally {
     await scratch.close();
   }
+}
+
+export interface RectSample {
+  /** Epoch ms of the rAF callback. */
+  readonly t: number;
+  readonly box: Box | null;
+  readonly transform: string;
+  readonly opacity: number;
+}
+
+/**
+ * Samples the element's rect, transform and opacity on every animation frame
+ * for `durationMs`. Main-thread sampling: it stops while the main thread is
+ * blocked, which is the point of the screencast path above.
+ */
+export async function sampleRects(
+  locator: Locator,
+  durationMs: number,
+): Promise<RectSample[]> {
+  return locator.evaluate(
+    (element, duration) =>
+      new Promise<
+        {
+          t: number;
+          box: {x: number; y: number; width: number; height: number} | null;
+          transform: string;
+          opacity: number;
+        }[]
+      >(resolve => {
+        // The harness's own waits run on the real timers: a frozen timer gate
+        // (story.ts) holds only the page's.
+        const gate = (
+          window as unknown as {
+            __harnessTimerGate?: {
+              frame?: typeof requestAnimationFrame;
+              now?: () => number;
+            };
+          }
+        ).__harnessTimerGate;
+        const frame = gate?.frame ?? window.requestAnimationFrame.bind(window);
+        // The deadline reads the real clock, which a page freeze does not stop.
+        const realNow = gate?.now ?? (() => performance.now());
+        const samples: {
+          t: number;
+          box: {x: number; y: number; width: number; height: number} | null;
+          transform: string;
+          opacity: number;
+        }[] = [];
+        // A frame's time is the page's. After a page freeze it trails real
+        // time by the frozen span, which the stamp adds back.
+        const freeze = (
+          window as unknown as {__harnessFreeze?: {offset: number}}
+        ).__harnessFreeze;
+        const end = realNow() + duration;
+        const tick = (now: number) => {
+          const rect = element.getBoundingClientRect();
+          const style = getComputedStyle(element);
+          samples.push({
+            t: performance.timeOrigin + now + (freeze?.offset ?? 0),
+            box: {x: rect.x, y: rect.y, width: rect.width, height: rect.height},
+            transform: style.transform,
+            opacity: Number(style.opacity),
+          });
+          if (realNow() < end) {
+            frame(tick);
+          } else {
+            resolve(samples);
+          }
+        };
+        frame(tick);
+      }),
+    durationMs,
+  );
 }
 
 export interface FrameStats {

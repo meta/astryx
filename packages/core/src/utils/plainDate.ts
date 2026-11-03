@@ -9,6 +9,8 @@
 
 import type {ISODateString, PlainDate} from './dateTypes';
 import type {Locale} from '../i18n/types';
+import {firstCharacter} from './characters';
+import {standaloneMonthCapitalLanguages} from './standaloneMonthCapitals.generated';
 
 export type {PlainDate} from './dateTypes';
 
@@ -200,7 +202,7 @@ export function plainDateToInstant(
   // this wall time skipped or repeated.
   const offsetBefore = getTimezoneOffsetMS(timezoneID, wallTime - DAY_MS);
   const offsetAfter = getTimezoneOffsetMS(timezoneID, wallTime + DAY_MS);
-  // AST-067 (Temporal's "compatible" disambiguation): a wall time that happens
+  // Temporal's "compatible" disambiguation (AST-067): a wall time that happens
   // twice resolves to its earlier occurrence, and one that never happens is
   // read in the offset before the transition, which moves it forward by the
   // length of the gap.
@@ -328,6 +330,32 @@ export const DATE_FORMAT_MONTH_YEAR: Intl.DateTimeFormatOptions = {
   year: 'numeric',
   month: 'long',
 };
+
+/**
+ * The month and year as a label that stands alone, such as a calendar heading
+ * or a month grid's name. `Intl` formats the month for running text; where
+ * CLDR titlecases a stand-alone month name (its `contextTransforms`), the
+ * label starts with a capital, as Calendar's weekday headers use CLDR's
+ * stand-alone forms (`component:Calendar` FR1). Internal: not re-exported from
+ * `utils/index.ts`.
+ */
+export function plainDateFormatStandaloneMonthYear(
+  pd: PlainDate,
+  locale: Locale,
+): string {
+  const label = plainDateFormat(pd, DATE_FORMAT_MONTH_YEAR, locale);
+  let language: string;
+  try {
+    language = new Intl.Locale(locale).language;
+  } catch {
+    return label;
+  }
+  if (!standaloneMonthCapitalLanguages.has(language)) {
+    return label;
+  }
+  const first = firstCharacter(label);
+  return first.toLocaleUpperCase(locale) + label.slice(first.length);
+}
 
 // e.g. "Sun" (locale-dependent) — the weekday on its own, abbreviated.
 //

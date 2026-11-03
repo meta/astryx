@@ -5,23 +5,26 @@
 /**
  * @file useClickableContainer.ts
  * @input Container ref, interactive element ref, click/href handlers
- * @output onClick and onMouseUp handlers for the container; INTERACTIVE_SELECTORS list
- * @position Core hook for clickable containers that safely handle nested interactive elements
- *
- * Solves the "nested interactive elements" problem: when a card is clickable
- * but contains buttons/links, clicking those should NOT trigger the card's action.
- *
- * Every navigation exit here (window.open, location.href, and the delegated
- * click on the interactive ref) runs after the shared navigation-destination
- * rule in utils/safeUrl.ts; a blocked href does not navigate by any
- * activation method.
+ * @output onClick and onMouseUp handlers for the container; INTERACTIVE_SELECTORS list;
+ *   hasInteractiveAncestor and the shared innermostInteractive walk
+ * @position Core hook for clickable containers with nested interactive
+ *   elements. A click on a nested button or link does not run the card's
+ *   action. Each navigation passes the rule in utils/safeUrl.ts first.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/hooks/index.ts (export)
  */
 
 import {useCallback, useEffect, type RefObject, type MouseEvent} from 'react';
+import {isLayerSurface} from '../Layer/layerSurfacePress';
 import {isSafeUrl} from '../utils/safeUrl';
+
+/**
+ * The attribute this hook sets on the container it makes clickable. A click
+ * inside a nested marked container belongs to that container (see
+ * INTERACTIVE_SELECTORS).
+ */
+export const PRESSABLE_CONTAINER_ATTRIBUTE = 'data-pressable-container';
 
 /**
  * Canonical list of interactive element selectors — native controls plus
@@ -52,34 +55,67 @@ export const INTERACTIVE_SELECTORS = [
   '[role="listbox"]',
   '[role="slider"]',
   '[role="spinbutton"]',
-  '[data-pressable-container]',
+  `[${PRESSABLE_CONTAINER_ATTRIBUTE}]`,
 ].join(',');
 
 const NON_INTERACTIVE_SELECTORS = '[aria-readonly="true"]';
 
 /**
- * Check whether an element has an interactive ancestor between it and the root.
- * If the click target is inside a nested button/link/etc., we should NOT
- * handle it at the container level.
+ * Whether this element is interactive by INTERACTIVE_SELECTORS: a control,
+ * link, editor, or nested clickable container, and not marked read-only.
+ */
+export function matchesInteractiveSelectors(element: Element): boolean {
+  return (
+    element.matches(INTERACTIVE_SELECTORS) &&
+    !element.matches(NON_INTERACTIVE_SELECTORS)
+  );
+}
+
+/**
+ * The innermost element, from `el` up to (not including) `rootEl` or the
+ * document body, that `isInteractive` accepts: by default the
+ * INTERACTIVE_SELECTORS match. The one walk every "does this event belong
+ * to a control" check shares; a hover layer's tap passes its own test
+ * (useTouchTrigger's `tapLandsOnDisabledControl`).
+ */
+export function innermostInteractive(
+  el: Element,
+  rootEl: Element | null,
+  isInteractive: (element: Element) => boolean = matchesInteractiveSelectors,
+): Element | null {
+  let current: Element | null = el;
+  while (current != null && current !== rootEl && current !== document.body) {
+    if (isInteractive(current)) {
+      return current;
+    }
+    current = current.parentElement;
+  }
+  return null;
+}
+
+/**
+ * Check whether an element has an interactive ancestor between it and the
+ * root (the element itself included). If the click target is inside a nested
+ * button/link/etc., we should NOT handle it at the container level.
  *
  * Exported for containers that cannot use the hook itself — a `<tr>` whose
  * props are assembled inside a Table plugin's `transformBodyRow`, for
  * instance, has no ref to hand the hook but needs the identical rule. Sharing
  * the walk keeps one definition of "this click belongs to something else"
  * instead of a short hand-rolled selector list per caller.
+ *
+ * A press inside an open Tooltip or HoverCard surface also answers true: it
+ * belongs to that surface, not the container around its trigger.
  */
 export function hasInteractiveAncestor(el: Element, rootEl: Element): boolean {
-  let current: Element | null = el;
-  while (current != null && current !== rootEl && current !== document.body) {
-    if (
-      current.matches(INTERACTIVE_SELECTORS) &&
-      !current.matches(NON_INTERACTIVE_SELECTORS)
-    ) {
-      return true;
-    }
-    current = current.parentElement;
-  }
-  return false;
+  return innermostInteractive(el, rootEl, belongsToSomethingElse) != null;
+}
+
+// hasInteractiveAncestor documents this answer until the next minor.
+// A layer root stops such a press before any bubble-phase React handler.
+// A native listener or a capture-phase handler still sees it.
+function belongsToSomethingElse(element: Element): boolean {
+  return matchesInteractiveSelectors(element) || isLayerSurface(element);
 }
 
 /**
@@ -164,7 +200,7 @@ export function useClickableContainer({
   useEffect(() => {
     const el = containerRef.current;
     if (el) {
-      el.setAttribute('data-pressable-container', 'true');
+      el.setAttribute(PRESSABLE_CONTAINER_ATTRIBUTE, 'true');
     }
   }, [containerRef]);
 
@@ -179,7 +215,6 @@ export function useClickableContainer({
         return;
       }
 
-      // Don't trigger on text selection
       if (hasTextSelection(containerEl)) {
         return;
       }
@@ -189,7 +224,6 @@ export function useClickableContainer({
         return;
       }
 
-      // If the click landed on or inside a nested interactive element, bail
       if (
         eventTarget !== event.currentTarget &&
         hasInteractiveAncestor(eventTarget, containerEl)
@@ -197,17 +231,15 @@ export function useClickableContainer({
         return;
       }
 
-      // Fire the click handler
       onClickProp?.(event);
       if (event.defaultPrevented) {
         return;
       }
 
-      // Navigate if href is provided. React DOM vets the hrefs it writes as
-      // attributes; nothing below passes through React, so the shared
-      // navigation rule decides once, before target, modifier key, or the
-      // delegated anchor can select a sink. A blocked href simply does not
-      // navigate — the click handler above still ran.
+      // React DOM checks the hrefs that it writes, but nothing below passes
+      // through React. So the shared navigation rule decides once, before the
+      // target, a modifier key, or the delegated anchor picks a sink. A
+      // blocked href does not navigate, but the click handler above still ran.
       if (href != null && isSafeUrl(href)) {
         const shouldOpenNewTab =
           target === '_blank' || event.ctrlKey || event.metaKey;

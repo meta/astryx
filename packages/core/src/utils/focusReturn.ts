@@ -5,11 +5,15 @@
  * @input The document's current active element and the shared interaction
  *   modality.
  * @output Whether focus is currently "detached" — on nothing in particular —
- *   and a focus move whose ring follows the last input.
+ *   or would be lost if a surface hid now; a focus move whose ring follows the
+ *   last input; and the one path that moves focus out of content a change
+ *   removed or hid (`noteFocusWithin`, `moveFocusLeftBehind`).
  * @position Utility; used by overlay triggers (e.g. DateInput, DateTimeInput)
  *   that return focus to their control when the overlay closes, but only when
  *   the dismiss did not already move focus somewhere the user chose, and by
- *   overlays (Dialog, DropdownMenu) that move focus programmatically.
+ *   overlays (Dialog, DropdownMenu) that move focus programmatically, and by
+ *   disclosures that hide focused content. Only
+ *   `isFocusDetached` is exported from the utils entry; the rest is internal.
  */
 
 import {
@@ -39,8 +43,68 @@ export function isFocusDetached(doc: Document = document): boolean {
 }
 
 /**
- * Move focus programmatically so its ring follows the last input
- * (`architecture:interaction-modality` INV1). After pointer input the browser's
+ * True when focus would be lost if `surface` hid now: nothing is focused (see
+ * isFocusDetached) or focus sits inside `surface`. Reads `surface`'s own
+ * document, so a surface in an iframe or Picture-in-Picture window is
+ * answered there. Internal: not exported from the utils barrel.
+ */
+export function isFocusLost(surface: Element | null, doc?: Document): boolean {
+  const ownerDocument = doc ?? surface?.ownerDocument ?? document;
+  return (
+    isFocusDetached(ownerDocument) ||
+    (surface != null && surface.contains(ownerDocument.activeElement))
+  );
+}
+
+/** Where focus was, inside a container, before a change removed or hid content. */
+export interface FocusWithin {
+  readonly element: Element;
+  readonly container: HTMLElement;
+}
+
+/**
+ * The focused element, if it is inside `container`. A disclosure calls this
+ * in the commit before the DOM changes (`LayoutChangeSnapshot`'s
+ * `onBeforeChange`), and passes the result to `moveFocusLeftBehind` from a
+ * layout effect of the same commit. Internal.
+ */
+export function noteFocusWithin(
+  container: HTMLElement | null | undefined,
+): FocusWithin | null {
+  const active = container?.ownerDocument.activeElement;
+  if (container == null || active == null || !container.contains(active)) {
+    return null;
+  }
+  return {element: active, container};
+}
+
+/**
+ * Moves focus noted by `noteFocusWithin` to `target` when the change lost it
+ * (`isFocusLost`): it fell to the page because its element was removed, or
+ * it is still inside `hidden`, content the change hid but kept, which the
+ * browser is about to blur. Focus that survived the change, or that was never
+ * inside, is not moved. The ring follows the last input, so the calling
+ * component keeps modality tracking active
+ * (`useInteractionModalityTracking()`). Returns whether focus moved. Internal.
+ */
+export function moveFocusLeftBehind(
+  note: FocusWithin | null,
+  target: HTMLElement | null | undefined,
+  hidden: Element | null = null,
+): boolean {
+  if (
+    note == null ||
+    target == null ||
+    !isFocusLost(hidden, note.container.ownerDocument)
+  ) {
+    return false;
+  }
+  focusForLastInput(target);
+  return true;
+}
+
+/**
+ * Move focus programmatically so its ring follows the last input. After pointer input the browser's
  * focus option keeps the element from matching `:focus-visible`, which is the
  * one way to reach an element the overlay does not render: the consumer's
  * autofocus target, the control that opened a Dialog, or a menu trigger the

@@ -31,6 +31,7 @@ import React, {
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useTooltip} from '../Tooltip';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import type {IconName} from '../Icon';
@@ -39,7 +40,6 @@ import {
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputWrapperStyles,
-  type FieldStatusVariant,
 } from '../Field';
 import {useKeepLayerOpenProps} from '../Layer/useLayer';
 import {InternalInputClearButton} from '../Field/InputClearButton';
@@ -102,11 +102,18 @@ import {groupStyles, inputGroupItemProps} from '../InputGroup/groupStyles';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {VisuallyHidden} from '../VisuallyHidden';
-import {useTranslator} from '../i18n';
 import type {AdaptivePresentation} from '../hooks/useAdaptivePresentation';
 import {SelectorBottomSheet} from '../Selector/SelectorBottomSheet';
 import {useSelectorPresentation} from '../Selector/useSelectorPresentation';
 import {selectorPresentationStyles} from '../Selector/selectorPresentation.stylex';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/MultiSelector/MultiSelector.generated';
+
+registerEnglishFallback(english);
 
 // Sentinel value for the select-all item in keyboard navigation
 const SELECT_ALL_VALUE = '__xds_select_all__';
@@ -270,21 +277,6 @@ const styles = stylex.create({
         '@media (pointer: coarse)': 'scale(1)',
       },
       '[data-astryx-press="on"]': 'scale(0.98)',
-    },
-  },
-  // A disabled input-variant trigger keeps its tab stop (`spec:AST-085` FR1),
-  // and the shared disabled wrapper style drops the field focus ring, so the
-  // trigger shows keyboard focus here instead (FR6). It keys on the trigger
-  // itself, a direct child, so a focused status button keeps its own outline.
-  triggerDisabledFocus: {
-    borderColor: {
-      default: colorVars['--color-border-emphasized'],
-      ':has(> [aria-disabled="true"]:focus-visible)':
-        colorVars['--color-accent'],
-    },
-    boxShadow: {
-      default: 'none',
-      ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
     },
   },
   triggerGhostDisabled: {
@@ -804,7 +796,7 @@ export interface MultiSelectorProps<
    * - 'tooltip': message is exposed from the on-field status icon
    * @default 'attached' for input selectors; 'detached' for secondary and ghost selectors
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
 
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
@@ -1156,7 +1148,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
         controlClassName != null ||
         controlStyle != null),
   );
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const pressable = usePressFeedback();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
@@ -2630,7 +2622,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
             variant === 'input' &&
               isDisabled &&
               !surface.isTriggerFocusRingSuppressed &&
-              styles.triggerDisabledFocus,
+              inputDisabledFocusStyles.ring,
             isEffectivelyReadOnly && styles.triggerReadOnly,
             variant !== 'input' && isDisabled && styles.triggerGhostDisabled,
             variant !== 'input' &&
