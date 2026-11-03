@@ -161,10 +161,16 @@ export function solveLightness(
     const mid = (lo + hi) / 2;
     const ok = passes(at(mid));
     if (darker) {
-      if (ok) {lo = mid;}
-      else {hi = mid;}
-    } else if (ok) {hi = mid;}
-    else {lo = mid;}
+      if (ok) {
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    } else if (ok) {
+      hi = mid;
+    } else {
+      lo = mid;
+    }
   }
   const solved = at(darker ? lo : hi);
   return passes(solved) ? solved : target;

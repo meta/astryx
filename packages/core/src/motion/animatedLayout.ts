@@ -91,6 +91,7 @@ import {
 import {isSpring} from './roleValue';
 import {solveSpring, toSpring, type SpringDescription} from './spring';
 import {registerSpringsTable, SETTLE_SPRING} from './uikit/springs';
+import {themeReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 import {reducedMotionCrossFade} from './uikit/timing';
 
 /** The shared motion role (`spec:AST-105` FR4). */
@@ -152,7 +153,10 @@ function springProgress(description: SpringDescription): SpringProgress {
 
 /** The motion a change in `area` plays now. */
 function layoutMotion(area: Element): LayoutMotion {
-  if (matches(area, '(prefers-reduced-motion: reduce)')) {
+  if (
+    matches(area, '(prefers-reduced-motion: reduce)') ||
+    themeReducesMotion(area)
+  ) {
     if (!matches(area, '(pointer: coarse)')) {
       return {kind: 'instant'};
     }
