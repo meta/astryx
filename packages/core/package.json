@@ -824,6 +824,11 @@
       "types": "./dist/Markdown/remark.d.ts",
       "default": "./dist/Markdown/remark.js"
     },
+    "./internal/indicatorPress.stylex": {
+      "source": "./src/internal/indicatorPress.stylex.ts",
+      "types": "./dist/internal/indicatorPress.stylex.d.ts",
+      "default": "./dist/internal/indicatorPress.stylex.js"
+    },
     "./internal/touch": {
       "source": "./src/internal/touch.ts",
       "types": "./dist/internal/touch.d.ts",

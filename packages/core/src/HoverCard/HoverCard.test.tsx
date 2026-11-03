@@ -170,6 +170,118 @@ describe('useHoverCard closing while the pointer is on the card', () => {
   });
 });
 
+describe('useHoverCard — focusTrigger="auto" decides when focus arrives', () => {
+  it('opens on focus of a trigger that was tabindex="-1" when it attached', async () => {
+    const onShow = vi.fn();
+    function RovingMember() {
+      const card = useHoverCard({onShow, delay: 0});
+      return (
+        <div>
+          {/* A roving-tabindex member that is not the tab stop when the
+              card attaches. */}
+          <button type="button" tabIndex={-1} ref={card.ref}>
+            Filter
+          </button>
+          {card.renderHoverCard(<span>Card</span>)}
+        </div>
+      );
+    }
+    render(<RovingMember />);
+    const member = screen.getByRole('button', {name: 'Filter'});
+    // The roving hook moves the tab stop, then focus, as an arrow key does.
+    member.setAttribute('tabindex', '0');
+    fireEvent.focusIn(member);
+    await waitFor(() => expect(onShow).toHaveBeenCalledTimes(1));
+  });
+
+  it('opens on focus of a focusable trigger it does not list, such as a summary', async () => {
+    const onShow = vi.fn();
+    function SummaryTrigger() {
+      const card = useHoverCard({onShow, delay: 0});
+      return (
+        <details>
+          <summary ref={card.ref}>More</summary>
+          {card.renderHoverCard(<span>Card</span>)}
+        </details>
+      );
+    }
+    render(<SummaryTrigger />);
+    fireEvent.focusIn(screen.getByText('More'));
+    await waitFor(() => expect(onShow).toHaveBeenCalledTimes(1));
+  });
+
+  it('ignores focus inside a plain wrapper trigger', async () => {
+    const onShow = vi.fn();
+    function WrapperTrigger() {
+      const card = useHoverCard({onShow, delay: 0});
+      return (
+        <div>
+          <div ref={card.ref}>
+            <input aria-label="Amount" />
+          </div>
+          {card.renderHoverCard(<span>Card</span>)}
+        </div>
+      );
+    }
+    render(<WrapperTrigger />);
+    fireEvent.focusIn(screen.getByRole('textbox', {name: 'Amount'}));
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 20));
+    });
+    expect(onShow).not.toHaveBeenCalled();
+  });
+
+  it('hides on blur from inside a focusable trigger that left the tab order', async () => {
+    const onShow = vi.fn();
+    const onHide = vi.fn();
+    function FocusableRow() {
+      const card = useHoverCard({onShow, onHide, delay: 0, hideDelay: 0});
+      return (
+        <div>
+          <div tabIndex={0} ref={card.ref} data-testid="row">
+            <button type="button">Inside</button>
+          </div>
+          {card.renderHoverCard(<span>Card</span>)}
+        </div>
+      );
+    }
+    render(<FocusableRow />);
+    const inside = screen.getByRole('button', {name: 'Inside'});
+    // Focus inside a focusable trigger counts.
+    fireEvent.focusIn(inside);
+    await waitFor(() => expect(onShow).toHaveBeenCalledTimes(1));
+    // The trigger leaves the tab order before focus moves on: the focus that
+    // counted still hides the card.
+    screen.getByTestId('row').setAttribute('tabindex', '-1');
+    fireEvent.focusOut(inside);
+    await waitFor(() => expect(onHide).toHaveBeenCalledTimes(1));
+  });
+
+  it('hides on blur of a trigger that left the tab order while focused', async () => {
+    const onShow = vi.fn();
+    const onHide = vi.fn();
+    function RovingMember() {
+      const card = useHoverCard({onShow, onHide, delay: 0, hideDelay: 0});
+      return (
+        <div>
+          <button type="button" ref={card.ref}>
+            Filter
+          </button>
+          {card.renderHoverCard(<span>Card</span>)}
+        </div>
+      );
+    }
+    render(<RovingMember />);
+    const member = screen.getByRole('button', {name: 'Filter'});
+    fireEvent.focusIn(member);
+    await waitFor(() => expect(onShow).toHaveBeenCalledTimes(1));
+    // The roving hook takes the tab stop away before focus moves on.
+    member.setAttribute('tabindex', '-1');
+    fireEvent.focusOut(member);
+    await waitFor(() => expect(onHide).toHaveBeenCalledTimes(1));
+  });
+});
+
 describe('HoverCard', () => {
   it('renders trigger element', () => {
     render(

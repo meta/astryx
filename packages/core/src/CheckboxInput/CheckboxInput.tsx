@@ -46,6 +46,7 @@ import {useTooltip} from '../Tooltip/useTooltip';
 import {mergeProps} from '../utils/mergeProps';
 import {rtlStyles} from '../utils/rtlStyles';
 import {indicatorScope} from '../Indicator/indicator.markers.stylex';
+import {indicatorPressScope} from '../internal/indicatorPress.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {useIndicatorFocusRing} from '../hooks/useIndicatorFocusRing';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
@@ -63,6 +64,11 @@ import english from '../i18n/generated-english/CheckboxInput/CheckboxInput.gener
 
 registerEnglishFallback(english);
 
+/** Written by the touch press controller while the row is pressed. */
+const PRESSED_ON = '[data-astryx-press="on"]';
+/** Written by the touch press controller for the press's release. */
+const PRESSED_FADING = '[data-astryx-press="fading"]';
+
 // The touch press's paint, declared by the shared overlay styles on the
 // element the controller writes to (`pressedAlpha`) at the press's strength,
 // 1 while on and 1 → 0 over the release, and inherited resolved by the layer
@@ -78,6 +84,20 @@ const styles = stylex.create({
   containerLabelHidden: {
     gap: 0,
   },
+  // An indicator in another package may not name this row's private press
+  // attribute. So the row hands its touch press image down to an indicator
+  // that paints its own press, but only in its own press states. A pressed
+  // ancestor row reaches it no more than it reaches the built-in box. The
+  // property has no default: a layered stylesheet ranks a default above the
+  // arms. Only this row declares it. A menu item paints its own press, so a
+  // mapped indicator there paints none.
+  indicatorPressImage: {
+    '--_indicator-press-image': {
+      default: null,
+      [PRESSED_ON]: 'var(--_press-paint-image)',
+      [PRESSED_FADING]: 'var(--_press-paint-image)',
+    },
+  },
   checkboxWrapper: {
     position: 'relative',
     display: 'flex',
@@ -86,15 +106,22 @@ const styles = stylex.create({
     flexShrink: 0,
     isolation: 'isolate',
   },
-  // The owner paints this layer over the resolved indicator, so a theme
-  // replacement cannot accidentally drop the component's pressed contract.
+  // The owner paints this layer over the resolved indicator, so a plain theme
+  // replacement keeps the pressed feedback. An indicator with
+  // `indicatorPressScope` paints its own press from what the row hands down,
+  // so this layer stays off over it.
   // Two pointers, two press models (see interactionOverlay.stylex.ts): a
   // mouse keeps `:active`; under a coarse pointer that arm is dropped and the
   // touch press controller writes `data-astryx-press` on the row, which this layer
   // reads off the same scope marker as the hover tint.
   indicatorPressOverlay: {
     '::after': {
-      content: '""',
+      // `when.descendant` takes a pseudo-class; `:is(*)` matches any marked
+      // indicator.
+      content: {
+        default: '""',
+        [stylex.when.descendant(':is(*)', indicatorPressScope)]: 'none',
+      },
       position: 'absolute',
       inset: 0,
       borderRadius: radiusVars['--radius-inner'],
@@ -112,15 +139,14 @@ const styles = stylex.create({
       // what moves. Coarse pointers only, like the drop above.
       backgroundImage: {
         default: null,
-        [stylex.when.ancestor('[data-astryx-press="on"]', indicatorScope)]: {
+        [stylex.when.ancestor(PRESSED_ON, indicatorScope)]: {
           default: null,
           '@media (pointer: coarse)': pressedOverlayImage,
         },
-        [stylex.when.ancestor('[data-astryx-press="fading"]', indicatorScope)]:
-          {
-            default: null,
-            '@media (pointer: coarse)': pressedOverlayImage,
-          },
+        [stylex.when.ancestor(PRESSED_FADING, indicatorScope)]: {
+          default: null,
+          '@media (pointer: coarse)': pressedOverlayImage,
+        },
       },
     },
   },
@@ -450,6 +476,7 @@ export function CheckboxInput({
           // Hover and focus reach the checkbox visual through this ancestor
           // marker rather than props, so the whole row drives it.
           !isDisabled && indicatorScope,
+          !isDisabled && styles.indicatorPressImage,
           // The touch press's strength and release live on the row the
           // controller writes to; the layer over the checkbox box inherits
           // and paints it.
