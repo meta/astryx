@@ -66,11 +66,9 @@ const editorTheme = stylex.create({
   // they do in Google Docs and in Lexical's own playground.
   //
   // `auto` means the block has no single direction of its own — it holds
-  // digits, punctuation, an image, nothing at all, or several lines that
-  // are each read on their own terms (a list, a fenced code block). It
-  // follows the document around it (spec:AST-061 FR6), so an empty
-  // paragraph keeps its caret on a right-to-left document's start edge and
-  // an English item under a Hebrew one still reads `Buy milk.`.
+  // digits, punctuation, an image, nothing at all, or several lines each
+  // read on their own terms. It follows the document, so an empty paragraph
+  // keeps its caret on a right-to-left document's start edge.
   blockDirection: {
     direction: {
       default: null,

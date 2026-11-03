@@ -12,17 +12,12 @@
  * @position Rendered by RichTextEditor and RichTextView inside the composer,
  *   so a document reads the same way in both.
  *
- * Lexical leaves a top-level block's `dir` as `auto` and writes none at all
- * below that, so the HTML directionality heuristic reads a top-level block's
- * first strong character and everything deeper simply inherits the
- * document's direction. Neither can express "this block has no direction of
- * its own": under `dir="auto"` a block of digits, an image or nothing at all
- * resolves left-to-right, exactly like a block of English, so a document
- * cannot both let a Hebrew paragraph read right-to-left and keep an empty
- * paragraph's caret on a right-to-left document's start edge (spec:AST-061
- * FR6). And an English list item in a right-to-left document, with no `dir`
- * of its own, is a left-to-right run in a right-to-left box: it flushes
- * right and its arrow keys move the caret the wrong way.
+ * Lexical leaves a top-level block's `dir` as `auto` and writes none below
+ * that. Neither state can say "this block has no direction of its own":
+ * under `auto`, digits, an image and an empty block all resolve
+ * left-to-right, exactly like English. An English list item in a
+ * right-to-left document is then a left-to-right run in a right-to-left
+ * box — it flushes right and its arrow keys move the caret the wrong way.
  *
  * Writing the direction out resolves both. A prose container whose own text
  * is strongly directional gets `dir="ltr"` or `dir="rtl"` and reads that way
@@ -104,7 +99,8 @@ function $isOwnDirectionBlock(node: LexicalNode): node is ElementNode {
 }
 
 /**
- * The strongly right-to-left characters of UAX #9 — Bidi_Class `R` and `AL`.
+ * The strongly right-to-left characters of the Unicode Bidirectional
+ * Algorithm — Bidi_Class `R` and `AL`.
  * Living scripts are named so the set reads as what it is; the two ranges
  * cover the historic right-to-left scripts in the Supplementary Multilingual
  * Plane (Phoenician, Kharoshthi, Old Hungarian, Mende Kikakui, …), which have
@@ -123,13 +119,14 @@ const STRONG_RTL =
 
 /**
  * Bidi_Class `L`: any other letter, plus the left-to-right mark. Digits,
- * punctuation, emoji and other symbols are deliberately absent — UAX #9 P2
- * skips them, so `123 — מזל טוב` and `🎉 מזל טוב` both read right-to-left.
+ * punctuation, emoji and other symbols are deliberately absent: the
+ * algorithm's P2 rule skips them, so `123 — מזל טוב` and `🎉 מזל טוב` both read right-to-left.
  */
 const STRONG_LTR = /[\p{Letter}\u200E]/u;
 
 /**
- * UAX #9 P2–P3: the direction of the first strongly directional character,
+ * P2 and P3 of that algorithm: the direction of the first strongly
+ * directional character,
  * or null when the text has none. Iterating the string yields whole code
  * points, so a surrogate pair is classified as the character it encodes.
  */
