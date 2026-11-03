@@ -95,8 +95,8 @@ export type SelectableCardGroupProps = Omit<
     /** Helper text under the label, linked to the group. */
     description?: string;
     /**
-     * The native inputs' shared `name`, which groups the radios, as
-     * `htmlName` on RadioList. Defaults to a generated one.
+     * The name the group's value is submitted under. The radios group by a
+     * generated name. Defaults to a generated one.
      */
     htmlName?: string;
     /** Disables every card; they stay focusable and announce disabled. */
@@ -123,9 +123,7 @@ export interface SelectableCardGroupItemProps extends Omit<
 
 interface GroupContextValue {
   inputType: 'checkbox' | 'radio';
-  /** The inputs' grouping name. */
-  name: string;
-  /** The name the group's value is submitted under. */
+  groupName: string;
   submitName: string;
   isDisabled: boolean;
   isSelected: (value: string) => boolean;
@@ -201,7 +199,7 @@ export function SelectableCardGroup(props: SelectableCardGroupProps) {
       const {value, onChange} = props;
       return {
         inputType: 'checkbox',
-        name: submitName,
+        groupName: submitName,
         submitName,
         isDisabled,
         isSelected: v => value.includes(v),
@@ -218,7 +216,7 @@ export function SelectableCardGroup(props: SelectableCardGroupProps) {
     // apart, even from another form's group with the same `htmlName`.
     return {
       inputType: 'radio',
-      name: generatedName,
+      groupName: generatedName,
       submitName,
       isDisabled,
       isSelected: v => value === v,
@@ -291,7 +289,7 @@ export function SelectableCardGroupItem({
         ? null
         : {
             type: group.inputType,
-            name: group.name,
+            name: group.groupName,
             value,
           },
     [group, value],

@@ -62,7 +62,7 @@ export const docs = {
       name: 'htmlName',
       type: 'string',
       description:
-        "The native inputs' shared name, which groups the radios (as `htmlName` on RadioList). Defaults to a generated one.",
+        "The name the group's value is submitted under. The radios group by a generated name. Defaults to a generated one.",
     },
     {
       name: 'isDisabled',
@@ -188,7 +188,7 @@ export const docsZh = {
       name: 'htmlName',
       type: 'string',
       description:
-        '原生输入共享的 name，用于将单选按钮分组（与 RadioList 的 `htmlName` 相同）。默认自动生成。',
+        '提交组的值时使用的名称。单选按钮按自动生成的名称分组。默认自动生成。',
     },
     {
       name: 'isDisabled',

@@ -22,7 +22,6 @@ function RadioCard({value, ...props}: SelectableCardProps & {value: string}) {
       type: 'radio' as const,
       name: 'plan',
       value,
-      isGroupDisabled: false,
     }),
     [value],
   );
