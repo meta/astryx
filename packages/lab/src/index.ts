@@ -24,6 +24,15 @@ export {
 // InfoTip — accessible info-icon help affordance (RFC meta/astryx#3349)
 export {InfoTip, type InfoTipProps, type InfoTipSize} from './InfoTip';
 
+// SelectableCardGroup — a set of selectable cards with the semantics of its
+// selection: one choice is a radio group, several a group of checkboxes
+export {
+  SelectableCardGroup,
+  SelectableCardGroupItem,
+  type SelectableCardGroupProps,
+  type SelectableCardGroupItemProps,
+} from './SelectableCardGroup';
+
 // EmojiPicker — standalone searchable emoji panel
 export {
   EmojiPicker,
@@ -314,24 +323,6 @@ export {
   type DiffViewerLineRef,
   type DiffViewerSide,
 } from './DiffViewer';
-
-// MobileTokenizer — Lab prototype (stack layer 1) of the touch Tokenizer
-// flow: summary trigger + stacked manage/add BottomSheets. Graduates to
-// Core Tokenizer presentation="bottom-sheet" (stack layer 2).
-export {
-  MobileTokenizer,
-  type MobileTokenizerProps,
-  type MobileTokenizerChange,
-} from './MobileTokenizer';
-
-// MobilePowerSearch — Lab prototype (stack layer 1) of the touch PowerSearch
-// flow: field-wide "Manage filters" trigger with display-only tokens, a
-// Filters sheet, and a field → operator → value drill-down. The caller picks
-// it explicitly on touch layouts; the API mirrors Core PowerSearch.
-export {
-  MobilePowerSearch,
-  type MobilePowerSearchProps,
-} from './MobilePowerSearch';
 
 // RichTextEditor (RFC meta/astryx#3899) moved out of @astryxdesign/lab into
 // its own package, @astryxdesign/richtext. Import it from there:
