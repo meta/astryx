@@ -49,6 +49,7 @@ import type {KeyboardTransition} from './keyboardModel';
 import {
   FIELD_OFFSET,
   drawnOffsetOf,
+  FIELD_CLEARANCE_AT_REPORT,
   followKeyboard,
   keepFieldAboveKeyboard,
   registerKeyboardTarget,
@@ -56,13 +57,6 @@ import {
 } from './keyboardTarget';
 import {distanceIntoBand} from './revealBand';
 import {rideKeyboard} from './rideKeyboard';
-
-// Chrome on Android pans the page itself if the keyboard still covers the
-// focused field about 100 to 170 ms after the report. A field a fraction of a
-// pixel under the keyboard's top still counts as covered. So the reveal sets
-// the field 4 px above that top in the report's own commit, and only the rest
-// rides.
-const FIELD_CLEARANCE_AT_REPORT = 4;
 
 /** How a target keeps a focused field above the on-screen keyboard. */
 export interface MobileKeyboardOptions {

@@ -4,7 +4,8 @@
  * @file reducedMotion.ts
  * @input The Reduced Motion preference, the primary pointer, the motion tables
  * @output reducedMotionFade (the fade the animator would play, for motion it
- *   does not drive), playReducedMotionDip, and the queries a transition spells
+ *   does not drive), reducesMotion (whether motion is reduced),
+ *   playReducedMotionDip, and the queries a transition spells
  * @position The one Reduced Motion policy (design:reduced-motion) for code
  *   beside the animator: a raw Web Animations fade, a CSS transition
  *
@@ -70,6 +71,15 @@ export interface ReducedMotionFade {
 }
 
 /**
+ * Whether motion is reduced for `element` now. The person's Reduce Motion
+ * setting reduces it. So does a theme around `element` that reduces motion
+ * for everyone.
+ */
+export function reducesMotion(element?: Element | null): boolean {
+  return defaultPrefersReducedMotion() || themeReducesMotion(element);
+}
+
+/**
  * The Reduced Motion fade for a change to `element` now, for motion the
  * animator does not drive (two titles cross-fading with Web Animations):
  * null when motion is not reduced (play the normal motion), else an
@@ -84,8 +94,7 @@ export function reducedMotionFade(
     touchRelease?: boolean;
   } = {},
 ): ReducedMotionFade | null {
-  // A theme that reduces motion for everyone counts as the setting.
-  if (!defaultPrefersReducedMotion() && !themeReducesMotion(element)) {
+  if (!reducesMotion(element)) {
     return null;
   }
   const fades = options.touchRelease === true || defaultIsCoarsePointer();

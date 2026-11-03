@@ -65,13 +65,19 @@ that times motion with it. Everything here is internal to
   field the surface owns has focus, and `putBack()` pans it back without
   scrolling the document, by scrolling into view a probe fixed where the
   visual viewport sat at the report (or the element given, such as a
-  full-viewport dialog). Every watch in a document shares one passive
-  `touchstart` subscription on the window's input stream, which lives only
-  while a surface watches. BottomSheet's hook watches while its sheet is presented
+  full-viewport dialog). `panVisualViewportTo(window, top)` makes that pan to
+  any top, the one way Core moves the visual viewport itself. Every watch in a
+  document shares one passive subscription to `touchstart`, `touchend` and
+  `touchcancel` on the window's input stream, which lives only while a surface
+  watches. A report while a finger is on the screen (`isFingerOnScreen`, from
+  the stream's count), as when Firefox's toolbar hides in a drag, leaves that
+  drag's pan to the person. A finger down at the keyboard's last hide counts no
+  more until a touch starts. BottomSheet's hook watches while its sheet is presented
   under a coarse primary pointer; under a fine one it registers no touch
   listener. `watchPans(win, owns)` (`keyboardTarget.ts`) runs that loop on
   each height the module reports: the keyboard targets and ChatLayout's
-  composer watch with it.
+  composer watch with it. Its `expectPan(top)` makes a pan the caller makes
+  itself the new rest.
 - **Keyboard targets (`keyboardTarget.ts`):** a target keeps the focused field
   inside it above the keyboard, and registers so a field inside moves nothing
   itself (`registerKeyboardTarget`, `isInsideKeyboardTarget`).
@@ -93,21 +99,51 @@ that times motion with it. Everything here is internal to
   document included, brings it into view on both edges (`distanceIntoBand`,
   shared with the Tall sheet's reveal), `FIELD_OFFSET` (10 px) above the
   keyboard while one shows. Nothing else moves. A scroller does not gain the
-  missing scroll range at its end yet (`spec:AST-099` Gap 11), so a field it
-  cannot scroll far enough stays partly covered, and an element with nothing to
-  scroll yet, the document included, does not count as a scroller: the browser's
-  own reveal stays there. In a fixed container the app positions (one that
+  missing scroll range at its end yet (`spec:AST-099` Gap 11). Until it does,
+  a page with nothing to scroll keeps the browser's own reveal. Once the
+  keyboard shows, the document reveals a field that its area cannot place, in
+  the page or, where a document scroll moves a fixed container (as in Safari
+  while its keyboard shows), in that container. Where the document cannot
+  scroll far enough, as at a short page's end in Chrome,
+  `panVisualViewportTo` pans the visual viewport for the rest in the same frame
+  (`panIntoView`), so Chrome's own pan finds the field clear. The reveal-pan
+  watch takes that pan as the new rest once the viewport reports it. In Safari,
+  a document scroll reaches into the room the keyboard takes. On iOS, a reveal
+  that places the field rises on the browser's smooth scroll, beside the
+  keyboard's slide (`risesSmoothly`); the scroll back records where it is
+  headed. Chrome checks the field in the resize's own commit, so there, and
+  where motion is reduced (`reducesMotion`), the reveal moves at once. Each
+  reveal's scroll is recorded (`noteKeyboardScroll`). Once the keyboard reports
+  it has gone, `keyboardScrollBack.ts` scrolls each scroller back to where it
+  was, on the browser's smooth scroll, unless the person scrolled it meanwhile.
+  Firefox for Android can carry the reveal as a visual-viewport offset and show
+  the document where it was before the reveal at that report. The scroll back
+  then waits up to a second for the browser's own document scroll that turns the
+  offset back, and follows it; a touch, a new keyboard or the field's page going
+  ends the wait.
+  In a fixed
+  container the app positions (one that
   fills the viewport, floats above the bottom edge, or sets its own `translate`,
   which the ride would replace), a scroller between the field and the container
   reveals the field. Inside a keyboard target, or in such a container with no
   scroller around the field, the path does nothing and the browser's own reveal
-  stays. A
-  ride places its target on the frame after each report, slide or focus move,
-  once every listener of that event has run, and measures what the keyboard
-  still covers after any move the app makes itself: a bar the app already moves
-  with the keyboard is not moved, one the app lifts part of the way moves the
-  rest, and one the app is moving itself at that moment (a running CSS
-  transition or animation on its position) is left to the app; a script
+  stays. A ride places its target on the frame after each report, slide or focus
+  move, once every listener of that event has run. On the guide's show, a ride
+  first sets the focused field `FIELD_CLEARANCE_AT_REPORT` (4 px) above the
+  keyboard's top at once, so Chrome's own pan finds it clear, and only the rest
+  rides (`spec:AST-099` DEC-6). Every viewport report feeds the reveal-pan
+  watch, so a pan the browser still makes is put back. A pan made at one
+  keyboard height goes back at the next height's report. In Chrome, the ride's
+  watch also scrolls the document back (`documentScrollIsReveal`): under Remove
+  animations, Gboard first reports a keyboard 48 px tall, and Chrome may then
+  reveal the bar's field itself, scrolling the page behind the bar before it
+  pans. Only a scroll and a pan that centre the field as Chrome's reveal does
+  count, so the app's own scroll to another element stays. The ride measures
+  what the keyboard still covers after any move the app makes itself: a bar the
+  app already moves with the keyboard is not moved, one the app lifts part of
+  the way moves the rest, and one the app is moving itself at that moment (a
+  running CSS transition or animation on its position) is left to the app; a
+  script
   animation is not seen, so an app that moves its bar from script keeps it clear
   with its own `translate`. The ride writes the CSS `translate`, which adds to
   an app's `transform`, writes nothing on an element it never moved, and on an
@@ -282,6 +318,7 @@ keyboard module measures them from the visual viewport, as in every browser
 | `useMobileKeyboard.ts`   | Keeps a focused field in a target above the keyboard: the inset, the reveal, the ride and the dismiss.                |
 | `keyboardTarget.ts`      | The targets: their registry, a docked or scrolling target, and a field's own path.                                    |
 | `revealBand.ts`          | `distanceIntoBand`: the scroll that brings a box inside a band, shared by the field's and the sheet's reveals.        |
+| `keyboardScrollBack.ts`  | Records each scroll a reveal makes and scrolls it back when the keyboard goes.                                        |
 | `keyboardModel.ts`       | The clock-free core of the guide: transitions from keyboard reports and focus changes.                                |
 | `keyboardLayoutGuide.ts` | One guide per window, fed by the keyboard module: the verification timer, the focus handoff.                          |
 | `rideKeyboard.ts`        | Moves an element with the keyboard on the curve its transition publishes, or at once (tests: `rideKeyboard.test.ts`). |

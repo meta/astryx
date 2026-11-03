@@ -72,6 +72,7 @@ import {
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {useMobileKeyboard} from '../keyboard/useMobileKeyboard';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -458,6 +459,7 @@ export function TextArea({
   const statusMessageID = useId();
   const counterID = useId();
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  useMobileKeyboard(textareaRef);
   const containerRef = useRef<HTMLDivElement | null>(null);
   // Tracks the counter "zone" last announced (under / near / over) so we only
   // announce on a zone change, not on every keystroke.
