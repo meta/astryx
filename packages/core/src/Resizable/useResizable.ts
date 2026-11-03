@@ -567,8 +567,8 @@ function useResizableController(
     () => serverInitial,
   );
   // When an `<Activity>` shows this component, React subscribes to the slot
-  // again but does not read it. The factory made for the reveal reports in
-  // that same commit, so render again with what it reports.
+  // again but does not read it. The factory resumes and reports in that same
+  // commit. Render again with what it reports.
   const [, rerender] = useReducer((count: number) => count + 1, 0);
   useIsomorphicLayoutEffect(() => {
     if (slot.read() !== snapshot) {
