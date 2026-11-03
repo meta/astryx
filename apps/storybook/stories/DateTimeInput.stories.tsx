@@ -740,7 +740,8 @@ function PersianDateTimeField() {
 /**
  * In a calendar other than Gregorian, DateTimeInput never shows native date
  * and time controls: it opens the popovers on a mouse and the bottom sheet on
- * a touch screen. The value stays a Gregorian ISO date-time.
+ * a touch screen, whose Date panel shows months of the calendar. The value
+ * stays a Gregorian ISO date-time.
  */
 export const CalendarSystems: Story = {
   render: () => <PersianDateTimeField />,

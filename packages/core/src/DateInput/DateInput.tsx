@@ -410,9 +410,10 @@ export interface DateInputProps extends Omit<
   format?: DateInputFormat | ((value: ISODateString) => string);
 
   /**
-   * The calendar the text field and its calendar popover show dates in, such
-   * as `'persian'`, `'hebrew'`, or `'buddhist'`. `value`, `onChange`, `min`,
-   * and `max` stay Gregorian ISO dates in every calendar. People type a date the way the locale writes
+   * The calendar the field shows dates in, such as `'persian'`, `'hebrew'`, or
+   * `'buddhist'`: the text field, its calendar popover, and the bottom sheet's
+   * months and wheels. `value`, `onChange`, `min`, and `max` stay Gregorian
+   * ISO dates in every calendar. People type a date the way the locale writes
    * it in this calendar, and the committed text uses it.
    * Years are years of this calendar, so a Buddhist field reads `2026` as
    * Buddhist year 2026; set `min` and `max` to catch a year typed in the
@@ -421,8 +422,7 @@ export interface DateInputProps extends Omit<
    * application loads; without it the field uses the Gregorian calendar.
    * The native date control is Gregorian, so with a calendar other than
    * `gregory` or `iso8601` every presentation that would show it uses the
-   * popover on a fine pointer and the bottom sheet on a coarse pointer. On a
-   * coarse pointer the field and its bottom sheet show Gregorian dates.
+   * popover on a fine pointer and the bottom sheet on a coarse pointer.
    *
    * @default the InternationalizationProvider's calendar, else `'gregory'`
    * @example
@@ -1228,7 +1228,15 @@ export function DateInput(props: DateInputProps) {
     case 'native':
       return <NativeDateField {...rest} isDisabled={isDisabled} />;
     case 'sheet':
-      return <TouchDateField {...rest} isDisabled={isDisabled} />;
+      return (
+        <TouchDateField
+          // Month indexes depend on the calendar. A new calendar remounts the sheet.
+          key={calendar}
+          {...rest}
+          calendar={calendar}
+          isDisabled={isDisabled}
+        />
+      );
     case 'desktop':
       return (
         <PointerDateField

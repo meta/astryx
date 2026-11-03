@@ -148,7 +148,7 @@ export const docs = {
       name: 'calendar',
       type: "'gregory' | 'iso8601' | 'buddhist' | 'roc' | 'japanese' | 'persian' | 'indian' | 'hebrew' | 'chinese' | 'dangi' | 'coptic' | 'ethiopic' | 'ethioaa' | 'islamic-civil' | 'islamic-tbla' | 'islamic-umalqura'",
       description:
-        'The calendar the date segment reads and writes typed dates in, and the calendar its popover shows. value, onChange, min, and max stay Gregorian ISO datetimes. People type a date the way the locale writes it in this calendar, in any decimal digits; the field reports a date only once it is complete, and names a date the calendar does not have. Years are years of this calendar, so set min and max on Buddhist and Minguo calendar fields to catch a Gregorian year typed by mistake. Calendars other than gregory, iso8601, buddhist, roc, and japanese need Temporal, native or a polyfill the application loads; without it the field shows Gregorian dates. With a calendar other than gregory or iso8601, a presentation that would show native controls shows the popovers on a fine pointer and the bottom sheet on a coarse pointer, because the native date control is Gregorian. On a coarse pointer the field and the Date panel of its bottom sheet show Gregorian dates.',
+        'The calendar the date segment reads and writes typed dates in, and the calendar its popover and bottom sheet show. value, onChange, min, and max stay Gregorian ISO datetimes. People type a date the way the locale writes it in this calendar, in any decimal digits; the field reports a date only once it is complete, and names a date the calendar does not have. Years are years of this calendar, so set min and max on Buddhist and Minguo calendar fields to catch a Gregorian year typed by mistake. Calendars other than gregory, iso8601, buddhist, roc, and japanese need Temporal, native or a polyfill the application loads; without it the field shows Gregorian dates. With a calendar other than gregory or iso8601, a presentation that would show native controls shows the popovers on a fine pointer and the bottom sheet on a coarse pointer, because the native date control is Gregorian; the Date panel of the bottom sheet shows the months, leap months, and era years of the calendar. A year in which the era changes is labeled with the era of the shown month, such as 平成31 in January 2019 and 令和元 in July.',
       default: "the InternationalizationProvider's calendar, else 'gregory'",
     },
     {
@@ -548,7 +548,7 @@ export const docsZh = {
       name: 'calendar',
       type: "'gregory' | 'iso8601' | 'buddhist' | 'roc' | 'japanese' | 'persian' | 'indian' | 'hebrew' | 'chinese' | 'dangi' | 'coptic' | 'ethiopic' | 'ethioaa' | 'islamic-civil' | 'islamic-tbla' | 'islamic-umalqura'",
       description:
-        '日期部分读写输入日期所用的历法，也是其弹出日历显示的历法。value、onChange、min 和 max 始终为公历 ISO 日期时间。用户按当前语言区域在该历法中的写法输入日期，可使用任意十进制数字；只有输入完整时字段才会报告日期，并会指出该历法中不存在的日期。年份是该历法的年份，因此请为佛历和民国纪年字段设置 min 和 max，以发现误输入的公历年份。gregory、iso8601、buddhist、roc 和 japanese 以外的历法需要 Temporal（原生或由应用加载的 polyfill）；没有 Temporal 时字段显示公历日期。使用 gregory 或 iso8601 以外的历法时，原本显示原生控件的呈现会在精细指针上显示弹出层、在粗指针上显示底部面板，因为原生日期控件只显示公历。底部面板的日期页显示公历日期。',
+        '日期部分读写输入日期所用的历法，也是其弹出日历和底部面板显示的历法。value、onChange、min 和 max 始终为公历 ISO 日期时间。用户按当前语言区域在该历法中的写法输入日期，可使用任意十进制数字；只有输入完整时字段才会报告日期，并会指出该历法中不存在的日期。年份是该历法的年份，因此请为佛历和民国纪年字段设置 min 和 max，以发现误输入的公历年份。gregory、iso8601、buddhist、roc 和 japanese 以外的历法需要 Temporal（原生或由应用加载的 polyfill）；没有 Temporal 时字段显示公历日期。使用 gregory 或 iso8601 以外的历法时，原本显示原生控件的呈现会在精细指针上显示弹出层、在粗指针上显示底部面板，因为原生日期控件只显示公历；底部面板的日期页显示该历法的月份、闰月和带纪元的年份。年号更替的年份按所显示月份的年号标注，如 2019 年 1 月为“平成31”，7 月为“令和元”。',
       default: "InternationalizationProvider 的历法，否则为 'gregory'",
     },
     {
@@ -731,7 +731,7 @@ export const docsDense = {
     hasClear: 'Shows clear button when datetime is set',
     placeholder: 'date-portion placeholder when empty',
     calendar:
-      "calendar for typed + committed date text and the popover; the sheet's Date panel stays Gregorian (default: provider's, else 'gregory'); values stay Gregorian ISO; years are the calendar's, so set min/max on buddhist/roc fields; non-Gregorian-aligned calendars need Temporal (native or app-loaded polyfill), else Gregorian; non-gregory/iso8601 never shows native controls: popovers fine / sheet coarse",
+      "calendar for typed + committed date text, the popover, and the sheet's Date panel (months, leap months, era years; an era-change year follows the shown month, e.g. 平成31 in Jan 2019, 令和元 in Jul) (default: provider's, else 'gregory'); values stay Gregorian ISO; years are the calendar's, so set min/max on buddhist/roc fields; non-Gregorian-aligned calendars need Temporal (native or app-loaded polyfill), else Gregorian; non-gregory/iso8601 never shows native controls: popovers fine / sheet coarse",
     timePlaceholder:
       'time-portion placeholder when empty; shown on touch closed time segment',
     timeLabel:

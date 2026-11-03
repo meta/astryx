@@ -2185,10 +2185,9 @@ export function DateTimeInput(props: DateTimeInputProps) {
     case 'native':
       // Only `adaptive-native` on a coarse pointer resolves here (FR2).
       return <PointerDateTimeField {...rest} nativeMode="adaptive" />;
-    case 'sheet': {
-      const {calendar: _calendar, ...sheetProps} = rest;
-      return <TouchDateTimeField {...sheetProps} />;
-    }
+    case 'sheet':
+      // Month indexes depend on the calendar. A new calendar remounts the sheet.
+      return <TouchDateTimeField key={calendar} {...rest} />;
     case 'desktop':
       return <PointerDateTimeField {...rest} />;
   }

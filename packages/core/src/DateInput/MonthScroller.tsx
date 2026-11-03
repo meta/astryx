@@ -4,7 +4,8 @@
 
 /**
  * @file MonthScroller.tsx
- * @input Month bounds, selected value, constraints, week start
+ * @input A calendar's month model, month bounds, selected value, constraints,
+ *   week start
  * @output Exports MonthScroller and MonthScrollerHandle
  * @position Internal component; consumed by TouchDateField.tsx
  *
@@ -36,12 +37,14 @@ import {
   useImperativeHandle,
   useLayoutEffect,
   useRef,
+  useMemo,
   useState,
 } from 'react';
 import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
-import {useCalendarDays} from '../Calendar';
-import {useDirection, useLocale} from '../i18n';
+import {useCalendarMonthDays} from '../Calendar/hooks/useCalendarDays';
+import {useDirection} from '../i18n/useDirection';
+import {useLocale} from '../i18n/useLocale';
 import {
   colorVars,
   radiusVars,
@@ -50,33 +53,31 @@ import {
   durationVars,
   borderVars,
 } from '../theme/tokens.stylex';
-import {focusOutlineStyles} from '../utils';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import type {DayOfWeek, ISODateString, PlainDate} from '../utils/dateTypes';
 import {
-  plainDateFormatDayNumber,
-  plainDateFormatStandaloneMonthYear,
-} from '../utils/plainDate';
-import {
-  type DayOfWeek,
-  type ISODateString,
-  type PlainDate,
   plainDateAddDays,
   plainDateDayOfWeek,
-  plainDateFormat,
+  plainDateFormatDayNumber,
   plainDateIsEqual,
   plainDateToISO,
   DATE_FORMAT_WITH_WEEKDAY,
-} from '../utils';
+} from '../utils/plainDate';
 import {
   playReducedMotionDip,
   reducedMotionFade,
   type ReducedMotionDip,
 } from '../motion/reducedMotion';
+import {
+  formatCalendarDate,
+  formatCalendarMonthLabel,
+  isInCalendarMonth,
+} from '../utils/calendarSystem';
 import {dateInputTouchSizes, dateInputTouchGeometry} from './tokens.stylex';
 import {useOwnScrollGesture} from './useOwnScrollGesture';
 import {useScrollSettle} from './useScrollSettle';
 import {
-  fromMonthIndex,
-  monthIndexOf,
+  type MonthModel,
   paneWindow,
   rowAtScrollOffset,
   rowsIn,
@@ -286,6 +287,8 @@ export interface MonthScrollerHandle {
 export interface MonthScrollerProps {
   /** Imperative handle for programmatic navigation (Today, the wheels). */
   handleRef?: React.RefObject<MonthScrollerHandle | null>;
+  /** The calendar's months, by index. */
+  monthModel: MonthModel;
   /** First reachable month, as a month index. */
   minMonthIndex: number;
   /** Last reachable month, as a month index. */
@@ -311,6 +314,7 @@ export interface MonthScrollerProps {
  */
 export function MonthScroller({
   handleRef,
+  monthModel,
   minMonthIndex,
   maxMonthIndex,
   initialMonthIndex,
@@ -763,17 +767,17 @@ export function MonthScroller({
   const moveFocus = useCallback(
     (from: PlainDate, deltaDays: number) => {
       const next = plainDateAddDays(from, deltaDays);
-      const nextIndex = monthIndexOf(next);
+      const nextIndex = monthModel.indexOf(next);
       if (nextIndex < minMonthIndex || nextIndex > maxMonthIndex) {
         return;
       }
       shouldRestoreFocusRef.current = true;
       setFocusedDate(next);
-      if (nextIndex !== monthIndexOf(from)) {
+      if (nextIndex !== monthModel.indexOf(from)) {
         scrollToMonth(nextIndex, 'smooth');
       }
     },
-    [minMonthIndex, maxMonthIndex, scrollToMonth],
+    [monthModel, minMonthIndex, maxMonthIndex, scrollToMonth],
   );
 
   const handleKeyDown = useCallback(
@@ -861,6 +865,7 @@ export function MonthScroller({
           rowsIn(visibleRows).map(row => (
             <MonthPane
               key={row}
+              monthModel={monthModel}
               monthIndex={minMonthIndex + row}
               insetInlineStart={row * paneSize}
               inlineSize={paneSize}
@@ -882,6 +887,7 @@ export function MonthScroller({
 MonthScroller.displayName = 'MonthScroller';
 
 interface MonthPaneProps {
+  monthModel: MonthModel;
   monthIndex: number;
   insetInlineStart: number;
   inlineSize: number;
@@ -903,6 +909,7 @@ interface MonthPaneProps {
  * so each day instead carries its weekday in its accessible name.
  */
 function MonthPane({
+  monthModel,
   monthIndex,
   insetInlineStart,
   inlineSize,
@@ -916,40 +923,33 @@ function MonthPane({
   onDayFocus,
 }: MonthPaneProps) {
   const locale = useLocale();
-  const {year, month} = fromMonthIndex(monthIndex);
-  const {weeks} = useCalendarDays({
-    year,
+  const {calendar} = monthModel;
+  const month = useMemo(
+    () => monthModel.monthAt(monthIndex),
+    [monthModel, monthIndex],
+  );
+  const {weeks} = useCalendarMonthDays({
     month,
+    calendar,
     weekStartsOn,
     // Always six rows: a variable grid would make pane heights differ, and
     // with them every snap offset below this month.
     hasVariableRowCount: false,
   });
 
-  const monthLabel = plainDateFormatStandaloneMonthYear(
-    {year, month, day: 1},
-    locale,
-  );
+  const monthLabel = formatCalendarMonthLabel(calendar, month, locale);
 
   // Exactly one day per pane is tab-reachable, so Tab moves through the
   // picker rather than through 42 buttons: the focused day if the keyboard
   // owns one, else the selection, else the first of the month.
   const tabbableISO = (() => {
-    if (
-      focusedDate != null &&
-      focusedDate.year === year &&
-      focusedDate.month === month
-    ) {
+    if (focusedDate != null && isInCalendarMonth(focusedDate, month)) {
       return plainDateToISO(focusedDate);
     }
-    if (
-      selectedDate != null &&
-      selectedDate.year === year &&
-      selectedDate.month === month
-    ) {
+    if (selectedDate != null && isInCalendarMonth(selectedDate, month)) {
       return plainDateToISO(selectedDate);
     }
-    return plainDateToISO({year, month, day: 1});
+    return plainDateToISO(month.start);
   })();
 
   return (
@@ -987,7 +987,8 @@ function MonthPane({
                   data-date={day.iso}
                   data-outside={day.isOutside ? '' : undefined}
                   tabIndex={day.iso === tabbableISO ? 0 : -1}
-                  aria-label={plainDateFormat(
+                  aria-label={formatCalendarDate(
+                    calendar,
                     day.date,
                     DATE_FORMAT_WITH_WEEKDAY,
                     locale,

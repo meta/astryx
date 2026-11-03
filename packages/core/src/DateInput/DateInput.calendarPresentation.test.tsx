@@ -195,6 +195,20 @@ describe('DateInput surface in a calendar', () => {
       </InternationalizationProvider>,
     );
     expect(surfaceShown()).toBe('sheet');
+    expect(document.querySelector('input')).toHaveValue('Aban 11, 1405 AP');
+  });
+
+  it('writes the sheet field text in the calendar', () => {
+    stubPointer('coarse');
+    render(
+      <DateInput
+        label="Date"
+        calendar="persian"
+        value="2026-11-02"
+        onChange={() => {}}
+      />,
+    );
+    expect(document.querySelector('input')).toHaveValue('Aban 11, 1405 AP');
   });
 
   it('warns once when an explicit native cannot show the calendar', () => {
@@ -297,5 +311,21 @@ describe('DateTimeInput surface in a calendar', () => {
       .filter(message => message.includes('presentation="native"'));
     expect(messages).toHaveLength(1);
     expect(messages[0]).toContain('DateTimeInput');
+  });
+
+  it('writes the sheet date segment in the calendar', () => {
+    stubPointer('coarse');
+    render(
+      <DateTimeInput
+        label="When"
+        calendar="persian"
+        presentation="adaptive-bottom-sheet"
+        value={'2026-11-02T09:00' as ISODateTimeString}
+        onChange={() => {}}
+      />,
+    );
+    expect(document.querySelector('input[inputmode="none"]')).toHaveValue(
+      'Aban 11, 1405 AP',
+    );
   });
 });

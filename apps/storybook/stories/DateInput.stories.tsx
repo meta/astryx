@@ -364,6 +364,34 @@ const PRESENTATION_FIELDS: ReadonlyArray<{
     presentation: 'native',
   },
   {
+    id: 'en-hebrew-leap',
+    locale: 'en',
+    calendar: 'hebrew',
+    label: 'Start date (Hebrew, a leap year)',
+    dir: 'ltr',
+    value: '2024-02-15' as ISODateString,
+    min: '2020-01-01' as ISODateString,
+    max: '2030-12-31' as ISODateString,
+  },
+  {
+    id: 'ja-japanese',
+    locale: 'ja-JP',
+    calendar: 'japanese',
+    label: '開始日',
+    dir: 'ltr',
+    value: '2026-11-02' as ISODateString,
+    min: '2015-01-01' as ISODateString,
+    max: '2030-12-31' as ISODateString,
+  },
+  {
+    id: 'en-ethiopic-pagume',
+    locale: 'en',
+    calendar: 'ethiopic',
+    label: 'Start date (Ethiopic, the thirteenth month)',
+    dir: 'ltr',
+    value: '2026-09-08' as ISODateString,
+  },
+  {
     id: 'en-gregory',
     locale: 'en',
     calendar: 'gregory',
@@ -413,8 +441,10 @@ function PresentationField({
 /**
  * In a calendar other than Gregorian, the field never shows the native date
  * control, which is Gregorian: the default and `presentation="native"` open
- * the calendar popover on a mouse and the bottom sheet on a touch screen.
- * Values stay Gregorian ISO dates.
+ * the calendar popover on a mouse and the bottom sheet on a touch screen. The
+ * bottom sheet shows months of the calendar, its month wheel lists the months
+ * of the calendar year, including leap months, and its year wheel names the
+ * era. Values stay Gregorian ISO dates.
  */
 export const CalendarSystemPresentations: Story = {
   render: () => (

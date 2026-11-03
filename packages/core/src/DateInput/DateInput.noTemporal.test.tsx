@@ -4,13 +4,14 @@
  * @file DateInput.noTemporal.test.tsx
  * @input Uses vitest, Testing Library, DateInput, DateTimeInput; no Temporal
  * @output Presentations without Temporal: a calendar that needs it falls back
- *   to Gregorian, with the native control and a warning
+ *   to Gregorian, with the native control and a warning, while Buddhist and
+ *   Japanese still show their years in the bottom sheet
  * @position Testing; validates the runtime without Temporal, such as Safari
  */
 
 import {afterAll, afterEach, beforeAll, beforeEach} from 'vitest';
 import {describe, expect, it, vi, type MockInstance} from 'vitest';
-import {fireEvent, render, screen} from '@testing-library/react';
+import {fireEvent, render, screen, within} from '@testing-library/react';
 import {DateInput, type DateInputProps} from './DateInput';
 import {
   DateTimeInput,
@@ -154,6 +155,47 @@ describe('presentations without Temporal', () => {
     expect(
       document.querySelector('[data-title="month-year"]'),
     ).toHaveTextContent('November 2026');
+  });
+
+  it('shows Buddhist years in the bottom sheet a coarse pointer gets', () => {
+    const warn = warnings();
+    renderField('th-TH', {
+      calendar: 'buddhist',
+      value: '2026-11-02',
+      min: '2025-01-01',
+      max: '2026-12-31',
+    });
+    expect(document.querySelector('input[type="date"]')).toBeNull();
+    expect(screen.getByRole('combobox')).toHaveAttribute('inputmode', 'none');
+    expect(screen.getByRole<HTMLInputElement>('combobox').value).toContain(
+      '2569',
+    );
+    withLayout(() => fireEvent.click(screen.getByRole('combobox')));
+    expect(
+      document.querySelector('[data-title="month-year"]'),
+    ).toHaveTextContent('2569');
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('labels Japanese years with their era', () => {
+    const warn = warnings();
+    renderField('ja-JP', {
+      calendar: 'japanese',
+      value: '2026-11-02',
+      min: '2025-01-01',
+      max: '2026-12-31',
+    });
+    withLayout(() => fireEvent.click(screen.getByRole('combobox')));
+    withLayout(() =>
+      fireEvent.click(
+        document.querySelector<HTMLElement>('[data-title="month-year"]')!,
+      ),
+    );
+    const years = within(screen.getByRole('listbox', {name: 'Year'}))
+      .getAllByRole('option')
+      .map(option => option.textContent);
+    expect(years).toEqual(['令和7', '令和8']);
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it('shows a Persian DateTimeInput as Gregorian native controls', () => {
