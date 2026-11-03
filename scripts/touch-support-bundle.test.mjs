@@ -119,6 +119,13 @@ function filesUnder(dir, pattern) {
  * that reaches it, with a comment naming the gesture.
  */
 const GESTURE_USERS = new Set([
+  // AlertDialog: its actions' press, tracked across both for every pointer.
+  'AlertDialog',
+  // Through AlertDialog: Tokenizer's bottom sheet confirms with an alert, and
+  // PowerSearch and Table's filtering render a Tokenizer.
+  'PowerSearch',
+  'Table',
+  'Tokenizer',
   // Slider's thumb.
   'Slider',
   // Switch: its press tracking and its drag, for every pointer.

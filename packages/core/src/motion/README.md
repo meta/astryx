@@ -19,6 +19,7 @@ roles through `resolveMotion`.
 | `uikit/scroll.ts`                                | UIScrollView: deceleration rates, rubber band, bounce-back spring, `delaysContentTouches`, scroll to top.                                                            |
 | `uikit/timing.ts`                                | Non-spring clocks and curves: press highlight, Core Animation's named curves, keyboard, Reduced Motion cross-fade.                                                   |
 | `uikit/paging.ts`                                | A paging UIScrollView: the integrator that settles a release on its page, the page rule, the catch, `setContentOffset(animated:)`.                                   |
+| `uikit/alert.ts`                                 | UIAlertController: how a finger is tracked across the actions (highlight onset and bounds).                                                                          |
 | `uikit/navigation.ts`                            | UINavigationController: push velocity, parallax, dimming, transition clock, interactive pop finish rule.                                                             |
 | `uikit/progressBar.ts`                           | UIProgressView's fill: the whole-track duration and curve, its minimum length and empty alpha; the reduced-motion pulse (three roles).                               |
 | `uikit/gestures.ts`                              | Gesture recognizer thresholds, the velocity filter and haptic stand-ins, as `{value, unit}` entries (sources in JSDoc).                                              |
