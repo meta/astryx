@@ -141,7 +141,8 @@ const GESTURE_USERS = new Set([
   // AlertDialog: its actions' press, tracked across both for every pointer.
   'AlertDialog',
   // Through AlertDialog: Tokenizer's bottom sheet confirms with an alert, and
-  // PowerSearch and Table's filtering render a Tokenizer.
+  // PowerSearch and Table's filtering render a Tokenizer. Both also reach
+  // TimeInput's wheels: PowerSearch's edit popover and Table's filtering.
   'PowerSearch',
   'Table',
   'Tokenizer',
