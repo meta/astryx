@@ -1,0 +1,1339 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+/**
+ * @file PageControl.interaction.browser.spec.ts
+ * @input The built "Default" and "Many Pages" PageControl stories, real touch
+ *   input (Chromium CDP / WebKit's tap path) and the interaction harness
+ * @output Proof against UIPageControl's measurements: taps, the scrub, the
+ *   jog, the held platter, the fades, the window's slide and the page scroll
+ * @position Browser proof for the lab PageControl, run by
+ *   `pnpm test:interaction`
+ */
+
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
+import {
+  animationStoryboard,
+  armHold,
+  drag,
+  releaseAnimations,
+  openStory,
+  touchDriver,
+  touchStoryboard,
+  withStorybook,
+} from '@astryxdesign/interaction-harness';
+
+const storybook = withStorybook(test);
+
+/** Indicator pitch, px (the pageControl table: 9.67 + 8). */
+const PITCH = 17.67;
+/** A full-size dot's scale: the 9.67 px indicator on its 10 px box. */
+const DOT_SCALE = 0.967;
+
+/**
+ * Opens a PageControl story. The phone projects have a coarse primary
+ * pointer: the touch presentation, on any engine (one touch model; nothing
+ * asks for iOS). A block that sets `hasTouch: false` gets a mouse.
+ */
+async function open(
+  page: Page,
+  story = 'lab-pagecontrol--default',
+  {rtl = false}: {rtl?: boolean} = {},
+) {
+  if (rtl) {
+    await page.goto(
+      `${storybook()}/iframe.html?id=${story}&viewMode=story&globals=direction:rtl`,
+    );
+    await page.getByRole('slider').waitFor();
+  } else {
+    await openStory(page, storybook(), story);
+  }
+  const slider = page.getByRole('slider');
+  const driver = await touchDriver(page);
+  return {slider, driver};
+}
+
+/** The centre of page `index`'s indicator, page coordinates. */
+async function indicatorCenter(slider: Locator, index: number) {
+  return slider.evaluate((el, i) => {
+    const dot = el.querySelector(`[data-page="${i}"]`) as HTMLElement;
+    const box = dot.getBoundingClientRect();
+    return {x: box.left + box.width / 2, y: box.top + box.height / 2};
+  }, index);
+}
+
+const valueNow = async (slider: Locator) =>
+  Number(await slider.getAttribute('aria-valuenow'));
+
+/** Logs every page change with its time (performance.now()) from now on. */
+async function logPages(slider: Locator) {
+  await slider.evaluate(el => {
+    const log: Array<{t: number; page: number}> = [];
+    (window as unknown as {pageLog: typeof log}).pageLog = log;
+    new MutationObserver(() => {
+      log.push({
+        t: performance.now(),
+        page: Number(el.getAttribute('aria-valuenow')),
+      });
+    }).observe(el, {attributes: true, attributeFilter: ['aria-valuenow']});
+  });
+  return () =>
+    slider.evaluate(
+      () =>
+        (window as unknown as {pageLog: Array<{t: number; page: number}>})
+          .pageLog,
+    );
+}
+
+test('a tap on the trailing side of the current indicator moves one page forward, the leading side one back', async ({
+  page,
+}) => {
+  const {slider, driver} = await open(page);
+  expect(await valueNow(slider)).toBe(3);
+  const current = await indicatorCenter(slider, 2);
+  await driver.tap({x: current.x + 12, y: current.y});
+  await expect.poll(async () => valueNow(slider)).toBe(4);
+  await expect(page.getByTestId('page')).toHaveText('Page 4');
+  const next = await indicatorCenter(slider, 3);
+  await driver.tap({x: next.x - 12, y: next.y});
+  await expect.poll(async () => valueNow(slider)).toBe(3);
+});
+
+test('a tap just above the control, inside its 44 px hit area, steps a page', async ({
+  page,
+}) => {
+  const {slider, driver} = await open(page);
+  expect(await valueNow(slider)).toBe(3);
+  // The 25.67 px tall control grows about 9 px past each edge.
+  await expect
+    .poll(() =>
+      slider.evaluate(
+        el =>
+          Number.parseFloat(
+            el.style.getPropertyValue('--astryx-hit-inset-top'),
+          ) || 0,
+      ),
+    )
+    .toBeGreaterThan(8);
+  const box = await slider.boundingBox();
+  if (box == null) {
+    throw new Error('no control');
+  }
+  const current = await indicatorCenter(slider, 2);
+  await driver.tap({x: current.x + 12, y: box.y - 6});
+  await expect.poll(async () => valueNow(slider)).toBe(4);
+});
+
+test('the page changes when the finger lifts, not when it lands', async ({
+  page,
+}) => {
+  const {slider, driver} = await open(page);
+  const current = await indicatorCenter(slider, 2);
+  const at = {x: current.x + 12, y: current.y};
+  let whileDown = NaN;
+  // A finger held 200 ms (a 0.4 px creep, so moves are reported) then lifted.
+  await driver.play(
+    drag(at, {x: at.x + 0.4, y: at.y}, {durationMs: 200, hz: 10}),
+    {
+      onEvent: async step => {
+        if (step.type === 'touchMove' && Number.isNaN(whileDown)) {
+          whileDown = await valueNow(slider);
+        }
+      },
+    },
+  );
+  expect(whileDown).toBe(3);
+  await expect.poll(async () => valueNow(slider)).toBe(4);
+});
+
+test('rapid taps are not coalesced: five taps 150 ms apart step five pages (UIKit: each tap steps once)', async ({
+  page,
+}) => {
+  const {slider, driver} = await open(page, 'lab-pagecontrol--many-pages');
+  expect(await valueNow(slider)).toBe(26);
+  for (let i = 0; i < 5; i++) {
+    const current = await indicatorCenter(slider, 25 + i);
+    await driver.tap({x: current.x + 12, y: current.y});
+    await page.waitForTimeout(100);
+  }
+  await expect.poll(async () => valueNow(slider)).toBe(31);
+});
+
+test('a finger that travels 16 px scrubs: the page is the indicator under it, switching at the midpoints, with no layout read after the scrub begins', async ({
+  page,
+}) => {
+  const {slider, driver} = await open(page);
+  const centers = await Promise.all(
+    [0, 1, 2, 3, 4].map(i => indicatorCenter(slider, i)),
+  );
+  const from = centers[2];
+  const to = {x: centers[4].x + 4, y: from.y};
+  // Every layout read the page makes from here on.
+  await page.evaluate(() => {
+    const counter = window as unknown as {layoutReads: number};
+    const read = Element.prototype.getBoundingClientRect;
+    counter.layoutReads = 0;
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      counter.layoutReads++;
+      return read.call(this);
+    };
+  });
+  const seen: Array<{x: number; reads: number}> = [];
+  await driver.play(drag(from, to, {durationMs: 900, hz: 30, restMs: 120}), {
+    onEvent: async step => {
+      if (step.type === 'touchMove') {
+        const x = step.fingers[0].x;
+        const travel = x - from.x;
+        const expected =
+          travel < 16
+            ? 2
+            : Math.max(0, Math.min(4, Math.round((x - centers[0].x) / PITCH)));
+        // One sample of slack at a switch point (the page follows the finger
+        // within the move that crossed it). Each other sample waits for the
+        // page it expects: where the page lands, not how fast.
+        if (
+          Math.abs(((x - centers[0].x) / PITCH) % 1) - 0.5 > 0.06 ||
+          travel < 15
+        ) {
+          await expect
+            .poll(async () => (await valueNow(slider)) - 1, {
+              message: `finger at ${x.toFixed(1)}`,
+            })
+            .toBe(expected);
+        }
+        seen.push({
+          x,
+          reads: await page.evaluate(
+            () => (window as unknown as {layoutReads: number}).layoutReads,
+          ),
+        });
+      }
+    },
+  });
+  // The scrub reads the control's layout once, as it begins, and never while
+  // the finger moves.
+  const scrubbing = seen.filter(({x}) => x - from.x >= 16);
+  expect(scrubbing.length).toBeGreaterThan(5);
+  expect(scrubbing[0].reads).toBeGreaterThan(0);
+  expect(scrubbing[scrubbing.length - 1].reads).toBe(scrubbing[0].reads);
+  await expect.poll(async () => valueNow(slider)).toBe(5);
+  // Scrubbing back to page 0.
+  await driver.play(
+    drag(to, {x: centers[0].x - 6, y: from.y}, {durationMs: 900, restMs: 120}),
+  );
+  await expect.poll(async () => valueNow(slider)).toBe(1);
+});
+
+test('past the edge of a windowed control the page keeps stepping, faster the further past (jog)', async ({
+  page,
+}) => {
+  const {slider, driver} = await open(page, 'lab-pagecontrol--many-pages');
+  const box = await slider.boundingBox();
+  if (box == null) {
+    throw new Error('no control');
+  }
+  const contentEnd = box.x + box.width - 14;
+  const current = await indicatorCenter(slider, 25);
+  const pages = await logPages(slider);
+  // Scrub 40 px past the content's edge and hold there for 1.2 s:
+  // 0.173 pages/s per px → about 7 pages a second.
+  await driver.play(
+    drag(
+      current,
+      {x: contentEnd + 40, y: current.y},
+      {durationMs: 300, hz: 60, restMs: 1200},
+    ),
+  );
+  const log = await pages();
+  const held = log.filter(e => e.t >= log[0].t + 400);
+  const intervals = held.slice(1).map((e, i) => e.t - held[i].t);
+  const median = intervals.sort((a, b) => a - b)[
+    Math.floor(intervals.length / 2)
+  ];
+  expect(median).toBeGreaterThan(110);
+  expect(median).toBeLessThan(190);
+  expect(log[log.length - 1].page).toBeGreaterThan(30);
+  // Far past (100 px): 15 pages a second.
+  const far = await logPages(slider);
+  const now = await indicatorCenter(slider, (await valueNow(slider)) - 1);
+  await driver.play(
+    drag(
+      now,
+      {x: contentEnd + 100, y: now.y},
+      {durationMs: 200, hz: 60, restMs: 900},
+    ),
+  );
+  const fast = (await far()).filter((e, i, all) => e.t >= all[0].t + 300);
+  const fastIntervals = fast.slice(1).map((e, i) => e.t - fast[i].t);
+  const fastMedian = fastIntervals.sort((a, b) => a - b)[
+    Math.floor(fastIntervals.length / 2)
+  ];
+  expect(fastMedian).toBeGreaterThan(50);
+  expect(fastMedian).toBeLessThan(85);
+});
+
+test('a held finger shows the platter, the pressed overlay, and dims the other indicators after 155 ms; the touched indicator does not transform', async ({
+  page,
+}) => {
+  const {slider, driver} = await open(page);
+  const target = await indicatorCenter(slider, 3);
+  const restingScale = await slider.evaluate(
+    el =>
+      getComputedStyle(el.querySelector('[data-page="3"]') as HTMLElement)
+        .scale,
+  );
+  const states: Array<{
+    t: number;
+    interacting: boolean;
+    platter: number;
+    other: number;
+    touchedScale: string;
+  }> = [];
+  // Each read is dated on the page's clock from the moment the finger landed.
+  // The 155 ms runs on that clock. On a loaded runner, the driver plays the
+  // moves later than scripted, so a scripted time would date a late read
+  // early.
+  await slider.evaluate(el => {
+    el.addEventListener(
+      'touchstart',
+      () => {
+        (window as unknown as {landedAt: number}).landedAt = performance.now();
+      },
+      {capture: true, once: true},
+    );
+  });
+  const read = async () => {
+    const state = await slider.evaluate(el => {
+      // The platter is the root's ::before (no element of its own).
+      const platter = getComputedStyle(el, '::before');
+      const other = el.querySelector('[data-page="0"]') as HTMLElement;
+      const touched = el.querySelector('[data-page="3"]') as HTMLElement;
+      return {
+        t:
+          performance.now() -
+          (window as unknown as {landedAt: number}).landedAt,
+        interacting: el.hasAttribute('data-interacting'),
+        platter: Number(platter.opacity),
+        other: Number(other.style.opacity),
+        touchedScale: getComputedStyle(touched).scale,
+      };
+    });
+    states.push(state);
+  };
+  await driver.play(
+    drag(target, {x: target.x + 0.4, y: target.y}, {durationMs: 400, hz: 20}),
+    {
+      onEvent: async step => {
+        if (step.type === 'touchStart' || step.type === 'touchMove') {
+          await read();
+        }
+      },
+    },
+  );
+  const early = states.filter(s => s.t < 100);
+  const late = states.filter(s => s.t > 260);
+  expect(early.length).toBeGreaterThan(0);
+  expect(early.every(s => !s.interacting && s.other === 0.48)).toBe(true);
+  expect(late.length).toBeGreaterThan(0);
+  expect(late.every(s => s.interacting && s.other === 0.25)).toBe(true);
+  expect(late.every(s => s.platter > 0.9)).toBe(true);
+  // The platter is the held look: the system pressed overlay, resolved as any
+  // element resolves it here.
+  const colors = await slider.evaluate(el => {
+    const probe = document.createElement('span');
+    probe.style.backgroundColor = 'var(--color-overlay-pressed)';
+    el.append(probe);
+    const expected = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return {
+      platter: getComputedStyle(el, '::before').backgroundColor,
+      expected,
+    };
+  });
+  expect(colors.expected).not.toBe('rgba(0, 0, 0, 0)');
+  expect(colors.platter).toBe(colors.expected);
+  // The touched indicator keeps its resting size throughout.
+  expect(states.every(s => s.touchedScale === restingScale)).toBe(true);
+  // At the lift both return.
+  await expect
+    .poll(async () =>
+      slider.evaluate(el => el.hasAttribute('data-interacting')),
+    )
+    .toBe(false);
+  expect(
+    await slider.evaluate(
+      el => (el.querySelector('[data-page="0"]') as HTMLElement).style.opacity,
+    ),
+  ).toBe('0.48');
+});
+
+test('the old current indicator fades over 0.125 s after a tap and 0.25 s after any other change, on (0, 0, 0.58, 1)', async ({
+  page,
+}) => {
+  const {slider, driver} = await open(page);
+  // Each opacity transition as it runs, read from the transition itself: the
+  // dot goes back to the switch once its fade starts. And each one that ran
+  // to its end, with how long it ran.
+  await slider.evaluate(el => {
+    const runs: Array<{page: number; duration: number; easing: string}> = [];
+    const ends: Array<{page: number; duration: number}> = [];
+    Object.assign(window, {runs, ends});
+    el.addEventListener('transitionrun', event => {
+      const dot = event.target as HTMLElement;
+      for (const animation of dot.getAnimations()) {
+        if (
+          animation instanceof CSSTransition &&
+          animation.transitionProperty === 'opacity'
+        ) {
+          const timing = animation.effect?.getTiming();
+          // WebKit names this curve by its keyword.
+          const easing =
+            timing?.easing === 'ease-out'
+              ? 'cubic-bezier(0, 0, 0.58, 1)'
+              : (timing?.easing ?? '');
+          runs.push({
+            page: Number(dot.dataset.page),
+            duration: Number(timing?.duration),
+            easing,
+          });
+        }
+      }
+    });
+    el.addEventListener('transitionend', event => {
+      const {propertyName, elapsedTime, target} = event as TransitionEvent;
+      if (propertyName === 'opacity') {
+        ends.push({
+          page: Number((target as HTMLElement).dataset.page),
+          duration: elapsedTime,
+        });
+      }
+    });
+  });
+  const runsOf = async (index: number) =>
+    page.evaluate(
+      i =>
+        (
+          window as unknown as {
+            runs: Array<{page: number; duration: number; easing: string}>;
+          }
+        ).runs
+          .filter(run => run.page === i)
+          .map(({duration, easing}) => ({duration, easing})),
+      index,
+    );
+  const endsOf = async (index: number) =>
+    page.evaluate(
+      i =>
+        (
+          window as unknown as {ends: Array<{page: number; duration: number}>}
+        ).ends
+          .filter(end => end.page === i)
+          .map(end => end.duration),
+      index,
+    );
+  const current = await indicatorCenter(slider, 2);
+  await driver.tap({x: current.x + 12, y: current.y});
+  await expect.poll(async () => valueNow(slider)).toBe(4);
+  await expect
+    .poll(async () => runsOf(2))
+    .toEqual([{duration: 125, easing: 'cubic-bezier(0, 0, 0.58, 1)'}]);
+  await expect.poll(async () => endsOf(2)).toEqual([0.125]);
+  await expect.poll(async () => endsOf(3)).toEqual([0.015625]);
+  await slider.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(async () => valueNow(slider)).toBe(5);
+  await expect
+    .poll(async () => (await runsOf(3)).at(-1))
+    .toEqual({duration: 250, easing: 'cubic-bezier(0, 0, 0.58, 1)'});
+  await expect.poll(async () => (await endsOf(3)).at(-1)).toBe(0.25);
+});
+
+test('after a page change, a held finger dims every other indicator on the switch, the previous current one included, and the lift restores them on it', async ({
+  page,
+}) => {
+  const {slider, driver} = await open(page);
+  // Each opacity transition that ran to its end, with how long it ran.
+  await slider.evaluate(el => {
+    const fades: Array<{page: number; duration: number}> = [];
+    (window as unknown as {fades: typeof fades}).fades = fades;
+    el.addEventListener('transitionend', event => {
+      const {propertyName, elapsedTime, target} = event as TransitionEvent;
+      if (propertyName === 'opacity') {
+        fades.push({
+          page: Number((target as HTMLElement).dataset.page),
+          duration: elapsedTime,
+        });
+      }
+    });
+  });
+  const fadesOf = async (index: number) =>
+    page.evaluate(
+      i =>
+        (
+          window as unknown as {fades: Array<{page: number; duration: number}>}
+        ).fades
+          .filter(fade => fade.page === i)
+          .map(fade => fade.duration),
+      index,
+    );
+  // End: page 3's indicator fades out over 0.25 s.
+  await slider.focus();
+  await page.keyboard.press('End');
+  await expect.poll(async () => valueNow(slider)).toBe(5);
+  await expect.poll(async () => fadesOf(2)).toEqual([0.25]);
+  await page.evaluate(() => {
+    (window as unknown as {fades: unknown[]}).fades.length = 0;
+  });
+  // A finger held on the current indicator dims the others, then lifts. Its
+  // step past the last page keeps the page.
+  const target = await indicatorCenter(slider, 4);
+  await driver.play(
+    drag(target, {x: target.x + 0.4, y: target.y}, {durationMs: 400, hz: 20}),
+  );
+  await expect
+    .poll(async () =>
+      slider.evaluate(el => el.hasAttribute('data-interacting')),
+    )
+    .toBe(false);
+  expect(await valueNow(slider)).toBe(5);
+  for (const index of [0, 1, 2, 3]) {
+    await expect.poll(async () => fadesOf(index)).toEqual([0.015625, 0.015625]);
+  }
+});
+
+test('after a page change made while the control is hidden, a held finger dims the previous current indicator on the switch', async ({
+  page,
+}) => {
+  const {slider, driver} = await open(page);
+  await slider.evaluate(el => {
+    const fades: Array<{page: number; duration: number}> = [];
+    (window as unknown as {fades: typeof fades}).fades = fades;
+    el.addEventListener('transitionend', event => {
+      const {propertyName, elapsedTime, target} = event as TransitionEvent;
+      if (propertyName === 'opacity') {
+        fades.push({
+          page: Number((target as HTMLElement).dataset.page),
+          duration: elapsedTime,
+        });
+      }
+    });
+  });
+  const fadesOf = async (index: number) =>
+    page.evaluate(
+      i =>
+        (
+          window as unknown as {fades: Array<{page: number; duration: number}>}
+        ).fades
+          .filter(fade => fade.page === i)
+          .map(fade => fade.duration),
+      index,
+    );
+  // End while the control is hidden: no fade can run.
+  await slider.evaluate(el => {
+    el.style.display = 'none';
+    el.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'End',
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  });
+  // A role locator skips a hidden element; read the attribute directly.
+  const hidden = page.locator('[role="slider"]');
+  await expect(hidden).toHaveAttribute('aria-valuenow', '5');
+  await hidden.evaluate(el => {
+    el.style.display = '';
+  });
+  // A finger held on the current indicator dims the others, then lifts.
+  const target = await indicatorCenter(slider, 4);
+  await driver.play(
+    drag(target, {x: target.x + 0.4, y: target.y}, {durationMs: 400, hz: 20}),
+  );
+  await expect
+    .poll(async () =>
+      slider.evaluate(el => el.hasAttribute('data-interacting')),
+    )
+    .toBe(false);
+  await expect.poll(async () => fadesOf(2)).toEqual([0.015625, 0.015625]);
+});
+
+test('when a tap or a key slides the window, the old indicator fades for 0.125 s or 0.25 s, not the switch', async ({
+  page,
+}) => {
+  const {slider, driver} = await open(page, 'lab-pagecontrol--many-pages');
+  // Each opacity transition that ran, with how long it ran: a finished
+  // transition's transitionend reports its duration.
+  await slider.evaluate(el => {
+    const fades: Array<{page: number; duration: number}> = [];
+    (window as unknown as {fades: typeof fades}).fades = fades;
+    el.addEventListener('transitionend', event => {
+      const {propertyName, elapsedTime, target} = event as TransitionEvent;
+      if (propertyName === 'opacity') {
+        fades.push({
+          page: Number((target as HTMLElement).dataset.page),
+          duration: elapsedTime,
+        });
+      }
+    });
+  });
+  const fadesOf = async (index: number) =>
+    page.evaluate(
+      i =>
+        (
+          window as unknown as {fades: Array<{page: number; duration: number}>}
+        ).fades
+          .filter(fade => fade.page === i)
+          .map(fade => fade.duration),
+      index,
+    );
+  const translateX = async () =>
+    slider.evaluate(el => {
+      const strip = el.children[0] as HTMLElement;
+      return Number.parseFloat(getComputedStyle(strip).translate) || 0;
+    });
+  // Page 26 of 50 (index 25) sits in the window's last full slot, so the next
+  // page slides the window.
+  const before = await translateX();
+  const current = await indicatorCenter(slider, 25);
+  await driver.tap({x: current.x + 12, y: current.y});
+  await expect.poll(async () => valueNow(slider)).toBe(27);
+  await expect.poll(async () => translateX()).not.toBeCloseTo(before, 0);
+  await expect.poll(async () => fadesOf(25)).toEqual([0.125]);
+  // A key slides it again: the old indicator fades for 0.25 s. Page 27 also
+  // switched on when it became current, so read only the fades after the key.
+  await page.evaluate(() => {
+    (window as unknown as {fades: unknown[]}).fades.length = 0;
+  });
+  await slider.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(async () => valueNow(slider)).toBe(28);
+  await expect.poll(async () => fadesOf(26)).toEqual([0.25]);
+});
+
+test('when the window jumps, a dot that mounts starts at its size in the old window and grows on the slide', async ({
+  page,
+}) => {
+  const {slider} = await open(page, 'lab-pagecontrol--many-pages');
+  const scaleOf = async (index: number) =>
+    slider.evaluate((el, i) => {
+      const dot = el.querySelector(`[data-page="${i}"]`) as HTMLElement | null;
+      return dot == null
+        ? null
+        : Number.parseFloat(getComputedStyle(dot).scale);
+    }, index);
+  // Page 46 (index 45) is outside the window, so it is not rendered yet.
+  expect(await scaleOf(45)).toBeNull();
+  // The first frame after the change: before the slide starts.
+  await slider.evaluate(el => {
+    el.addEventListener(
+      'keydown',
+      () => {
+        requestAnimationFrame(() => {
+          const dot = el.querySelector<HTMLElement>('[data-page="45"]');
+          (window as unknown as {mounted?: number | null}).mounted =
+            dot == null ? null : Number.parseFloat(getComputedStyle(dot).scale);
+        });
+      },
+      {capture: true, once: true},
+    );
+  });
+  await slider.focus();
+  await page.keyboard.press('End');
+  await expect.poll(async () => valueNow(slider)).toBe(50);
+  // It mounted at its old-window size, 0, and grows to full size.
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        () => (window as unknown as {mounted?: number | null}).mounted,
+      ),
+    )
+    .toBe(0);
+  await expect.poll(async () => scaleOf(45)).toBeCloseTo(DOT_SCALE, 3);
+});
+
+test('a windowed control slides one slot 50 ms after the change, on a critically damped spring', async ({
+  page,
+}) => {
+  const {slider, driver} = await open(page, 'lab-pagecontrol--many-pages');
+  // Page 26 of 50 from page 1: the window starts at page 18; page 26 (index
+  // 25) is in its last full slot.
+  const translateX = () =>
+    slider.evaluate(el => {
+      const strip = el.children[0] as HTMLElement;
+      return Number.parseFloat(getComputedStyle(strip).translate) || 0;
+    });
+  expect(await translateX()).toBeCloseTo(-18 * PITCH, 0);
+  const current = await indicatorCenter(slider, 25);
+  await slider.evaluate(el => {
+    const strip = el.children[0] as HTMLElement;
+    const trace: Array<{t: number; x: number; page: number}> = [];
+    const w = window as unknown as {slide: typeof trace; changedAt?: number};
+    w.slide = trace;
+    const start = performance.now();
+    // The change is dated when the lift that makes it begins, at its first
+    // event: the pointer's, then the touch's. The page commits the change in
+    // that task. The first frame that shows it and the end of the task both
+    // come late on a loaded runner, so neither dates it.
+    for (const type of ['pointerup', 'touchend']) {
+      addEventListener(
+        type,
+        () => {
+          w.changedAt ??= performance.now() - start;
+        },
+        {capture: true, once: true},
+      );
+    }
+    const sample = () => {
+      trace.push({
+        t: performance.now() - start,
+        x: Number.parseFloat(getComputedStyle(strip).translate) || 0,
+        page: Number(el.getAttribute('aria-valuenow')),
+      });
+      if (performance.now() - start < 1500) {
+        requestAnimationFrame(sample);
+      }
+    };
+    requestAnimationFrame(sample);
+  });
+  await driver.tap({x: current.x + 12, y: current.y});
+  await expect.poll(async () => valueNow(slider)).toBe(27);
+  // The trace holds the slide once a sample sits on the next slot.
+  await expect
+    .poll(() =>
+      slider.evaluate(
+        (_, pitch) =>
+          (window as unknown as {slide: Array<{x: number}>}).slide.some(
+            s => Math.abs(s.x + 19 * pitch) < 0.3,
+          ),
+        PITCH,
+      ),
+    )
+    .toBe(true);
+  const {trace, changedAt} = await slider.evaluate(() => {
+    const w = window as unknown as {
+      slide: Array<{t: number; x: number; page: number}>;
+      changedAt?: number;
+    };
+    return {trace: w.slide, changedAt: w.changedAt ?? NaN};
+  });
+  const moving = trace.filter(s => Math.abs(s.x + 18 * PITCH) > 0.2);
+  const startedAt = moving[0]?.t ?? NaN;
+  expect(startedAt - changedAt).toBeGreaterThan(30);
+  expect(startedAt - changedAt).toBeLessThan(120);
+  // Monotonic to the next slot, settled within ~0.35 s of starting.
+  const xs = trace.filter(s => s.t >= startedAt).map(s => s.x);
+  for (let i = 1; i < xs.length; i++) {
+    expect(xs[i]).toBeLessThanOrEqual(xs[i - 1] + 0.01);
+  }
+  const settled = trace.find(s => Math.abs(s.x + 19 * PITCH) < 0.3);
+  expect(settled).toBeDefined();
+  expect((settled?.t ?? Infinity) - startedAt).toBeLessThan(350);
+  // Page 27 (index 26) grows from its 7.33 px edge size to full: 9.67 px, a
+  // 10 px box at scale 0.967.
+  expect(
+    Number.parseFloat(
+      await slider.evaluate(
+        el =>
+          getComputedStyle(el.querySelector('[data-page="26"]') as HTMLElement)
+            .scale,
+      ),
+    ),
+  ).toBeCloseTo(0.967, 3);
+});
+
+test('RTL: a scrub toward the left goes forward and the window slides the other way', async ({
+  page,
+}) => {
+  const {slider, driver} = await open(page, 'lab-pagecontrol--many-pages', {
+    rtl: true,
+  });
+  expect(await slider.evaluate(el => getComputedStyle(el).direction)).toBe(
+    'rtl',
+  );
+  const stripX = () =>
+    slider.evaluate(el =>
+      Number.parseFloat(
+        getComputedStyle(el.children[0] as HTMLElement).translate,
+      ),
+    );
+  // Page 26: the window starts at page 18, shifted toward the right in RTL.
+  expect(await stripX()).toBeCloseTo(18 * PITCH, 0);
+  const current = await indicatorCenter(slider, 25);
+  const box = await slider.boundingBox();
+  if (box == null) {
+    throw new Error('no control');
+  }
+  // The next pages sit to the left in RTL. Page 26 is the window's last full
+  // slot. So a scrub past it toward the left runs into the content's edge and
+  // jogs forward, as it does toward the right in LTR. Held 6 px past the edge,
+  // about one page a second, the jog steps once about 1 s after the finger
+  // crosses it. It steps again about 1 s later, after the lift.
+  await driver.play(
+    drag(
+      current,
+      {x: box.x + 14 - 6, y: current.y},
+      {durationMs: 300, restMs: 1400},
+    ),
+  );
+  await expect.poll(async () => valueNow(slider)).toBe(27);
+  // The window followed one slot, toward the right.
+  await expect.poll(stripX, {timeout: 2000}).toBeCloseTo(19 * PITCH, 0);
+});
+
+/**
+ * At most a jump: `property` holds its start value, then its end value, and
+ * never one in between. A cross-fade moves the track at the bottom of its
+ * dip.
+ */
+const holdsOrJumps = (
+  keyframes: ReadonlyArray<Record<string, unknown>>,
+  property: string,
+): boolean => {
+  const values = new Set<string>();
+  for (const k of keyframes) {
+    const v = k[property];
+    if (typeof v === 'string' || typeof v === 'number') {
+      values.add(String(v));
+    }
+  }
+  return values.size <= 2;
+};
+
+test('under Reduce Motion nothing slides or scales, and no fade runs over 200 ms on a coarse pointer (design:reduced-motion DR1, DR2)', async ({
+  page,
+}) => {
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  const {slider, driver} = await open(page, 'lab-pagecontrol--many-pages');
+  // The phone projects have a coarse pointer, where the cross-fade applies.
+  expect(
+    await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+  ).toBe(true);
+  const stripX = () =>
+    slider.evaluate(el =>
+      Number.parseFloat(
+        getComputedStyle(el.children[0] as HTMLElement).translate,
+      ),
+    );
+  const longestFade = () =>
+    slider.evaluate(el =>
+      Math.max(
+        0,
+        ...Array.from(el.querySelectorAll<HTMLElement>('[data-page]')).flatMap(
+          dot =>
+            getComputedStyle(dot)
+              .transitionDuration.split(',')
+              .map(d =>
+                d.trim().endsWith('ms') ? parseFloat(d) : parseFloat(d) * 1000,
+              ),
+        ),
+      ),
+    );
+  // A tap that moves the window: page 26 to 27. Armed before the tap, the page
+  // holds every animation under the control once one has run 60 ms, past the
+  // window's 50 ms delay.
+  const current = await indicatorCenter(slider, 25);
+  const hold = await armHold(page, slider, {minProgressMs: 60});
+  await driver.tap({x: current.x + 12, y: current.y});
+  await expect.poll(async () => valueNow(slider)).toBe(27);
+  // Every animation is an opacity fade of at most 200 ms. No translate or
+  // scale travels.
+  const held = await hold.held();
+  // The window's own cross-fade is among them: the animator's, not a CSS
+  // transition.
+  expect(held.some(a => a.kind === 'Animation')).toBe(true);
+  for (const a of held) {
+    // Nothing travels: the strip and the dots hold, then jump.
+    for (const property of ['translate', 'scale', 'transform']) {
+      expect(holdsOrJumps(a.keyframes, property)).toBe(true);
+    }
+    expect(a.curveEndMs).toBeLessThanOrEqual(200);
+  }
+  await releaseAnimations(page);
+  // The window still keeps the page in view.
+  await expect.poll(stripX, {timeout: 2000}).toBeCloseTo(-19 * PITCH, 0);
+  expect(await longestFade()).toBeLessThanOrEqual(200);
+  // A change that is not a tap (a key) fades the old dot: at most 200 ms.
+  await slider.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(async () => valueNow(slider)).toBe(28);
+  expect(await longestFade()).toBeLessThanOrEqual(200);
+  // A held finger's platter fades in and out in at most 200 ms too.
+  const finger = await indicatorCenter(slider, 27);
+  await driver.play(
+    drag(finger, {x: finger.x + 1, y: finger.y}, {durationMs: 400, restMs: 0}),
+  );
+  const platterFade = await slider.evaluate(el =>
+    Math.max(
+      ...getComputedStyle(el, '::before')
+        .transitionDuration.split(',')
+        .map(d =>
+          d.trim().endsWith('ms') ? parseFloat(d) : parseFloat(d) * 1000,
+        ),
+    ),
+  );
+  expect(platterFade).toBeGreaterThan(0);
+  expect(platterFade).toBeLessThanOrEqual(200);
+});
+
+test('busy main thread: a window slide finishes on time through a 600 ms block', async ({
+  page,
+  browserName,
+}) => {
+  test.skip(
+    browserName === 'webkit',
+    "WebKit's screencast clock is not the page's (harness README); the simulator clip covers it",
+  );
+  const {slider, driver} = await open(page, 'lab-pagecontrol--many-pages');
+  const current = await indicatorCenter(slider, 25);
+  await driver.tap({x: current.x + 12, y: current.y});
+  await expect
+    .poll(async () =>
+      slider.evaluate(
+        el => (el.children[0] as HTMLElement).getAnimations().length,
+      ),
+    )
+    .toBeGreaterThan(0);
+  // Block the main thread once the slide is on the timeline (it starts 50 ms
+  // after the change), for longer than the slide lasts.
+  const afterBlock = await slider.evaluate(el => {
+    const strip = el.children[0] as HTMLElement;
+    const end = performance.now() + 600;
+    while (performance.now() < end) {
+      // busy
+    }
+    return {
+      x: Number.parseFloat(getComputedStyle(strip).translate),
+      running: strip
+        .getAnimations()
+        .filter(
+          a => a.playState === 'running' && Number(a.currentTime ?? 0) < 400,
+        ).length,
+    };
+  });
+  // The compositor carried the slide to the next slot during the block.
+  expect(afterBlock.x).toBeCloseTo(-19 * PITCH, 0);
+  expect(afterBlock.running).toBe(0);
+});
+
+test('on an Android phone (no -webkit-touch-callout) a finger scrubs: one touch model, no platform idiom', async ({
+  page,
+}) => {
+  const {slider, driver} = await open(page);
+  expect(
+    await page.evaluate(() => ({
+      coarse: matchMedia('(pointer: coarse)').matches,
+      ios: CSS.supports('(-webkit-touch-callout: none)'),
+    })),
+  ).toEqual({coarse: true, ios: false});
+  const from = await indicatorCenter(slider, 2);
+  const to = await indicatorCenter(slider, 4);
+  await driver.play(drag(from, to, {durationMs: 600, restMs: 150}));
+  await expect.poll(async () => valueNow(slider)).toBe(5);
+});
+
+test.describe('with a mouse', () => {
+  test.use({hasTouch: false, isMobile: false});
+
+  test('a long control is the full row of pages, cropped, every dot at full size', async ({
+    page,
+  }) => {
+    const {slider} = await open(page, 'lab-pagecontrol--many-pages');
+    // A mouse: the context's pointer must not still match coarse.
+    expect(
+      await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+    ).toBe(false);
+    const facts = await slider.evaluate(el => {
+      const dots = Array.from(el.querySelectorAll<HTMLElement>('[data-page]'));
+      return {
+        count: dots.length,
+        scales: new Set(dots.map(d => getComputedStyle(d).scale)).size,
+        overflow: getComputedStyle(el).overflow,
+        width: el.getBoundingClientRect().width,
+      };
+    });
+    expect(facts).toMatchObject({count: 50, scales: 1, overflow: 'hidden'});
+    expect(facts.width).toBeCloseTo(161.3, 0);
+  });
+
+  // The tap and the scrub take every pointer. The touch presentation (the
+  // platter, the window, the fades) stays on a coarse one.
+  test('a click on the trailing side of the current indicator moves one page forward, the leading side one back, once each (spec:AST-094 FR43)', async ({
+    page,
+  }) => {
+    const {slider} = await open(page);
+    expect(
+      await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+    ).toBe(false);
+    // aria-valuenow counts from 1; the dots from 0.
+    const start = (await valueNow(slider)) - 1;
+    const last = Number(await slider.getAttribute('aria-valuemax')) - 1;
+    const forward = start < last;
+    const from = await indicatorCenter(slider, start);
+    await page.mouse.click(from.x + (forward ? 12 : -12), from.y);
+    const next = start + (forward ? 1 : -1);
+    await expect.poll(() => valueNow(slider)).toBe(next + 1);
+    // The click the browser sends after the press pages nothing more.
+    await page.waitForTimeout(150);
+    expect(await valueNow(slider)).toBe(next + 1);
+    const back = await indicatorCenter(slider, next);
+    await page.mouse.click(back.x + (forward ? -12 : 12), back.y);
+    await expect.poll(() => valueNow(slider)).toBe(start + 1);
+  });
+
+  test('a drag across the dots scrubs: the page is the dot under the pointer (spec:AST-094 FR43)', async ({
+    page,
+  }) => {
+    const {slider} = await open(page);
+    // aria-valuenow counts from 1; the dots from 0.
+    const last = Number(await slider.getAttribute('aria-valuemax')) - 1;
+    expect(last).toBeGreaterThanOrEqual(2);
+    const mid = Math.floor(last / 2);
+    const first = await indicatorCenter(slider, 0);
+    const end = await indicatorCenter(slider, last);
+    const middle = await indicatorCenter(slider, mid);
+    await page.mouse.move(first.x, first.y);
+    await page.mouse.down();
+    await page.mouse.move(end.x, end.y, {steps: 12});
+    await expect.poll(() => valueNow(slider)).toBe(last + 1);
+    await page.mouse.move(middle.x, middle.y, {steps: 8});
+    await expect.poll(() => valueNow(slider)).toBe(mid + 1);
+    await page.mouse.up();
+    expect(
+      await slider.evaluate(el => el.hasAttribute('data-interacting')),
+    ).toBe(false);
+  });
+
+  test('on a cropped long row, a drag holds the row still, and the page is the dot under the pointer until the lift', async ({
+    page,
+  }) => {
+    const {slider} = await open(page, 'lab-pagecontrol--many-pages');
+    const stripX = () =>
+      slider.evaluate(
+        el =>
+          Number.parseFloat(
+            getComputedStyle(el.children[0] as HTMLElement).translate,
+          ) || 0,
+      );
+    // aria-valuenow counts from 1; the dots from 0.
+    const start = (await valueNow(slider)) - 1;
+    const rest = await stripX();
+    const from = await indicatorCenter(slider, start);
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    for (let i = 1; i <= 5; i++) {
+      const x = from.x + i * PITCH;
+      await page.mouse.move(x, from.y, {steps: 3});
+      const under = await slider.evaluate((el, at) => {
+        let nearest = -1;
+        let distance = Infinity;
+        for (const dot of el.querySelectorAll<HTMLElement>('[data-page]')) {
+          const box = dot.getBoundingClientRect();
+          const d = Math.abs(box.left + box.width / 2 - at);
+          if (d < distance) {
+            distance = d;
+            nearest = Number(dot.dataset.page);
+          }
+        }
+        return nearest;
+      }, x);
+      await expect.poll(() => valueNow(slider)).toBe(under + 1);
+      expect(await stripX()).toBe(rest);
+    }
+    await page.mouse.up();
+    // At the lift the row re-centres on the page.
+    await expect.poll(stripX).not.toBe(rest);
+  });
+
+  test('a held press shows no platter and dims nothing: the held look is the touch presentation', async ({
+    page,
+  }) => {
+    const {slider} = await open(page);
+    const look = () =>
+      slider.evaluate(el => ({
+        interacting: el.hasAttribute('data-interacting'),
+        background: getComputedStyle(el).backgroundColor,
+        opacities: Array.from(
+          el.querySelectorAll<HTMLElement>('[data-page]'),
+        ).map(dot => getComputedStyle(dot).opacity),
+      }));
+    const before = await look();
+    const at = await indicatorCenter(slider, await valueNow(slider));
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+    // Past UIPageControl's 155 ms interaction delay.
+    await page.waitForTimeout(400);
+    const held = await look();
+    await page.mouse.up();
+    expect(held).toEqual({...before, interacting: false});
+  });
+
+  for (const [story, count] of [
+    ['lab-pagecontrol--default', 5],
+    ['lab-pagecontrol--many-pages', 9],
+  ] as const) {
+    test(`every indicator paints round, as wide as it is tall (${story}, a mouse)`, async ({
+      page,
+    }) => {
+      const {slider} = await open(page, story);
+      // A mouse: the context's pointer must not still match coarse.
+      expect(
+        await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
+      ).toBe(false);
+      const dots = await paintedDots(page, slider);
+      expect(dots.length).toBeGreaterThanOrEqual(count);
+      for (const dot of dots) {
+        expect(
+          Math.abs(dot.width - dot.height),
+          JSON.stringify(dots),
+        ).toBeLessThanOrEqual(1);
+      }
+    });
+  }
+});
+
+test('the page can scroll under the control (touch-action)', async ({page}) => {
+  const {slider} = await open(page);
+  // The scrub's horizontal pan keeps the vertical axis for the page.
+  expect(await slider.evaluate(el => getComputedStyle(el).touchAction)).toBe(
+    'pan-y pinch-zoom',
+  );
+});
+
+// A recognizer that competes with the page's scroll decides within 10 px. So
+// a swipe that starts vertical on the dots is the page's: it scrolls, and the
+// page indicator does not change.
+test("a vertical swipe that starts on the dots pages nothing and leaves every move to the page's scroll", async ({
+  page,
+  browserName,
+}) => {
+  const {slider, driver} = await open(page);
+  // Room to scroll, the control well inside the viewport, and whether each
+  // move reached the page cancelled (read after every listener).
+  await page.evaluate(() => {
+    const above = document.createElement('div');
+    above.style.height = '420px';
+    document.body.insertBefore(above, document.body.firstChild);
+    const below = document.createElement('div');
+    below.style.height = '3000px';
+    document.body.appendChild(below);
+    window.scrollTo(0, 0);
+    const log = window as unknown as {cancelledMoves: boolean[]};
+    log.cancelledMoves = [];
+    addEventListener(
+      'touchmove',
+      event => log.cancelledMoves.push(event.defaultPrevented),
+      {passive: true},
+    );
+  });
+  const pageBefore = await slider.getAttribute('aria-valuenow');
+  const from = await indicatorCenter(slider, 3);
+  await driver.play(
+    drag(from, {x: from.x + 2, y: from.y - 300}, {durationMs: 500, hz: 60}),
+  );
+  await page.waitForTimeout(400);
+  expect(await slider.getAttribute('aria-valuenow')).toBe(pageBefore);
+  const cancelled = await page.evaluate(
+    () => (window as unknown as {cancelledMoves: boolean[]}).cancelledMoves,
+  );
+  expect(cancelled.length).toBeGreaterThan(5);
+  expect(cancelled.some(Boolean)).toBe(false);
+  if (browserName === 'chromium') {
+    // Injected touches scroll natively only in Chromium (harness README).
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(100);
+  }
+});
+
+/**
+ * The painted size of every indicator, in device pixels. The page decodes the
+ * control's screenshot and reads each dark run across its middle row. It also
+ * reads the dark run down through that run's centre. Runs cut by the
+ * screenshot's edge are left out.
+ */
+async function paintedDots(page: Page, slider: Locator) {
+  const png = await slider.screenshot();
+  return page.evaluate(async b64 => {
+    const img = new Image();
+    img.src = `data:image/png;base64,${b64}`;
+    await img.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const g = canvas.getContext('2d');
+    if (g == null) {
+      throw new Error('no 2d context');
+    }
+    g.drawImage(img, 0, 0);
+    const {data, width, height} = g.getImageData(0, 0, img.width, img.height);
+    const dark = (x: number, y: number) => data[(y * width + x) * 4] < 200;
+    const cy = Math.floor(height / 2);
+    const dots: Array<{width: number; height: number}> = [];
+    for (let x = 0; x < width;) {
+      if (!dark(x, cy)) {
+        x++;
+        continue;
+      }
+      let x1 = x;
+      while (x1 < width && dark(x1, cy)) {
+        x1++;
+      }
+      const mid = (x + x1) >> 1;
+      let y0 = cy;
+      while (y0 > 0 && dark(mid, y0 - 1)) {
+        y0--;
+      }
+      let y1 = cy;
+      while (y1 < height - 1 && dark(mid, y1 + 1)) {
+        y1++;
+      }
+      if (x > 0 && x1 < width) {
+        dots.push({width: x1 - x, height: y1 - y0 + 1});
+      }
+      x = x1;
+    }
+    return dots;
+  }, png.toString('base64'));
+}
+
+for (const [story, count] of [
+  ['lab-pagecontrol--default', 5],
+  // The window's two outermost dots overhang the control's box by a pixel or
+  // two, so the screenshot cuts them.
+  ['lab-pagecontrol--many-pages', 8],
+] as const) {
+  test(`every indicator paints round, as wide as it is tall (${story}, a finger)`, async ({
+    page,
+  }) => {
+    const {slider} = await open(page, story);
+    const dots = await paintedDots(page, slider);
+    expect(dots.length).toBeGreaterThanOrEqual(count);
+    for (const dot of dots) {
+      expect(
+        Math.abs(dot.width - dot.height),
+        JSON.stringify(dots),
+      ).toBeLessThanOrEqual(1);
+    }
+  });
+}
+
+test('storyboard: a tap on the trailing side @storyboard', async ({page}) => {
+  const {slider, driver} = await open(page);
+  const current = await indicatorCenter(slider, 2);
+  const at = {x: current.x + 12, y: current.y};
+  const box = await slider.boundingBox();
+  if (box == null) {
+    throw new Error('no control');
+  }
+  const storyboard = await touchStoryboard(
+    page,
+    driver,
+    drag(at, {x: at.x + 0.4, y: at.y}, {durationMs: 100, hz: 20}),
+    {
+      name: 'page-control-tap',
+      clip: {
+        x: box.x - 8,
+        y: box.y - 8,
+        width: box.width + 16,
+        height: box.height + 16,
+      },
+      measure: async () => ({page: await valueNow(slider)}),
+    },
+  );
+  await storyboard.write(test.info());
+  const pages = storyboard.frames.map(f => (f.data as {page: number}).page);
+  // Page 3 until the lift, page 4 after it.
+  expect(pages[0]).toBe(3);
+  expect(pages.slice(0, -1).every(p => p === 3)).toBe(true);
+  expect(pages[pages.length - 1]).toBe(4);
+});
+
+test('storyboard: a scrub across the control @storyboard', async ({page}) => {
+  const {slider, driver} = await open(page);
+  const from = await indicatorCenter(slider, 2);
+  const end = await indicatorCenter(slider, 4);
+  const box = await slider.boundingBox();
+  if (box == null) {
+    throw new Error('no control');
+  }
+  const storyboard = await touchStoryboard(
+    page,
+    driver,
+    drag(from, {x: end.x + 4, y: from.y}, {durationMs: 600, hz: 10}),
+    {
+      name: 'page-control-scrub',
+      clip: {
+        x: box.x - 8,
+        y: box.y - 8,
+        width: box.width + 16,
+        height: box.height + 16,
+      },
+      measure: async () => ({
+        page: await valueNow(slider),
+        interacting: await slider.evaluate(el =>
+          el.hasAttribute('data-interacting'),
+        ),
+      }),
+    },
+  );
+  await storyboard.write(test.info());
+  const pages = storyboard.frames.map(f => (f.data as {page: number}).page);
+  // Pages only move forward, one indicator at a time, and end on page 5.
+  for (let i = 1; i < pages.length; i++) {
+    expect(pages[i] - pages[i - 1]).toBeGreaterThanOrEqual(0);
+    expect(pages[i] - pages[i - 1]).toBeLessThanOrEqual(1);
+  }
+  expect(pages[pages.length - 1]).toBe(5);
+});
+
+test('storyboard: the window slides one slot @storyboard', async ({page}) => {
+  const {slider, driver} = await open(page, 'lab-pagecontrol--many-pages');
+  const current = await indicatorCenter(slider, 25);
+  const box = await slider.boundingBox();
+  if (box == null) {
+    throw new Error('no control');
+  }
+  // Armed before the tap, the page holds the change's motion as it starts,
+  // however late the test reads it. That motion is the old indicator's fade
+  // and the slide, which starts 50 ms after the change.
+  const hold = await armHold(page, slider);
+  await driver.tap({x: current.x + 12, y: current.y});
+  const held = await hold.held();
+  const {storyboard} = await animationStoryboard(page, {
+    name: 'page-control-window-slide',
+    held,
+    clip: {
+      x: box.x - 24,
+      y: box.y - 8,
+      width: box.width + 48,
+      height: box.height + 16,
+    },
+    measure: async () =>
+      slider.evaluate(el => ({
+        x: Number.parseFloat(
+          getComputedStyle(el.children[0] as HTMLElement).translate,
+        ),
+        grow: Number.parseFloat(
+          getComputedStyle(el.querySelector('[data-page="26"]') as HTMLElement)
+            .scale,
+        ),
+      })),
+  });
+  await storyboard.write(test.info());
+  const frames = storyboard.frames.map(
+    f => f.data as {x: number; grow: number},
+  );
+  // The strip moves one slot left without overshoot while the new current
+  // indicator grows from its edge size (0.7588) to full.
+  for (let i = 1; i < frames.length; i++) {
+    expect(frames[i].x).toBeLessThanOrEqual(frames[i - 1].x + 0.01);
+    expect(frames[i].grow).toBeGreaterThanOrEqual(frames[i - 1].grow - 0.001);
+  }
+  expect(frames[frames.length - 1].x).toBeCloseTo(-19 * PITCH, 0);
+  expect(frames[0].grow).toBeLessThan(0.9);
+  // Full size: 9.67 px, a 10 px box at scale 0.967.
+  expect(frames[frames.length - 1].grow).toBeCloseTo(0.967, 2);
+});

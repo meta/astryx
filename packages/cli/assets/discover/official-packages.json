@@ -146,6 +146,10 @@
         },
         {
           "kind": "component",
+          "name": "PageControl"
+        },
+        {
+          "kind": "component",
           "name": "RadialChart"
         },
         {
