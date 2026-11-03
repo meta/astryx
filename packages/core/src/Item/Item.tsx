@@ -63,6 +63,7 @@ import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import type {ItemSwipeBridge} from './ItemSwipeLayer';
+import {isPressPinClick} from '../Layer/pressPinClick';
 
 // The gesture and the panels, loaded only by a row that has swipe actions: a
 // row without them never bundles useSwipeAction. While the chunk loads the
@@ -760,7 +761,7 @@ export function Item({
   );
 
   const handleContainerClick = (e: React.MouseEvent) => {
-    if (isDisabled) {
+    if (isDisabled || isPressPinClick(e.nativeEvent)) {
       return;
     }
     const target = e.target as HTMLElement;

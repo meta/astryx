@@ -18,6 +18,7 @@
 import {useCallback, useEffect, type RefObject, type MouseEvent} from 'react';
 import {isLayerSurface} from '../Layer/layerSurfacePress';
 import {isSafeUrl} from '../utils/safeUrl';
+import {isPressPinClick} from '../Layer/pressPinClick';
 
 /**
  * The attribute this hook sets on the container it makes clickable. A click
@@ -206,7 +207,9 @@ export function useClickableContainer({
 
   const onClick = useCallback(
     (event: MouseEvent<HTMLElement>) => {
-      if (disabled) {
+      // A press that pinned or closed a hover layer stops at its trigger, so
+      // the container does not act on it.
+      if (disabled || isPressPinClick(event.nativeEvent)) {
         return;
       }
 

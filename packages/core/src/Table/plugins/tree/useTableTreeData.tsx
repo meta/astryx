@@ -58,6 +58,7 @@ import {
   useComponentTranslator,
 } from '../../../i18n/useComponentTranslator';
 import english from '../../../i18n/generated-english/Table/plugins/tree/useTableTreeData.generated';
+import {isPressPinClick} from '../../../Layer/pressPinClick';
 
 registerEnglishFallback(english);
 
@@ -698,7 +699,10 @@ export function useTableTreeData<T extends Record<string, unknown>>(
               // "this click belongs to something else".
               const row = event.currentTarget;
               const target = event.target;
-              if (!(target instanceof Element)) {
+              if (
+                !(target instanceof Element) ||
+                isPressPinClick(event.nativeEvent)
+              ) {
                 return;
               }
               if (target !== row && hasInteractiveAncestor(target, row)) {

@@ -45,6 +45,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/TreeList/TreeListItem.generated';
+import {isPressPinClick} from '../Layer/pressPinClick';
 
 registerEnglishFallback(english);
 
@@ -445,7 +446,7 @@ export function TreeListItem({
   const handleClick = useMemo(() => {
     if (onClick != null || (hasChildren && onToggle != null)) {
       return (e: React.MouseEvent) => {
-        if (isDisabled) {
+        if (isDisabled || isPressPinClick(e.nativeEvent)) {
           return;
         }
         // Controls inside the row, native or role-based, keep their own

@@ -91,7 +91,7 @@ export const docs = {
           name: 'triggerBehavior',
           type: "'adaptive' | 'hover' | 'toggle'",
           description:
-            'How the trigger opens the tooltip. adaptive (the default): hover and focus preview it, and a tap opens it unless the trigger performs an action of its own, as touchTrigger decides while it remains. hover: hover and focus preview it, and no touch or pen tap opens it. toggle, on a button trigger: a click, a tap, Enter, or Space pins the tooltip and the same press closes it, while hover and keyboard focus still preview it. A pinned tooltip stays until Escape, a second press, a press outside, or focus leaving, and the press stops at the trigger, so a clickable row or card around it does not activate (with anchorRef, the anchored trigger still runs its own onClick, Astryx clickable rows and cards ignore the press except an Item row when the anchor is not a native button, and a plain onClick element around the anchor receives it unless that onClick stops it). The trigger reports aria-expanded and aria-controls, and the text is announced once when it pins. Use it for an info icon or any button whose only job is revealing the tooltip.',
+            'How the trigger opens the tooltip. adaptive (the default): hover and focus preview it, and a tap opens it unless the trigger performs an action of its own, as touchTrigger decides while it remains. hover: hover and focus preview it, and no touch or pen tap opens it. toggle, on a button trigger: a click, a tap, Enter, or Space pins the tooltip and the same press closes it, while hover and keyboard focus still preview it. A pinned tooltip stays until Escape, a second press, a press outside, or focus leaving, and the press stops at the trigger, so a clickable row or card around it does not activate (with anchorRef, the anchored trigger still runs its own onClick, Astryx clickable rows and cards ignore the press, and a plain onClick element around the anchor receives it unless that onClick stops it). The trigger reports aria-expanded and aria-controls, and the text is announced once when it pins. Use it for an info icon or any button whose only job is revealing the tooltip.',
           default: "'adaptive'",
         },
         {
@@ -211,7 +211,7 @@ export const docsZh = {
           name: 'triggerBehavior',
           type: "'adaptive' | 'hover' | 'toggle'",
           description:
-            '触发元素如何打开工具提示。adaptive（默认）：悬停和聚焦会预览；轻点即打开，除非触发元素本身会执行操作（在 touchTrigger 仍存在期间由它决定）。hover：悬停和聚焦会预览，触摸或触控笔轻点都不会打开。toggle（仅限按钮触发元素）：单击、轻点、Enter 或空格键固定打开，再按一次关闭；悬停和键盘聚焦仍会预览。固定后，直到按 Escape、再次按下、在外部按下或焦点移出才关闭；这次按下止于触发元素，外层可点击的行或卡片不会被激活（使用 anchorRef 时，锚定元素自身的 onClick 仍会运行，Astryx 的可点击行和卡片会忽略这次按下，但锚定元素不是原生按钮时，Item 行仍会响应，锚定元素外层普通的 onClick 元素仍会收到，除非锚定元素的 onClick 阻止它）。触发元素会报告 aria-expanded 和 aria-controls，固定时朗读一次文本。适用于信息图标等唯一作用就是显示工具提示的按钮。',
+            '触发元素如何打开工具提示。adaptive（默认）：悬停和聚焦会预览；轻点即打开，除非触发元素本身会执行操作（在 touchTrigger 仍存在期间由它决定）。hover：悬停和聚焦会预览，触摸或触控笔轻点都不会打开。toggle（仅限按钮触发元素）：单击、轻点、Enter 或空格键固定打开，再按一次关闭；悬停和键盘聚焦仍会预览。固定后，直到按 Escape、再次按下、在外部按下或焦点移出才关闭；这次按下止于触发元素，外层可点击的行或卡片不会被激活（使用 anchorRef 时，锚定元素自身的 onClick 仍会运行，Astryx 的可点击行和卡片会忽略这次按下，锚定元素外层普通的 onClick 元素仍会收到，除非锚定元素的 onClick 阻止它）。触发元素会报告 aria-expanded 和 aria-controls，固定时朗读一次文本。适用于信息图标等唯一作用就是显示工具提示的按钮。',
           default: "'adaptive'",
         },
         {

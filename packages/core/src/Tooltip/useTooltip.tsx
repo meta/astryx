@@ -5,7 +5,8 @@
 /**
  * @file useTooltip.tsx
  * @input Uses useLayer, usePressPin, React hooks
- * @output Exports useTooltip hook with stable trigger refs for hover/focus/tap tooltips
+ * @output Exports useTooltip hook with stable trigger refs for hover/focus/tap
+ *   tooltips, and useTooltipInternal with Core's internal options
  * @position Layer hook; builds on useLayer for tooltip behavior
  *
  * SYNC: When modified, update:
@@ -151,11 +152,11 @@ export interface TooltipOptions {
    *   tooltip open, and the same press closes it. Hover and keyboard focus
    *   still preview it. A pinned tooltip stays until Escape, a second press,
    *   a press outside, or focus leaving. Astryx clickable rows and cards
-   *   ignore the pinning press, except an Item row on a trigger that is not
-   *   a native button. The `Tooltip` component also stops it at a child
-   *   trigger. A hook caller stops a plain `onClick` ancestor itself. The
-   *   trigger reports `aria-expanded` and `aria-controls`, and the tooltip's
-   *   text is announced once when it pins. `touchTrigger` is ignored.
+   *   ignore the pinning press. The `Tooltip` component also stops it at a
+   *   child trigger. A hook caller stops a plain `onClick` ancestor itself.
+   *   The trigger reports `aria-expanded` and `aria-controls`, and the
+   *   tooltip's text is announced once when it pins. `touchTrigger` is
+   *   ignored.
    *
    * @default 'adaptive'
    */
@@ -296,6 +297,21 @@ function isFocusable(element: HTMLElement): boolean {
  */
 
 export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
+  return useTooltipInternal(options);
+}
+
+/**
+ * `useTooltip` with the internal options that Core components pass.
+ * `repeatsTriggerText` marks a tooltip that repeats its trigger's own visible
+ * text, such as a truncated Text that is its own tab stop. Under
+ * `triggerBehavior="toggle"`, a press pins it without a button trigger and
+ * without toggle state.
+ *
+ * @internal
+ */
+export function useTooltipInternal(
+  options: TooltipOptions & {repeatsTriggerText?: boolean} = {},
+): TooltipReturn {
   const {
     placement = 'above',
     alignment = 'center',
@@ -304,6 +320,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     focusTrigger = 'auto',
     touchTrigger = 'auto',
     triggerBehavior = 'adaptive',
+    repeatsTriggerText = false,
     isEnabled = true,
     isOpen,
     isDefaultOpen = false,
@@ -388,6 +405,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     show: showNow,
     hide: hideNow,
     report: next => (next ? onShow?.() : onHide?.()),
+    repeatsTriggerText,
   });
 
   // Only a pin announces the text: a preview is already the trigger's

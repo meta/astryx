@@ -76,6 +76,7 @@ import {
   useComponentTranslator,
 } from '../../../i18n/useComponentTranslator';
 import english from '../../../i18n/generated-english/Table/plugins/rowExpansion/useTableRowExpansion.generated';
+import {isPressPinClick} from '../../../Layer/pressPinClick';
 
 registerEnglishFallback(english);
 
@@ -1004,7 +1005,10 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
                   // so this shares its guards rather than its plumbing.
                   const row = event.currentTarget;
                   const target = event.target;
-                  if (!(target instanceof Element)) {
+                  if (
+                    !(target instanceof Element) ||
+                    isPressPinClick(event.nativeEvent)
+                  ) {
                     return;
                   }
                   if (target !== row && hasInteractiveAncestor(target, row)) {

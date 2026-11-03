@@ -2,11 +2,13 @@
 
 /**
  * @file usePressPin.test.tsx
- * @input Uses vitest, @testing-library/react, Tooltip, usePressPin
+ * @input Uses vitest, @testing-library/react, Tooltip, useTooltipInternal,
+ *   usePressPin
  * @output Tests of `triggerBehavior="toggle"`: a press pins and closes the
  *   layer, and a pin stays when the pointer leaves. Escape, a second press, a
  *   press outside, or focus leaving closes it. The trigger carries the toggle
- *   state, the press stops at the trigger, and a non-button trigger warns.
+ *   state, the press stops at the trigger, and a non-button trigger warns. A
+ *   trigger whose layer repeats its text pins with no toggle state.
  * @position Unit tests beside usePressPin
  *
  * SYNC: When usePressPin.ts or useTooltip.tsx change, update these cases.
@@ -32,11 +34,15 @@ import {
 } from 'react';
 import {Tooltip} from '../Tooltip/Tooltip';
 import {HoverCard} from '../HoverCard/HoverCard';
+import {useTooltipInternal} from '../Tooltip/useTooltip';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
 import {Dialog} from '../Dialog/Dialog';
 import {Item} from '../Item/Item';
 import {Table} from '../Table/Table';
 import {useTableRowExpansion} from '../Table/plugins/rowExpansion/useTableRowExpansion';
+import {useTableTreeData} from '../Table/plugins/tree/useTableTreeData';
+import {useTableTreeState} from '../Table/plugins/tree/useTableTreeState';
+import {TreeList} from '../TreeList/TreeList';
 import {announceMessage} from '../hooks/useAnnounce';
 import type * as UseAnnounceModule from '../hooks/useAnnounce';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
@@ -762,6 +768,65 @@ describe('a toggle press stops at its trigger', () => {
   });
 });
 
+/** A truncated Text that is its own tab stop: its tooltip repeats its text. */
+function RepeatingText({text}: {text: string}): ReactElement {
+  const tooltip = useTooltipInternal({
+    triggerBehavior: 'toggle',
+    repeatsTriggerText: true,
+  });
+  return (
+    <>
+      <span
+        ref={tooltip.ref}
+        tabIndex={0}
+        aria-describedby={tooltip.describedBy}>
+        {text}
+      </span>
+      {tooltip.renderTooltip(<span data-full="">{text}</span>)}
+    </>
+  );
+}
+
+describe('a trigger whose tooltip repeats its own text (component:Tooltip FR9)', () => {
+  it('pins without being a button, with no warning, toggle state, or announcement', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      render(<RepeatingText text="Quarterly revenue by region" />);
+      const trigger = screen.getAllByText('Quarterly revenue by region')[0];
+      click(trigger);
+      const full = document.querySelector<HTMLElement>('[data-full]');
+      expect(
+        full?.closest<HTMLElement>('[popover]')?.matches(':popover-open'),
+      ).toBe(true);
+      expect(trigger).not.toHaveAttribute('aria-expanded');
+      expect(trigger).not.toHaveAttribute('aria-controls');
+      expect(announce).not.toHaveBeenCalled();
+      expect(warn).not.toHaveBeenCalled();
+      fireEvent.keyDown(trigger, {key: 'Enter'});
+      expect(
+        full?.closest<HTMLElement>('[popover]')?.matches(':popover-open'),
+      ).toBe(false);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('inside an Astryx ClickableCard, with no wrapper to stop the press, the card does not open', () => {
+    const onCard = vi.fn();
+    render(
+      <ClickableCard label="Revenue" onClick={onCard}>
+        <RepeatingText text="Quarterly revenue by region" />
+      </ClickableCard>,
+    );
+    click(screen.getAllByText('Quarterly revenue by region')[0]);
+    const full = document.querySelector<HTMLElement>('[data-full]');
+    expect(
+      full?.closest<HTMLElement>('[popover]')?.matches(':popover-open'),
+    ).toBe(true);
+    expect(onCard).not.toHaveBeenCalled();
+  });
+});
+
 describe('a pin inside a modal Dialog (spec:AST-086 FR14)', () => {
   it('is announced through the modal, not the page body behind it', async () => {
     render(
@@ -902,6 +967,174 @@ describe('a hover layer whose trigger is in another document', () => {
       expect(open()).toBe(false);
     } finally {
       done();
+    }
+  });
+});
+
+describe('Astryx rows ignore a press that pins a tooltip', () => {
+  const TEXT = 'Quarterly revenue by region';
+  const pinned = () =>
+    document
+      .querySelector<HTMLElement>('[data-full]')
+      ?.closest<HTMLElement>('[popover]')
+      ?.matches(':popover-open') ?? false;
+
+  function AnchoredSpan(): ReactElement {
+    const ref = useRef<HTMLSpanElement>(null);
+    return (
+      <>
+        <span ref={ref} role="button" tabIndex={0} aria-label="About billing">
+          i
+        </span>
+        <Tooltip content={TIP} anchorRef={ref} triggerBehavior="toggle" />
+      </>
+    );
+  }
+
+  it('an anchored role="button" trigger in an Item row pins, and the row does not activate', () => {
+    const onRow = vi.fn();
+    render(
+      <Item label="Billing" onClick={onRow} endContent={<AnchoredSpan />} />,
+    );
+    click(screen.getByRole('button', {name: 'About billing'}));
+    expect(shows(TIP)).toBe(true);
+    expect(onRow).not.toHaveBeenCalled();
+  });
+
+  it('an own-text trigger in an Item row pins, and the row does not activate', () => {
+    const onRow = vi.fn();
+    render(
+      <Item
+        label="Revenue"
+        onClick={onRow}
+        endContent={<RepeatingText text={TEXT} />}
+      />,
+    );
+    click(screen.getAllByText(TEXT)[0]);
+    expect(pinned()).toBe(true);
+    expect(onRow).not.toHaveBeenCalled();
+  });
+
+  it('an own-text trigger in a TreeList row pins, and the row does not activate', () => {
+    const onRow = vi.fn();
+    render(
+      <TreeList
+        aria-label="Reports"
+        items={[
+          {
+            id: 'revenue',
+            label: 'Revenue',
+            onClick: onRow,
+            endContent: <RepeatingText text={TEXT} />,
+          },
+        ]}
+      />,
+    );
+    click(screen.getAllByText(TEXT)[0]);
+    expect(pinned()).toBe(true);
+    expect(onRow).not.toHaveBeenCalled();
+  });
+
+  it('an own-text trigger in a Table row that expands on click pins, and the row stays shut', () => {
+    function Rows() {
+      const [expanded, setExpanded] = useState(new Set<string>());
+      const expansion = useTableRowExpansion<{id: string; name: string}>({
+        expandedKeys: expanded,
+        onToggle: key => setExpanded(new Set([key])),
+        getRowKey: item => item.id,
+        renderExpanded: item => <div data-testid="panel">{item.name}</div>,
+        hasRowClickExpansion: true,
+      });
+      return (
+        <Table
+          data={[{id: 'a', name: 'Ada'}]}
+          columns={[
+            {
+              key: 'name',
+              header: 'Name',
+              renderCell: () => <RepeatingText text={TEXT} />,
+            },
+          ]}
+          idKey="id"
+          plugins={{expansion}}
+        />
+      );
+    }
+    render(<Rows />);
+    click(screen.getAllByText(TEXT)[0]);
+    expect(pinned()).toBe(true);
+    expect(screen.queryByTestId('panel')).not.toBeInTheDocument();
+  });
+
+  it('an own-text trigger in a tree-data Table row that expands on click pins, and the row stays shut', () => {
+    type FileRow = {id: string; name: string; children?: FileRow[]};
+    function TreeRows() {
+      const {visibleData, treeConfig} = useTableTreeState<FileRow>({
+        data: [{id: 'src', name: 'src', children: [{id: 'lib', name: 'lib'}]}],
+        idKey: 'id',
+      });
+      const tree = useTableTreeData({
+        ...treeConfig,
+        hasRowClickExpansion: true,
+      });
+      return (
+        <Table
+          data={visibleData}
+          columns={[
+            {
+              key: 'name',
+              header: 'Name',
+              renderCell: (row: FileRow) =>
+                row.id === 'src' ? <RepeatingText text={TEXT} /> : row.name,
+            },
+          ]}
+          idKey="id"
+          plugins={{tree}}
+        />
+      );
+    }
+    render(<TreeRows />);
+    click(screen.getAllByText(TEXT)[0]);
+    expect(pinned()).toBe(true);
+    expect(screen.queryByText('lib')).not.toBeInTheDocument();
+  });
+});
+
+describe('a tooltip that starts repeating its trigger text after mount', () => {
+  function LateRepeatingText({repeats}: {repeats: boolean}): ReactElement {
+    const tooltip = useTooltipInternal({
+      triggerBehavior: 'toggle',
+      repeatsTriggerText: repeats,
+    });
+    return (
+      <>
+        <span
+          ref={tooltip.ref}
+          tabIndex={0}
+          aria-describedby={tooltip.describedBy}>
+          Quarterly revenue by region
+        </span>
+        {tooltip.renderTooltip(
+          <span data-full="">Quarterly revenue by region</span>,
+        )}
+      </>
+    );
+  }
+
+  it('wires its trigger, so a press pins it', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const view = render(<LateRepeatingText repeats={false} />);
+      view.rerender(<LateRepeatingText repeats />);
+      click(screen.getAllByText('Quarterly revenue by region')[0]);
+      expect(
+        document
+          .querySelector<HTMLElement>('[data-full]')
+          ?.closest<HTMLElement>('[popover]')
+          ?.matches(':popover-open'),
+      ).toBe(true);
+    } finally {
+      warn.mockRestore();
     }
   });
 });

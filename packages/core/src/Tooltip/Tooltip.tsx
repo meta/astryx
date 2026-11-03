@@ -138,9 +138,8 @@ export interface TooltipProps {
    *   No clickable row or card around the trigger activates. With
    *   `anchorRef`, the anchor's own `onClick` runs, and a plain `onClick`
    *   element around it receives the press unless that `onClick` stops it.
-   *   Astryx clickable rows, cards, and containers ignore it, except an Item
-   *   row when the anchor is not a native button. The trigger reports
-   *   `aria-expanded` and `aria-controls`, and the tooltip's text is
+   *   Astryx clickable rows, cards, and containers ignore it. The trigger
+   *   reports `aria-expanded` and `aria-controls`, and the tooltip's text is
    *   announced once when it pins. Use it for a trigger whose information
    *   lives only in the tooltip, such as an info icon. `touchTrigger` is
    *   ignored.

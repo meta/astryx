@@ -27,6 +27,7 @@ import {
 import {useAnnounce} from '../hooks/useAnnounce';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {stopInReactTree} from './layerClickBoundary';
+import {isPressPinClick, markPressPinClick} from './pressPinClick';
 import {
   useTouchTriggerInternal,
   type LayerTouchTrigger,
@@ -42,9 +43,6 @@ import {
  */
 export type LayerTriggerBehavior = 'adaptive' | 'hover' | 'toggle';
 
-/** The clicks a press pin answered, so the wrapper can stop them (`stopPressPinClick`). */
-const pressPinClicks = new WeakSet<Event>();
-
 /**
  * The layer component's wrapper handler. It stops a press that pinned or
  * closed the layer in the React tree only, after the trigger's own handlers.
@@ -53,7 +51,7 @@ const pressPinClicks = new WeakSet<Event>();
  * wrapper, so a plain `onClick` element around it still receives the press.
  */
 export function stopPressPinClick(event: ReactMouseEvent): void {
-  if (pressPinClicks.has(event.nativeEvent)) {
+  if (isPressPinClick(event.nativeEvent)) {
     stopInReactTree(event);
   }
 }
@@ -86,6 +84,14 @@ export interface UsePressPinOptions {
   hide: () => void;
   /** Reports a controlled layer's toggled value without changing it. */
   report: (isOpen: boolean) => void;
+
+  /**
+   * The layer repeats the trigger's own visible text, as a truncated Text that
+   * is its own tab stop does. A press then pins it without a button trigger.
+   * It gets no development warning, no `aria-expanded` or `aria-controls`, and
+   * no announcement, because its text is already the trigger's content.
+   */
+  repeatsTriggerText?: boolean;
   /** The layer's `label`: a press that pins the layer says it once, in place of its text. */
   label?: string;
   /** The layer's `touchTrigger`, which decides taps only under `adaptive`. */
@@ -156,11 +162,15 @@ function writeAttribute(
  * `triggerBehavior="toggle"`. The same press closes it, and so do Escape, a
  * press or scroll outside, and focus that leaves the trigger and the layer.
  * The press stops at the trigger. A trigger that is not a button gets a
- * development warning and keeps tap-only opening.
+ * development warning and keeps tap-only opening. A trigger whose layer
+ * repeats its own visible text pins without being a button, with no warning,
+ * toggle state, or announcement.
  */
 export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
   const {triggerBehavior, isOpen, isLayerOpen, layerId} = options;
   const isToggleMode = triggerBehavior === 'toggle';
+  const repeatsTriggerText = options.repeatsTriggerText === true;
+  const wiresState = !repeatsTriggerText;
 
   // DOM listeners read the latest options and announcer through refs. The
   // announcer is the layer's own: inside a modal, the modal's region.
@@ -232,7 +242,8 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
     (element: HTMLElement | null) =>
       optionsRef.current.triggerBehavior === 'toggle' &&
       element != null &&
-      isPressPinTrigger(element),
+      (optionsRef.current.repeatsTriggerText === true ||
+        isPressPinTrigger(element)),
     [],
   );
 
@@ -250,7 +261,7 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
   const announceName = useCallback(() => {
     const current = optionsRef.current;
     const name = current.label?.trim() ?? '';
-    if (name !== '') {
+    if (name !== '' && current.repeatsTriggerText !== true) {
       announceRef.current(name, 'polite');
     }
   }, []);
@@ -294,7 +305,7 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
       }
       // The press stops at its trigger: no label control, link, or submit.
       event.preventDefault();
-      pressPinClicks.add(event);
+      markPressPinClick(event);
       if (
         event.detail === 0 &&
         (keyPressedRef.current || spaceHeldRef.current)
@@ -410,29 +421,33 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
     triggerRef.current = null;
   }, [handlePress, handleKeyDown, handleKeyUp, handleFocusLeave]);
 
-  // The element and mode last settled; the same pair again does nothing.
+  // The element, mode, and own-text flag last settled; the same set again
+  // does nothing.
   const settledRef = useRef<{
     element: HTMLElement | null;
     mode: LayerTriggerBehavior;
+    repeats: boolean;
   } | null>(null);
 
   const wire = useCallback(
     (element: HTMLElement | null) => {
       const current = optionsRef.current;
       const settled = settledRef.current;
+      const repeats = current.repeatsTriggerText === true;
       if (
         settled != null &&
         settled.element === element &&
-        settled.mode === current.triggerBehavior
+        settled.mode === current.triggerBehavior &&
+        settled.repeats === repeats
       ) {
         return;
       }
-      settledRef.current = {element, mode: current.triggerBehavior};
+      settledRef.current = {element, mode: current.triggerBehavior, repeats};
       unwire();
       if (element == null || current.triggerBehavior !== 'toggle') {
         return;
       }
-      if (!isPressPinTrigger(element)) {
+      if (!repeats && !isPressPinTrigger(element)) {
         return;
       }
       element.addEventListener('click', handlePress);
@@ -442,10 +457,12 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
       }
       // Its own focus-leave listener: `focusTrigger="never"` attaches none.
       element.addEventListener('focusout', handleFocusLeave);
-      ownStateRef.current = {
-        expanded: element.getAttribute('aria-expanded'),
-        controls: element.getAttribute('aria-controls'),
-      };
+      if (!repeats) {
+        ownStateRef.current = {
+          expanded: element.getAttribute('aria-expanded'),
+          controls: element.getAttribute('aria-controls'),
+        };
+      }
       triggerRef.current = element;
     },
     [unwire, handlePress, handleKeyDown, handleKeyUp, handleFocusLeave],
@@ -463,17 +480,20 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
     [wire],
   );
 
-  const isWired = isToggleMode && offeredKind === 'button';
+  const isWired =
+    isToggleMode &&
+    (offeredKind === 'button' || (!wiresState && offeredKind !== 'none'));
   useDevWarning(
     options.component,
     '`triggerBehavior="toggle"` pins only a button trigger (a <button> or role="button"); this trigger keeps tap-only opening.',
-    isToggleMode && offeredKind === 'other',
+    isToggleMode && wiresState && offeredKind === 'other',
   );
 
-  // A later `triggerBehavior` change rewires here; the ref does not rerun.
+  // A later `triggerBehavior` or `repeatsTriggerText` change rewires here; the
+  // ref does not rerun.
   useEffect(() => {
     wire(offeredRef.current);
-  }, [triggerBehavior, wire]);
+  }, [triggerBehavior, repeatsTriggerText, wire]);
 
   const unpin = useCallback(() => {
     if (isPinnedRef.current) {
@@ -489,14 +509,14 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
   // host can swap the trigger on any commit; equal values are not rewritten.
   useEffect(() => {
     const trigger = triggerRef.current;
-    if (!isToggleMode || !isWired || trigger == null) {
+    if (!isToggleMode || !isWired || !wiresState || trigger == null) {
       return;
     }
     writeAttribute(trigger, 'aria-expanded', isExpanded ? 'true' : 'false');
     writeAttribute(trigger, 'aria-controls', isLayerOpen ? layerId : null);
   });
 
-  const isPinShown = isToggleMode && isWired && isExpanded;
+  const isPinShown = isToggleMode && isWired && wiresState && isExpanded;
 
   return {
     isToggleTrigger,
