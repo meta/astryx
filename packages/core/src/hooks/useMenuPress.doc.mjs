@@ -24,7 +24,7 @@ export const docs = {
       name: 'menuRef',
       type: 'RefObject<HTMLElement | null>',
       description:
-        'The menu or listbox root — the surface whose rows a press picks from. The hook creates a press for the element behind the ref after each commit, calls the latest callbacks, creates a new press when the menu, its document, the trigger, a value option or the set of callbacks changes, and destroys it at unmount. While the element is unmounted there is no press, not even on the trigger.',
+        'The menu or listbox root — the surface whose rows a press picks from. The hook creates a press for the element behind the ref at commit, and a new one only for a new menu or document; any other change of the trigger, an option or a callback reaches the press through update() at commit. It destroys the press at unmount. While the element is unmounted there is no press, not even on the trigger.',
       required: true,
     },
     {
@@ -120,7 +120,19 @@ export const docs = {
       name: 'cancel',
       type: '() => void',
       description:
-        'End the gesture in flight with nothing acting, for when the menu closes under it. Nothing is spread: the press listens on the menu and its trigger itself and marks the menu root with data-astryx-menu-press. Without React, createMenuPress(menu, options) takes the same options with the trigger as an element (trigger) and returns {isTriggerClickFromPress, cancel, destroy}; destroy removes every listener it added.',
+        'End the gesture in flight with nothing acting, for when the menu closes under it. Nothing is spread: the press listens for press-downs on the menu and the trigger at their document and marks the menu root with data-astryx-menu-press. Without React, createMenuPress(menu, options) takes the same options with the trigger as an element (trigger) and returns {isTriggerClickFromPress, cancel, update, handleTriggerPointerDown, handleTriggerContextMenu, destroy}; destroy removes every listener it added.',
+    },
+    {
+      name: 'handleTriggerPointerDown',
+      type: '(event: PointerEvent | React.PointerEvent) => void',
+      description:
+        'Ref form only: hands the press a trigger press-down that a handler forwards, such as a trigger that runs its own handler first. The press takes each event once.',
+    },
+    {
+      name: 'handleTriggerContextMenu',
+      type: '(event: MouseEvent | React.MouseEvent) => void',
+      description:
+        "Ref form only: the same for the trigger's contextmenu, which a held finger raises as it opens the menu.",
     },
   ],
   usage: {
@@ -155,7 +167,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          "Use the ref form, useMenuPress(menuRef, {triggerRef, …}): it listens on the menu and the trigger itself, so nothing is spread. Its press, the trigger's included, exists only while the menu element is mounted, so a menu that opens on a press of its trigger keeps its element mounted while closed. The options form, useMenuPress({menuRef, …}), is deprecated.",
+          "Use the ref form, useMenuPress(menuRef, {triggerRef, …}): it listens for their press-downs on the menu's document, so nothing is spread; an ancestor that stops a press-down hides it. Its press, the trigger's included, exists only while the menu element is mounted, so a menu that opens on a press of its trigger keeps its element mounted while closed. The options form, useMenuPress({menuRef, …}), is deprecated (DEP-0019) and is removed in 0.8.0; run astryx upgrade to move calls to the ref form.",
       },
     ],
   },
@@ -171,7 +183,7 @@ export const docsDense = {
     'macOS/iOS menu press model for any pointer: the row under the RELEASE acts, the highlight follows a held pointer, a mouse opens on press and drags in, a held finger opens with the finger down. Document-level pointerId tracking; the browser stray click after a touch is swallowed. Already mounted by DropdownMenu / ContextMenu / DropdownMenuSubMenu / Selector / menu bottom sheet.',
   paramDescriptions: {
     menuRef:
-      'menu / listbox root; a press per element, latest callbacks, new press on a new menu / document / trigger / value option / callback set; none while unmounted; destroyed at unmount.',
+      'menu / listbox root; a press per element; a new press only on a new menu / document, other changes via update() at commit; none while unmounted; destroyed at unmount.',
     options: 'config.',
     'options.itemSelector': 'selector for ENABLED rows; anything else clears.',
     'options.triggerRef':
@@ -198,7 +210,7 @@ export const docsDense = {
     isTriggerClickFromPress:
       'true = the trigger click belongs to the press that already opened / closed; ignore it.',
     cancel:
-      'end the gesture w/o acting. Nothing to spread. No React: createMenuPress(menu, {trigger, …}) → {isTriggerClickFromPress, cancel, update, destroy}.',
+      'end the gesture w/o acting. Nothing to spread. No React: createMenuPress(menu, {trigger, …}) → {isTriggerClickFromPress, cancel, update, handleTriggerPointerDown, handleTriggerContextMenu, destroy}.',
   },
   usage: {
     description:
@@ -231,7 +243,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Use useMenuPress(menuRef, {triggerRef, …}) (nothing to spread); useMenuPress({menuRef, …}) is deprecated. The press exists only while the menu is mounted, trigger included: keep a press-to-open menu mounted while closed.',
+          'Use useMenuPress(menuRef, {triggerRef, …}) (nothing to spread); useMenuPress({menuRef, …}) is deprecated (DEP-0019, removed in 0.8.0; astryx upgrade rewrites it). The press exists only while the menu is mounted, trigger included: keep a press-to-open menu mounted while closed.',
       },
     ],
   },

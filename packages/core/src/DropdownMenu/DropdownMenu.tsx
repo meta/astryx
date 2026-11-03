@@ -372,13 +372,17 @@ export interface DropdownMenuTriggerProps {
   onClick: (event: React.MouseEvent<HTMLElement>) => void;
   onClickCapture: (event: React.MouseEvent<HTMLElement>) => void;
   /**
-   * @deprecated The menu listens on the trigger itself, so spreading this
-   *   adds nothing.
+   * @deprecated Forward `ref` to the control instead. The press listens for
+   *   the control's press-down on its document, so an ancestor that stops
+   *   the press-down hides it from the press. `astryx upgrade` removes
+   *   redundant forwards. It is removed in 0.8.0.
    */
   onPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
   /**
-   * @deprecated The menu listens on the trigger itself, so spreading this
-   *   adds nothing.
+   * @deprecated Forward `ref` to the control instead. The press listens for
+   *   the control's press-down on its document, so an ancestor that stops
+   *   the press-down hides it from the press. `astryx upgrade` removes
+   *   redundant forwards. It is removed in 0.8.0.
    */
   onContextMenu: (event: React.MouseEvent<HTMLElement>) => void;
   onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => void;
@@ -1623,8 +1627,9 @@ function DropdownMenuPopover({
     id: triggerId,
     onClick: handleButtonClick,
     onClickCapture: handleTriggerClickCapture,
-    // The press listens on the trigger itself. A caller that still forwards
-    // these hands the same event to it, and it takes the press once.
+    // The press listens for the trigger's press-down on its document. A caller
+    // that still forwards these hands the same event to it, and it takes the
+    // press once.
     onPointerDown: menuPress.handleTriggerPointerDown,
     onContextMenu: menuPress.handleTriggerContextMenu,
     onKeyDown: handleButtonKeyDown,
@@ -1659,8 +1664,14 @@ function DropdownMenuPopover({
             handleTriggerClickCapture(event);
           }}
           onKeyDown={handleButtonKeyDown}
-          onPointerDown={button.onPointerDown}
-          onContextMenu={button.onContextMenu}
+          onPointerDown={event => {
+            button.onPointerDown?.(event);
+            menuPress.handleTriggerPointerDown(event);
+          }}
+          onContextMenu={event => {
+            button.onContextMenu?.(event);
+            menuPress.handleTriggerContextMenu(event);
+          }}
           onFocus={event => {
             button.onFocus?.(event);
             onFocusReturnTargetFocus();

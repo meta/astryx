@@ -9,11 +9,8 @@
  * @output Exports useMenuPress, createMenuPress's React form, and the
  *   internal useDropdownMenuPress entry with its touch model. Re-exports the
  *   marker attributes, the press constants and the activation mark.
- * @position Core hook; a thin wrapper over createMenuPress, in its ref form
- *   for ContextMenu, DropdownMenuSubMenu, MenuBottomSheetActionList, Selector
- *   and TabMenu. The options form, which returns props to spread, stays with
- *   DropdownMenu (its trigger's props), BreadcrumbItem, NavHeadingMenu,
- *   TopNavMenu, and the SideNav and TopNav heading menus.
+ * @position Core hook; a thin wrapper over createMenuPress. Every Core menu
+ *   uses the ref form; the options form is deprecated.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/hooks/index.ts
@@ -77,6 +74,7 @@ export type UseMenuPressRefReturn = Pick<
 /**
  * The options form's options: the menu and the trigger as refs.
  * @deprecated Use the ref form, `useMenuPress(menuRef, options)`.
+ *   `astryx upgrade` rewrites calls. It is removed in 0.8.0.
  */
 export interface UseMenuPressOptions {
   /** The menu (or listbox) root: the surface whose rows the press picks from. */
@@ -132,6 +130,7 @@ export interface UseMenuPressOptions {
 /**
  * What the options form returns: props to spread on the menu and the trigger.
  * @deprecated Use the ref form, `useMenuPress(menuRef, options)`.
+ *   `astryx upgrade` rewrites calls. It is removed in 0.8.0.
  */
 export interface UseMenuPressReturn {
   /** Spread onto the menu root: claims presses that begin inside it. */
@@ -246,6 +245,7 @@ export function useMenuPress(
  * The options form: props to spread on the menu root and the trigger. The ref
  * form above listens on both itself, so nothing is spread.
  * @deprecated Use the ref form, `useMenuPress(menuRef, options)`.
+ *   `astryx upgrade` rewrites calls. It is removed in 0.8.0.
  */
 export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn;
 export function useMenuPress(

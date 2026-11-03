@@ -1,5 +1,4 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-
 /**
  * @file next transform manifest
  *
@@ -10,11 +9,19 @@
 import promoteTokenizerPresentation, {
   meta as promoteTokenizerPresentationMeta,
 } from './promote-tokenizer-presentation.mjs';
+import migrateUseMenuPressToRefForm, {
+  meta as migrateUseMenuPressToRefFormMeta,
+} from './migrate-use-menu-press-to-ref-form.mjs';
 
 export default [
   {
     name: 'promote-tokenizer-presentation',
     transform: promoteTokenizerPresentation,
     meta: promoteTokenizerPresentationMeta,
+  },
+  {
+    name: 'migrate-use-menu-press-to-ref-form',
+    transform: migrateUseMenuPressToRefForm,
+    meta: migrateUseMenuPressToRefFormMeta,
   },
 ];

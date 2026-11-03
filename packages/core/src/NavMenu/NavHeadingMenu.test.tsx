@@ -95,6 +95,35 @@ describe('NavHeadingMenuItem', () => {
     expect(item.tagName).toBe('DIV');
   });
 
+  it("starts no press when the caller's onPointerDown cancels the press-down", () => {
+    __resetMenuPressForTest();
+    let isCancelling = true;
+    const onB = vi.fn();
+    render(
+      <NavHeadingMenu
+        onPointerDown={event => {
+          if (isCancelling) {
+            event.preventDefault();
+          }
+        }}>
+        <NavHeadingMenuItem label="A" />
+        <NavHeadingMenuItem label="B" onClick={onB} />
+      </NavHeadingMenu>,
+    );
+    const [a, b] = screen.getAllByRole('menuitem');
+    const slide = (pointerId: number) => {
+      const finger = {pointerType: 'touch', pointerId};
+      fireEvent.pointerDown(a, finger);
+      fireEvent.pointerMove(b, finger);
+      fireEvent.pointerUp(b, finger);
+    };
+    slide(1);
+    expect(onB).not.toHaveBeenCalled();
+    isCancelling = false;
+    slide(2);
+    expect(onB).toHaveBeenCalledOnce();
+  });
+
   it('calls onClick on click', async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();

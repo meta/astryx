@@ -3022,6 +3022,30 @@ describe('DropdownMenu press model', () => {
     expect(menu).not.toHaveClass(hash(touchStyles.panYPinchZoom));
   });
 
+  it("runs the Button's own onPointerDown before the press opens the menu", () => {
+    const onOpenChange = vi.fn();
+    let opensSeenByButton = -1;
+    render(
+      <DropdownMenu
+        button={{
+          label: 'Actions',
+          onPointerDown: () => {
+            opensSeenByButton = onOpenChange.mock.calls.length;
+          },
+        }}
+        onOpenChange={onOpenChange}>
+        <DropdownMenuItem label="Edit" onClick={() => {}} />
+      </DropdownMenu>,
+    );
+    fireEvent.pointerDown(screen.getByRole('button', {name: /Actions/}), {
+      pointerType: 'mouse',
+      pointerId: 1,
+      button: 0,
+    });
+    expect(opensSeenByButton).toBe(0);
+    expect(onOpenChange).toHaveBeenLastCalledWith(true);
+  });
+
   it('a mouse press on the trigger opens the menu and a drag-release acts on the row under it', () => {
     const onPick = vi.fn();
     const trigger = renderMenu(onPick);

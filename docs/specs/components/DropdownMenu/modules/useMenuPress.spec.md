@@ -88,14 +88,46 @@ adopter.
   `yes` for every consumer prop and every item, divider, section and
   presentation API
 - Compatibility class: additive public hook and types; behavior change inside
-  the menu family
-- Migration decision: `module:DropdownMenu/useMenuPress/DEC-3`; proposed
-  `module:DropdownMenu/useMenuPress/DEC-4` and
-  `module:DropdownMenu/useMenuPress/DEC-9` (pending owner review);
+  the menu family; the options form is deprecated (DEP-0019)
+- Migration decision: `module:DropdownMenu/useMenuPress/DEC-3` and
+  `module:DropdownMenu/useMenuPress/DEC-9`; proposed
+  `module:DropdownMenu/useMenuPress/DEC-4` (pending owner review);
   `spec:AST-094` FR25 (a caller that needs the released 500 ms wait passes
-  `longPressDelayMs: 500`)
+  `longPressDelayMs: 500`); DEP-0019 and CLN-0030 below
 
 Consumer migration instructions belong in consumer docs and release notes.
+
+### DEP-0019 — Deprecate the options form and the trigger's press handlers
+
+| Field            | Value                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| id               | `DEP-0019`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| cleanup          | `CLN-0030`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| package          | `@astryxdesign/core`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| surface          | `useMenuPress`'s options form, `useMenuPress({menuRef, …})`, with the types `UseMenuPressOptions` and `UseMenuPressReturn`; and the `onPointerDown` and `onContextMenu` handlers of `DropdownMenuTriggerProps`                                                                                                                                                                                                                                                                                                                                                                                                    |
+| old contract     | `useMenuPress(options)` returns `menuProps` and `triggerProps` to spread on the menu root and the trigger, with `isTriggerClickFromPress` and `cancel`; a `renderTrigger` control gets the trigger's press through `onPointerDown` and `onContextMenu`                                                                                                                                                                                                                                                                                                                                                            |
+| replacement      | The ref form, `useMenuPress(menuRef, {triggerRef, …})`, which listens for their press-downs on the menu's document and returns `isTriggerClickFromPress`, `cancel` and the two trigger handle methods (DEC-9); a `renderTrigger` control needs only the trigger props' `ref` (`component:DropdownMenu` DEC-11)                                                                                                                                                                                                                                                                                                    |
+| direct authority | `module:DropdownMenu/useMenuPress` DEC-9 and `component:DropdownMenu` DEC-11. Owner: `cixzhang`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| warning          | Static `@deprecated` metadata on the options-form overload, its two types and the two trigger handlers; consumer docs and the release notes name `DEP-0019`, the replacement and `astryx upgrade`. No runtime warning (`spec:AST-017` FR29, FR29a)                                                                                                                                                                                                                                                                                                                                                                |
+| compatibility    | The options form keeps its released behavior: the props it returns still claim the press. A trigger handler that a caller still forwards reaches the press once. An ancestor that stops a press-down hides it from the document, where only a forwarded handler still reaches the press                                                                                                                                                                                                                                                                                                                           |
+| migration        | Mechanical. `useMenuPress({menuRef: R, …rest})` becomes `useMenuPress(R, {…rest})`; the spreads of `menuProps` and `triggerProps` go, and a trigger that got the press only through its spread passes its `ref` as `triggerRef`. A `renderTrigger` control that spreads the trigger props drops its redundant forwards of the two handlers                                                                                                                                                                                                                                                                        |
+| codemod          | An `astryx upgrade` codemod, `migrate-use-menu-press-to-ref-form.mjs`, staged in `packages/cli/assets/codemods/transforms/next/` with its tests, available in the release that deprecates the form. It leaves a TODO wherever it cannot prove the result: options that are not an object literal, a return read other than through the two spreads, no `menuProps` spread on the menu element, a spread on an element whose `ref` is not the menu's or the trigger's, a trigger whose menu is not in the component's one returned JSX, and a handler forward on an element that does not spread the trigger props |
+| downstream       | Every maintained caller, DropdownMenu and the five navigation menus, moves to the ref form in the deprecating patch with the same behavior (`spec:AST-017` FR29c); Core's docs teach only the ref form (FR29b)                                                                                                                                                                                                                                                                                                                                                                                                    |
+| transition       | no prior transition                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| state            | `proposed`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| target plan      | `CLN-0030` in 0.8.0, the next minor release                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+
+### CLN-0030 — Remove the options form and the trigger's press handlers
+
+| Field       | Value                                                                                                                                                        |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| id          | `CLN-0030`                                                                                                                                                   |
+| lifecycle   | `DEP-0019`                                                                                                                                                   |
+| delta       | `useMenuPress`'s options form, `UseMenuPressOptions`, `UseMenuPressReturn`, and `DropdownMenuTriggerProps`'s `onPointerDown` and `onContextMenu` are removed |
+| replacement | `useMenuPress(menuRef, options)` (DEC-9)                                                                                                                     |
+| codemod     | 0.8.0's `astryx upgrade` runs DEP-0019's rewrite, the same codemod callers could already run early, over any remaining site and reports what it cannot prove |
+| rollback    | Restore the overload, the two types and the two handlers from the final-patch baseline                                                                       |
+| state       | `pending` — lands in 0.8.0, a declared minor, with its `[breaking]` Changeset                                                                                |
 
 ## Ownership boundary
 
@@ -196,7 +228,9 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 - **PR1 — Listeners per gesture.** Document listeners for `pointermove`,
   `pointerup`, `pointercancel`, `pointerdown` and window `blur` are attached
-  at press and removed when the gesture ends; none are live while idle.
+  at press and removed when the gesture ends. While idle, one press-down pair
+  (`pointerdown`, `contextmenu`) per document stays, shared by every press
+  mounted there; the last press's destroy removes it.
 - **PR2 — One swallower.** The window capture `click` listener is installed
   once per document and armed per gesture.
 - **PR3 — Autoscroll.** One interval while a tracked pointer rests in an
@@ -329,19 +363,23 @@ the open, so a screen reader hears one open and one close.
 
 Rejected: opening a sub-menu when a finger rests on its row.
 
-### DEC-9 (proposed) — One factory, and every caller on the ref form
+### DEC-9 — One factory, and every caller on the ref form
 
 **Reference:** `module:DropdownMenu/useMenuPress/DEC-9`
-**Decider:** proposed by `vjeux`, `2026-11-03`, as the owner decided on
-`2026-11-03`; pending owner review
+**Decider:** `cixzhang`, `2026-11-03`
 
 The ref form delegates to the factory, as `architecture:public-component-api`
 INV22 asks. The factory takes new options in place: they merge with the ones it
 has, apply from the next event, and never end a press in progress. A menu whose
 other content keeps its own clicks starts a press only on an item. A trigger
-event that a caller still forwards reaches the press once. Every maintained
-caller moves to the ref form in the patch that deprecates the options form
-under INV9 (`spec:AST-017` FR29c).
+event that a caller still forwards reaches the press once. The press starts after the page's own press-down handlers. A press-down that one of them stops, or cancels inside the menu, starts no press. The trigger is in the menu's document. Every maintained
+caller moves to the ref form, with the same behavior, in the patch that
+deprecates the options form under INV9 (`spec:AST-017` FR29c). The options
+form goes at the next minor release: DEP-0019 deprecates it, and CLN-0030
+removes it.
+
+Rejected: a new factory for each change of options, which the in-place update
+replaces; moving the callers later, one at a time.
 
 ## Open questions
 
