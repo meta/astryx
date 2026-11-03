@@ -45,13 +45,13 @@ describe('separatorAttributes', () => {
     expect(aria['aria-valuetext']).toBe('Collapsed');
   });
 
-  it('takes a disabled separator out of the tab order and says it is disabled', () => {
+  it('keeps a disabled separator in the tab order and says it is disabled', () => {
     const aria = separatorAttributes({
       direction: 'horizontal',
       isDisabled: true,
       value,
     });
-    expect(aria.tabIndex).toBe(-1);
+    expect(aria.tabIndex).toBe(0);
     expect(aria['aria-disabled']).toBe(true);
   });
 

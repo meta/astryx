@@ -273,11 +273,11 @@ describe('createResizable on a plain element', () => {
     expect(resizable.size).toBe(0);
   });
 
-  it('ignores pointer and keyboard input while disabled, says so, and leaves the tab order as ResizeHandle does', () => {
+  it('ignores pointer and keyboard input while disabled, says so, and keeps its tab stop, as ResizeHandle does', () => {
     const {handle} = makeHandle();
     const resizable = create(handle, {defaultSize: 200, isDisabled: true});
     expect(handle.getAttribute('aria-disabled')).toBe('true');
-    expect(handle.tabIndex).toBe(-1);
+    expect(handle.tabIndex).toBe(0);
     drag(handle, 0, 80);
     key(handle, 'ArrowRight');
     expect(resizable.size).toBe(200);

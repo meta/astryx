@@ -896,10 +896,10 @@ describe('ResizeHandle', () => {
 
   // --- Disabled guard ---
 
-  it('ignores keyboard input when disabled', () => {
+  it('ignores keyboard input when disabled, and keeps its tab stop', () => {
     render(<Harness handleProps={{isDisabled: true}} />);
     const separator = getSeparator();
-    expect(separator).toHaveAttribute('tabindex', '-1');
+    expect(separator).toHaveAttribute('tabindex', '0');
     fireEvent.keyDown(separator, {key: 'ArrowRight'});
     expect(separator).toHaveAttribute('aria-valuenow', '200');
   });
