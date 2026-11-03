@@ -59,6 +59,9 @@ const cases = [
  * The open layer's entrance: its animation name and the properties its
  * keyframes animate (read from the page's style sheets).
  */
+/** Core Animation's easeInOut, as the source writes it or as a build names it. */
+const EASE_IN_OUT = ['ease-in-out', 'cubic-bezier(0.42, 0, 0.58, 1)'];
+
 async function entranceOf(page: Page, selector: string) {
   await expect(page.locator(`${selector}:popover-open`)).toHaveCount(1);
   return page.evaluate(sel => {
@@ -125,9 +128,9 @@ for (const {name, story, trigger, layer} of cases) {
       // design:reduced-motion DR2: a cross-fade of 200 ms or less.
       expect(entrance.duration).toBeGreaterThan(0);
       expect(entrance.duration).toBeLessThanOrEqual(0.2);
-      // The motion foundation's cross-fade: Core Animation's easeInOut,
-      // cubic-bezier(0.42, 0, 0.58, 1), which the engine names ease-in-out.
-      expect(entrance.easing).toBe('ease-in-out');
+      // The motion foundation's cross-fade: Core Animation's easeInOut.
+      // Chromium reports the curve as written, so accept either spelling.
+      expect(EASE_IN_OUT).toContain(entrance.easing);
     });
   });
 
@@ -149,9 +152,9 @@ for (const {name, story, trigger, layer} of cases) {
       expect(entrance.properties).toEqual(['opacity']);
       expect(entrance.duration).toBeGreaterThan(0);
       expect(entrance.duration).toBeLessThanOrEqual(0.2);
-      // The motion foundation's cross-fade: Core Animation's easeInOut,
-      // cubic-bezier(0.42, 0, 0.58, 1), which the engine names ease-in-out.
-      expect(entrance.easing).toBe('ease-in-out');
+      // The motion foundation's cross-fade: Core Animation's easeInOut.
+      // Chromium reports the curve as written, so accept either spelling.
+      expect(EASE_IN_OUT).toContain(entrance.easing);
     });
   });
 

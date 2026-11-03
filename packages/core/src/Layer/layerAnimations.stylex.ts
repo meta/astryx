@@ -2,7 +2,8 @@
 
 /**
  * @file layerAnimations.stylex.ts
- * @input Uses StyleX, theme duration/easing tokens
+ * @input Uses StyleX, theme duration/easing tokens, the Reduce Motion fade
+ *   constants
  * @output Exports shared entry animation styles for layer-based components
  * @position Shared animation primitives; consumed by DropdownMenu, Popover,
  *   HoverCard, Tooltip, Selector, and any component using useLayer
@@ -27,6 +28,7 @@
  */
 
 import * as stylex from '@stylexjs/stylex';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {durationVars, easeVars, spacingVars} from '../theme/tokens.stylex';
 
 const enterBelow = stylex.keyframes({
@@ -89,21 +91,20 @@ const fadeIn = stylex.keyframes({
   to: {opacity: 1},
 });
 
-// Reduce Motion follows the motion foundation's policy
-// (design:reduced-motion): under a coarse pointer an opacity-only fade of
-// 200 ms on easeInOut that no theme value lengthens, under any other pointer
-// no animation. The media keys stay literal, spelled as the policy's queries
-// (a test pins them): the StyleX build gives an imported at-rule key another
-// priority. The values become `reducedMotionFadeConsts` once it is on main.
+// Under Reduce Motion a coarse pointer gets the shared opacity-only fade,
+// which no theme value lengthens, and any other pointer gets no animation.
+// The media keys stay literal: StyleX gives an imported at-rule key a later
+// priority layer (see reducedMotionKeys).
 const animationBase = {
   animationDuration: {
     default: durationVars['--duration-fast-max'],
-    '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '200ms',
+    '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+      reducedMotionFadeConsts.duration,
   },
   animationTimingFunction: {
     default: easeVars['--ease-standard'],
     '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
-      'cubic-bezier(0.42, 0, 0.58, 1)',
+      reducedMotionFadeConsts.easing,
   },
   animationFillMode: 'backwards' as const,
 };
@@ -118,7 +119,7 @@ const animationBase = {
  * scale. Under a finger (the primary pointer is coarse) the layer fades in,
  * opacity only, in 200 ms on easeInOut: on a touch screen Reduce Motion
  * replaces motion with a cross-fade rather than a jump; under any other
- * pointer it appears at once (design:reduced-motion DR1 to DR4).
+ * pointer it appears at once.
  */
 export const layerAnimations = stylex.create({
   below: {
