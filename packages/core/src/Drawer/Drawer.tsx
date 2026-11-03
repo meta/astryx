@@ -52,13 +52,16 @@
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Drawer/Drawer.doc.mjs (props table, features, usage)
  * - /packages/core/src/Drawer/Drawer.test.tsx (tests for new/changed behavior)
- * - /packages/core/src/Drawer/Drawer.spec.md (component contract)
+ * - /packages/core/src/Drawer/__tests__/DrawerNonModalPageScroll.a11y.chromium.spec.ts (the page beside a non-modal drawer scrolls)
+ * - /docs/specs/components/Drawer/Drawer.spec.md (component contract)
  * - /packages/core/src/Drawer/index.ts (exports if types change)
  * - /packages/cli/assets/templates/blocks/components/Drawer/ (showcase blocks)
  * - /apps/storybook/stories/Drawer.stories.tsx (examples and visual coverage)
  */
 
 import {useCallback, useRef, useState, type ReactNode} from 'react';
+import {useIsHydrating} from '../hooks/useIsHydrating';
+import {useSettledOpen} from '../hooks/useSettledOpen';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {
@@ -74,7 +77,12 @@ import {LayerDepthProvider, useLayerDismissal} from '../Layer';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
+import {useModalOutlet} from '../Layer/modalOutlet';
+import {useBackdropPress} from '../Layer/useBackdropPress';
+import {layerClickBoundary} from '../Layer/layerClickBoundary';
+import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {composeEventHandlers, mergeProps, themeProps} from '../utils';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {container, overlayPaddingReset} from '../Layout';
 import {
   containerPaddingBlockEndVarStyles,
@@ -85,6 +93,8 @@ import {
 } from '../Layout/padding.stylex';
 import type {SpacingStep, SpacingToken} from '../Layout';
 import {useDrawerDialogPresence} from './useDrawerDialogPresence';
+
+type PointerHandler = (event: React.PointerEvent<HTMLDialogElement>) => void;
 
 // =============================================================================
 // Styles
@@ -120,8 +130,13 @@ const styles = stylex.create({
     flexDirection: 'column',
     backgroundColor: colorVars['--color-background-surface'],
     boxShadow: shadowVars['--shadow-high'],
-    overflow: 'hidden',
-    overscrollBehavior: 'contain',
+    // `clip`, not `hidden`: `hidden` makes the panel a scroll container, and
+    // Chromium then holds a finger's drag on the page beside an open
+    // non-modal drawer in that container's overscroll containment, so the
+    // page stops scrolling. `clip` clips the off-screen panel the same way
+    // without a scroll container (MobileNav's dialog does the same). The
+    // content area keeps its own scrolling and containment.
+    overflow: 'clip',
     outline: 'none',
     // Full-height side panel, pinned across the block axis.
     insetBlockStart: 0,
@@ -196,11 +211,19 @@ const styles = stylex.create({
       },
     },
   },
+  // A drawer present on page load opens where it rests (spec:AST-013 FR13):
+  // the collapse reduced motion uses, so the transition still ends.
+  openSettled: {
+    transitionDuration: '0.01s',
+    '::backdrop': {
+      transitionDuration: '0.01s',
+    },
+  },
   // Scrim via the browser's ::backdrop pseudo-element (top layer).
   scrim: {
     '::backdrop': {
+      // No backdrop-filter: a full-viewport blur is costly to repaint.
       backgroundColor: colorVars['--color-overlay'],
-      backdropFilter: 'blur(2px)',
       opacity: 0,
       transitionProperty: 'opacity',
       transitionDuration: durationVars['--duration-medium'],
@@ -419,7 +442,7 @@ export interface DrawerProps extends BaseProps<HTMLDialogElement> {
  * ```
  */
 export function Drawer({
-  isOpen,
+  isOpen: isOpenProp,
   onOpenChange,
   side = 'end',
   width = 400,
@@ -437,6 +460,17 @@ export function Drawer({
   ref,
   ...props
 }: DrawerProps) {
+  // A drawer open on the server renders closed until hydration, and opens in
+  // the render after it, the first one that can enter its native host: a
+  // <dialog> painted open with aria-modal before it is modal claims a state it
+  // does not have (FR17).
+  const isHydrating = useIsHydrating();
+  const isOpen = isOpenProp && !isHydrating;
+  // A drawer open on the server was present on page load, so it opens settled,
+  // with no slide-in; its later opens and closes animate as usual
+  // (spec:AST-013 FR13).
+  const [settledOpen] = useSettledOpen(isOpenProp, isOpen, false);
+  const opensSettled = settledOpen && isOpen;
   const dialogRef = useRef<HTMLDialogElement>(null);
   const {containerRef: focusTrapRef} = useFocusTrap<HTMLDialogElement>({
     isActive: isOpen && hasScrim,
@@ -468,6 +502,11 @@ export function Drawer({
     setIsRendered,
   });
 
+  // Toasts outside an open modal are inert, so the open drawer hosts them.
+  // It releases them when its exit starts.
+  // showModal() must run first, so keep this call after useDrawerDialogPresence.
+  useModalOutlet(dialogRef, isOpen && hasScrim);
+
   const handleDismiss = useCallback(() => {
     onOpenChange(false);
   }, [onOpenChange]);
@@ -495,6 +534,11 @@ export function Drawer({
   // same top-most/IME rules as the shared Escape listener.
   const handleCancel = useCallback(
     (event: React.SyntheticEvent<HTMLDialogElement>) => {
+      // A cancel that bubbles up from inside (a dismissed file picker) is not
+      // a close request; the platform's is fired at the dialog itself.
+      if (event.target !== event.currentTarget) {
+        return;
+      }
       event.preventDefault();
       if (shouldDismissOnCloseRequest() && allowEscape) {
         handleDismiss();
@@ -503,15 +547,14 @@ export function Drawer({
     [allowEscape, handleDismiss, shouldDismissOnCloseRequest],
   );
 
-  // Clicks on the ::backdrop target the <dialog> element itself; clicks on
-  // drawer content always target a child (the content area fills the panel).
-  const handleClick = useCallback(
-    (event: React.MouseEvent<HTMLDialogElement>) => {
-      if (event.target === event.currentTarget && hasScrim && allowScrimClick) {
-        onOpenChange(false);
-      }
-    },
-    [allowScrimClick, hasScrim, onOpenChange],
+  // A press on the ::backdrop targets the <dialog> itself (the content area
+  // fills the panel). The press must start and end there.
+  const handleScrimPress = useCallback(() => {
+    onOpenChange(false);
+  }, [onOpenChange]);
+  const scrimPress = useBackdropPress(
+    handleScrimPress,
+    hasScrim && allowScrimClick,
   );
 
   const widthValue = typeof width === 'number' ? `${width}px` : width;
@@ -555,6 +598,7 @@ export function Drawer({
           isOpen && sideOpenStyle,
           hasScrim && styles.scrim,
           hasScrim && isOpen && styles.scrimOpen,
+          opensSettled && styles.openSettled,
           xstyle,
         ),
         className,
@@ -563,49 +607,70 @@ export function Drawer({
       {...safeProps}
       popover={hasScrim ? undefined : 'manual'}
       aria-label={label}
-      aria-modal={hasScrim ? 'true' : undefined}
+      aria-modal={hasScrim && !isHydrating ? 'true' : undefined}
       {...(purpose === 'required' && hasScrim
         ? {role: 'alertdialog'}
         : undefined)}
-      onClick={composeEventHandlers(onClickProp, handleClick)}
+      // Presses inside the drawer do not reach handlers around where it is
+      // written.
+      {...layerClickBoundary({
+        ...safeProps,
+        onClick: composeEventHandlers(onClickProp, scrimPress.onClick),
+      })}
+      // The hook records where the press started first. The caller's capture
+      // handler then runs, also when a child prevented default.
+      onPointerDownCapture={chainEventHandlers(
+        scrimPress.onPointerDownCapture,
+        safeProps.onPointerDownCapture as PointerHandler | undefined,
+      )}
+      onPointerUpCapture={chainEventHandlers(
+        scrimPress.onPointerUpCapture,
+        safeProps.onPointerUpCapture as PointerHandler | undefined,
+      )}
+      onPointerCancelCapture={chainEventHandlers(
+        scrimPress.onPointerCancelCapture,
+        safeProps.onPointerCancelCapture as PointerHandler | undefined,
+      )}
       onKeyDown={onKeyDownProp}
       onCancel={handleCancel}>
-      <LayerDepthProvider>
-        <LayerContentBoundary>
-          {/* Scrollable content area — tabIndex so the dialog's focusing steps
+      <ModalAnnounceProvider dialogRef={dialogRef} isOpen={isOpen && hasScrim}>
+        <LayerDepthProvider>
+          <LayerContentBoundary>
+            {/* Scrollable content area — tabIndex so the dialog's focusing steps
               land on the panel body rather than the first button inside. */}
-          <div
-            tabIndex={-1}
-            {...stylex.props(
-              styles.content,
-              ...container(
-                usesThemePadding
-                  ? {useThemeDefault: 'drawer'}
-                  : {
-                      paddingInnerX: paddingToken,
-                      paddingInnerY: paddingToken,
-                      paddingOuterX: paddingToken,
-                      paddingOuterY: paddingToken,
-                    },
-              ),
-              !usesThemePadding &&
-                effectivePadding !== 4 &&
-                paddingStyles[effectivePadding],
-              !usesThemePadding &&
-                effectivePadding !== 4 &&
-                containerPaddingInlineVarStyles[effectivePadding],
-              !usesThemePadding &&
-                effectivePadding !== 4 &&
-                containerPaddingBlockStartVarStyles[effectivePadding],
-              !usesThemePadding &&
-                effectivePadding !== 4 &&
-                containerPaddingBlockEndVarStyles[effectivePadding],
-              styles.contentSafeArea,
-            )}>
-            {children}
-          </div>
-        </LayerContentBoundary>
-      </LayerDepthProvider>
+            <div
+              tabIndex={-1}
+              {...stylex.props(
+                styles.content,
+                ...container(
+                  usesThemePadding
+                    ? {useThemeDefault: 'drawer'}
+                    : {
+                        paddingInnerX: paddingToken,
+                        paddingInnerY: paddingToken,
+                        paddingOuterX: paddingToken,
+                        paddingOuterY: paddingToken,
+                      },
+                ),
+                !usesThemePadding &&
+                  effectivePadding !== 4 &&
+                  paddingStyles[effectivePadding],
+                !usesThemePadding &&
+                  effectivePadding !== 4 &&
+                  containerPaddingInlineVarStyles[effectivePadding],
+                !usesThemePadding &&
+                  effectivePadding !== 4 &&
+                  containerPaddingBlockStartVarStyles[effectivePadding],
+                !usesThemePadding &&
+                  effectivePadding !== 4 &&
+                  containerPaddingBlockEndVarStyles[effectivePadding],
+                styles.contentSafeArea,
+              )}>
+              {children}
+            </div>
+          </LayerContentBoundary>
+        </LayerDepthProvider>
+      </ModalAnnounceProvider>
     </dialog>
   );
 }

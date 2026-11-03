@@ -91,9 +91,11 @@ export const myTheme = defineTheme({
 
   /**
    * Start from another theme instead of the defaults. Tokens are copied then
-   * overridden, `components` deep-merge, `icons` shallow-merge — but the scale
-   * configs below REPLACE the base's rather than merging, because they are
-   * inputs to a generator, not values.
+   * overridden, `components` deep-merge, `icons` shallow-merge — but the
+   * typography, radius and color scale configs below REPLACE the base's rather
+   * than merging, because they are inputs to a generator, not values. `motion`
+   * inherits field by field: `fast`, `medium` and `ratio` regenerate the fast
+   * and medium durations, and a `slow` or `easing` left unset keeps the base's.
    *
    * Reference: `astryx theme list` (themes you can install and extend).
    */
@@ -179,12 +181,26 @@ export const myTheme = defineTheme({
   radius: {base: 4, multiplier: 1},
 
   /**
-   * Duration scale in ms. Each of fast/medium/slow also gets a -min and -max
-   * sibling computed with `ratio` (min = base × ratio, max = base ÷ ratio), so
-   * a component can pick a longer or shorter variant of the same tempo.
+   * Motion. Two knobs set how its CSS feels (touch springs don't read them
+   * yet):
+   *   tempo — 1 is Astryx's own; 0.75 the quickest, 1.5 the slowest.
+   *   character — 'crisp' | 'standard' | 'expressive': the entrance and move
+   *     curves (--ease-entrance, --ease-move). --ease-exit, the curve for
+   *     something leaving, is the same at every character; exits and fades
+   *     never overshoot.
+   *   e.g. motion: {tempo: 0.85, character: 'crisp'}
+   * Finger tracking, momentum, the rubber band, the on-screen keyboard,
+   * hover-intent delays, gesture thresholds, the press's onset delay, cancel
+   * distance and tap flash, and busy loops never follow them; the press
+   * release fade follows tempo, up to the 200 ms Reduce Motion cap.
+   *
+   * A duration scale in ms wins over tempo for the durations it sets. Each of
+   * fast/medium/slow also gets a -min and -max sibling computed with `ratio`
+   * (min = base × ratio, max = base ÷ ratio), so a component can pick a longer
+   * or shorter variant of the same tempo.
    *   Snappy {fast: 100, medium: 250} · Default {fast: 175, medium: 410, slow: 975}
    *   Cinematic {fast: 200, medium: 500, slow: 1200}
-   * `easing` overrides --ease-standard.
+   * `easing` overrides --ease-standard. Explicit `tokens` win over both.
    *
    * Reference: `astryx docs motion`.
    */
@@ -215,7 +231,8 @@ export const myTheme = defineTheme({
   //   --radius-*       none · inner · element · container · page · chat · full
   //   --shadow-*       low/med/high + inset-{hover,selected,success,warning,error}
   //   --duration-*     {fast,medium,slow} × {-min, base, -max}
-  //   --ease-standard
+  //   --ease-*         standard (state) · entrance (arriving) · move (on
+  //                    screen) · exit (leaving)
   //   --font-family-*  body · heading · code
   //   --font-size-*    4xs … 5xl
   //   --font-weight-*  normal · medium · semibold · bold
@@ -312,10 +329,21 @@ export const myTheme = defineTheme({
 
   /**
    * Swap the artwork behind semantic icon names — every component that asks
-   * for `check`, `close`, `chevron-down` gets yours.
+   * for `check`, `close`, `chevron-down` gets yours. An entry may also be a
+   * pure function of `{size, variant}` that picks artwork for the size Icon
+   * renders at.
    * Reference: `astryx docs icons` lists the names.
    */
-  // icons: {check: <MyCheck />, close: <MyClose />},
+  // icons: {check: <MyCheck />, info: ({size}) => <MyInfo bold={size === 'sm'} />},
+
+  /**
+   * The icon variant names this theme supports, listed once for the whole
+   * theme. An icon entry function receives `variant` typed as these names.
+   * A theme that sets the list replaces the one it would inherit; omit it to
+   * inherit the base's list.
+   * Reference: `astryx docs icons`.
+   */
+  // iconVariants: ['outline', 'filled'],
 
   /**
    * Replace the small components that DRAW control state — the checkbox box,

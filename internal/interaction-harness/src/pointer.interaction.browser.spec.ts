@@ -52,6 +52,9 @@ test('newFinePointerPage reads a fine pointer with hover and no touch', async ({
     expect(
       await page.locator('p').evaluate(p => getComputedStyle(p).color),
     ).toBe('rgb(0, 0, 0)');
+    await expect(assertCoarsePointer(page)).rejects.toThrow(
+      /Not a coarse pointer/,
+    );
   } finally {
     await context.close();
   }

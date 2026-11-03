@@ -8,72 +8,28 @@
  *   to an element inside the control
  * @output Announces each busy start once, through the shared polite channel
  *   or a persistent region inside the open modal dialog holding the control
- * @position Core a11y hook for controls that show a decorative busy Spinner
- *
- * The busy Spinner inside a control is decorative (hidden, no live role); the
- * control announces its busy state instead (`spec:AST-086` FR8), once per busy
- * start (FR6): rerenders and StrictMode replay do not repeat it, and settling
- * re-arms it. The returned function is called by an owner announcing the
- * busy operation's outcome: a busy start not yet announced is dropped, so it
- * never follows its own outcome (FR8). While a native modal is open, the body-level channel is not
- * exposed, so a control inside it announces through one persistent polite
- * region in that dialog, inserted empty and filled a frame later (Platform
- * support, FR3).
- *
- * SYNC: deliberately NOT exported from /packages/core/src/hooks/index.ts —
- * this is a shared implementation detail of Astryx's busy controls.
+ * @position Core a11y hook for controls that show a decorative busy Spinner.
+ *   It is a shared detail of the busy controls, so it is not in hooks/index.ts.
  */
+
+// The busy Spinner is decorative, so the control announces its busy state,
+// once for each busy start (AST-086). A re-render or a StrictMode replay does
+// not repeat it, and the settle re-arms it. An owner calls the returned function
+// when it announces the outcome. A busy start that is not yet announced is
+// then dropped, so it never follows its own outcome. While a native modal is
+// open, the page-body channel is not exposed. So a control in a modal
+// announces through that dialog's polite region, also in a modal that an app
+// renders without Astryx.
 
 import {useCallback, useEffect, useRef, type RefObject} from 'react';
 import {
+  announceInModal,
+  enclosingModalDialog,
   takeJoinedAnnouncement,
   useAnnounce,
   withdrawPendingAnnouncement,
+  type WithdrawAnnouncement,
 } from './useAnnounce';
-
-const REGION_ATTR = 'data-astryx-modal-busy-region';
-const VISUALLY_HIDDEN_CSS =
-  'position:absolute;width:1px;height:1px;margin:-1px;padding:0;' +
-  'overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;';
-const CLEAR_DELAY_MS = 2000; // Matches useAnnounce.
-
-// The pending write and clear of each in-dialog region; a new write cancels
-// them so an earlier message can neither land late nor clear a later one.
-const pendingByRegion = new WeakMap<
-  HTMLElement,
-  {frame: number; timer?: ReturnType<typeof setTimeout>}
->();
-
-function announceInModal(dialog: HTMLDialogElement, message: string): void {
-  let region = dialog.querySelector<HTMLElement>(`:scope > [${REGION_ATTR}]`);
-  if (region == null) {
-    region = document.createElement('div');
-    region.setAttribute(REGION_ATTR, '');
-    region.setAttribute('role', 'status');
-    region.setAttribute('aria-live', 'polite');
-    region.setAttribute('aria-atomic', 'true');
-    region.style.cssText = VISUALLY_HIDDEN_CSS;
-    dialog.appendChild(region);
-  }
-  const target = region;
-  const previous = pendingByRegion.get(target);
-  if (previous != null) {
-    cancelAnimationFrame(previous.frame);
-    clearTimeout(previous.timer);
-  }
-  target.textContent = '';
-  const pending: {frame: number; timer?: ReturnType<typeof setTimeout>} = {
-    frame: 0,
-  };
-  pending.frame = requestAnimationFrame(() => {
-    target.textContent = message;
-    pending.timer = setTimeout(() => {
-      target.textContent = '';
-      pendingByRegion.delete(target);
-    }, CLEAR_DELAY_MS);
-  });
-  pendingByRegion.set(target, pending);
-}
 
 export function useBusyAnnouncement(
   isBusy: boolean,
@@ -86,10 +42,14 @@ export function useBusyAnnouncement(
   // This busy start's share of the shared channel's pending text, until it
   // settles.
   const channelMessageRef = useRef<object | null>(null);
+  // Or how to take back its write inside a modal, wherever the modal moves
+  // it, until it settles.
+  const modalMessageRef = useRef<WithdrawAnnouncement | null>(null);
   useEffect(() => {
     if (!isBusy) {
       hasAnnouncedRef.current = false;
       channelMessageRef.current = null;
+      modalMessageRef.current = null;
       return;
     }
     if (hasAnnouncedRef.current) {
@@ -100,9 +60,12 @@ export function useBusyAnnouncement(
     const frame = requestAnimationFrame(() => {
       frameRef.current = null;
       hasAnnouncedRef.current = true;
-      const dialog = elementRef.current?.closest('dialog');
-      if (dialog?.open && dialog.matches(':modal')) {
-        announceInModal(dialog, message);
+      // The nearest open native modal around the control's element, Astryx or
+      // app-rendered. Else the shared `useAnnounce` route, which follows the
+      // nearest Astryx modal around this hook's caller.
+      const dialog = enclosingModalDialog(elementRef.current);
+      if (dialog != null) {
+        modalMessageRef.current = announceInModal(dialog, message);
       } else {
         announce(message, 'polite');
         channelMessageRef.current = takeJoinedAnnouncement();
@@ -122,10 +85,16 @@ export function useBusyAnnouncement(
       // Still busy until the settled state commits; do not schedule again.
       hasAnnouncedRef.current = true;
     }
-    // Written to the channel but not yet exposed: withdraw it too.
+    // Written to the channel, or inside the modal, but not yet exposed:
+    // withdraw it too.
     if (channelMessageRef.current != null) {
       withdrawPendingAnnouncement(channelMessageRef.current, 'polite');
       channelMessageRef.current = null;
+    }
+    if (modalMessageRef.current != null) {
+      const withdraw = modalMessageRef.current;
+      modalMessageRef.current = null;
+      withdraw();
     }
   }, []);
 }

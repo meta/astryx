@@ -103,7 +103,7 @@
         "token-utilities",
         "usetheme-hook"
       ],
-      "skeleton": "4e494f1ed2599a4a3ba54c3f722ae1ff9808fe80843e9ed0c6ab2e8b9f0bb19e",
+      "skeleton": "67521830da2f078f4335b843b78812e05919c7f7b976f089bfcf8c3d1552c496",
       "mentions": []
     },
     "browser-support": {
@@ -152,7 +152,7 @@
         "example-apps",
         "explore-the-cli"
       ],
-      "skeleton": "6564c786e0e708b5ffb9a1811db06328dc9eb1f833c9722f7a4c417c46cc6eee",
+      "skeleton": "3cd256cfa2bad3dc6e87eb50075aef0d8afb437a7be74d4e5d4aebecf6948d0b",
       "mentions": []
     },
     "icons": {
@@ -160,9 +160,10 @@
         "available-names",
         "custom-icons",
         "theme-overrides",
+        "icon-variants",
         "component-and-library-icons"
       ],
-      "skeleton": "e64c5b38eb3c598a4e2d35f4301fe72a59497fee2f48a32e1faf270fc5fd41f1",
+      "skeleton": "b58107977247069a83428bd5c6af3c28edef4c4754cb12e6b8bbfa9dca6ab052",
       "mentions": [
         "This lets you swap the icon set (e.g."
       ]
@@ -198,9 +199,10 @@
         "movement-principles",
         "respecting-user-preferences",
         "usage",
+        "theme-motion",
         "best-practices"
       ],
-      "skeleton": "e648d618f9141bbd7f15bf970ba9e0d41b59ff9ae89e0cbbb2042e98bd5f0109",
+      "skeleton": "f1ffd7fc39f49d407c6caa563c25eadd8d79bf4d3c2fc6837f06297c37f714eb",
       "mentions": []
     },
     "principles": {
@@ -251,10 +253,11 @@
       "sections": [
         "quick-start",
         "creating-a-custom-theme",
+        "icon-sizes",
         "light-dark-mode",
         "integration-themes"
       ],
-      "skeleton": "4af0a08dbcf2008c2ad6c12e61a1451130f10109fdb666a08933a7ce69ce18bd",
+      "skeleton": "eacd1432d49237ed62f82ea054c0e5930503e9f072ab40b4965461f29cf31080",
       "mentions": []
     },
     "use-a-theme": {

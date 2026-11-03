@@ -8,6 +8,9 @@
  * @output Safe prop getters, native keyboard entry, and stable per-axis effective scroll state
  * @position Canonical behavior core for ScrollableArea and structure-owning adopters
  *
+ * Geometry and style signals cause one full measurement per frame. A scroll
+ * moves only the offset, so it reads only box geometry.
+ *
  * SYNC: When modified, update:
  * - /packages/core/src/hooks/useScrollableArea.doc.mjs
  * - /packages/core/src/hooks/useScrollableArea.test.tsx
@@ -35,6 +38,7 @@ import {
   getLogicalAxisMapping,
   measureLogicalOverflowGeometry,
   measureLogicalScrollAxis,
+  measureLogicalScrollPosition,
   type LogicalAxisMapping,
   type LogicalOverflowGeometry,
 } from './scrollGeometry';
@@ -106,6 +110,7 @@ const INITIAL_MAPPING: LogicalAxisMapping = {
   inlineReversed: false,
   blockReversed: false,
 };
+const LOGICAL_AXES = ['inline', 'block'] as const;
 
 const styles = stylex.create({
   overflow: (
@@ -218,6 +223,18 @@ export function useScrollableArea({
 
     let frame: number | null = null;
     let isActive = true;
+    // What the last full measurement read from computed style and geometry.
+    // A scroll changes neither, so the scroll path reuses them.
+    let measuredMapping = INITIAL_MAPPING;
+    let measuredOverflow = INITIAL_OVERFLOW;
+
+    const publish = (nextState: ScrollableAreaState) => {
+      stateRef.current = nextState;
+      registerScrollOwner(viewport, nextState);
+      setMeasured(current =>
+        statesEqual(current, nextState) ? current : nextState,
+      );
+    };
 
     // Measures now; `measure` is the frame callback that also clears the
     // pending frame. The same-commit remeasure below calls this one, so a frame
@@ -257,17 +274,15 @@ export function useScrollableArea({
         block: blockOverflow,
       };
       const nextState = {inline, block};
-      stateRef.current = nextState;
-      registerScrollOwner(viewport, nextState);
+      measuredMapping = nextMapping;
+      measuredOverflow = nextOverflow;
       // Measured DOM geometry decides whether the viewport becomes a CSS
       // scroll container.
       setOverflow(current =>
         overflowEqual(current, nextOverflow) ? current : nextOverflow,
       );
       // The measured DOM state is the hook's output.
-      setMeasured(current =>
-        statesEqual(current, nextState) ? current : nextState,
-      );
+      publish(nextState);
       // A writing-mode change remaps the behavior-owned physical CSS.
       setMapping(current =>
         mappingsEqual(current, nextMapping) ? current : nextMapping,
@@ -286,13 +301,67 @@ export function useScrollableArea({
       frame = window.requestAnimationFrame(measure);
     };
 
+    // A scroll moves only the offset, so it derives the logical edges from
+    // box geometry when the event fires. Style and layout are usually still
+    // clean then, so no computed style is read and no frame is requested.
+    // When the scroll cannot explain a change (overflow on a requested axis
+    // appears or goes away, or the offset sign does not match the writing
+    // direction), it schedules the full measurement.
+    const onScroll = () => {
+      if (!isActive || frame != null) {
+        // A full measurement is already pending for this frame.
+        return;
+      }
+      const current = stateRef.current;
+      let next = current;
+      for (const logicalAxis of LOGICAL_AXES) {
+        if (!axisIsRequested(axis, logicalAxis)) {
+          continue;
+        }
+        const position = measureLogicalScrollPosition(
+          viewport,
+          logicalAxis,
+          measuredMapping,
+        );
+        if (position == null) {
+          return;
+        }
+        if (
+          position.overflows !== measuredOverflow[logicalAxis] ||
+          position.contradictsMapping
+        ) {
+          scheduleMeasure();
+          return;
+        }
+        const axisState = current[logicalAxis];
+        if (
+          !axisState.isScrollable ||
+          (axisState.atStart === position.atStart &&
+            axisState.atEnd === position.atEnd)
+        ) {
+          continue;
+        }
+        next = {
+          ...next,
+          [logicalAxis]: {
+            isScrollable: true,
+            atStart: position.atStart,
+            atEnd: position.atEnd,
+          },
+        };
+      }
+      if (next !== current) {
+        publish(next);
+      }
+    };
+
     registerScrollOwner(viewport, stateRef.current);
     measureRef.current = measureNow;
     measure();
     const stopObservingViewport = observeResize(viewport, scheduleMeasure);
     const stopObservingContent = observeResize(content, scheduleMeasure);
 
-    viewport.addEventListener('scroll', scheduleMeasure, {passive: true});
+    viewport.addEventListener('scroll', onScroll, {passive: true});
     window.addEventListener('resize', scheduleMeasure);
     window.visualViewport?.addEventListener('resize', scheduleMeasure);
     content.addEventListener('load', scheduleMeasure, true);
@@ -338,7 +407,7 @@ export function useScrollableArea({
       stopObservingViewport();
       stopObservingContent();
       mutationObserver?.disconnect();
-      viewport.removeEventListener('scroll', scheduleMeasure);
+      viewport.removeEventListener('scroll', onScroll);
       window.removeEventListener('resize', scheduleMeasure);
       window.visualViewport?.removeEventListener('resize', scheduleMeasure);
       content.removeEventListener('load', scheduleMeasure, true);
@@ -353,14 +422,12 @@ export function useScrollableArea({
     };
   }, [axis, content, viewport]);
 
-  // The first measure reads the viewport before this hook has let an
-  // overflowing axis scroll (it is `clip` until then), so it finds overflow
-  // but no scrollable axis yet. Measure again in the same commit once an axis
-  // has just gained overflow (or the axis mapping changed), so the viewport is
-  // a tab stop from the first frame it scrolls, not an animation frame later
-  // (`spec:AST-025` FR12). Only on a gain: content that fits only once a
-  // scrollbar takes space would otherwise flip overflow back and forth inside
-  // one commit; a loss waits for the next frame, as before.
+  // The first measure runs before an overflowing axis can scroll (it is
+  // `clip` until then). So when an axis gains overflow, or the axis mapping
+  // changes, measure again in the same commit. Then the viewport is a tab
+  // stop from the first frame it scrolls (AST-025). Do this only on a gain:
+  // content that fits only when a scrollbar takes space would flip in one
+  // commit. A loss waits for the next frame.
   const previousOverflowRef = useRef<LogicalOverflowGeometry>(INITIAL_OVERFLOW);
   const previousMappingRef = useRef<LogicalAxisMapping>(INITIAL_MAPPING);
   useIsomorphicLayoutEffect(() => {

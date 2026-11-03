@@ -9,7 +9,15 @@
  * SYNC: When Selector.tsx API changes, update these tests.
  */
 
-import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  beforeEach,
+  afterEach,
+} from 'vitest';
 import {readFileSync} from 'node:fs';
 import {
   act,
@@ -61,6 +69,15 @@ function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
 }
 
 // Mock showPopover and hidePopover methods since they're not implemented in jsdom
+// The bottom-sheet presentation renders BottomSheet through React.lazy. Its
+// first import transforms the BottomSheet module tree, which on a loaded
+// runner takes longer than a query's 1 s wait, so the first sheet test timed
+// out before the dialog existed. Load the module once up front: lazy() then
+// resolves from the module cache and every sheet test waits only on the open.
+beforeAll(async () => {
+  await import('../BottomSheet/BottomSheet');
+});
+
 beforeEach(() => {
   // The live regions are a document-level singleton; start each test clean.
   __resetLiveRegionsForTest();
@@ -275,6 +292,13 @@ function expectSilentBusySpinner() {
   expect(spinner).toHaveAttribute('aria-hidden', 'true');
   expect(screen.queryByRole('status', {name: 'Loading'})).toBeNull();
 }
+
+// The bottom sheet is loaded on demand (SelectorBottomSheet's lazy import).
+// Loading its module is not part of an open, so the file waits for it once
+// here, and each test's open waits only for the open.
+beforeAll(async () => {
+  await import('../BottomSheet/BottomSheet');
+});
 
 describe('Selector', () => {
   it('uses a bottom sheet and closes after a selection when requested', async () => {
@@ -1051,6 +1075,30 @@ describe('Selector', () => {
       );
       await user.click(screen.getByRole('button', {name: 'Fruit'}));
       expect(screen.getByRole('combobox', h)).toBeInTheDocument();
+    });
+
+    it('asks a touch keyboard for its Search key and no autocorrection in the search row, and Enter still selects the highlighted option', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Apple"
+          onChange={onChange}
+          hasSearch
+        />,
+      );
+      await user.click(screen.getByRole('button', {name: 'Fruit'}));
+      const search = screen.getByRole('combobox', h);
+      expect(search).toHaveAttribute('enterkeyhint', 'search');
+      expect(search).toHaveAttribute('autocorrect', 'off');
+
+      await user.type(search, 'ban');
+      await user.keyboard('{ArrowDown}');
+      expect(search).toHaveAttribute('aria-activedescendant');
+      fireEvent.keyDown(search, {key: 'Enter'});
+      expect(onChange).toHaveBeenCalledWith('Banana');
     });
 
     // The search input's expanded state, popup relationship, and active option
@@ -2004,6 +2052,8 @@ describe('Selector', () => {
         scrollIntoView.mockClear();
 
         const options = screen.getAllByRole('option', {hidden: true});
+        // The mouse moves onto the row: a hover after keyboard use.
+        fireEvent.pointerMove(options[3], {screenX: 40, screenY: 80});
         fireEvent.mouseEnter(options[3]);
 
         const trigger = screen.getByRole('combobox');
@@ -2036,6 +2086,42 @@ describe('Selector', () => {
         'aria-expanded',
         'false',
       );
+    });
+
+    it('reaches accented and stroked options with a plain letter (INV17)', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Selector
+          label="Name"
+          options={['Anh', 'Dung', 'Đào', 'Ánh']}
+          value="Dung"
+          onChange={onChange}
+        />,
+      );
+
+      await user.tab();
+      await user.keyboard('d');
+
+      expect(onChange).toHaveBeenLastCalledWith('Đào');
+    });
+
+    it('puts the exact option first for a typed mark (INV17)', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Selector
+          label="Name"
+          options={['Anh', 'Dung', 'Đào']}
+          value="Anh"
+          onChange={onChange}
+        />,
+      );
+
+      await user.tab();
+      await user.keyboard('đ');
+
+      expect(onChange).toHaveBeenLastCalledWith('Đào');
     });
 
     it('cycles through options sharing a first letter on repeated presses', async () => {
@@ -3026,7 +3112,9 @@ describe('Selector', () => {
 
         rerender(selector(true));
 
-        await waitFor(() => expect(dialog).toHaveAttribute('inert'));
+        // The sheet starts its exit; focus stays inside it until the exit
+        // ends, so it is not inert yet.
+        await waitFor(() => expect(dialog).not.toHaveAttribute('aria-modal'));
         fireEvent.transitionEnd(panel!, {propertyName: 'transform'});
         const readOnlyTrigger = screen.getByRole('combobox', {name: 'Fruit'});
         await waitFor(() => expect(readOnlyTrigger).toHaveFocus());
@@ -4271,6 +4359,71 @@ describe('Selector popup theme target', () => {
   });
 });
 
+describe('Selector light dismiss focus (spec:Popover AR4)', () => {
+  function closeByLightDismiss() {
+    const popover = document.querySelector('[popover]') as HTMLElement;
+    act(() => {
+      popover.dispatchEvent(
+        Object.assign(new Event('toggle'), {
+          oldState: 'open',
+          newState: 'closed',
+        }),
+      );
+    });
+  }
+
+  it('leaves focus on the field a press moved it to', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Banana"
+          onChange={() => {}}
+          placement="below"
+        />
+        <input aria-label="Notes" />
+      </>,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+
+    // The press on another field focuses it before the browser's light
+    // dismiss closes the list.
+    const notes = screen.getByRole('textbox', {name: 'Notes'});
+    act(() => {
+      notes.focus();
+    });
+    closeByLightDismiss();
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(notes).toHaveFocus();
+  });
+
+  it('returns focus to the trigger when the press lands on nothing focusable', async () => {
+    const user = userEvent.setup();
+    render(
+      <Selector
+        label="Fruit"
+        options={OPTIONS}
+        value="Banana"
+        onChange={() => {}}
+        placement="below"
+      />,
+    );
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    act(() => {
+      (document.activeElement as HTMLElement | null)?.blur();
+    });
+    closeByLightDismiss();
+
+    expect(trigger).toHaveFocus();
+  });
+});
+
 describe('Selector option-row theme target', () => {
   const ROW_OPTIONS = ['Apple', 'Banana', 'Orange'];
 
@@ -4796,6 +4949,145 @@ describe('Selector option descriptions and trigger value', () => {
   });
 });
 
+describe('Selector disabled selection transitions', () => {
+  it.each([
+    {presentation: 'popover', hasSearch: false, withReason: false},
+    {presentation: 'popover', hasSearch: true, withReason: true},
+    {presentation: 'bottom-sheet', hasSearch: false, withReason: true},
+    {presentation: 'bottom-sheet', hasSearch: true, withReason: false},
+  ] as const)(
+    'rejects a pointer selection from a popup opened before disablement ($presentation, search=$hasSearch, reason=$withReason)',
+    async ({presentation, hasSearch, withReason}) => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const changeAction = vi.fn();
+      function ControlledSelector({isDisabled}: {isDisabled: boolean}) {
+        const [value, setValue] = useState('Apple');
+        return (
+          <form aria-label="Fruit form">
+            <Selector
+              label="Fruit"
+              htmlName="fruit"
+              options={OPTIONS}
+              value={value}
+              isDisabled={isDisabled}
+              presentation={presentation}
+              hasSearch={hasSearch}
+              disabledMessage={withReason ? 'Unavailable reason' : undefined}
+              onChange={next => {
+                onChange(next);
+                setValue(next);
+              }}
+              changeAction={changeAction}
+            />
+          </form>
+        );
+      }
+      const {rerender} = render(<ControlledSelector isDisabled={false} />);
+      const trigger = screen.getByRole(hasSearch ? 'button' : 'combobox', {
+        name: 'Fruit',
+      });
+      const form = screen.getByRole<HTMLFormElement>('form', {
+        name: 'Fruit form',
+      });
+      await user.click(trigger);
+      // The bottom-sheet presentation loads lazily on its first opening.
+      const banana = await screen.findByRole('option', {name: 'Banana', ...h});
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      if (hasSearch) {
+        await waitFor(() =>
+          expect(screen.getByRole('combobox', h)).toHaveFocus(),
+        );
+      }
+      const focused = document.activeElement;
+
+      rerender(<ControlledSelector isDisabled />);
+      expect(document.activeElement).toBe(focused);
+      expect(trigger).toHaveAttribute('aria-disabled', 'true');
+      expect(new FormData(form).getAll('fruit')).toEqual([]);
+      await user.click(banana);
+
+      expect(onChange).not.toHaveBeenCalled();
+      expect(changeAction).not.toHaveBeenCalled();
+      expect(trigger).toHaveTextContent('Apple');
+      rerender(<ControlledSelector isDisabled={false} />);
+      expect(new FormData(form).getAll('fruit')).toEqual(['Apple']);
+      await user.click(banana);
+      expect(onChange).toHaveBeenCalledExactlyOnceWith('Banana');
+      expect(changeAction).toHaveBeenCalledExactlyOnceWith('Banana');
+      expect(new FormData(form).getAll('fruit')).toEqual(['Banana']);
+    },
+  );
+
+  it('rejects activation of a retained option after closing and disabling', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const changeAction = vi.fn();
+    const selector = (isDisabled: boolean) => (
+      <Selector
+        label="Fruit"
+        options={OPTIONS}
+        value="Apple"
+        isDisabled={isDisabled}
+        onChange={onChange}
+        changeAction={changeAction}
+      />
+    );
+    const {rerender} = render(selector(false));
+    const trigger = screen.getByRole('combobox', {name: 'Fruit'});
+    await user.click(trigger);
+    const banana = screen.getByRole('option', {name: 'Banana', ...h});
+    await user.keyboard('{Escape}');
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(banana).toBeInTheDocument();
+
+    rerender(selector(true));
+    fireEvent.click(banana, {detail: 0});
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(changeAction).not.toHaveBeenCalled();
+    expect(trigger).toHaveTextContent('Apple');
+    expect(trigger).toHaveFocus();
+  });
+
+  it.each(['mouse', 'touch', 'pen'])(
+    'rejects a %s gesture released after the selector becomes disabled',
+    async pointerType => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const changeAction = vi.fn();
+      const selector = (isDisabled: boolean) => (
+        <Selector
+          label="Fruit"
+          options={OPTIONS}
+          value="Apple"
+          isDisabled={isDisabled}
+          onChange={onChange}
+          changeAction={changeAction}
+        />
+      );
+      const {rerender} = render(selector(false));
+      const trigger = screen.getByRole('combobox', {name: 'Fruit'});
+      await user.click(trigger);
+      const apple = screen.getByRole('option', {name: 'Apple', ...h});
+      const banana = screen.getByRole('option', {name: 'Banana', ...h});
+      const pointer = {pointerType, pointerId: 1, button: 0};
+      fireEvent.pointerDown(apple, pointer);
+      fireEvent.pointerMove(banana, pointer);
+      rerender(selector(true));
+      fireEvent.pointerUp(banana, pointer);
+      // Include the delayed click that a browser can send after the gesture.
+      fireEvent.click(apple, {detail: 1});
+      // Assistive activation reaches the same component-owned selection path.
+      fireEvent.click(banana, {detail: 0});
+      expect(onChange).not.toHaveBeenCalled();
+      expect(changeAction).not.toHaveBeenCalled();
+      expect(trigger).toHaveTextContent('Apple');
+      expect(trigger).toHaveFocus();
+    },
+  );
+});
+
 describe('Selector press model', () => {
   const touch = {pointerType: 'touch', pointerId: 1};
   const h = {hidden: true};
@@ -4889,6 +5181,159 @@ describe('Selector press model', () => {
     expect(listbox).not.toHaveClass(hash(touchStyles.panYPinchZoom));
   });
 
+  it('a press held still after a key lights the pressed row', async () => {
+    const user = userEvent.setup();
+    const many = Array.from({length: 30}, (_, i) => `Option ${i}`);
+    render(<Selector label="Item" options={many} onChange={() => {}} />);
+    const trigger = screen.getByRole('combobox');
+    trigger.focus();
+    await user.keyboard('{ArrowDown}');
+    const listbox = screen.getByRole('listbox', h);
+    const rows = within(listbox).getAllByRole('option', h);
+    await user.keyboard('{End}');
+    expect(trigger).toHaveAttribute('aria-activedescendant', rows[29].id);
+    // The browser reports the row under the still mouse as entered.
+    fireEvent.mouseOver(rows[20]);
+    expect(trigger).toHaveAttribute('aria-activedescendant', rows[29].id);
+    // The mouse presses without moving: the pressed row lights.
+    fireEvent.pointerDown(rows[20], {
+      pointerType: 'mouse',
+      button: 0,
+      buttons: 1,
+    });
+    expect(trigger).toHaveAttribute('aria-activedescendant', rows[20].id);
+  });
+
+  it('a row that scrolls under a still mouse after a key does not take the highlight; a mouse that moves does', async () => {
+    const user = userEvent.setup();
+    const many = Array.from({length: 30}, (_, i) => `Option ${i}`);
+    render(<Selector label="Item" options={many} onChange={() => {}} />);
+    const trigger = screen.getByRole('combobox');
+    trigger.focus();
+    await user.keyboard('{ArrowDown}');
+    const listbox = screen.getByRole('listbox', h);
+    const rows = within(listbox).getAllByRole('option', h);
+    const active = () =>
+      document
+        .querySelector('[aria-activedescendant]')
+        ?.getAttribute('aria-activedescendant');
+    // The mouse rests over row 3.
+    fireEvent.pointerMove(rows[3], {screenX: 100, screenY: 200});
+    fireEvent.mouseOver(rows[3]);
+    expect(active()).toBe(rows[3].id);
+    // End moves the highlight to the last row and scrolls; the browser then
+    // reports whichever row is now under the still mouse as entered.
+    await user.keyboard('{End}');
+    expect(active()).toBe(rows[29].id);
+    fireEvent.pointerMove(rows[20], {screenX: 100, screenY: 200});
+    fireEvent.mouseOver(rows[20]);
+    expect(active()).toBe(rows[29].id);
+    // The mouse moves. The browser reports entering the next row before the
+    // move that reaches it; that row takes the highlight with the move.
+    fireEvent.mouseOver(rows[21]);
+    expect(active()).toBe(rows[29].id);
+    fireEvent.pointerMove(rows[21], {screenX: 100, screenY: 230});
+    expect(active()).toBe(rows[21].id);
+    fireEvent.mouseOver(rows[22]);
+    expect(active()).toBe(rows[22].id);
+  });
+
+  it('re-renders only the rows a highlight move or the open changes, not the whole list', async () => {
+    const user = userEvent.setup();
+    const many = Array.from({length: 50}, (_, i) => `Option ${i}`);
+    // A stable renderOption: it runs once per row render.
+    const rendered: string[] = [];
+    const renderOption = (option: {value: string}) => {
+      rendered.push(option.value);
+      return option.value;
+    };
+    function Harness() {
+      return (
+        <Selector
+          label="Item"
+          options={many}
+          onChange={() => {}}
+          renderOption={renderOption}
+        />
+      );
+    }
+    render(<Harness />);
+    expect(new Set(rendered).size).toBe(50);
+    rendered.length = 0;
+    await user.click(screen.getByRole('combobox'));
+    // Opening highlights the first row; no other row's props change.
+    expect(rendered.length).toBeLessThanOrEqual(2);
+    rendered.length = 0;
+    await user.keyboard('{ArrowDown}');
+    // The highlight moves from row 0 to row 1: those two rows only.
+    expect([...new Set(rendered)].sort()).toEqual(['Option 0', 'Option 1']);
+  });
+
+  it('a long list renders its scrolling touch-action from the first open, with no class swap after the open measure', async () => {
+    const user = userEvent.setup();
+    const many = Array.from({length: 249}, (_, i) => `Option ${i}`);
+    const touchStyles = stylex.create({
+      pinchZoom: {touchAction: 'pinch-zoom'},
+      panYPinchZoom: {touchAction: 'pan-y pinch-zoom'},
+    });
+    const hash = (style: stylex.StyleXStyles) =>
+      stylex.props(style).className!.split(' ').pop()!;
+    // A 249-row list overflows its 300 px box.
+    Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+      configurable: true,
+      get() {
+        return (this as HTMLElement).getAttribute('role') === 'listbox'
+          ? 7968
+          : 0;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+      configurable: true,
+      get() {
+        return (this as HTMLElement).getAttribute('role') === 'listbox'
+          ? 300
+          : 0;
+      },
+    });
+    try {
+      render(<Selector label="Country" options={many} onChange={() => {}} />);
+      const listbox = screen.getByRole('listbox', h);
+      // The class is already the scrolling one while closed, so the open
+      // never swaps it (a swap restyles every row a second time).
+      expect(listbox).toHaveClass(hash(touchStyles.panYPinchZoom));
+      const swaps: string[] = [];
+      const observer = new MutationObserver(() => {
+        if (listbox.classList.contains(hash(touchStyles.pinchZoom))) {
+          swaps.push(listbox.className);
+        }
+      });
+      observer.observe(listbox, {attributes: true, attributeFilter: ['class']});
+      await user.click(screen.getByRole('combobox'));
+      observer.disconnect();
+      expect(swaps).toEqual([]);
+      expect(listbox).toHaveClass(hash(touchStyles.panYPinchZoom));
+    } finally {
+      // jsdom defines both on Element.prototype; drop the overrides.
+      delete (HTMLElement.prototype as {scrollHeight?: number}).scrollHeight;
+      delete (HTMLElement.prototype as {clientHeight?: number}).clientHeight;
+    }
+  });
+
+  it('a list guessed long that fits after the open measure gets the fitting touch-action', async () => {
+    const user = userEvent.setup();
+    const many = Array.from({length: 20}, (_, i) => `Option ${i}`);
+    render(<Selector label="Country" options={many} onChange={() => {}} />);
+    await user.click(screen.getByRole('combobox'));
+    const touchStyles = stylex.create({
+      pinchZoom: {touchAction: 'pinch-zoom'},
+    });
+    // jsdom measures every element at 0 px, so the measure says it fits and
+    // corrects the guess.
+    expect(screen.getByRole('listbox', h)).toHaveClass(
+      stylex.props(touchStyles.pinchZoom).className!.split(' ').pop()!,
+    );
+  });
+
   it('marks the listbox as carrying the press model', async () => {
     const user = userEvent.setup();
     render(<Selector label="Fruit" options={OPTIONS} onChange={() => {}} />);
@@ -4977,5 +5422,52 @@ describe('Selector and option actions (not adopted)', () => {
     } finally {
       warn.mockRestore();
     }
+  });
+});
+
+describe('Selector caller aria-labelledby', () => {
+  const FRUITS = ['Apple', 'Banana', 'Cherry'];
+
+  it('names the trigger by its label and a caller aria-labelledby', () => {
+    render(
+      <>
+        <span id="lunch-heading">Lunch</span>
+        <Selector
+          label="Fruit"
+          options={FRUITS}
+          onChange={() => {}}
+          aria-labelledby="lunch-heading"
+        />
+      </>,
+    );
+    const trigger = screen.getByRole('combobox', {name: 'Fruit Lunch'});
+    expect(trigger.getAttribute('aria-labelledby')?.split(' ')).toContain(
+      'lunch-heading',
+    );
+  });
+
+  it('names a grouped trigger by the group, its label, and a caller aria-labelledby', () => {
+    render(
+      <>
+        <span id="lunch-heading">Lunch</span>
+        <InputGroup label="Order">
+          <Selector
+            label="Fruit"
+            options={FRUITS}
+            onChange={() => {}}
+            aria-labelledby="lunch-heading"
+          />
+        </InputGroup>
+      </>,
+    );
+    expect(
+      screen.getByRole('combobox', {name: 'Order Fruit Lunch'}),
+    ).toBeInTheDocument();
+  });
+
+  it('leaves a standalone trigger named by its label element without a caller aria-labelledby', () => {
+    render(<Selector label="Fruit" options={FRUITS} onChange={() => {}} />);
+    const trigger = screen.getByRole('combobox', {name: 'Fruit'});
+    expect(trigger).not.toHaveAttribute('aria-labelledby');
   });
 });

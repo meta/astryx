@@ -5,7 +5,8 @@
  * @input Uses vitest, @testing-library/react, @babel/core + @stylexjs/babel-plugin,
  *   ButtonGroup and Button components
  * @output Unit tests for ButtonGroup, incl. the compiled-CSS contract for the
- *   trailing radius (#2508)
+ *   trailing radius (#2508): compiled selector shape and membership; corners
+ *   in ButtonGroupCorners.interaction.browser.spec.ts
  * @position Testing; validates ButtonGroup component implementation
  *
  * SYNC: When ButtonGroup component changes, update tests to match new behavior
@@ -209,22 +210,29 @@ describe('ButtonGroup', () => {
   // DropdownMenu), and useLayer renders a marker plus the layer inline when the
   // host is safe, so they steal the slot. See IS_LAST_ITEM in Button.tsx.
   //
-  // HOW THESE TESTS CATCH THE BUG
-  // jsdom applies no StyleX CSS, so a DOM-only test cannot prove which rule
-  // wins — and a test that hand-copies the selector is a tautology (revert
-  // groupStyles to `:last-child` and it still passes). So the predicate is NOT
-  // hand-copied here: `compileButtonRules()` runs the REAL StyleX babel plugin
-  // over Button.tsx (same config as scripts/build-css.mjs) and reads the
-  // trailing-radius rule's selector straight out of the emitted CSS, then
-  // matches it against the real rendered DOM. Revert groupStyles to
-  // `:last-child` and these go red.
+  // WHAT THESE TESTS CHECK, AND WHERE THE CORNERS ARE CHECKED
+  // The trailing predicate is `:nth-last-child(1 of S)` (S = not a layer
+  // piece), which jsdom evaluates slowly and wrongly, so jsdom never receives
+  // it (internal/test-utils/src/setup.ts). Here, `compileButtonRules()` runs
+  // the REAL StyleX babel plugin over Button.tsx and asserts the compiled
+  // trailing selector's shape (layer-skipping, never `:last-child`), and the
+  // DOM tests assert MEMBERSHIP: which element is the group's last member,
+  // with the layer pieces after it. Which corners actually round is checked in
+  // a real browser by ButtonGroupCorners.interaction.browser.spec.ts
+  // (ButtonGroup FR3).
   // ===========================================================================
   describe('trailing radius (#2508)', () => {
     /** The group members, in DOM order (excludes invisible layer siblings). */
     const items = (group: HTMLElement): Element[] =>
       Array.from(
-        group.querySelectorAll(':scope > *:not([popover]):not(template)'),
+        group.querySelectorAll(
+          ':scope > *:not([popover]):not(template):not(dialog)',
+        ),
       );
+
+    /** The element is the group's last member (layer pieces may follow it). */
+    const isLastMember = (group: HTMLElement, el: Element): boolean =>
+      items(group).at(-1) === el;
 
     // -- Compiled CSS, read from the source -----------------------------------
 
@@ -238,7 +246,7 @@ describe('ButtonGroup', () => {
       property: string;
       /** CSS value, e.g. `var(--radius-element)`. */
       value: string;
-      /** The full compiled selector, e.g. `.xp0wexf:not(:has(~ [data-...]))`. */
+      /** The full compiled selector, e.g. `.xp0wexf:nth-last-child(1 of …)`. */
       selector: string;
     };
 
@@ -355,14 +363,11 @@ describe('ButtonGroup', () => {
       return rules.map(rule => rule.selector);
     };
 
-    /** Does the compiled CSS actually round `el`'s trailing corners? */
-    const hasRoundedTrailingCorners = (
+    /** `el` carries both trailing-corner rounding rules (StyleX classes). */
+    const carriesTrailingRule = (
       el: Element,
       orientation: Orientation = 'horizontal',
-    ): boolean =>
-      trailingRoundingSelectors(el, orientation).every(selector =>
-        el.matches(selector),
-      );
+    ): boolean => trailingRoundingSelectors(el, orientation).length === 2;
 
     // -- The compiled CSS contract --------------------------------------------
 
@@ -380,13 +385,18 @@ describe('ButtonGroup', () => {
 
         for (const selector of selectors) {
           // `:last-child` is the bug: an inline layer element steals the slot.
-          expect(selector).not.toContain(':last-child');
+          expect(selector).not.toMatch(/:last-child/);
+          // The last sibling that is not a layer piece, written so WebKit
+          // does not re-evaluate it per sibling on every insertion (#9281).
+          expect(selector).toContain(':nth-last-child(1 of ');
+          expect(selector).not.toContain(':has(');
           // `[popover]` must survive compilation *verbatim*. StyleX only
           // statically evaluates a selector key from a same-file const; from a
           // .stylex.ts file it compiles to a mangled selector like `[x13pbwiz]`
           // that matches nothing in the DOM.
           expect(selector).toContain('[popover]');
           expect(selector).toContain('template');
+          expect(selector).toContain('dialog');
         }
       },
     );
@@ -439,8 +449,9 @@ describe('ButtonGroup', () => {
         expect(more).not.toBe(group.lastElementChild);
         expect(items(group).at(-1)).toBe(more);
 
-        expect(hasRoundedTrailingCorners(more, orientation)).toBe(true);
-        expect(hasRoundedTrailingCorners(save, orientation)).toBe(false);
+        expect(carriesTrailingRule(more, orientation)).toBe(true);
+        expect(isLastMember(group, more)).toBe(true);
+        expect(isLastMember(group, save)).toBe(false);
       },
     );
 
@@ -465,8 +476,9 @@ describe('ButtonGroup', () => {
         expect(trigger).not.toBe(group.lastElementChild);
         expect(items(group).at(-1)).toBe(trigger);
 
-        expect(hasRoundedTrailingCorners(trigger, orientation)).toBe(true);
-        expect(hasRoundedTrailingCorners(allow, orientation)).toBe(false);
+        expect(carriesTrailingRule(trigger, orientation)).toBe(true);
+        expect(isLastMember(group, trigger)).toBe(true);
+        expect(isLastMember(group, allow)).toBe(false);
       },
     );
 
@@ -485,7 +497,8 @@ describe('ButtonGroup', () => {
       expect(link).not.toBe(group.lastElementChild);
       expect(items(group).at(-1)).toBe(link);
 
-      expect(hasRoundedTrailingCorners(link)).toBe(true);
+      expect(carriesTrailingRule(link)).toBe(true);
+      expect(isLastMember(group, link)).toBe(true);
     });
 
     it('rounds only the last member (first/middle/last)', () => {
@@ -511,9 +524,9 @@ describe('ButtonGroup', () => {
 
       // Middle has a tooltip layer after it, but a *marked* sibling follows too,
       // so it must NOT take the trailing radius.
-      expect(hasRoundedTrailingCorners(first)).toBe(false);
-      expect(hasRoundedTrailingCorners(middle)).toBe(false);
-      expect(hasRoundedTrailingCorners(last)).toBe(true);
+      expect(isLastMember(group, first)).toBe(false);
+      expect(isLastMember(group, middle)).toBe(false);
+      expect(isLastMember(group, last)).toBe(true);
     });
 
     it('rounds both edges of a lone tooltip’d member', () => {
@@ -523,11 +536,13 @@ describe('ButtonGroup', () => {
         </ButtonGroup>,
       );
 
+      const group = screen.getByRole('group');
       const only = screen.getByRole('button', {name: 'Only'});
 
       // Leading edge is unaffected: a member's button always precedes its layer.
       expect(only.matches(':first-child')).toBe(true);
-      expect(hasRoundedTrailingCorners(only)).toBe(true);
+      expect(only).not.toBe(group.lastElementChild);
+      expect(isLastMember(group, only)).toBe(true);
     });
 
     // -- Members the group does not recognise ---------------------------------
@@ -547,11 +562,12 @@ describe('ButtonGroup', () => {
         </ButtonGroup>,
       );
 
+      const group = screen.getByRole('group');
       const save = screen.getByRole('button', {name: 'Save'});
 
       // Tooltip wraps element children in a `display: contents` <div>, so the
       // inner Button is a DESCENDANT of the wrapper, not a DOM sibling of Save.
-      expect(hasRoundedTrailingCorners(save)).toBe(false);
+      expect(isLastMember(group, save)).toBe(false);
     });
 
     it('does not round the preceding button when a HoverCard-wrapped member follows', () => {
@@ -564,11 +580,12 @@ describe('ButtonGroup', () => {
         </ButtonGroup>,
       );
 
+      const group = screen.getByRole('group');
       const save = screen.getByRole('button', {name: 'Save'});
 
       // Button has no `hoverCard` prop, so wrapping is the ONLY way to put a
       // HoverCard on a group button — this composition has no alternative.
-      expect(hasRoundedTrailingCorners(save)).toBe(false);
+      expect(isLastMember(group, save)).toBe(false);
     });
 
     it('does not round the preceding button when a raw <button> follows', () => {
@@ -579,9 +596,10 @@ describe('ButtonGroup', () => {
         </ButtonGroup>,
       );
 
+      const group = screen.getByRole('group');
       const save = screen.getByRole('button', {name: 'Save'});
 
-      expect(hasRoundedTrailingCorners(save)).toBe(false);
+      expect(isLastMember(group, save)).toBe(false);
     });
   });
 

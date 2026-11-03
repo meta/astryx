@@ -23,8 +23,9 @@
  */
 
 import {StrictMode} from 'react';
+import * as stylex from '@stylexjs/stylex';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {render, screen, fireEvent, waitFor} from '@testing-library/react';
+import {act, render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Switch} from './Switch';
 import {
@@ -33,11 +34,16 @@ import {
 } from '../__tests__/forcedColors';
 import {
   hasPressedArm,
-  hasReleaseFade,
   readsPressStrength,
+  releasesOnLayer,
+  rulesDeclaredFor,
+  rulesWithSelector,
 } from '../__tests__/pressState';
+import {press as uikitPress} from '../motion/uikit/timing';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {InternationalizationProvider} from '../i18n';
+import {installPressFeedback} from '../utils/pressFeedback';
+import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 
 afterEach(() => {
   __resetLiveRegionsForTest();
@@ -91,6 +97,94 @@ describe('Switch', () => {
       />,
     );
     expect(screen.getByRole('switch')).toBeInTheDocument();
+  });
+
+  it('toggles nothing for a pen press that a window blur cancels, at its later lift or its click (spec:AST-094 FR44)', async () => {
+    const onChange = vi.fn();
+    render(<Switch label="Wi-Fi" value={false} onChange={onChange} />);
+    const input = screen.getByRole('switch');
+    const pen = (type: 'pointerdown' | 'pointerup', time: number) => {
+      const event = new Event(type, {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      });
+      Object.defineProperties(event, {
+        pointerId: {value: 7},
+        pointerType: {value: 'pen'},
+        isPrimary: {value: true},
+        clientX: {value: 10},
+        clientY: {value: 10},
+        button: {value: 0},
+        buttons: {value: type === 'pointerup' ? 0 : 1},
+        timeStamp: {value: time},
+      });
+      act(() => {
+        input.dispatchEvent(event);
+      });
+    };
+    pen('pointerdown', 1000);
+    act(() => {
+      window.dispatchEvent(new Event('blur'));
+    });
+    // The microtask after the blur, where an armed press's page listeners go.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    pen('pointerup', 1080);
+    // The pen's own click: a pointer's, detail 1.
+    fireEvent.click(input, {detail: 1});
+    expect(onChange).not.toHaveBeenCalled();
+    expect(input).not.toBeChecked();
+  });
+
+  it('toggles nothing for a pen press that a window blur cancels under a coarse primary pointer too (spec:AST-094 FR44)', () => {
+    const original = window.matchMedia;
+    window.matchMedia = (query: string) => ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    });
+    try {
+      const onChange = vi.fn();
+      render(<Switch label="Wi-Fi" value={false} onChange={onChange} />);
+      const input = screen.getByRole('switch');
+      const pen = (type: 'pointerdown' | 'pointerup', time: number) => {
+        const event = new Event(type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+        });
+        Object.defineProperties(event, {
+          pointerId: {value: 7},
+          pointerType: {value: 'pen'},
+          isPrimary: {value: true},
+          clientX: {value: 10},
+          clientY: {value: 10},
+          button: {value: 0},
+          buttons: {value: type === 'pointerup' ? 0 : 1},
+          timeStamp: {value: time},
+        });
+        act(() => {
+          input.dispatchEvent(event);
+        });
+      };
+      pen('pointerdown', 1000);
+      act(() => {
+        window.dispatchEvent(new Event('blur'));
+      });
+      pen('pointerup', 1080);
+      fireEvent.click(input, {detail: 1});
+      expect(onChange).not.toHaveBeenCalled();
+      expect(input).not.toBeChecked();
+    } finally {
+      window.matchMedia = original;
+    }
   });
 
   it('calls onChange with new checked state when clicked', async () => {
@@ -312,6 +406,27 @@ describe('Switch', () => {
     expect(children.length).toBe(2);
   });
 
+  it('keeps its input when labelPosition changes, so what is attached to it stays attached', () => {
+    const view = render(
+      <Switch
+        label="Enable notifications"
+        value={false}
+        onChange={() => {}}
+        labelPosition="start"
+      />,
+    );
+    const input = screen.getByRole('switch');
+    view.rerender(
+      <Switch
+        label="Enable notifications"
+        value={false}
+        onChange={() => {}}
+        labelPosition="end"
+      />,
+    );
+    expect(screen.getByRole('switch')).toBe(input);
+  });
+
   // Retained on purpose: the shared switch contract encodes no busy expectation
   // — no current record adopts one — so this is the only thing gating it.
   it('sets aria-busy on input when loading', () => {
@@ -429,7 +544,9 @@ describe('Switch', () => {
           continue;
         }
         for (const node of record.addedNodes) {
-          if (node.textContent) {written.push(node.textContent);}
+          if (node.textContent) {
+            written.push(node.textContent);
+          }
         }
       }
     });
@@ -563,6 +680,24 @@ describe('Switch', () => {
     expect(screen.getByRole('switch')).toBeRequired();
   });
 
+  it('keeps a required switch valid until status shows an error', () => {
+    const {rerender} = render(
+      <Switch label="Accept" value={false} onChange={() => {}} isRequired />,
+    );
+    // Native required alone makes Chromium report the switch invalid.
+    expect(screen.getByRole('switch')).toHaveAttribute('aria-invalid', 'false');
+    rerender(
+      <Switch
+        label="Accept"
+        value={false}
+        onChange={() => {}}
+        isRequired
+        status={{type: 'error', message: 'Required'}}
+      />,
+    );
+    expect(screen.getByRole('switch')).toHaveAttribute('aria-invalid', 'true');
+  });
+
   describe('disabledMessage', () => {
     const h = {hidden: true} as const;
 
@@ -678,6 +813,51 @@ describe('Switch', () => {
       );
       await user.click(screen.getByRole('switch', h));
       expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('does not run caller key handlers while disabled', async () => {
+      const user = userEvent.setup();
+      const onKeyDown = vi.fn();
+      const onKeyUp = vi.fn();
+      render(
+        <Switch
+          label="Enable notifications"
+          value={false}
+          onChange={() => {}}
+          onKeyDown={onKeyDown}
+          onKeyUp={onKeyUp}
+          isDisabled
+        />,
+      );
+      await user.tab();
+      expect(screen.getByRole('switch')).toHaveFocus();
+      await user.keyboard('{Enter}');
+      await user.keyboard(' ');
+      expect(onKeyDown).not.toHaveBeenCalled();
+      expect(onKeyUp).not.toHaveBeenCalled();
+    });
+
+    it('still runs caller key handlers on an enabled switch', async () => {
+      const user = userEvent.setup();
+      const onKeyDown = vi.fn();
+      const onKeyUp = vi.fn();
+      render(
+        <Switch
+          label="Enable notifications"
+          value={false}
+          onChange={() => {}}
+          onKeyDown={onKeyDown}
+          onKeyUp={onKeyUp}
+        />,
+      );
+      await user.tab();
+      // Releasing Tab lands a keyup on the newly focused switch; count only
+      // the key pressed after it.
+      onKeyDown.mockClear();
+      onKeyUp.mockClear();
+      await user.keyboard('{Enter}');
+      expect(onKeyDown).toHaveBeenCalledTimes(1);
+      expect(onKeyUp).toHaveBeenCalledTimes(1);
     });
 
     it('stays focusable via aria-disabled when disabled without a reason', async () => {
@@ -976,7 +1156,7 @@ describe('Switch', () => {
       expect(hasPressedArm(thumb)).toBe(true);
     });
 
-    it('fades the touch press out from the row, with the track and thumb reading its strength', () => {
+    it("paints the touch press on the track's ::before and releases it on the compositor", () => {
       const {container} = render(
         <Switch label="Notifications" value={false} onChange={() => {}} />,
       );
@@ -986,14 +1166,272 @@ describe('Switch', () => {
       if (track == null || thumb == null || row == null) {
         throw new Error('the switch has no pressable row, track or thumb');
       }
-      // The controller writes the row; the row owns the strength and its
-      // release, and the two parts paint the pressed token at that strength
-      // on both touch arms, so they fade together.
-      expect(hasReleaseFade(row)).toBe(true);
+      const coarse = {
+        insideMedia: /\(pointer: coarse\)/,
+        outsideMedia: /prefers-reduced-motion/,
+      };
+      const selector = (rule: string) => rule.slice(0, rule.indexOf('{'));
+      const body = (rule: string) => rule.slice(rule.indexOf('{'));
+      // The controller writes the row. Under a finger the press is a layer on
+      // the track, under the thumb. It exists only while the row is pressed
+      // or releasing, with no element and no box at rest. It paints the
+      // pressed token, shows at once, and releases on the compositor. Track
+      // and thumb both paint it.
       for (const part of [track, thumb]) {
-        expect(readsPressStrength(part, '[data-astryx-press="on"]')).toBe(true);
-        expect(readsPressStrength(part)).toBe(true);
+        const layer = rulesDeclaredFor(part).filter(rule =>
+          selector(rule).includes('::before'),
+        );
+        const creates = layer.filter(rule =>
+          /(^|[{;\s])content:/.test(body(rule)),
+        );
+        expect(creates.length).toBeGreaterThan(0);
+        for (const rule of creates) {
+          expect(selector(rule)).toMatch(/data-astryx-press="(on|fading)"/);
+        }
+        expect(
+          layer.some(rule =>
+            /background-color:[^;}]*--color-overlay-pressed/.test(rule),
+          ),
+        ).toBe(true);
       }
+      const on = rulesWithSelector(track, '[data-astryx-press="on"]', coarse);
+      expect(on.some(rule => /opacity:\s*1\b/.test(rule))).toBe(true);
+      expect(on.some(rule => /animation-name:\s*(?!none)/.test(rule))).toBe(
+        false,
+      );
+      for (const part of [track, thumb]) {
+        expect(
+          releasesOnLayer(part, '::before', uikitPress.highlightOutMs),
+        ).toBe(true);
+      }
+      // Nothing reads the strength under a finger, so its main-thread
+      // release stops there; any other pointer keeps it (the desktop rule).
+      expect(
+        rulesWithSelector(row, '[data-astryx-press="fading"]', coarse).some(
+          rule => /animation-name:\s*none/.test(rule),
+        ),
+      ).toBe(true);
+      const fine = {outsideMedia: /prefers-reduced-motion|\(pointer: coarse\)/};
+      expect(
+        rulesWithSelector(row, '[data-astryx-press="fading"]', fine).some(
+          rule => /animation-name:\s*(?!none)/.test(rule),
+        ),
+      ).toBe(true);
+      for (const part of [track, thumb]) {
+        expect(readsPressStrength(part, '[data-astryx-press="on"]')).toBe(
+          false,
+        );
+        expect(readsPressStrength(part)).toBe(false);
+      }
+    });
+
+    it('releases the touch press on the shared release’s clock and curve', () => {
+      render(
+        <>
+          <Switch label="Notifications" value={false} onChange={() => {}} />
+          <div
+            data-testid="shared-release"
+            {...stylex.props(interactionOverlayStyles.pressedAlpha)}
+          />
+        </>,
+      );
+      const track = document.querySelector('.astryx-switch');
+      if (track == null) {
+        throw new Error('the switch has no track');
+      }
+      const shared = screen.getByTestId('shared-release');
+      const fading = '[data-astryx-press="fading"]';
+      const reduced = /prefers-reduced-motion/;
+      const valuesOf = (rules: string[], property: string) => [
+        ...new Set(
+          rules.flatMap(rule => {
+            const match = rule.match(new RegExp(`${property}:\\s*([^;}]+)`));
+            // StyleX may write a time in s or ms: compare it in ms.
+            return match == null
+              ? []
+              : [
+                  match[1]
+                    .trim()
+                    .replace(
+                      /(\d*\.?\d+)(ms|s)\b/g,
+                      (_, n: string, unit: string) =>
+                        `${Number(n) * (unit === 's' ? 1000 : 1)}ms`,
+                    ),
+                ];
+          }),
+        ),
+      ];
+      const layer = (filter: {insideMedia?: RegExp; outsideMedia?: RegExp}) =>
+        rulesWithSelector(track, fading, filter).filter(rule =>
+          rule.slice(0, rule.indexOf('{')).includes('::before'),
+        );
+      const touch = layer({
+        insideMedia: /\(pointer: coarse\)/,
+        outsideMedia: reduced,
+      });
+      const own = rulesWithSelector(shared, fading, {outsideMedia: reduced});
+      for (const property of [
+        'animation-duration',
+        'animation-timing-function',
+      ]) {
+        expect(valuesOf(own, property)).toHaveLength(1);
+        expect(valuesOf(touch, property)).toEqual(valuesOf(own, property));
+      }
+      // Reduce Motion's arm nests one `@media` rule in another, which the
+      // test DOM drops: the browser proofs check it.
+    });
+  });
+
+  describe('the row that holds the touch press', () => {
+    const FADING = '[data-astryx-press="fading"]';
+    /** Rules under a coarse primary pointer, Reduce Motion's arms left out. */
+    const UNDER_COARSE = {
+      insideMedia: /\(pointer: coarse\)/,
+      outsideMedia: /prefers-reduced-motion/,
+    };
+    /** Rules for any other pointer, Reduce Motion's arms left out. */
+    const UNDER_FINE = {
+      outsideMedia: /prefers-reduced-motion|\(pointer: coarse\)/,
+    };
+    const selectorOf = (rule: string) => rule.slice(0, rule.indexOf('{'));
+    const fadingOnHost = (rules: string[]) =>
+      rules.filter(
+        rule =>
+          selectorOf(rule).includes(FADING) && !selectorOf(rule).includes('::'),
+      );
+    const valuesOf = (rules: string[], property: string) =>
+      rules
+        .flatMap(rule => {
+          const match = rule.match(new RegExp(`${property}:\\s*([^;}]+)`));
+          return match == null ? [] : [match[1].trim()];
+        })
+        .sort();
+    /** The switch's row, and an element with the shared press styles alone. */
+    function renderOwners(): {alpha: HTMLElement; row: Element} {
+      render(
+        <>
+          <Switch label="Notifications" value={false} onChange={() => {}} />
+          <div
+            data-testid="alpha"
+            {...stylex.props(interactionOverlayStyles.pressedAlpha)}
+          />
+        </>,
+      );
+      const row = document
+        .querySelector('.astryx-switch')
+        ?.closest('[data-astryx-pressable]');
+      if (row == null) {
+        throw new Error('the switch has no pressable row');
+      }
+      return {alpha: screen.getByTestId('alpha'), row};
+    }
+
+    it('declares the shared strength and paint for the track’s and thumb’s layers', () => {
+      const {alpha, row} = renderOwners();
+      const strengthAndPaint = (el: Element) =>
+        rulesDeclaredFor(el)
+          .filter(rule => /--astryx-press-alpha|--_press-paint/.test(rule))
+          .sort();
+      expect(strengthAndPaint(alpha).length).toBeGreaterThan(0);
+      expect(strengthAndPaint(row)).toEqual(strengthAndPaint(alpha));
+    });
+
+    it('with any pointer but a coarse primary one, keeps the shared release on the row', () => {
+      const {alpha, row} = renderOwners();
+      const release = (el: Element) =>
+        fadingOnHost(rulesDeclaredFor(el, UNDER_FINE));
+      expect(valuesOf(release(alpha), 'animation-name')).not.toEqual([]);
+      for (const property of [
+        'animation-name',
+        'animation-duration',
+        'animation-timing-function',
+      ]) {
+        expect(valuesOf(release(row), property)).toEqual(
+          valuesOf(release(alpha), property),
+        );
+      }
+    });
+
+    it('under a coarse primary pointer, drops the strength’s own release on the row', () => {
+      const {alpha, row} = renderOwners();
+      const names = (el: Element) =>
+        valuesOf(
+          fadingOnHost(rulesDeclaredFor(el, UNDER_COARSE)),
+          'animation-name',
+        );
+      // The shared styles keep the strength's release there; the row holds
+      // the strength, so the layers' fade is the one fade.
+      expect(names(alpha)).not.toContain('none');
+      expect(names(row)).toEqual(['none']);
+    });
+  });
+
+  describe('mouse look', () => {
+    // jsdom applies no `@media (pointer: coarse)` rule, so these are the
+    // styles a mouse gets. The touch presentation must override none of
+    // them: a later style that names a property replaces all of it.
+    const look = (container: HTMLElement) => {
+      const track = container.querySelector<HTMLElement>('.astryx-switch');
+      const thumb = container.querySelector<HTMLElement>(
+        '.astryx-switch-thumb',
+      );
+      if (track == null || thumb == null) {
+        throw new Error('the switch has no track or thumb');
+      }
+      const t = getComputedStyle(track);
+      const h = getComputedStyle(thumb);
+      return {
+        fill: t.backgroundColor,
+        padding: t.paddingTop,
+        fade: [t.transitionProperty, t.transitionDuration],
+        size: [h.width, h.height],
+        slide: [h.transitionProperty.replace(/\s/g, ''), h.transitionDuration],
+        travel: h.transform,
+      };
+    };
+
+    it('keeps the track fill, padding and colour fade, and the thumb size and slide', () => {
+      // A fine pointer: the desktop switch.
+      expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+      const {container, rerender} = render(
+        <Switch label="Wi-Fi" value={false} onChange={() => {}} />,
+      );
+      const off = look(container);
+      expect(off.fill).toContain('--color-background-gray');
+      expect(off.padding).toBe('4px');
+      expect(off.fade[0]).toBe('background-color');
+      expect(off.fade[1]).not.toMatch(/^(0s)?$/);
+      expect(off.size).toEqual(['16px', '16px']);
+      expect(off.slide[0]).toBe('transform,width,height');
+      expect(off.slide[1]).not.toMatch(/^(0s)?$/);
+
+      rerender(<Switch label="Wi-Fi" value onChange={() => {}} />);
+      const on = look(container);
+      expect(on.fill).toContain('--color-accent');
+      expect(on.size).toEqual(['20px', '20px']);
+      expect(on.travel).toBe('translateX(14px)');
+    });
+
+    it('adds no element: the thumb is the track’s only child, under a finger too', () => {
+      const {container} = render(
+        <Switch label="Wi-Fi" value={false} onChange={() => {}} />,
+      );
+      const track = container.querySelector('.astryx-switch');
+      const thumb = container.querySelector('.astryx-switch-thumb');
+      // architecture:component-style-authoring INV7: the touch presentation
+      // styles the existing thumb (the fade layer is the track's ::before).
+      expect(track?.children.length).toBe(1);
+      expect(thumb?.parentElement).toBe(track);
+    });
+
+    it('keeps the small size’s padding and thumb', () => {
+      expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+      const {container} = render(
+        <Switch label="Wi-Fi" size="sm" value={false} onChange={() => {}} />,
+      );
+      const off = look(container);
+      expect(off.padding).toBe('2px');
+      expect(off.size).toEqual(['14px', '14px']);
     });
   });
 
@@ -1030,6 +1468,319 @@ describe('Switch', () => {
 // jsdom cannot emulate forced-colors rendering, so these assert that the
 // compiled output includes the forced-colors rules; visual behavior needs
 // manual verification under Windows High Contrast.
+describe('touch listeners (spec:AST-094 FR24)', () => {
+  const coarseMedia = (query: string) =>
+    ({
+      matches:
+        query.includes('pointer: coarse') ||
+        query.includes('any-pointer: coarse'),
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }) as unknown as MediaQueryList;
+
+  // React's root delegates touch events too: count against a plain element.
+  const listenersWhileRendering = (
+    isDisabled: boolean | 'none' | 'busy',
+  ): {touch: number; pointer: number; contextMenu: number; click: number} => {
+    vi.spyOn(window, 'matchMedia').mockImplementation(coarseMedia);
+    const types: string[] = [];
+    const clickTargets: unknown[] = [];
+    const record = function (this: unknown, type: string) {
+      types.push(type);
+      if (type === 'click') {
+        clickTargets.push(this);
+      }
+    };
+    const onDocument = vi
+      .spyOn(document, 'addEventListener')
+      .mockImplementation(record);
+    const onElements = vi
+      .spyOn(HTMLElement.prototype, 'addEventListener')
+      .mockImplementation(record);
+    const {container, unmount} = render(
+      isDisabled === 'none' ? (
+        <div />
+      ) : (
+        <Switch
+          label="Notifications"
+          value={false}
+          onChange={() => {}}
+          isDisabled={isDisabled === true}
+          isLoading={isDisabled === 'busy'}
+        />
+      ),
+    );
+    onDocument.mockRestore();
+    onElements.mockRestore();
+    // On the switch's own elements, read while they are mounted: React's root
+    // and the page's shared listeners are not the switch's.
+    const ownClicks = clickTargets.filter(
+      target =>
+        target instanceof Node &&
+        target !== container &&
+        container.contains(target),
+    ).length;
+    unmount();
+    vi.restoreAllMocks();
+    return {
+      touch: types.filter(type => type.startsWith('touch')).length,
+      pointer: types.filter(type => type.startsWith('pointer')).length,
+      contextMenu: types.filter(type => type === 'contextmenu').length,
+      click: ownClicks,
+    };
+  };
+
+  it('a switch under a coarse pointer attaches no touch or click listener, and a disabled one arms no press listener', () => {
+    const baseline = listenersWhileRendering('none');
+    const enabled = listenersWhileRendering(false);
+    const disabled = listenersWhileRendering(true);
+    const busy = listenersWhileRendering('busy');
+    // No state adds a touch listener, so a scroll never waits on the switch.
+    // Nor a context-menu one: the gesture host keeps a held switch's menu
+    // closed. Nor a click one on its own elements: a lift's click wait
+    // listens only while it waits (utils/browserClickWait.ts).
+    for (const counts of [enabled, disabled, busy]) {
+      expect(counts.touch).toBe(baseline.touch);
+      expect(counts.contextMenu).toBe(baseline.contextMenu);
+      expect(counts.click).toBe(0);
+    }
+    // The gesture host arms a press listener for an enabled switch only.
+    expect(enabled.pointer).toBeGreaterThan(disabled.pointer);
+    // Busy stays attached, so the change that made it busy keeps its motion.
+    expect(busy.pointer).toBeGreaterThan(disabled.pointer);
+  });
+
+  it('under a fine pointer an enabled switch arms one passive pointerdown listener on its own element and adds no page listener until a press; a disabled one arms none (spec:AST-094 FR24, FR43)', () => {
+    const fineMedia = (query: string) =>
+      ({
+        matches:
+          query.includes('pointer: fine') || query.includes('hover: hover'),
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }) as unknown as MediaQueryList;
+    const listenersWhileRendering = (isDisabled: boolean) => {
+      vi.spyOn(window, 'matchMedia').mockImplementation(fineMedia);
+      // The one shared press controller is the allowed idle page listener. It
+      // is installed before the render is measured, so a count is the
+      // switch's own.
+      const releasePressController = installPressFeedback();
+      const onElements: {
+        target: unknown;
+        type: string;
+        options: unknown;
+      }[] = [];
+      const onPage: string[] = [];
+      const elementSpy = vi
+        .spyOn(HTMLElement.prototype, 'addEventListener')
+        .mockImplementation(function (
+          this: unknown,
+          type: string,
+          _listener: unknown,
+          options?: unknown,
+        ) {
+          onElements.push({target: this, type, options});
+        });
+      const recordPage = function (this: unknown, type: string) {
+        onPage.push(type);
+      };
+      const documentSpy = vi
+        .spyOn(document, 'addEventListener')
+        .mockImplementation(recordPage);
+      const windowSpy = vi
+        .spyOn(window, 'addEventListener')
+        .mockImplementation(recordPage);
+      const {container, unmount} = render(
+        <Switch
+          label="Notifications"
+          value={false}
+          onChange={() => {}}
+          isDisabled={isDisabled}
+        />,
+      );
+      const surface = container.querySelector('[role="switch"]')?.parentElement;
+      elementSpy.mockRestore();
+      documentSpy.mockRestore();
+      windowSpy.mockRestore();
+      unmount();
+      releasePressController();
+      vi.restoreAllMocks();
+      const armed = onElements.filter(({target, type, options}) => {
+        const o = options as AddEventListenerOptions | undefined;
+        return (
+          target === surface &&
+          type === 'pointerdown' &&
+          o?.capture === true &&
+          o?.passive === true
+        );
+      }).length;
+      // The host's page listeners for a press: none at rest (FR24).
+      const pressListeners = onPage.filter(type =>
+        /^(pointermove|pointerup|pointercancel|touch)/.test(type),
+      ).length;
+      return {armed, pressListeners};
+    };
+    expect(listenersWhileRendering(false)).toEqual({
+      armed: 1,
+      pressListeners: 0,
+    });
+    expect(listenersWhileRendering(true)).toEqual({
+      armed: 0,
+      pressListeners: 0,
+    });
+  });
+
+  it('runs no hit-area observer or window listener under a fine pointer, or while disabled under a coarse one', () => {
+    const observersWhileRendering = (
+      isCoarse: boolean,
+      isDisabled: boolean,
+    ): {observers: number; resize: number} => {
+      vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+        ...coarseMedia(query),
+        matches: isCoarse && query.includes('pointer: coarse'),
+      }));
+      let observers = 0;
+      vi.stubGlobal(
+        'IntersectionObserver',
+        class {
+          constructor() {
+            observers += 1;
+          }
+          observe() {}
+          unobserve() {}
+          disconnect() {}
+        },
+      );
+      const onWindow = vi.spyOn(window, 'addEventListener');
+      const {unmount} = render(
+        <Switch
+          label="Notifications"
+          value={false}
+          onChange={() => {}}
+          isDisabled={isDisabled}
+        />,
+      );
+      const resize = onWindow.mock.calls.filter(
+        ([type]) => type === 'resize',
+      ).length;
+      unmount();
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+      return {observers, resize};
+    };
+    expect(observersWhileRendering(false, false)).toEqual({
+      observers: 0,
+      resize: 0,
+    });
+    expect(observersWhileRendering(true, true)).toEqual({
+      observers: 0,
+      resize: 0,
+    });
+    // Enabled under a coarse pointer it measures.
+    expect(observersWhileRendering(true, false).observers).toBe(1);
+  });
+});
+
+describe('hit area under a coarse pointer (Switch FR10)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('grows toward 44 × 44 px and stops halfway to a link beside it, so a tap nearer the link is the link’s', () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    let reveal: ((entries: IntersectionObserverEntry[]) => void) | null = null;
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(callback: (entries: IntersectionObserverEntry[]) => void) {
+          reveal = callback;
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      },
+    );
+    const frames: (() => void)[] = [];
+    vi.stubGlobal('requestAnimationFrame', (run: () => void) =>
+      frames.push(run),
+    );
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+    const {container} = render(
+      <div>
+        <Switch
+          label="Wi-Fi"
+          isLabelHidden
+          size="sm"
+          value={false}
+          onChange={() => {}}
+        />
+        <a href="#details">Details</a>
+      </div>,
+    );
+    const input = screen.getByRole('switch');
+    const surface = input.parentElement as HTMLElement;
+    const link = container.querySelector('a') as HTMLElement;
+    const box = (left: number, top: number, width: number, height: number) =>
+      ({
+        left,
+        top,
+        right: left + width,
+        bottom: top + height,
+        width,
+        height,
+        x: left,
+        y: top,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    // A 32 × 20 (small) switch with the link 8 px to its right.
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
+      function (this: HTMLElement) {
+        if (this === surface) {
+          return box(100, 100, 32, 20);
+        }
+        if (this === link) {
+          return box(140, 100, 60, 20);
+        }
+        return box(0, 0, 0, 0);
+      },
+    );
+    expect(surface.style.getPropertyValue('--astryx-hit-inset-right')).toBe('');
+    reveal!([
+      {
+        target: surface,
+        isIntersecting: true,
+      } as unknown as IntersectionObserverEntry,
+    ]);
+    frames.splice(0).forEach(run => run());
+    // Up and down 12 px (20 → 44); left 6 px (32 → 44); right stops at
+    // 4 px, half the 8 px gap.
+    expect(surface.style.getPropertyValue('--astryx-hit-inset-top')).toBe(
+      '12px',
+    );
+    expect(surface.style.getPropertyValue('--astryx-hit-inset-left')).toBe(
+      '6px',
+    );
+    expect(surface.style.getPropertyValue('--astryx-hit-inset-right')).toBe(
+      '4px',
+    );
+  });
+});
+
 describe('forced colors (WCAG 1.4.11)', () => {
   it('compiles forced-colors overrides so on/off state survives Windows High Contrast', () => {
     render(<Switch label="Notifications" value={true} onChange={() => {}} />);

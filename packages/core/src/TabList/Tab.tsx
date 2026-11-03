@@ -42,6 +42,7 @@ import {useDevWarning} from '../hooks/useDevWarning';
 import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {isRenderable} from '../utils/isRenderable';
 
 export interface TabProps extends BaseProps<HTMLButtonElement> {
   /**
@@ -247,6 +248,12 @@ const hoverSizeStyles = stylex.create({
 });
 
 const layoutStyles = stylex.create({
+  // A hugging tab keeps its label's width. Without this the strip's flex
+  // shrinks every tab below its text before overflow can scroll, and on a
+  // narrow screen the labels draw over one another.
+  hug: {
+    flexShrink: 0,
+  },
   fill: {
     flex: 1,
     justifyContent: 'center',
@@ -298,7 +305,8 @@ export function Tab({
   const isTabsPattern = tabListCtx.pattern === 'tabs';
   const isLink = href != null && !isTabsPattern;
   const isTabRole = isTabsPattern && !isLink;
-  const displayIcon = isSelected && selectedIcon ? selectedIcon : icon;
+  const displayIcon =
+    isSelected && isRenderable(selectedIcon) ? selectedIcon : icon;
   const hasVisibleLabel = !isLabelHidden && label !== '';
 
   const isDisabled =
@@ -347,7 +355,7 @@ export function Tab({
     !isTabsPattern && panelId != null,
   );
 
-  const iconElement = displayIcon ? (
+  const iconElement = isRenderable(displayIcon) ? (
     <span {...stylex.props(styles.icon, iconSizeStyles[size])}>
       {displayIcon}
     </span>
@@ -391,7 +399,7 @@ export function Tab({
         styles.base,
         sizeStyles[size],
         isSelected && styles.selected,
-        isFill && layoutStyles.fill,
+        isFill ? layoutStyles.fill : layoutStyles.hug,
         !isDisabled && tabScope,
         // The touch press's strength and release live on the tab the
         // controller writes to; the hover layer inherits and paints it.
@@ -433,7 +441,7 @@ export function Tab({
     </span>
   ) : null;
 
-  const endContentElement = endContent ? (
+  const endContentElement = isRenderable(endContent) ? (
     <span {...stylex.props(styles.endContentWrapper)}>{endContent}</span>
   ) : null;
 

@@ -4,8 +4,9 @@
 
 /**
  * @file TextInput.tsx
- * @input Uses React, useId, ChangeEvent, Field, Icon, InputGroupContext
- * @output Exports TextInput component, TextInputProps
+ * @input Uses React, useId, ChangeEvent, Field, Icon, InputGroupContext,
+ *   textEntryTraits (the touch-keyboard trait props)
+ * @output Exports TextInput component, TextInputProps, TextInputType
  * @position Core implementation; consumed by index.ts, tested by TextInput.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -34,21 +35,27 @@ import {
   typographyVars,
   typeScaleVars,
 } from '../theme/tokens.stylex';
+import {Field} from '../Field/Field';
+import {InputClearButton} from '../Field/InputClearButton';
 import {
-  Field,
-  InputClearButton,
-  type InputStatus,
   inputWrapperStyles,
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
-  type FieldStatusVariant,
-} from '../Field';
-import {renderIconSlot, type IconType} from '../Icon';
-import {Spinner} from '../Spinner';
-import {useTooltip} from '../Tooltip';
-import {VisuallyHidden} from '../VisuallyHidden';
-import {getInputARIA, isImeKeyEvent} from '../utils';
+} from '../Field/inputStyles.stylex';
+import type {InputStatus} from '../Field/types';
+import {renderIconSlot, type IconType} from '../Icon/Icon';
+import {isRenderable} from '../utils/isRenderable';
+import {Spinner} from '../Spinner/Spinner';
+import {useTooltip} from '../Tooltip/useTooltip';
+import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
+import {getInputARIA} from '../utils/inputAria';
+import {isImeKeyEvent} from '../utils/ime';
+import {
+  textEntryTraitAttributes,
+  type TextEntryTraitProps,
+} from '../Field/textEntryTraits';
+import {joinAriaIDs} from '../utils/inputAria';
 
 const styles = stylex.create({
   input: {
@@ -103,7 +110,7 @@ export type {
   InputStatus as TextInputStatus,
   InputStatusType as TextInputStatusType,
 } from '../Field';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {useSize} from '../SizeContext/SizeContext';
 import {useInputContainer} from '../hooks/useInputContainer';
 import {useInputStatusIcon} from '../hooks/useInputStatusIcon';
@@ -118,20 +125,35 @@ import {
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
-export type TextInputType = 'text' | 'password' | 'email';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/TextInput/TextInput.generated';
 
-export interface TextInputProps extends Omit<
-  FieldInputBaseProps,
-  'onChange' | 'defaultValue'
-> {
+registerEnglishFallback(english);
+/**
+ * The HTML input type. Beyond their meaning, `email`, `tel`, `url` and
+ * `password` choose a touch keyboard (email, phone pad, URL) and its
+ * capitalization; `search` makes the field a search box.
+ */
+export type TextInputType =
+  'text' | 'password' | 'email' | 'search' | 'tel' | 'url';
+
+export interface TextInputProps
+  extends
+    Omit<FieldInputBaseProps, 'onChange' | 'defaultValue'>,
+    TextEntryTraitProps {
   /** Ref forwarded to the root element */
   ref?: React.Ref<HTMLInputElement>;
   /**
-   * The HTML input type.
+   * The HTML input type. `email`, `tel` and `url` also bring up the matching
+   * touch keyboard (email, phone pad, URL); `search` makes the field a search
+   * box (pair it with `enterKeyHint="search"` for a Search key).
    * @default 'text'
    */
   type?: TextInputType;
@@ -213,7 +235,7 @@ export interface TextInputProps extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
   /**
    * The size of the input.
    * - 'sm': Compact size (18px height)
@@ -281,6 +303,11 @@ export interface TextInputProps extends Omit<
    * session-scoped field that must not reuse a prior value).
    */
   autoComplete?: React.InputHTMLAttributes<HTMLInputElement>['autoComplete'];
+  /**
+   * Whether misspelled words are underlined (the native `spellcheck`).
+   * Unset, the browser decides.
+   */
+  hasSpellCheck?: boolean;
 }
 
 /**
@@ -317,6 +344,11 @@ export function TextInput({
   htmlName,
   onEnter,
   onKeyDown,
+  enterKeyHint,
+  inputMode,
+  autoCapitalize,
+  hasAutoCorrect,
+  hasSpellCheck,
   width,
   containerXstyle,
   containerClassName,
@@ -327,6 +359,7 @@ export function TextInput({
   ref,
   id: idProp,
   'aria-describedby': ariaDescribedByProp,
+  'aria-labelledby': ariaLabelledByProp,
   ...restProps
 }: TextInputProps) {
   const inputGroup = useInputGroup();
@@ -337,7 +370,7 @@ export function TextInput({
     containerClassName,
     containerStyle,
   });
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   // A disabled field keeps its tab stop but, like a natively disabled one,
   // runs no caller event handler other than focus and blur (`spec:AST-085` FR2).
@@ -352,6 +385,7 @@ export function TextInput({
 
   const generatedID = useId();
   const id = idProp ?? generatedID;
+  const fieldLabelID = useId();
   const inputLabelID = useId();
   const descriptionID = useId();
   const statusMessageID = useId();
@@ -401,6 +435,12 @@ export function TextInput({
     ],
     inputGroup,
   );
+  // A caller aria-labelledby names the input together with the field's own
+  // label (the Field label standalone, the group and input labels in a group).
+  const inputLabelledBy =
+    ariaLabelledByProp != null
+      ? joinAriaIDs(ariaLabelledBy ?? fieldLabelID, ariaLabelledByProp)
+      : ariaLabelledBy;
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     // Value can't change while showing a disabled message (the field is
@@ -478,7 +518,11 @@ export function TextInput({
         controlClassName,
         controlStyle,
       )}>
-      {startIcon && renderIconSlot(startIcon, {size: 'sm', color: 'secondary'})}
+      {/* The shared presence check decides the slot
+          (`architecture:react-component-runtime` INV16); an icon component
+          counts as present, as any non-empty value does. */}
+      {isRenderable(startIcon as ReactNode) &&
+        renderIconSlot(startIcon, {size: 'sm', color: 'secondary'})}
       {inputGroup && <VisuallyHidden id={inputLabelID}>{label}</VisuallyHidden>}
       <input
         {...fieldProps}
@@ -486,6 +530,14 @@ export function TextInput({
         id={id}
         name={isDisabled ? undefined : htmlName}
         type={type}
+        {...textEntryTraitAttributes({
+          enterKeyHint,
+          inputMode,
+          autoCapitalize,
+          hasAutoCorrect,
+        })}
+        // Only when set, so an untyped `spellCheck` passed through still applies.
+        {...(hasSpellCheck != null ? {spellCheck: hasSpellCheck} : {})}
         value={optimisticValue}
         onChange={handleChange}
         onKeyDown={
@@ -525,16 +577,18 @@ export function TextInput({
         aria-required={isEffectivelyRequired ? 'true' : undefined}
         aria-invalid={status?.type === 'error' ? 'true' : undefined}
         aria-busy={isBusy || undefined}
-        aria-labelledby={ariaLabelledBy}
+        aria-labelledby={inputLabelledBy}
         {...stylex.props(styles.input, isDisabled && styles.inputDisabled)}
       />
+      {/* The Spinner comes first so it appears inward of the clear button
+          and the button keeps its place when the field turns busy. */}
+      {isBusy && <Spinner size="sm" aria-hidden="true" />}
       {hasClear && value !== '' && !isDisabled && !isReadOnly && (
         <InputClearButton
           label={t('@astryx.textInput.clearLabel', {label})}
           onClick={handleClear}
         />
       )}
-      {isBusy && <Spinner size="sm" aria-hidden="true" />}
       {statusIcon}
     </div>
   );
@@ -556,6 +610,7 @@ export function TextInput({
       isLabelHidden={isLabelHidden}
       description={description}
       inputID={id}
+      labelID={ariaLabelledByProp != null ? fieldLabelID : undefined}
       descriptionID={description ? descriptionID : undefined}
       isOptional={isOptional}
       isRequired={isRequired}

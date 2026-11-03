@@ -1130,22 +1130,30 @@ describe('with icon sets installed but no experimental.iconSet, stable output is
   // manifest key `experimental` in the CLI without icon sets; this CLI prints
   // none, so its stderr equals what that CLI prints for the package with the
   // key removed. The theme writers have no dry run and print the nudge only
-  // after they succeed, so they run in this test's own project: two themes
+  // after they succeed, so they run in this block's own project: two themes
   // are forked and their built files stubbed, then added, used, and removed.
   // `upgrade` runs without `--apply`, a dry run, against the repo's Core.
-  it('every command that prints the integration-issue nudge prints none', async () => {
-    const cwd = installed('nudge');
-    const pkgFile = path.join(cwd, 'package.json');
-    const pkgJson = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
-    pkgJson.dependencies['@astryxdesign/core'] = '*';
-    fs.writeFileSync(pkgFile, JSON.stringify(pkgJson));
-    fs.mkdirSync(path.join(cwd, 'src'));
-    fs.mkdirSync(path.join(cwd, 'node_modules', '@astryxdesign'));
-    fs.symlinkSync(
-      path.join(PROJECTS_ROOT, 'packages', 'core'),
-      path.join(cwd, 'node_modules', '@astryxdesign', 'core'),
-      'dir',
-    );
+  // Each command is its own test, in this order, since the theme commands
+  // build on the ones before them; the last test compares what they printed.
+  describe('every command that prints the integration-issue nudge prints none', () => {
+    /** @type {string} */
+    let cwd;
+    /** @type {string[]} */
+    const printed = [];
+    beforeAll(() => {
+      cwd = installed('nudge');
+      const pkgFile = path.join(cwd, 'package.json');
+      const pkgJson = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
+      pkgJson.dependencies['@astryxdesign/core'] = '*';
+      fs.writeFileSync(pkgFile, JSON.stringify(pkgJson));
+      fs.mkdirSync(path.join(cwd, 'src'));
+      fs.mkdirSync(path.join(cwd, 'node_modules', '@astryxdesign'));
+      fs.symlinkSync(
+        path.join(PROJECTS_ROOT, 'packages', 'core'),
+        path.join(cwd, 'node_modules', '@astryxdesign', 'core'),
+        'dir',
+      );
+    });
     /** @type {Record<string, () => void>} */
     const setup = {
       'theme add': () => {
@@ -1168,21 +1176,28 @@ describe('with icon sets installed but no experimental.iconSet, stable output is
         );
       },
     };
-    const stderr = NUDGE_COMMANDS.map(({name, args}) => {
-      setup[name]?.();
-      const res = astryx(args, cwd);
-      expect(res.status, `astryx ${args.join(' ')}: ${res.stderr}`).toBe(0);
-      if (!REGENERATING) {
-        expect(res.stderr).not.toMatch(/integration issue/u);
-      }
-      return `$ astryx ${args.join(' ')}\n${textShape(res.stderr, [
-        /^(?:Warning|Error):/u,
-        /^package: /u,
-      ])}`;
-    }).join('\n');
-    await expect(stderr).toMatchFileSnapshot(
-      path.join(GOLDEN, 'installed-set-stderr.txt'),
-    );
+    for (const {name, args} of NUDGE_COMMANDS) {
+      it(`astryx ${args.join(' ')}`, () => {
+        setup[name]?.();
+        const res = astryx(args, cwd);
+        expect(res.status, `astryx ${args.join(' ')}: ${res.stderr}`).toBe(0);
+        if (!REGENERATING) {
+          expect(res.stderr).not.toMatch(/integration issue/u);
+        }
+        printed.push(
+          `$ astryx ${args.join(' ')}\n${textShape(res.stderr, [
+            /^(?:Warning|Error):/u,
+            /^package: /u,
+          ])}`,
+        );
+      });
+    }
+    it('prints what the CLI without icon sets prints for the package without the key', async () => {
+      expect(printed).toHaveLength(NUDGE_COMMANDS.length);
+      await expect(printed.join('\n')).toMatchFileSnapshot(
+        path.join(GOLDEN, 'installed-set-stderr.txt'),
+      );
+    });
   });
 
   // The list is every caller of the nudge: a new caller fails here until it

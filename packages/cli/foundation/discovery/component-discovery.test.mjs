@@ -334,3 +334,51 @@ describe('integration component discovery (ownership-aware)', () => {
     expect(recs.find(r => r.name === 'MetaAppShell').package).toBe('@acme/astryx-meta');
   }, SLOW);
 });
+
+describe('findComponentSource reads names from the folders it lists', () => {
+  /** A Core folder with these files; a value of `{link}` is a symbolic link. */
+  function core(files) {
+    const dir = mkTmp('astryx-core-source-');
+    for (const [rel, contents] of Object.entries(files)) {
+      const file = path.join(dir, 'src', rel);
+      fs.mkdirSync(path.dirname(file), {recursive: true});
+      if (typeof contents === 'object') {
+        fs.symlinkSync(path.join(dir, 'src', contents.link), file);
+      } else {
+        fs.writeFileSync(file, contents);
+      }
+    }
+    return dir;
+  }
+
+  it('finds the prefixed source before the bare one, in a nested folder', () => {
+    const dir = core({
+      'Layout/Card/Card.tsx': '',
+      'Layout/Card/XDSCard.tsx': '',
+    });
+    expect(findComponentSource(dir, 'Card')).toBe(
+      path.join(dir, 'src', 'Layout', 'Card', 'XDSCard.tsx'),
+    );
+  });
+
+  it('passes over a case variant and a link to a missing file', () => {
+    const dir = core({
+      'Card/card.tsx': '',
+      'Card/XDSCard.tsx': {link: 'Card/Gone.tsx'},
+      'Card/inner/Card.tsx': '',
+    });
+    expect(findComponentSource(dir, 'Card')).toBe(
+      path.join(dir, 'src', 'Card', 'inner', 'Card.tsx'),
+    );
+  });
+
+  it('follows a link to a file that is there', () => {
+    const dir = core({
+      'shared/Card.tsx': '',
+      'Card/Card.tsx': {link: 'shared/Card.tsx'},
+    });
+    expect(findComponentSource(dir, 'Card')).toBe(
+      path.join(dir, 'src', 'Card', 'Card.tsx'),
+    );
+  });
+});

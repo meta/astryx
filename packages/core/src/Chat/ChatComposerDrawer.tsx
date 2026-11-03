@@ -15,7 +15,7 @@
  * SYNC: When modified, update:
  * - /packages/core/src/Chat/ChatComposerDrawer.test.tsx
  * - /packages/core/src/Chat/ChatComposerDrawer.doc.mjs
- * - /packages/core/src/Chat/ChatComposerDrawer.spec.md
+ * - /docs/specs/components/Chat/ChatComposerDrawer.spec.md
  * - /apps/storybook/stories/ChatComposerDrawer.stories.tsx
  * - /packages/core/src/Chat/index.ts (exports)
  * - /packages/cli/assets/templates/blocks/components/ChatComposerDrawer/ (block examples)
@@ -37,7 +37,13 @@ import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Chat/ChatComposerDrawer.generated';
+
+registerEnglishFallback(english);
 
 export interface ChatComposerDrawerProps extends BaseProps<HTMLDivElement> {
   ref?: React.Ref<HTMLDivElement>;
@@ -253,7 +259,7 @@ export function ChatComposerDrawer({
   'data-testid': testId,
   ...htmlProps
 }: ChatComposerDrawerProps): React.ReactElement {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.chat.composerDrawer.label');
   const [internalCollapsed, setInternalCollapsed] =
     useState(defaultIsCollapsed);

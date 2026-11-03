@@ -6,6 +6,7 @@ import {expect, userEvent, waitFor, within} from 'storybook/test';
 import {DateInput} from '@astryxdesign/core/DateInput';
 import {FormLayout} from '@astryxdesign/core/FormLayout';
 import {Text} from '@astryxdesign/core/Text';
+import {InternationalizationProvider} from '@astryxdesign/core/i18n';
 import {InputGroup, InputGroupText} from '@astryxdesign/core/InputGroup';
 import type {ISODateString} from '@astryxdesign/core/Calendar';
 import {Layout, LayoutContent} from '@astryxdesign/core/Layout';
@@ -155,6 +156,34 @@ export const WithValue: Story = {
   },
   args: {
     label: 'Event date',
+  },
+};
+
+/**
+ * A day-first locale: typed numeric dates read day, then month. The line
+ * under the field shows each value the field reports.
+ */
+export const DayFirstLocale: Story = {
+  tags: ['!autodocs'],
+  render: args => {
+    const [value, setValue] = useState<ISODateString | undefined>(undefined);
+    const [reported, setReported] = useState<string[]>([]);
+    return (
+      <InternationalizationProvider locale="en-GB">
+        <DateInput
+          {...args}
+          value={value}
+          onChange={next => {
+            setValue(next);
+            setReported(previous => [...previous, String(next)]);
+          }}
+        />
+        <Text data-testid="reported">{reported.join(', ')}</Text>
+      </InternationalizationProvider>
+    );
+  },
+  args: {
+    label: 'Start date',
   },
 };
 

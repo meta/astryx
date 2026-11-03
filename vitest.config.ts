@@ -3,8 +3,8 @@
 /**
  * @file vitest.config.ts
  * @input Uses vitest/config, @vitejs/plugin-react
- * @output Vitest configuration with jsdom, coverage, test setup, and the two
- *   test projects (`ui`, `node`)
+ * @output Vitest configuration with jsdom, coverage, test setup, the two
+ *   test projects (`ui`, `node`), and the sequencer that splits `--shard` legs
  * @position Root test config and the actual test entry point. The two projects
  *   under `test.projects` decide which files run where via their per-project
  *   include lists. The root-level `test` options (globals, environment,
@@ -22,6 +22,7 @@ import path from 'node:path';
 import {configDefaults, defineConfig} from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import stylexResolution from './scripts/stylex-module-resolution.cjs';
+import DurationShardSequencer from './scripts/vitest-shard-sequencer.mjs';
 
 const rootDir = path.resolve(__dirname, '.');
 const coreSrc = path.resolve(__dirname, 'packages/core/src');
@@ -85,6 +86,10 @@ export default defineConfig({
     // (e.g. Chat composer tests with contentEditable + popover portals in
     // jsdom). Vitest 4 removed `poolOptions`; per-worker argv is now top-level.
     execArgv: ['--max-old-space-size=4096'],
+    // A `--shard` leg of the `node` project runs files chosen by their
+    // recorded time, not by count, so the slowest files never share a leg
+    // (scripts/vitest-shard-sequencer.mjs, spec:AST-030 FR22).
+    sequence: {sequencer: DurationShardSequencer},
     // Test projects (migrated from vitest.workspace.ts). Partitioning rule
     // (nothing can fall through):
     //   - `ui`   = packages/core + packages/lab + packages/charts + packages/richtext
@@ -132,6 +137,15 @@ export default defineConfig({
         // `resolve` — the root's aliases do not reach it.
         resolve: {
           alias: [
+            // Catalog templates import docs-only demo content from the
+            // docsite. The docsite tsconfig maps the same specifier.
+            {
+              find: /^@astryx-docs\/demo-content$/,
+              replacement: path.join(
+                rootDir,
+                'apps/docsite/src/templateDemoContent/demoContent.tsx',
+              ),
+            },
             // Theme packages resolve to `dist/`, which no test run builds. The
             // sandbox palette suite reads their palettes as a reference corpus,
             // so point the BARE specifier at the authored source. Subpath
@@ -150,6 +164,18 @@ export default defineConfig({
           name: 'node',
           globals: true,
           environment: 'node',
+          // Prebuilt and plain-data modules load as Node loads them for the
+          // CLI, not through Vite's transform, which would otherwise inline
+          // every file: Core's built bundle (the workspace link resolves it
+          // outside node_modules; the theme build imports its root entry, all
+          // of Core and React: 0.9 s natively, 4.5 s inlined) and the
+          // `.doc.mjs` documentation modules the docs catalog imports by the
+          // hundred (doctor's first case: 0.7 s natively, 4.7 s inlined).
+          // Both grow several times over on a loaded box. Mocks keep working
+          // from inlined callers.
+          server: {
+            deps: {external: [/\/packages\/core\/dist\//, /\.doc\.mjs$/]},
+          },
           // Several CLI suites spawn a fresh `node bin/astryx.mjs` per assertion
           // (real process boundary). Under the forks pool these cold-starts can
           // run long on a busy box; the 5s default testTimeout then flakes

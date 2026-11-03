@@ -5,9 +5,9 @@
  * @input Uses vitest, @testing-library/react, Banner component
  * @output Unit tests for Banner component behavior, including default and
  *   explicit live-region roles, augmented-status color fallback, scoped status
- *   control context that does not recolor tooltips, the 'banner-frame' theme
- *   target on the outer elevation/radius painter, and the 'banner-icon' theme
- *   target on the status icon glyph (#4166)
+ *   foregrounds that do not recolor consumer content or tooltips, the
+ *   'banner-frame' theme target on the outer elevation/radius painter, and the
+ *   'banner-icon' theme target on the status icon glyph (#4166)
  * @position Testing; validates Banner.tsx implementation
  *
  * SYNC: When modified, update this header
@@ -157,9 +157,17 @@ describe('Banner', () => {
         expect(
           getComputedStyle(button).getPropertyValue('--color-text-primary'),
         ).toBe(expectedRole);
-        const tooltip = document.getElementById(
-          button.getAttribute('aria-describedby')!,
-        );
+        // A tooltip that repeats the name does not describe the button
+        // (Button FR12), so find it by its text.
+        const describedBy = button.getAttribute('aria-describedby');
+        const tooltip =
+          describedBy != null
+            ? document.getElementById(describedBy)
+            : (screen
+                .getAllByRole('tooltip', {hidden: true})
+                .find(
+                  el => el.textContent === button.getAttribute('aria-label'),
+                ) ?? null);
         expect(tooltip).not.toBeNull();
         expect(
           getComputedStyle(tooltip!).getPropertyValue('--color-text-primary'),
@@ -229,22 +237,41 @@ describe('Banner', () => {
     expect(screen.queryByRole('button', {name: /^Dismiss/})).toBeNull();
   });
 
-  it('leaves consumer endContent outside the built-in status control context', () => {
+  it('leaves consumer endContent outside the built-in status foreground', () => {
     render(
-      <Banner
-        status="success"
-        title="With Action"
-        endContent={
-          <button type="button" data-testid="end-btn">
-            Action
-          </button>
-        }
-      />,
+      <>
+        <style>{'dialog { color: inherit; }'}</style>
+        <Banner
+          status="warning"
+          title="Warning action"
+          endContent={
+            <dialog open data-testid="warning-dialog">
+              Consumer dialog
+            </dialog>
+          }
+        />
+        <Banner
+          status="error"
+          title="Error action"
+          endContent={
+            <dialog open data-testid="error-dialog">
+              Consumer dialog
+            </dialog>
+          }
+        />
+      </>,
     );
-    const action = screen.getByTestId('end-btn');
-    expect(action).toBeInTheDocument();
-    expect(action.className).not.toContain(
-      'Banner__statusControlStyles.success',
+
+    const warningTitle = screen.getByText('Warning action');
+    const errorTitle = screen.getByText('Error action');
+    const warningDialog = screen.getByTestId('warning-dialog');
+    const errorDialog = screen.getByTestId('error-dialog');
+
+    expect(getComputedStyle(warningTitle).color).not.toBe(
+      getComputedStyle(errorTitle).color,
+    );
+    expect(getComputedStyle(warningDialog).color).toBe(
+      getComputedStyle(errorDialog).color,
     );
   });
 
@@ -811,7 +838,13 @@ describe('Banner', () => {
         <Banner status="info" title={<span>Rich title</span>} isDismissable />,
       );
       const button = screen.getByRole('button', {name: 'Dismiss'});
-      expect(button).toHaveAccessibleDescription('Dismiss');
+      // The tooltip repeats the name, so it shows but adds no description.
+      expect(button).not.toHaveAttribute('aria-describedby');
+      expect(
+        screen
+          .getAllByRole('tooltip', {hidden: true})
+          .some(el => el.textContent === 'Dismiss'),
+      ).toBe(true);
     });
 
     it('uses a translated dismissLabel for a rich title and its tooltip', () => {
@@ -826,7 +859,12 @@ describe('Banner', () => {
       const button = screen.getByRole('button', {
         name: 'Wartungshinweis schließen',
       });
-      expect(button).toHaveAccessibleDescription('Wartungshinweis schließen');
+      expect(button).not.toHaveAttribute('aria-describedby');
+      expect(
+        screen
+          .getAllByRole('tooltip', {hidden: true})
+          .some(el => el.textContent === 'Wartungshinweis schließen'),
+      ).toBe(true);
     });
 
     it('keeps a translated verb when the titled message falls back to English', () => {

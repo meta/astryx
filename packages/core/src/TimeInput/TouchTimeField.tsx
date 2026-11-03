@@ -27,6 +27,7 @@ import {
   type KeyboardEvent,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {BottomSheet} from '../BottomSheet';
 import {Button} from '../Button';
 import {
@@ -46,8 +47,9 @@ import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {Icon} from '../Icon';
-import {useTranslator} from '../i18n';
-import {colorVars, sizeVars, spacingVars} from '../theme/tokens.stylex';
+import {useLocale} from '../i18n';
+import {formatLocaleTime} from '../utils/timeFormat';
+import {sizeVars, spacingVars} from '../theme/tokens.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {Spinner} from '../Spinner';
 import {useTooltip} from '../Tooltip';
@@ -57,8 +59,6 @@ import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {themeProps} from '../utils/themeProps';
 import {
   clampTime,
-  formatDisplayTime12h,
-  formatDisplayTime24h,
   formatISOTime,
   getInputARIA,
   isTimeInRange,
@@ -68,6 +68,13 @@ import {
 } from '../utils';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
 import type {TimeInputProps} from './TimeInput';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/TimeInput/TouchTimeField.generated';
+
+registerEnglishFallback(english);
 
 const sizeStyles = stylex.create({
   sm: {height: sizeVars['--size-element-sm'], minWidth: 120},
@@ -76,17 +83,6 @@ const sizeStyles = stylex.create({
 });
 
 const styles = stylex.create({
-  // Same as TimeInput's: the focus ring for a focused disabled field.
-  disabledFocusRing: {
-    borderColor: {
-      default: colorVars['--color-border-emphasized'],
-      ':focus-within': colorVars['--color-accent'],
-    },
-    boxShadow: {
-      default: 'none',
-      ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
-    },
-  },
   iconButton: {
     display: 'flex',
     alignItems: 'center',
@@ -237,7 +233,8 @@ export function TouchTimeField({
     onClick: onClickProp,
     ...controlProps
   } = rest;
-  const t = useTranslator();
+  const t = useComponentTranslator();
+  const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
     placeholderFromProps ?? t('@astryx.timeInput.placeholder');
@@ -302,10 +299,8 @@ export function TouchTimeField({
     [changeAction, isEffectivelyDisabled, onChange, setOptimisticValue],
   );
 
-  const formatDisplayTime =
-    hourFormat === '12h' ? formatDisplayTime12h : formatDisplayTime24h;
   const displayValue = optimisticValue
-    ? formatDisplayTime(optimisticValue, hasSeconds)
+    ? formatLocaleTime(optimisticValue, locale, hourFormat, hasSeconds)
     : '';
 
   const fallbackTime = useMemo(() => {
@@ -470,7 +465,7 @@ export function TouchTimeField({
           inputWrapperStyles.base,
           sizeStyles[size],
           isDisabled && inputWrapperStyles.disabled,
-          isDisabled && styles.disabledFocusRing,
+          isDisabled && inputDisabledFocusStyles.withinRing,
           status && inputStatusBorderStyles[status.type],
           status && !isDisabled && inputStatusHoverShadowStyles[status.type],
           status && inputStatusFocusWithinStyles[status.type],

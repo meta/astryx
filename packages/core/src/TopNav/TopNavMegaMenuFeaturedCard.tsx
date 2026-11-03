@@ -26,7 +26,7 @@ import {
   typeScaleVars,
   fontWeightVars,
 } from '../theme/tokens.stylex';
-import {mergeProps} from '../utils';
+import {mergeProps, rtlStyles} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {themeProps} from '../utils/themeProps';
@@ -69,6 +69,10 @@ const styles = stylex.create({
     lineHeight: typeScaleVars['--text-supporting-leading'],
     color: colorVars['--color-text-accent'],
     textDecoration: 'none',
+  },
+  // A transform needs a box: an inline span would not mirror.
+  linkArrow: {
+    display: 'inline-block',
   },
 });
 
@@ -175,7 +179,10 @@ export function TopNavMegaMenuFeaturedCard({
         )}
         {linkLabel && linkHref && (
           <LinkComponent href={linkHref} {...stylex.props(styles.link)}>
-            {linkLabel} →
+            {linkLabel}{' '}
+            {/* The arrow points toward the inline end, so it mirrors in RTL
+                (design:bidirectionality DR4); U+2192 is not bidi-mirrored. */}
+            <span {...stylex.props(styles.linkArrow, rtlStyles.mirror)}>→</span>
           </LinkComponent>
         )}
         {children}

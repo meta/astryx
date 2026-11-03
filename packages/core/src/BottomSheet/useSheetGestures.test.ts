@@ -12,6 +12,7 @@
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {act, renderHook} from '@testing-library/react';
 import {
+  isInsideNestedLayer,
   useSheetGestures,
   type UseSheetGesturesOptions,
 } from './useSheetGestures';
@@ -105,6 +106,27 @@ function up(hook: Hook, y: number, t: number, target: HTMLElement) {
     hook.result.current.handleProps.onPointerUp(pointerEvent(y, t, target)),
   );
 }
+
+describe('isInsideNestedLayer', () => {
+  it("is true for a target inside a <dialog> rendered within the body, and false for the body's own content", () => {
+    const body = document.createElement('div');
+    const own = document.createElement('button');
+    body.append(own);
+    const nested = document.createElement('dialog');
+    const nestedHandle = document.createElement('div');
+    nested.append(nestedHandle);
+    body.append(nested);
+    expect(isInsideNestedLayer(own, body)).toBe(false);
+    expect(isInsideNestedLayer(body, body)).toBe(false);
+    expect(isInsideNestedLayer(nestedHandle, body)).toBe(true);
+    expect(isInsideNestedLayer(nested, body)).toBe(true);
+    // A dialog above the body (the sheet's own) does not count.
+    const ownDialog = document.createElement('dialog');
+    ownDialog.append(body);
+    expect(isInsideNestedLayer(own, body)).toBe(false);
+    expect(isInsideNestedLayer(null, body)).toBe(false);
+  });
+});
 
 describe('useSheetGestures', () => {
   it('dismisses on a fast downward flick (swipe-to-close)', () => {
@@ -1211,6 +1233,36 @@ describe('useSheetGestures', () => {
         touchOn(tile, body, 'touchmove', 160);
       });
       expect(hook.result.current.isDragging).toBe(true);
+    });
+
+    it('leaves a touch that starts inside a nested <dialog> to that layer', () => {
+      // A sheet opened from this sheet's content renders its <dialog> inside
+      // the body, so its touches bubble here. The same pull-down from the
+      // body's own content promotes (see above); from the nested layer it
+      // must not.
+      const {hook} = setup({snapHeights: () => [200]});
+      const {body} = makeNested({
+        bodyScrollTop: 0,
+        innerScrollTop: 0,
+        innerScrollHeight: 200,
+      });
+      const nested = document.createElement('dialog');
+      const nestedHandle = document.createElement('div');
+      nested.appendChild(nestedHandle);
+      body.appendChild(nested);
+      act(() => hook.result.current.sheetRef(body));
+      act(() => hook.result.current.bodyProps.ref(body));
+      let start: Event | undefined;
+      let pull: Event | undefined;
+      act(() => {
+        start = touchOn(nestedHandle, body, 'touchstart', 100);
+        pull = touchOn(nestedHandle, body, 'touchmove', 160);
+      });
+      expect(start?.defaultPrevented).toBe(false);
+      expect(pull?.defaultPrevented).toBe(false);
+      expect(hook.result.current.isDragging).toBe(false);
+      expect(liveOffset(hook)).toBe(0);
+      expect(body.style.transform).toBe('');
     });
 
     it('leaves a pull-up to a nested scroller with content below', () => {

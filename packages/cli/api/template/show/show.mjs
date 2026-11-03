@@ -12,9 +12,9 @@ import * as fs from 'node:fs';
 import {AstryxError} from '../../error.mjs';
 import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {
-  extractComponents,
+  componentsInSource,
   pkgOf,
-  replaceDemoMedia,
+  replaceTemplateDemos,
 } from '../../../foundation/discovery/template-adapter.mjs';
 import {
   NO_ICON_SETS,
@@ -38,11 +38,14 @@ export function templateShow(match, {iconSets = NO_ICON_SETS} = {}) {
   }
 
   // The source template.copy writes (spec:AST-028 FR7): a template printed and
-  // pasted must not keep a media path only Astryx's previews serve, and the
-  // caller is told how many it replaced, the way the copy receipt tells it.
-  const {source: withMedia, demoMediaReplaced} = replaceDemoMedia(
-    fs.readFileSync(match.filePath, 'utf-8'),
-  );
+  // pasted must not keep demo content or a media path only Astryx's previews
+  // serve, and the caller is told how many it replaced, the way the copy
+  // receipt tells it.
+  const {
+    source: withMedia,
+    demoContentReplaced,
+    demoMediaReplaced,
+  } = replaceTemplateDemos(fs.readFileSync(match.filePath, 'utf-8'));
   // Icons follow the project's icon set, as template.copy writes them.
   const {source, icons} = mapTemplateIcons(withMedia, iconSets, match.icons);
 
@@ -53,9 +56,10 @@ export function templateShow(match, {iconSets = NO_ICON_SETS} = {}) {
       template: match.dirName,
       description: match.description,
       type: match.type,
-      components: extractComponents(match.filePath),
+      components: componentsInSource(source),
       source,
       demoMediaReplaced,
+      demoContentReplaced,
       ...(icons ? {icons} : {}),
     },
   };
