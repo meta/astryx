@@ -2,14 +2,18 @@
 
 /**
  * @file createResizable.ts
- * @input A region's options
+ * @input A handle element, or null for a region with no handle yet, and the
+ *   region's options
  * @output createResizable; readInitialResizableState for the hook's first
- *   render; createResizableAs and the internal channel for the hook
- * @position The Resizable family's region, internal to the package. The
- *   configuration-object useResizable builds on it, and ResizeHandle drives
- *   it through resizeGesture.ts's model. Importing it does no DOM work
+ *   render; createResizableAs and the internal channel for the hooks
+ * @position The Resizable family's factory, internal to the package. Its
+ *   input is resizeGesture.ts: it listens with it on a plain handle, and
+ *   ResizeHandle drives the region through its model. The
+ *   configuration-object useResizable builds on it. No DOM work on import
  */
 
+import {registerEnglishFallback} from '../i18n/englishFallback';
+import english from '../i18n/generated-english/Resizable/createResizable.generated';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {devWarn} from '../utils/devWarning';
 import type {SizeValue} from '../utils/types';
@@ -29,8 +33,25 @@ import {
   type PersistedResizableState,
   type ResizableDirection,
 } from './resizableModel';
-import type {ResizeGestureModel, ResizeGestureState} from './resizeGesture';
+import {
+  createResizeGesture,
+  type ResizeGesture,
+  type ResizeGestureModel,
+  type ResizeGestureState,
+} from './resizeGesture';
+import {separatorAttributes} from './separatorAttributes';
 import type {ResizableSize} from './utils';
+
+// The English for the two messages it names, and nothing more of the catalog.
+registerEnglishFallback(english);
+
+/**
+ * The catalog's messages for a plain handle: its name and what it announces
+ * while collapsed, when the options give neither `label` nor
+ * `collapsedLabel`. The factory uses the shipped English messages.
+ */
+const LABEL_KEY = '@astryx.resizable.handle.label';
+const COLLAPSED_LABEL_KEY = '@astryx.resizable.collapsed';
 
 export interface CreateResizableOptions {
   /**
@@ -72,6 +93,31 @@ export interface CreateResizableOptions {
   onSizeChange?: (size: number) => void;
   /** Called when an interaction collapses or expands the region. */
   onCollapseChange?: (isCollapsed: boolean) => void;
+  /**
+   * The handle sits after the panel it resizes (the panel is at the end), so
+   * a drag toward the start grows it.
+   * @default false
+   */
+  isReversed?: boolean;
+  /**
+   * Ignores pointer and keyboard input and says so; a plain element keeps its
+   * tab stop.
+   * @default false
+   */
+  isDisabled?: boolean;
+  /**
+   * A plain element's accessible name, when it has none of its own. Without
+   * it, the factory uses the message catalog's English message.
+   * @default 'Resize handle'
+   */
+  label?: string;
+  /**
+   * Replaces the catalog's "Collapsed" that the handle announces as its
+   * `aria-valuetext` while the region is collapsed. Absent, the factory
+   * announces the shipped English message.
+   * @default 'Collapsed'
+   */
+  collapsedLabel?: string;
 }
 
 export interface ResizableController {
@@ -96,7 +142,10 @@ export interface ResizableController {
    * that stops it.
    */
   subscribe(listener: () => void): () => void;
-  /** Stops every observer the factory started; a gesture in flight ends. */
+  /**
+   * Removes every listener, observer and attribute the factory added and the
+   * body's drag cursor; a drag in flight ends as cancelled.
+   */
   destroy(): void;
 }
 
@@ -117,8 +166,8 @@ function readWindowExtent(direction: ResizableDirection): number | null {
 const QUIET = {current: true};
 
 /**
- * The state a region with `options` starts in: the server's render and a
- * hook's first render. A container is not measured
+ * The state a region with `options` starts in, before its handle exists: the
+ * server's render and a hook's first render. A container is not measured
  * yet, so a percentage of it resolves against the deterministic 1200px basis
  * until the factory measures it. `'server'` reads the state the server
  * rendered, for a render that hydrates it: the 1200px basis for a viewport
@@ -239,16 +288,16 @@ interface ResizableInternals {
   syncContainer(): void;
   /**
    * Lets go of the page and keeps the region. A gesture in flight ends as
-   * cancelled, and the observers go. Collapse, expand and resize still apply
-   * and report. For a React caller whose component unmounts or an
-   * `<Activity>` hides.
+   * cancelled, and the handle's listeners, its attributes and the observers
+   * go. Collapse, expand and resize still apply and report. For a React caller
+   * whose component unmounts or an `<Activity>` hides.
    */
   suspend(): void;
-  /** Takes the page back after `suspend`: the observers. */
+  /** Takes the page back after `suspend`: the handle, and the observers. */
   resume(): void;
   /**
-   * The region's side of a ResizeHandle's gesture: the drag and keys of a
-   * ResizeHandle given the configuration object's props.
+   * The region's side of a gesture the factory does not own: the drag and
+   * keys of a ResizeHandle given the configuration object's props.
    */
   model: ResizeGestureModel;
 }
@@ -262,16 +311,64 @@ export function readResizableInternals(
   return internals.get(controller);
 }
 
+/** An attribute's value as the DOM takes it; undefined removes it. */
+function toAttribute(
+  value: string | number | boolean | undefined,
+): string | null {
+  return value == null ? null : String(value);
+}
+
+/** The attributes the factory writes on a handle, restored by `destroy`. */
+const MANAGED_ATTRIBUTES = [
+  'role',
+  'tabindex',
+  'aria-label',
+  'aria-orientation',
+  'aria-valuenow',
+  'aria-valuemin',
+  'aria-valuemax',
+  'aria-valuetext',
+  'aria-disabled',
+  'data-resizing',
+] as const;
+
 /**
- * A resizable region, without React. The factory never sizes the panel: it
- * reports the size, and the caller applies it. It resolves, clamps, snaps,
- * collapses and saves the size, and a percentage follows its basis.
- * `destroy` stops its observers.
+ * Make `handle` a window splitter that resizes a region. The factory never
+ * sizes the panel: it reports the size, and the caller applies it.
+ *
+ * It gives the handle `role="separator"`, its orientation and its value. It
+ * adds a tab stop and an accessible name when the handle has none. It answers
+ * a pointer drag, the arrow keys, Home and End, and holds the pointer for a
+ * whole drag. Enter and a double-click collapse and restore. A horizontal
+ * region resizes along the inline axis, and under right-to-left the drag
+ * follows the pointer. `destroy` takes all of it away. With a null handle the
+ * region still answers collapse, expand, resize and subscribe, and touches no
+ * element. Outside a provider, its name and its collapsed text are the
+ * shipped English messages. `label` names it, and `collapsedLabel` replaces
+ * its collapsed text in another language.
+ *
+ * @example
+ * ```
+ * const sidebar = document.querySelector('#sidebar');
+ * const resizable = createResizable(document.querySelector('#divider'), {
+ *   defaultSize: 260,
+ *   minSize: 180,
+ *   maxSize: 480,
+ *   collapsible: true,
+ *   autoSaveId: 'sidebar',
+ * });
+ * const paint = () => {
+ *   sidebar.style.width = `${resizable.size}px`;
+ * };
+ * paint();
+ * resizable.subscribe(paint);
+ * ```
  */
 export function createResizable(
+  handle: HTMLElement | null,
   options: CreateResizableOptions = {},
 ): ResizableController {
-  return createResizableAs('createResizable', options);
+  return createResizableAs('createResizable', handle, options);
 }
 
 /**
@@ -287,6 +384,7 @@ export type ResizableWarningSource = 'createResizable' | 'useResizable';
  */
 export function createResizableAs(
   source: ResizableWarningSource,
+  handle: HTMLElement | null,
   options: CreateResizableOptions = {},
 ): ResizableController {
   // The configuration-object useResizable keeps its warnings word for word.
@@ -296,6 +394,8 @@ export function createResizableAs(
   // Let go of the page by `suspend`, with the region kept.
   let isSuspended = false;
   const listeners = new Set<() => void>();
+  const isReversed = (): boolean => opts.isReversed ?? false;
+  const isDisabled = (): boolean => opts.isDisabled ?? false;
   const didWarn = {
     min: {current: false},
     max: {current: false},
@@ -330,7 +430,7 @@ export function createResizableAs(
   let uncontrolledIsCollapsed =
     persisted?.isCollapsed ?? opts.defaultIsCollapsed ?? false;
 
-  // What the region last computed, notified and wrote.
+  // What the region last computed, notified, wrote, and announced.
   let derived = {
     size: 0,
     isCollapsed: false,
@@ -518,13 +618,13 @@ export function createResizableAs(
     derived = {size, isCollapsed, min, max, effectiveMax, isBasisMeasured};
   }
 
-  /** Recompute, then bring the observers, storage and subscribers along. */
+  /** Recompute, then bring the observers, the handle, storage and subscribers along. */
   function commit(): void {
     if (isDestroyed) {
       return;
     }
     if (isSuspended) {
-      // No observers: the last measured basis stands.
+      // No observers and no handle: the last measured basis stands.
       compute();
     } else {
       // The observation a computation needs can change with it (a default
@@ -541,6 +641,9 @@ export function createResizableAs(
           break;
         }
       }
+    }
+    if (handle != null && !isSuspended) {
+      announce();
     }
     persist();
     const reported = {
@@ -604,6 +707,59 @@ export function createResizableAs(
       written = next;
       persistState(key, {size: next.size, isCollapsed: next.isCollapsed});
     }
+  }
+
+  const original = new Map<string, string | null>();
+  if (handle != null) {
+    for (const name of MANAGED_ATTRIBUTES) {
+      original.set(name, handle.getAttribute(name));
+    }
+  }
+  const hasOwnName =
+    handle != null &&
+    (handle.hasAttribute('aria-label') ||
+      handle.hasAttribute('aria-labelledby'));
+
+  const setAttribute = (name: string, value: string | null) => {
+    if (handle == null) {
+      return;
+    }
+    if (value == null) {
+      handle.removeAttribute(name);
+    } else if (handle.getAttribute(name) !== value) {
+      handle.setAttribute(name, value);
+    }
+  };
+
+  function announce(): void {
+    if (original.get('role') == null) {
+      setAttribute('role', 'separator');
+    }
+    if (!hasOwnName) {
+      setAttribute('aria-label', opts.label ?? english[LABEL_KEY]);
+    }
+    const {size, isCollapsed, min, effectiveMax} = derived;
+    // The attributes ResizeHandle renders, from the same derivation.
+    const aria = separatorAttributes({
+      direction: direction(),
+      isDisabled: isDisabled(),
+      value: {
+        size: isCollapsed ? 0 : size,
+        minPx: min,
+        maxPx: effectiveMax,
+        isCollapsed,
+        collapsedText: opts.collapsedLabel ?? english[COLLAPSED_LABEL_KEY],
+      },
+    });
+    if (original.get('tabindex') == null) {
+      setAttribute('tabindex', String(aria.tabIndex));
+    }
+    setAttribute('aria-orientation', aria['aria-orientation']);
+    setAttribute('aria-valuenow', toAttribute(aria['aria-valuenow']));
+    setAttribute('aria-valuemin', toAttribute(aria['aria-valuemin']));
+    setAttribute('aria-valuemax', toAttribute(aria['aria-valuemax']));
+    setAttribute('aria-valuetext', toAttribute(aria['aria-valuetext']));
+    setAttribute('aria-disabled', toAttribute(aria['aria-disabled']));
   }
 
   const setCollapsed = (value: boolean) => {
@@ -736,8 +892,60 @@ export function createResizableAs(
     commit();
   }
 
-  /** The observers go; a gesture in flight has ended first. */
+  const gesture: ResizeGesture = createResizeGesture(
+    () => handle,
+    model,
+    () => ({
+      direction: direction(),
+      isReversed: isReversed(),
+      isDisabled: isDisabled(),
+    }),
+    dragging => {
+      setAttribute('data-resizing', dragging ? '' : null);
+    },
+  );
+
+  // --- Listeners on the handle ---
+  const onPointerDown = (event: PointerEvent) => {
+    gesture.pointerDown(event);
+  };
+  const onPointerMove = (event: PointerEvent) => {
+    gesture.pointerMove(event);
+  };
+  const onPointerUp = (event: PointerEvent) => {
+    gesture.pointerUp(event);
+  };
+  const onPointerCancel = (event: PointerEvent) => {
+    gesture.pointerCancel(event);
+  };
+  const onKeyDown = (event: KeyboardEvent) => {
+    gesture.keyDown(event);
+  };
+  const onDoubleClick = () => {
+    gesture.doubleClick();
+  };
+  function bindHandle(): void {
+    handle?.addEventListener('pointerdown', onPointerDown);
+    handle?.addEventListener('pointermove', onPointerMove);
+    handle?.addEventListener('pointerup', onPointerUp);
+    handle?.addEventListener('pointercancel', onPointerCancel);
+    handle?.addEventListener('lostpointercapture', onPointerCancel);
+    handle?.addEventListener('keydown', onKeyDown);
+    handle?.addEventListener('dblclick', onDoubleClick);
+  }
+
+  /**
+   * The handle's listeners and the observers go, and the handle gets its own
+   * attributes back; a gesture in flight has ended first.
+   */
   function letGoOfPage(): void {
+    handle?.removeEventListener('pointerdown', onPointerDown);
+    handle?.removeEventListener('pointermove', onPointerMove);
+    handle?.removeEventListener('pointerup', onPointerUp);
+    handle?.removeEventListener('pointercancel', onPointerCancel);
+    handle?.removeEventListener('lostpointercapture', onPointerCancel);
+    handle?.removeEventListener('keydown', onKeyDown);
+    handle?.removeEventListener('dblclick', onDoubleClick);
     stopObservingContainer?.();
     stopObservingContainer = null;
     containerElement = null;
@@ -745,8 +953,12 @@ export function createResizableAs(
       window.removeEventListener('resize', onViewportResize);
       isObservingViewport = false;
     }
+    for (const [name, value] of original) {
+      setAttribute(name, value);
+    }
   }
 
+  bindHandle();
   commit();
 
   const controller: ResizableController = {
@@ -780,8 +992,11 @@ export function createResizableAs(
       if (isDestroyed) {
         return;
       }
-      // A gesture a ResizeHandle drove through the region's model ends first,
-      // so the size it reached is saved.
+      // A drag in flight ends first, as cancelled, so the size it reached is
+      // saved and the pointer and the body's cursor are released.
+      gesture.interrupt();
+      // A gesture a ResizeHandle drove through the region's model, rather
+      // than the factory's own, ends the same way.
       endGesture();
       isDestroyed = true;
       if (!isSuspended) {
@@ -804,6 +1019,7 @@ export function createResizableAs(
       if (isDestroyed || isSuspended) {
         return;
       }
+      gesture.interrupt();
       endGesture();
       isSuspended = true;
       letGoOfPage();
@@ -813,6 +1029,7 @@ export function createResizableAs(
         return;
       }
       isSuspended = false;
+      bindHandle();
       commit();
     },
     syncContainer() {
