@@ -835,6 +835,33 @@ describe('CommandPalette', () => {
       expect(input).not.toHaveAttribute('aria-activedescendant');
     });
 
+    it('reopens empty with the bootstrap list after the app closes it', async () => {
+      const user = userEvent.setup();
+      const source = spySource(fruits);
+      const {rerender} = render(
+        <CommandPalette isOpen onOpenChange={() => {}} searchSource={source} />,
+      );
+      await user.type(screen.getByRole('combobox'), 'apri');
+      await waitFor(() => expect(screen.queryByText('Apple')).toBeNull());
+
+      rerender(
+        <CommandPalette
+          isOpen={false}
+          onOpenChange={() => {}}
+          searchSource={source}
+        />,
+      );
+      rerender(
+        <CommandPalette isOpen onOpenChange={() => {}} searchSource={source} />,
+      );
+
+      await waitFor(() =>
+        expect(screen.getByText('Apple')).toBeInTheDocument(),
+      );
+      expect(screen.getByText('Apricot')).toBeInTheDocument();
+      expect(screen.getByRole('combobox')).toHaveValue('');
+    });
+
     it('does not query a new source while closed', async () => {
       const first = spySource(fruits);
       const second = spySource(tools);

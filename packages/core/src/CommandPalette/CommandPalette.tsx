@@ -70,6 +70,8 @@ export interface CommandPaletteProps<
    * Search source providing items. Implements `search(query)` and `bootstrap()`.
    * Same interface as Typeahead's searchSource.
    * Use `createStaticSource` for simple static lists.
+   * A new source while the palette is open runs the shown query again, so
+   * keep the source stable (for example with `useMemo`).
    */
   searchSource: SearchSource<T>;
 
@@ -278,10 +280,11 @@ function ItemRenderer<T extends SearchableItem>({
  *
  * @example
  * ```
+ * const source = useMemo(() => createStaticSource(commands), [commands]);
  * <CommandPalette
  *   isOpen={isOpen}
  *   onOpenChange={setIsOpen}
- *   searchSource={createStaticSource(commands)}
+ *   searchSource={source}
  * />
  * ```
  */
@@ -506,15 +509,25 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
     ],
   );
 
-  // Bootstrap on open. We use a ref to avoid re-triggering when
-  // runSearch's identity changes (it depends on searchResults).
+  // A ref, so the Effect below does not run again when runSearch's identity
+  // changes (it depends on searchResults).
   const runSearchRef = useRef(runSearch);
   runSearchRef.current = runSearch;
 
+  // Syncs the caller's search source with the open palette. Opening runs the
+  // bootstrap; a new source while open runs the shown query again. Cleanup
+  // cancels the source's pending request when it is replaced or closed.
+  const openSourceRef = useRef<SearchSource<T> | null>(null);
   useEffect(() => {
-    if (isOpen) {
-      runSearchRef.current(currentQueryRef.current);
+    if (!isOpen) {
+      openSourceRef.current = null;
+      return;
     }
+    const isNewSourceWhileOpen =
+      openSourceRef.current !== null && openSourceRef.current !== searchSource;
+    openSourceRef.current = searchSource;
+    runSearchRef.current(isNewSourceWhileOpen ? currentQueryRef.current : '');
+    return () => searchSource.cancel?.();
   }, [isOpen, searchSource]);
 
   // Wrap combobox's onKeyDown to preserve inline-preview Escape handling and
