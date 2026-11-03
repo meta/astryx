@@ -324,6 +324,22 @@ describe('BottomSheetPanel', () => {
     expect(handleBar![1]).toContain("colorVars['--color-background-surface']");
   });
 
+  // While the sheet's transform animates between detents, WebKit can draw the
+  // bar under the scrolling body. The pill then vanishes until the sheet rests.
+  // This is asserted on the style definition, as the test above is.
+  it('gives the floating handle bar a compositing layer of its own', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const source = fs.readFileSync(
+      path.resolve(__dirname, './BottomSheetPanel.tsx'),
+      'utf-8',
+    );
+
+    const handleBar = source.match(/handleBar: \{([\s\S]*?)\n {2}\},/);
+    expect(handleBar).not.toBeNull();
+    expect(handleBar![1]).toContain("willChange: 'transform'");
+  });
+
   // In dark mode the surface fill and the scrim sit a few RGB steps apart and
   // the drop shadow is black on near-black, so the fill alone leaves the
   // sheet's left and right edges invisible against the scrim. A hairline on
