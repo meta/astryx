@@ -697,3 +697,51 @@ export const GrabZoneOnShortItems: StoryObj<typeof ShortItems> = {
   args: {pillPlacement: 'auto', position: 'inline'},
   render: args => <ShortItems {...args} />,
 };
+
+/**
+ * Browser fixture for a pill that shows on hover beside an overlay Handle.
+ * The pill can sit outside the Grab zone, so the pointer crosses a gap to
+ * reach it.
+ */
+function HoverPillOnOverlay({
+  pillPlacement,
+  dir,
+}: {
+  pillPlacement: 'start' | 'end';
+  dir: 'ltr' | 'rtl';
+}) {
+  const sidebar = useResizable({defaultSize: 250, minSize: 150, maxSize: 500});
+  return (
+    <div dir={dir} {...stylex.props(ps.shell)}>
+      <Layout
+        height="fill"
+        start={
+          <>
+            <LayoutPanel width={sidebar.size} hasDivider={false}>
+              <Text>{sidebar.size}px</Text>
+            </LayoutPanel>
+            <ResizeHandle
+              direction="horizontal"
+              position="overlay"
+              pillPlacement={pillPlacement}
+              isAlwaysVisible={false}
+              resizable={sidebar.props}
+              label="Resize sidebar"
+            />
+          </>
+        }
+        content={
+          <LayoutContent>
+            <Heading level={4}>Content</Heading>
+          </LayoutContent>
+        }
+      />
+    </div>
+  );
+}
+
+export const HoverPillOnOverlayHandle: StoryObj<typeof HoverPillOnOverlay> = {
+  tags: ['!autodocs', 'no-visual'],
+  args: {pillPlacement: 'start', dir: 'ltr'},
+  render: args => <HoverPillOnOverlay {...args} />,
+};

@@ -221,3 +221,48 @@ test('a drag on a 30-minute event moves it, and a drag on its Handle resizes it'
   await expect(handle).toHaveAttribute('aria-valuenow', '36');
   await expect(event).toHaveAttribute('data-top', '48');
 });
+
+const HOVER_PILL_STORY = 'core-resizable--hover-pill-on-overlay-handle';
+
+for (const [dir, pillPlacement] of [
+  ['ltr', 'start'],
+  ['rtl', 'end'],
+] as const) {
+  test(`a pill shown on hover beside an overlay Handle stays reachable from the Grab zone (${dir}, pillPlacement="${pillPlacement}")`, async ({
+    page,
+  }) => {
+    await openStory(page, storybook(), HOVER_PILL_STORY, {dir, pillPlacement});
+    const handle = page.getByRole('separator', {name: 'Resize sidebar'});
+    await expect(handle).toBeVisible();
+    const pill = handle.locator('.astryx-resize-handle-pill');
+    const zoneBox = await handle.locator(':scope > *').first().boundingBox();
+    if (zoneBox == null) {
+      throw new Error('the Grab zone has no box');
+    }
+    // Hovering the zone shows the pill.
+    await page.mouse.move(
+      zoneBox.x + zoneBox.width / 2,
+      zoneBox.y + zoneBox.height / 2,
+    );
+    await expect(pill).toHaveCSS('opacity', '1');
+    const pillBox = await pill.boundingBox();
+    if (pillBox == null) {
+      throw new Error('the Grip pill has no box');
+    }
+    // The pill sits outside the zone, so the pointer crosses a gap to it.
+    expect(
+      pillBox.x >= zoneBox.x + zoneBox.width ||
+        pillBox.x + pillBox.width <= zoneBox.x,
+      'the pill sits outside the Grab zone',
+    ).toBe(true);
+    const x = pillBox.x + pillBox.width / 2;
+    const y = pillBox.y + pillBox.height / 2;
+    await page.mouse.move(x, y, {steps: 4});
+    await expect(pill).toHaveCSS('opacity', '1');
+    const before = await handle.getAttribute('aria-valuenow');
+    await page.mouse.down();
+    await page.mouse.move(x + (dir === 'ltr' ? 40 : -40), y, {steps: 4});
+    await page.mouse.up();
+    await expect(handle).not.toHaveAttribute('aria-valuenow', before ?? '');
+  });
+}
