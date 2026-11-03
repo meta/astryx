@@ -46,7 +46,8 @@ type AuditCase = {
   interaction: 'none' | 'focus' | 'hover' | 'press';
   // Story args set through the Storybook channel before the capture.
   args?: Record<string, unknown>;
-  variant?: string;
+  // Adds a key suffix that names a case's story args.
+  suffix?: string;
 };
 
 type AuditReceipt = {
@@ -90,13 +91,13 @@ function add(
     interaction?: AuditCase['interaction'];
     modes?: Mode[];
     args?: Record<string, unknown>;
-    variant?: string;
+    suffix?: string;
   } = {},
 ) {
   const theme = options.theme ?? 'neutral';
   const interaction = options.interaction ?? 'none';
   for (const mode of options.modes ?? ['light', 'dark']) {
-    const parts = [story, options.variant, theme];
+    const parts = [story, options.suffix, theme];
     if (interaction !== 'none') {
       parts.push(interaction);
     }
@@ -107,7 +108,7 @@ function add(
       theme,
       interaction,
       args: options.args,
-      variant: options.variant,
+      suffix: options.suffix,
     });
   }
 }
@@ -126,7 +127,7 @@ add('destructive', {interaction: 'focus', modes: ['light']});
 add('with-tooltip', {interaction: 'focus'});
 add('default', {interaction: 'hover', modes: ['light']});
 add('primary', {interaction: 'press', modes: ['light']});
-add('default', {variant: 'elevated', args: {elevation: 'med'}});
+add('default', {suffix: 'elevated', args: {elevation: 'med'}});
 add('loading');
 add('disabled');
 add('emoji-icon', {modes: ['light']});
@@ -225,6 +226,7 @@ async function observe(page: Page) {
             boxShadow: style?.boxShadow,
             transform: style?.transform,
             backgroundColor: style?.backgroundColor,
+            backgroundImage: style?.backgroundImage,
             focusVisible: button.matches(':focus-visible'),
             outlineStyle: style?.outlineStyle,
             outlineWidth: style?.outlineWidth,
