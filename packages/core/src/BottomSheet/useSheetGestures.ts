@@ -738,7 +738,9 @@ export function useSheetGestures({
         }
         return;
       }
-      recordSheetHeight(node.getBoundingClientRect().height);
+      // No measure here: reading the height while the sheet mounts forces a
+      // layout in the middle of the open. The observer's first report comes
+      // after the browser's own layout, before the first paint.
       const ro = new ResizeObserver(entries => {
         const entry = entries[0];
         if (entry) {

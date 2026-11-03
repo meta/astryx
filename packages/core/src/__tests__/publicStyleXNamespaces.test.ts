@@ -30,6 +30,7 @@ import * as selectorPresentation from '@astryxdesign/core/Selector/selectorPrese
 import * as stack from '@astryxdesign/core/Stack/stack.stylex';
 import * as stackItem from '@astryxdesign/core/Stack/stackItem.stylex';
 import * as text from '@astryxdesign/core/Text/text.stylex';
+import * as indicatorPress from '@astryxdesign/core/internal/indicatorPress.stylex';
 import * as dataTokens from '@astryxdesign/core/theme/dataTokens.stylex';
 import * as tokens from '@astryxdesign/core/theme/tokens.stylex';
 import * as focusOutline from '@astryxdesign/core/utils/focusOutline.stylex';
@@ -136,7 +137,7 @@ type StylexPropsArgument = stylex.StyleXArray<
 type NoKeys<Namespaces> = {[Name in keyof Namespaces]: never};
 
 /**
- * The public `.stylex` subpaths, each with the exports that `stylex.create`
+ * The exported `.stylex` subpaths, each with the exports that `stylex.create`
  * made. A subpath with no style namespace exports only variables, constants,
  * a marker or style builders.
  */
@@ -188,6 +189,7 @@ const styleNamespacesBySubpath = {
     'weightStyles',
     'wordBreakStyles',
   ],
+  './internal/indicatorPress.stylex': [],
   './theme/dataTokens.stylex': [],
   './theme/tokens.stylex': [],
   './utils/focusOutline.stylex': ['focusOutlineStyles'],
@@ -211,6 +213,7 @@ const modulesBySubpath: Readonly<
   './Stack/stack.stylex': stack,
   './Stack/stackItem.stylex': stackItem,
   './Text/text.stylex': text,
+  './internal/indicatorPress.stylex': indicatorPress,
   './theme/dataTokens.stylex': dataTokens,
   './theme/tokens.stylex': tokens,
   './utils/focusOutline.stylex': focusOutline,

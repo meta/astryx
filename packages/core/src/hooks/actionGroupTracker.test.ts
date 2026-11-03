@@ -155,6 +155,17 @@ describe('createActionGroupTracker', () => {
     expect(second.onClick).not.toHaveBeenCalled();
   });
 
+  it('where several actions hold the point, the one the press landed on wins (a test renderer lays out nothing)', () => {
+    place(first.button, {left: 0, top: 0, width: 0, height: 0});
+    place(second.button, {left: 0, top: 0, width: 0, height: 0});
+    const group = tracker();
+    group.begin(0, 0, {landed: second.button.firstChild});
+    expect(group.highlighted).toBe(second.button);
+    group.end();
+    expect(second.onClick).toHaveBeenCalledTimes(1);
+    expect(first.onClick).not.toHaveBeenCalled();
+  });
+
   it('skips disabled actions', () => {
     second.button.disabled = true;
     const group = tracker();

@@ -351,6 +351,9 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   // by whatever paints it. A theme sets `--color-overlay-pressed`, not this.
   '--_press-paint',
   '--_press-paint-image',
+  // A checkbox row's touch press image, which an indicator that paints its
+  // own press inherits. The row writes it from the press paint above.
+  '--_indicator-press-image',
   '--_input-clear-hit-content',
   '--_power-search-sheet-hit-content',
   // Placement and swipe lifecycle values are private Toast behavior. A theme
