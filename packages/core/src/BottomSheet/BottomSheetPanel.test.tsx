@@ -161,9 +161,9 @@ describe('BottomSheetPanel', () => {
     const onMotionComplete = vi.fn();
     renderPanel({kind: 'exiting'}, {onMotionComplete});
     const panel = getPanel();
-    // Chromium cancels a running transition whose end value changes (the
-    // exit's percentage transform, when the closing frame moves the sheet's
-    // height by a fraction of a pixel) and starts one from where it was.
+    // Chromium cancels a running transition whose end value changes, and
+    // starts one from where it was. The exit's percentage transform changes
+    // when the closing frame moves the sheet's height by a fraction of a pixel.
     panel.getAnimations = () =>
       [{transitionProperty: 'transform', playState: 'running'}] as never;
     fireEvent.transitionCancel(panel, {propertyName: 'transform'});

@@ -357,10 +357,10 @@ function waitForTransition(
     if (event.target !== element || event.propertyName !== propertyName) {
       return;
     }
-    // A transition whose end value changes mid-flight (a percentage
-    // transform over a height that moved by a fraction of a pixel in the
-    // closing frame) is cancelled and replaced by one running on from where
-    // it was: that one ends the motion, not the cancel.
+    // The engine cancels a transition whose end value changes mid-flight. A
+    // percentage transform does when the closing frame moves the height by a
+    // fraction of a pixel. A replacement runs on from where it was. That one
+    // ends the motion, not the cancel.
     if (
       event.type === 'transitioncancel' &&
       hasRunningTransition(element, propertyName)
