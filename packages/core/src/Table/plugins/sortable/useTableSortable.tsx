@@ -4,7 +4,8 @@
 
 /**
  * @file useTableSortable.tsx
- * @input React, types, Icon, theme tokens, i18n (useComponentTranslator)
+ * @input React, types, Icon, the theme's `table-sort-indicator` icon slot,
+ *   theme tokens, i18n (useComponentTranslator)
  * @output Exports useTableSortable hook and sort-related types
  * @position Sortable plugin; consumed by Table via plugins prop
  *
@@ -18,6 +19,7 @@ import * as stylex from '@stylexjs/stylex';
 import {colorVars, spacingVars, radiusVars} from '../../../theme/tokens.stylex';
 import {focusOutlineProps} from '../../../utils/focusOutline.stylex';
 import {Icon} from '../../../Icon';
+import {ComponentIcon} from '../../../Icon/ComponentIcon';
 import {resolveContextActions} from '../../tableContextMenu';
 import type {
   TablePlugin,
@@ -227,7 +229,7 @@ function SortHeaderButton<T extends Record<string, unknown>>({
     config.isMultiSortEnabled === true && config.sort.length > 1;
   const rank = isMultiSort && entryIndex >= 0 ? entryIndex + 1 : null;
 
-  const iconName =
+  const indicator =
     direction === 'ascending'
       ? 'arrowUp'
       : direction === 'descending'
@@ -303,9 +305,10 @@ function SortHeaderButton<T extends Record<string, unknown>>({
               ? sortStyles.iconWrapperActive
               : sortStyles.iconWrapperUnsorted,
           )}>
-          <Icon
-            icon={iconName}
-            size="xsm"
+          <ComponentIcon
+            slot="table-sort-indicator"
+            state={{direction: direction ?? 'none'}}
+            fallback={{icon: indicator, size: 'xsm'}}
             color={direction != null ? 'accent' : 'secondary'}
           />
         </span>
