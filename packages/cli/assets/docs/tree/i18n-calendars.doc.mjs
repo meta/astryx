@@ -11,7 +11,7 @@
 export const docs = {
   type: 'generic',
   name: 'i18n-calendars',
-  title: 'Calendars',
+  title: 'Other calendars',
   placement: {
     parent: 'namespace:internationalization',
     slot: 'guides',
