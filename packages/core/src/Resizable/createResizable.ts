@@ -162,7 +162,7 @@ function readWindowExtent(direction: ResizableDirection): number | null {
   return direction === 'vertical' ? window.innerHeight : window.innerWidth;
 }
 
-/** A warning already given, so a resolution repeated silently stays quiet. */
+/** Starts as warned: the factory warns, and this first-render read does not. */
 const QUIET = {current: true};
 
 /**
