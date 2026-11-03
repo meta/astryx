@@ -38,6 +38,8 @@ import {
   startTransition,
   StrictMode,
   Suspense,
+  useLayoutEffect,
+  useRef,
   useState,
   type ProfilerOnRenderCallback,
 } from 'react';
@@ -1545,6 +1547,62 @@ describe('BaseTypeahead hasEntriesOnFocus', () => {
     expect(queryBusySpinner()).not.toBeInTheDocument();
     expect(
       screen.getByRole('option', {name: 'Query result', hidden: true}),
+    ).toBeInTheDocument();
+  });
+
+  it('keeps a read that the replacement source starts earlier in the commit that replaces it', async () => {
+    let settleBootstrap: (items: SearchableItem[]) => void = () => {};
+    const firstSource: SearchSource = {search: () => [], bootstrap: () => []};
+    const replacementSource: SearchSource = {
+      search: () => [],
+      bootstrap: async () =>
+        new Promise<SearchableItem[]>(resolve => {
+          settleBootstrap = resolve;
+        }),
+    };
+
+    // A component committed before the field focuses it when the scope
+    // changes, in the same commit that hands the field its new source.
+    function FocusOnScopeChange({scope}: {scope: string}) {
+      const isFirstRef = useRef(true);
+      useLayoutEffect(() => {
+        if (isFirstRef.current) {
+          isFirstRef.current = false;
+          return;
+        }
+        screen.getByRole('combobox').focus();
+      }, [scope]);
+      return null;
+    }
+    function ScopedField({scope}: {scope: string}) {
+      return (
+        <>
+          <FocusOnScopeChange scope={scope} />
+          <Typeahead
+            label="Test"
+            searchSource={scope === 'first' ? firstSource : replacementSource}
+            value={null}
+            onChange={() => {}}
+            hasEntriesOnFocus
+          />
+        </>
+      );
+    }
+
+    const {rerender} = render(<ScopedField scope="first" />);
+    const input = screen.getByRole('combobox');
+    rerender(<ScopedField scope="replacement" />);
+    expect(input).toHaveFocus();
+    expect(input).toHaveAttribute('aria-busy', 'true');
+
+    await act(async () => {
+      settleBootstrap([{id: 'entry', label: 'Entry'}]);
+      await Promise.resolve();
+    });
+    expect(input).not.toHaveAttribute('aria-busy');
+    expect(queryBusySpinner()).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('option', {name: 'Entry', hidden: true}),
     ).toBeInTheDocument();
   });
 

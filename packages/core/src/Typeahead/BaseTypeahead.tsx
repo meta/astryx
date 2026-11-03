@@ -24,6 +24,7 @@ import React, {
   useCallback,
   useEffect,
   useId,
+  useInsertionEffect,
   useMemo,
   useRef,
   useState,
@@ -797,24 +798,36 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
     }
   }
 
-  // Syncs the replaced source's requests and the wrapper's busy lane. Results
-  // that arrive from a replaced source must not land in the new source's menu,
-  // so the replacement starts a new generation. This runs when the replacement
-  // commits, not in render. React can render a replacement and then discard
-  // it, for example when a transition suspends and a newer update replaces
-  // it. The source that stays then keeps its read.
+  // Results that arrive from a replaced source must not land in the new
+  // source's menu, so the replacement starts a new generation. That happens
+  // when the replacement commits, not in render. React can render a
+  // replacement and then discard it, for example when a transition suspends
+  // and a newer update replaces it. The source that stays then keeps its read.
+  // An insertion effect runs before every layout effect and ref callback of
+  // its commit, so a read that one of them starts against the replacement
+  // gets a later generation and stays current.
   const prevSearchSourceRef = useRef(searchSource);
-  useIsomorphicLayoutEffect(() => {
+  const replacedSourceRef = useRef<SearchSource<T> | null>(null);
+  useInsertionEffect(() => {
     if (prevSearchSourceRef.current === searchSource) {
       return;
     }
-    prevSearchSourceRef.current.cancel?.();
+    replacedSourceRef.current = prevSearchSourceRef.current;
     prevSearchSourceRef.current = searchSource;
     sourceGenRef.current = ++searchGenRef.current;
-    // The abandoned read cannot end the busy state. The replacing render
-    // cleared the state. This clears the ref and the lane.
-    if (loadingRef.current) {
-      loadingRef.current = false;
+    // The replacing render cleared the busy state.
+    loadingRef.current = false;
+  }, [searchSource]);
+  // Syncs the replaced source's requests and the wrapper's busy lane. A read
+  // of the replacement that already started keeps the lane busy.
+  useIsomorphicLayoutEffect(() => {
+    const replacedSource = replacedSourceRef.current;
+    if (replacedSource == null) {
+      return;
+    }
+    replacedSourceRef.current = null;
+    replacedSource.cancel?.();
+    if (!loadingRef.current) {
       onLoadingChangeRef.current?.(false);
     }
   }, [searchSource]);
