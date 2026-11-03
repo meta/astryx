@@ -3682,6 +3682,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-overflow-editor-toolbar",
+      "path": "examples/use-overflow/editor-toolbar",
+      "aliases": []
+    },
+    {
       "name": "example-use-popover-quick-actions",
       "path": "examples/use-popover/quick-actions",
       "aliases": []
