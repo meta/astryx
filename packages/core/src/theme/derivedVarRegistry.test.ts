@@ -110,6 +110,15 @@ const STRUCTURAL_VARS = new Set([
   // every render and read by the fill's transform. Runtime state, never
   // authored by a theme.
   '--_progress-bar-fill',
+  // ProgressBar's touch layer (ProgressBarTouch) writes these inline on every
+  // render: the touch move's duration and curve, the three-step return offset
+  // and the touch minimum. The duration and curve are the progress table's
+  // motion roles, which no theme sets. Runtime state, never authored by a
+  // theme.
+  '--_progress-bar-move',
+  '--_progress-bar-curve',
+  '--_progress-bar-flip',
+  '--_progress-bar-min',
 ]);
 
 /**
@@ -343,6 +352,10 @@ const VARS_WITHOUT_DERIVED_MAPPING = new Set([
   '--_toast-swipe-exit-y',
   '--_toast-swipe-opacity',
   '--_toast-swipe-scale',
+  // Set by each ChatMessage article from its own content and read as its
+  // avatar's top margin, so the avatar lines up with a name row. Content
+  // state, not a value a theme author sets.
+  '--_chat-avatar-offset',
   // Indentation and row-spacing metrics: --tree-list-indent is the authorable
   // step, --_tree-indent the per-row distance TreeListItem computes from it.
   // --tree-list-row-gap is applied as half a padding-block on each row wrapper,

@@ -25,6 +25,7 @@
 import {transformAsync} from '@babel/core';
 import stylexBabelPlugin from '@stylexjs/babel-plugin';
 import stylexResolution from './stylex-module-resolution.cjs';
+import {STYLEX_GENERATED_VARIABLE} from './lib/stylex-generated-variable.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -36,7 +37,7 @@ const ROOT = path.resolve(__dirname, '..');
 // Per-package build targets. Each entry defines where source lives, where the
 // stylesheet is written, and any StyleX module-resolution aliases needed for
 // cross-package theme-token imports (lab consumes @astryxdesign/core tokens).
-const TARGETS = {
+export const TARGETS = {
   core: {
     src: path.resolve(ROOT, 'packages/core/src'),
     dist: path.resolve(ROOT, 'packages/core/dist'),
@@ -377,7 +378,7 @@ export function composePackageStylesheet(banner, css) {
  * object or string, or a `defineConsts` member passed to `firstThatWorks` on
  * its own. The dynamic-style variables StyleX sets inline (`--x-<property>`)
  * are not generated names and are never reported, nor is a name that is not
- * hash-shaped (StyleX's hash is four to seven base-36 characters).
+ * hash-shaped (see STYLEX_GENERATED_VARIABLE).
  *
  * SYNC: packages/build/src/undefinedVariables.ts is the same check for an
  * app's production build.
@@ -389,9 +390,14 @@ export function undefinedStyleXVariables(css, providerCss = '') {
     ),
   );
   const read = new Set(
-    [...css.matchAll(/var\(\s*(--x[a-z0-9]{4,7})\s*[,)]/g)].map(
-      match => match[1],
-    ),
+    [
+      ...css.matchAll(
+        new RegExp(
+          String.raw`var\(\s*(${STYLEX_GENERATED_VARIABLE})\s*[,)]`,
+          'g',
+        ),
+      ),
+    ].map(match => match[1]),
   );
   return [...read].filter(name => !declared.has(name)).sort();
 }

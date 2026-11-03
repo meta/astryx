@@ -443,9 +443,10 @@ describe('Node-tooling CI routing', () => {
   });
 
   it('preserves the historical joins and fails them on owned-lane failure', () => {
-    // room only tells test when CI is full (ci-admission.test.mjs).
+    // room and admission only tell test when CI is full (ci-admission.test.mjs).
     expect(ci.jobs.test.needs).toEqual([
       'room',
+      'admission',
       'heavy-ci',
       'release-bump',
       'test-ui',
@@ -457,6 +458,7 @@ describe('Node-tooling CI routing', () => {
     ]);
     expect(ci.jobs.build.needs).toEqual([
       'room',
+      'admission',
       'heavy-ci',
       'build-storybook',
       'typecheck',
