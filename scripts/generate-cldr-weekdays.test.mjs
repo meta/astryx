@@ -13,6 +13,7 @@ import {
   resolveCldrSourceLocale,
 } from './generate-cldr-weekdays.mjs';
 import {weekdayHeaderNamesByLocale} from '../packages/core/src/Calendar/weekdayHeaderNames.generated';
+import {MAX_ABBREVIATED_HEADER_LENGTH} from '../packages/core/src/Calendar/getWeekdayHeaderNames';
 
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -86,6 +87,8 @@ describe('generate-cldr-weekdays', () => {
 
   it('picks abbreviated names only where all seven fit in four characters', () => {
     expect(MAX_ABBREVIATED_LENGTH).toBe(4);
+    // The runtime fallback for unshipped languages applies the same limit.
+    expect(MAX_ABBREVIATED_HEADER_LENGTH).toBe(MAX_ABBREVIATED_LENGTH);
     expect(weekdayHeaderNamesByLocale.en).toEqual([
       'Sun',
       'Mon',
@@ -95,8 +98,12 @@ describe('generate-cldr-weekdays', () => {
       'Fri',
       'Sat',
     ]);
-    expect(weekdayHeaderNamesByLocale.en).toEqual(readRawCldr('en', 'abbreviated'));
-    expect(weekdayHeaderNamesByLocale.fr).toEqual(readRawCldr('fr', 'abbreviated'));
+    expect(weekdayHeaderNamesByLocale.en).toEqual(
+      readRawCldr('en', 'abbreviated'),
+    );
+    expect(weekdayHeaderNamesByLocale.fr).toEqual(
+      readRawCldr('fr', 'abbreviated'),
+    );
     // Whole-word or longer abbreviations keep the whole locale on short names.
     for (const locale of ['pt-PT', 'pl', 'he', 'da', 'vi', 'ar']) {
       expect(weekdayHeaderNamesByLocale[locale]).toEqual(

@@ -239,6 +239,18 @@ describe('Calendar', () => {
     ).toEqual(['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']);
   });
 
+  it('shows the platform narrow names for an unshipped locale whose abbreviated names run past four characters', () => {
+    render(
+      <InternationalizationProvider locale="sw-KE">
+        <Calendar />
+      </InternationalizationProvider>,
+    );
+
+    expect(
+      screen.getAllByRole('columnheader').map(header => header.textContent),
+    ).toEqual(['S', 'M', 'T', 'W', 'T', 'F', 'S']);
+  });
+
   it('updates the month header and subsequent navigation with provider locale', async () => {
     const user = userEvent.setup();
     const renderCalendar = (locale: 'en-US' | 'es-ES') => (

@@ -103,6 +103,28 @@ describe('getWeekdayHeaderNames', () => {
     ]);
   });
 
+  it('uses the platform narrow names where an unshipped language abbreviates past four characters', () => {
+    // sw abbreviates with whole words (Jumapili), fa with up to eight letters.
+    expect(getWeekdayHeaderNames('sw-KE')).toEqual([
+      'S',
+      'M',
+      'T',
+      'W',
+      'T',
+      'F',
+      'S',
+    ]);
+    expect(getWeekdayHeaderNames('fa-IR')).toEqual([
+      'ی',
+      'د',
+      'س',
+      'چ',
+      'پ',
+      'ج',
+      'ش',
+    ]);
+  });
+
   it('safely falls back to English for malformed and unknown locales', () => {
     expect(getWeekdayHeaderNames('not_a_locale')).toEqual(
       weekdayHeaderNamesByLocale.en,

@@ -8,6 +8,7 @@
  *   DateInput and DateTimeInput bottom sheets; not exported from the package
  */
 
+import {characterCount} from '../utils/characters';
 import type {DayOfWeek} from '../utils/dateTypes';
 import {plainDateWeekdayNames} from '../utils/plainDate';
 import {
@@ -19,11 +20,18 @@ const weekdayNamesByLocale: Readonly<Record<string, WeekdayHeaderNames>> =
   weekdayHeaderNamesByLocale;
 const englishWeekdayNames = weekdayNamesByLocale.en;
 
+/** The longest abbreviated name a header row takes; the generator uses the same. */
+export const MAX_ABBREVIATED_HEADER_LENGTH = 4;
+
+function fitsHeader(names: ReadonlyArray<string>): boolean {
+  return names.every(
+    name => characterCount(name) <= MAX_ABBREVIATED_HEADER_LENGTH,
+  );
+}
+
 /**
- * Sunday-first names: the generated row for the exact locale or its language.
- * A language with no generated row keeps its own words, so it gets the
- * abbreviated names the platform formats. A malformed tag, or a language the
- * platform does not know, gets English.
+ * A language with no generated row keeps its own words. `Intl` has no CLDR
+ * short width, so names too long for the column fall to the narrow width.
  */
 function sundayFirstNames(locale: string): ReadonlyArray<string> {
   let parsed: Intl.Locale;
@@ -32,11 +40,21 @@ function sundayFirstNames(locale: string): ReadonlyArray<string> {
   } catch {
     return englishWeekdayNames;
   }
-  return (
+  const generated =
     weekdayNamesByLocale[parsed.baseName] ??
-    weekdayNamesByLocale[parsed.language] ??
-    plainDateWeekdayNames(parsed.baseName) ??
-    englishWeekdayNames
+    weekdayNamesByLocale[parsed.language];
+  if (generated != null) {
+    return generated;
+  }
+  const abbreviated = plainDateWeekdayNames(parsed.baseName);
+  if (abbreviated == null) {
+    return englishWeekdayNames;
+  }
+  if (fitsHeader(abbreviated)) {
+    return abbreviated;
+  }
+  return (
+    plainDateWeekdayNames(parsed.baseName, 'narrow') ?? englishWeekdayNames
   );
 }
 

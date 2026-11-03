@@ -1008,6 +1008,18 @@ describe('plainDateWeekdayNames', () => {
     ]);
   });
 
+  it('formats the narrow width on request', () => {
+    expect(plainDateWeekdayNames('en', 'narrow')).toEqual([
+      'S',
+      'M',
+      'T',
+      'W',
+      'T',
+      'F',
+      'S',
+    ]);
+  });
+
   it('returns null for a language the platform has no data for', () => {
     expect(plainDateWeekdayNames('xx-ZZ')).toBeNull();
   });

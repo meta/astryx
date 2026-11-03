@@ -366,14 +366,19 @@ export const DATE_FORMAT_WEEKDAY_ONLY: Intl.DateTimeFormatOptions = {
 };
 
 /**
- * The platform's abbreviated weekday names for a locale, Sunday first, or
- * `null` when the platform has no data for the locale's language. A caller
- * then uses its own fallback instead of the host's default locale.
+ * The platform's weekday names for a locale, Sunday first, in `Intl`'s
+ * `short` width (CLDR's abbreviated) or its `narrow` width. Returns `null`
+ * when the platform has no data for the locale's language, so a caller uses
+ * its own fallback instead of the host's default locale.
  */
-export function plainDateWeekdayNames(locale: Locale): string[] | null {
+export function plainDateWeekdayNames(
+  locale: Locale,
+  width: 'short' | 'narrow' = 'short',
+): string[] | null {
+  const options: Intl.DateTimeFormatOptions = {weekday: width};
   // A language the platform lacks resolves to the host's default locale.
   const resolved = dateTimeFormatFor(locale, {
-    ...DATE_FORMAT_WEEKDAY_ONLY,
+    ...options,
     calendar: 'gregory',
   }).resolvedOptions().locale;
   if (new Intl.Locale(resolved).language !== new Intl.Locale(locale).language) {
@@ -381,11 +386,7 @@ export function plainDateWeekdayNames(locale: Locale): string[] | null {
   }
   // January 4, 1970 was a Sunday.
   return Array.from({length: 7}, (_, day) =>
-    plainDateFormat(
-      {year: 1970, month: 1, day: 4 + day},
-      DATE_FORMAT_WEEKDAY_ONLY,
-      locale,
-    ),
+    plainDateFormat({year: 1970, month: 1, day: 4 + day}, options, locale),
   );
 }
 
