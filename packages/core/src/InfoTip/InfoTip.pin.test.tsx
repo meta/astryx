@@ -212,6 +212,8 @@ describe('InfoTip press-to-pin (component:InfoTip FR2)', () => {
     vi.mocked(HTMLElement.prototype.hidePopover).mockClear();
     fireEvent.pointerDown(trigger, {pointerType: 'mouse'});
     expect(shows(TIP)).toBe(true);
+    // The press keeps it in view; only its click pins it.
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
     fireEvent.pointerUp(trigger, {pointerType: 'mouse'});
     fireEvent.click(trigger, {detail: 1});
     expect(shows(TIP)).toBe(true);
