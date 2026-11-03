@@ -142,6 +142,15 @@ export default defineConfig({
         // `resolve` — the root's aliases do not reach it.
         resolve: {
           alias: [
+            // Catalog templates import docs-only demo content from the
+            // docsite. The docsite tsconfig maps the same specifier.
+            {
+              find: /^@astryx-docs\/demo-content$/,
+              replacement: path.join(
+                rootDir,
+                'apps/docsite/src/templateDemoContent/demoContent.tsx',
+              ),
+            },
             // Theme packages resolve to `dist/`, which no test run builds. The
             // sandbox palette suite reads their palettes as a reference corpus,
             // so point the BARE specifier at the authored source. Subpath

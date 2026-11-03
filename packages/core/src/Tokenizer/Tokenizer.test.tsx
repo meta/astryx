@@ -23,6 +23,7 @@ import {render, screen, fireEvent, act, waitFor} from '@testing-library/react';
 import {createRef, Profiler, useState} from 'react';
 import userEvent from '@testing-library/user-event';
 import {Tokenizer} from './Tokenizer';
+import {TokenizerItemRemovableContext} from './TokenizerItemRemovableContext';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import type {SearchSource, SearchableItem} from '../Typeahead/types';
 import {TestIcon} from '../__tests__/TestIcon';
@@ -200,6 +201,32 @@ describe('Tokenizer press inside and outside', () => {
 });
 
 describe('Tokenizer', () => {
+  it('asks a touch keyboard for its Search key and no autocorrection, and Enter still adds the highlighted result', async () => {
+    const onChange = vi.fn();
+    render(
+      <Tokenizer
+        label="Members"
+        searchSource={userSource}
+        value={[users[0]]}
+        onChange={onChange}
+        debounceMs={0}
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    expect(input).toHaveAttribute('enterkeyhint', 'search');
+    expect(input).toHaveAttribute('autocorrect', 'off');
+
+    fireEvent.change(input, {target: {value: 'Bob'}});
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
+    fireEvent.keyDown(input, {key: 'Enter'});
+    expect(onChange).toHaveBeenCalledWith(
+      [users[0], expect.objectContaining({label: 'Bob'})],
+      expect.objectContaining({type: 'add'}),
+    );
+  });
+
   it('forwards DOM props and ref to the combobox input while preserving focus callbacks', () => {
     const ref = createRef<HTMLInputElement>();
     const onClick = vi.fn();
@@ -1209,6 +1236,314 @@ describe('Tokenizer', () => {
 
       // Popover should not reopen with an empty menu after selection
       expect(input).toHaveAttribute('aria-expanded', 'false');
+    });
+  });
+
+  // After the tokens change, the list the field shows is the current one
+  // (spec:AST-092 FR4; component:Tokenizer FR13, FR15). Each row is one
+  // situation from the state table in the pull request: the list open or
+  // closed, a focus list or typed text, a typed search waiting for its
+  // debounce, a reload that is slow or fails, a token added or removed from
+  // inside or outside, and the limit.
+  describe('list after the tokens change', () => {
+    const slowSource: SearchSource = {
+      search: async query =>
+        users.filter(u => u.label.toLowerCase().includes(query.toLowerCase())),
+      bootstrap: async () => {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        return users.slice(0, 3);
+      },
+    };
+    function failsOnReload(): SearchSource {
+      let calls = 0;
+      return {
+        search: userSource.search,
+        bootstrap: async () => {
+          calls += 1;
+          if (calls > 1) {
+            throw new Error('offline');
+          }
+          return users.slice(0, 3);
+        },
+      };
+    }
+
+    function Controlled({
+      initial,
+      maxEntries,
+      source = userSource,
+    }: {
+      initial: SearchableItem[];
+      maxEntries?: number;
+      source?: SearchSource;
+    }) {
+      const [value, setValue] = useState(initial);
+      return (
+        <>
+          <Tokenizer
+            label="Members"
+            searchSource={source}
+            value={value}
+            onChange={setValue}
+            hasEntriesOnFocus
+            maxEntries={maxEntries}
+          />
+          <button type="button" onClick={() => setValue([users[2]])}>
+            Set Charlie
+          </button>
+          <button type="button" onClick={() => setValue([users[0]])}>
+            Set Alice
+          </button>
+          <button
+            type="button"
+            onClick={() => setValue([users[0], users[1], users[2]])}>
+            Set all three
+          </button>
+        </>
+      );
+    }
+
+    // Steps: `open` (click the field and wait for its list), `type:<text>`
+    // (type without waiting for the debounce), `listed:<name>` (wait until
+    // listed), `noResults` (wait for the empty-search message), `escape`,
+    // `set:<button>` (a value set from outside, focus stays in the field),
+    // `remove:<name>` (the token's remove button), `pick:<name>` (choose an
+    // option), `absent:<name>` (not listed right now).
+    type Row = {
+      situation: string;
+      initial: SearchableItem[];
+      maxEntries?: number;
+      source?: () => SearchSource;
+      steps: string[];
+      expanded?: boolean;
+      listed?: string[];
+      notListed?: string[];
+    };
+    const rows: Row[] = [
+      {
+        situation:
+          'focus list open, outside adds a token, choices remain: reload',
+        initial: [users[0]],
+        steps: ['open', 'listed:Charlie', 'set:Set Charlie', 'listed:Alice'],
+        expanded: true,
+        listed: ['Alice', 'Bob'],
+        notListed: ['Charlie'],
+      },
+      {
+        situation: 'focus list open, outside commits its last row: close',
+        initial: [users[0], users[1]],
+        steps: ['open', 'listed:Charlie', 'set:Set all three'],
+        expanded: false,
+      },
+      {
+        situation: 'focus list open, token removed with its button: reload',
+        initial: [users[0], users[1]],
+        steps: ['open', 'escape', 'remove:Alice', 'listed:Alice'],
+        expanded: true,
+        listed: ['Alice', 'Charlie'],
+      },
+      {
+        situation: 'focus list closed, outside change: stays closed',
+        initial: [users[0]],
+        steps: ['open', 'escape', 'set:Set Charlie'],
+        expanded: false,
+      },
+      {
+        // Whether a pick keeps the list open is FR14's, not this table's.
+        situation: 'token picked from the list (inside add): not offered again',
+        initial: [users[0]],
+        steps: ['open', 'listed:Charlie', 'pick:Charlie'],
+        notListed: ['Charlie'],
+      },
+      {
+        situation: 'focus list open, slow reload: new token never listed',
+        initial: [users[0]],
+        source: () => slowSource,
+        steps: [
+          'open',
+          'listed:Charlie',
+          'set:Set Charlie',
+          'absent:Charlie',
+          'listed:Alice',
+        ],
+        expanded: true,
+        notListed: ['Charlie'],
+      },
+      {
+        situation: 'focus list open, reload fails: close',
+        initial: [users[0]],
+        source: failsOnReload,
+        steps: ['open', 'listed:Charlie', 'set:Set Charlie'],
+        expanded: false,
+      },
+      {
+        situation: 'typed text, limit reached from outside: close',
+        initial: [users[0]],
+        maxEntries: 3,
+        steps: ['type:i', 'listed:Diana', 'set:Set all three'],
+        expanded: false,
+      },
+      {
+        situation: 'typed text matched only a token, token removed: re-search',
+        initial: [users[0], users[1]],
+        steps: ['type:ali', 'noResults', 'set:Set Charlie', 'listed:Alice'],
+        expanded: true,
+        listed: ['Alice'],
+      },
+      {
+        situation:
+          'typed text, tokens return to a set that once emptied the list: re-search',
+        initial: [users[0], users[1]],
+        steps: [
+          'open',
+          'listed:Charlie',
+          'set:Set all three',
+          'set:Set Alice',
+          'type:i',
+          'listed:Diana',
+          'set:Set all three',
+          'listed:Diana',
+        ],
+        expanded: true,
+        listed: ['Diana'],
+        notListed: ['Charlie'],
+      },
+      {
+        situation:
+          'typed search waiting for its debounce, outside commit: re-search',
+        initial: [users[0]],
+        steps: ['type:char', 'set:Set Charlie', 'absent:Charlie'],
+        expanded: true,
+        notListed: ['Charlie'],
+      },
+      {
+        situation:
+          'typed search waiting for its debounce, commit empties the shown rows: re-search',
+        initial: [users[0], users[1]],
+        steps: [
+          'open',
+          'listed:Charlie',
+          'type:d',
+          'set:Set all three',
+          'listed:Diana',
+        ],
+        expanded: true,
+        listed: ['Diana'],
+      },
+    ];
+
+    it.each(rows)('$situation', async row => {
+      const user = userEvent.setup();
+      render(
+        <Controlled
+          initial={row.initial}
+          maxEntries={row.maxEntries}
+          source={row.source?.()}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      const option = (name: string) =>
+        screen.queryByRole('option', {name, hidden: true});
+      for (const step of row.steps) {
+        const [action, arg = ''] = step.split(/:(.*)/s);
+        if (action === 'open') {
+          await user.click(input);
+          await waitFor(() => {
+            expect(input).toHaveAttribute('aria-expanded', 'true');
+          });
+        } else if (action === 'type') {
+          await user.type(input, arg);
+        } else if (action === 'listed') {
+          await waitFor(() => {
+            expect(option(arg)).toBeInTheDocument();
+          });
+        } else if (action === 'noResults') {
+          await waitFor(() => {
+            expect(screen.getByText('No results found')).toBeInTheDocument();
+          });
+        } else if (action === 'escape') {
+          await user.keyboard('{Escape}');
+        } else if (action === 'set') {
+          act(() => {
+            screen.getByRole('button', {name: arg}).click();
+          });
+        } else if (action === 'remove') {
+          await user.click(screen.getByRole('button', {name: `Remove ${arg}`}));
+        } else if (action === 'pick') {
+          await user.click(
+            screen.getByRole('option', {name: arg, hidden: true}),
+          );
+        } else if (action === 'absent') {
+          expect(option(arg)).not.toBeInTheDocument();
+        } else {
+          throw new Error(`Unknown step: ${step}`);
+        }
+      }
+      // Let any reload or debounced search settle.
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 300));
+      });
+
+      if (row.expanded != null) {
+        expect(input).toHaveAttribute(
+          'aria-expanded',
+          row.expanded ? 'true' : 'false',
+        );
+      }
+      for (const name of row.listed ?? []) {
+        expect(option(name)).toBeInTheDocument();
+      }
+      for (const name of row.notListed ?? []) {
+        expect(option(name)).not.toBeInTheDocument();
+      }
+    });
+
+    it('never shows a value set from outside while an async reload is pending', async () => {
+      const user = userEvent.setup();
+      // Whether each commit after the change painted Charlie as a choice.
+      const commitsListingCharlie: boolean[] = [];
+      let isWatching = false;
+      render(
+        <Profiler
+          id="tokenizer"
+          onRender={() => {
+            if (isWatching) {
+              commitsListingCharlie.push(
+                Array.from(document.querySelectorAll('[role="option"]')).some(
+                  option => option.textContent?.includes('Charlie'),
+                ),
+              );
+            }
+          }}>
+          <Controlled initial={[users[0]]} source={slowSource} />
+        </Profiler>,
+      );
+      const input = screen.getByRole('combobox');
+
+      await user.click(input);
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Charlie', hidden: true}),
+        ).toBeInTheDocument();
+      });
+      isWatching = true;
+      act(() => {
+        screen.getByRole('button', {name: 'Set Charlie'}).click();
+      });
+      isWatching = false;
+
+      // No commit, not even the one that adds the token, lists Charlie.
+      expect(commitsListingCharlie.length).toBeGreaterThan(0);
+      expect(commitsListingCharlie).not.toContain(true);
+      expect(
+        screen.queryByRole('option', {name: 'Charlie', hidden: true}),
+      ).not.toBeInTheDocument();
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      await waitFor(() => {
+        expect(
+          screen.getByRole('option', {name: 'Alice', hidden: true}),
+        ).toBeInTheDocument();
+      });
     });
   });
 
@@ -2451,5 +2786,69 @@ describe('Tokenizer incremental results (spec:AST-092)', () => {
       settle([people, teams]);
     });
     expect(optionLabels()).toEqual(['Ben', 'Bento', 'Create "ben x"']);
+  });
+});
+
+describe('Tokenizer locked tokens (internal removable context)', () => {
+  it('Clear all keeps a locked token and reports the last removed one', () => {
+    const onChange = vi.fn();
+    render(
+      <TokenizerItemRemovableContext value={item => item.id !== '1'}>
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1], users[2]]}
+          onChange={onChange}
+          hasClear
+        />
+      </TokenizerItemRemovableContext>,
+    );
+    expect(
+      screen.queryByRole('button', {name: 'Remove Alice'}),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', {name: 'Remove Bob'}),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: /clear/i}));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith([users[0]], {
+      item: users[2],
+      type: 'remove',
+    });
+  });
+
+  it('has no Clear all when every token is locked', () => {
+    render(
+      <TokenizerItemRemovableContext value={() => false}>
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0]]}
+          onChange={() => {}}
+          hasClear
+        />
+      </TokenizerItemRemovableContext>,
+    );
+    expect(
+      screen.queryByRole('button', {name: /clear/i}),
+    ).not.toBeInTheDocument();
+  });
+
+  it('Backspace on an empty input removes nothing while the last token is locked', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <TokenizerItemRemovableContext value={item => item.id !== '2'}>
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[users[0], users[1]]}
+          onChange={onChange}
+        />
+      </TokenizerItemRemovableContext>,
+    );
+    await user.click(screen.getByRole('combobox'));
+    await user.keyboard('{Backspace}');
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

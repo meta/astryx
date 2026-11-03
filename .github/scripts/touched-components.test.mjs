@@ -488,9 +488,11 @@ describe('per-component results', () => {
 
 describe('pr-touched-components routing', () => {
   it('runs on every pull request after the Storybook build and pr-visual, on one standard arm runner', () => {
-    expect(job.needs).toEqual(['build-storybook', 'pr-visual']);
+    // Admission too: a run CI is full for at its longest wait has its
+    // Storybook build, and builds nothing more (ci-admission.test.mjs).
+    expect(job.needs).toEqual(['admission', 'build-storybook', 'pr-visual']);
     expect(ungated(job.if)).toBe(
-      "!cancelled() && github.event_name == 'pull_request' && needs.build-storybook.result == 'success'",
+      "!cancelled() && github.event_name == 'pull_request' && needs.build-storybook.result == 'success' && needs.build-storybook.outputs.lab_only != 'true' && needs.admission.outputs.full != 'true'",
     );
     expect(job['runs-on']).toBe('ubuntu-24.04-arm');
     expect(job['timeout-minutes']).toBeLessThanOrEqual(15);

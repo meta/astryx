@@ -17,7 +17,7 @@
  * - /packages/cli/assets/templates/blocks/components/Token/ (showcase blocks)
  */
 
-import type {ReactNode} from 'react';
+import {use, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -38,12 +38,17 @@ import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
-import {innermostInteractive} from '../hooks/useClickableContainer';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {isLayerSurface} from '../Layer/layerSurfacePress';
-import {useTranslator} from '../i18n';
 import type {TokenColorMap} from './index';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
+import {TokenNamingContext} from './TokenNamingContext';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Token/Token.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -189,6 +194,8 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-full'],
     width: '16px',
     height: '16px',
+    // A token cut by its width shrinks only its label, not the button.
+    flexShrink: 0,
     color: 'inherit',
     '::after': {
       content: '""',
@@ -303,6 +310,8 @@ export function Token({
   'data-testid': testId,
   'aria-labelledby': ariaLabelledBy,
   'aria-describedby': ariaDescribedBy,
+  'aria-haspopup': ariaHasPopup,
+  'aria-expanded': ariaExpanded,
   ref,
   ...rest
 }: TokenProps) {
@@ -310,9 +319,10 @@ export function Token({
   // document controller once, so the token's output stays a pure function
   // of its props.
   const pressable = usePressFeedback();
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const LinkComponent = useLinkComponent();
   const role = useInteractiveRole({href, onClick, isDisabled});
+  const naming = use(TokenNamingContext);
 
   // When role is 'button' via context (no explicit onClick), treat as
   // if onClick was provided — the popover attaches its own handler.
@@ -321,7 +331,9 @@ export function Token({
   const removeButton = onRemove != null && (
     <button
       type="button"
-      aria-label={t('@astryx.token.remove', {label})}
+      aria-label={t('@astryx.token.remove', {
+        label: naming?.removeName ?? label,
+      })}
       onClick={e => {
         e.stopPropagation();
         onRemove(e);
@@ -346,12 +358,14 @@ export function Token({
     </>
   );
 
-  // Naming inputs reach the element that owns the token's action: the inner
-  // button of a clickable token, otherwise the root
+  // Naming and popup inputs reach the element that owns the token's action:
+  // the inner button of a clickable token, otherwise the root
   // (architecture:public-component-api INV5).
   const labellingProps = {
     'aria-labelledby': ariaLabelledBy,
     'aria-describedby': ariaDescribedBy,
+    'aria-haspopup': ariaHasPopup,
+    'aria-expanded': ariaExpanded,
   };
 
   const sharedProps = {
@@ -491,12 +505,7 @@ export function Token({
   if (effectiveOnClick != null) {
     const handleContainerClick = (e: React.MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (
-        target.closest('button, a') ||
-        // A press inside an open Tooltip or HoverCard belongs to it
-        // (component:Tooltip FR11, component:HoverCard FR11).
-        innermostInteractive(target, e.currentTarget, isLayerSurface) != null
-      ) {
+      if (target.closest('button, a')) {
         return;
       }
       effectiveOnClick(e);
@@ -531,6 +540,7 @@ export function Token({
         <button
           type="button"
           onClick={effectiveOnClick}
+          aria-label={ariaLabelledBy == null ? naming?.actionName : undefined}
           {...labellingProps}
           aria-disabled={isDisabled || undefined}
           {...(isDisabled ? disabledInteractionProps() : null)}

@@ -7,19 +7,11 @@
  * @position Internal shared helper for TimeInput and DateTimeInput; not part
  *   of the public surface
  *
- * Time of day as the locale writes it. The hour cycle, digits, separator, and
- * day-period words all come from Intl rather than a table, so a field reads
- * the same way `Timestamp` does beside it.
- *
- * The hour cycle is the locale's own: `en-US` and `ko-KR` read twelve-hour,
- * `en-GB`, `de-DE`, and `vi-VN` read twenty-four-hour. A `-u-hc-` extension
- * on the provider locale (`en-US-u-hc-h23`) carries an app's per-user
- * preference through the same path, so every Astryx time honors it.
- *
- * The parser reads back what the formatter writes: the locale's digits, its
- * hour-minute separator, and its day-period words, on either side of the time.
- * Whatever is left goes through the shared English-tolerant parser, so "2:30
- * PM" and "14:30" keep working in every locale.
+ * The hour cycle, digits, separator and day-period words come from Intl, so a
+ * field reads like `Timestamp`. A `-u-hc-` extension on the provider locale
+ * carries an app's per-user hour cycle. The parser reads back what the
+ * formatter writes, and the rest goes through the English-tolerant parser,
+ * so "2:30 PM" and "14:30" work in every locale.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/utils/timeFormat.test.ts

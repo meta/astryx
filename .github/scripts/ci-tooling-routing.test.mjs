@@ -31,6 +31,9 @@ const TOOLING_FALSE = "steps.scope.outputs.tooling_only != 'true'";
 const TOOLING_TRUE = "steps.scope.outputs.tooling_only == 'true'";
 const BROAD_ONLY =
   "steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'";
+// The Build package's contracts skip a Lab-only change too (spec:AST-030
+// FR26); the Node lane runs its scoped share and guards.
+const BROAD_NOT_LAB = `${BROAD_ONLY} && steps.scope.outputs.lab_only != 'true'`;
 
 // The Build package's test directory: an opt-in test there (one that runs only
 // with an `ASTRYX_*=1` switch) must run in test-build, with its switch set.
@@ -351,7 +354,7 @@ describe('Node-tooling CI routing', () => {
     expect(
       step(ci.jobs['test-build'], 'Run Build package contracts'),
     ).toMatchObject({
-      if: BROAD_ONLY,
+      if: BROAD_NOT_LAB,
       run: 'pnpm test:build',
     });
     // The Build package's owner keeps its contracts. The list lives once, in
@@ -378,7 +381,7 @@ describe('Node-tooling CI routing', () => {
       'Verify canonical setup compositions',
       'Verify guest fixture contrast',
     ]) {
-      expect(step(ci.jobs['test-build'], name).if).toBe(BROAD_ONLY);
+      expect(step(ci.jobs['test-build'], name).if).toBe(BROAD_NOT_LAB);
     }
     // No size-base job: Main keeps the merge base's sizes, and build-storybook
     // builds the base only when Main kept no record.
@@ -425,7 +428,9 @@ describe('Node-tooling CI routing', () => {
         candidate.id === 'scope' ||
         candidate.with?.path === '.test-scope' ||
         candidate.name === 'Skip heavy work for a specialized lane' ||
-        candidate.name === 'Skip typechecks for a specialized lane'
+        candidate.name === 'Skip typechecks for a specialized lane' ||
+        candidate.name === 'Lab-only: Lab tests + Storybook build' ||
+        candidate.name === 'Lab-only: typecheck Lab and its stories'
       ) {
         continue;
       }
@@ -438,9 +443,10 @@ describe('Node-tooling CI routing', () => {
   });
 
   it('preserves the historical joins and fails them on owned-lane failure', () => {
-    // room only tells test when CI is full (ci-admission.test.mjs).
+    // room and admission only tell test when CI is full (ci-admission.test.mjs).
     expect(ci.jobs.test.needs).toEqual([
       'room',
+      'admission',
       'heavy-ci',
       'release-bump',
       'test-ui',
@@ -452,6 +458,7 @@ describe('Node-tooling CI routing', () => {
     ]);
     expect(ci.jobs.build.needs).toEqual([
       'room',
+      'admission',
       'heavy-ci',
       'build-storybook',
       'typecheck',

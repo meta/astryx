@@ -7,15 +7,9 @@
  * @input Container ref, interactive element ref, click/href handlers
  * @output onClick and onMouseUp handlers for the container; INTERACTIVE_SELECTORS list;
  *   hasInteractiveAncestor and the shared innermostInteractive walk
- * @position Core hook for clickable containers that safely handle nested interactive elements
- *
- * Solves the "nested interactive elements" problem: when a card is clickable
- * but contains buttons/links, clicking those should NOT trigger the card's action.
- *
- * Every navigation exit here (window.open, location.href, and the delegated
- * click on the interactive ref) runs after the shared navigation-destination
- * rule in utils/safeUrl.ts; a blocked href does not navigate by any
- * activation method.
+ * @position Core hook for clickable containers with nested interactive
+ *   elements. A click on a nested button or link does not run the card's
+ *   action. Each navigation passes the rule in utils/safeUrl.ts first.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/hooks/index.ts (export)
@@ -117,8 +111,9 @@ export function hasInteractiveAncestor(el: Element, rootEl: Element): boolean {
   return innermostInteractive(el, rootEl, belongsToSomethingElse) != null;
 }
 
-// A press inside an open Tooltip or HoverCard surface belongs to that surface
-// (component:Tooltip FR11, component:HoverCard FR11).
+// hasInteractiveAncestor documents this answer until the next minor.
+// A layer root stops such a press before any bubble-phase React handler.
+// A native listener or a capture-phase handler still sees it.
 function belongsToSomethingElse(element: Element): boolean {
   return matchesInteractiveSelectors(element) || isLayerSurface(element);
 }
@@ -220,7 +215,6 @@ export function useClickableContainer({
         return;
       }
 
-      // Don't trigger on text selection
       if (hasTextSelection(containerEl)) {
         return;
       }
@@ -230,7 +224,6 @@ export function useClickableContainer({
         return;
       }
 
-      // If the click landed on or inside a nested interactive element, bail
       if (
         eventTarget !== event.currentTarget &&
         hasInteractiveAncestor(eventTarget, containerEl)
@@ -238,17 +231,15 @@ export function useClickableContainer({
         return;
       }
 
-      // Fire the click handler
       onClickProp?.(event);
       if (event.defaultPrevented) {
         return;
       }
 
-      // Navigate if href is provided. React DOM vets the hrefs it writes as
-      // attributes; nothing below passes through React, so the shared
-      // navigation rule decides once, before target, modifier key, or the
-      // delegated anchor can select a sink. A blocked href simply does not
-      // navigate — the click handler above still ran.
+      // React DOM checks the hrefs that it writes, but nothing below passes
+      // through React. So the shared navigation rule decides once, before the
+      // target, a modifier key, or the delegated anchor picks a sink. A
+      // blocked href does not navigate, but the click handler above still ran.
       if (href != null && isSafeUrl(href)) {
         const shouldOpenNewTab =
           target === '_blank' || event.ctrlKey || event.metaKey;

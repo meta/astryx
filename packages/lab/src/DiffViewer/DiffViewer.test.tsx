@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event';
 import {createRef} from 'react';
 import {DiffViewer} from './DiffViewer';
 import {parseUnifiedDiff} from './parseUnifiedDiff';
-import type {DiffViewerLineRef} from './diffTypes';
+import type {DiffViewerFile, DiffViewerLineRef} from './diffTypes';
 import {createDiffFile} from './createDiffFile';
 import {dockerfile} from '@astryxdesign/core/CodeBlock/languages/dockerfile';
 import {graphql} from '@astryxdesign/core/CodeBlock/languages/graphql';
@@ -600,6 +600,241 @@ describe('DiffViewer', () => {
     expect(screen.getByText('Renamed')).toBeInTheDocument();
     expect(screen.getByText('a.ts → b.ts')).toBeInTheDocument();
     expect(screen.getByText('No content changes')).toBeInTheDocument();
+  });
+
+  describe('replaced blocks', () => {
+    // The shape createDiffFile gives a change too large to compare line by
+    // line: shared context, every old line removed, every new line added.
+    const LINE_COUNT = 3;
+    const numbers = Array.from({length: LINE_COUNT}, (_, i) => i);
+    const REPLACED: DiffViewerFile = {
+      oldPath: 'big.txt',
+      newPath: 'big.txt',
+      status: 'modified',
+      isBinary: false,
+      hunks: [
+        {
+          header: `@@ -1,${LINE_COUNT + 2} +1,${LINE_COUNT + 2} @@`,
+          oldStart: 1,
+          oldLines: LINE_COUNT + 2,
+          newStart: 1,
+          newLines: LINE_COUNT + 2,
+          isReplacedBlock: true,
+          lines: [
+            {
+              kind: 'context',
+              content: 'head',
+              oldLineNumber: 1,
+              newLineNumber: 1,
+            },
+            ...numbers.map(i => ({
+              kind: 'removed' as const,
+              content: `old ${i}`,
+              oldLineNumber: i + 2,
+              newLineNumber: null,
+            })),
+            ...numbers.map(i => ({
+              kind: 'added' as const,
+              content: `new ${i}`,
+              oldLineNumber: null,
+              newLineNumber: i + 2,
+            })),
+            {
+              kind: 'context',
+              content: 'tail',
+              oldLineNumber: LINE_COUNT + 2,
+              newLineNumber: LINE_COUNT + 2,
+            },
+          ],
+        },
+      ],
+    };
+
+    it('folds the changed lines behind a labeled control', () => {
+      const {container} = render(<DiffViewer file={REPLACED} />);
+      expect(screen.getByText('Large change: 6 lines')).toBeTruthy();
+      const button = screen.getByRole('button', {name: 'Show full diff'});
+      expect(button.getAttribute('aria-expanded')).toBe('false');
+      // The hunk header, the leading context, the fold, the trailing context.
+      expect(codeRows(container)).toHaveLength(4);
+      expect(container.querySelector('[data-diff="removed"]')).toBeNull();
+      expect(screen.getByText('head')).toBeTruthy();
+      expect(screen.getByText('tail')).toBeTruthy();
+      // The header still counts the whole change.
+      expect(screen.getByText('3 lines added, 3 lines removed')).toBeTruthy();
+    });
+
+    it('shows and hides the full diff from the keyboard', async () => {
+      const user = userEvent.setup();
+      const {container} = render(<DiffViewer file={REPLACED} />);
+      const button = screen.getByRole('button', {name: 'Show full diff'});
+      button.focus();
+      await user.keyboard('{Enter}');
+      const hide = screen.getByRole('button', {name: 'Hide full diff'});
+      expect(hide.getAttribute('aria-expanded')).toBe('true');
+      expect(hide).toBe(document.activeElement);
+      expect(container.querySelectorAll('[data-diff="removed"]')).toHaveLength(
+        LINE_COUNT,
+      );
+      expect(container.querySelectorAll('[data-diff="added"]')).toHaveLength(
+        LINE_COUNT,
+      );
+      await user.keyboard(' ');
+      expect(
+        screen
+          .getByRole('button', {name: 'Show full diff'})
+          .getAttribute('aria-expanded'),
+      ).toBe('false');
+      expect(container.querySelector('[data-diff="added"]')).toBeNull();
+    });
+
+    it('gives the expanded block no inline highlight', async () => {
+      const user = userEvent.setup();
+      const {container} = render(<DiffViewer file={REPLACED} />);
+      await user.click(screen.getByRole('button', {name: 'Show full diff'}));
+      expect(changedText(container, 'removed')).toEqual([]);
+      expect(changedText(container, 'added')).toEqual([]);
+    });
+
+    it('puts one control in split view and labels the fold on both sides', async () => {
+      const user = userEvent.setup();
+      const {container} = render(
+        <DiffViewer file={REPLACED} viewMode="split" />,
+      );
+      expect(
+        screen.getAllByRole('button', {name: 'Show full diff'}),
+      ).toHaveLength(1);
+      for (const side of ['old', 'new'] as const) {
+        const rows = paneRows(container, side);
+        // The hunk header, the leading context, the fold, the trailing context.
+        expect(rows).toHaveLength(4);
+        expect(rows[2].textContent).toContain('Large change: 6 lines');
+      }
+      await user.click(screen.getByRole('button', {name: 'Show full diff'}));
+      expect(paneRows(container, 'old')).toHaveLength(4 + LINE_COUNT);
+      expect(paneRows(container, 'new')).toHaveLength(4 + LINE_COUNT);
+    });
+
+    it('folds the block again for a new file', async () => {
+      const user = userEvent.setup();
+      const {rerender} = render(<DiffViewer file={REPLACED} />);
+      await user.click(screen.getByRole('button', {name: 'Show full diff'}));
+      rerender(<DiffViewer file={{...REPLACED}} />);
+      expect(screen.getByRole('button', {name: 'Show full diff'})).toBeTruthy();
+    });
+
+    it('opens a block that holds an annotated line, and can still fold it', async () => {
+      const user = userEvent.setup();
+      const {container} = render(
+        <DiffViewer
+          file={REPLACED}
+          renderLineAnnotation={ref =>
+            ref.side === 'old' && ref.lineNumber === 3 ? (
+              <span>Why was this removed?</span>
+            ) : null
+          }
+        />,
+      );
+      expect(screen.getByText('Why was this removed?')).toBeTruthy();
+      const hide = screen.getByRole('button', {name: 'Hide full diff'});
+      expect(hide.getAttribute('aria-expanded')).toBe('true');
+      await user.click(hide);
+      expect(screen.queryByText('Why was this removed?')).toBeNull();
+      expect(container.querySelector('[data-diff="removed"]')).toBeNull();
+    });
+
+    it('keeps a block folded when its annotations render nothing', () => {
+      render(
+        <DiffViewer
+          file={REPLACED}
+          renderLineAnnotation={ref => (ref.side === 'old' ? '' : false)}
+        />,
+      );
+      expect(
+        screen
+          .getByRole('button', {name: 'Show full diff'})
+          .getAttribute('aria-expanded'),
+      ).toBe('false');
+    });
+
+    it('shows no fold for an ordinary diff', () => {
+      render(<DiffViewer file={FILE} />);
+      expect(screen.queryByRole('button', {name: 'Show full diff'})).toBeNull();
+    });
+  });
+
+  describe('large files', () => {
+    /** One hunk that adds `count` lines to an empty file. */
+    function addedFile(count: number): DiffViewerFile {
+      return {
+        oldPath: null,
+        newPath: 'generated.txt',
+        status: 'added',
+        isBinary: false,
+        hunks: [
+          {
+            header: `@@ -0,0 +1,${count} @@`,
+            oldStart: 0,
+            oldLines: 0,
+            newStart: 1,
+            newLines: count,
+            lines: Array.from({length: count}, (_, i) => ({
+              kind: 'added' as const,
+              content: `line ${i}`,
+              oldLineNumber: null,
+              newLineNumber: i + 1,
+            })),
+          },
+        ],
+      };
+    }
+
+    it('folds a file with more than 2,000 changed lines until the reader opens it', async () => {
+      const user = userEvent.setup();
+      const {container} = render(<DiffViewer file={addedFile(2001)} />);
+      expect(screen.getByText('Large change: 2,001 lines')).toBeTruthy();
+      expect(container.querySelector('table')).toBeNull();
+      // The header still counts every line.
+      expect(
+        screen.getByText('2,001 lines added, 0 lines removed'),
+      ).toBeTruthy();
+      const button = screen.getByRole('button', {name: 'Show full diff'});
+      button.focus();
+      await user.keyboard('{Enter}');
+      const hide = screen.getByRole('button', {name: 'Hide full diff'});
+      expect(hide.getAttribute('aria-expanded')).toBe('true');
+      expect(hide).toBe(document.activeElement);
+      expect(container.querySelectorAll('[data-diff="added"]')).toHaveLength(
+        2001,
+      );
+      await user.click(hide);
+      expect(container.querySelector('table')).toBeNull();
+    });
+
+    it('shows a file with 2,000 changed lines without a fold', () => {
+      const {container} = render(<DiffViewer file={addedFile(2000)} />);
+      expect(screen.queryByRole('button', {name: 'Show full diff'})).toBeNull();
+      expect(container.querySelectorAll('[data-diff="added"]')).toHaveLength(
+        2000,
+      );
+    });
+
+    it('opens a large file that has an annotated line', () => {
+      render(
+        <DiffViewer
+          file={addedFile(2001)}
+          renderLineAnnotation={ref =>
+            ref.lineNumber === 1500 ? <span>Generated?</span> : null
+          }
+        />,
+      );
+      expect(screen.getByText('Generated?')).toBeTruthy();
+      expect(
+        screen
+          .getByRole('button', {name: 'Hide full diff'})
+          .getAttribute('aria-expanded'),
+      ).toBe('true');
+    });
   });
 
   it('shows a message for binary files', () => {

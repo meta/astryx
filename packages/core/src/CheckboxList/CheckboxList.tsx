@@ -246,6 +246,7 @@ export function CheckboxList({
         ? disabledMessageTooltip.describedBy
         : undefined,
       isReadOnly,
+      isInvalid: status?.type === 'error',
       loadingValues,
     }),
     [
@@ -256,6 +257,7 @@ export function CheckboxList({
       showsDisabledMessage,
       disabledMessageTooltip.describedBy,
       isReadOnly,
+      status?.type,
       loadingValues,
     ],
   );
@@ -298,6 +300,10 @@ export function CheckboxList({
             controlStyle,
           )}
           role="group"
+          // Screen readers announce the whole group as unavailable. Its dimmed
+          // label then labels a disabled control. An enabled list keeps a
+          // caller's own value.
+          aria-disabled={isDisabled || rest['aria-disabled']}
           // A caller aria-labelledby names the group together with its label.
           aria-labelledby={joinAriaIDs(labelID, ariaLabelledByProp)}
           aria-describedby={

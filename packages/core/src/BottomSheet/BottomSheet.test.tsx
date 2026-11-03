@@ -568,6 +568,9 @@ describe('BottomSheet', () => {
   it('keeps a standalone modal sheet presented through its exit animation', () => {
     render(<ExitHarness />);
     const dialog = screen.getByRole('dialog', {name: 'Filters'});
+    // With focus elsewhere at the close, the exiting sheet is inert and
+    // hidden at once (BottomSheetCloseFocus.test.tsx covers focus inside).
+    act(() => (document.activeElement as HTMLElement | null)?.blur());
 
     fireEvent.click(screen.getByRole('button', {name: 'Close sheet'}));
 

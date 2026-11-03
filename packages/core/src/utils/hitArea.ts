@@ -15,17 +15,15 @@
  *   a standalone control writes `watchHitArea`'s insets to an invisible
  *   coarse-only hit layer
  *
- * A finger needs a 44 × 44 px target, but a control may not grow on a phone,
- * and its hit area must never take a neighbour's taps. Each side grows toward
- * the minimum size and stops at half the gap to the nearest neighbour on that
- * side (0 when they touch), so two neighbours' areas meet in the middle and a
- * tap always goes to the nearer target. CSS cannot see where the neighbours
- * are, so a live control measures: only where the primary pointer is coarse,
- * only while on screen, and every control pending a measurement in one read
- * pass per frame (all reads, then all writes), up to a 4 ms budget, the rest
- * carried to the next frame. Until the first pass the
- * insets are 0, so first paint and server rendering never overlap anything.
  */
+
+// A finger needs a 44 × 44 px target, but a control may not grow on a phone,
+// and its hit area must never take a neighbor's taps. Each side grows toward
+// the minimum and stops at half the gap to the nearest neighbor on that side,
+// so a tap always goes to the nearer target. CSS cannot see the neighbors, so a
+// live control measures: only under a coarse primary pointer (AST-094), only on
+// screen, and in one read pass per frame within a 4 ms budget. Until the first
+// pass the insets are 0, so first paint never overlaps anything.
 
 import {observeContent} from './sharedMutationObserver';
 
@@ -459,10 +457,9 @@ function scheduleAll(): void {
  * neighbour, and the next tap uses the fresh insets.
  */
 function onPress(event: Event): void {
-  // One listener for every watched control, on the document: a control, a
-  // row or a handle carries none of its own (a list's listeners stay the
-  // list's, spec:AST-103 FR5). The innermost watched element the press
-  // lands in is the one it is for.
+  // One listener on the document for every watched control, so a control, row
+  // or handle has none of its own (AST-103 FR5). The innermost watched element
+  // that the press lands in is the one it is for.
   for (
     let node: Element | null =
       event.target instanceof Element ? event.target : null;
@@ -579,9 +576,9 @@ function observe(element: Element, entry: Watched): void {
 }
 
 /**
- * Everything that watches the page for hit areas: on only while the primary
- * pointer is coarse, so a mouse page runs no observer, timer or listener for
- * them (`spec:AST-094` FR24).
+ * Everything that watches the page for hit areas is on only while the
+ * primary pointer is coarse, so a mouse page runs no observer, timer or
+ * listener for them.
  */
 function startObserving(): void {
   if (view == null) {

@@ -53,7 +53,13 @@ import {CheckboxInput} from '../../../CheckboxInput';
 import {mergeRefs} from '../../../utils';
 import type {TablePlugin, TableColumn, BodyRowRenderProps} from '../../types';
 import {pixel} from '../../columnUtils';
-import {useTranslator} from '../../../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/selection/useTableSelection.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Config Type
@@ -235,7 +241,7 @@ function SelectAllCheckboxInner<T extends Record<string, unknown>>({
 }: {
   store: SelectionStore<T>;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const getSnapshot = useCallback(() => {
     const config = store.getConfig();
     const allSelected = config.getIsAllSelected();
@@ -287,7 +293,7 @@ function SelectionCellContentInner<T extends Record<string, unknown>>({
   store: SelectionStore<T>;
   item: T;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const config = store.getConfig();
   const isSelected = useIsItemSelected(store, item);
   const selectable = config.getIsItemSelectable?.(item) ?? true;

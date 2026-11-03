@@ -4,22 +4,10 @@
 
 /**
  * @file useHotkeys.ts
- * @input Uses React useEffect, useRef
- * @output Exports useHotkeys hook and Hotkey interface for global keyboard shortcuts
- * @position Core hook; used by consumers for app-level keyboard shortcuts
- *
- * Registers a single window keydown listener per hook instance. Handlers
- * are kept in a ref so re-renders never re-subscribe (subscribe once on
- * mount, unsubscribe on unmount). SSR-safe — window is only touched
- * inside the effect.
- *
- * Skips events that are already handled (defaultPrevented) or during IME composition,
- * and events targeting typing surfaces (input, textarea, select, contenteditable)
- * unless a hotkey opts in via `allowInInputs`.
- *
- * Platform-aware: `mod` maps to metaKey (⌘) on Apple platforms and
- * ctrlKey elsewhere, through the same isApplePlatform util Kbd reads, so
- * displayed and handled shortcuts cannot disagree.
+ * @input React effects and refs
+ * @output useHotkeys hook and Hotkey interface for global keyboard shortcuts
+ * @position Core hook for app-level keyboard shortcuts. `mod` uses the same
+ *   isApplePlatform util as Kbd, so shown and handled shortcuts agree.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/hooks/index.ts

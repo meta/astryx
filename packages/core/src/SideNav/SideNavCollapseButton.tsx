@@ -31,10 +31,16 @@ import {
   type SideNavImperativeCollapseHandle,
 } from './SideNavCollapseContext';
 import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
-import {useTranslator} from '../i18n';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {SideNavFocusTargetsContext} from './SideNavFocusTargetsContext';
 import type {ElementSize} from '../SizeContext/SizeContext';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/SideNav/SideNavCollapseButton.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Styles
@@ -140,7 +146,7 @@ export function SideNavCollapseButton({
   onClick: onClickProp,
   ...props
 }: SideNavCollapseButtonProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {isCollapsed, toggle, isCollapsible} = useSideNavCollapseState(
     collapsible,
     handleRef,

@@ -12,7 +12,7 @@
  *   that return focus to their control when the overlay closes, but only when
  *   the dismiss did not already move focus somewhere the user chose, and by
  *   overlays (Dialog, DropdownMenu) that move focus programmatically, and by
- *   disclosures that hide focused content (`component:SideNav` AR3). Only
+ *   disclosures that hide focused content. Only
  *   `isFocusDetached` is exported from the utils entry; the rest is internal.
  */
 
@@ -104,8 +104,7 @@ export function moveFocusLeftBehind(
 }
 
 /**
- * Move focus programmatically so its ring follows the last input
- * (`architecture:interaction-modality` INV1). After pointer input the browser's
+ * Move focus programmatically so its ring follows the last input. After pointer input the browser's
  * focus option keeps the element from matching `:focus-visible`, which is the
  * one way to reach an element the overlay does not render: the consumer's
  * autofocus target, the control that opened a Dialog, or a menu trigger the
@@ -151,4 +150,34 @@ export function focusForLastInput(
     element.blur();
   }
   element.focus({...options, focusVisible: false});
+}
+
+/**
+ * Prepares the focus return for an open surface that may be removed while
+ * open (rendered only while open, or removed with its view). Removing a
+ * `<dialog>` runs no close and no browser focus return. Call this while the
+ * surface is mounted: it reads the frame that hosts the surface now, because a
+ * removed frame's document has no window. Call the returned function from the
+ * effect cleanup with the opener.
+ *
+ * Once the commit has finished, focus moves to the opener only when the
+ * surface really left the document (StrictMode's simulated unmount keeps it),
+ * the opener is still on the page, and the removal lost focus, both in the
+ * surface's document and in the document that hosts its frame. A control the
+ * user pressed outside the surface, or outside its frame, keeps its focus.
+ */
+export function prepareFocusReturnOnRemoval(
+  surface: Element,
+): (opener: Element | null) => void {
+  const host = surface.ownerDocument.defaultView?.frameElement ?? null;
+  return opener => {
+    queueMicrotask(() => {
+      if (surface.isConnected || opener == null || !opener.isConnected) {
+        return;
+      }
+      if (isFocusLost(surface) && (host == null || isFocusLost(host))) {
+        focusForLastInput(opener as HTMLElement);
+      }
+    });
+  };
 }

@@ -25,6 +25,7 @@ import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
+import {STYLEX_GENERATED_VARIABLE} from '../lib/stylex-generated-variable.mjs';
 
 const require = createRequire(import.meta.url);
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -67,6 +68,17 @@ const cap = s =>
     : `${s.slice(0, MAX_TYPE - 40)} … #${createHash('sha1').update(s).digest('hex').slice(0, 8)}`;
 const kebabAttr = p =>
   `data-${p.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}`;
+
+const STYLEX_HASHED_NAME = new RegExp(`^${STYLEX_GENERATED_VARIABLE}$`);
+
+/**
+ * Whether a stylesheet's custom property is public: not a private `--_*`
+ * name and not a name StyleX hashed.
+ * @param {string} name
+ * @returns {boolean}
+ */
+const isPublicCustomProperty = name =>
+  !name.startsWith('--_') && !STYLEX_HASHED_NAME.test(name);
 
 /**
  * The file an entry point publishes: its stylesheet for a stylesheet entry,
@@ -247,7 +259,11 @@ export async function generateReport(opts) {
     return out.length ? ` ${out.join(' ')}` : '';
   };
 
+  // Array#map passes an index second, so oneSig keeps a single parameter.
   function oneSig(sig) {
+    return sigText(sig, declared);
+  }
+  function sigText(sig, paramType) {
     const d = sig.getDeclaration();
     if (!d || !inPkg(d.getSourceFile()) || !d.parameters) {
       return cap(
@@ -265,7 +281,7 @@ export async function generateReport(opts) {
       : '';
     const params = d.parameters.map(p => {
       const name = ts.isIdentifier(p.name) ? p.name.text : '{…}';
-      const t = p.type ? declared(p.type) : show(checker.getTypeAtLocation(p));
+      const t = p.type ? paramType(p.type) : show(checker.getTypeAtLocation(p));
       return `${p.dotDotDotToken ? '...' : ''}${name}${p.questionToken || p.initializer ? '?' : ''}: ${t}`;
     });
     const ret = d.type ? declared(d.type) : show(sig.getReturnType());
@@ -342,8 +358,12 @@ export async function generateReport(opts) {
     !!(type.getProperty('Provider') && type.getProperty('Consumer'));
   function componentProps(name, type) {
     if (!/^[A-Z]/.test(name) || isContext(type)) return null;
-    const sig = type.getCallSignatures()[0];
+    // `ComponentProps<typeof X>` reads an overloaded component's last
+    // signature, so the component row does too; the others become overloads.
+    const sigs = type.getCallSignatures();
+    const sig = sigs.at(-1);
     if (!sig || sig.parameters.length > 2) return null;
+    const overloads = sigs.slice(0, -1);
     const exotic = !!type.getProperty('$$typeof');
     const returnsElement =
       /\b(JSX\.Element|ReactNode|ReactElement|Element)\b/.test(
@@ -351,14 +371,95 @@ export async function generateReport(opts) {
       );
     if (!exotic && !returnsElement) return null;
     const p = sig.parameters[0];
-    if (!p) return {propsName: null, propsType: null};
+    if (!p) return {propsName: null, propsType: null, sig, overloads};
     const propsType = checker.getTypeOfSymbol(p);
     const alias = propsType.aliasSymbol?.name ?? propsType.symbol?.name;
     return {
       propsName: alias && !alias.startsWith('__') ? alias : null,
       propsType,
+      sig,
+      overloads,
     };
   }
+
+  // The symbols the entry points export. An overload line prints a private
+  // props alias or interface by its definition instead of its name. A private
+  // type nested deeper still prints by name.
+  const publicSymbols = new Set();
+  for (const e of entries.filter(e => e.kind === 'code')) {
+    const sf = program.getSourceFile(e.abs);
+    const modSym = sf && (checker.getSymbolAtLocation(sf) ?? sf.symbol);
+    for (const ex of modSym ? checker.getExportsOfModule(modSym) : []) {
+      publicSymbols.add(
+        ex.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(ex) : ex,
+      );
+    }
+  }
+  const privateTypeSymbol = node => {
+    if (!ts.isTypeReferenceNode(node)) return null;
+    let s = checker.getSymbolAtLocation(node.typeName);
+    if (s && s.flags & ts.SymbolFlags.Alias) s = checker.getAliasedSymbol(s);
+    const d = s?.declarations?.[0];
+    return d && inPkg(d.getSourceFile()) && !publicSymbols.has(s) ? s : null;
+  };
+  const printer = ts.createPrinter({removeComments: true});
+  const print = node =>
+    norm(
+      printer.printNode(ts.EmitHint.Unspecified, node, node.getSourceFile()),
+    );
+  const definition = sym => {
+    const alias = sym.declarations.find(ts.isTypeAliasDeclaration);
+    if (alias) return {text: print(alias.type), params: alias.typeParameters};
+    const faces = sym.declarations.filter(ts.isInterfaceDeclaration);
+    if (!faces.length) return null;
+    const bases = faces.flatMap(
+      f => f.heritageClauses?.flatMap(h => h.types.map(print)) ?? [],
+    );
+    const members = faces.flatMap(f => f.members.map(print));
+    const body = members.length ? [`{ ${members.join('; ')} }`] : [];
+    return {
+      text: [...bases, ...body].join(' & ') || '{}',
+      params: faces[0].typeParameters,
+    };
+  };
+  // A private props type prints as its definition, without comments, with
+  // the reference's type arguments in place of its own parameters.
+  const publicTypeText = node => {
+    const sym = privateTypeSymbol(node);
+    const def = sym && definition(sym);
+    if (!def) return declared(node);
+    const args = new Map(
+      (def.params ?? []).map((tp, i) => [
+        tp.name.text,
+        norm(
+          (node.typeArguments?.[i] ?? tp.default)?.getText() ?? tp.name.text,
+        ),
+      ]),
+    );
+    // The rename is textual, so a key or literal spelled like a parameter
+    // changes too.
+    const renamed = [...args].filter(([from, to]) => from !== to);
+    return cap(
+      renamed.length
+        ? def.text.replace(
+            new RegExp(
+              `\\b(${renamed.map(([from]) => from).join('|')})\\b`,
+              'g',
+            ),
+            from => args.get(from),
+          )
+        : def.text,
+    );
+  };
+  // An overload line carries its own declaration's tags, and @experimental
+  // when its props type's name says so, as a member's name does.
+  const overloadLine = sig => {
+    const d = sig.getDeclaration();
+    const t = d?.parameters?.[0]?.type;
+    const propsName =
+      t && ts.isTypeReferenceNode(t) ? t.typeName.getText() : '';
+    return `  overload ${sigText(sig, publicTypeText)}${marks(d, propsName)}`;
+  };
 
   // ---- entry point sections; each declaration is detailed once -----------
   const seen = new Map(); // declaration identity -> first entry point
@@ -431,7 +532,8 @@ export async function generateReport(opts) {
       }
       seen.set(identity, e.subpath);
       const m = marks(decl, name);
-      if (m.includes('@internal')) internal.push(`${name} via ${e.subpath}`);
+      // The internal list reads the same tags as the item's row.
+      let rowTags = m;
 
       if (sym.flags & ts.SymbolFlags.Class) {
         groups.Classes.push([
@@ -446,8 +548,16 @@ export async function generateReport(opts) {
         const comp = componentProps(name, type);
         if (comp) {
           if (comp.propsName) propsOf.set(comp.propsName, name);
+          // A function's overloads carry their own tags, so its row takes the
+          // last one's. A `const` keeps its statement's tags.
+          const last = comp.sig.getDeclaration();
+          rowTags =
+            comp.overloads.length && last && ts.isFunctionDeclaration(last)
+              ? marks(last, name)
+              : m;
           groups.Components.push([
-            `component ${name}${comp.propsName ? `(props: ${comp.propsName})` : ''}${m}`,
+            `component ${name}${comp.propsName ? `(props: ${comp.propsName})` : ''}${rowTags}`,
+            ...comp.overloads.map(overloadLine),
             ...(comp.propsType ? members(comp.propsType, 'prop ') : []),
           ]);
         } else if (isContext(type)) {
@@ -515,6 +625,8 @@ export async function generateReport(opts) {
           body: () => d.members.map(x => `  ${norm(x.getText())}`),
         });
       }
+      if (rowTags.includes('@internal'))
+        internal.push(`${name} via ${e.subpath}`);
     }
     sections.push({head, groups, empty: !exported.length});
   }
@@ -535,8 +647,8 @@ export async function generateReport(opts) {
   for (const e of entries.filter(e => e.kind === 'css')) {
     const css = fs.readFileSync(e.abs, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const names = new Set();
-    for (const m of css.matchAll(/(?:^|[;{\s])(--[A-Za-z][\w-]*)\s*:/g))
-      names.add(m[1]);
+    for (const m of css.matchAll(/(?:^|[;{\s])(--[\w-]+)\s*:/g))
+      if (isPublicCustomProperty(m[1])) names.add(m[1]);
     for (const n of [...names].sort(byName))
       cssLines.push(`var ${n} (${e.subpath})`);
   }

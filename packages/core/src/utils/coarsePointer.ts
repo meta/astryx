@@ -9,13 +9,11 @@
  *   the press controller (pressFeedback.ts): touch-only work registers only
  *   while it holds
  *
- * Where the primary pointer is coarse, a phone's touch work stays
- * registered: the gesture host's page listeners, the page hold and the
- * finger scroll. Where it is fine, recognizers still attach for every
- * pointer, and the host listens on the page only during a press
- * (`spec:AST-094` FR19, FR24, FR43). The query is TOUCH_QUERY, from
- * touchQueries.ts, which loads without React. The answer can change while
- * the page is open (a tablet docking a mouse), so a holder watches it.
+ * Under a coarse primary pointer, a phone's touch work stays registered: the
+ * gesture host's page listeners, the page hold and the finger scroll. Under a
+ * fine one, recognizers still attach, and the host listens on the page only
+ * during a press (AST-094). The answer can change while the page is open (a
+ * tablet docking a mouse), so a holder watches it.
  *
  * SYNC: When modified, update coarsePointer.test.ts.
  */

@@ -4,7 +4,7 @@
 
 /**
  * @file useKeyboardHint.tsx
- * @input Uses React, StyleX, Kbd, useLayer, i18n (useTranslator)
+ * @input Uses React, StyleX, Kbd, useLayer, i18n (useComponentTranslator)
  * @output Exports useKeyboardHint hook — ephemeral arrow-key navigation hint
  * @position Core hook; shows sighted keyboard users how to navigate composite
  *   widgets that use roving tabindex (single Tab stop, arrows inside)
@@ -27,7 +27,13 @@ import {
 } from '../theme/tokens.stylex';
 import {Kbd} from '../Kbd';
 import {useLayer} from '../Layer/useLayer';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/hooks/useKeyboardHint.generated';
+
+registerEnglishFallback(english);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -181,7 +187,7 @@ export function useKeyboardHint(
     isEnabled = true,
   } = options;
 
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dismissedRef = useRef(false);
   const isVisibleRef = useRef(false);

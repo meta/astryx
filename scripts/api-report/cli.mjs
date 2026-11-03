@@ -158,6 +158,7 @@ export const SHARED_INPUTS = [
   'tsconfig.json',
   'pnpm-lock.yaml',
   'scripts/build-css.mjs',
+  'packages/build/src/source-stylesheet.js',
   'scripts/stylex-module-resolution.cjs',
   'scripts/add-declaration-extensions.mjs',
 ];

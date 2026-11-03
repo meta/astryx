@@ -77,8 +77,12 @@ import {LayerDepthProvider, useLayerDismissal} from '../Layer';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
+import {useModalOutlet} from '../Layer/modalOutlet';
+import {useBackdropPress} from '../Layer/useBackdropPress';
+import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {composeEventHandlers, mergeProps, themeProps} from '../utils';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {container, overlayPaddingReset} from '../Layout';
 import {
   containerPaddingBlockEndVarStyles,
@@ -89,6 +93,8 @@ import {
 } from '../Layout/padding.stylex';
 import type {SpacingStep, SpacingToken} from '../Layout';
 import {useDrawerDialogPresence} from './useDrawerDialogPresence';
+
+type PointerHandler = (event: React.PointerEvent<HTMLDialogElement>) => void;
 
 // =============================================================================
 // Styles
@@ -216,8 +222,8 @@ const styles = stylex.create({
   // Scrim via the browser's ::backdrop pseudo-element (top layer).
   scrim: {
     '::backdrop': {
+      // No backdrop-filter: a full-viewport blur is costly to repaint.
       backgroundColor: colorVars['--color-overlay'],
-      backdropFilter: 'blur(2px)',
       opacity: 0,
       transitionProperty: 'opacity',
       transitionDuration: durationVars['--duration-medium'],
@@ -496,6 +502,11 @@ export function Drawer({
     setIsRendered,
   });
 
+  // Toasts outside an open modal are inert, so the open drawer hosts them.
+  // It releases them when its exit starts.
+  // showModal() must run first, so keep this call after useDrawerDialogPresence.
+  useModalOutlet(dialogRef, isOpen && hasScrim);
+
   const handleDismiss = useCallback(() => {
     onOpenChange(false);
   }, [onOpenChange]);
@@ -536,15 +547,14 @@ export function Drawer({
     [allowEscape, handleDismiss, shouldDismissOnCloseRequest],
   );
 
-  // Clicks on the ::backdrop target the <dialog> element itself; clicks on
-  // drawer content always target a child (the content area fills the panel).
-  const handleClick = useCallback(
-    (event: React.MouseEvent<HTMLDialogElement>) => {
-      if (event.target === event.currentTarget && hasScrim && allowScrimClick) {
-        onOpenChange(false);
-      }
-    },
-    [allowScrimClick, hasScrim, onOpenChange],
+  // A press on the ::backdrop targets the <dialog> itself (the content area
+  // fills the panel). The press must start and end there.
+  const handleScrimPress = useCallback(() => {
+    onOpenChange(false);
+  }, [onOpenChange]);
+  const scrimPress = useBackdropPress(
+    handleScrimPress,
+    hasScrim && allowScrimClick,
   );
 
   const widthValue = typeof width === 'number' ? `${width}px` : width;
@@ -601,7 +611,26 @@ export function Drawer({
       {...(purpose === 'required' && hasScrim
         ? {role: 'alertdialog'}
         : undefined)}
-      onClick={composeEventHandlers(onClickProp, handleClick)}
+      // Presses inside the drawer do not reach handlers around where it is
+      // written.
+      {...layerClickBoundary({
+        ...safeProps,
+        onClick: composeEventHandlers(onClickProp, scrimPress.onClick),
+      })}
+      // The hook records where the press started first. The caller's capture
+      // handler then runs, also when a child prevented default.
+      onPointerDownCapture={chainEventHandlers(
+        scrimPress.onPointerDownCapture,
+        safeProps.onPointerDownCapture as PointerHandler | undefined,
+      )}
+      onPointerUpCapture={chainEventHandlers(
+        scrimPress.onPointerUpCapture,
+        safeProps.onPointerUpCapture as PointerHandler | undefined,
+      )}
+      onPointerCancelCapture={chainEventHandlers(
+        scrimPress.onPointerCancelCapture,
+        safeProps.onPointerCancelCapture as PointerHandler | undefined,
+      )}
       onKeyDown={onKeyDownProp}
       onCancel={handleCancel}>
       <ModalAnnounceProvider dialogRef={dialogRef} isOpen={isOpen && hasScrim}>
