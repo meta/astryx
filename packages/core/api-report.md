@@ -397,6 +397,7 @@ component ChatComposerDrawer(props: ChatComposerDrawerProps)
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component ChatComposerInput(props: ChatComposerInputProps)
   prop debounceMs?: number = 150
+  prop enterKeyHint?: EnterKeyHint = 'send'
   prop handleRef?: React.Ref<ChatComposerInputHandle>
   prop hasHistory?: boolean = true
   prop isDisabled?: boolean = false
@@ -1324,6 +1325,13 @@ component IconButton(props: IconButtonProps)
   prop width?: SizeValue
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
+component InfoTip(props: InfoTipProps)
+  prop content: ReactNode
+  prop label?: string = A translated "More information"
+  prop ref?: Ref<HTMLButtonElement>
+  prop size?: InfoTipSize = 'sm'
+  prop xstyle?: StyleXStyles
+  inherits HTMLAttributes
 component InputClearButton(props: InputClearButtonProps)
   prop iconClassName?: string
   prop label: string
@@ -2387,6 +2395,7 @@ component Text(props: TextProps)
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component TextArea(props: TextAreaProps)
+  prop autoCapitalize?: AutoCapitalize
   prop autoComplete?: React.TextareaHTMLAttributes<HTMLTextAreaElement>['autoComplete']
   prop changeAction?: (value: string, e: ChangeEvent<HTMLTextAreaElement>) => void | Promise<void>
   prop containerClassName?: string
@@ -2397,9 +2406,12 @@ component TextArea(props: TextAreaProps)
   prop controlXstyle?: StyleXStyles
   prop description?: string
   prop disabledMessage?: string
+  prop enterKeyHint?: EnterKeyHint
+  prop hasAutoCorrect?: boolean
   prop hasAutoFocus?: boolean = false
   prop hasSpellCheck?: boolean = true
   prop htmlName?: string
+  prop inputMode?: InputMode
   prop isDisabled?: boolean = false
   prop isLabelHidden?: boolean = false
   prop isLoading?: boolean = false
@@ -2424,6 +2436,7 @@ component TextArea(props: TextAreaProps)
   prop width?: SizeValue
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component TextInput(props: TextInputProps)
+  prop autoCapitalize?: AutoCapitalize
   prop autoComplete?: React.InputHTMLAttributes<HTMLInputElement>['autoComplete']
   prop changeAction?: (value: string, e: ChangeEvent<HTMLInputElement>) => void | Promise<void>
   prop containerClassName?: string
@@ -2434,9 +2447,13 @@ component TextInput(props: TextInputProps)
   prop controlXstyle?: StyleXStyles
   prop description?: string
   prop disabledMessage?: string
+  prop enterKeyHint?: EnterKeyHint
+  prop hasAutoCorrect?: boolean
   prop hasAutoFocus?: boolean = false
   prop hasClear?: boolean = false
+  prop hasSpellCheck?: boolean
   prop htmlName?: string
+  prop inputMode?: InputMode
   prop isDisabled?: boolean = false
   prop isLabelHidden?: boolean = false
   prop isLoading?: boolean = false
@@ -3502,6 +3519,7 @@ interface AppShellVariantMap
 type AspectRatioFit = 'cover' | 'contain' | 'center'
 interface AspectRatioProps extends BaseProps<HTMLDivElement> (props of AspectRatio)
 type AspectRatioShape = 'rectangle' | 'ellipse'
+type AutoCapitalize = 'off' | 'none' | 'on' | 'sentences' | 'words' | 'characters'
 interface AvatarGroupContextValue
   numericSize: number
   overlap: number
@@ -4212,6 +4230,7 @@ type ElementSize = 'sm' | 'md' | 'lg'
 interface EmptyOperatorValue
   type: 'empty'
 interface EmptyStateProps extends BaseProps<HTMLDivElement> (props of EmptyState)
+type EnterKeyHint = 'enter' | 'done' | 'go' | 'next' | 'previous' | 'search' | 'send'
 interface EntityListOperatorValue
   isArbitraryStringAllowed?: boolean = false
   renderItem?: (item: SearchableItem) => ReactNode
@@ -4470,6 +4489,8 @@ type IndicatorRegistrySource = DefinedTheme | string | null | undefined
 type IndicatorSize = 'sm' | 'md'
 type IndicatorState<F extends IndicatorFamily = IndicatorFamily> = IndicatorFamilyMap[F]
 type InferData<D extends ReadonlyArray<FieldDefinition>> = { [F in D[number] as F['key']]: FieldTypeToJS[F['type']] }
+interface InfoTipProps extends Pick<BaseProps, 'xstyle' | 'className' | 'style'> (props of InfoTip)
+type InfoTipSize = IconSize
 type InlineNode<Extension extends MarkdownExtensionNode = never> = { type: 'text'; content: string } | { type: 'bold'; children: InlineNode<Extension>[] } | { type: 'italic'; children: InlineNode<Extension>[] } | { type: 'strik … #7f5046d1
 type InlineNodeWithMath<Extension extends MarkdownExtensionNode = never> = { type: 'text'; content: string } | { type: 'bold'; children: InlineNodeWithMath<Extension>[] } | { type: 'italic'; children: InlineNodeWithMath<Extension>[] }  … #7144a813
 interface InputARIA
@@ -4485,6 +4506,7 @@ interface InputGroupContextValue
 interface InputGroupProps extends Omit<BaseProps<HTMLDivElement>, 'children'> (props of InputGroup)
 type InputGroupSize = 'sm' | 'md' | 'lg'
 interface InputGroupTextProps extends BaseProps<HTMLDivElement> (props of InputGroupText)
+type InputMode = 'none' | 'text' | 'tel' | 'url' | 'email' | 'numeric' | 'decimal' | 'search'
 type InputSize = 'sm' | 'md' | 'lg'
 interface InputStatus
   message?: string
@@ -5425,7 +5447,7 @@ interface TableTreeRowMeta
   isExpanded: boolean
   level: number
 type TableVerticalAlign = 'middle' | 'top' | 'bottom'
-interface TextAreaProps extends Omit<FieldInputBaseProps, 'onChange' | 'defaultValue'> (props of TextArea)
+interface TextAreaProps extends Omit<FieldInputBaseProps, 'onChange' | 'defaultValue'>, TextEntryTraitProps (props of TextArea)
 type TextAreaSize = 'sm' | 'md' | 'lg'
 interface TextAreaStatus
   message?: string
@@ -5440,13 +5462,13 @@ interface TextColorMap
   primary: true
   secondary: true
 type TextDisplay = 'inline' | 'block'
-interface TextInputProps extends Omit<FieldInputBaseProps, 'onChange' | 'defaultValue'> (props of TextInput)
+interface TextInputProps extends Omit<FieldInputBaseProps, 'onChange' | 'defaultValue'>, TextEntryTraitProps (props of TextInput)
 type TextInputSize = keyof typeof sizeStyles
 interface TextInputStatus
   message?: string
   type: InputStatusType
 type TextInputStatusType = 'warning' | 'error' | 'success'
-type TextInputType = 'text' | 'password' | 'email'
+type TextInputType = 'text' | 'password' | 'email' | 'search' | 'tel' | 'url'
 type TextJustify = 'start' | 'center' | 'end'
 interface TextProps extends Omit<BaseProps, 'children'> (props of Text)
 type TextSize = '4xs' | '3xs' | '2xs' | 'xsm' | 'sm' | 'base' | 'lg' | 'xl' | '2xl' | '3xl' | '4xl'
@@ -6947,6 +6969,8 @@ EmptyStateProps (.)
 ### Also exported from an earlier entry point
 
 ```text
+AutoCapitalize (.)
+EnterKeyHint (.)
 Field (.)
 FieldContainerStyleProps (.)
 FieldControlStyleProps (.)
@@ -6963,6 +6987,7 @@ FieldStatusType (.)
 FieldStatusVariant (.)
 FieldStatusVariantMap (.)
 InputClearButton (.)
+InputMode (.)
 InputSize (.)
 InputStatus (.)
 InputStatusType (.)
@@ -7140,6 +7165,16 @@ useIndicator (.)
 
 ```text
 indicatorScope (.)
+```
+
+## `./InfoTip`
+
+### Also exported from an earlier entry point
+
+```text
+InfoTip (.)
+InfoTipProps (.)
+InfoTipSize (.)
 ```
 
 ## `./InputGroup`
@@ -9970,7 +10005,6 @@ var --text-supporting-size (./astryx.css)
 var --text-supporting-weight (./astryx.css)
 var --tree-list-indent (./astryx.css)
 var --tree-list-row-gap (./astryx.css)
-var --x1ue0wla (./astryx.css)
 var --border-color-error (./tailwind-theme.css)
 var --border-color-info (./tailwind-theme.css)
 var --border-color-success (./tailwind-theme.css)

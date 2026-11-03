@@ -1,5 +1,19 @@
 # @xds/theme-matcha
 
+# 0.7.6
+
+#### Fixes
+
+- Published packages no longer include repository test and benchmark files, reducing install size without changing exports. (#9153)
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @parinith-web
+
+---
+
 # 0.7.5
 
 #### New Features

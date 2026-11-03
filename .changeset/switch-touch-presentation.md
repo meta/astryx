@@ -1,0 +1,7 @@
+---
+'@astryxdesign/core': patch
+---
+
+[feat] Under a finger, on every touch screen, Switch moves like the iOS switch. A press lifts the thumb a little, with a soft shadow, and a horizontal drag moves it with the finger and flips the switch once the finger has travelled most of the track; lifting the finger commits. A tap toggles through the browser's own click, and a hold or a short drag toggles at the lift. The thumb stays inside the track however far the finger drags past either end, in either writing direction. A press slid off the switch and lifted outside still toggles it, as on iOS. A vertical drag scrolls the page and the switch lets go. The motion runs on the compositor, so it stays smooth while scripts run. The thumb keeps its circle and its size on every device, and under a coarse pointer the switch's invisible hit area grows toward 44 × 44 px with nothing visible added, stopping halfway to any neighbouring control so a tap goes to the nearer one. The track keeps its theme's fill, and the colour change crossfades over it. With reduced motion on, a change cross-fades instead of moving on a touch screen and is immediate with a mouse. A press shows the pressed overlay, through a drag too, and a still hold selects no text. Keyboard and assistive technology behave as before. In Chromium, a Switch retargeted right after a tap, such as one tapped again mid-travel, turns around from where it is, with no step back to the start of its travel. Switch joins Slider on the shared press tracking and touch negotiation.
+
+@vjeux
