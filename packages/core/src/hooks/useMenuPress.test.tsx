@@ -10,6 +10,8 @@
  *   is covered by menuPressGesture.test.ts.
  */
 
+import {readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {act, fireEvent, render, screen, within} from '@testing-library/react';
 import {useRef, useState} from 'react';
@@ -22,6 +24,7 @@ import {
   useMenuPress,
 } from './useMenuPress';
 import {MENU_PRESS_HANDOFF_PX, MENU_PRESS_SETTLE_MS} from './menuPressGesture';
+import {isMenuPressLit} from '../privateAttributes/menuPressLit.stylex';
 
 const ITEM_SELECTOR = '[role="menuitem"]:not([aria-disabled="true"])';
 
@@ -235,6 +238,86 @@ describe('useMenuPress — tracking inside the menu', () => {
     expect(clicks[0].metaKey).toBe(true);
     expect(clicks[0].shiftKey).toBe(true);
     expect(clicks[0].detail).toBe(0);
+  });
+});
+
+describe('useMenuPress — the row a held press lights (spec:AST-094 FR27, FR43)', () => {
+  const lit = () =>
+    screen
+      .getAllByRole('menuitem')
+      .filter(each => isMenuPressLit(each))
+      .map(each => each.textContent);
+
+  it.each([
+    ['finger', touch()],
+    ['pen', {pointerType: 'pen', pointerId: 1}],
+  ])(
+    'marks the row under a held %s as it moves, no row off the rows, and none once the press ends',
+    (_name, pointer) => {
+      render(<Harness />);
+      fireEvent.pointerDown(row('A'), pointer);
+      expect(lit()).toEqual(['A']);
+      fireEvent.pointerMove(row('B'), pointer);
+      expect(lit()).toEqual(['B']);
+      fireEvent.pointerMove(row('C'), pointer);
+      expect(lit()).toEqual(['C']);
+      fireEvent.pointerMove(screen.getByTestId('divider'), pointer);
+      expect(lit()).toEqual([]);
+      fireEvent.pointerMove(row('D (disabled)'), pointer);
+      expect(lit()).toEqual([]);
+      fireEvent.pointerMove(row('B'), pointer);
+      expect(lit()).toEqual(['B']);
+      fireEvent.pointerUp(screen.getByTestId('outside'), pointer);
+      expect(lit()).toEqual([]);
+      expect(row('B')).toHaveFocus();
+    },
+  );
+
+  it('lights the row under a held mouse with focus alone, so it keeps the hover tint', () => {
+    render(<Harness />);
+    fireEvent.pointerDown(row('A'), mouse());
+    expect(row('A')).toHaveFocus();
+    expect(lit()).toEqual([]);
+    fireEvent.pointerMove(row('B'), mouse());
+    expect(row('B')).toHaveFocus();
+    expect(lit()).toEqual([]);
+    fireEvent.pointerUp(screen.getByTestId('outside'), mouse());
+    expect(lit()).toEqual([]);
+  });
+
+  it('marks the row under the finger that opened the menu once it hands off, and clears it at the lift', () => {
+    vi.useFakeTimers();
+    render(<Harness touchModel="uikit" />);
+    const trigger = screen.getByRole('button', {name: 'Open'});
+    fireEvent.pointerDown(trigger, {...touch(), clientX: 0, clientY: 0});
+    act(() => {
+      vi.advanceTimersByTime(MENU_PRESS_LONG_PRESS_MS);
+    });
+    fireEvent.pointerMove(row('A'), {...touch(), clientX: 0, clientY: 4});
+    expect(lit()).toEqual([]);
+    const past = {...touch(), clientX: 0, clientY: 4 + MENU_PRESS_HANDOFF_PX};
+    fireEvent.pointerMove(row('A'), past);
+    expect(lit()).toEqual(['A']);
+    fireEvent.pointerMove(row('B'), {...past, clientY: past.clientY + 30});
+    expect(lit()).toEqual(['B']);
+    fireEvent.pointerCancel(row('B'), past);
+    expect(lit()).toEqual([]);
+  });
+
+  it('paints every menu row family: each composes the lit style and reads its variable', () => {
+    for (const family of [
+      'DropdownMenuItem',
+      'DropdownMenuCheckboxItem',
+      'DropdownMenuRadioItem',
+      'DropdownMenuSubMenu',
+    ]) {
+      const source = readFileSync(
+        resolve(__dirname, `../DropdownMenu/${family}.tsx`),
+        'utf8',
+      );
+      expect(source).toContain('menuPressLitRowStyle,');
+      expect(source).toContain('var(--_menu-row-focus-paint, ');
+    }
   });
 });
 

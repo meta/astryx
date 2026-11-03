@@ -47,6 +47,10 @@ import {focusForLastInput} from '../utils/focusReturn';
 import {useInteractionModalityTrackingFor} from '../utils/interactionModality';
 import {LONG_PRESS_DURATION_MS} from '../motion/uikit/longPress';
 import {
+  clearMenuPressLit,
+  markMenuPressLit,
+} from '../privateAttributes/menuPressLit.stylex';
+import {
   __resetClickGuardForTest,
   armClickGuard,
   CLICK_GUARD_WINDOW_MS,
@@ -430,8 +434,13 @@ export function useDropdownMenuPress(
     autoscrollRef.current = null;
   }, [autoscroll]);
 
+  const litRowRef = useRef<HTMLElement | null>(null);
   const endGesture = useCallback(() => {
     longPressApiRef.current?.cancel();
+    if (litRowRef.current != null) {
+      clearMenuPressLit(litRowRef.current);
+      litRowRef.current = null;
+    }
     touchMovePreventerRef.current?.();
     touchMovePreventerRef.current = null;
     stopAutoscroll();
@@ -444,6 +453,22 @@ export function useDropdownMenuPress(
 
   const highlight = useCallback(
     (row: HTMLElement | null) => {
+      // A held finger or pen marks the row it lights, for the row's pressed
+      // paint. A held mouse keeps the hover tint, as on a desktop.
+      const gesture = gestureRef.current;
+      const lit =
+        gesture.phase !== 'idle' && gesture.pointerType !== 'mouse'
+          ? row
+          : null;
+      if (litRowRef.current !== lit) {
+        if (litRowRef.current != null) {
+          clearMenuPressLit(litRowRef.current);
+        }
+        litRowRef.current = lit;
+        if (lit != null) {
+          markMenuPressLit(lit);
+        }
+      }
       const {onHighlight, menuRef} = optionsRef.current;
       if (onHighlight != null) {
         onHighlight(row);
