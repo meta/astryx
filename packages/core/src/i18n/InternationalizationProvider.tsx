@@ -108,7 +108,7 @@ export interface InternationalizationProviderProps {
    * The calendar system of this subtree, such as `'persian'` or `'hebrew'`.
    * `Calendar` shows it, and Timestamp, PowerSearch, and Lab's Schedule write
    * their dates in it. The popover fields of `DateInput` and `DateTimeInput`
-   * show it too; their bottom-sheet and native surfaces, and `DateRangeInput`,
+   * show it too; their bottom sheet, and `DateRangeInput`,
    * show Gregorian dates. Values stay
    * Gregorian ISO dates. When omitted, the calendar is Gregorian: a locale
    * never selects it, neither by its default calendar nor by a `-u-ca-`
