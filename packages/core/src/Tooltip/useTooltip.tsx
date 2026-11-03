@@ -363,6 +363,8 @@ export function useTooltipWithTriggerBehavior(
   const showTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
+  // Set once the trigger has stayed detached; the next attach reads it.
+  const wasDetachedRef = useRef(false);
 
   // Clear all timeouts
   const clearTimeouts = useCallback(() => {
@@ -519,42 +521,6 @@ export function useTooltipWithTriggerBehavior(
     [focusTrigger, isTouchInteraction],
   );
 
-  // A caller can remove the surface and its trigger ref while disabled (the
-  // Button inside DropdownMenu does). On the change to disabled, drop the
-  // timers and close an open uncontrolled tooltip, or mounting the surface
-  // again restores a stale open tooltip. On the change back, focus may have
-  // arrived while the listeners were detached: open only for focus that would
-  // open the tooltip now, never from the old open state. Explicit controlled
-  // visibility still belongs to the caller.
-  const wasEnabledRef = useRef(isEnabled);
-  useEffect(() => {
-    const wasEnabled = wasEnabledRef.current;
-    wasEnabledRef.current = isEnabled;
-    if (isEnabled === wasEnabled) {
-      return;
-    }
-    if (!isEnabled) {
-      if (isOpen === undefined && isLayerOpen) {
-        hideNow();
-      } else if (showTimeoutRef.current) {
-        clearTimeout(showTimeoutRef.current);
-        showTimeoutRef.current = null;
-      }
-      return;
-    }
-    const trigger = triggerRef.current;
-    const focused = trigger?.ownerDocument.activeElement;
-    if (
-      isOpen === undefined &&
-      trigger != null &&
-      focused instanceof HTMLElement &&
-      trigger.contains(focused) &&
-      opensOnFocus(focused, trigger)
-    ) {
-      showNow();
-    }
-  }, [isEnabled, isOpen, isLayerOpen, hideNow, showNow, opensOnFocus]);
-
   // Under `auto`, whether focus counts is decided when it arrives, not when
   // the listeners attach: a roving-tabindex member that was `tabindex="-1"`
   // then can be the tab stop now. A trigger that receives focus is focusable
@@ -659,6 +625,27 @@ export function useTooltipWithTriggerBehavior(
         );
       }
 
+      // A tooltip belongs to an attached, enabled trigger. When the trigger
+      // stays detached (DropdownMenu's Button removes its tooltip wiring while
+      // its menu is open), close an uncontrolled tooltip and drop its pending
+      // show, or the next attach brings a stale tooltip back. React also calls
+      // this with null right before it attaches a changed callback, so the
+      // check waits until the commit is done. Disabling changes this callback,
+      // so a disabled trigger attaches again here and drops its pending show.
+      if (el == null) {
+        queueMicrotask(() => {
+          if (triggerRef.current == null) {
+            wasDetachedRef.current = true;
+            if (isOpen === undefined) {
+              hideNow();
+            }
+          }
+        });
+      } else if (showTimeoutRef.current && !isEnabled) {
+        clearTimeout(showTimeoutRef.current);
+        showTimeoutRef.current = null;
+      }
+
       if (el) {
         // Attach hover listeners. `pointerenter` runs before the synthesized
         // `mouseenter` a tap produces, which is what lets the hover path know
@@ -679,9 +666,34 @@ export function useTooltipWithTriggerBehavior(
 
       triggerRef.current = el;
       attachPressPin(el);
+
+      // A trigger that attaches again after a detach (DropdownMenu's Button
+      // gets its tooltip wiring back as its menu closes) missed any focus
+      // that arrived meanwhile. Show for focus already inside it only if that
+      // focus would open the tooltip: returned keyboard focus does, focus
+      // returned after a pointer pick does not.
+      if (el != null && wasDetachedRef.current) {
+        wasDetachedRef.current = false;
+        const focused = el.ownerDocument.activeElement;
+        if (
+          isEnabled &&
+          isOpen === undefined &&
+          focusTrigger !== 'never' &&
+          focused instanceof HTMLElement &&
+          el.contains(focused) &&
+          opensOnFocus(focused, el)
+        ) {
+          showNow();
+        }
+      }
     },
     [
       attachPressPin,
+      isEnabled,
+      isOpen,
+      hideNow,
+      showNow,
+      opensOnFocus,
       focusTrigger,
       handleMouseEnter,
       handleMouseLeave,

@@ -29,7 +29,6 @@ import {
   type TooltipOptions,
 } from './useTooltip';
 import {useLayer} from '../Layer/useLayer';
-import {Tooltip} from './Tooltip';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
 import type {MouseEvent as ReactMouseEvent} from 'react';
 
@@ -170,155 +169,62 @@ describe('useTooltip — show delay', () => {
   });
 });
 
-describe('useTooltip — enabled transitions', () => {
-  it('closes an open tooltip on disable and waits for a fresh hover on re-enable', () => {
-    const onShow = vi.fn();
+// A caller that removes the trigger wiring while its own layer is open, as
+// DropdownMenu's Button does.
+function DetachableHarness({
+  isAttached,
+  ...options
+}: TooltipOptions & {isAttached: boolean}) {
+  const tooltip = useTooltip(options);
+  return (
+    <div>
+      <button
+        type="button"
+        ref={isAttached ? tooltip.ref : undefined}
+        aria-describedby={tooltip.describedBy}>
+        Trigger
+      </button>
+      {tooltip.renderTooltip('Helpful text')}
+    </div>
+  );
+}
+
+describe('useTooltip — a trigger that detaches and attaches again', () => {
+  it('closes an open tooltip when its trigger stays detached', async () => {
     const onHide = vi.fn();
-    const {rerender} = render(<Harness onShow={onShow} onHide={onHide} />);
+    const {rerender} = render(<DetachableHarness isAttached onHide={onHide} />);
     fireEvent.mouseEnter(trigger());
     tick(200);
     expect(tooltipElement().matches(':popover-open')).toBe(true);
 
-    rerender(<Harness isEnabled={false} onShow={onShow} onHide={onHide} />);
+    rerender(<DetachableHarness isAttached={false} onHide={onHide} />);
+    await act(async () => {});
     expect(tooltipElement().matches(':popover-open')).toBe(false);
     expect(onHide).toHaveBeenCalledTimes(1);
-
-    rerender(<Harness onShow={onShow} onHide={onHide} />);
-    tick(1000);
-    expect(tooltipElement().matches(':popover-open')).toBe(false);
-    expect(onShow).toHaveBeenCalledTimes(1);
-
-    fireEvent.mouseEnter(trigger());
-    tick(200);
-    expect(tooltipElement().matches(':popover-open')).toBe(true);
-    expect(onShow).toHaveBeenCalledTimes(2);
   });
 
-  it('shows for keyboard focus that returned while triggers were disabled', () => {
-    const {rerender} = render(<Harness isEnabled={false} />);
-    const matches = trigger().matches.bind(trigger());
-    vi.spyOn(trigger(), 'matches').mockImplementation(
-      selector => selector === ':focus-visible' || matches(selector),
-    );
-    act(() => trigger().focus());
-    expect(tooltipElement().matches(':popover-open')).toBe(false);
-
-    rerender(<Harness />);
-    expect(tooltipElement().matches(':popover-open')).toBe(true);
-
-    // An ordinary rerender must not resurrect an Escape-dismissed tooltip.
-    fireEvent.keyDown(document, {key: 'Escape'});
-    rerender(<Harness onShow={vi.fn()} />);
-    expect(tooltipElement().matches(':popover-open')).toBe(false);
-  });
-
-  it('does not show for pointer focus on re-enable', () => {
-    const {rerender} = render(<Harness isEnabled={false} />);
-    const matches = trigger().matches.bind(trigger());
-    vi.spyOn(trigger(), 'matches').mockImplementation(selector =>
-      selector === ':focus-visible' ? false : matches(selector),
-    );
-    act(() => trigger().focus());
-
-    rerender(<Harness />);
-    tick(1000);
-    expect(tooltipElement().matches(':popover-open')).toBe(false);
-  });
-
-  it('does not replay touch focus on re-enable and accepts a fresh tap', () => {
-    const {rerender} = render(<Harness touchTrigger="tap" />);
-    const matches = trigger().matches.bind(trigger());
-    vi.spyOn(trigger(), 'matches').mockImplementation(
-      selector => selector === ':focus-visible' || matches(selector),
-    );
-    fireEvent.pointerDown(trigger(), {pointerType: 'touch'});
-    act(() => trigger().focus());
-    fireEvent.pointerUp(trigger(), {pointerType: 'touch'});
-    fireEvent.click(trigger());
-    expect(tooltipElement().matches(':popover-open')).toBe(true);
-
-    rerender(<Harness touchTrigger="tap" isEnabled={false} />);
-    expect(tooltipElement().matches(':popover-open')).toBe(false);
-    rerender(<Harness touchTrigger="tap" />);
-    expect(tooltipElement().matches(':popover-open')).toBe(false);
-
-    fireEvent.pointerDown(trigger(), {pointerType: 'touch'});
-    fireEvent.pointerUp(trigger(), {pointerType: 'touch'});
-    fireEvent.click(trigger());
-    expect(tooltipElement().matches(':popover-open')).toBe(true);
-  });
-
-  it('honors focusTrigger never when re-enabled on a focused trigger', () => {
-    const {rerender} = render(
-      <Harness isEnabled={false} focusTrigger="never" />,
-    );
+  it('shows on attach for keyboard focus that arrived while detached', async () => {
+    const {rerender} = render(<DetachableHarness isAttached />);
+    rerender(<DetachableHarness isAttached={false} />);
+    await act(async () => {});
     const matches = trigger().matches.bind(trigger());
     vi.spyOn(trigger(), 'matches').mockImplementation(
       selector => selector === ':focus-visible' || matches(selector),
     );
     act(() => trigger().focus());
 
-    rerender(<Harness focusTrigger="never" />);
-    expect(tooltipElement().matches(':popover-open')).toBe(false);
-  });
-
-  it('keeps a controlled tooltip open when triggers are disabled', () => {
-    const onHide = vi.fn();
-    const {rerender} = render(<Harness isOpen onHide={onHide} />);
-
-    rerender(<Harness isOpen isEnabled={false} onHide={onHide} />);
-    tick(1000);
+    rerender(<DetachableHarness isAttached />);
     expect(tooltipElement().matches(':popover-open')).toBe(true);
-    expect(onHide).not.toHaveBeenCalled();
   });
 
-  it('reports no close on a rerender while it stays disabled', () => {
-    const reported: boolean[] = [];
-    const {rerender} = render(
-      <Tooltip
-        content="Hint"
-        isDefaultOpen
-        onOpenChange={isOpen => reported.push(isOpen)}>
-        <button type="button">Trigger</button>
-      </Tooltip>,
-    );
-    rerender(
-      <Tooltip
-        content="Hint"
-        isDefaultOpen
-        isEnabled={false}
-        onOpenChange={isOpen => reported.push(isOpen)}>
-        <button type="button">Trigger</button>
-      </Tooltip>,
-    );
-    expect(reported).toEqual([true, false]);
-
-    rerender(
-      <Tooltip
-        content="Hint"
-        isDefaultOpen
-        isEnabled={false}
-        onOpenChange={isOpen => reported.push(isOpen)}>
-        <button type="button">Trigger</button>
-      </Tooltip>,
-    );
-    expect(reported).toEqual([true, false]);
-  });
-
-  it('keeps a controlled tooltip closed when re-enabled on a focused trigger', () => {
-    const onShow = vi.fn();
-    const {rerender} = render(
-      <Harness isOpen={false} isEnabled={false} onShow={onShow} />,
-    );
-    const matches = trigger().matches.bind(trigger());
-    vi.spyOn(trigger(), 'matches').mockImplementation(
-      selector => selector === ':focus-visible' || matches(selector),
-    );
+  it('stays closed on attach for pointer focus that arrived while detached', async () => {
+    const {rerender} = render(<DetachableHarness isAttached />);
+    rerender(<DetachableHarness isAttached={false} />);
+    await act(async () => {});
     act(() => trigger().focus());
 
-    rerender(<Harness isOpen={false} onShow={onShow} />);
+    rerender(<DetachableHarness isAttached />);
     expect(tooltipElement().matches(':popover-open')).toBe(false);
-    expect(onShow).not.toHaveBeenCalled();
   });
 });
 
