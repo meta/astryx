@@ -838,6 +838,11 @@
       "source": "./src/internal/touch-sheet.ts",
       "types": "./dist/internal/touch-sheet.d.ts",
       "default": "./dist/internal/touch-sheet.js"
+    },
+    "./internal/selectable-card": {
+      "source": "./src/internal/selectable-card.ts",
+      "types": "./dist/internal/selectable-card.d.ts",
+      "default": "./dist/internal/selectable-card.js"
     }
   },
   "files": [

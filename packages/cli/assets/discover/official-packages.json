@@ -162,6 +162,10 @@
         },
         {
           "kind": "component",
+          "name": "SelectableCardGroup"
+        },
+        {
+          "kind": "component",
           "name": "Stat"
         },
         {

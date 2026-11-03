@@ -24,6 +24,15 @@ export {
 // InfoTip — accessible info-icon help affordance (RFC meta/astryx#3349)
 export {InfoTip, type InfoTipProps, type InfoTipSize} from './InfoTip';
 
+// SelectableCardGroup — a set of selectable cards with the semantics of its
+// selection: one choice is a radio group, several a group of checkboxes
+export {
+  SelectableCardGroup,
+  SelectableCardGroupItem,
+  type SelectableCardGroupProps,
+  type SelectableCardGroupItemProps,
+} from './SelectableCardGroup';
+
 // EmojiPicker — standalone searchable emoji panel
 export {
   EmojiPicker,

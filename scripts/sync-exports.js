@@ -240,6 +240,7 @@ const FILE_MODULE_SUBPATH_EXPORTS = [
   'internal/indicatorPress.stylex',
   'internal/touch',
   'internal/touch-sheet',
+  'internal/selectable-card',
 ];
 
 /**
