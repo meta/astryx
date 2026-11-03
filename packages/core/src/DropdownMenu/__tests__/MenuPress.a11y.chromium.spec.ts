@@ -167,6 +167,29 @@ async function openMenuWithMouse(page: Page) {
   return menu;
 }
 
+/**
+ * A menu opened by touch grows out of its trigger on UIMenu's spring; its
+ * rows are where a finger can reach them only once that motion is done.
+ * Wait for it before reading a row's position.
+ */
+async function settled(page: Page) {
+  await expect
+    .poll(async () =>
+      page.evaluate(() => {
+        const surface = document
+          .querySelector('[role="menu"], [role="listbox"]')
+          ?.closest('[popover]');
+        if (surface == null) {
+          return -1;
+        }
+        return surface
+          .getAnimations({subtree: true})
+          .filter(animation => animation.playState === 'running').length;
+      }),
+    )
+    .toBe(0);
+}
+
 async function activeRowName(page: Page) {
   return page.evaluate(() => {
     const active = document.activeElement;
@@ -301,6 +324,7 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     await touch.tap(cdp, await center(page, TRIGGER));
     const menu = page.getByRole('menu');
     await expect(menu).toBeVisible();
+    await settled(page);
 
     const edit = await center(page, 'menuitem', 'Edit');
     const del = await center(page, 'menuitem', 'Delete');
@@ -323,6 +347,7 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     await mount(page, MENU_STORY);
     await touch.tap(cdp, await center(page, TRIGGER));
     await expect(page.getByRole('menu')).toBeVisible();
+    await settled(page);
     await touch.tap(cdp, await center(page, 'menuitem', 'Duplicate'));
     await page.waitForTimeout(500);
     expect(activations).toEqual(['Duplicate clicked']);
@@ -337,6 +362,7 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     await touch.tap(cdp, await center(page, TRIGGER));
     const menu = page.getByRole('menu');
     await expect(menu).toBeVisible();
+    await settled(page);
     const edit = await center(page, 'menuitem', 'Edit');
     await touch.start(cdp, edit);
     await touch.slide(cdp, edit, {x: edit.x + 400, y: edit.y + 200});
@@ -381,6 +407,7 @@ test.describe('DropdownMenu press model (Chromium)', () => {
     await expect
       .poll(async () => menu.evaluate(el => getComputedStyle(el).touchAction))
       .toBe('pan-y pinch-zoom');
+    await settled(page);
 
     const first = await center(page, 'menuitem', 'New File');
     const scrollBefore = await menu.evaluate(el => el.scrollTop);

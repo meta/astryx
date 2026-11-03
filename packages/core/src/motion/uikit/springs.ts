@@ -523,6 +523,24 @@ const SPRING_ROLES = {
   sliderDrop: SLIDER_DROP_SPRING,
 };
 
+// UIKit's menu springs under their table paths, for registerMenuSprings.
+const menuSpringRoles = {
+  menuOpen: MENU_OPEN_SPRING,
+  menuClose: MENU_CLOSE_SPRING,
+};
+
+/**
+ * Registers only UIKit's menu springs as their roles, `springs.menuOpen`
+ * and `springs.menuClose`, for DropdownMenu's grow and collapse. DropdownMenu
+ * plays them without the rest of the table: its bundle carries these two
+ * springs and no other.
+ */
+export function registerMenuSprings(): void {
+  registerMotionTable('springs', menuSpringRoles, {
+    roles: Object.keys(menuSpringRoles),
+  });
+}
+
 /**
  * Registers the role springs (`SPRING_ROLES`) as internal motion roles
  * (motion/roles.ts), by their row names (`springs.settle`). Every other

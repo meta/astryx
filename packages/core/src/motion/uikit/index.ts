@@ -5,9 +5,9 @@
  * @input The domain files of the UIKit constants table
  * @output Re-exports `springs` and one constant per spring (`SHEET_PRESENT_SPRING`,
  *   …), `scroll`, `timing`, `navigation`, `progressBar`, `segmentedControl`,
- *   the `slider` and switch (`switchControl`) domains, and the gesture
- *   thresholds (one `UIKIT_*` group per recognizer, their union
- *   `UIKIT_GESTURES`, and the haptic tables)
+ *   the `slider` and switch (`switchControl`) domains, the menu (`menu`),
+ *   and the gesture thresholds (one `UIKIT_*` group per recognizer, their
+ *   union `UIKIT_GESTURES`, and the haptic tables)
  * @position Entry of the UIKit constants table (motion/uikit). Internal to
  *   core: not exported from the package entry point
  *
@@ -40,6 +40,7 @@ export {
   type GestureConstantUnit,
   type HapticFeedbackKind,
 } from './gestures';
+export {menu} from './menu';
 export {navigation, registerNavigationTable} from './navigation';
 export {progressBar, registerProgressBarTable} from './progressBar';
 export {registerScrollTable, scroll} from './scroll';

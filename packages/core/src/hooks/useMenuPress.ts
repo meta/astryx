@@ -203,7 +203,14 @@ export interface UseMenuPressReturn {
  *
  * @internal
  */
-export type DropdownMenuPressReturn = UseMenuPressReturn;
+export interface DropdownMenuPressReturn extends UseMenuPressReturn {
+  /**
+   * The pointer type of the trigger's last press, for a click that opens the
+   * menu and carries none: only a click in that press's gesture reads it, and
+   * reading it clears it.
+   */
+  readonly takeTriggerPressPointerType: () => MenuPressPointerType | null;
+}
 
 /**
  * Where a pointer is, for a finger's handoff distance. Positions reach the
@@ -325,8 +332,12 @@ export function useDropdownMenuPress(
   const {surface, triggerContext} = useMenuPressModel(options);
   const trigger = useMenuTriggerPress(triggerContext, options);
   return useMemo(
-    () => ({...surface, triggerProps: trigger}),
-    [surface, trigger],
+    () => ({
+      ...surface,
+      triggerProps: trigger,
+      takeTriggerPressPointerType: triggerContext.takeTriggerPointerType,
+    }),
+    [surface, trigger, triggerContext],
   );
 }
 
@@ -339,7 +350,7 @@ export function useDropdownMenuPress(
  */
 export type MenuSurfacePressReturn = Omit<
   DropdownMenuPressReturn,
-  'triggerProps'
+  'triggerProps' | 'takeTriggerPressPointerType'
 >;
 
 /**
@@ -413,6 +424,11 @@ function useMenuPressModel(options: DropdownMenuPressOptions): {
   );
   const lastPointerEventRef = useRef<PointerEvent | null>(null);
   const triggerGestureRef = useRef<number | null>(null);
+  // The pointer type of the trigger's last press, with the gesture it began.
+  const triggerPressRef = useRef<{
+    pointerType: MenuPressPointerType;
+    gesture: number;
+  } | null>(null);
   // The second pointer that ended a gesture must not start the next one.
   const ignoredPointerIdRef = useRef<number | null>(null);
 
@@ -823,6 +839,16 @@ function useMenuPressModel(options: DropdownMenuPressOptions): {
     },
     setLastPointerEvent: event => {
       lastPointerEventRef.current = event;
+    },
+    setTriggerPointerType: pointerType => {
+      triggerPressRef.current = {pointerType, gesture: currentGesture()};
+    },
+    takeTriggerPointerType: () => {
+      const press = triggerPressRef.current;
+      triggerPressRef.current = null;
+      return press != null && press.gesture === currentGesture()
+        ? press.pointerType
+        : null;
     },
     takeIgnoredPointer: pointerId => {
       if (pointerId !== ignoredPointerIdRef.current) {
