@@ -146,6 +146,10 @@ const GESTURE_USERS = new Set([
   'SegmentedControl',
   // DateTimeInput: through the SegmentedControl its touch field renders.
   'DateTimeInput',
+  // The menu press model's touch scroll-view probe: DropdownMenu passes it to
+  // the trigger half, and MoreMenu renders a DropdownMenu.
+  'DropdownMenu',
+  'MoreMenu',
 ]);
 
 /** Public imports that carry no gesture code, whatever the list above says. */
