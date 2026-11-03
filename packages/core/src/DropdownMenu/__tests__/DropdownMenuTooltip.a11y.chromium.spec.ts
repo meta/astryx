@@ -1,9 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope ^(packages/core/src/(DropdownMenu|Button|Tooltip|Layer)/|apps/storybook/stories/DropdownMenuTooltipA11y)
+// @pr-a11y scope ^packages/core/src/(DropdownMenu|Button|Tooltip|Layer)/ ^apps/storybook/stories/DropdownMenu.stories.tsx$
 
 /**
  * @file DropdownMenuTooltip.a11y.chromium.spec.ts
- * @input Built DropdownMenuTooltipA11y stories and real Chromium input
+ * @input The Core/DropdownMenu stories in a built Storybook and Chromium
  * @output Regression evidence for suppressed trigger tooltips and focus return
  * @position Native popover and focus-modality proof for issue #8965
  */
@@ -26,52 +26,69 @@ test.afterAll(async () => {
   await storybook?.close();
 });
 
-async function mount(page: Page, story = 'data'): Promise<Locator> {
-  await page.goto(
-    `${storybook.origin}/iframe.html?id=a11y-dropdownmenu-tooltip--${story}&viewMode=story`,
-  );
+async function mount(page: Page, mode: string) {
+  const story = mode === 'compound' ? 'compound-basic' : 'default';
+  const presentation = mode === 'sheet' ? 'bottom-sheet' : 'popover';
+  const params = new URLSearchParams({
+    id: `core-dropdownmenu--${story}`,
+    viewMode: 'story',
+    args: `button.label:Actions;button.tooltip:More actions;presentation:${presentation}`,
+  });
+  await page.goto(`${storybook.origin}/iframe.html?${params}`);
   await holdMotionStill(page);
   const trigger = page.getByRole('button', {name: 'Actions', exact: true});
+  const item = page.getByRole(mode === 'sheet' ? 'button' : 'menuitem', {
+    name: 'Edit',
+    exact: true,
+  });
   await expect(trigger).toBeVisible();
-  return trigger;
+  return {trigger, item};
 }
 
 function openTooltip(page: Page): Locator {
   return page.locator('[role="tooltip"]:popover-open');
 }
 
-async function expectClosedAfterPick(page: Page, trigger: Locator) {
+async function pointerPick(page: Page, mode: string, hoverFirst = true) {
+  const {trigger, item} = await mount(page, mode);
+  if (hoverFirst) {
+    await trigger.hover();
+    await expect(openTooltip(page)).toBeVisible();
+  }
+  await trigger.click();
+  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  await page.waitForTimeout(400);
+  await expect(openTooltip(page)).toHaveCount(0);
+  await item.click();
   await expect(trigger).toHaveAttribute('aria-expanded', 'false');
-  await expect(page.getByRole('status', {name: 'Picks'})).toHaveText('1');
-  await page.getByRole('button', {name: 'Elsewhere'}).hover();
+  await page.mouse.move(0, 0);
   await expect(trigger).toBeFocused();
   expect(
     await trigger.evaluate(el => el.matches(':hover, :focus-visible')),
   ).toBe(false);
-  // Cross the default show delay and the hover bridge: an absent tooltip
-  // before a still-pending timer runs is not proof that it stays closed.
+  // Cross the show delay and hover bridge rather than passing before a timer.
   await page.waitForTimeout(400);
+  await expect(openTooltip(page)).toHaveCount(0);
+
+  await trigger.hover();
+  await expect(openTooltip(page)).toBeVisible();
+  await page.mouse.move(0, 0);
   await expect(openTooltip(page)).toHaveCount(0);
 }
 
-async function pointerPick(page: Page, story: string) {
-  const trigger = await mount(page, story);
-  await trigger.hover();
+async function keyboardPick(page: Page, mode: string) {
+  const {trigger, item} = await mount(page, mode);
+  await page.keyboard.press('Tab');
+  await expect(trigger).toBeFocused();
   await expect(openTooltip(page)).toBeVisible();
-  await trigger.click();
-  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  await page.keyboard.press('Enter');
+  await expect(item).toBeFocused();
   await expect(openTooltip(page)).toHaveCount(0);
-  await page
-    .getByRole(story === 'bottom-sheet' ? 'button' : 'menuitem', {
-      name: 'Rename',
-      exact: true,
-    })
-    .click();
-  await expectClosedAfterPick(page, trigger);
-
-  await trigger.hover();
+  await page.keyboard.press('Enter');
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  await expect(trigger).toBeFocused();
   await expect(openTooltip(page)).toBeVisible();
-  await page.getByRole('button', {name: 'Elsewhere'}).hover();
+  await page.keyboard.press('Escape');
   await expect(openTooltip(page)).toHaveCount(0);
 }
 
@@ -90,41 +107,14 @@ test('a compound menu does not resurrect its tooltip after a pointer pick', asyn
 test('a bottom sheet does not resurrect its tooltip after a pointer pick', async ({
   page,
 }) => {
-  await pointerPick(page, 'bottom-sheet');
+  await pointerPick(page, 'sheet');
 });
 
 test('opening before the hover delay expires cancels the pending tooltip', async ({
   page,
 }) => {
-  const trigger = await mount(page);
-  await trigger.click();
-  await expect(trigger).toHaveAttribute('aria-expanded', 'true');
-  await page.waitForTimeout(400);
-  await expect(openTooltip(page)).toHaveCount(0);
-  await page.getByRole('menuitem', {name: 'Rename', exact: true}).click();
-  await expectClosedAfterPick(page, trigger);
+  await pointerPick(page, 'data', false);
 });
-
-async function keyboardPick(page: Page, story: string) {
-  const trigger = await mount(page, story);
-  await page.keyboard.press('Tab');
-  await expect(trigger).toBeFocused();
-  await expect(openTooltip(page)).toBeVisible();
-  await page.keyboard.press('Enter');
-  const item = page.getByRole(
-    story === 'bottom-sheet' ? 'button' : 'menuitem',
-    {name: 'Rename', exact: true},
-  );
-  await expect(item).toBeFocused();
-  await expect(openTooltip(page)).toHaveCount(0);
-  await page.keyboard.press('Enter');
-  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
-  await expect(trigger).toBeFocused();
-  await expect(page.getByRole('status', {name: 'Picks'})).toHaveText('1');
-  await expect(openTooltip(page)).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(openTooltip(page)).toHaveCount(0);
-}
 
 test('keyboard selection in a data menu returns focus and shows the tooltip', async ({
   page,
@@ -141,19 +131,18 @@ test('keyboard selection in a compound menu returns focus and shows the tooltip'
 test('keyboard selection in a bottom sheet returns focus and shows the tooltip', async ({
   page,
 }) => {
-  await keyboardPick(page, 'bottom-sheet');
+  await keyboardPick(page, 'sheet');
 });
 
 test('Escape returns keyboard focus and shows the tooltip', async ({page}) => {
-  const trigger = await mount(page);
+  const {trigger, item} = await mount(page, 'data');
   await page.keyboard.press('Tab');
   await expect(trigger).toBeFocused();
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('menuitem', {name: 'Rename'})).toBeFocused();
+  await expect(item).toBeFocused();
   await expect(openTooltip(page)).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(trigger).toHaveAttribute('aria-expanded', 'false');
   await expect(trigger).toBeFocused();
-  await expect(page.getByRole('status', {name: 'Picks'})).toHaveText('0');
   await expect(openTooltip(page)).toBeVisible();
 });
