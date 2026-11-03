@@ -30,9 +30,11 @@
  *     publish twice even when a registry read is stale.
  *   - `--skip-if-package-absent` is for a private canary-only package whose
  *     npm name may not be set up yet: its first publish would be refused.
- *     The check reads the package's dist-tags, which stay small, and never
- *     its full document, which grows with every canary and can outlast a
- *     read's time limit. An unknown answer is asked again and never skips.
+ *     The check reads the package's `latest` version document, which stays
+ *     small and answers 404 for a missing package, and never its full
+ *     document, which grows with every canary and can outlast a read's time
+ *     limit. (A missing scoped package's dist-tags answer 401, not 404.) An
+ *     unknown answer is asked again and never skips.
  */
 
 import {spawnSync} from 'node:child_process';
@@ -40,11 +42,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 
-import {
-  DEFAULT_REGISTRY,
-  fetchDistTags,
-  fetchVersionDocument,
-} from './registry.mjs';
+import {DEFAULT_REGISTRY, fetchVersionDocument} from './registry.mjs';
 
 const DEFAULT_ATTEMPTS = 3;
 const DEFAULT_RETRY_WAITS_MS = [20_000, 60_000];
@@ -82,23 +80,16 @@ export async function registryHas({
 }
 
 /**
- * Whether the package `name` exists on the registry: `true`, `false` (404),
+ * Whether the package `name` exists on the registry, read from its `latest`
+ * version document: every published package has one. `true`, `false` (404),
  * or `null` when the read failed (a network error or any other status).
  */
-export async function packageExists({
+export function packageExists({
   name,
   registry = DEFAULT_REGISTRY,
   fetchImpl = fetch,
 }) {
-  try {
-    const response = await fetchDistTags({name, registry, fetchImpl});
-    await response.body?.cancel();
-    if (response.status === 200) return true;
-    if (response.status === 404) return false;
-    return null;
-  } catch {
-    return null;
-  }
+  return registryHas({name, version: 'latest', registry, fetchImpl});
 }
 
 /**

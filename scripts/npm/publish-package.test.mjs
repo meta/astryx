@@ -177,7 +177,7 @@ describe('registryHas', () => {
 describe('packageExists', () => {
   const respond = status => async () => new Response('{}', {status});
 
-  it("reads the package's dist-tags, not its full document", async () => {
+  it("reads the package's latest version document, not its full document", async () => {
     const urls = [];
     await packageExists({
       name: '@astryxdesign/vega',
@@ -188,7 +188,7 @@ describe('packageExists', () => {
       },
     });
     expect(urls).toEqual([
-      'https://registry.example/-/package/%40astryxdesign%2Fvega/dist-tags',
+      'https://registry.example/%40astryxdesign%2Fvega/latest',
     ]);
   });
 

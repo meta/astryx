@@ -4,8 +4,8 @@
  * @file registry.mjs
  * @input A package name and version, an npm registry URL, and a fetch
  * @output `fetchVersionDocument`: the registry's response for one exact
- *   version's document; `fetchDistTags`: the response for a package's
- *   dist-tags, a small document that is 404 when the package does not exist
+ *   version's document (a dist-tag such as `latest` also names a version);
+ *   `fetchDistTags`: the response for a package's dist-tags, a small document
  * @position The one way the release scripts read a version from npm:
  *   publish-package.mjs asks whether a version exists before and after each
  *   publish, and verify-published.mjs confirms a release propagated. Keeping

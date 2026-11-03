@@ -62,10 +62,12 @@ const PNPM_STUB =
   'esac; fi\n';
 
 /*
- * A registry stand-in on a local port. The private canary-only package's
- * dist-tags answer each status in `NATIVE_STATUSES` in turn (the last one
- * repeats; `000` drops the connection); other dist-tags answer 200, and every
- * version document 404. Each request path is logged.
+ * A registry stand-in on a local port that answers as npm does. The private
+ * canary-only package's `latest` version document answers each status in
+ * `NATIVE_STATUSES` in turn (the last one repeats; `000` drops the
+ * connection). Its dist-tags answer 401, as npm answers for a missing scoped
+ * package. Other dist-tags answer 200 and other version documents 404. Each
+ * request path is logged.
  */
 const REGISTRY_STUB = `
 import fs from 'node:fs';
@@ -76,6 +78,10 @@ const server = http.createServer((request, response) => {
   const url = decodeURIComponent(request.url);
   fs.appendFileSync(process.env.REQUEST_LOG, url + '\\n');
   if (url === '/-/package/@astryxdesign/native/dist-tags') {
+    response.writeHead(401).end('"Unauthorized"');
+    return;
+  }
+  if (url === '/@astryxdesign/native/latest') {
     const status = statuses[Math.min(nativeReads, statuses.length - 1)];
     nativeReads += 1;
     if (status === '000') return request.socket.destroy();
@@ -364,13 +370,13 @@ describe('stable and canary publication authority', () => {
     expect(result.published).toContain('publish ./packages/native');
   });
 
-  it('asks whether a package exists through its dist-tags, never its full document', async () => {
+  it('asks whether a package exists through its latest version document, never its full document', async () => {
     const result = await runCanaryPublish({nativeStatuses: '200'});
+    const requests = result.requests.split('\n');
 
-    expect(result.requests).toContain(
-      '/-/package/@astryxdesign/native/dist-tags',
-    );
-    expect(result.requests.split('\n')).not.toContain('/@astryxdesign/native');
+    expect(requests).toContain('/@astryxdesign/native/latest');
+    expect(requests).not.toContain('/@astryxdesign/native');
+    expect(requests).not.toContain('/-/package/@astryxdesign/native/dist-tags');
     expect(step(canary, 'Publish canary versions').run).not.toContain('curl');
   });
 
