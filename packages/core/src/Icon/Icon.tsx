@@ -176,7 +176,11 @@ export interface IconProps extends Omit<
   SVGProps<SVGSVGElement>,
   'ref' | 'color'
 > {
-  /** Ref forwarded to the root element */
+  /**
+   * Ref to the rendered SVG element when `icon` is an icon component. A
+   * semantic or namespaced name renders inside an internal wrapper, and the
+   * ref is not attached.
+   */
   ref?: React.Ref<SVGSVGElement>;
   /**
    * Icon to render. Can be:

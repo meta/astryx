@@ -80,7 +80,7 @@ export const docs = {
       name: 'color',
       type: "'primary' | 'secondary' | 'tertiary' | 'disabled' | 'accent' | 'info' | 'success' | 'error' | 'warning' | 'inherit' | 'blue' | 'red' | 'green' | 'gray' | 'cyan' | 'teal' | 'yellow' | 'orange' | 'pink' | 'purple'",
       description:
-        'Color variant mapped to Astryx icon color tokens. Semantic values (primary through warning) follow the role; palette values (blue through purple) pick a fixed, non-semantic hue; inherit uses the surrounding text color.',
+        'Color variant mapped to Astryx icon color tokens. Semantic values (primary through warning) follow the role; palette values (blue through purple) pick a non-semantic hue; inherit uses the surrounding text color.',
       default: "'inherit'",
     },
     {
@@ -235,7 +235,7 @@ export const docsZh = {
       name: 'color',
       type: "'primary' | 'secondary' | 'tertiary' | 'disabled' | 'accent' | 'info' | 'success' | 'error' | 'warning' | 'inherit' | 'blue' | 'red' | 'green' | 'gray' | 'cyan' | 'teal' | 'yellow' | 'orange' | 'pink' | 'purple'",
       description:
-        '映射到 Astryx 图标颜色令牌的颜色变体。语义值（primary 到 warning）跟随角色；调色板值（blue 到 purple）选择固定的非语义色相；inherit 使用周围文字的颜色。',
+        '映射到 Astryx 图标颜色令牌的颜色变体。语义值（primary 到 warning）跟随角色；调色板值（blue 到 purple）选择非语义色相；inherit 使用周围文字的颜色。',
       default: "'inherit'",
     },
     {

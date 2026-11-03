@@ -14,6 +14,7 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   XCircleIcon,
+  InformationCircleIcon,
 } from '@heroicons/react/24/outline';
 import {
   HeartIcon as HeartIconSolid,
@@ -186,6 +187,7 @@ export const AllColors: Story = {
       <Icon icon={CogIcon} color="tertiary" />
       <Icon icon={BellIcon} color="disabled" />
       <Icon icon={HeartIcon} color="accent" />
+      <Icon icon={InformationCircleIcon} color="info" />
       <Icon icon={CheckCircleIcon} color="success" />
       <Icon icon={XCircleIcon} color="error" />
       <Icon icon={ExclamationTriangleIcon} color="warning" />

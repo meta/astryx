@@ -58,6 +58,7 @@ const SEMANTIC_COLORS = [
   'tertiary',
   'disabled',
   'accent',
+  'info',
   'success',
   'error',
   'warning',
@@ -82,6 +83,7 @@ const COLOR_TOKEN: Record<string, string> = {
   tertiary: '--color-icon-secondary',
   disabled: '--color-icon-disabled',
   accent: '--color-accent',
+  info: '--color-icon-info',
   success: '--color-icon-success',
   error: '--color-icon-error',
   warning: '--color-icon-warning',
@@ -119,7 +121,7 @@ add('all-sizes', 'neutral');
 add('accessible-name', 'neutral');
 add('inherit-color', 'neutral');
 
-test.describe.configure({mode: 'serial', retries: 0});
+test.describe.configure({retries: 0});
 let server: StaticServer;
 let checkoutSha: string;
 let storybookSha: string;
@@ -358,6 +360,7 @@ for (const item of cases) {
         SIZES.includes(icon.dataSize ?? ''),
         `${id}: data-size ${icon.dataSize}`,
       );
+      check(icon.dataColor != null, `${id}: no data-color`);
       if (icon.tagName === 'span' && icon.glyphBox) {
         check(
           near(icon.glyphBox.width, icon.box.width) &&
@@ -523,6 +526,7 @@ for (const item of cases) {
       `${JSON.stringify(receipt, null, 2)}\n`,
     );
     await context.close();
+    expect(failures).toEqual([]);
   });
 }
 
@@ -554,6 +558,12 @@ test('manifest is complete', async () => {
     )}\n`,
   );
   expect(receiptFiles).toHaveLength(cases.length);
+  // A receipt left by an earlier build does not count.
+  expect(
+    receipts
+      .filter(receipt => receipt.expected.build !== checkoutSha)
+      .map(receipt => receipt.expected),
+  ).toEqual([]);
   expect(
     receipts
       .filter(receipt => !receipt.passed)
