@@ -29,6 +29,7 @@ import {
   SegmentedControlItem,
 } from '@astryxdesign/core/SegmentedControl';
 import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
+import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import type {CSSProperties, ReactNode} from 'react';
 
 // Custom CSS here is limited to what Astryx components can't express today:
@@ -260,6 +261,9 @@ function StarRating({rating, count}: {rating: number; count?: number}) {
       {Array.from({length: empty}, (_, i) => (
         <Icon key={`empty-${i}`} icon={StarIcon} size="sm" />
       ))}
+      {count === undefined && (
+        <VisuallyHidden>{`Rated ${rating} out of 5`}</VisuallyHidden>
+      )}
       {count !== undefined && (
         <Text type="body" color="secondary">
           {rating} ({count.toLocaleString('en-US')})

@@ -246,7 +246,10 @@ export function rankPages(query, pages) {
 /**
  * Put a named family's base template ahead of the variant that outranks it,
  * unless the variant matched START_TERMS terms the base did not, or the base
- * scores too little to start on its own.
+ * cannot start on its own: too little score, or too few matched terms. Score
+ * alone drifts upward as the catalog grows (idf rises with page count), which
+ * would eventually let a one-term base displace its variant; hits do not
+ * drift.
  * @param {RankedPage[]} ranked
  * @returns {RankedPage[]}
  */
@@ -254,7 +257,9 @@ function baseFirst(ranked) {
   const top = ranked[0];
   if (!top || top.base || !top.familyNamed) return ranked;
   const base = ranked.find(r => r.base && r.family === top.family);
-  if (!base || base.score < START_SCORE) return ranked;
+  if (!base || base.score < START_SCORE || base.hits < START_TERMS) {
+    return ranked;
+  }
   const own = [...top.matched].filter(t => !base.matched.has(t)).length;
   return own >= START_TERMS
     ? ranked
