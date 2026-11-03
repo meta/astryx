@@ -1810,7 +1810,6 @@ component PowerSearch(props: PowerSearchProps)
   prop config: PowerSearchConfig
   prop disabledMessage?: string
   prop endContent?: React.ReactNode
-  prop experimental?: { presentation?: 'popover' | 'bottom-sheet' | 'adaptive' } @experimental
   prop filters: ReadonlyArray<PowerSearchFilter>
   prop handleRef?: React.Ref<PowerSearchHandle>
   prop hasAutoFocus?: boolean = false
@@ -1828,6 +1827,7 @@ component PowerSearch(props: PowerSearchProps)
   prop onFocus?: (e: React.FocusEvent) => void
   prop placeholder?: string = 'Search...'
   prop popoverSaveButtonLabel?: string = 'Apply'
+  prop presentation?: PowerSearchPresentation = 'adaptive'
   prop ref?: React.Ref<HTMLDivElement>
   prop resultCount?: number | string
   prop size?: PowerSearchSize = 'md'
@@ -4991,6 +4991,7 @@ interface PowerSearchOperatorWithLabel extends PowerSearchOperatorBase
   key: string
   label: string
   value: OperatorValue
+type PowerSearchPresentation = AdaptivePresentation
 interface PowerSearchProps extends Omit<BaseProps<HTMLElement>, 'onChange'> (props of PowerSearch)
 type PowerSearchSize = 'sm' | 'md' | 'lg'
 interface PowerSearchTokenProps (props of PowerSearchToken)
@@ -8239,6 +8240,7 @@ PowerSearchOperator (.)
 PowerSearchOperatorBase (.)
 PowerSearchOperatorWithI18nKey (.)
 PowerSearchOperatorWithLabel (.)
+PowerSearchPresentation (.)
 PowerSearchProps (.)
 PowerSearchSize (.)
 PowerSearchToken (.)
