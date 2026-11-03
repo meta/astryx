@@ -89,9 +89,6 @@ Consumer migration instructions belong in consumer docs and release notes.
   does not reflect it, so a theme rule for one direction never matches, where
   `architecture:component-theming-surface` INV6 keeps declared state on the
   owning target.
-- **Disabled Handle leaves the tab order (FR3, AR1).** A disabled Handle sets
-  `tabIndex={-1}`, so keyboard users cannot reach it to hear that it is
-  disabled, where `spec:AST-085` FR1 keeps a disabled control's tab stop.
 - **Window-splitter gaps (AR1).** The Handle names the pane it resizes with
   `aria-controls` only when its caller passes one; an unbounded Handle in a
   container that no percentage bound observes carries no `aria-valuemax`; and
@@ -175,7 +172,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | Custom handle content  | Handle and Grab zone remain; caller content replaces the pill.   | Caller content.                  |
 | Horizontal or vertical | Interaction follows the axis; ARIA orientation is the divider's. | Size, reversal, pill placement.  |
 | Collapsed              | `aria-valuenow` at the minimum and "Collapsed" value text.       | Pill side.                       |
-| Disabled               | `aria-disabled`; no resize; tab stop kept (FR3 gap).             | Disabled paint.                  |
+| Disabled               | `aria-disabled`; no resize; tab stop kept.                       | Disabled paint.                  |
 
 ### Transformation and precedence order
 
@@ -258,7 +255,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 - `spec:AST-010` owns structured sizing; FR5 and FR6 apply it.
 - `spec:AST-020` FR15 adopts the APG Window Splitter for the Handle; AR1
   applies it and records its gaps.
-- `spec:AST-085` owns disabled-control behavior; FR3 records the tab-order gap.
+- `spec:AST-085` owns disabled-control behavior.
 - `architecture:component-theming-surface` owns target mapping and state
   reflection; FR4 records the `direction` gap.
 - `architecture:interaction-modality` owns shared modality and focus
