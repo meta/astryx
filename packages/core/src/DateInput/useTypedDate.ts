@@ -214,16 +214,19 @@ export function useTypedDate({
     [t, calendarName, format, locale, calendar, min, max],
   );
 
+  const isProviderCalendar = isGregorian
+    ? providerCalendar === 'gregory' || providerCalendar === 'iso8601'
+    : calendar === providerCalendar;
+
   return {
     calendar,
     prepare,
     parse,
     formatCommitted,
     getFormatHint,
-    calendarDescription:
-      calendar === providerCalendar
-        ? null
-        : t('@astryx.dateInput.calendarDescription', {calendar: calendarName}),
+    calendarDescription: isProviderCalendar
+      ? null
+      : t('@astryx.dateInput.calendarDescription', {calendar: calendarName}),
     errorMessage,
   };
 }

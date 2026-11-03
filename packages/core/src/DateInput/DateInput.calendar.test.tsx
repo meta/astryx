@@ -290,6 +290,11 @@ describe('DateInput typed entry with a calendar', () => {
     expect(input).toHaveAttribute('placeholder', 'Select a date');
   });
 
+  it('names no calendar for an iso8601 field in a Gregorian provider', () => {
+    const {input} = renderField('en', {calendar: 'iso8601'});
+    expect(input).not.toHaveAttribute('aria-describedby');
+  });
+
   it('names the Persian calendar without a provider calendar', () => {
     const {input} = renderField('en', {calendar: 'persian'});
     expect(input).toHaveAccessibleDescription('Dates use the Persian Calendar');

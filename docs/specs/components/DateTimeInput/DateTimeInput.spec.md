@@ -192,7 +192,7 @@ durable constraints and their verification target.
   field's error status unless the caller sets `status` (`spec:AST-111` AR3).
   The pointer date segment's description names the calendar only when its
   resolved calendar differs from the provider's resolved calendar, else
-  `gregory`, both compared after the Gregorian fallback for a runtime without
+  `gregory`, with `gregory` and `iso8601` as one calendar, both compared after the Gregorian fallback for a runtime without
   `Temporal`. With a calendar other than `gregory` or `iso8601` and no caller
   `placeholder`, the empty focused segment shows an example date in the
   calendar's numeric pattern; a caller `placeholder` shows in every state and
