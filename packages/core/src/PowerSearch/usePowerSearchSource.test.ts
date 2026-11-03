@@ -596,11 +596,11 @@ describe('usePowerSearchSource', () => {
       expect(aux.filterValue).toEqual({type: 'enum_list', value: ['bug']});
     });
   });
-  describe("valueMatchMode: 'all-string-fields'", () => {
+  describe("valueSuggestionBehavior: 'all-string-fields'", () => {
     const allStringsConfig: PowerSearchConfig = {
       ...baseConfig,
       contentSearchFieldKey: 'title',
-      valueMatchMode: 'all-string-fields',
+      valueSuggestionBehavior: 'all-string-fields',
     };
 
     it('is off by default: free text offers only the content-search item', () => {
@@ -637,7 +637,7 @@ describe('usePowerSearchSource', () => {
       const config: PowerSearchConfig = {
         name: 'OptOut',
         contentSearchFieldKey: 'title',
-        valueMatchMode: 'all-string-fields',
+        valueSuggestionBehavior: 'all-string-fields',
         fields: [
           {
             key: 'title',
@@ -656,7 +656,7 @@ describe('usePowerSearchSource', () => {
     it('respects typeaheadMinQueryLength', () => {
       const config: PowerSearchConfig = {
         name: 'MinLength',
-        valueMatchMode: 'all-string-fields',
+        valueSuggestionBehavior: 'all-string-fields',
         fields: [
           {
             key: 'title',
@@ -682,7 +682,7 @@ describe('usePowerSearchSource', () => {
       const config: PowerSearchConfig = {
         name: 'SourceValues',
         contentSearchFieldKey: 'title',
-        valueMatchMode: 'all-string-fields',
+        valueSuggestionBehavior: 'all-string-fields',
         fields: [
           {
             key: 'title',

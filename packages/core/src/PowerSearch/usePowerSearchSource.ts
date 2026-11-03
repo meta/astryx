@@ -178,12 +178,12 @@ export function usePowerSearchSource(
         }
 
         // Opt-in free-text value matches across every visible string field.
-        // `valueMatchMode: 'all-string-fields'` emits a `<Field> <op> "<text>"`
+        // `valueSuggestionBehavior: 'all-string-fields'` emits a `<Field> <op> "<text>"`
         // item per visible string/string_list operator. Only runs when the
         // query does not start with a field label: that path already suggests
         // exact values above, and reusing the whole query as the value there
         // would be wrong.
-        if (config.config.valueMatchMode === 'all-string-fields') {
+        if (config.config.valueSuggestionBehavior === 'all-string-fields') {
           const startsWithFieldLabel = config
             .getVisibleFields()
             .some(f => lower.startsWith(`${f.label.toLowerCase()} `));

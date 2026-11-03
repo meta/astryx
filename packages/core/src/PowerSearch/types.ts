@@ -351,7 +351,7 @@ export interface PowerSearchConfig {
    * `'all-string-fields'` additionally emits a `<Field> <op> "<text>"` item
    * for every visible string/string_list operator.
    */
-  readonly valueMatchMode?: 'field-prefix' | 'all-string-fields';
+  readonly valueSuggestionBehavior?: 'field-prefix' | 'all-string-fields';
 }
 
 // =============================================================================
