@@ -134,7 +134,6 @@ function adjacentSnapPoint(
   return ahead[Math.min(count, ahead.length) - 1];
 }
 
-/** One step of a gesture: start, move by `delta`, end. */
 function step(model: ResizeGestureModel, delta: number): void {
   model.start();
   model.move(delta);
@@ -222,9 +221,6 @@ export function createResizeGesture(
       const current = event.currentTarget as Element | null;
       const target =
         typeof current?.setPointerCapture === 'function' ? current : null;
-      // Take the pointer for the whole gesture. Without capture the browser
-      // re-hit-tests every move, so a frame anywhere under the drag path
-      // swallows the rest of it into the guest document.
       target?.setPointerCapture?.(event.pointerId);
       const isHorizontal = config.direction === 'horizontal';
       drag = {

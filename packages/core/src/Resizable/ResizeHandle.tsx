@@ -475,8 +475,8 @@ export function ResizeHandle({
 
   // A handle whose axis disagrees with its region drags along one axis while
   // the region measures percentage bounds on the other. `ResizableProps` is
-  // exported, so `_direction` is optional for old hand-built objects; absent
-  // means there is no region axis to compare, not that it is horizontal.
+  // exported, so `_direction` is optional for old hand-built objects. Without
+  // it there is no axis to compare.
   const regionDirection = resizable?._direction;
   useDevWarning(
     'ResizeHandle',
