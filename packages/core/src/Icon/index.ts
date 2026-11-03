@@ -108,10 +108,9 @@ export type ComponentIconMap<Variant extends string = IconVariant> = {
  * names, `null`, and static requests. Slots a theme resolves with a function
  * are left out.
  */
-export type ComponentIconStaticMap = {
-  [Slot in ComponentIconSlotName]?:
-    IconName | null | ComponentIconRequest<string>;
-};
+export type ComponentIconStaticMap = Partial<
+  Record<ComponentIconSlotName, IconName | null | ComponentIconRequest<string>>
+>;
 
 export {Icon, renderIconSlot} from './Icon';
 export {useIcon} from './useIcon';
