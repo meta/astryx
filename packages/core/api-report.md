@@ -3866,6 +3866,7 @@ interface ClickableCardProps extends BaseProps (props of ClickableCard)
 interface ClickableContainerResult
   onClick: (event: MouseEvent<HTMLElement>) => void
   onMouseUp: (event: MouseEvent<HTMLElement>) => void
+  onPointerDown: (event: PointerEvent<HTMLElement>) => void
 interface CodeBlockProps extends BaseProps<HTMLPreElement> (props of CodeBlock)
 type CodeColor = 'primary' | 'secondary' | 'inherit'
 type CodeLanguage

@@ -5,8 +5,8 @@
  * @input The press state machine (pressGesture.ts), the menu-press and
  *   press-group markers and the document's pointer, keyboard, scroll and
  *   visibility events
- * @output PRESSABLE_ATTRIBUTE, PRESSED_ATTRIBUTE, pressableProps and
- *   installPressFeedback
+ * @output PRESSABLE_ATTRIBUTE, PRESSED_ATTRIBUTE, pressableProps,
+ *   installPressFeedback and cancelPress
  * @position The DOM half of the touch press model. usePressFeedback installs
  *   it, and the CSS arms live in interactionOverlay.stylex.ts.
  *
@@ -300,6 +300,21 @@ function finish(slot: Slot): void {
   slot.live = null;
   if (slot === button) {
     holdKey(false);
+  }
+}
+
+/**
+ * Ends the press the controller follows on `element`, and its paint, at once.
+ * A clickable container calls it when a press starts on an interactive
+ * element inside it: that press does not activate the container, so the
+ * container shows no press.
+ */
+export function cancelPress(element: Element): void {
+  if (finger.live?.element === element) {
+    finish(finger);
+  }
+  if (button.live?.element === element) {
+    finish(button);
   }
 }
 

@@ -46,6 +46,7 @@ import {
 } from '../theme/tokens.stylex';
 import type {SizeValue, SpacingStep, Elevation} from '../utils/types';
 import {mergeProps} from '../utils';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {Card} from '../Card/Card';
 import type {CardVariant} from '../Card/Card';
 import {useClickableContainer} from '../hooks/useClickableContainer';
@@ -55,6 +56,7 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {nestedPressStyles} from '../privateAttributes/nestedPress.stylex';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
@@ -96,22 +98,8 @@ const styles = stylex.create({
     // stylesheet and a flat one alike. A custom property's attribute arm
     // does not: a layered build emits the property's default outside the
     // priority layers its attribute arms land in, and the default wins.
-    '--_press-overlay': {
-      default: 'transparent',
-      ':where(:not(:disabled,[aria-disabled="true"]))': {
-        default: null,
-        ':active': {
-          default: colorVars['--color-overlay-pressed'],
-          '@media (pointer: coarse)': 'transparent',
-        },
-        '@media (hover: hover)': {
-          default: null,
-          ':hover:where(:not(:disabled,[aria-disabled="true"]))':
-            colorVars['--color-overlay-hover'],
-          ':active': colorVars['--color-overlay-pressed'],
-        },
-      },
-    },
+    // `--_press-overlay`, the colour of the hover and mouse press, comes from
+    // nestedPressStyles.cardPressOverlay.
     '::after': {
       content: '""',
       position: 'absolute',
@@ -314,6 +302,7 @@ export function ClickableCard({
   label,
   onClick: onClickProp,
   onMouseUp: onMouseUpProp,
+  onPointerDown: onPointerDownProp,
   href,
   target,
   isDisabled = false,
@@ -370,7 +359,7 @@ export function ClickableCard({
 
   const LinkComponent = useLinkComponent();
 
-  const {onClick, onMouseUp} = useClickableContainer({
+  const {onClick, onMouseUp, onPointerDown} = useClickableContainer({
     containerRef,
     interactiveRef,
     onClick: onClickProp,
@@ -416,6 +405,7 @@ export function ClickableCard({
         [
           styles.interactive,
           hasBorder ? styles.bordered : styles.borderless,
+          !isDisabled && nestedPressStyles.cardPressOverlay,
           !isDisabled && styles.overlay,
           // The touch press's strength and release, on the element the
           // controller writes to; the `::after` above paints off it.
@@ -427,6 +417,11 @@ export function ClickableCard({
       }
       onClick={!isDisabled ? onClick : undefined}
       onMouseUp={!isDisabled ? handleMouseUp : undefined}
+      onPointerDown={
+        !isDisabled
+          ? chainEventHandlers(onPointerDown, onPointerDownProp)
+          : onPointerDownProp
+      }
       {...props}>
       {isLink ? (
         <LinkRoot

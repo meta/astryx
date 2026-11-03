@@ -234,3 +234,50 @@ describe('useClickableContainer navigation — blocked href keeps the rest', () 
     expect(open).not.toHaveBeenCalled();
   });
 });
+
+describe('onPointerDown', () => {
+  function Harness({disabled = false}: {disabled?: boolean}) {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const {onClick, onPointerDown} = useClickableContainer({
+      containerRef,
+      onClick: () => {},
+      disabled,
+    });
+    return (
+      <div
+        data-testid="container"
+        ref={containerRef}
+        onClick={onClick}
+        onPointerDown={onPointerDown}>
+        <span>Surface</span>
+        <button type="button">Nested</button>
+      </div>
+    );
+  }
+
+  it('marks the container for a press that starts on a nested control, until it ends', () => {
+    render(<Harness />);
+    const container = screen.getByTestId('container');
+    const nested = screen.getByRole('button', {name: 'Nested'});
+    fireEvent.pointerDown(nested, {pointerType: 'mouse', button: 0});
+    expect(container.hasAttribute('data-astryx-nested-press')).toBe(true);
+    fireEvent.pointerUp(nested, {pointerType: 'mouse', button: 0});
+    expect(container.hasAttribute('data-astryx-nested-press')).toBe(false);
+  });
+
+  it('leaves the container unmarked for a press on its surface or while disabled', () => {
+    const {unmount} = render(<Harness />);
+    fireEvent.pointerDown(screen.getByText('Surface'), {pointerType: 'mouse'});
+    expect(
+      screen.getByTestId('container').hasAttribute('data-astryx-nested-press'),
+    ).toBe(false);
+    unmount();
+    render(<Harness disabled />);
+    fireEvent.pointerDown(screen.getByRole('button', {name: 'Nested'}), {
+      pointerType: 'mouse',
+    });
+    expect(
+      screen.getByTestId('container').hasAttribute('data-astryx-nested-press'),
+    ).toBe(false);
+  });
+});
