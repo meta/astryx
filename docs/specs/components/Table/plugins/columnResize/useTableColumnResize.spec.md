@@ -160,9 +160,9 @@ remain in `useTableColumnResize.doc.mjs`.
 ## Accessibility contract
 
 - **AR1 — Unchanged semantics.** Each boundary keeps its separator role, vertical
-  orientation, accessible name naming its column, and current value bounds. The
-  boundary never adds to its column header's accessible name: the header is
-  named by the rest of its content, without the boundary's name or value.
+  orientation, accessible name naming its column, and current value bounds. Its
+  resize handle sits in the `overlay` slot, so it doesn't join the header's
+  name (`component:Table` FR11).
 - **AR2 — Decorative disclosure.** `hinted` is presentation only. It changes no ARIA
   state, announces nothing, and does not enter or reorder tab order.
 - **AR3 — Parity without hover.** Keyboard focus draws the same boundary at accent,
