@@ -4,7 +4,8 @@
  * @file keyboardTestDouble.ts
  * @input vitest, the window's visual viewport and matchMedia
  * @output installKeyboardTestDouble: a stand-in on-screen keyboard that a
- *   field's keyboard test drives with one call per keyboard change
+ *   field's keyboard test drives with one call per keyboard change. Its
+ *   visual viewport pans as Chrome's does
  * @position Test helper for the keyboard module and the fields it covers
  */
 
@@ -20,6 +21,8 @@ export interface KeyboardTestDouble {
   hide(): void;
   /** Runs the animation frames asked for since, as before a paint. */
   frame(): void;
+  /** The visual viewport. A fixed element scrolled into view pans it there. */
+  viewport: EventTarget & {height: number; offsetTop: number};
   /** Puts the window back as it was. */
   restore(): void;
 }
@@ -42,6 +45,14 @@ export function installKeyboardTestDouble({
   Object.defineProperty(window, 'visualViewport', {
     configurable: true,
     value: viewport,
+  });
+  Object.defineProperty(Element.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: vi.fn(function (this: HTMLElement) {
+      if (this.style.position === 'fixed') {
+        viewport.offsetTop = parseFloat(this.style.top) || 0;
+      }
+    }),
   });
   vi.stubGlobal(
     'matchMedia',
@@ -98,10 +109,12 @@ export function installKeyboardTestDouble({
     show: cover => report(window.innerHeight - cover),
     hide: () => report(window.innerHeight),
     frame,
+    viewport,
     restore: () => {
       Reflect.deleteProperty(page, 'scrollHeight');
       Reflect.deleteProperty(page, 'clientHeight');
       Reflect.deleteProperty(window, 'visualViewport');
+      Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
       __resetLayoutViewportForTest();
       vi.unstubAllGlobals();
     },

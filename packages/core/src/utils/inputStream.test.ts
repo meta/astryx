@@ -23,8 +23,10 @@ import {afterEach, describe, expect, it, vi} from 'vitest';
 import {getGestureHost} from '../gestures/GestureHost';
 import {
   getDownPresses,
+  getTouchStartCount,
   getLastMousePoint,
   getLastPointerType,
+  isTouchOnScreen,
   subscribeInput,
 } from './inputStream';
 import {installPressFeedback} from './pressFeedback';
@@ -301,6 +303,77 @@ describe('inputStream', () => {
       stop();
     }
     expect([...getDownPresses(view)]).toEqual([]);
+  });
+
+  it('counts the fingers on the screen while touch starts and ends are heard, through a native pan that cancels the press', () => {
+    const view = document.defaultView as Window;
+    const touch = (type: string, fingers: number) =>
+      document.body.dispatchEvent(
+        Object.assign(new Event(type, {bubbles: true}), {
+          touches: Array.from({length: fingers}, () => ({})),
+        }),
+      );
+    // With only the start heard, an end could be missed: nothing is counted.
+    const stopStart = subscribeInput(view, 'touchstart', () => {});
+    touch('touchstart', 1);
+    expect(isTouchOnScreen(view)).toBe(false);
+    const stopEnd = subscribeInput(view, 'touchend', () => {});
+    const stopCancel = subscribeInput(view, 'touchcancel', () => {});
+    const stopPointer = subscribeInput(view, 'pointercancel', () => {});
+    touch('touchstart', 1);
+    expect(isTouchOnScreen(view)).toBe(true);
+    // A native pan cancels the finger's pointer, not its touch.
+    document.body.dispatchEvent(
+      new PointerEvent('pointercancel', {
+        bubbles: true,
+        pointerType: 'touch',
+        pointerId: 41,
+      }),
+    );
+    expect(isTouchOnScreen(view)).toBe(true);
+    touch('touchstart', 2);
+    touch('touchend', 1);
+    expect(isTouchOnScreen(view)).toBe(true);
+    touch('touchcancel', 0);
+    expect(isTouchOnScreen(view)).toBe(false);
+    touch('touchstart', 1);
+    expect(isTouchOnScreen(view)).toBe(true);
+    // Once no subscriber hears a touch end, a finger may have lifted unheard.
+    stopEnd();
+    expect(isTouchOnScreen(view)).toBe(false);
+    stopStart();
+    stopCancel();
+    stopPointer();
+  });
+
+  it('counts the touch starts it hears while it counts fingers, and keeps that count once it stops', () => {
+    const view = document.defaultView as Window;
+    const touch = (type: string, fingers: number) =>
+      document.body.dispatchEvent(
+        Object.assign(new Event(type, {bubbles: true}), {
+          touches: Array.from({length: fingers}, () => ({})),
+        }),
+      );
+    const stopStart = subscribeInput(view, 'touchstart', () => {});
+    const before = getTouchStartCount(view);
+    touch('touchstart', 1);
+    expect(getTouchStartCount(view)).toBe(before);
+    const stopEnd = subscribeInput(view, 'touchend', () => {});
+    const stopCancel = subscribeInput(view, 'touchcancel', () => {});
+    touch('touchstart', 1);
+    expect(getTouchStartCount(view)).toBe(before + 1);
+    // A second finger is a new touch; an end or a cancel starts none.
+    touch('touchstart', 2);
+    touch('touchend', 1);
+    touch('touchcancel', 0);
+    expect(getTouchStartCount(view)).toBe(before + 2);
+    // With no touch end heard, it counts no finger and no start.
+    stopEnd();
+    touch('touchstart', 1);
+    expect(isTouchOnScreen(view)).toBe(false);
+    expect(getTouchStartCount(view)).toBe(before + 2);
+    stopStart();
+    stopCancel();
   });
 
   it("records where the latest delivered mouse pointer event was, and keeps it through a finger's events", () => {

@@ -4,13 +4,15 @@
  * @file keyboardTarget.guide.test.ts
  * @input keyboardTarget.ts with a stand-in layout guide and a stand-in
  *   animator, a stand-in visual viewport and stubbed boxes
- * @output Proves a docked ride on the guide's slides. A field that loses
+ * @output Proves a docked ride on the guide's slides. A show sets the field
+ *   just above the keyboard at once and rides the rest. A pan the browser
+ *   makes is put back, also one made at the last height. A field that loses
  *   focus while the keyboard shows rides its bar down on the hide's slide. No
  *   set cuts the slide at its start
  * @position Keyboard module tests
  */
 
-import {afterEach, beforeEach, expect, it, vi} from 'vitest';
+import {afterEach, beforeEach, expect, it, onTestFinished, vi} from 'vitest';
 import {act} from '@testing-library/react';
 import {keyboard as androidKeyboard} from '../motion/android';
 import type {KeyboardTransition} from './keyboardModel';
@@ -72,7 +74,8 @@ vi.mock('../motion/animator', async importOriginal => {
   return {...actual, animatorFor: () => animator};
 });
 
-const {keepFieldAboveKeyboard} = await import('./keyboardTarget');
+const {keepFieldAboveKeyboard, FIELD_CLEARANCE_AT_REPORT} =
+  await import('./keyboardTarget');
 
 let keyboard: KeyboardTestDouble;
 
@@ -153,4 +156,155 @@ it("rides a blurred field's bar down on the hide's slide, never cutting it with 
   publish(slide('show', 300));
   expect(animator.play).toHaveBeenCalledTimes(1);
   stop();
+});
+
+// A bar docked at the viewport's bottom with a field 10 px above its bottom,
+// both drawn where the ride moves them.
+function dockedBar() {
+  const bottom = window.innerHeight;
+  const bar = document.createElement('div');
+  bar.style.position = 'fixed';
+  const input = document.createElement('input');
+  bar.append(input);
+  document.body.append(bar);
+  animator.state.element = bar;
+  vi.spyOn(bar, 'getBoundingClientRect').mockImplementation(
+    () => new DOMRect(0, bottom - 60 + animator.state.y, 300, 60),
+  );
+  vi.spyOn(input, 'getBoundingClientRect').mockImplementation(
+    () => new DOMRect(0, bottom - 50 + animator.state.y, 300, 40),
+  );
+  return {bar, input};
+}
+
+it("sets a docked bar's field just above the keyboard at the show's first report, then rides the rest", () => {
+  const {input} = dockedBar();
+  const stop = keepFieldAboveKeyboard(input);
+  act(() => input.focus());
+  keyboard.frame();
+  animator.set.mockClear();
+  animator.play.mockClear();
+  publish(slide('show', 300));
+  // The field's bottom, 10 px above the viewport's bottom, is set
+  // FIELD_CLEARANCE_AT_REPORT px above the keyboard's top at once.
+  expect(animator.set).toHaveBeenCalledWith({
+    y: -(300 - 10 + FIELD_CLEARANCE_AT_REPORT),
+  });
+  // The rest rides on the slide, to the bar's bottom on the keyboard's top.
+  expect(animator.play).toHaveBeenCalledTimes(1);
+  expect(animator.set.mock.invocationCallOrder[0]).toBeLessThan(
+    animator.play.mock.invocationCallOrder[0],
+  );
+  expect(animator.state.y).toBe(-300);
+  stop();
+});
+
+it('puts back a pan the browser makes on its own while a docked bar rides its field', () => {
+  const {input} = dockedBar();
+  const stop = keepFieldAboveKeyboard(input);
+  act(() => input.focus());
+  keyboard.frame();
+  publish(slide('show', 300));
+  keyboard.show(300);
+  expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+  // The browser pans the visual viewport by itself: no touch, no scroll.
+  keyboard.viewport.offsetTop = 48;
+  act(() => {
+    keyboard.viewport.dispatchEvent(new Event('scroll'));
+  });
+  expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1);
+  expect(keyboard.viewport.offsetTop).toBe(0);
+  stop();
+});
+
+// Chrome with Remove animations: Gboard first reports a keyboard 48 px tall,
+// and the bar lands on its top. The page sits scrolled to 154.3.
+function interimKeyboard() {
+  const {viewport} = keyboard;
+  const page = {scrollY: 154.3};
+  Object.defineProperty(window, 'scrollY', {
+    configurable: true,
+    get: () => page.scrollY,
+  });
+  const scrollTo = vi.fn(({top}: {top: number}) => {
+    page.scrollY = top;
+  });
+  vi.stubGlobal('scrollTo', scrollTo);
+  const {input} = dockedBar();
+  const stop = keepFieldAboveKeyboard(input);
+  act(() => input.focus());
+  keyboard.frame();
+  keyboard.show(48);
+  publish({...slide('show', 48), animated: false});
+  expect(animator.state.y).toBe(-48);
+  // How far Chrome's reveal moves to centre the field in the visual viewport.
+  const box = input.getBoundingClientRect();
+  const centring = (box.top + box.bottom) / 2 - viewport.height / 2;
+  const land = (scrollY: number, offsetTop: number) => {
+    page.scrollY = scrollY;
+    viewport.offsetTop = offsetTop;
+    act(() => {
+      viewport.dispatchEvent(new Event('scroll'));
+    });
+  };
+  onTestFinished(() => {
+    Reflect.deleteProperty(window, 'scrollY');
+    stop();
+  });
+  return {viewport, page, scrollTo, centring, input, land};
+}
+
+it("puts back, at the keyboard's real report, a pan the browser made at the last height", () => {
+  const {viewport} = interimKeyboard();
+  // A pan with no report of its own, which only the next height's report sees.
+  viewport.offsetTop = 48;
+  keyboard.show(336);
+  publish({...slide('show', 336), from: 48});
+  expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1);
+  expect(viewport.offsetTop).toBe(0);
+  expect(animator.state.y).toBe(-336);
+});
+
+it("puts back Chrome's own reveal of a docked bar's field, its document scroll and its pan, as soon as it lands, and not the app's later scroll", () => {
+  const {viewport, page, scrollTo, centring, land} = interimKeyboard();
+  // Chrome reveals the field as if it scrolled with the page. The document
+  // scroll centres its document position, which moves only the page behind
+  // the fixed bar. The pan takes the 48 px the keyboard leaves.
+  land(154.3 + centring, 48);
+  expect(scrollTo).toHaveBeenCalledWith({
+    left: 0,
+    top: 154.3,
+    behavior: 'instant',
+  });
+  expect(page.scrollY).toBe(154.3);
+  expect(viewport.offsetTop).toBe(0);
+  land(300, 48);
+  expect(scrollTo).toHaveBeenCalledTimes(1);
+  keyboard.show(336);
+  publish({...slide('show', 336), from: 48});
+  expect(animator.state.y).toBe(-336);
+  expect(page.scrollY).toBe(300);
+  expect(viewport.offsetTop).toBe(48);
+});
+
+it("leaves an app's own scroll to another element that pans while a docked bar's field has focus, and reads no layout for it again", () => {
+  const {viewport, page, scrollTo, input, land} = interimKeyboard();
+  // The app scrolls a page element into view: the document scrolls and the
+  // visual viewport pans, but the field's document position is not centred.
+  land(300, 48);
+  // Whether a scroll is Chrome's reveal is decided once per report.
+  const reads = vi.mocked(input.getBoundingClientRect).mock.calls.length;
+  land(300, 48);
+  expect(input.getBoundingClientRect).toHaveBeenCalledTimes(reads);
+  expect(scrollTo).not.toHaveBeenCalled();
+  expect(page.scrollY).toBe(300);
+  expect(viewport.offsetTop).toBe(48);
+});
+
+it("leaves a scroll that centres the field when the pan stops short of Chrome's reveal", () => {
+  const {viewport, scrollTo, centring, land} = interimKeyboard();
+  // Chrome's pan takes all 48 px the keyboard leaves; this one stops at 20.
+  land(154.3 + centring, 20);
+  expect(scrollTo).not.toHaveBeenCalled();
+  expect(viewport.offsetTop).toBe(20);
 });

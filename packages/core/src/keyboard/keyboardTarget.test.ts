@@ -13,6 +13,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {act} from '@testing-library/react';
 import {animatorFor} from '../motion/animator';
 import {__resetLayoutViewportForTest} from '../utils/layoutViewport';
+import {watchRevealPan} from './keyboardHeight';
 import {
   FIELD_OFFSET,
   coveredBy,
@@ -56,6 +57,13 @@ function keyboard(cover: number) {
     viewport.dispatchEvent(new Event('resize'));
   });
   runFrames();
+}
+
+/** A touch event that leaves `fingers` touches on the screen. */
+function touchEvent(type: string, fingers: number): Event {
+  return Object.assign(new Event(type, {bubbles: true}), {
+    touches: Array.from({length: fingers}, () => ({})),
+  });
 }
 
 /** Focuses `element`, then lets the next frame run. */
@@ -161,6 +169,16 @@ beforeEach(() => {
       return boxOf(this);
     },
   );
+  // A fixed element scrolled into view pans the visual viewport to its top,
+  // as in Chrome for Android.
+  Object.defineProperty(Element.prototype, 'scrollIntoView', {
+    configurable: true,
+    value: vi.fn(function (this: HTMLElement) {
+      if (this.style.position === 'fixed') {
+        viewport.offsetTop = parseFloat(this.style.top) || 0;
+      }
+    }),
+  });
   pageScrollRange(3000);
 });
 
@@ -186,6 +204,7 @@ afterEach(() => {
   Reflect.deleteProperty(page, 'scrollHeight');
   Reflect.deleteProperty(page, 'clientHeight');
   Reflect.deleteProperty(window, 'visualViewport');
+  Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
   __resetLayoutViewportForTest();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -337,30 +356,1106 @@ describe('keepFieldAboveKeyboard', () => {
     );
   });
 
-  it('scrolls only its nearest scroller, and nothing else, when that scroller cannot scroll far enough', () => {
+  it("claims a field that its scroll area cannot scroll up to the area's own top, and reveals it through the document and a pan", () => {
     const scrollBy = vi.fn();
     vi.stubGlobal('scrollBy', scrollBy);
     const list = element('div', {top: 0, height: 760}, {overflowY: 'auto'});
+    // The list has 140 px of range left, and the field sits 660 px down it.
     Object.defineProperty(list, 'scrollHeight', {value: 900});
     Object.defineProperty(list, 'clientHeight', {value: 760});
-    // The list has 140 px of range left.
     let listTop = 0;
     Object.defineProperty(list, 'scrollTop', {
       configurable: true,
       get: () => listTop,
       set: (value: number) => {
-        listTop = Math.max(0, Math.min(140, value));
+        listTop = Math.min(140, Math.max(0, value));
       },
     });
+    const other = element('input', {top: 10, height: 40});
     const input = element('input', {top: 660, height: 40});
+    list.append(other, input);
+    document.body.append(list);
+    track(keepFieldAboveKeyboard(input));
+    focusOn(other);
+    const focus = vi.spyOn(input, 'focus');
+    focusOn(input);
+    expect(focus).toHaveBeenCalledWith({preventScroll: true});
+    keyboard(300);
+    // The list scrolls its last 140 px; the document does not move; a pan does.
+    expect(list.scrollTop).toBe(140);
+    const keyboardTop = window.innerHeight - 300;
+    const need = 700 - 140 + FIELD_OFFSET - keyboardTop;
+    expect(scrollBy).toHaveBeenCalledWith({top: need, behavior: 'instant'});
+    expect(viewport.offsetTop).toBe(need);
+    expect(input.getBoundingClientRect().bottom - viewport.offsetTop).toBe(
+      keyboardTop - FIELD_OFFSET,
+    );
+  });
+
+  it("claims a field that its scroll area can just scroll up to the area's own top, and reveals it there", () => {
+    vi.stubGlobal('scrollBy', vi.fn());
+    const list = element('div', {top: 0, height: 760}, {overflowY: 'auto'});
+    // 660 px of range left: the field at 660 can reach the list's top.
+    Object.defineProperty(list, 'scrollHeight', {value: 1420});
+    Object.defineProperty(list, 'clientHeight', {value: 760});
+    const other = element('input', {top: 10, height: 40});
+    const input = element('input', {top: 660, height: 40});
+    list.append(other, input);
+    document.body.append(list);
+    track(keepFieldAboveKeyboard(input));
+    focusOn(other);
+    const focus = vi.spyOn(input, 'focus');
+    focusOn(input);
+    expect(focus).toHaveBeenCalledWith({preventScroll: true});
+    keyboard(300);
+    expect(list.scrollTop).toBe(
+      700 + FIELD_OFFSET - (window.innerHeight - 300),
+    );
+  });
+
+  // A scroll area low on the page. Its box ends under a 300 px keyboard's
+  // top, and it has a field 20 px down it with range to spare.
+  function lowScrollArea() {
+    const bottom = window.innerHeight;
+    const list = element(
+      'div',
+      {top: bottom - 268, height: 220},
+      {overflowY: 'auto'},
+    );
+    Object.defineProperty(list, 'scrollHeight', {value: 900});
+    Object.defineProperty(list, 'clientHeight', {value: 220});
+    const input = element('input', {top: bottom - 248, height: 40});
+    list.append(input);
+    return {list, input};
+  }
+
+  it('reveals through the document a field whose scroll area sits under the keyboard, and pans the visual viewport where the document does not move', () => {
+    const scrollBy = vi.fn();
+    vi.stubGlobal('scrollBy', scrollBy);
+    const {list, input} = lowScrollArea();
+    document.body.append(list);
+    track(keepFieldAboveKeyboard(input));
+    focusOn(input);
+    keyboard(300);
+    // The list cannot bring the field above the keyboard: the document does.
+    expect(list.scrollTop).toBe(0);
+    const bottom = window.innerHeight;
+    const need = bottom - 208 + FIELD_OFFSET - (bottom - 300);
+    expect(scrollBy).toHaveBeenCalledWith({top: need, behavior: 'instant'});
+    // The document does not move, so Core pans; its pan's report moves nothing.
+    expect(viewport.offsetTop).toBe(need);
+    act(() => {
+      viewport.dispatchEvent(new Event('scroll'));
+    });
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(viewport.offsetTop).toBe(need);
+  });
+
+  // A full-viewport fixed container around a low scroll area. The field's box
+  // moves by `shift`, as a document scroll that moves the container moves it.
+  function fixedLowScrollArea() {
+    const dialog = element(
+      'div',
+      {top: 0, height: window.innerHeight},
+      {position: 'fixed'},
+    );
+    const {list, input} = lowScrollArea();
+    dialog.append(list);
+    document.body.append(dialog);
+    const page = {shift: 0, scrollY: 0};
+    const bottom = window.innerHeight;
+    vi.spyOn(input, 'getBoundingClientRect').mockImplementation(
+      () => new DOMRect(0, bottom - 248 - page.shift, 300, 40),
+    );
+    Object.defineProperty(window, 'scrollY', {
+      configurable: true,
+      get: () => page.scrollY,
+    });
+    return {list, input, page};
+  }
+
+  it('reveals through the document a field in a fixed container whose scroller sits under the keyboard, where a document scroll moves the container', () => {
+    const {list, input, page} = fixedLowScrollArea();
+    // As in Safari while its keyboard shows: the scroll moves the container.
+    const scrollBy = vi.fn(({top}: {top: number}) => {
+      page.scrollY += top;
+      page.shift += top;
+    });
+    vi.stubGlobal('scrollBy', scrollBy);
+    track(keepFieldAboveKeyboard(input));
+    focusOn(input);
+    keyboard(300);
+    const bottom = window.innerHeight;
+    expect(list.scrollTop).toBe(0);
+    expect(scrollBy).toHaveBeenCalledTimes(1);
+    expect(scrollBy).toHaveBeenCalledWith({
+      top: bottom - 208 + FIELD_OFFSET - (bottom - 300),
+      behavior: 'instant',
+    });
+    Reflect.deleteProperty(window, 'scrollY');
+  });
+
+  it('undoes the document scroll where it does not move the fixed container, and pans the visual viewport to the field instead', () => {
+    const {input, page} = fixedLowScrollArea();
+    // As in Chrome: the scroll moves the page behind, not the container.
+    const scrollBy = vi.fn(({top}: {top: number}) => {
+      page.scrollY += top;
+    });
+    vi.stubGlobal('scrollBy', scrollBy);
+    track(keepFieldAboveKeyboard(input));
+    focusOn(input);
+    keyboard(300);
+    const bottom = window.innerHeight;
+    const need = bottom - 208 + FIELD_OFFSET - (bottom - 300);
+    expect(scrollBy.mock.calls).toEqual([
+      [{top: need, behavior: 'instant'}],
+      [{top: -need, behavior: 'instant'}],
+    ]);
+    expect(page.scrollY).toBe(0);
+    // A pan moves the visual viewport over the container's layout viewport.
+    expect(viewport.offsetTop).toBe(need);
+    Reflect.deleteProperty(window, 'scrollY');
+  });
+
+  it('claims a focus move into a field whose scroll area sits under the keyboard, and pans the visual viewport to it', () => {
+    vi.stubGlobal('scrollBy', vi.fn());
+    const other = element('input', {top: 10, height: 40});
+    const {list, input} = lowScrollArea();
+    document.body.append(other, list);
+    track(keepFieldAboveKeyboard(input));
+    focusOn(other);
+    keyboard(300);
+    const focus = vi.spyOn(input, 'focus');
+    focusOn(input);
+    expect(focus).toHaveBeenCalledWith({preventScroll: true});
+    expect(list.scrollTop).toBe(0);
+    const bottom = window.innerHeight;
+    expect(viewport.offsetTop).toBe(
+      bottom - 208 + FIELD_OFFSET - (bottom - 300),
+    );
+  });
+
+  it("puts back the browser's own pan for a field its scroll area has placed above the keyboard", () => {
+    vi.stubGlobal('scrollBy', vi.fn());
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    const list = element('div', {top: 0, height: 760}, {overflowY: 'auto'});
+    Object.defineProperty(list, 'scrollHeight', {value: 2000});
+    Object.defineProperty(list, 'clientHeight', {value: 760});
+    const input = element('input', {top: 600, height: 40});
     list.append(input);
     document.body.append(list);
     track(keepFieldAboveKeyboard(input));
     focusOn(input);
     keyboard(300);
-    expect(list.scrollTop).toBe(140);
-    // The page stays where it is; the rest of the field stays covered.
+    expect(list.scrollTop).toBe(
+      640 + FIELD_OFFSET - (window.innerHeight - 300),
+    );
+    viewport.offsetTop = 160;
+    act(() => {
+      viewport.dispatchEvent(new Event('scroll'));
+    });
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+  });
+
+  it("claims a field near the page's end, since a document scroll reaches into the room the keyboard takes", () => {
+    const scrollBy = vi.fn();
+    vi.stubGlobal('scrollBy', scrollBy);
+    // The page scrolls only 84 px, less than the field needs.
+    pageScrollRange(window.innerHeight + 84);
+    const input = element('input', {top: window.innerHeight - 50, height: 40});
+    document.body.append(input);
+    track(keepFieldAboveKeyboard(input));
+    focusOn(input);
+    keyboard(300);
+    expect(scrollBy).toHaveBeenCalledWith({
+      top: 300 - 10 + FIELD_OFFSET,
+      behavior: 'instant',
+    });
+  });
+
+  // A field in the page, whose box moves with the document's scroll. The
+  // document scrolls `range` px at most, as Chrome clamps it.
+  function pageField(top: number, range: number) {
+    const page = {scrollY: 0};
+    const input = element('input', {top, height: 40});
+    document.body.append(input);
+    vi.spyOn(input, 'getBoundingClientRect').mockImplementation(
+      () => new DOMRect(0, top - page.scrollY, 300, 40),
+    );
+    Object.defineProperty(window, 'scrollY', {
+      configurable: true,
+      get: () => page.scrollY,
+    });
+    const scrollBy = vi.fn(({top: by}: {top: number}) => {
+      page.scrollY = Math.min(range, Math.max(0, page.scrollY + by));
+    });
+    vi.stubGlobal('scrollBy', scrollBy);
+    const scrollTo = vi.fn(({top}: {top: number}) => {
+      page.scrollY = Math.min(range, Math.max(0, top));
+    });
+    vi.stubGlobal('scrollTo', scrollTo);
+    return {input, page, scrollBy, scrollTo};
+  }
+
+  it("scrolls the page back to its place before the reveal once the keyboard has gone, on the browser's smooth scroll", () => {
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+    try {
+      pageScrollRange(window.innerHeight * 2);
+      const fieldTop = window.innerHeight - 100;
+      const {input, page, scrollTo} = pageField(fieldTop, window.innerHeight);
+      page.scrollY = 40;
+      track(keepFieldAboveKeyboard(input));
+      focusOn(input);
+      keyboard(300);
+      expect(page.scrollY).toBe(
+        fieldTop + 40 + FIELD_OFFSET - (window.innerHeight - 300),
+      );
+      // Outside Safari on iOS, the report that the keyboard has gone comes as
+      // it slides down, and the blur moves nothing.
+      act(() => input.blur());
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+      expect(scrollTo).not.toHaveBeenCalled();
+      keyboard(0);
+      expect(scrollTo).toHaveBeenCalledTimes(1);
+      expect(scrollTo).toHaveBeenCalledWith({top: 40, behavior: 'smooth'});
+      expect(page.scrollY).toBe(40);
+    } finally {
+      vi.useRealTimers();
+      Reflect.deleteProperty(window, 'scrollY');
+    }
+  });
+
+  it('scrolls back at once under Reduce Motion', () => {
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: query.includes('pointer: coarse') || query.includes('reduce'),
+        media: query,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      })),
+    );
+    pageScrollRange(window.innerHeight * 2);
+    const {input, scrollTo} = pageField(
+      window.innerHeight - 100,
+      window.innerHeight,
+    );
+    track(keepFieldAboveKeyboard(input));
+    focusOn(input);
+    keyboard(300);
+    act(() => input.blur());
+    keyboard(0);
+    expect(scrollTo).toHaveBeenCalledWith({top: 0, behavior: 'instant'});
+    Reflect.deleteProperty(window, 'scrollY');
+  });
+
+  it('scrolls back at once in a theme that reduces motion for everyone', () => {
+    document.documentElement.setAttribute('data-astryx-reduced-motion', '');
+    try {
+      pageScrollRange(window.innerHeight * 2);
+      const {input, scrollTo} = pageField(
+        window.innerHeight - 100,
+        window.innerHeight,
+      );
+      track(keepFieldAboveKeyboard(input));
+      focusOn(input);
+      keyboard(300);
+      act(() => input.blur());
+      keyboard(0);
+      expect(scrollTo).toHaveBeenCalledWith({top: 0, behavior: 'instant'});
+    } finally {
+      document.documentElement.removeAttribute('data-astryx-reduced-motion');
+      Reflect.deleteProperty(window, 'scrollY');
+    }
+  });
+
+  it("reveals nothing at a report while a finger is on the screen, as when Firefox's toolbar hides in a drag", () => {
+    pageScrollRange(window.innerHeight * 2);
+    const fieldTop = window.innerHeight - 100;
+    const {input, page, scrollBy} = pageField(fieldTop, window.innerHeight);
+    track(keepFieldAboveKeyboard(input));
+    focusOn(input);
+    keyboard(290);
+    expect(scrollBy).toHaveBeenCalledTimes(1);
+    // The person drags the page down, so the field sinks under the keyboard,
+    // and the toolbar hides twice in the drag.
+    act(() => {
+      document.body.dispatchEvent(touchEvent('touchstart', 1));
+    });
+    page.scrollY -= 40;
+    keyboard(256);
+    keyboard(226);
+    expect(scrollBy).toHaveBeenCalledTimes(1);
+    // With the finger up, a report reveals the field again.
+    act(() => {
+      document.body.dispatchEvent(touchEvent('touchend', 0));
+    });
+    keyboard(290);
+    expect(scrollBy).toHaveBeenCalledTimes(2);
+    Reflect.deleteProperty(window, 'scrollY');
+  });
+
+  it('follows a keyboard that grows while the long press that focused the field is held, and holds for a press that starts after the reveal', () => {
+    pageScrollRange(window.innerHeight * 2);
+    const fieldTop = window.innerHeight - 100;
+    const {input, scrollBy} = pageField(fieldTop, window.innerHeight);
+    track(keepFieldAboveKeyboard(input));
+    // Another surface already watches, as ChatLayout's composer does, so the
+    // stream counts the press's finger.
+    track(watchRevealPan(window, {owns: () => false}).stop);
+    act(() => {
+      document.body.dispatchEvent(touchEvent('touchstart', 1));
+    });
+    focusOn(input);
+    // Gboard can report a short keyboard first, then its full height, while
+    // the press that focused the field is still down.
+    keyboard(48);
     expect(scrollBy).not.toHaveBeenCalled();
+    keyboard(290);
+    expect(scrollBy).toHaveBeenCalledTimes(1);
+    // The next show's first reveal runs again, the finger still down.
+    keyboard(0);
+    keyboard(290);
+    expect(scrollBy).toHaveBeenCalledTimes(2);
+    act(() => {
+      document.body.dispatchEvent(touchEvent('touchend', 0));
+    });
+    // A press that starts after the reveal holds a report until it lifts.
+    act(() => {
+      document.body.dispatchEvent(touchEvent('touchstart', 1));
+    });
+    keyboard(320);
+    expect(scrollBy).toHaveBeenCalledTimes(2);
+    act(() => {
+      document.body.dispatchEvent(touchEvent('touchend', 0));
+    });
+    keyboard(330);
+    expect(scrollBy).toHaveBeenCalledTimes(3);
+    // The keyboard goes with no finger down, as after Back. A long press on
+    // the field still focused brings it back, and the show's first reveal
+    // runs with that press still down.
+    keyboard(0);
+    act(() => {
+      document.body.dispatchEvent(touchEvent('touchstart', 1));
+    });
+    keyboard(290);
+    expect(scrollBy).toHaveBeenCalledTimes(4);
+    act(() => {
+      document.body.dispatchEvent(touchEvent('touchend', 0));
+    });
+    Reflect.deleteProperty(window, 'scrollY');
+  });
+
+  it('keeps a scroll the person made while the keyboard showed, and puts nothing back', () => {
+    pageScrollRange(window.innerHeight * 2);
+    const fieldTop = window.innerHeight - 100;
+    const {input, page, scrollTo} = pageField(fieldTop, window.innerHeight);
+    track(keepFieldAboveKeyboard(input));
+    focusOn(input);
+    keyboard(300);
+    page.scrollY += 30;
+    const scrolled = page.scrollY;
+    act(() => input.blur());
+    keyboard(0);
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(page.scrollY).toBe(scrolled);
+    Reflect.deleteProperty(window, 'scrollY');
+  });
+
+  // Firefox for Android carries the reveal's document scroll as a visual-
+  // viewport offset. At a slow speed it turns that offset back into a document
+  // scroll only after the keyboard's hide report.
+  function carryRevealAsOffset(page: {scrollY: number}) {
+    viewport.offsetTop = page.scrollY;
+    page.scrollY = 0;
+  }
+
+  function closeKeyboardBeforeFold() {
+    viewport.offsetTop = 0;
+    keyboard(0);
+  }
+
+  // The document's own scroll event, which the browser fires at the document.
+  function foldReveal(page: {scrollY: number}, to: number) {
+    page.scrollY = to;
+    act(() => {
+      document.dispatchEvent(new Event('scroll', {bubbles: true}));
+    });
+  }
+
+  it('scrolls the page back after Firefox turns the reveal back into a document scroll after the hide report', () => {
+    pageScrollRange(window.innerHeight * 2);
+    const fieldTop = window.innerHeight - 100;
+    const {input, page, scrollTo} = pageField(fieldTop, window.innerHeight);
+    track(keepFieldAboveKeyboard(input));
+    focusOn(input);
+    keyboard(300);
+    const revealed = page.scrollY;
+    expect(revealed).toBeGreaterThan(0);
+    carryRevealAsOffset(page);
+    closeKeyboardBeforeFold();
+    expect(scrollTo).not.toHaveBeenCalled();
+    // A scroll area's own scroll is not the document's.
+    const list = element('div', {top: 0, height: 100}, {overflowY: 'auto'});
+    document.body.append(list);
+    act(() => {
+      list.dispatchEvent(new Event('scroll'));
+    });
+    foldReveal(page, revealed);
+    expect(scrollTo).toHaveBeenCalledWith({top: 0, behavior: 'smooth'});
+    expect(page.scrollY).toBe(0);
+    Reflect.deleteProperty(window, 'scrollY');
+  });
+
+  it('keeps the page where a touch left it while Firefox carried the reveal as an offset', () => {
+    pageScrollRange(window.innerHeight * 2);
+    const fieldTop = window.innerHeight - 100;
+    const {input, page, scrollTo} = pageField(fieldTop, window.innerHeight);
+    track(keepFieldAboveKeyboard(input));
+    focusOn(input);
+    keyboard(300);
+    const revealed = page.scrollY;
+    carryRevealAsOffset(page);
+    // The person drags the page: Firefox moves only the offset.
+    act(() => {
+      document.body.dispatchEvent(new Event('touchstart', {bubbles: true}));
+    });
+    viewport.offsetTop += 156;
+    closeKeyboardBeforeFold();
+    act(() => {
+      document.body.dispatchEvent(new Event('touchstart', {bubbles: true}));
+    });
+    foldReveal(page, revealed + 156);
+    foldReveal(page, revealed);
+    expect(scrollTo).not.toHaveBeenCalled();
+    Reflect.deleteProperty(window, 'scrollY');
+  });
+
+  it('waits for only the first document scroll after the hide report, and only a short while', () => {
+    pageScrollRange(window.innerHeight * 2);
+    const fieldTop = window.innerHeight - 100;
+    const {input, page, scrollTo} = pageField(fieldTop, window.innerHeight);
+    track(keepFieldAboveKeyboard(input));
+    focusOn(input);
+    keyboard(300);
+    const revealed = page.scrollY;
+    carryRevealAsOffset(page);
+    closeKeyboardBeforeFold();
+    // A first scroll that lands elsewhere ends the wait.
+    foldReveal(page, revealed - 40);
+    foldReveal(page, revealed);
+    expect(scrollTo).not.toHaveBeenCalled();
+    // Again, with no scroll until the wait is over.
+    focusOn(input);
+    page.scrollY = 0;
+    keyboard(300);
+    const again = page.scrollY;
+    carryRevealAsOffset(page);
+    vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+    try {
+      closeKeyboardBeforeFold();
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+    foldReveal(page, again);
+    expect(scrollTo).not.toHaveBeenCalled();
+    Reflect.deleteProperty(window, 'scrollY');
+  });
+
+  // How many native scroll listeners the window gained and lost from here on.
+  function countScrollListeners() {
+    const added = vi.spyOn(window, 'addEventListener');
+    const removed = vi.spyOn(window, 'removeEventListener');
+    const count = (calls: ReadonlyArray<ReadonlyArray<unknown>>) =>
+      calls.filter(([type]) => type === 'scroll').length;
+    return {
+      added: () => count(added.mock.calls),
+      removed: () => count(removed.mock.calls),
+    };
+  }
+
+  it.each([
+    ['the fold', 'fold'],
+    ['a touch', 'touch'],
+    ['the keyboard coming back', 'keyboard'],
+    ['the wait running out', 'time'],
+    ["the field's page going", 'gone'],
+  ] as const)(
+    'leaves no listener behind once the wait for the fold ends with %s',
+    (_name, ending) => {
+      pageScrollRange(window.innerHeight * 2);
+      const fieldTop = window.innerHeight - 100;
+      const {input, page} = pageField(fieldTop, window.innerHeight);
+      const stop = track(keepFieldAboveKeyboard(input));
+      focusOn(input);
+      keyboard(300);
+      const revealed = page.scrollY;
+      carryRevealAsOffset(page);
+      const listeners = countScrollListeners();
+      vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+      try {
+        closeKeyboardBeforeFold();
+        expect(listeners.added()).toBe(1);
+        expect(listeners.removed()).toBe(0);
+        if (ending === 'fold') {
+          foldReveal(page, revealed);
+        } else if (ending === 'touch') {
+          act(() => {
+            document.body.dispatchEvent(
+              new Event('touchstart', {bubbles: true}),
+            );
+          });
+        } else if (ending === 'keyboard') {
+          // A keyboard that leaves the field clear, so no reveal runs.
+          keyboard(50);
+        } else if (ending === 'time') {
+          act(() => {
+            vi.advanceTimersByTime(1000);
+          });
+        } else {
+          stop();
+        }
+      } finally {
+        vi.useRealTimers();
+      }
+      expect(listeners.removed()).toBe(listeners.added());
+      Reflect.deleteProperty(window, 'scrollY');
+    },
+  );
+
+  it('decides at the hide report in Chrome, with no wait, where the page sits where Core or the person left it', () => {
+    pageScrollRange(window.innerHeight * 2);
+    const fieldTop = window.innerHeight - 100;
+    const {input, page, scrollTo} = pageField(fieldTop, window.innerHeight);
+    track(keepFieldAboveKeyboard(input));
+    const listeners = countScrollListeners();
+    focusOn(input);
+    keyboard(300);
+    act(() => input.blur());
+    keyboard(0);
+    expect(scrollTo).toHaveBeenCalledWith({top: 0, behavior: 'smooth'});
+    focusOn(input);
+    keyboard(300);
+    page.scrollY += 75;
+    act(() => input.blur());
+    keyboard(0);
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(listeners.added()).toBe(0);
+    Reflect.deleteProperty(window, 'scrollY');
+  });
+
+  it("scrolls a scroll area at once through its own scrollBy, which the area's smooth scroll-behavior cannot slow", () => {
+    const list = element(
+      'div',
+      {top: 100, height: window.innerHeight - 100},
+      {overflowY: 'auto', scrollBehavior: 'smooth'},
+    );
+    let listTop = 0;
+    Object.defineProperty(list, 'scrollTop', {
+      configurable: true,
+      get: () => listTop,
+      set: (value: number) => {
+        listTop = Math.max(0, Math.min(600, value));
+      },
+    });
+    const listScrollBy = vi.fn(({top}: {top: number}) => {
+      list.scrollTop = listTop + top;
+    });
+    Object.defineProperty(list, 'scrollBy', {value: listScrollBy});
+    Object.defineProperty(list, 'scrollHeight', {
+      value: 600 + window.innerHeight - 100,
+    });
+    Object.defineProperty(list, 'clientHeight', {
+      value: window.innerHeight - 100,
+    });
+    const input = element('input', {top: window.innerHeight - 60, height: 40});
+    list.append(input);
+    document.body.append(list);
+    track(keepFieldAboveKeyboard(input));
+    focusOn(input);
+    keyboard(300);
+    const revealed =
+      window.innerHeight - 20 + FIELD_OFFSET - (window.innerHeight - 300);
+    expect(listScrollBy).toHaveBeenCalledWith({
+      top: revealed,
+      behavior: 'instant',
+    });
+    expect(listTop).toBe(revealed);
+  });
+
+  it('scrolls a scroll area back when the keyboard goes with the field still focused, as Back does in Chrome', () => {
+    const list = element(
+      'div',
+      {top: 100, height: window.innerHeight - 100},
+      {overflowY: 'auto'},
+    );
+    let listTop = 0;
+    Object.defineProperty(list, 'scrollTop', {
+      configurable: true,
+      get: () => listTop,
+      set: (value: number) => {
+        listTop = Math.max(0, Math.min(600, value));
+      },
+    });
+    const scrollTo = vi.fn(({top}: {top: number}) => {
+      list.scrollTop = top;
+    });
+    Object.defineProperty(list, 'scrollTo', {value: scrollTo});
+    Object.defineProperty(list, 'scrollHeight', {
+      value: 600 + window.innerHeight - 100,
+    });
+    Object.defineProperty(list, 'clientHeight', {
+      value: window.innerHeight - 100,
+    });
+    const input = element('input', {top: window.innerHeight - 60, height: 40});
+    list.append(input);
+    document.body.append(list);
+    track(keepFieldAboveKeyboard(input));
+    focusOn(input);
+    keyboard(300);
+    expect(listTop).toBe(
+      window.innerHeight - 20 + FIELD_OFFSET - (window.innerHeight - 300),
+    );
+    keyboard(0);
+    expect(scrollTo).toHaveBeenCalledWith({top: 0, behavior: 'smooth'});
+    expect(listTop).toBe(0);
+  });
+
+  it('keeps the scroll where focus moves to another field, so the keyboard stays up', () => {
+    pageScrollRange(window.innerHeight * 2);
+    const fieldTop = window.innerHeight - 100;
+    const {input, page, scrollTo} = pageField(fieldTop, window.innerHeight);
+    const other = element('input', {top: 20, height: 40});
+    document.body.append(other);
+    track(keepFieldAboveKeyboard(input));
+    track(keepFieldAboveKeyboard(other));
+    focusOn(input);
+    keyboard(300);
+    const revealed = page.scrollY;
+    expect(revealed).toBeGreaterThan(0);
+    focusOn(other);
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(page.scrollY).toBe(revealed);
+    Reflect.deleteProperty(window, 'scrollY');
+  });
+
+  describe("on iOS, where a field rises on the browser's smooth scroll", () => {
+    beforeEach(() => {
+      // Safari's CSS.supports, in both forms: a property and value, or a
+      // condition.
+      vi.stubGlobal('CSS', {
+        supports: (property: string, value?: string) =>
+          value === undefined
+            ? property === '(-webkit-touch-callout: none)'
+            : property === '-webkit-touch-callout' && value === 'none',
+      });
+    });
+
+    it("rises on the browser's smooth scroll when the keyboard opens", () => {
+      pageScrollRange(window.innerHeight * 2);
+      const fieldTop = window.innerHeight - 100;
+      const {input, scrollBy} = pageField(fieldTop, window.innerHeight);
+      track(keepFieldAboveKeyboard(input));
+      focusOn(input);
+      keyboard(300);
+      expect(scrollBy).toHaveBeenCalledTimes(1);
+      expect(scrollBy).toHaveBeenCalledWith({
+        top: fieldTop + 40 + FIELD_OFFSET - (window.innerHeight - 300),
+        behavior: 'smooth',
+      });
+      Reflect.deleteProperty(window, 'scrollY');
+    });
+
+    it('moves the field at once under Reduce Motion', () => {
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn((query: string) => ({
+          matches:
+            query.includes('pointer: coarse') || query.includes('reduce'),
+          media: query,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+        })),
+      );
+      pageScrollRange(window.innerHeight * 2);
+      const fieldTop = window.innerHeight - 100;
+      const {input, scrollBy} = pageField(fieldTop, window.innerHeight);
+      track(keepFieldAboveKeyboard(input));
+      focusOn(input);
+      keyboard(300);
+      expect(scrollBy).toHaveBeenCalledWith({
+        top: fieldTop + 40 + FIELD_OFFSET - (window.innerHeight - 300),
+        behavior: 'instant',
+      });
+      Reflect.deleteProperty(window, 'scrollY');
+    });
+
+    it('moves the field at once in a theme that reduces motion for everyone', () => {
+      document.documentElement.setAttribute('data-astryx-reduced-motion', '');
+      try {
+        pageScrollRange(window.innerHeight * 2);
+        const fieldTop = window.innerHeight - 100;
+        const {input, scrollBy} = pageField(fieldTop, window.innerHeight);
+        track(keepFieldAboveKeyboard(input));
+        focusOn(input);
+        keyboard(300);
+        expect(scrollBy).toHaveBeenCalledWith({
+          top: fieldTop + 40 + FIELD_OFFSET - (window.innerHeight - 300),
+          behavior: 'instant',
+        });
+      } finally {
+        document.documentElement.removeAttribute('data-astryx-reduced-motion');
+        Reflect.deleteProperty(window, 'scrollY');
+      }
+    });
+
+    it("decides at the hide report as before, with no wait: Safari's own scroll at the focus, the rise, then Done, and again after a drag", () => {
+      pageScrollRange(window.innerHeight * 2);
+      const fieldTop = window.innerHeight - 100;
+      const {input, page, scrollTo} = pageField(fieldTop, window.innerHeight);
+      track(keepFieldAboveKeyboard(input));
+      const listeners = countScrollListeners();
+      focusOn(input);
+      // Safari scrolls the page by 7 px at the focus, before the reveal.
+      page.scrollY = 7;
+      keyboard(300);
+      act(() => input.blur());
+      keyboard(0);
+      expect(scrollTo).toHaveBeenCalledWith({top: 7, behavior: 'smooth'});
+      focusOn(input);
+      page.scrollY = 7;
+      keyboard(300);
+      act(() => {
+        document.body.dispatchEvent(new Event('touchstart', {bubbles: true}));
+      });
+      page.scrollY += 87;
+      act(() => input.blur());
+      keyboard(0);
+      expect(scrollTo).toHaveBeenCalledTimes(1);
+      expect(listeners.added()).toBe(0);
+      Reflect.deleteProperty(window, 'scrollY');
+    });
+
+    it('scrolls back to its place after a rise the browser drew later', () => {
+      pageScrollRange(window.innerHeight * 2);
+      const fieldTop = window.innerHeight - 100;
+      const {input, page, scrollBy, scrollTo} = pageField(
+        fieldTop,
+        window.innerHeight,
+      );
+      // The browser draws the rise over the next frames, not in the call.
+      scrollBy.mockImplementation(() => {});
+      track(keepFieldAboveKeyboard(input));
+      focusOn(input);
+      keyboard(300);
+      page.scrollY = fieldTop + 40 + FIELD_OFFSET - (window.innerHeight - 300);
+      act(() => input.blur());
+      keyboard(0);
+      expect(scrollTo).toHaveBeenCalledWith({top: 0, behavior: 'smooth'});
+      Reflect.deleteProperty(window, 'scrollY');
+    });
+
+    it('carries its rise on when the keyboard grows before the rise is drawn, and still scrolls back', () => {
+      pageScrollRange(window.innerHeight * 2);
+      const fieldTop = window.innerHeight - 100;
+      const {input, page, scrollBy, scrollTo} = pageField(
+        fieldTop,
+        window.innerHeight,
+      );
+      scrollBy.mockImplementation(() => {});
+      track(keepFieldAboveKeyboard(input));
+      focusOn(input);
+      keyboard(300);
+      keyboard(340);
+      expect(scrollBy).toHaveBeenLastCalledWith({
+        top: fieldTop + 40 + FIELD_OFFSET - (window.innerHeight - 340),
+        behavior: 'smooth',
+      });
+      page.scrollY = fieldTop + 40 + FIELD_OFFSET - (window.innerHeight - 340);
+      act(() => input.blur());
+      keyboard(0);
+      expect(scrollTo).toHaveBeenCalledWith({top: 0, behavior: 'smooth'});
+      Reflect.deleteProperty(window, 'scrollY');
+    });
+
+    it('takes no second reveal for a field its scroll area raises, before the rise is drawn', () => {
+      const pageScrollBy = vi.fn();
+      vi.stubGlobal('scrollBy', pageScrollBy);
+      const list = element(
+        'div',
+        {top: 100, height: window.innerHeight - 100},
+        {overflowY: 'auto'},
+      );
+      let listTop = 0;
+      Object.defineProperty(list, 'scrollTop', {
+        configurable: true,
+        get: () => listTop,
+        set: (value: number) => {
+          listTop = Math.max(0, Math.min(600, value));
+        },
+      });
+      const listScrollBy = vi.fn();
+      Object.defineProperty(list, 'scrollBy', {value: listScrollBy});
+      Object.defineProperty(list, 'scrollHeight', {
+        value: 600 + window.innerHeight - 100,
+      });
+      Object.defineProperty(list, 'clientHeight', {
+        value: window.innerHeight - 100,
+      });
+      const input = element('input', {
+        top: window.innerHeight - 60,
+        height: 40,
+      });
+      list.append(input);
+      document.body.append(list);
+      track(keepFieldAboveKeyboard(input));
+      focusOn(input);
+      keyboard(300);
+      expect(listScrollBy).toHaveBeenCalledWith({
+        top:
+          window.innerHeight - 20 + FIELD_OFFSET - (window.innerHeight - 300),
+        behavior: 'smooth',
+      });
+      expect(pageScrollBy).not.toHaveBeenCalled();
+    });
+
+    describe('at the blur that closes the keyboard, before the report that it has gone', () => {
+      beforeEach(() => {
+        vi.useFakeTimers({toFake: ['setTimeout', 'clearTimeout']});
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+        Reflect.deleteProperty(window, 'scrollY');
+      });
+
+      /** A field in the page, raised over a 300 px keyboard from scroll 40. */
+      function raisedField() {
+        pageScrollRange(window.innerHeight * 2);
+        const fieldTop = window.innerHeight - 100;
+        const parts = pageField(fieldTop, window.innerHeight);
+        parts.page.scrollY = 40;
+        track(keepFieldAboveKeyboard(parts.input));
+        focusOn(parts.input);
+        keyboard(300);
+        return parts;
+      }
+
+      /** Ends the blur's focus change: focus lands after the event. */
+      function settle() {
+        act(() => {
+          vi.advanceTimersByTime(0);
+        });
+      }
+
+      it('scrolls the page back at once, beside the slide, and the report moves nothing more', () => {
+        const {input, page, scrollTo} = raisedField();
+        act(() => input.blur());
+        settle();
+        expect(scrollTo).toHaveBeenCalledTimes(1);
+        expect(scrollTo).toHaveBeenCalledWith({top: 40, behavior: 'smooth'});
+        expect(page.scrollY).toBe(40);
+        keyboard(0);
+        expect(scrollTo).toHaveBeenCalledTimes(1);
+      });
+
+      it('keeps the page when focus moves on to another field, and the keyboard stays', () => {
+        const {input, scrollTo} = raisedField();
+        const next = element('input', {top: 200, height: 40});
+        document.body.append(next);
+        act(() => next.focus());
+        settle();
+        expect(document.activeElement).toBe(next);
+        expect(scrollTo).not.toHaveBeenCalled();
+        input.remove();
+      });
+
+      it('waits for the report while a finger is on the screen at the blur, as when the field is tapped again at once', () => {
+        const {input, scrollTo} = raisedField();
+        act(() => {
+          document.body.dispatchEvent(touchEvent('touchstart', 1));
+        });
+        act(() => input.blur());
+        settle();
+        expect(scrollTo).not.toHaveBeenCalled();
+        act(() => {
+          document.body.dispatchEvent(touchEvent('touchend', 0));
+        });
+        keyboard(0);
+        expect(scrollTo).toHaveBeenCalledWith({top: 40, behavior: 'smooth'});
+      });
+
+      it('keeps the page when focus moves into a frame, whose field keeps the keyboard up', () => {
+        const {scrollTo} = raisedField();
+        const frame = document.createElement('iframe');
+        document.body.append(frame);
+        act(() => frame.focus());
+        settle();
+        expect(document.activeElement).toBe(frame);
+        expect(scrollTo).not.toHaveBeenCalled();
+        frame.remove();
+      });
+
+      it('leaves a page the person scrolled while the keyboard showed', () => {
+        const {input, page, scrollTo} = raisedField();
+        page.scrollY += 87;
+        act(() => input.blur());
+        settle();
+        keyboard(0);
+        expect(scrollTo).not.toHaveBeenCalled();
+      });
+
+      it('waits for the report under Reduce Motion, then lands at once', () => {
+        vi.stubGlobal(
+          'matchMedia',
+          vi.fn((query: string) => ({
+            matches:
+              query.includes('pointer: coarse') || query.includes('reduce'),
+            media: query,
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+          })),
+        );
+        const {input, scrollTo} = raisedField();
+        act(() => input.blur());
+        settle();
+        expect(scrollTo).not.toHaveBeenCalled();
+        keyboard(0);
+        expect(scrollTo).toHaveBeenCalledWith({top: 40, behavior: 'instant'});
+      });
+
+      it('stops the scroll back where the page is when the field gains focus again during the slide, raises it from there in one scroll, and the next close goes back to the first place', () => {
+        const {input, page, scrollBy, scrollTo} = raisedField();
+        const raised = page.scrollY;
+        // The browser draws the scroll back over the next frames.
+        scrollTo.mockImplementation(() => {});
+        act(() => input.blur());
+        settle();
+        expect(scrollTo).toHaveBeenCalledWith({top: 40, behavior: 'smooth'});
+        page.scrollY = raised - 60;
+        scrollBy.mockClear();
+        // A tap focuses the field again before Safari reports the keyboard gone.
+        focusOn(input);
+        expect(scrollTo).toHaveBeenLastCalledWith({
+          top: raised - 60,
+          behavior: 'instant',
+        });
+        expect(scrollBy).toHaveBeenCalledTimes(1);
+        expect(scrollBy).toHaveBeenCalledWith({top: 60, behavior: 'smooth'});
+        expect(page.scrollY).toBe(raised);
+        act(() => input.blur());
+        settle();
+        expect(scrollTo).toHaveBeenCalledTimes(3);
+        expect(scrollTo).toHaveBeenLastCalledWith({
+          top: 40,
+          behavior: 'smooth',
+        });
+      });
+
+      it('keeps the page where a touch stopped the scroll back, when the field gains focus again with nothing left to raise, and the next close still goes back', () => {
+        const {input, page, scrollBy, scrollTo} = raisedField();
+        const raised = page.scrollY;
+        // The tap's touch stops the browser's scroll back before it moves.
+        scrollTo.mockImplementation(() => {});
+        act(() => input.blur());
+        settle();
+        scrollBy.mockClear();
+        focusOn(input);
+        expect(scrollBy).not.toHaveBeenCalled();
+        expect(page.scrollY).toBe(raised);
+        act(() => input.blur());
+        settle();
+        expect(scrollTo).toHaveBeenLastCalledWith({
+          top: 40,
+          behavior: 'smooth',
+        });
+      });
+
+      it('scrolls back at the report once more after such a focus, when the keyboard then goes with the field still focused', () => {
+        const {input, page, scrollTo} = raisedField();
+        const raised = page.scrollY;
+        scrollTo.mockImplementation(() => {});
+        act(() => input.blur());
+        settle();
+        page.scrollY = raised - 60;
+        focusOn(input);
+        expect(page.scrollY).toBe(raised);
+        keyboard(0);
+        expect(scrollTo).toHaveBeenCalledTimes(3);
+        expect(scrollTo).toHaveBeenLastCalledWith({
+          top: 40,
+          behavior: 'smooth',
+        });
+      });
+    });
+  });
+
+  it("pans the visual viewport for the rest where the document reaches its end, so a field at a short page's end ends 10 px above the keyboard", () => {
+    pageScrollRange(window.innerHeight + 84);
+    const fieldTop = window.innerHeight - 50;
+    const {input, page, scrollBy} = pageField(fieldTop, 84);
+    track(keepFieldAboveKeyboard(input));
+    focusOn(input);
+    keyboard(300);
+    const keyboardTop = window.innerHeight - 300;
+    const need = fieldTop + 40 + FIELD_OFFSET - keyboardTop;
+    expect(scrollBy).toHaveBeenCalledWith({top: need, behavior: 'instant'});
+    expect(page.scrollY).toBe(84);
+    // The pan takes the rest at once, so Chrome's own pan finds the field clear.
+    expect(viewport.offsetTop).toBe(need - 84);
+    expect(input.getBoundingClientRect().bottom - viewport.offsetTop).toBe(
+      keyboardTop - FIELD_OFFSET,
+    );
+    Reflect.deleteProperty(window, 'scrollY');
+  });
+
+  it('pans nothing where the document scroll reaches the room the keyboard takes, as in Safari', () => {
+    pageScrollRange(window.innerHeight + 84);
+    const fieldTop = window.innerHeight - 50;
+    // As in Safari while its keyboard shows: the scroll goes past the range.
+    const {input, page} = pageField(fieldTop, Number.POSITIVE_INFINITY);
+    track(keepFieldAboveKeyboard(input));
+    focusOn(input);
+    keyboard(300);
+    expect(page.scrollY).toBe(
+      fieldTop + 40 + FIELD_OFFSET - (window.innerHeight - 300),
+    );
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+    expect(viewport.offsetTop).toBe(0);
+    Reflect.deleteProperty(window, 'scrollY');
+  });
+
+  it('keeps its own pan when the browser applies it after the call', () => {
+    const {list, input} = lowScrollArea();
+    document.body.append(list);
+    vi.stubGlobal('scrollBy', vi.fn());
+    const pans: number[] = [];
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: vi.fn(function (this: HTMLElement) {
+        pans.push(parseFloat(this.style.top) || 0);
+      }),
+    });
+    track(keepFieldAboveKeyboard(input));
+    focusOn(input);
+    keyboard(300);
+    expect(pans).toHaveLength(1);
+    // The pan lands a frame later, with a report of its own; it stays.
+    viewport.offsetTop = pans[0] ?? 0;
+    act(() => {
+      viewport.dispatchEvent(new Event('scroll'));
+    });
+    expect(pans).toHaveLength(1);
   });
 
   it('moves its docked bar up by the part of it the keyboard covers, and back once the keyboard has gone', () => {
@@ -718,6 +1813,35 @@ describe('keepFieldAboveKeyboard', () => {
     ]).toEqual([40, 680, 41, 742, 1]);
   });
 
+  it("leaves a document scroll the app makes while a docked bar's field has focus, which Safari carries out as a visual-viewport offset", () => {
+    const bottom = window.innerHeight;
+    const bar = element(
+      'div',
+      {top: bottom - 60, height: 60},
+      {position: 'fixed'},
+    );
+    const input = element('input', {top: bottom - 50, height: 40});
+    bar.append(input);
+    document.body.append(bar);
+    const page = {scrollY: 100};
+    Object.defineProperty(window, 'scrollY', {
+      configurable: true,
+      get: () => page.scrollY,
+    });
+    track(keepFieldAboveKeyboard(input));
+    focusOn(input);
+    keyboard(300);
+    // The app scrolls past the page's end; Safari carries the rest as an offset.
+    page.scrollY = 400;
+    viewport.offsetTop = 120;
+    act(() => {
+      viewport.dispatchEvent(new Event('scroll'));
+    });
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+    expect(viewport.offsetTop).toBe(120);
+    Reflect.deleteProperty(window, 'scrollY');
+  });
+
   it('puts back a pan the browser makes on its own after a focus no claim saw', () => {
     vi.stubGlobal('scrollBy', vi.fn());
     const scrollIntoView = vi.fn();
@@ -734,6 +1858,106 @@ describe('keepFieldAboveKeyboard', () => {
     expect(scrollIntoView).not.toHaveBeenCalled();
     // The browser pans the visual viewport down to the field by itself.
     viewport.offsetTop = 120;
+    act(() => {
+      viewport.dispatchEvent(new Event('scroll'));
+    });
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+  });
+
+  it("keeps a drag's pan while the finger is down, when Firefox's toolbar hiding resizes the viewport in the drag", () => {
+    vi.stubGlobal('scrollBy', vi.fn());
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    const input = element('input', {top: 300, height: 40});
+    document.body.append(input);
+    track(keepFieldAboveKeyboard(input));
+    focusOn(input);
+    keyboard(290);
+    // The person drags the page with the keyboard up; the finger stays down.
+    act(() => {
+      document.body.dispatchEvent(touchEvent('touchstart', 1));
+    });
+    viewport.offsetTop = 162;
+    // Firefox's toolbar hides in the drag: the viewport grows twice, so the
+    // keyboard reads shorter, while the drag moves the offset on.
+    viewport.height = window.innerHeight - 256;
+    act(() => {
+      viewport.dispatchEvent(new Event('resize'));
+    });
+    viewport.offsetTop = 165;
+    viewport.height = window.innerHeight - 226;
+    act(() => {
+      viewport.dispatchEvent(new Event('resize'));
+    });
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    expect(viewport.offsetTop).toBe(165);
+    // Once the finger is up, a pan the browser makes after a report is put
+    // back again.
+    act(() => {
+      document.body.dispatchEvent(touchEvent('touchend', 0));
+    });
+    keyboard(290);
+    viewport.offsetTop += 40;
+    act(() => {
+      viewport.dispatchEvent(new Event('scroll'));
+    });
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+  });
+
+  it('holds a report while an older finger is down after a newer touch came and went', () => {
+    pageScrollRange(window.innerHeight * 2);
+    const fieldTop = window.innerHeight - 100;
+    const {input, scrollBy} = pageField(fieldTop, window.innerHeight);
+    track(keepFieldAboveKeyboard(input));
+    track(watchRevealPan(window, {owns: () => false}).stop);
+    // A long press focuses the field and stays down.
+    act(() => {
+      document.body.dispatchEvent(touchEvent('touchstart', 1));
+    });
+    focusOn(input);
+    keyboard(290);
+    expect(scrollBy).toHaveBeenCalledTimes(1);
+    // A second finger taps and lifts while the first stays down.
+    act(() => {
+      document.body.dispatchEvent(touchEvent('touchstart', 2));
+    });
+    act(() => {
+      document.body.dispatchEvent(touchEvent('touchend', 1));
+    });
+    keyboard(320);
+    expect(scrollBy).toHaveBeenCalledTimes(1);
+    act(() => {
+      document.body.dispatchEvent(touchEvent('touchend', 0));
+    });
+    keyboard(330);
+    expect(scrollBy).toHaveBeenCalledTimes(2);
+    Reflect.deleteProperty(window, 'scrollY');
+  });
+
+  it('forgets a finger whose lift it never heard once the keyboard hides, so the next show puts back the browser pan', () => {
+    vi.stubGlobal('scrollBy', vi.fn());
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(Element.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: scrollIntoView,
+    });
+    const input = element('input', {top: 300, height: 40});
+    document.body.append(input);
+    track(keepFieldAboveKeyboard(input));
+    focusOn(input);
+    keyboard(290);
+    // A touch whose target leaves the page: its end never reaches the window.
+    act(() => {
+      document.body.dispatchEvent(touchEvent('touchstart', 1));
+    });
+    keyboard(0);
+    keyboard(290);
+    viewport.offsetTop += 40;
     act(() => {
       viewport.dispatchEvent(new Event('scroll'));
     });

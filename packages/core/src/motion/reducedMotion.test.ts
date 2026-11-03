@@ -4,7 +4,8 @@
  * @file reducedMotion.test.ts
  * @input reducedMotion.ts, reducedMotion.stylex.ts, the timing table, and
  *   every StyleX source file in core
- * @output Proof of the Reduced Motion policy beside the animator. Its fade is
+ * @output Proof of the Reduced Motion policy beside the animator. A theme that
+ *   reduces motion counts as the setting. Its fade is
  *   200 ms at most on a coarse pointer or touch release, else at once. Its dip
  *   lands a change on its own timeline. Its CSS constants match the table, and
  *   every StyleX key splitting Reduce Motion by pointer spells the two queries.
@@ -20,6 +21,7 @@ import {
   REDUCED_MOTION_INSTANT_QUERY,
   playReducedMotionDip,
   reducedMotionFade,
+  reducesMotion,
 } from './reducedMotion';
 import {
   reducedMotionFadeConsts,
@@ -66,6 +68,29 @@ describe('reducedMotionFade', () => {
     expect(reducedMotionFade(null, {touchRelease: true})?.duration).toBe(
       timing.reducedMotionCrossFadeMs,
     );
+  });
+});
+
+describe('reducesMotion', () => {
+  afterEach(() => {
+    document.documentElement.removeAttribute('data-astryx-reduced-motion');
+  });
+
+  it('follows the Reduce Motion setting', () => {
+    settings(true, false);
+    expect(reducesMotion(document.body)).toBe(true);
+    settings(false, false);
+    expect(reducesMotion(document.body)).toBe(false);
+  });
+
+  it('counts a theme that reduces motion for everyone as the setting', () => {
+    settings(false, false);
+    document.documentElement.setAttribute('data-astryx-reduced-motion', '');
+    expect(reducesMotion(document.body)).toBe(true);
+    expect(reducedMotionFade(document.body)).toEqual({
+      duration: 0,
+      easing: 'linear',
+    });
   });
 });
 

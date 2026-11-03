@@ -168,7 +168,8 @@ await handle.finished; // true if it ran to the end, false if interrupted
   `{crossfadeAs: 'entrance'}` or `'exit'` gives a slide that changes no
   opacity its direction. No option or theme value lengthens the fade or keeps
   travel. For motion the animator does not drive, `reducedMotionFade()`
-  answers the same policy, and `reducedMotion.stylex.ts` holds its CSS
+  answers the same policy, `reducesMotion()` answers whether motion is
+  reduced at all, and `reducedMotion.stylex.ts` holds its CSS
   constants and the two media queries a StyleX transition spells.
   A decay's momentum keeps its motion under Reduce Motion: momentum that
   continues a throw is direct movement (DR2, DEC-2). A curve marked
