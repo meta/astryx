@@ -10407,7 +10407,7 @@ target timestamp-copy-button (Timestamp)
 target toast (Toast) props [type]
 target toggle-button (ToggleButton) props [elevation] states [isPressed]
 target toggle-button-group (ToggleButton)
-target token (Token) props [color, size] states [disabled]
+target token (Token) props [color, size] states [disabled, selected]
 target tokenizer (Tokenizer) props [size, status] states [disabled]
 target toolbar (Toolbar) states [size]
 target tooltip (Tooltip)
@@ -10482,7 +10482,7 @@ attr data-presentation (theme reflection on 1 target)
 attr data-progress (theme reflection on 4 targets)
 attr data-readonly (theme reflection on 5 targets)
 attr data-select-all (theme reflection on 1 target)
-attr data-selected (theme reflection on 14 targets)
+attr data-selected (theme reflection on 15 targets)
 attr data-sender (theme reflection on 2 targets)
 attr data-shade (theme reflection on 1 target)
 attr data-shape (theme reflection on 5 targets)

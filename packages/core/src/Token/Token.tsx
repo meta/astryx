@@ -13,11 +13,12 @@
  * - /packages/core/src/Token/Token.doc.mjs (props table, features, implementation notes)
  * - /packages/core/src/Token/Token.test.tsx (tests for new/changed behavior)
  * - /packages/core/src/Token/index.ts (exports if types change)
+ * - /packages/core/src/Token/TokenSelectedContext.ts (the selected state)
  * - /apps/storybook/stories/Token.stories.tsx (storybook stories)
  * - /packages/cli/assets/templates/blocks/components/Token/ (showcase blocks)
  */
 
-import type {ReactNode} from 'react';
+import {use, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -34,6 +35,7 @@ import {mergeProps} from '../utils';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {useInteractiveRole} from '../hooks/useInteractiveRole';
 import {TokenLink} from './TokenLink';
+import {TokenSelectedContext} from './TokenSelectedContext';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
@@ -318,6 +320,7 @@ export function Token({
   // of its props.
   const pressable = usePressFeedback();
   const t = useComponentTranslator();
+  const selected = use(TokenSelectedContext) ? 'selected' : null;
   const LinkComponent = useLinkComponent();
   const role = useInteractiveRole({href, onClick, isDisabled});
 
@@ -387,7 +390,7 @@ export function Token({
         aria-disabled={true}
         tabIndex={0}
         {...mergeProps(
-          themeProps('token', {color, size, disabled: 'disabled'}),
+          themeProps('token', {color, size, disabled: 'disabled', selected}),
           focusOutlineProps.focusVisible(
             styles.base,
             sizeStyles[size],
@@ -421,6 +424,7 @@ export function Token({
               color,
               size,
               disabled: isDisabled ? 'disabled' : null,
+              selected,
             }),
             focusOutlineProps.focusVisible(
               styles.base,
@@ -476,6 +480,7 @@ export function Token({
             color,
             size,
             disabled: isDisabled ? 'disabled' : null,
+            selected,
           }),
           focusOutlineProps.focusWithin(
             styles.base,
@@ -515,6 +520,7 @@ export function Token({
             color,
             size,
             disabled: isDisabled ? 'disabled' : null,
+            selected,
           }),
           focusOutlineProps.focusWithin(
             styles.base,
@@ -560,6 +566,7 @@ export function Token({
           color,
           size,
           disabled: isDisabled ? 'disabled' : null,
+          selected,
         }),
         stylex.props(
           styles.base,

@@ -1703,6 +1703,10 @@
     "defaultMessage": "Removed {label}",
     "description": "Polite screen-reader announcement after a token is removed from a Tokenizer, by its × button or by Backspace. Live-region text, never shown on screen; `{label}` is the token's visible text."
   },
+  "@astryx.tokenizer.tokenSelected": {
+    "defaultMessage": "{label} selected. Delete again to remove it.",
+    "description": "Polite screen-reader announcement on a touch screen when Backspace (the keyboard's Delete key) on an empty Tokenizer input selects the last token instead of removing it; a second Delete removes it. Live-region text, never shown on screen; `{label}` is the token's visible text."
+  },
   "@astryx.tokenizer.search": {
     "defaultMessage": "Search {label}",
     "description": "Accessible name of the search field at the top of a Tokenizer's bottom sheet (the touch presentation). `{label}` is the field's own label, e.g. `Search Tags`. Not shown on screen."
