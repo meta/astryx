@@ -307,18 +307,23 @@ test('a meridiem change past the maximum turns the hour wheel onto it, frame by 
   const meridiem = page.getByRole('listbox', {name: 'AM/PM'});
   // The touch column draws its rows on a strip it translates. The animator
   // writes `translate`, which `transform` does not report. Record its drawn top
-  // on every frame from before the tap.
+  // on every frame from before the tap until the wheel is at rest.
   const strip = hours.locator('[data-wheel-strip]');
   await expect(strip).toHaveCount(1);
   // The strip has no size of its own: its rows are placed on it. A drawn row
   // shows that the sheet is laid out before the sampling starts.
   await expect(strip.locator(':scope > *').first()).toBeVisible();
+  const from = await strip.evaluate(
+    element => element.getBoundingClientRect().top,
+  );
+  // 10 onto 5: five rows down the strip.
+  const to = from + 5 * ROW;
   await strip.evaluate(element => {
-    const ys: number[] = [];
-    (window as unknown as {stripYs: number[]}).stripYs = ys;
-    const sample = () => {
-      ys.push(element.getBoundingClientRect().top);
-      if (ys.length < 150) {
+    const recorder = {frames: [] as DrawnFrame[], isDone: false};
+    (window as unknown as {hourTurn: typeof recorder}).hourTurn = recorder;
+    const sample = (at: number) => {
+      recorder.frames.push({at, y: element.getBoundingClientRect().top});
+      if (!recorder.isDone) {
         requestAnimationFrame(sample);
       }
     };
@@ -332,23 +337,89 @@ test('a meridiem change past the maximum turns the hour wheel onto it, frame by 
     .evaluate(el => el.getBoundingClientRect().toJSON() as DOMRect);
   await page.touchscreen.tap(pm.x + pm.width / 2, pm.y + pm.height / 2);
   await expect(field).toHaveValue('5:00 PM', {timeout: 3000});
+  // The record ends once a drawn frame shows the wheel at rest on 5.
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {hourTurn: {frames: DrawnFrame[]}}
+          ).hourTurn.frames.at(-1)?.y,
+      ),
+    )
+    .toBeCloseTo(to, 0);
+  const frames = await page.evaluate(() => {
+    const recorder = (
+      window as unknown as {
+        hourTurn: {frames: DrawnFrame[]; isDone: boolean};
+      }
+    ).hourTurn;
+    recorder.isDone = true;
+    return recorder.frames;
+  });
   await expect(selectedHour(hours)).toHaveText('5');
-  await sleep(1000);
-  const ys = await page.evaluate(
-    () => (window as unknown as {stripYs: number[]}).stripYs,
-  );
   // From 10 onto 5 through the rows between, as UIDatePicker turns onto its
-  // maximum. It never jumps, and it moves one way only: five rows down the
-  // strip.
-  expect(ys.length).toBeGreaterThan(30);
-  const from = ys[0];
-  const to = ys[ys.length - 1];
-  expect(Math.abs(to - from - 5 * ROW)).toBeLessThan(1);
-  const between = ys.filter(y => y > from + 2 && y < to - 2);
-  expect(between.length).toBeGreaterThanOrEqual(4);
-  for (let i = 1; i < ys.length; i++) {
-    expect(ys[i]).toBeGreaterThanOrEqual(ys[i - 1] - 0.5);
+  // maximum, never a jump, and only ever one way.
+  expectAnimatedTurn(frames, from, to);
+});
+
+test('on a starved main thread, a meridiem change past the maximum still comes to rest on it (component:DateInput FR13, FR14)', async ({
+  page,
+}) => {
+  const {field, hours} = await openHourWheel(page);
+  const meridiem = page.getByRole('listbox', {name: 'AM/PM'});
+  const pm = await meridiem
+    .getByRole('option', {name: 'PM'})
+    .evaluate(el => el.getBoundingClientRect().toJSON() as DOMRect);
+  // Frames come late and few, as on a slow phone.
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setCPUThrottlingRate', {rate: 8});
+  try {
+    await page.touchscreen.tap(pm.x + pm.width / 2, pm.y + pm.height / 2);
+    // The wheels are at rest when two reads in a row find the same value,
+    // rows and positions, and no timed animation runs.
+    let previous = '';
+    await expect
+      .poll(
+        async () => {
+          const now = await page.evaluate(() => {
+            const field = document.querySelector<HTMLInputElement>(
+              'input[role="combobox"]',
+            );
+            const boxes = [...document.querySelectorAll('[role="listbox"]')];
+            return JSON.stringify({
+              value: field?.value,
+              rows: boxes.map(
+                box => box.querySelector('[aria-selected="true"]')?.textContent,
+              ),
+              tops: [...document.querySelectorAll('[data-wheel-strip]')].map(
+                strip => Math.round(strip.getBoundingClientRect().top),
+              ),
+              scrolls: boxes.map(box => Math.round(box.scrollTop)),
+              // Scroll-driven row effects run for as long as the rows show;
+              // only the clock's animations move the wheels on their own.
+              running: document
+                .getAnimations()
+                .filter(
+                  animation =>
+                    animation.playState === 'running' &&
+                    animation.timeline === document.timeline,
+                ).length,
+            });
+          });
+          const isAtRest = now === previous && now.endsWith('"running":0}');
+          previous = now;
+          return isAtRest;
+        },
+        {timeout: 30_000, intervals: [500]},
+      )
+      .toBe(true);
+  } finally {
+    await cdp.send('Emulation.setCPUThrottlingRate', {rate: 1});
   }
+  // 10 PM clamps to the 5 PM maximum, and no late frame moves it on.
+  await expect(field).toHaveValue('5:00 PM');
+  await expect(selectedHour(hours)).toHaveText('5');
 });
 
 test.describe('under a mouse', () => {
