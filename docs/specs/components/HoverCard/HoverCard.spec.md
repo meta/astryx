@@ -103,6 +103,11 @@ Consumer migration instructions belong in consumer docs and release notes.
   focus, and a hover-opened card the user has tabbed into closes when the
   pointer leaves the trigger, dropping focus to the page. WCAG 1.4.13 requires
   content shown on focus to persist until focus moves or the user dismisses it.
+
+## Ownership boundary
+
+**Owns**
+
 - Trigger wiring, open and close behavior per input, card semantics, and the
   `hover-card` surface (FR1–FR8).
 
