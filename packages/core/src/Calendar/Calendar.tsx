@@ -60,7 +60,10 @@ import {
   plainDateFormat,
   plainDateWeekFieldName,
   DATE_FORMAT_WITH_WEEKDAY,
-  DATE_FORMAT_MONTH_YEAR,
+} from '../utils/plainDate';
+import {
+  plainDateFormatDayNumber,
+  plainDateFormatStandaloneMonthYear,
 } from '../utils/plainDate';
 import {mergeProps, composeEventHandlers, rtlStyles} from '../utils';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
@@ -94,8 +97,15 @@ import type {
 } from '../utils/dateTypes';
 import {normalizeDayOfWeek} from '../utils/dateTypes';
 import {themeProps} from '../utils/themeProps';
-import {useLocale, useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
 import {VisuallyHidden} from '../VisuallyHidden';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Calendar/Calendar.generated';
+
+registerEnglishFallback(english);
 
 /** How a month navigation moves the focused day: by its row offset in days, or by whole months. */
 type NavigationUnit = 'days' | 'months';
@@ -249,7 +259,7 @@ function firstEnabledDayOfMonth(
  * ```
  */
 export function Calendar({ref, ...props}: CalendarProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const {
     handleRef,
@@ -389,14 +399,15 @@ export function Calendar({ref, ...props}: CalendarProps) {
   );
 
   // Format month header
-  const monthYearLabel = useMemo(() => {
-    if (numberOfMonths === 1) {
-      return plainDateFormat(visibleMonths[0], DATE_FORMAT_MONTH_YEAR, locale);
-    }
-    return visibleMonths
-      .map(m => plainDateFormat(m, DATE_FORMAT_MONTH_YEAR, locale))
-      .join(' – ');
-  }, [visibleMonths, numberOfMonths, locale]);
+  // Each month is its own stand-alone label, so each starts with a capital
+  // where the locale capitalizes one (FR1).
+  const monthYearLabel = useMemo(
+    () =>
+      visibleMonths
+        .map(m => plainDateFormatStandaloneMonthYear(m, locale))
+        .join(' – '),
+    [visibleMonths, locale],
+  );
 
   // Announce the newly visible month to screen readers whenever it changes.
   // The visible month label (`<span>`) carries no live semantics, so paging the
@@ -1087,7 +1098,7 @@ function MonthGrid({
 
   // Month label for announcements
   const monthLabel = useMemo(() => {
-    return plainDateFormat(month, DATE_FORMAT_MONTH_YEAR, locale);
+    return plainDateFormatStandaloneMonthYear(month, locale);
   }, [month, locale]);
 
   return (
@@ -1147,7 +1158,7 @@ function MonthGrid({
                 <div
                   role="rowheader"
                   {...stylex.props(monthGridStyles.weekNumber)}>
-                  {weekNum}
+                  {plainDateFormatDayNumber(weekNum, locale)}
                 </div>
               )}
               {week.map((day, dayIndex) => {
@@ -1252,7 +1263,7 @@ function DayCell({
   onDayClick,
   onDayHover,
 }: DayCellProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const pressable = usePressFeedback();
   const {date, isOutside, dayNumber} = day;
@@ -1414,7 +1425,7 @@ function DayCell({
             state.effectivelyDisabled && dayCellTheme.dayDisabled,
           ),
         )}>
-        {dayNumber}
+        {plainDateFormatDayNumber(dayNumber, locale)}
       </button>
     </div>
   );

@@ -110,7 +110,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | FR5 | The visible root carries `dropdown-menu-item`; size and destructive state reflect on it (`data-size`, `data-variant`); semantic tokens own layout and paint before caller styling inputs compose.                                                                                                                                            | `architecture:component-theming-surface`; current source and tests |
 | FR6 | Ref, supported host attributes and handlers, `className`, `style`, and `xstyle` reach or compose on the row root without replacing owned role, tab stop, disabled behavior, destination handling, or activation order.                                                                                                                       | `architecture:public-component-api` INV5–INV9; current tests       |
 | FR7 | Disabled menu rows are inert, and the parent menu's arrow keys and typeahead skip them. Shipped behavior, not a requirement until OQ1 is ruled.                                                                                                                                                                                              | `component:DropdownMenu` FR17, OQ1                                 |
-| FR8 | Keyboard focus paints the row's hover background with no outline, about 1.1:1 against the menu surface in the default themes; in forced-colors mode that background is not drawn, so focus has no visible indicator. Shipped behavior; the focus treatment is OQ2.                                                                           | Current source                                                     |
+| FR8 | Keyboard focus draws the shared focus ring inside the row, inset by the ring's own width, in every color mode; forced colors keep that ring as the focus indicator. After pointer input the row shows only its hover background (`architecture:interaction-modality` INV1); the focused row owns the indicator (INV3).                       | Current source; `architecture:interaction-modality` INV1, INV3     |
 
 ### Allowed variation
 
@@ -153,8 +153,9 @@ Consumer migration instructions belong in consumer docs and release notes.
 - **AR2 — Disabled state.** Disabled rows expose state and cannot activate or navigate.
 - **AR3 — Keyboard ownership.** DropdownMenu owns focus collection and activation;
   the item remains a single row in that model.
-- **AR4 — Focus perception.** Focus paints a low-contrast row background in
-  ordinary themes and no indicator in forced-colors mode (FR8, OQ2).
+- **AR4 — Focus perception.** After keyboard input the focused row draws the
+  shared focus ring inside its edge in every color mode, forced colors
+  included; after pointer input it shows only its hover background (FR8).
 
 ## Design relationships
 
@@ -162,7 +163,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | ---------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------- | -------------- | ------------------ |
 | Row              | One full-width action/destination target with tokenized insets and start alignment. | Current source and parent menu composition      | prominent      | FR1–FR6            |
 | Supporting text  | Description and end content remain subordinate to the row label.                    | Delegated Item layout and current consumer docs | supporting     | FR1                |
-| Interaction      | Hover, focus, press, disabled, and destructive states remain distinguishable.       | Current source; forced-colors focus is OQ2      | prominent      | FR5, FR8, AR4      |
+| Interaction      | Hover, focus, press, disabled, and destructive states remain distinguishable.       | Current source; FR8                             | prominent      | FR5, FR8, AR4      |
 
 No component-local visual decision is recorded.
 
@@ -188,14 +189,12 @@ No component-local visual decision is recorded.
 | FR5            | `DropdownMenu.test.tsx` destructive-variant cases; `themingTargets.test.ts`                                                                                                                                                                                                                                                | Default and destructive; data and compound mode           | A missing `data-variant` fails; a rendered class absent from the documented targets fails. Evidence gap: no test asserts the `dropdown-menu-item` class or `data-size`.                        | `audit:DropdownMenuItem/theming`       |
 | FR6            | `DropdownMenu.test.tsx` ref and host-attribute cases ("a ref reaches the menuitem element", "puts aria-\*, data-\* and id on the row root, a link row included", "runs the DOM handlers the caller attaches, such as a drop target")                                                                                       | Ref; host attributes; caller handlers                     | A dropped ref, attribute, or handler fails. Evidence gap: no test asserts `className`, `style`, or `xstyle` on the row.                                                                        | `audit:DropdownMenuItem/api`           |
 | FR7            | `DropdownMenu.test.tsx` "skips aria-disabled menuitemradio and menuitemcheckbox items during arrow navigation" (the shipped behavior OQ1 leaves open)                                                                                                                                                                      | Disabled rows                                             | A disabled row that activates fails.                                                                                                                                                           | `audit:DropdownMenuItem/accessibility` |
-| FR8, AR4, PR1  | Evidence gap: no test asserts the focus paint, forced-colors focus, or the listener bound                                                                                                                                                                                                                                  | —                                                         | —                                                                                                                                                                                              | `audit:DropdownMenuItem/visual`        |
+| FR8, AR4, PR1  | `DropdownMenuForcedColors.test.tsx` (each row's `:focus-visible` ring and token inset); `DropdownMenuAudit.a11y.chromium.spec.ts` forced-colors frames                                                                                                                                                                     | Action and destructive rows; light, dark, forced colors   | A row without the ring after keyboard input, or a ring not inset by the ring width, fails. Evidence gap: no test asserts the listener bound.                                                   | `audit:DropdownMenuItem/visual`        |
 | RTL            | `apps/storybook/rtl-audit/verified-not-applicable.json` DropdownMenuItem entry                                                                                                                                                                                                                                             | LTR and RTL                                               | A changed source hash fails the receipt.                                                                                                                                                       | `audit:DropdownMenuItem/rtl`           |
 
 ## Current-state impact
 
-- **Focus visibility (FR8).** Keyboard focus on a row shows only a background
-  tint about 1.1:1 against the menu surface, and no indicator in forced-colors
-  mode; the treatment is OQ2.
+No known difference between shipped behavior and this contract.
 
 ## Decision log
 
@@ -205,8 +204,6 @@ No component-local decision.
 
 - **OQ1 — Which shared keyboard owner should keep disabled menu items discoverable
   while preserving their inert behavior?** (`human-api`)
-- **OQ2 — Should forced-colors focus use a component-specific system outline, or a
-  shared row-focus treatment that also governs ordinary themes?** (`human-design`)
 
 ## Content boundary
 

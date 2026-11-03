@@ -51,6 +51,25 @@ beforeEach(() => {
 });
 
 describe('CommandPalette', () => {
+  it('a closed palette adds no document pointermove listener', () => {
+    const addListener = vi.spyOn(document, 'addEventListener');
+    try {
+      render(
+        <CommandPalette
+          isOpen={false}
+          onOpenChange={() => {}}
+          searchSource={simpleSource}
+        />,
+      );
+      const moveListeners = addListener.mock.calls.filter(
+        ([type]) => type === 'pointermove',
+      );
+      expect(moveListeners).toEqual([]);
+    } finally {
+      addListener.mockRestore();
+    }
+  });
+
   it('renders when isOpen is true', () => {
     render(
       <CommandPalette
@@ -320,6 +339,42 @@ describe('CommandPalette', () => {
     expect(handleOpenChange).not.toHaveBeenCalled();
   });
 
+  it('an inline preview highlights its value again after a key and a cleared query', async () => {
+    const user = userEvent.setup();
+    render(
+      <CommandPalette
+        isOpen={true}
+        isInline
+        onOpenChange={() => {}}
+        searchSource={simpleSource}
+        value="settings"
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    const settingsId = async () =>
+      (await screen.findByRole('option', {name: 'Settings', hidden: true})).id;
+    await waitFor(async () => {
+      expect(input.getAttribute('aria-activedescendant')).toBe(
+        await settingsId(),
+      );
+    });
+    await user.click(input);
+    // Keys only from here: a press would end the keyboard's hold.
+    await user.keyboard('{ArrowDown}');
+    await user.keyboard('h');
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('option', {name: 'Settings', hidden: true}),
+      ).toBeNull();
+    });
+    await user.keyboard('{Backspace}');
+    await waitFor(async () => {
+      expect(input.getAttribute('aria-activedescendant')).toBe(
+        await settingsId(),
+      );
+    });
+  });
+
   it('preserves local Escape closing for inline previews', () => {
     const handleOpenChange = vi.fn();
     render(
@@ -380,6 +435,120 @@ describe('CommandPalette', () => {
     await waitFor(() =>
       expect(screen.getByText('No results')).toBeInTheDocument(),
     );
+  });
+
+  // component:CommandPaletteEmpty FR2: "no query" is the field's current value.
+  it('shows no empty text while the first query is pending, then its outcome', async () => {
+    const resolvers: ((items: SearchableItem[]) => void)[] = [];
+    const source: SearchSource = {
+      bootstrap: () => [],
+      async search(): Promise<SearchableItem[]> {
+        return new Promise<SearchableItem[]>(resolve => {
+          resolvers.push(resolve);
+        });
+      },
+    };
+
+    render(
+      <CommandPalette
+        isOpen={true}
+        onOpenChange={() => {}}
+        searchSource={source}
+        emptyBootstrapText="Type to search"
+        emptySearchText="No results"
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByText('Type to search')).toBeInTheDocument(),
+    );
+
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: 'ap'}});
+    await waitFor(() => expect(resolvers).toHaveLength(1));
+    // Pending: no bootstrap text, no search-empty text; the spinner shows.
+    expect(screen.queryByText('Type to search')).toBeNull();
+    expect(screen.queryByText('No results')).toBeNull();
+    // The Input's spinner is decorative (spec:AST-086 FR8): find it by class.
+    expect(document.querySelector('.astryx-spinner')).not.toBeNull();
+    // The result surface keeps the Empty container (so the dialog keeps its
+    // height), hidden from assistive technology and with no message.
+    const placeholder = document.querySelector('.astryx-command-palette-empty');
+    expect(placeholder).not.toBeNull();
+    expect(placeholder).toHaveAttribute('aria-hidden', 'true');
+    expect(placeholder?.textContent?.trim()).toBe('');
+
+    resolvers[0]([]);
+    await waitFor(() =>
+      expect(screen.getByText('No results')).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('Type to search')).toBeNull();
+  });
+
+  it('shows the first query results once they arrive, with no empty text before', async () => {
+    const resolvers: ((items: SearchableItem[]) => void)[] = [];
+    const source: SearchSource = {
+      bootstrap: () => [],
+      async search(): Promise<SearchableItem[]> {
+        return new Promise<SearchableItem[]>(resolve => {
+          resolvers.push(resolve);
+        });
+      },
+    };
+
+    render(
+      <CommandPalette
+        isOpen={true}
+        onOpenChange={() => {}}
+        searchSource={source}
+        emptyBootstrapText="Type to search"
+        emptySearchText="No results"
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: 'ap'}});
+    await waitFor(() => expect(resolvers).toHaveLength(1));
+    expect(screen.queryByText('Type to search')).toBeNull();
+
+    resolvers[0]([{id: 'apple', label: 'Apple'}]);
+    await waitFor(() =>
+      expect(screen.getByRole('option', {name: /Apple/})).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('No results')).toBeNull();
+  });
+
+  it('brings the bootstrap text back when the field is cleared', async () => {
+    const resolvers: ((items: SearchableItem[]) => void)[] = [];
+    const source: SearchSource = {
+      bootstrap: () => [],
+      async search(): Promise<SearchableItem[]> {
+        return new Promise<SearchableItem[]>(resolve => {
+          resolvers.push(resolve);
+        });
+      },
+    };
+
+    render(
+      <CommandPalette
+        isOpen={true}
+        onOpenChange={() => {}}
+        searchSource={source}
+        emptyBootstrapText="Type to search"
+        emptySearchText="No results"
+      />,
+    );
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, {target: {value: 'zq'}});
+    await waitFor(() => expect(resolvers).toHaveLength(1));
+    resolvers[0]([]);
+    await waitFor(() =>
+      expect(screen.getByText('No results')).toBeInTheDocument(),
+    );
+
+    fireEvent.change(input, {target: {value: ''}});
+    await waitFor(() =>
+      expect(screen.getByText('Type to search')).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('No results')).toBeNull();
   });
 
   it('discards a search response that resolves after the palette closed', async () => {

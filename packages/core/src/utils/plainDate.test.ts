@@ -28,6 +28,8 @@ import {
   plainDateSetEndOfWeekExclusive,
   plainDateGetWeekNumber,
   plainDateFormat,
+  plainDateFormatStandaloneMonthYear,
+  plainDateFormatDayNumber,
   formatSharedDate,
   DATE_FORMAT_LONG,
   DATE_FORMAT_WITH_WEEKDAY,
@@ -755,6 +757,31 @@ describe('plainDateGetWeekNumber', () => {
   });
 });
 
+describe('plainDateFormatStandaloneMonthYear', () => {
+  const october = {year: 2026, month: 10, day: 1};
+
+  it.each([
+    ['es-ES', 'Octubre de 2026'],
+    ['fr-FR', 'Octobre 2026'],
+    ['it-IT', 'Ottobre 2026'],
+    ['nl-NL', 'Oktober 2026'],
+    ['pl-PL', 'Październik 2026'],
+    ['ru-RU', 'Октябрь 2026 г.'],
+    ['uk-UA', 'Жовтень 2026 р.'],
+    ['es-MX', 'Octubre de 2026'],
+  ])('capitalizes the stand-alone month in %s', (locale, label) => {
+    expect(plainDateFormatStandaloneMonthYear(october, locale)).toBe(label);
+  });
+
+  it.each([
+    ['vi-VN', 'tháng 10 năm 2026'],
+    ['en-US', 'October 2026'],
+    ['pt-BR', 'outubro de 2026'],
+  ])('keeps the Intl label in %s', (locale, label) => {
+    expect(plainDateFormatStandaloneMonthYear(october, locale)).toBe(label);
+  });
+});
+
 describe('plainDateFormat', () => {
   it('keeps one formatter per locale and options, whatever order the options are in', () => {
     // A month of day labels, as a calendar renders them, reuses one formatter.
@@ -934,5 +961,26 @@ describe('plainDateWeekFieldName', () => {
 
   it('never returns an empty name', () => {
     expect(plainDateWeekFieldName('zxx').length).toBeGreaterThan(0);
+  });
+});
+
+describe('plainDateFormatDayNumber', () => {
+  it.each([
+    ['en', 15, '15'],
+    ['fa-IR', 15, '۱۵'],
+    ['ar-EG', 15, '١٥'],
+    ['en-u-nu-arab', 31, '٣١'],
+  ])('writes the number in the digits of %s', (locale, value, expected) => {
+    expect(plainDateFormatDayNumber(value, locale)).toBe(expected);
+  });
+
+  it('keeps the Gregorian number in a locale whose default calendar differs', () => {
+    // fa-IR formats dates in the Persian calendar by default; a day number
+    // must still be the Gregorian day it was given.
+    expect(plainDateFormatDayNumber(1, 'fa-IR')).toBe('۱');
+  });
+
+  it('adds no grouping separator', () => {
+    expect(plainDateFormatDayNumber(1234, 'en')).toBe('1234');
   });
 });

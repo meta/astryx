@@ -59,13 +59,19 @@ import {
 } from '../Field/fieldParts';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 import type {TranslatorFn} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useListFormatter} from '../i18n/useListFormatter';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/FileInput/FileInput.generated';
+
+registerEnglishFallback(english);
 function formatFileSize(bytes: number, t: TranslatorFn): string {
   if (bytes < 1024) {
     return t('@astryx.fileInput.fileSize.bytes', {size: bytes});
@@ -404,6 +410,10 @@ export interface FileInputProps extends Omit<
    * - 'attached': message overlaps directly below the input (bordered treatment)
    * - 'detached': message floats below as a separate element with spacing
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
+   *
+   * Dropzone mode does not support 'attached': its tall surface cannot carry an
+   * overlapping message. Use 'detached' or 'tooltip' there. From the next minor
+   * release, a dropzone resolves 'attached' to 'detached' and defaults to it.
    * @default 'attached'
    */
   statusVariant?: FieldStatusPlacement;
@@ -485,7 +495,7 @@ export function FileInput({
     containerClassName,
     containerStyle,
   });
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const generatedID = useId();
   const id = idProp ?? generatedID;
   const descriptionID = useId();

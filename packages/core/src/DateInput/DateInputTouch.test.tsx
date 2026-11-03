@@ -451,11 +451,14 @@ describe('DateInput — surface selection', () => {
       expect(pane('March 2026')).toBeInTheDocument();
 
       rerender(renderDateInput('es-ES'));
+      // The field's date is running text; the sheet's month heading and each
+      // month pane's name stand alone, so they start with a capital
+      // (Calendar FR1).
       expect(field()).toHaveValue('21 de marzo de 2026');
       expect(
         document.querySelector('[data-title="month-year"]'),
-      ).toHaveTextContent('marzo de 2026');
-      expect(pane('marzo de 2026')).toBeInTheDocument();
+      ).toHaveTextContent('Marzo de 2026');
+      expect(pane('Marzo de 2026')).toBeInTheDocument();
 
       const nextButton = document.querySelector<HTMLButtonElement>(
         '[data-arrows="months"] button:last-child',
@@ -464,9 +467,28 @@ describe('DateInput — surface selection', () => {
       fireEvent.click(nextButton!);
       expect(
         document.querySelector('[data-title="month-year"]'),
-      ).toHaveTextContent('abril de 2026');
+      ).toHaveTextContent('Abril de 2026');
     });
   });
+
+  it.each([
+    ['fa-IR', '۲۱'],
+    ['ar-EG', '٢١'],
+    ['en-US', '21'],
+  ])(
+    'shows month-pane day numbers in the locale digits in %s',
+    (locale, day) => {
+      renderAndOpen(
+        <InternationalizationProvider locale={locale}>
+          <Controlled initial="2026-03-21" />
+        </InternationalizationProvider>,
+      );
+      const march21 = document.querySelector(
+        'button[data-date="2026-03-21"]:not([data-outside])',
+      );
+      expect(march21).toHaveTextContent(new RegExp(`^${day}$`));
+    },
+  );
 
   it('forwards ref to the input on both surfaces', () => {
     const desktopRef = {current: null as HTMLInputElement | null};

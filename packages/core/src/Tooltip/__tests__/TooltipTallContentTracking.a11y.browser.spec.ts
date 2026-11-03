@@ -309,14 +309,7 @@ async function focusTallTriggerOnPhone(page: Page, triggerY: number) {
   );
   await trigger.focus();
   await expect(page.getByRole('tooltip')).toBeVisible();
-  await page.waitForTimeout(200);
-  expect(
-    await page.evaluate(
-      sel =>
-        document.querySelector(sel)?.hasAttribute('data-astryx-clears-anchor'),
-      TOOLTIP,
-    ),
-  ).toBe(true);
+  await expectSwitched(page);
 }
 
 test('a switched tooltip whose trigger moves toward the far edge moves to the roomier side, readable', async ({
@@ -411,7 +404,17 @@ async function openHeldTooltip(
     },
     [TRIGGER, triggerY],
   );
-  await page.waitForTimeout(300);
+}
+
+/**
+ * Wait until the tooltip has switched to its anchor-clear list. A switch that
+ * follows a move waits for the move observer's report, which a loaded
+ * machine makes later.
+ */
+async function expectSwitched(page: Page) {
+  await expect(page.locator(TOOLTIP)).toHaveAttribute(
+    'data-astryx-clears-anchor',
+  );
 }
 
 async function hasSwitched(page: Page): Promise<boolean | undefined> {
@@ -479,7 +482,7 @@ test('a scroll that moves a tall tooltip’s trigger never leaves the tooltip ov
   // phone; the page scrolls in steps that carry the trigger down the screen,
   // past the middle, until the room above is the larger.
   await openHeldTooltip(page, {width: 390, height: 700}, '', 150);
-  expect(await hasSwitched(page)).toBe(true);
+  await expectSwitched(page);
   for (let step = 0; step < 4; step++) {
     const frames = await page.evaluate(
       async ({sel, tip}) => {
@@ -532,7 +535,7 @@ test('a smooth scroll that carries a tall tooltip’s trigger leaves it clear an
   // many frames; the observer must follow every frame of it, not only the
   // first, and stay armed for the next move.
   await openHeldTooltip(page, {width: 390, height: 700}, '', 150);
-  expect(await hasSwitched(page)).toBe(true);
+  await expectSwitched(page);
   const settle = async () =>
     page.evaluate(async () => {
       const frame = async () =>
@@ -641,7 +644,7 @@ test('a trigger that a scrolled container hides for several seconds is followed 
   // that settle before the case starts.
   await scrollTriggerTo(150);
   await page.waitForTimeout(1500);
-  expect(await hasSwitched(page)).toBe(true);
+  await expectSwitched(page);
 
   await scrollTriggerTo(-150);
   await page.waitForTimeout(3500);
@@ -781,7 +784,8 @@ const STATE_ROWS: Record<
     set: "a.effect.setKeyframes([{translate: '0px'}, {translate: '50px'}])",
   },
   paused: {set: 'a.pause()'},
-  reversed: {set: 'a.reverse()'},
+  // Reversed 9 s into its 10 s, it runs back for 9 s, longer than the test.
+  reversed: {set: 'a.currentTime = 9000; a.reverse()'},
   finished: {css: 'animation-duration:1ms;animation-fill-mode:forwards'},
   persisted: {set: 'a.persist()'},
   // Shapes.
@@ -916,7 +920,15 @@ test('placing a shown tooltip afresh keeps every animation in its content in its
       document.querySelector('[data-row="running"]') as Element
     ).getAnimations()[0];
   });
-  await page.waitForTimeout(100);
+  // Every row's animation has started: one the sets just made or re-timed
+  // (the scripted animation, the transition) is pending, its time held,
+  // until a frame starts it.
+  await page.evaluate(async () => {
+    const rows = Array.from(document.querySelectorAll('[data-row]'));
+    await Promise.all(
+      rows.flatMap(row => row.getAnimations()).map(async a => a.ready),
+    );
+  });
   const read = async () =>
     page.evaluate(names => {
       const handler = (window as unknown as {__handler: unknown}).__handler;
@@ -1020,7 +1032,7 @@ test('placing a shown tooltip afresh keeps every animation in its content in its
   }, TRIGGER);
   await page.waitForTimeout(450);
   if (browserName === 'chromium') {
-    expect(await hasSwitched(page)).toBe(true);
+    await expectSwitched(page);
   }
   const after = await read();
   // In Chromium the browser recreated the content's CSS animations: this is

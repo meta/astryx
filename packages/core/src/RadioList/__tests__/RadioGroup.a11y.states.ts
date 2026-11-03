@@ -283,11 +283,10 @@ export const RADIO_GROUP_BINDING_STATES = [
   {
     id: 'segmented-group-disabled',
     binding: 'SegmentedControl',
-    summary: 'a disabled segmented group outside the tab sequence',
+    summary: 'a disabled segmented group with one tab stop',
     facts: groupFacts({
       disabled: true,
       operable: false,
-      tabReachable: false,
       spaceSelection: false,
       pointerSelection: false,
       arrowSelection: false,
@@ -359,13 +358,12 @@ export const RADIO_GROUP_BINDING_STATES = [
   {
     id: 'segmented-option-group-disabled',
     binding: 'SegmentedControlItem',
-    summary:
-      'a selected segment disabled by its group and removed from Tab order',
+    summary: 'a selected segment disabled by its group that keeps the Tab stop',
     facts: optionFacts({
       checked: true,
       disabled: true,
       operable: false,
-      tabReachable: false,
+      tabReachable: true,
       pointerCancellation: false,
     }),
     subjectName: 'List',

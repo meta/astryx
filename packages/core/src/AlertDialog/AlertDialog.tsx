@@ -4,7 +4,9 @@
 
 /**
  * @file AlertDialog.tsx
- * @input Uses React, StyleX, Dialog, Layout, Heading, Text, Button
+ * @input Uses React, StyleX, Dialog, Layout, Heading, Text, Button, the
+ *   action-group tracking (hooks/useActionGroupTracking) and the press-group
+ *   marker (privateAttributes/pressGroupItem.stylex)
  * @output Exports AlertDialog component, AlertDialogProps type
  * @position Core implementation; consumed by index.ts, tested by AlertDialog.test.tsx
  *
@@ -12,11 +14,12 @@
  * - /packages/core/src/AlertDialog/AlertDialog.doc.mjs (props table, features, examples)
  * - /packages/core/src/AlertDialog/AlertDialog.test.tsx (tests for new/changed behavior)
  * - /packages/core/src/AlertDialog/index.ts (exports if types change)
+ * - /packages/core/src/AlertDialog/__tests__/AlertDialog.interaction.browser.spec.ts (touch tracking)
  * - /apps/storybook/stories/AlertDialog.stories.tsx (storybook stories)
  * - /packages/cli/assets/templates/blocks/components/AlertDialog/ (showcase blocks)
  */
 
-import React, {useId, useCallback} from 'react';
+import React, {useId, useCallback, useRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Dialog} from '../Dialog/Dialog';
 import {Layout} from '../Layout/Layout';
@@ -30,12 +33,32 @@ import type {ButtonVariant} from '../Button';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n/useTranslator';
 import {useMediaQuery} from '../hooks/useMediaQuery';
+import {useTouchPresentation} from '../utils/touchPresentation';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/AlertDialog/AlertDialog.generated';
+import {useActionGroupTracking} from '../hooks/useActionGroupTracking';
+import {PressGroupContext} from '../hooks/pressGroupContext';
+import {alertController} from '../motion/uikit/alert';
+import {pressGroupItemProps} from '../privateAttributes/pressGroupItem.stylex';
+
+registerEnglishFallback(english);
+
+const SLIDING_POINTERS = ['touch', 'pen'] as const;
+const ACTION_TRACKING_PROPS = pressGroupItemProps(SLIDING_POINTERS);
 
 const SMALL_SCREEN_QUERY = '(max-width: 640px)';
 
 const styles = stylex.create({
+  // The browser may pinch-zoom on the actions but never pans there. Chrome on
+  // Android cancels a pointer it pans, which would cancel the group's press.
+  // The gesture host keeps an author's narrower touch-action.
+  trackingRow: {
+    touchAction: 'pinch-zoom',
+  },
   action: {
     maxWidth: '100%',
     minWidth: 0,
@@ -158,7 +181,7 @@ export function AlertDialog({
   'data-testid': testId,
   ...rest
 }: AlertDialogProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const cancelLabel = cancelLabelFromProps ?? t('@astryx.alertDialog.cancel');
   const titleId = useId();
   const descriptionId = useId();
@@ -171,6 +194,24 @@ export function AlertDialog({
     onOpenChange(false);
   }, [onOpenChange]);
 
+  // Each action carries the press-group marker from its first render, so the
+  // tracker is its only painter.
+  const actionsRef = useRef<HTMLElement>(null);
+  // Only under the touch presentation does a press slide across the
+  // actions. A desktop press stays the native button's.
+  const {isTouch} = useTouchPresentation();
+  const isTracking = isOpen && isInline !== true && isTouch;
+  useActionGroupTracking(actionsRef, {
+    // The actions row holds only the two buttons.
+    itemSelector: 'button',
+    highlightOnsetMs: alertController.actions.highlightOnsetMs,
+    highlightExpansion: alertController.actions.highlightExpansion,
+    // A mouse press acts as a native button's under any presentation.
+    pointerTypes: SLIDING_POINTERS,
+    isEnabled: isTracking,
+  });
+  const actionTrackingProps = isTracking ? ACTION_TRACKING_PROPS : undefined;
+
   const buttonActionStyle = [
     styles.action,
     isSmallScreen && styles.stackedAction,
@@ -182,6 +223,7 @@ export function AlertDialog({
       label={cancelLabel}
       onClick={handleCancel}
       xstyle={buttonActionStyle}
+      {...actionTrackingProps}
       // Dialog focuses [data-autofocus] itself after showModal(), because
       // React's autoFocus runs during commit while the dialog is invisible.
       // Cancel is least destructive, so it remains the autofocus target even
@@ -197,6 +239,7 @@ export function AlertDialog({
       onClick={onAction}
       isLoading={isActionLoading}
       xstyle={buttonActionStyle}
+      {...actionTrackingProps}
     />
   );
 
@@ -238,13 +281,17 @@ export function AlertDialog({
                 destructive-above-Cancel narrow order because confirmation
                 actions have component-specific meaning here. */}
             <Stack
+              ref={actionsRef}
+              xstyle={isTracking && styles.trackingRow}
               direction={isSmallScreen ? 'vertical' : 'horizontal'}
               gap={2}
               hAlign={isSmallScreen ? 'stretch' : 'end'}
               wrap={isSmallScreen ? 'nowrap' : 'wrap'}>
-              {isSmallScreen
-                ? [actionButton, cancelButton]
-                : [cancelButton, actionButton]}
+              <PressGroupContext value={isTracking}>
+                {isSmallScreen
+                  ? [actionButton, cancelButton]
+                  : [cancelButton, actionButton]}
+              </PressGroupContext>
             </Stack>
           </LayoutFooter>
         }

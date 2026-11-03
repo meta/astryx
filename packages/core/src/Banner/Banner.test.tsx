@@ -157,9 +157,17 @@ describe('Banner', () => {
         expect(
           getComputedStyle(button).getPropertyValue('--color-text-primary'),
         ).toBe(expectedRole);
-        const tooltip = document.getElementById(
-          button.getAttribute('aria-describedby')!,
-        );
+        // A tooltip that repeats the name does not describe the button
+        // (Button FR12), so find it by its text.
+        const describedBy = button.getAttribute('aria-describedby');
+        const tooltip =
+          describedBy != null
+            ? document.getElementById(describedBy)
+            : (screen
+                .getAllByRole('tooltip', {hidden: true})
+                .find(
+                  el => el.textContent === button.getAttribute('aria-label'),
+                ) ?? null);
         expect(tooltip).not.toBeNull();
         expect(
           getComputedStyle(tooltip!).getPropertyValue('--color-text-primary'),
@@ -830,7 +838,13 @@ describe('Banner', () => {
         <Banner status="info" title={<span>Rich title</span>} isDismissable />,
       );
       const button = screen.getByRole('button', {name: 'Dismiss'});
-      expect(button).toHaveAccessibleDescription('Dismiss');
+      // The tooltip repeats the name, so it shows but adds no description.
+      expect(button).not.toHaveAttribute('aria-describedby');
+      expect(
+        screen
+          .getAllByRole('tooltip', {hidden: true})
+          .some(el => el.textContent === 'Dismiss'),
+      ).toBe(true);
     });
 
     it('uses a translated dismissLabel for a rich title and its tooltip', () => {
@@ -845,7 +859,12 @@ describe('Banner', () => {
       const button = screen.getByRole('button', {
         name: 'Wartungshinweis schließen',
       });
-      expect(button).toHaveAccessibleDescription('Wartungshinweis schließen');
+      expect(button).not.toHaveAttribute('aria-describedby');
+      expect(
+        screen
+          .getAllByRole('tooltip', {hidden: true})
+          .some(el => el.textContent === 'Wartungshinweis schließen'),
+      ).toBe(true);
     });
 
     it('keeps a translated verb when the titled message falls back to English', () => {

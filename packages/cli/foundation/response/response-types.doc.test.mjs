@@ -9,10 +9,25 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import {describe, it, expect} from 'vitest';
+import {afterAll, beforeAll, describe, it, expect} from 'vitest';
 import {doc} from './response-types.doc.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
 import {linkThisCliAsProjectCli} from '../../test-utils/release-fixtures.mjs';
+
+/**
+ * Every temporary folder these tests make lives here, removed once they
+ * finish. It is made in beforeAll, not when the module loads: Vitest skips
+ * both hooks when a run filters out every test here.
+ */
+let TEMP_ROOT = '';
+beforeAll(() => {
+  TEMP_ROOT = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'astryx-response-types-test-'),
+  );
+});
+afterAll(() => {
+  fs.rmSync(TEMP_ROOT, {recursive: true, force: true});
+});
 
 /** @param {string} type */
 const describedAs = type =>
@@ -174,7 +189,7 @@ describe('response-types EnumDoc names every field', () => {
 
   it('theme.palette.generate, including receipt provenance', async () => {
     const cwd = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'astryx-response-types-palette-'),
+      path.join(TEMP_ROOT, 'astryx-response-types-palette-'),
     );
     fs.writeFileSync(
       path.join(cwd, 'palette.config.json'),
@@ -216,9 +231,7 @@ describe('response-types EnumDoc names every field', () => {
   });
 
   it('theme.build, including notices', async () => {
-    const cwd = fs.mkdtempSync(
-      path.join(os.tmpdir(), 'astryx-response-types-'),
-    );
+    const cwd = fs.mkdtempSync(path.join(TEMP_ROOT, 'astryx-response-types-'));
     fs.writeFileSync(
       path.join(cwd, 'package.json'),
       '{"name":"app","version":"1.0.0"}',

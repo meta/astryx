@@ -18,6 +18,7 @@ verified_by:
     apps/storybook/stories/Grid.stories.tsx,
     .github/scripts/story-play-guard.js,
     packages/core/src/theme/themingTargets.test.ts,
+    apps/storybook/rtl-audit/targets.json,
   ]
 modules: []
 families: [family:layout-primitives]
@@ -171,6 +172,7 @@ wrapper's behavior.
 | FR7, AR1, AR2       | `Grid.stories.tsx` AuditMatrix play guard in LTR and RTL                                                          | Fixed tracks in both directions                                               | Items that do not run start to end in the document direction fail the play guard. Gap: no automated check asserts that Grid adds no role or keeps DOM order.                                                                                                                                                            | `audit:Grid/a11y-rtl` |
 | PR1                 | `serverSafeComponents.test.ts`; source review                                                                     | Every state                                                                   | A client API (state, an effect) added without a client directive fails `serverSafeComponents.test.ts`. Gap: a client API added together with a client directive passes, and no automated check fails if Grid adds layout measurement.                                                                                   | `audit:Grid/behavior` |
 | Theming anatomy map | `scripts/check-knowledge.mjs`                                                                                     | Consumer anatomy and current targets                                          | Missing, extra, or stale mappings fail repository validation.                                                                                                                                                                                                                                                           | `audit:Grid/theming`  |
+| RTL relation        | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `Grid / With grid span`                  | Spanning and single-track items; LTR and RTL                                  | A first grid item that is not at the inline start of the next fails D2.                                                                                                                                                                                                                                                 | `audit:Grid/i18n-rtl` |
 
 ## Decision log
 

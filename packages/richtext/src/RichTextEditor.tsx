@@ -54,7 +54,12 @@ import type {BaseProps} from '@astryxdesign/core';
 import {useInputStatusIcon} from '@astryxdesign/core/hooks';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {useTranslator} from '@astryxdesign/core/i18n';
-import {mergeProps, themeProps, type SizeValue} from '@astryxdesign/core/utils';
+import {
+  isRenderable,
+  mergeProps,
+  themeProps,
+  type SizeValue,
+} from '@astryxdesign/core/utils';
 import {useSize} from '@astryxdesign/core/SizeContext';
 
 import {LexicalExtensionComposer} from '@lexical/react/LexicalExtensionComposer';
@@ -599,7 +604,7 @@ export const RichTextEditor = function RichTextEditor({
   }
 
   const hasTabEscapeHint = editable && tabEscapeHint !== '';
-  const hasToolbar = toolbar != null && typeof toolbar !== 'boolean';
+  const hasToolbar = isRenderable(toolbar);
 
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
     useInputStatusIcon({
@@ -755,6 +760,7 @@ export const RichTextEditor = function RichTextEditor({
           <VisuallyHidden id={tabEscapeHintID}>{tabEscapeHint}</VisuallyHidden>
         )}
       </div>
+      {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `maxLength` is a number; 0 still shows its counter */}
       {maxLength != null && (
         <div
           id={counterID}

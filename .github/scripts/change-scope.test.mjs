@@ -31,6 +31,55 @@ describe('spec-only change scope', () => {
     expect(result.specOnly).toBe(true);
   });
 
+  it('treats a platform record beside the core record as a component record', () => {
+    const result = classifyChanges([
+      {filename: 'docs/specs/components/TextInput/TextInput.swift.spec.md'},
+    ]);
+    expect(result.touchesKnowledgeRecords).toBe(true);
+    expect(result.specOnly).toBe(true);
+    expect(result.surfaces).toEqual([SURFACES.KNOWLEDGE]);
+  });
+
+  it('owner-gates a platform record changed with its Swift view', () => {
+    const result = classifyChanges([
+      {filename: 'docs/specs/components/Button/Button.swift.spec.md'},
+      {filename: 'packages/native/apple/Sources/Astryx/Button/Button.swift'},
+    ]);
+    expect(result.touchesKnowledgeRecords).toBe(true);
+    expect(result.specOnly).toBe(false);
+  });
+
+  it('does not owner-gate a Swift view change that leaves its platform record alone', () => {
+    const result = classifyChanges([
+      {filename: 'packages/native/apple/Sources/Astryx/Button/Button.swift'},
+    ]);
+    expect(result.touchesKnowledgeRecords).toBe(false);
+  });
+
+  it('does not treat an unsupported language or a misplaced platform file as a record', () => {
+    for (const filename of [
+      'docs/specs/components/Button/Button.kotlin.spec.md',
+      'docs/specs/components/Button/modules/Button.swift.spec.md',
+    ]) {
+      expect(classifyChanges([{filename}]).specOnly).toBe(false);
+    }
+  });
+
+  it('owner-gates a package architecture record like docs/architecture/', () => {
+    const result = classifyChanges([
+      {filename: 'packages/native/specs/swift/slots.spec.md'},
+    ]);
+    expect(result.touchesKnowledgeRecords).toBe(true);
+    expect(result.specOnly).toBe(false);
+    // Every Markdown file under a package's specs/ is owner-gated, a README
+    // too, though only records count toward a spec-only change.
+    const readme = classifyChanges([
+      {filename: 'packages/native/specs/README.md'},
+    ]);
+    expect(readme.touchesKnowledgeRecords).toBe(true);
+    expect(readme.specOnly).toBe(false);
+  });
+
   it('owner-gates architecture records without granting the spec-only fast path', () => {
     const result = classifyChanges([
       {filename: 'docs/architecture/knowledge-contracts.md'},
@@ -454,5 +503,94 @@ describe('full-suite scope', () => {
   it('runs everything when there are no paths to scope from', () => {
     expect(classifyChanges([]).fullSuite).toBe(true);
     expect(classifyChanges([], {expectedCount: 0}).fullSuite).toBe(true);
+  });
+});
+
+describe('Lab-only change scope (spec:AST-030 FR26)', () => {
+  const lab = [
+    'packages/lab/src/Tour/Tour.tsx',
+    'packages/lab/src/Tour/__tests__/Tour.test.tsx',
+    'packages/lab/src/Tour/Tour.doc.mjs',
+  ];
+
+  it('is Lab-only when every changed path is in the Lab package', () => {
+    const result = classifyChanges(lab.map(filename => ({filename})));
+    expect(result).toMatchObject({
+      labOnly: true,
+      specOnly: false,
+      docsiteOnly: false,
+      toolingOnly: false,
+    });
+    expect(result.reason).toBe('only the Lab package changed');
+    // Its manifest and build configuration are the Lab package's too.
+    expect(
+      classifyChanges([{filename: 'packages/lab/package.json'}]).labOnly,
+    ).toBe(true);
+  });
+
+  it('stays Lab-only beside its release notes, but a Changeset alone is not Lab', () => {
+    expect(
+      classifyChanges(
+        [...lab, '.changeset/tour-steps.md'].map(filename => ({filename})),
+      ).labOnly,
+    ).toBe(true);
+    expect(
+      classifyChanges([{filename: '.changeset/tour-steps.md'}]).labOnly,
+    ).toBe(false);
+  });
+
+  it('runs full CI for any other path beside a Lab change', () => {
+    for (const other of [
+      'packages/core/src/Button/Button.tsx',
+      'packages/core/src/internal/touch.ts',
+      'packages/cli/api/search/search.mjs',
+      'scripts/sync-exports.js',
+      'tsconfig.json',
+      'packages/charts/src/index.ts',
+      'apps/storybook/stories/Tour.stories.tsx',
+      'apps/docsite/src/app/page.tsx',
+      'apps/sandbox/src/main.tsx',
+      '.github/workflows/ci.yml',
+      'pnpm-lock.yaml',
+      'package.json',
+      'vitest.config.mts',
+      'internal/lab-readiness/audit.mjs',
+      'docs/specs/AST-030/spec.md',
+      'packages/labels/src/index.ts',
+    ]) {
+      expect(
+        classifyChanges([...lab, other].map(filename => ({filename}))).labOnly,
+        other,
+      ).toBe(false);
+    }
+  });
+
+  it('checks both sides of a rename into or out of the Lab package', () => {
+    const graduated = classifyChanges([
+      {
+        filename: 'packages/core/src/Tour/Tour.tsx',
+        previous_filename: 'packages/lab/src/Tour/Tour.tsx',
+        status: 'R100',
+      },
+    ]);
+    expect(graduated.labOnly).toBe(false);
+    const parked = classifyChanges([
+      {
+        filename: 'packages/lab/src/Tour/Tour.tsx',
+        previous_filename: 'packages/core/src/Tour/Tour.tsx',
+        status: 'R100',
+      },
+    ]);
+    expect(parked.labOnly).toBe(false);
+  });
+
+  it('is never Lab-only for an incomplete or empty file list', () => {
+    expect(
+      classifyChanges(
+        lab.map(filename => ({filename})),
+        {expectedCount: 4},
+      ).labOnly,
+    ).toBe(false);
+    expect(classifyChanges([]).labOnly).toBe(false);
   });
 });

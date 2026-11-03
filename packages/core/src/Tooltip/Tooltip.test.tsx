@@ -25,10 +25,17 @@ import {
   fireEvent,
   waitFor,
 } from '@testing-library/react';
-import {useRef} from 'react';
-import {Tooltip} from './Tooltip';
+import {useRef, type ComponentProps} from 'react';
+import {Tooltip, TooltipWithTriggerBehavior} from './Tooltip';
+import {ClickableCard} from '../ClickableCard/ClickableCard';
+import {Item} from '../Item/Item';
+import {Token} from '../Token/Token';
 import {useTooltip} from './useTooltip';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
+import userEvent from '@testing-library/user-event';
+import {IconButton} from '../IconButton/IconButton';
+import {Toolbar} from '../Toolbar/Toolbar';
+import {TestIcon} from '../__tests__/TestIcon';
 
 // Store original matches to restore later
 const originalMatches = HTMLElement.prototype.matches;
@@ -815,5 +822,295 @@ describe('Tooltip sibling mode (anchorRef)', () => {
     // Unmounting detaches: the aria-describedby the tooltip added is removed.
     unmount();
     expect(anchor.getAttribute('aria-describedby')).toBe(null);
+  });
+});
+
+describe('Tooltip in a roving Toolbar (focusTrigger="auto")', () => {
+  it('opens on arrow-key focus for a member whose tooltip was added after mount', async () => {
+    const user = userEvent.setup();
+    function FormatToolbar({hasHints}: {hasHints: boolean}) {
+      return (
+        <Toolbar
+          label="Format"
+          startContent={
+            <>
+              <IconButton
+                label="Copy"
+                icon={<TestIcon />}
+                tooltip="Copy"
+                onClick={() => {}}
+              />
+              <IconButton
+                label="Filter"
+                icon={<TestIcon />}
+                tooltip={hasHints ? 'Filter (F)' : undefined}
+                onClick={() => {}}
+              />
+            </>
+          }
+        />
+      );
+    }
+    const {rerender} = render(<FormatToolbar hasHints={false} />);
+    rerender(<FormatToolbar hasHints />);
+    const filter = screen.getByRole('button', {name: 'Filter'});
+    const realMatches = filter.matches.bind(filter);
+    vi.spyOn(filter, 'matches').mockImplementation((selector: string) =>
+      selector === ':focus-visible' ? true : realMatches(selector),
+    );
+
+    screen.getByRole('button', {name: 'Copy'}).focus();
+    await user.keyboard('{ArrowRight}');
+    expect(filter).toHaveFocus();
+    const describedBy = filter.getAttribute('aria-describedby') ?? '';
+    await waitFor(() => {
+      const layer = describedBy
+        .split(' ')
+        .map(id => document.getElementById(id))
+        .find(element => element?.textContent === 'Filter (F)');
+      expect(layer).toBeDefined();
+      expect(layer?.matches(':popover-open')).toBe(true);
+    });
+  });
+});
+
+// FR11: a press inside an open tooltip acts only within the tooltip.
+describe('Tooltip surface press', () => {
+  it('keeps a click on the tooltip text from activating a clickable card', () => {
+    const onCardClick = vi.fn();
+    render(
+      <ClickableCard label="Card" onClick={onCardClick}>
+        <span>Card body</span>
+        <Tooltip content="Tooltip text" isOpen>
+          <button type="button">Trigger</button>
+        </Tooltip>
+      </ClickableCard>,
+    );
+    fireEvent.click(screen.getByText('Tooltip text'));
+    expect(onCardClick).not.toHaveBeenCalled();
+    // Positive control: a click on the card's own content still activates it.
+    fireEvent.click(screen.getByText('Card body'));
+    expect(onCardClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a click on the tooltip text from running an Item row', () => {
+    const onRowClick = vi.fn();
+    render(
+      <Item
+        label="Row"
+        onClick={onRowClick}
+        endContent={
+          <Tooltip content="Tooltip text" isOpen>
+            <span tabIndex={0}>Info</span>
+          </Tooltip>
+        }
+      />,
+    );
+    fireEvent.click(screen.getByText('Tooltip text'));
+    expect(onRowClick).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Row'));
+    expect(onRowClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a click on the tooltip text from running a Token', () => {
+    const onTokenClick = vi.fn();
+    render(
+      <Token
+        label="Tag"
+        onClick={onTokenClick}
+        endContent={
+          <Tooltip content="Tooltip text" isOpen>
+            <span tabIndex={0}>Info</span>
+          </Tooltip>
+        }
+      />,
+    );
+    fireEvent.click(screen.getByText('Tooltip text'));
+    expect(onTokenClick).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Tag'));
+    expect(onTokenClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a middle-button press on the tooltip text from opening a card link', () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    render(
+      <ClickableCard label="Card" href="https://example.com/">
+        <Tooltip content="Tooltip text" isOpen>
+          <button type="button">Trigger</button>
+        </Tooltip>
+      </ClickableCard>,
+    );
+    fireEvent.mouseUp(screen.getByText('Tooltip text'), {button: 1});
+    expect(open).not.toHaveBeenCalled();
+    open.mockRestore();
+  });
+
+  it('still lets document listeners see a click on the tooltip text', () => {
+    // A Typeahead or menu inside a layer closes and opens from document
+    // listeners, so the press must keep propagating.
+    const onDocumentClick = vi.fn();
+    document.addEventListener('click', onDocumentClick);
+    render(
+      <Tooltip content="Tooltip text" isOpen>
+        <button type="button">Trigger</button>
+      </Tooltip>,
+    );
+    fireEvent.click(screen.getByText('Tooltip text'));
+    document.removeEventListener('click', onDocumentClick);
+    expect(onDocumentClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a click on the tooltip text inside a label from toggling its control', () => {
+    render(
+      <label>
+        <input type="checkbox" /> Accept{' '}
+        <Tooltip content="Why we ask" isOpen>
+          <button type="button">Info</button>
+        </Tooltip>
+      </label>,
+    );
+    // The surface mounts outside the label (a label cannot contain it), so
+    // a click on its text is not label activation.
+    fireEvent.click(screen.getByText('Why we ask'));
+    expect(screen.getByRole('checkbox')).not.toBeChecked();
+    // Positive control: a click on the label's own text still toggles it.
+    fireEvent.click(screen.getByText('Accept'));
+    expect(screen.getByRole('checkbox')).toBeChecked();
+  });
+});
+
+describe('Tooltip, and its press-to-pin path, on every input (component:Tooltip FR5, FR9)', () => {
+  beforeEach(() => {
+    __resetInteractionModalityForTest();
+  });
+
+  type Behavior = 'adaptive' | 'toggle';
+
+  /** An info-only trigger: a span, or under the toggle the button it pins. */
+  function setup(
+    triggerBehavior?: Behavior,
+    touchTrigger?: 'auto' | 'tap' | 'none',
+    trigger = triggerBehavior === 'toggle' ? 'button' : 'span',
+  ) {
+    const onOpenChange = vi.fn<(open: boolean) => void>();
+    render(
+      <TooltipWithTriggerBehavior
+        content="Billed monthly"
+        delay={0}
+        onOpenChange={onOpenChange}
+        triggerBehavior={triggerBehavior}
+        touchTrigger={touchTrigger}>
+        {trigger === 'button' ? (
+          <button type="button">Billing</button>
+        ) : (
+          <span tabIndex={0}>Billing</span>
+        )}
+      </TooltipWithTriggerBehavior>,
+    );
+    const opened = () => onOpenChange.mock.calls.some(([open]) => open);
+    return {trigger: screen.getByText('Billing'), opened};
+  }
+
+  /** A finger or a landed pen: down, up, then the click (a pen hovers, so no arrival). */
+  function tap(element: HTMLElement, pointerType: 'touch' | 'pen') {
+    if (pointerType === 'touch') {
+      fireEvent.pointerEnter(element, {pointerType});
+    }
+    fireEvent.pointerDown(element, {pointerType});
+    fireEvent.pointerUp(element, {pointerType});
+    fireEvent.click(element);
+  }
+
+  const settle = async () =>
+    new Promise(resolve => {
+      setTimeout(resolve, 50);
+    });
+
+  describe.each([
+    ['adaptive by default', undefined, true],
+    ['adaptive', 'adaptive', true],
+    ['toggle', 'toggle', true],
+  ] as const)('%s', (_, behavior, tapOpens) => {
+    it('a mouse hover previews it', async () => {
+      const {trigger, opened} = setup(behavior);
+      fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(trigger);
+      await waitFor(() => expect(opened()).toBe(true));
+    });
+
+    it('keyboard focus previews it', async () => {
+      const {trigger, opened} = setup(behavior);
+      const realMatches = trigger.matches.bind(trigger);
+      vi.spyOn(trigger, 'matches').mockImplementation((selector: string) =>
+        selector === ':focus-visible' ? true : realMatches(selector),
+      );
+      fireEvent.keyDown(document, {key: 'Tab'});
+      fireEvent.focusIn(trigger);
+      await waitFor(() => expect(opened()).toBe(true));
+    });
+
+    it.each(['touch', 'pen'] as const)(
+      `a %s tap ${tapOpens ? 'opens' : 'never opens'} it`,
+      async pointerType => {
+        const {trigger, opened} = setup(behavior);
+        tap(trigger, pointerType);
+        await settle();
+        expect(opened()).toBe(tapOpens);
+      },
+    );
+
+    it.each(['mouse click', 'touch tap'] as const)(
+      `a %s on a button trigger ${behavior === 'toggle' ? 'pins it' : 'pins nothing'}`,
+      async press => {
+        const {trigger} = setup(behavior, undefined, 'button');
+        if (press === 'mouse click') {
+          fireEvent.pointerDown(trigger, {pointerType: 'mouse'});
+          fireEvent.pointerUp(trigger, {pointerType: 'mouse'});
+          fireEvent.click(trigger);
+        } else {
+          tap(trigger, 'touch');
+        }
+        await settle();
+        expect(trigger.getAttribute('aria-expanded')).toBe(
+          behavior === 'toggle' ? 'true' : null,
+        );
+      },
+    );
+  });
+
+  it.each([
+    ['adaptive', 'none', 'span', 'decides: no tap opens it', false],
+    ['adaptive', 'tap', 'button', 'decides: every tap opens it', true],
+    ['toggle', 'none', 'button', 'is ignored: a tap pins it', true],
+  ] as const)(
+    'beside triggerBehavior="%s", touchTrigger="%s" on a %s %s',
+    async (behavior, touchTrigger, trigger, _, tapOpens) => {
+      const tip = setup(behavior, touchTrigger, trigger);
+      tap(tip.trigger, 'touch');
+      await settle();
+      expect(tip.opened()).toBe(tapOpens);
+      if (behavior === 'toggle') {
+        expect(tip.trigger.getAttribute('aria-expanded')).toBe('true');
+      }
+    },
+  );
+});
+
+describe('Tooltip keeps press-to-pin internal', () => {
+  it('a spread props object that carries triggerBehavior at runtime pins nothing', () => {
+    const props = {
+      content: 'Billed monthly',
+      triggerBehavior: 'toggle',
+    } as unknown as ComponentProps<typeof Tooltip>;
+    render(
+      <Tooltip {...props}>
+        <button type="button">Billing</button>
+      </Tooltip>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Billing'});
+    fireEvent.pointerDown(trigger, {pointerType: 'mouse'});
+    fireEvent.pointerUp(trigger, {pointerType: 'mouse'});
+    fireEvent.click(trigger, {detail: 1});
+    expect(trigger).not.toHaveAttribute('aria-expanded');
   });
 });

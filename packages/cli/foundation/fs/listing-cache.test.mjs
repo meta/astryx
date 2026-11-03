@@ -5,8 +5,10 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {
+  findEntry,
   listDir,
   listDirEntries,
+  listingCacheActive,
   pathExists,
   withListingCache,
 } from './listing-cache.mjs';
@@ -83,6 +85,75 @@ describe('listing cache', () => {
     withListingCache(() => {
       expect(existsCaseExact(path.join(dir, 'Button'), dir)).toBe(true);
       expect(existsCaseExact(path.join(dir, 'button'), dir)).toBe(false);
+    });
+  });
+
+  it('says whether an operation is running', async () => {
+    expect(listingCacheActive()).toBe(false);
+    await withListingCache(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(listingCacheActive()).toBe(true);
+    });
+    expect(listingCacheActive()).toBe(false);
+  });
+
+  it('finds an entry by its exact name, from the listing inside an operation', () => {
+    withListingCache(() => {
+      expect(findEntry(dir, 'a.txt')?.isFile()).toBe(true);
+      expect(findEntry(dir, 'A.txt')).toBeNull();
+      fs.writeFileSync(path.join(dir, 'c.txt'), '');
+      // The listing answers, not the disk.
+      expect(findEntry(dir, 'c.txt')).toBeNull();
+      expect(findEntry(path.join(dir, 'missing'), 'a.txt')).toBeNull();
+    });
+    expect(findEntry(dir, 'c.txt')?.isFile()).toBe(true);
+  });
+
+  it('answers existsCaseExact from the listings inside an operation, as outside', () => {
+    fs.mkdirSync(path.join(dir, 'src', 'Button'), {recursive: true});
+    fs.writeFileSync(path.join(dir, 'src', 'Button', 'Button.tsx'), '');
+    fs.symlinkSync(
+      path.join(dir, 'src', 'Button', 'Button.tsx'),
+      path.join(dir, 'src', 'Linked.tsx'),
+    );
+    fs.symlinkSync(
+      path.join(dir, 'src', 'Gone.tsx'),
+      path.join(dir, 'src', 'Dangling.tsx'),
+    );
+    const cases = [
+      [path.join('src', 'Button', 'Button.tsx'), true],
+      [path.join('src', 'button', 'Button.tsx'), false],
+      [path.join('src', 'Button', 'button.tsx'), false],
+      [path.join('src', 'Linked.tsx'), true],
+      [path.join('src', 'Dangling.tsx'), false],
+      [path.join('src', 'Button', 'Button.tsx', 'x'), false],
+      [path.join('src', 'Missing.tsx'), false],
+      // Not plain paths under the root: these take path.relative.
+      [`src${path.sep}..${path.sep}src${path.sep}Linked.tsx`, true],
+      [`src${path.sep}${path.sep}Linked.tsx`, true],
+      [
+        `..${path.sep}${path.basename(dir)}${path.sep}src${path.sep}Linked.tsx`,
+        true,
+      ],
+    ];
+    const outside = cases.map(([rel]) =>
+      existsCaseExact(`${dir}${path.sep}${rel}`, dir),
+    );
+    const inside = withListingCache(() =>
+      cases.map(([rel]) => existsCaseExact(`${dir}${path.sep}${rel}`, dir)),
+    );
+    expect(outside).toEqual(cases.map(([, exists]) => exists));
+    expect(inside).toEqual(outside);
+    withListingCache(() => {
+      expect(existsCaseExact(dir, dir)).toBe(true);
+      expect(existsCaseExact(path.dirname(dir), dir)).toBe(false);
+      // A root written with a trailing separator.
+      expect(
+        existsCaseExact(
+          path.join(dir, 'src', 'Linked.tsx'),
+          `${dir}${path.sep}`,
+        ),
+      ).toBe(true);
     });
   });
 });
