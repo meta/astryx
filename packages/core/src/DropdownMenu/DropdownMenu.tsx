@@ -25,7 +25,8 @@
  * Under a finger, the popover opens and closes the way UIMenu does. It grows
  * out of its trigger on UIKit's open spring and collapses back into it on
  * the close spring (menuSurfaceMotion.ts). A pan that begins outside closes
- * it. Under a mouse it keeps the layer's own entrance and the theme's motion
+ * it. On every screen it opens beside its trigger at the layer's placement.
+ * Under a mouse it keeps the layer's own entrance and the theme's motion
  * tokens.
  *
  * Initial focus on open follows the input modality: a keyboard open

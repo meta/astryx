@@ -45,7 +45,7 @@ import {spacingVars} from '../theme/tokens.stylex';
 import {COMPACT_TOUCH_PRESENTATION_QUERY} from '../hooks/useAdaptivePresentation';
 import {MENU_PRESS_LONG_PRESS_MS} from '../hooks/useMenuPress';
 import {MENU_PRESS_SETTLE_MS} from '../hooks/menuPressGesture';
-import {TOUCH_QUERY} from '../utils/touchPresentation';
+import {COMPACT_QUERY, TOUCH_QUERY} from '../utils/touchPresentation';
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 
 // Mock showPopover and hidePopover methods since they're not implemented in jsdom
@@ -3243,6 +3243,52 @@ describe('DropdownMenu touch presentation (UIMenu under a finger)', () => {
     fireEvent.pointerDown(document.body, finger);
     fireEvent.pointerCancel(document.body, finger);
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  describe('on a phone (compact and touch): beside its trigger, as on a larger screen', () => {
+    beforeEach(() => {
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn().mockImplementation((query: string) => ({
+          // Coarse primary pointer, and the compact viewport.
+          matches: query === '(pointer: coarse)' || query === COMPACT_QUERY,
+          media: query,
+          onchange: null,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        })),
+      );
+    });
+
+    it('opens at the layer\u2019s placement beside its trigger, not over it', async () => {
+      const user = userEvent.setup();
+      const trigger = renderMenu();
+      await user.click(trigger);
+      const {style} = popoverOf();
+      // Not centered on the trigger or pinned to the viewport's sides.
+      expect(style.getPropertyValue('justify-self')).toBe('');
+      expect(style.getPropertyValue('left')).toBe('');
+      expect(style.getPropertyValue('right')).toBe('');
+      expect(style.getPropertyValue('top')).toBe('');
+      expect(style.getPropertyValue('bottom')).toBe('');
+    });
+
+    it('keeps the caller\u2019s placement', async () => {
+      const user = userEvent.setup();
+      render(
+        <DropdownMenu button={{label: 'Above'}} placement="above">
+          <DropdownMenuItem label="Edit" onClick={() => {}} />
+          <DropdownMenuItem label="Delete" onClick={() => {}} />
+        </DropdownMenu>,
+      );
+      await user.click(screen.getByRole('button', {name: /Above/}));
+      const {style} = popoverOf();
+      expect(style.getPropertyValue('justify-self')).toBe('');
+      expect(style.getPropertyValue('top')).toBe('');
+    });
   });
 
   it('a pan that starts inside the menu, or a mouse, does not dismiss it', async () => {
