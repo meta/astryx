@@ -226,6 +226,38 @@ describe('Icon', () => {
       expect(ref.current).toBeNull();
     });
 
+    it('moves to the new svg when the name changes', () => {
+      resetIcons();
+      resetThemes();
+      registerIcons({
+        'numberInput:stepperDown': <svg data-testid="down-svg" />,
+        'numberInput:stepperUp': <svg data-testid="up-svg" />,
+      });
+      const ref = createRef<SVGSVGElement>();
+      const {rerender} = render(
+        <Icon icon="numberInput:stepperDown" ref={ref} />,
+      );
+      expect(ref.current).toBe(screen.getByTestId('down-svg'));
+      rerender(<Icon icon="numberInput:stepperUp" ref={ref} />);
+      expect(ref.current).toBe(screen.getByTestId('up-svg'));
+    });
+
+    it('becomes null when the name changes to a text glyph', () => {
+      resetIcons();
+      resetThemes();
+      registerIcons({
+        'numberInput:stepperDown': <svg data-testid="down-svg" />,
+        'numberInput:stepperUp': 'text-glyph',
+      });
+      const ref = createRef<SVGSVGElement>();
+      const {rerender} = render(
+        <Icon icon="numberInput:stepperDown" ref={ref} />,
+      );
+      expect(ref.current).toBe(screen.getByTestId('down-svg'));
+      rerender(<Icon icon="numberInput:stepperUp" ref={ref} />);
+      expect(ref.current).toBeNull();
+    });
+
     it('clears the ref when a named icon unmounts', () => {
       const ref = createRef<SVGSVGElement>();
       const {unmount} = render(<Icon icon="close" ref={ref} />);

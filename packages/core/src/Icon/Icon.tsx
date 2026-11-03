@@ -412,13 +412,16 @@ function IconFromRegistry({
 }) {
   const themeName = useThemeName();
   const resolvedIcon = resolveIcon(name, themeName, {size, variant});
-  // The caller's ref points at the glyph's <svg> inside the wrapper span.
+  // The glyph can change while the span stays, so attach the ref again when
+  // the resolved glyph changes.
   const attachSvgRef = useCallback(
     (span: HTMLSpanElement | null) =>
       svgRef == null
         ? undefined
         : mergeRefs(svgRef)(span?.querySelector('svg') ?? null),
-    [svgRef],
+    // resolvedIcon is not read in the callback; it is listed so that a new
+    // glyph gets a new attach.
+    [svgRef, resolvedIcon],
   );
 
   if (resolvedIcon == null) {
