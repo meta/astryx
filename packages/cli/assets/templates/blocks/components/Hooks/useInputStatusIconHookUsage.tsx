@@ -5,7 +5,16 @@
 import {useId, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Card} from '@astryxdesign/core/Card';
-import type {FieldStatusPlacement, InputStatus} from '@astryxdesign/core/Field';
+import {
+  FieldStatus,
+  inputStatusBorderStyles,
+  inputWrapperStyles,
+} from '@astryxdesign/core/Field';
+import type {
+  FieldStatusVariant,
+  FieldStatusPlacement,
+  InputStatus,
+} from '@astryxdesign/core/Field';
 import {useInputStatusIcon} from '@astryxdesign/core/hooks';
 import {VStack} from '@astryxdesign/core/Layout';
 import {
@@ -13,41 +22,14 @@ import {
   SegmentedControlItem,
 } from '@astryxdesign/core/SegmentedControl';
 import {Text} from '@astryxdesign/core/Text';
-import {
-  borderVars,
-  colorVars,
-  focusVars,
-  radiusVars,
-  spacingVars,
-} from '@astryxdesign/core/theme/tokens.stylex';
+import {colorVars, spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
 
 const VALID_CODE = 'SAVE20';
 
 const styles = stylex.create({
   field: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: spacingVars['--spacing-2'],
-    backgroundColor: colorVars['--color-background-surface'],
-    borderColor: colorVars['--color-border-emphasized'],
-    borderRadius: radiusVars['--radius-element'],
-    borderStyle: 'solid',
-    borderWidth: borderVars['--border-width'],
-    paddingBlock: spacingVars['--spacing-1-5'],
     paddingInline: spacingVars['--spacing-3'],
-    outlineColor: {
-      default: 'transparent',
-      ':has(input:focus-visible)': focusVars['--focus-outline-color'],
-    },
-    outlineOffset: focusVars['--focus-outline-offset'],
-    outlineStyle: 'solid',
-    outlineWidth: {
-      default: '0',
-      ':has(input:focus-visible)': focusVars['--focus-outline-width'],
-    },
   },
-  error: {borderColor: colorVars['--color-border-error']},
-  success: {borderColor: colorVars['--color-border-success']},
   input: {
     flexGrow: 1,
     minWidth: 0,
@@ -79,7 +61,8 @@ function CouponField({statusVariant}: {statusVariant: FieldStatusPlacement}) {
 
   // `attached` and `detached` carry the text in a message box under the field;
   // `tooltip` carries it in the hook's tooltip instead.
-  const hasMessageBox = statusVariant !== 'tooltip' && !!status;
+  const hasMessageBox =
+    statusVariant !== 'tooltip' && !!status && !!status.message;
   const ariaDescribedBy =
     [hasMessageBox ? messageId : null, describedBy].filter(Boolean).join(' ') ||
     undefined;
@@ -88,9 +71,9 @@ function CouponField({statusVariant}: {statusVariant: FieldStatusPlacement}) {
     <VStack gap={1}>
       <div
         {...stylex.props(
+          inputWrapperStyles.base,
           styles.field,
-          status?.type === 'error' && styles.error,
-          status?.type === 'success' && styles.success,
+          status && inputStatusBorderStyles[status.type],
         )}>
         <input
           type="text"
@@ -104,10 +87,13 @@ function CouponField({statusVariant}: {statusVariant: FieldStatusPlacement}) {
         />
         {statusIcon}
       </div>
-      {hasMessageBox ? (
-        <Text id={messageId} type="supporting">
-          {status.message}
-        </Text>
+      {hasMessageBox && status?.message ? (
+        <FieldStatus
+          id={messageId}
+          type={status.type}
+          message={status.message}
+          variant={statusVariant as FieldStatusVariant}
+        />
       ) : null}
     </VStack>
   );

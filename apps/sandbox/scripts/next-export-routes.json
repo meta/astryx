@@ -784,6 +784,7 @@
     "/templates/useComboboxHookUsage/",
     "/templates/useContainerRevealHookUsage/",
     "/templates/useGridFocusHookUsage/",
+    "/templates/useInputStatusIconHookUsage/",
     "/templates/useKeyboardHintHookUsage/",
     "/templates/useListFocusHookUsage/",
     "/templates/useOverflowHookUsage/",
