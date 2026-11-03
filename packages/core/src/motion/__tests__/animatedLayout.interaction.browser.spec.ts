@@ -2238,8 +2238,14 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
           edge: 'inline-end',
           rideWith: column,
         });
-        for (let i = 0; i < 2; i++) {
-          await frame();
+        await new Promise<void>(resolve => {
+          queueMicrotask(resolve);
+        });
+        // Hold the collapse at fixed times on its own clock, once it rides.
+        // Late frames then cannot end it before these reads or move it
+        // between them.
+        for (const ms of [20, 40, 60, 80, 100, 120]) {
+          window.holdAt(ms);
           const copy = copyOf();
           copies = Math.max(copies, copy == null ? 0 : 1);
           if (copy != null) {
@@ -2248,12 +2254,6 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
         }
         // Expanded again 120 ms into the collapse, from the width it shows
         // then.
-        window.holdAt(120);
-        const copy = copyOf();
-        copies = Math.max(copies, copy == null ? 0 : 1);
-        if (copy != null) {
-          read('collapsing', copy);
-        }
         const shown = motion.shown()?.extent ?? null;
         motion.end();
         hold = AL.holdLayoutEdge(layout, panel, {
@@ -2272,6 +2272,16 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
           queueMicrotask(resolve);
         });
         window.resumeAll();
+        // Read where the expand starts in the task that makes it, before any
+        // frame.
+        read('expand start', panel);
+        // Hold the expand at fixed times too, so late frames cannot skip its
+        // edge check.
+        for (const ms of [20, 40, 60, 80, 100, 120]) {
+          window.holdAt(ms);
+          read('expand held', panel);
+        }
+        window.resumeAll();
         for (let i = 0; i < 60; i++) {
           await frame();
           read('expanding', panel);
@@ -2281,24 +2291,36 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
       expect(result.copies).toBe(1);
       // The copy is gone once the motion ends.
       expect(result.left).toBe(0);
+      // The case reads the collapse six times and the expand six times on
+      // their own clock, plus the expand's start. It also judges every drawn
+      // expanding frame, however many the page draws.
+      const count = (phase: string) =>
+        result.frames.filter(f => f.phase === phase).length;
+      expect(count('collapsing')).toBe(6);
+      expect(count('expand start')).toBe(1);
+      expect(count('expand held')).toBe(6);
       const moving = result.frames.filter(
         f => f.shown > 48.5 && f.shown < 259.5,
       );
-      expect(moving.length).toBeGreaterThan(5);
+      // Every read on the motion's own clock is in mid-motion.
+      expect(moving.filter(f => f.phase !== 'expanding')).toHaveLength(13);
       for (const f of moving) {
         expect(Math.abs(f.beside - f.edge), JSON.stringify(f)).toBeLessThan(
           1.5,
         );
       }
       reportSkew(moving, browserName);
-      // The expand starts where the collapse got to.
+      // The expand starts where the collapse got to. Read in that task, the
+      // two match to 0.0 px.
       const lastCollapse = result.frames
         .filter(f => f.phase === 'collapsing')
         .at(-1) as EdgeFrame;
-      const firstExpand = result.frames.find(
-        f => f.phase === 'expanding',
+      const expandStart = result.frames.find(
+        f => f.phase === 'expand start',
       ) as EdgeFrame;
-      expect(Math.abs(firstExpand.shown - lastCollapse.shown)).toBeLessThan(30);
+      expect(Math.abs(expandStart.shown - lastCollapse.shown)).toBeLessThan(
+        1.5,
+      );
     });
   }
 
@@ -2362,8 +2384,14 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
           };
           await frame();
           change(true);
-          for (let i = 0; i < 2; i++) {
-            await frame();
+          await new Promise<void>(resolve => {
+            queueMicrotask(resolve);
+          });
+          // Hold the collapse at fixed times on its own clock, once it rides.
+          // Late frames then cannot end it before these reads or move it
+          // between them.
+          for (const ms of [20, 40, 60, 80, 100]) {
+            window.holdAt(ms);
             read('collapsing');
           }
           // Opened again 120 ms into the collapse, as the page shows it then.
