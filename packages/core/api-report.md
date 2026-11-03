@@ -2855,6 +2855,7 @@ component VisuallyHidden(props: VisuallyHiddenProps)
 
 ```text
 hook useAnimatedLayout: ({…}: UseAnimatedLayoutOptions) => AnimatedLayout
+hook useAnimator: (ref: RefObject<HTMLElement | null>) => AnimatorHandle
 hook useAnnounce: ({…}?: UseAnnounceOptions) => AnnounceFn
 hook useAppShellMobile: () => AppShellMobileContextValue
 hook useAvatarGroup: () => AvatarGroupContextValue | null
@@ -2978,6 +2979,7 @@ function compactDefinition: (points?: Readonly<Pick<WidthBreakpoints, 'md'>>) =>
 function compareTime: (a: ISOTimeString | undefined, b: ISOTimeString | undefined) => number
 function composeEventHandlers: <E extends SyntheticEvent>(...handlers: (((event: E) => void) | undefined)[]) => (event: E) => void
 function container: ({…}: ContainerOptions) => readonly [Readonly<{ readonly boxSizing: stylex.StyleXClassNameFor<"boxSizing", "border-box">; readonly paddingInlineStart: stylex.StyleXClassNameFor<"paddingIn … #72b9b91f
+function createAnimator: (element: HTMLElement) => Animator
 function createCodeLanguage: ({…}: CreateCodeLanguageOptions) => CodeLanguage
 function createISOTimeString: (value: string) => ISOTimeString | null
 function createIncrementalState: <MathEnabled extends boolean = false>() => IncrementalState<MathEnabled>
@@ -3498,6 +3500,27 @@ const typographyVars: stylex.VarGroup<Readonly<{ readonly '--font-family-body': 
 interface AlertDialogProps extends BaseProps<HTMLDialogElement> (props of AlertDialog)
 interface AnimatedLayout
   [AREA]: () => Element | null
+interface Animator extends AnimatorHandle
+  animate: (target: AnimatorValues, options?: AnimatorAnimateOptions) => Promise<void>
+  decay: (velocity: AnimatorDecayVelocity) => Promise<void>
+  destroy: () => void
+  get: () => AnimatorSnapshot
+  getVelocity: () => AnimatorSnapshot
+  set: (values: AnimatorValues) => void
+  stop: () => void
+interface AnimatorAnimateOptions
+  velocity?: AnimatorValues
+type AnimatorChannel = 'x' | 'y' | 'scale' | 'rotate' | 'opacity'
+type AnimatorDecayVelocity = AnimatorValues
+interface AnimatorHandle
+  animate: (target: AnimatorValues, options?: AnimatorAnimateOptions) => Promise<void>
+  decay: (velocity: AnimatorDecayVelocity) => Promise<void>
+  get: () => AnimatorSnapshot
+  getVelocity: () => AnimatorSnapshot
+  set: (values: AnimatorValues) => void
+  stop: () => void
+type AnimatorSnapshot = Readonly<Record<AnimatorChannel, number>>
+type AnimatorValues = Partial<Record<AnimatorChannel, number>>
 type AnnounceFn = (message: string, politeness?: AnnouncePoliteness) => void
 type AnnouncePoliteness = 'polite' | 'assertive'
 type AppShellBreakpoint = WidthBreakpointName | 'none'
@@ -9104,6 +9127,7 @@ hasTextSelection (.)
 isMenuPressActivation (.)
 menuPressStep (.)
 useAnimatedLayout (.)
+useAnimator (.)
 useAnnounce (.)
 useClickableContainer (.)
 useClipboard (.)

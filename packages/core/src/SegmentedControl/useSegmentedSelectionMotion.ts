@@ -25,7 +25,7 @@ import {
   type RefObject,
 } from 'react';
 import {
-  createAnimator,
+  createMotionAnimator,
   type AnimateOptions,
   type Animator,
   type MotionCurve,
@@ -539,7 +539,7 @@ export class SegmentedSelectionMotion {
   private readonly after: Animator;
 
   constructor(
-    private readonly animator: Animator = createAnimator(null, {
+    private readonly animator: Animator = createMotionAnimator(null, {
       pseudoElement: '::before',
     }),
     options: SegmentedSelectionMotionOptions = {},
@@ -552,7 +552,10 @@ export class SegmentedSelectionMotion {
     this.now = options.now ?? defaultNow;
     this.after =
       options.afterAnimator ??
-      createAnimator(null, {pseudoElement: '::after', initial: {opacity: 0}});
+      createMotionAnimator(null, {
+        pseudoElement: '::after',
+        initial: {opacity: 0},
+      });
   }
 
   /** Attaches the radiogroup whose pseudo-elements are the lens (null detaches). */
