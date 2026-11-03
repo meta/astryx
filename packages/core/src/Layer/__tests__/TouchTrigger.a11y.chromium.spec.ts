@@ -281,12 +281,15 @@ test.describe('Tooltip and InfoTip under a finger and a pen (component:Tooltip F
   const term = (page: Page, name: string) =>
     page.getByText(name, {exact: true});
 
-  /** A tap: a finger through touch events, or a landed pen through pen-typed presses. */
+  /**
+   * A tap: a finger through touch events, or a landed pen through pen-typed
+   * presses. A held pen stays down past the hover delay before it lifts.
+   */
   async function tapWith(
     page: Page,
     finger: Finger,
     target: Locator,
-    pointer: 'finger' | 'pen',
+    pointer: 'finger' | 'pen' | 'held pen',
   ) {
     const [x, y] = await centerOf(target);
     if (pointer === 'finger') {
@@ -296,6 +299,9 @@ test.describe('Tooltip and InfoTip under a finger and a pen (component:Tooltip F
     }
     const cdp = await page.context().newCDPSession(page);
     for (const type of ['mousePressed', 'mouseReleased'] as const) {
+      if (type === 'mouseReleased' && pointer === 'held pen') {
+        await page.waitForTimeout(300);
+      }
       await cdp.send('Input.dispatchMouseEvent', {
         type,
         x,
@@ -308,7 +314,7 @@ test.describe('Tooltip and InfoTip under a finger and a pen (component:Tooltip F
     await cdp.detach();
   }
 
-  for (const pointer of ['finger', 'pen'] as const) {
+  for (const pointer of ['finger', 'pen', 'held pen'] as const) {
     test(`a ${pointer} tap opens a plain Tooltip term and pins an InfoTip`, async ({
       page,
     }) => {
