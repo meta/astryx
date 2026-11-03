@@ -22,7 +22,7 @@ export const docs = {
       name: 'handleRef',
       type: 'RefObject<HTMLElement | null>',
       description:
-        "The handle's ref, passed first: `useResizable(handleRef, options)` makes the element a window splitter and returns the region's size, collapse state and controls. Give the same ref to ResizeHandle, which reports its element as it mounts, or to a plain element, which the hook reads when its own component renders, so render a plain element there. The options are the params below, plus isReversed, isDisabled and label. Without a ref, the hook takes the params as one configuration object, for one region or several under `regions`, and also returns `props` for ResizeHandle.",
+        "The handle's ref, passed first: `useResizable(handleRef, options)` makes the element a window splitter and returns the region's size, collapse state and controls. Give the same ref to ResizeHandle, which reports its element as it mounts, or to a plain element, which the hook reads when its own component renders, so render a plain element there. The options are the params below, plus isReversed, isDisabled, label and collapsedLabel. Without a ref, the hook takes the params as one configuration object, for one region or several under `regions`, and also returns `props` for ResizeHandle.",
     },
     {
       name: 'defaultSize',
@@ -182,7 +182,7 @@ export const docsDense = {
     'Adds drag-to-resize behavior to layout regions. useResizable(handleRef, options): one region per call, from the handle behind the ref. Config-object form: single-/multi-region configs w/ snap points, collapsible panels, localStorage persistence, cascade resize ordering.',
   paramDescriptions: {
     handleRef:
-      "handle's ref, passed first; options = the params below + isReversed, isDisabled, label. Without it: one config object, returns props too.",
+      "handle's ref, passed first; options = the params below + isReversed, isDisabled, label, collapsedLabel. Without it: one config object, returns props too.",
     defaultSize:
       'initial pixels, exact N%, or percent(value, {min: pixel(value)}) / percent(value, {max: pixel(value)}); resolves once.',
     minSize:
