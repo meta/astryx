@@ -238,8 +238,9 @@ export function ToastSurface({
     }, remainingRef.current);
   }, [isAutoHide]);
 
-  // Holds are tracked whatever isAutoHide is: an overwrite can turn a toast
-  // that does not auto-hide into one that does while a hold is in place.
+  // Pointer, focus and gesture holds are tracked whatever isAutoHide is: an
+  // overwrite can turn a toast that does not auto-hide into one that does
+  // while a hold is in place. The window hold leaves with its listeners.
   const pauseTimer = useCallback((source: PauseSource) => {
     const sources = pauseSourcesRef.current;
     const wasRunning = sources.size === 0;

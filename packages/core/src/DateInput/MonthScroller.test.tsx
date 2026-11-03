@@ -1,0 +1,157 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+import {act, render} from '@testing-library/react';
+import {createRef} from 'react';
+import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
+import {MonthScroller, type MonthScrollerHandle} from './MonthScroller';
+
+/**
+ * A touch screen with Reduced Motion on: the policy's combined query
+ * (motion/reducedMotion.ts) and the coarse pointer both match.
+ */
+function stubReducedMotionTouch(): void {
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches:
+      query.includes('prefers-reduced-motion: reduce') ||
+      /pointer:\s*coarse/.test(query),
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }));
+}
+
+class FakeResizeObserver {
+  constructor(private callback: ResizeObserverCallback) {}
+  observe() {
+    this.callback([], this);
+  }
+  unobserve() {}
+  disconnect() {}
+}
+
+describe('MonthScroller under Reduced Motion on a touch screen', () => {
+  const scrollTo = vi.fn();
+  beforeEach(() => {
+    vi.useFakeTimers();
+    stubReducedMotionTouch();
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(300);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(300);
+    Element.prototype.scrollTo = scrollTo;
+    Element.prototype.animate = vi.fn(() => ({
+      cancel: vi.fn(),
+    })) as unknown as typeof Element.prototype.animate;
+    scrollTo.mockClear();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  function renderScroller({
+    onVisibleMonthChange = () => {},
+  }: {onVisibleMonthChange?: (monthIndex: number) => void} = {}) {
+    const handleRef = createRef<MonthScrollerHandle>();
+    const view = render(
+      <MonthScroller
+        handleRef={handleRef}
+        minMonthIndex={0}
+        maxMonthIndex={23}
+        initialMonthIndex={9}
+        onVisibleMonthChange={onVisibleMonthChange}
+        selectedDate={null}
+        today={{year: 2026, month: 10, day: 15}}
+        isDateDisabled={() => false}
+        weekStartsOn={0}
+        onSelect={() => {}}
+      />,
+    );
+    scrollTo.mockClear();
+    return {handleRef, ...view};
+  }
+
+  it('lets a second step within the dip replace the first: only its scroll lands', () => {
+    const {handleRef} = renderScroller();
+    act(() => handleRef.current?.scrollToMonth(10));
+    act(() => {
+      vi.advanceTimersByTime(40);
+    });
+    act(() => handleRef.current?.scrollToMonth(11));
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a jump to a distant month made within the dip: the dip does not land after it', () => {
+    const {handleRef} = renderScroller();
+    act(() => handleRef.current?.scrollToMonth(10));
+    act(() => {
+      vi.advanceTimersByTime(40);
+    });
+    // Eleven months on: beyond the mounted window, so it jumps at once.
+    act(() => handleRef.current?.scrollToMonth(20));
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(
+      scrollTo.mock.calls.map(([options]) => (options as ScrollToOptions).left),
+    ).toEqual([20 * 300]);
+  });
+
+  it('keeps a step at once made within the dip: the dip does not land after it', () => {
+    const {handleRef} = renderScroller();
+    act(() => handleRef.current?.scrollToMonth(10));
+    act(() => {
+      vi.advanceTimersByTime(40);
+    });
+    act(() => handleRef.current?.scrollToMonth(8, 'auto'));
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(
+      scrollTo.mock.calls.map(([options]) => (options as ScrollToOptions).left),
+    ).toEqual([8 * 300]);
+  });
+
+  it('reports a trackpad scroll after a step lands, even with an earlier steer that never arrived', () => {
+    const onVisibleMonthChange = vi.fn();
+    const {handleRef, container} = renderScroller({onVisibleMonthChange});
+    const scroller = container.querySelector<HTMLElement>(
+      '[data-scroller="months"]',
+    );
+    if (scroller == null) {
+      throw new Error('no scroller');
+    }
+    // The re-assert when the wheels close: a steer to the month already in
+    // view, whose scroll never arrives.
+    act(() => handleRef.current?.scrollToMonth(9, 'auto'));
+    // A step lands at its dip's middle.
+    act(() => handleRef.current?.scrollToMonth(10));
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    // A trackpad scroll on to the next month: no touch ends the steer.
+    act(() => {
+      scroller.scrollLeft = 11 * 300;
+      scroller.dispatchEvent(new Event('scroll'));
+      vi.advanceTimersByTime(50);
+    });
+    expect(onVisibleMonthChange).toHaveBeenLastCalledWith(11);
+  });
+
+  it('scrolls nothing once unmounted within the dip', () => {
+    const {handleRef, unmount} = renderScroller();
+    act(() => handleRef.current?.scrollToMonth(10));
+    unmount();
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(scrollTo).not.toHaveBeenCalled();
+  });
+});

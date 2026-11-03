@@ -7,7 +7,8 @@ source), the spring, decay, rubber-band and projection math UIKit uses, and a
 compositor animator that plays it. Nothing here is exported from the package
 entry point. Core's motion and gesture modules read the table by path;
 components read touch motion through its internal motion roles (`roles.ts`),
-so each keeps its measured value; no shipped component reads the roles yet.
+so each keeps its measured value; ProgressBar plays the progress table's two
+roles through `resolveMotion`.
 
 ## Files
 
@@ -15,9 +16,11 @@ so each keeps its measured value; no shipped component reads the roles yet.
 | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `uikit/`                                         | THE constants table: every spring, duration, deceleration rate, rubber-band constant and curve, with its source.                                                     |
 | `uikit/springs.ts`                               | Interaction springs (navigation, sheets, alerts, menus, controls, keyboard, banners) and the SwiftUI / UIKit presets.                                                |
-| `uikit/scroll.ts`                                | UIScrollView: deceleration rates, rubber band, bounce-back spring, paging, `delaysContentTouches`, scroll to top.                                                    |
+| `uikit/scroll.ts`                                | UIScrollView: deceleration rates, rubber band, bounce-back spring, `delaysContentTouches`, scroll to top.                                                            |
 | `uikit/timing.ts`                                | Non-spring clocks and curves: press highlight, Core Animation's named curves, keyboard, Reduced Motion cross-fade.                                                   |
+| `uikit/paging.ts`                                | A paging UIScrollView: the integrator that settles a release on its page, the page rule, the catch, `setContentOffset(animated:)`.                                   |
 | `uikit/navigation.ts`                            | UINavigationController: push velocity, parallax, dimming, transition clock, interactive pop finish rule.                                                             |
+| `uikit/progressBar.ts`                           | UIProgressView's fill: the whole-track duration and curve, its minimum length and empty alpha; the reduced-motion pulse (three roles).                               |
 | `uikit/gestures.ts`                              | Gesture recognizer thresholds, the velocity filter and haptic stand-ins, as `{value, unit}` entries (sources in JSDoc).                                              |
 | `roles.ts`                                       | The internal motion roles: the springs, durations and curves `spec:AST-094` FR4 names, registered by the shared tables, and a role's CSS form read back.             |
 | `roleValue.ts`                                   | A role's CSS form, written: a spring's duration and bounce, a duration in ms, a curve's `cubic-bezier()`.                                                            |
@@ -28,8 +31,8 @@ so each keeps its measured value; no shipped component reads the roles yet.
 | `coast.ts`                                       | A release's momentum curves for `animator.decay`: the coast, the edge spring, a release past an edge.                                                                |
 | `rubberBand.ts`                                  | UIScrollView's resistance past an edge, and its inverse.                                                                                                             |
 | `projection.ts`                                  | Release targets: the rest point nearest the projected coast.                                                                                                         |
+| `paging.ts`                                      | Paging: UIKit's paging settle as a playable curve, its velocity floor, the animated page scroll.                                                                     |
 | `resolveSnapPoint.ts`                            | Release policy: the snap point a release lands on (flick, back-out cancel, step limit), on `selectSnapPoint`. Internal.                                              |
-| `selectPage.ts`                                  | Paging: at most one page per release, on `resolveSnapPoint`.                                                                                                         |
 | `bezier.ts`                                      | Cubic-bézier timing functions (Core Animation's named curves).                                                                                                       |
 | `animator.ts`                                    | Compositor animator: springs, coasts and any closed-form curve compiled to Web Animations, read back analytically.                                                   |
 | `presentation.ts`                                | Where each moving element is drawn relative to where the engine hit-tests it, reported by the animator while translate runs; read by the gesture host at touch-down. |

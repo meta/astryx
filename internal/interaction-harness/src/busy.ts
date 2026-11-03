@@ -160,6 +160,15 @@ export interface BusyWindow {
   readonly to: number;
 }
 
+/** The window `blockMainThread` held, with the span its loop measured. */
+export interface BlockedWindow extends BusyWindow {
+  /**
+   * How long the loop held the thread, in ms, between the two clock readings
+   * it started and ended on. It is never less than the time asked for.
+   */
+  readonly spanMs: number;
+}
+
 /**
  * Holds the page's main thread for `ms` (a synchronous loop: no task, frame,
  * rAF, event or microtask runs meanwhile). Resolves with the window it held.
@@ -200,24 +209,33 @@ export async function blockMainThread(
     minProgressMs = 16,
     timeout = 5_000,
   }: {during?: Locator; minProgressMs?: number; timeout?: number} = {},
-): Promise<BusyWindow> {
+): Promise<BlockedWindow> {
   const minProgress = Math.max(minProgressMs, ONE_FRAME_MS);
   if (during == null) {
     return page.evaluate(duration => {
       // The harness's own work: a trace sets it apart (trace.ts HARNESS_READ).
       console.timeStamp('harness-read');
-      const from = performance.timeOrigin + performance.now();
-      const end = performance.now() + duration;
+      // One reading starts the loop and one ends it. A coarsened clock can
+      // step back between two reads, so a separate read would end it early.
+      // The loop tests the span it returns, which a sum rounded down would not.
+      const start = performance.now();
+      let now = start;
       let spins = 0;
-      while (performance.now() < end) {
+      while (now - start < duration) {
+        now = performance.now();
         spins += 1;
       }
-      return {from, to: performance.timeOrigin + performance.now(), spins};
+      return {
+        from: performance.timeOrigin + start,
+        to: performance.timeOrigin + now,
+        spanMs: now - start,
+        spins,
+      };
     }, ms);
   }
   return during.evaluate(
     (element, {duration, minProgress, wait}) =>
-      new Promise<BusyWindow>((resolve, reject) => {
+      new Promise<BlockedWindow>((resolve, reject) => {
         // The harness's own waits run on the real timers: a frozen timer gate
         // (story.ts) holds only the page's.
         const gate = (
@@ -255,12 +273,16 @@ export async function blockMainThread(
             // the animation: it runs once that frame's rendering update has
             // handed the animation to the compositor.
             later(() => {
-              const from = performance.timeOrigin + performance.now();
-              const end = performance.now() + duration;
-              while (performance.now() < end) {
-                // Busy: nothing else runs.
+              const start = performance.now();
+              let now = start;
+              while (now - start < duration) {
+                now = performance.now();
               }
-              resolve({from, to: performance.timeOrigin + performance.now()});
+              resolve({
+                from: performance.timeOrigin + start,
+                to: performance.timeOrigin + now,
+                spanMs: now - start,
+              });
             }, 0);
           } else if (performance.now() > deadline) {
             reject(new Error('blockMainThread: no animation started'));

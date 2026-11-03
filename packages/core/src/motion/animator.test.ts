@@ -942,67 +942,85 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
       expect(animator.get('x')).toBeCloseTo(curve.value(0.11), 9);
     });
 
-    it('a rebase after a late first frame reads what the rebuilt animation shows, from the first value it starts at the frame that commits it', async () => {
+    it('a rebase after a late first frame carries the channel on from that frame, with a start of its own', async () => {
       const {element, animator} = setup();
       animator.animate({x: 300}, {spring: springs.settle});
       clock = 1070;
       await commitFrame(1070, {startUnread: true});
       clock = 1170;
+      const shown = animator.get('x');
+      expect(shown).toBeCloseTo(curve.value(0.1), 1);
       animator.rebase({x: -16});
       const rebuilt = live('translate').at(-1) as Recorded;
-      expect(rebuilt.startTime).toBeNull();
-      // Until the frame that commits it, the screen shows its first keyframe.
-      // The inline value and the hit-test origin show it too.
+      // The compositor has x moving since that frame, so the rebuilt animation
+      // starts now, from the value on screen in the new coordinates.
+      expect(rebuilt.startTime).toBe(1170);
       const first = parse(rebuilt.keyframes[0].translate)[0];
+      expect(first).toBeCloseTo(shown - 16, 1);
       expect(animator.get('x')).toBeCloseTo(first, 1);
       expect(inlineX(element)).toBeCloseTo(first, 1);
       expect(presentedOffsetOf(element).x).toBeCloseTo(0, 1);
-      // It starts at that frame, which bounds its start again.
       clock = 1186;
       await commitFrame(1186, {startUnread: true});
       clock = 1202;
-      const shown = sampleAt(rebuilt, 'translate', rebuilt.createdAt + 16)[0];
-      expect(animator.get('x')).toBeCloseTo(shown, 1);
+      const later = sampleAt(rebuilt, 'translate', 1202)[0];
+      expect(animator.get('x')).toBeCloseTo(later, 1);
       animator.animate({x: 400}, {spring: springs.settle});
       const retarget = live('translate').at(-1) as Recorded;
-      expect(sampleAt(retarget, 'translate', 1202)[0]).toBeCloseTo(shown, 1);
+      expect(sampleAt(retarget, 'translate', 1202)[0]).toBeCloseTo(later, 1);
     });
 
-    it('a set of the other axis after a late first frame reads what the rebuilt animation shows, from the first value it starts at the frame that commits it', async () => {
+    it('a set of the other axis after a late first frame carries x on from that frame', async () => {
       const {element, animator} = setup();
       animator.animate({x: 300}, {spring: springs.settle});
       clock = 1070;
       await commitFrame(1070, {startUnread: true});
       clock = 1170;
+      const shown = animator.get('x');
+      const speed = animator.getVelocity('x');
       animator.set({y: 10});
       const rebuilt = live('translate').at(-1) as Recorded;
-      expect(rebuilt.startTime).toBeNull();
-      const first = parse(rebuilt.keyframes[0].translate)[0];
-      expect(animator.get('x')).toBeCloseTo(first, 1);
-      expect(inlineX(element)).toBeCloseTo(first, 1);
+      expect(rebuilt.startTime).toBe(1170);
+      const [x, y] = parse(rebuilt.keyframes[0].translate);
+      expect(x).toBeCloseTo(shown, 1);
+      expect(y).toBeCloseTo(10, 1);
+      expect(animator.get('x')).toBeCloseTo(shown, 1);
+      expect(animator.getVelocity('x')).toBeCloseTo(speed, 0);
+      expect(inlineX(element)).toBeCloseTo(shown, 1);
       expect(presentedOffsetOf(element).x).toBeCloseTo(0, 1);
       clock = 1186;
       await commitFrame(1186, {startUnread: true});
       clock = 1202;
-      const shown = sampleAt(rebuilt, 'translate', rebuilt.createdAt + 16)[0];
-      expect(animator.get('x')).toBeCloseTo(shown, 1);
+      expect(animator.get('x')).toBeCloseTo(
+        sampleAt(rebuilt, 'translate', 1202)[0],
+        1,
+      );
     });
 
-    it('a retarget of the other axis without a clock after a late first frame reads the first value the adopted curve starts from', async () => {
+    it('a retarget of the other axis without a clock after a late first frame carries x on from that frame', async () => {
       const {element, animator} = setup();
       animator.animate({x: 300}, {spring: springs.settle});
       clock = 1070;
       await commitFrame(1070, {startUnread: true});
       clock = 1170;
+      const shown = animator.get('x');
       animator.animate({y: 50}, {spring: springs.settle});
       const rebuilt = live('translate').at(-1) as Recorded;
-      expect(rebuilt.startTime).toBeNull();
-      // The new call takes the x curve and starts it again from its first
-      // keyframe. The reads, the inline value and the hit-test origin show it.
-      const first = parse(rebuilt.keyframes[0].translate)[0];
-      expect(animator.get('x')).toBeCloseTo(first, 1);
-      expect(inlineX(element)).toBeCloseTo(first, 1);
+      // The element is moving on screen, so the call starts now: x carries
+      // on from the screen and y starts from rest.
+      expect(rebuilt.startTime).toBe(1170);
+      const [x, y] = parse(rebuilt.keyframes[0].translate);
+      expect(x).toBeCloseTo(shown, 1);
+      expect(y).toBeCloseTo(0, 1);
+      expect(animator.get('x')).toBeCloseTo(shown, 1);
+      expect(inlineX(element)).toBeCloseTo(shown, 1);
       expect(presentedOffsetOf(element).x).toBeCloseTo(0, 1);
+      clock = 1186;
+      await commitFrame(1186, {startUnread: true});
+      clock = 1202;
+      const [laterX, laterY] = sampleAt(rebuilt, 'translate', 1202);
+      expect(animator.get('x')).toBeCloseTo(laterX, 1);
+      expect(animator.get('y')).toBeCloseTo(laterY, 1);
     });
 
     it('a retarget that joins a call by its clock after a late first frame reads the first value the rebuilt animation starts from', async () => {
@@ -1042,6 +1060,54 @@ describe('a call from rest starts at the commit, as Core Animation does', () => 
       const shown = sampleAt(joined, 'translate', joined.createdAt + 100);
       expect(animator.get('x')).toBeCloseTo(shown[0], 1);
       expect(animator.get('y')).toBeCloseTo(shown[1], 1);
+    });
+
+    it('a call whose only channel carries on after a late first frame reports that frame as its start', async () => {
+      const {animator} = setup();
+      const handle = animator.animate({x: 300}, {spring: springs.settle});
+      clock = 1070;
+      await commitFrame(1070, {startUnread: true});
+      clock = 1170;
+      animator.rebase({x: -16});
+      await expect(handle.started).resolves.toBe(1070);
+    });
+
+    it('a rebase of a coast after a late first frame keeps its course from that frame', async () => {
+      const {animator} = setup();
+      animator.decay(coast(animator, {x: 1000}));
+      clock = 1070;
+      await commitFrame(1070, {startUnread: true});
+      clock = 1170;
+      const shown = animator.get('x');
+      animator.rebase({x: -16});
+      const rebuilt = live('translate').at(-1) as Recorded;
+      expect(rebuilt.startTime).toBe(1170);
+      expect(parse(rebuilt.keyframes[0].translate)[0]).toBeCloseTo(
+        shown - 16,
+        1,
+      );
+      clock = 1202;
+      expect(animator.get('x')).toBeCloseTo(
+        sampleAt(rebuilt, 'translate', 1202)[0],
+        1,
+      );
+    });
+
+    it('a channel whose call waits past its undated end after a late first frame still carries on from the screen', async () => {
+      const {animator} = setup();
+      animator.animate({x: 300}, {spring: springs.settle});
+      clock = 1070;
+      await commitFrame(1070, {startUnread: true});
+      // Past the curve's end counted from the call's own time, and short of
+      // its end counted from that frame.
+      const duration =
+        Number(live('translate')[0].options.duration) - END_HOLD_MS;
+      clock = 1000 + duration + 30;
+      const shown = animator.get('x');
+      expect(shown).toBeLessThan(300);
+      animator.set({y: 10});
+      const rebuilt = live('translate').at(-1) as Recorded;
+      expect(parse(rebuilt.keyframes[0].translate)[0]).toBeCloseTo(shown, 1);
     });
 
     it('a late first frame that leaves the start unread: a read of a later time takes the curve from that frame, as the velocity does', async () => {
