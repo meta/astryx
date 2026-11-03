@@ -13,8 +13,13 @@
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {useRef} from 'react';
-import {fireEvent, render, screen} from '@testing-library/react';
-import {useClickableContainer} from './useClickableContainer';
+import {cleanup, fireEvent, render, screen} from '@testing-library/react';
+import {
+  hasInteractiveAncestor,
+  hasTextSelection,
+  innermostInteractive,
+  useClickableContainer,
+} from './useClickableContainer';
 
 // The scheme the rule exists to stop (kept in consts so the JSX below stays
 // lint-clean — the tests are ABOUT these URLs never navigating).
@@ -83,8 +88,177 @@ function DelegatingCard({
 }
 
 afterEach(() => {
+  cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  document.getSelection()?.removeAllRanges();
+});
+
+describe('shared clickable-container guards', () => {
+  it('detects a selected range intersecting a container with its anchor outside', () => {
+    render(
+      <>
+        <p>Outside</p>
+        <Card href="/docs" />
+      </>,
+    );
+    const card = screen.getByTestId('card');
+    const range = document.createRange();
+    range.setStart(screen.getByText('Outside').firstChild!, 0);
+    range.setEnd(card.firstChild!, 3);
+    const selection = document.getSelection()!;
+    selection.addRange(range);
+    expect(card.contains(selection.anchorNode)).toBe(false);
+    expect(hasTextSelection(card)).toBe(true);
+  });
+
+  it('does not navigate when a cross-boundary selection ends inside the card', () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+    render(
+      <>
+        <p>Outside</p>
+        <Card href="/docs" target="_blank" />
+      </>,
+    );
+    const card = screen.getByTestId('card');
+    const range = document.createRange();
+    range.setStart(screen.getByText('Outside').firstChild!, 0);
+    range.setEnd(card.firstChild!, 3);
+    document.getSelection()!.addRange(range);
+    fireEvent.click(card);
+    expect(open).not.toHaveBeenCalled();
+    document.getSelection()!.removeAllRanges();
+    fireEvent.click(card);
+    expect(open).toHaveBeenCalledExactlyOnceWith('/docs', '_blank', 'noopener');
+  });
+
+  it('ignores absent, collapsed and unrelated selections', () => {
+    render(
+      <>
+        <p>Outside</p>
+        <Card href="/docs" />
+      </>,
+    );
+    const card = screen.getByTestId('card');
+    const selection = document.getSelection()!;
+    expect(hasTextSelection(card)).toBe(false);
+    const range = document.createRange();
+    range.selectNodeContents(card);
+    range.collapse(true);
+    selection.addRange(range);
+    expect(hasTextSelection(card)).toBe(false);
+    selection.removeAllRanges();
+    range.selectNodeContents(screen.getByText('Outside'));
+    selection.addRange(range);
+    expect(hasTextSelection(card)).toBe(false);
+    vi.spyOn(document, 'getSelection').mockReturnValue(null);
+    expect(hasTextSelection(card)).toBe(false);
+  });
+
+  it('checks every selected range, not just the anchor or first range', () => {
+    render(
+      <>
+        <p>Outside</p>
+        <Card href="/docs" />
+      </>,
+    );
+    const card = screen.getByTestId('card');
+    const unrelated = document.createRange();
+    unrelated.selectNodeContents(screen.getByText('Outside'));
+    const intersecting = document.createRange();
+    intersecting.setStart(screen.getByText('Outside').firstChild!, 0);
+    intersecting.setEnd(card.firstChild!, 3);
+    // jsdom supports only one native selection range.
+    vi.spyOn(document, 'getSelection').mockReturnValue({
+      isCollapsed: false,
+      anchorNode: unrelated.startContainer,
+      rangeCount: 2,
+      getRangeAt: (index: number) => [unrelated, intersecting][index],
+    } as Selection);
+    expect(hasTextSelection(card)).toBe(true);
+  });
+
+  it('treats an inaccessible selected range as a blocked gesture', () => {
+    render(<Card href="/docs" />);
+    vi.spyOn(document, 'getSelection').mockReturnValue({
+      isCollapsed: false,
+      anchorNode: null,
+      rangeCount: 1,
+      getRangeAt() {
+        throw new Error('Range changed');
+      },
+    } as unknown as Selection);
+    expect(hasTextSelection(screen.getByTestId('card'))).toBe(true);
+  });
+
+  it('uses the node document selection instead of the global document', () => {
+    const iframe = document.createElement('iframe');
+    document.body.append(iframe);
+    try {
+      const foreign = iframe.contentDocument!;
+      const outside = foreign.createElement('p');
+      outside.textContent = 'Outside';
+      const card = foreign.createElement('div');
+      card.textContent = 'Inside';
+      foreign.body.append(outside, card);
+      const range = foreign.createRange();
+      range.setStart(outside.firstChild!, 0);
+      range.setEnd(card.firstChild!, 3);
+      foreign.getSelection()!.addRange(range);
+      expect(document.getSelection()!.rangeCount).toBe(0);
+      expect(hasTextSelection(card)).toBe(true);
+    } finally {
+      iframe.remove();
+    }
+  });
+
+  it('stops the shared walk at the target document body', () => {
+    const iframe = document.createElement('iframe');
+    document.body.append(iframe);
+    try {
+      const foreign = iframe.contentDocument!;
+      const content = foreign.createElement('span');
+      foreign.body.append(content);
+      foreign.body.setAttribute('role', 'button');
+      expect(innermostInteractive(content, null)).toBeNull();
+    } finally {
+      iframe.remove();
+    }
+  });
+
+  it.each([
+    'button',
+    'a',
+    'input',
+    'select',
+    'textarea',
+    'checkbox',
+    'radio',
+    'switch',
+    'tab',
+    'menuitem',
+    'option',
+    'combobox',
+    'listbox',
+    'slider',
+    'spinbutton',
+    'link',
+  ])('preserves the shared interactive boundary for %s', kind => {
+    const root = document.createElement('div');
+    const isNative = ['button', 'a', 'input', 'select', 'textarea'].includes(
+      kind,
+    );
+    const control = document.createElement(isNative ? kind : 'span');
+    if (!isNative) {
+      control.setAttribute('role', kind);
+    }
+    const child = document.createElement('span');
+    control.append(child);
+    root.append(control);
+    expect(hasInteractiveAncestor(child, root)).toBe(true);
+    control.setAttribute('aria-readonly', 'true');
+    expect(hasInteractiveAncestor(child, root)).toBe(false);
+  });
 });
 
 describe('useClickableContainer navigation — new tab (target="_blank")', () => {

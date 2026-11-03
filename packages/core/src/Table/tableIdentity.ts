@@ -85,5 +85,14 @@ export function resolveTableAdmission<T extends Record<string, unknown>>(
         plugin.transformBodyCell != null),
   );
   const rowModel = modifier?.rowModel ?? (modifier ? 'custom' : 'flat');
-  return {rowModel};
+  const owners = plugins.filter(plugin => plugin.wholeRowOwner != null);
+  const wantsActivation = owners.some(
+    plugin => plugin.wholeRowOwner === 'activation',
+  );
+  return {
+    rowModel,
+    canActivate: rowModel === 'flat' && wantsActivation && owners.length === 1,
+    usesCanonicalIdentity: wantsActivation,
+    hasOwnerConflict: wantsActivation && owners.length !== 1,
+  };
 }

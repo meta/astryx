@@ -2944,6 +2944,7 @@ hook useStepperContext: () => StepperContextValue
 hook useStreamingText: (targetText: string, isStreaming: boolean, options?: UseStreamingTextOptions) => string
 hook useSyntaxTheme: () => UseSyntaxThemeReturn | null
 hook useTabListContext: () => TabListContextValue
+hook useTableActivation: <T extends Record<string, unknown>>(config: UseTableActivationConfig<T>) => TablePlugin<T>
 hook useTableColumnResize: <T extends Record<string, unknown>>(config: UseTableColumnResizeConfig) => TablePlugin<T>
 hook useTableColumnSettings: <T extends Record<string, unknown>, TColumnKey extends string = string>(config: UseTableColumnSettingsConfig<TColumnKey>) => TablePlugin<T>
 hook useTableColumnSettingsState: <TColumnKey extends string = string>(config: UseTableColumnSettingsStateConfig<TColumnKey>) => UseTableColumnSettingsStateReturn<TColumnKey>
@@ -5423,6 +5424,7 @@ interface TablePlugin<T extends Record<string, unknown> = Record<string, unknown
   transformScrollWrapper?: (props: ScrollWrapperRenderProps, context?: TableRenderContext) => ScrollWrapperRenderProps
   transformTable?: (props: TableRenderProps) => TableRenderProps
   transformTableContext?: (children: ReactNode) => ReactNode
+  wholeRowOwner?: 'activation' | 'expansion' | 'navigation'
 interface TableProps<T extends Record<string, unknown>> extends TableAppearanceProps<T>
   children?: ReactNode
   columns?: TableColumn<T>[]
@@ -5444,6 +5446,7 @@ interface TableProps<T extends Record<string, unknown>> extends TableAppearanceP
   xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 interface TableRenderContext
+  canActivate: boolean
   headerRowCount: number
   logicalRowCount: number
   mode: 'data' | 'children'
@@ -6129,6 +6132,10 @@ interface UseSyntaxThemeReturn
   name: string
   token: (name: SyntaxThemeTokenKey) => string
   tokens: Record<SyntaxThemeTokenKey, string>
+interface UseTableActivationConfig<T extends Record<string, unknown>>
+  activeKey: string | number | null
+  getIsItemActivatable?: (item: T) => boolean
+  onActivate: (item: T, key: string | number) => void
 interface UseTableColumnResizeConfig
   columnWidths?: Record<string, number>
   columns?: TableColumn<Record<string, unknown>>[]
@@ -8687,6 +8694,7 @@ TableTextOverflow (.)
 TableTreeRowMeta (.)
 TableVerticalAlign (.)
 TableVirtualizationCapability (.)
+UseTableActivationConfig (.)
 UseTableColumnResizeConfig (.)
 UseTableColumnSettingsConfig (.)
 UseTableColumnSettingsStateConfig (.)
@@ -8717,6 +8725,7 @@ resolveColumnWidths (.)
 resolveContextActions (.)
 toSearchFilters (.)
 useBaseTablePlugins (.)
+useTableActivation (.)
 useTableColumnResize (.)
 useTableColumnSettings (.)
 useTableColumnSettingsState (.)
@@ -10020,6 +10029,7 @@ var --spinner-diameter (./astryx.css)
 var --spinner-stroke-width (./astryx.css)
 var --spinner-track-color (./astryx.css)
 var --step-connector-gap (./astryx.css)
+var --table-row-active-cue-width (./astryx.css)
 var --table-row-overlay (./astryx.css)
 var --text-body-leading (./astryx.css)
 var --text-body-size (./astryx.css)

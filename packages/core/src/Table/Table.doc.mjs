@@ -163,7 +163,7 @@ export const docs = {
       name: 'idKey',
       type: '(keyof T & string) | ((item: T) => string | number)',
       description:
-        'Canonical row identity: a property name projects valid strings and finite numbers to strings; a function retains string/number type. Optional legacy tables fall back to index. Virtualization requires explicit unique valid keys.',
+        'Canonical row identity: a property name projects valid strings and finite numbers to strings; a function retains string/number type. Optional legacy tables fall back to index. Activation and virtualization require explicit unique valid keys.',
     },
     {
       name: 'density',
