@@ -379,8 +379,8 @@ export function Calendar({ref, ...props}: CalendarProps) {
     [isControlledFocus, onFocusDateChange],
   );
 
-  // The calendar month that holds the focus date. A controlled focus date is
-  // a new object on each render, so the memo keys on its ISO string.
+  // A controlled focus date is a new object on each render. Key the memo on
+  // its ISO string.
   const focusIso = plainDateToISO(focusDate);
   const baseMonth = useMemo(
     () => calendarMonthOf(calendar, plainDateFromISO(focusIso)),
