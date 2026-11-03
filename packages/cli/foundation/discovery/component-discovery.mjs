@@ -8,7 +8,12 @@ import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {DOC_EXPORTS} from '../doc-compiler/read.mjs';
-import {listDir, listDirEntries, pathExists} from '../fs/listing-cache.mjs';
+import {
+  listDir,
+  listDirEntries,
+  pathExists,
+  withListingCache,
+} from '../fs/listing-cache.mjs';
 import {existsCaseExact} from '../fs/paths.mjs';
 import {CORE_PROVIDER_ID} from '../identity/providers.mjs';
 import {loadComponentDoc} from './component-loader.mjs';
@@ -595,20 +600,25 @@ export function findComponentSource(coreDir, name) {
    * @param {string} dirPath
    * @returns {string | null}
    */
-  function searchDir(dirPath) {
-    if (!pathExists(dirPath)) return null;
+  function searchDir(dirPath, listed = false) {
+    // A folder from its parent's listing exists; only a starting folder
+    // needs the check.
+    if (!listed && !pathExists(dirPath)) return null;
     const entries = listDirEntries(dirPath);
 
-    // Check for an exact match (prefixed or bare) first
+    // Check for an exact match (prefixed or bare) first. The listing in hand
+    // holds every name in the folder, so no name is probed on disk.
     for (const candidate of candidateFiles) {
+      const entry = entries.find(e => e.name === candidate);
+      if (!entry) continue;
       const exact = path.join(dirPath, candidate);
-      if (existsCaseExact(exact, dirPath)) return exact;
+      if (!entry.isSymbolicLink() || pathExists(exact)) return exact;
     }
 
     // Recurse into subdirectories
     for (const entry of entries) {
       if (entry.isDirectory()) {
-        const found = searchDir(path.join(dirPath, entry.name));
+        const found = searchDir(path.join(dirPath, entry.name), true);
         if (found) return found;
       }
     }
@@ -1703,6 +1713,16 @@ export function unscopedComponentOwners(owners) {
  * @returns {Array<{name: string, package: string, group: string|null, docPath: string|null, sourcePath: string|null, issuesUrl: string|undefined}>}
  */
 export function discoverOwnedComponents(coreDir, loadedIntegrations = []) {
+  // Read-only: one listing of each folder serves the whole discovery.
+  return withListingCache(() => ownedComponents(coreDir, loadedIntegrations));
+}
+
+/**
+ * @param {string} coreDir
+ * @param {Array<{name: string, components?: string, issuesUrl?: string}>} loadedIntegrations
+ * @returns {Array<{name: string, package: string, group: string|null, docPath: string|null, sourcePath: string|null, issuesUrl: string|undefined}>}
+ */
+function ownedComponents(coreDir, loadedIntegrations) {
   /** @type {Array<{name: string, package: string, group: string|null, docPath: string|null, sourcePath: string|null, issuesUrl: string|undefined}>} */
   const records = [];
 
