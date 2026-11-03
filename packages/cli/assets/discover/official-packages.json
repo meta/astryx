@@ -162,11 +162,31 @@
         },
         {
           "kind": "component",
+          "name": "SearchField"
+        },
+        {
+          "kind": "component",
           "name": "Stat"
         },
         {
           "kind": "component",
           "name": "SVGIcon"
+        },
+        {
+          "kind": "component",
+          "name": "TabBar"
+        },
+        {
+          "kind": "component",
+          "name": "TabBarItem"
+        },
+        {
+          "kind": "component",
+          "name": "TabBarMoreList"
+        },
+        {
+          "kind": "component",
+          "name": "TabBarSearchTab"
         },
         {
           "kind": "component",

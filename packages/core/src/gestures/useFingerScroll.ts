@@ -45,12 +45,13 @@ function documentOf(node: Element | Document): Document {
 
 /**
  * Watch a scroller's finger scrolls. Pass a ref to a scrolling element, or
- * the document for the page's own scroll. Returns a reader, stable across
- * renders: `true` while the scroller's scroll is a finger's.
- * Internal: not exported from the package.
+ * the document (or a ref that holds it) for the page's own scroll. Returns a
+ * reader, stable across renders: `true` while the scroller's scroll is a
+ * finger's.
+ * Internal: outside Core, only `@astryxdesign/core/internal/touch` reaches it.
  */
 export function useFingerScroll(
-  scroller: RefObject<Element | null> | Document,
+  scroller: RefObject<Element | Document | null> | Document,
 ): () => boolean {
   /** The node the watch is on now, for the reader. */
   const watchedRef = useRef<Element | Document | null>(null);

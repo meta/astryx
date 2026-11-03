@@ -2,7 +2,8 @@
 
 /**
  * @file touch.ts
- * @input The gesture core: the arena, the recognizers, and their geometry
+ * @input The gesture core and the motion, touch, focus and direction modules
+ *   Lab uses
  * @output `@astryxdesign/core/internal/touch`: the gesture core's primitives
  *   for Lab components, re-exported by name
  * @position An internal entry reserved for Astryx's own packages:
@@ -37,5 +38,30 @@ export {
   unwrapAngle,
 } from '../gestures/geometry';
 export {LongPressGestureRecognizer} from '../gestures/LongPressGestureRecognizer';
+export {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
 export {TapGestureRecognizer} from '../gestures/TapGestureRecognizer';
 export {DEFAULT_ENVIRONMENT} from '../gestures/types';
+export {useFingerScroll} from '../gestures/useFingerScroll';
+export {useGestureRecognizer} from '../gestures/useGestureRecognizer';
+export {usePressTracker} from '../gestures/usePressTracker';
+export {createActionGroupTracker} from '../hooks/actionGroupTracker';
+export type {ActionGroupTarget} from '../hooks/actionGroupTracker';
+export {isRtlElement} from '../hooks/isRtlElement';
+// The animator's internal factory, under a name no public factory has: the
+// public animator factory is `createAnimator`.
+export {createAnimator as createMotionAnimator} from '../motion/animator';
+export type {
+  AnimateOptions,
+  Animator as MotionAnimator,
+  AnimatorOptions as MotionAnimatorOptions,
+  MotionCurve,
+  MotionHandle,
+} from '../motion/animator';
+export {cubicBezier} from '../motion/bezier';
+export {rubberBand} from '../motion/rubberBand';
+export {UIKIT_GESTURES} from '../motion/uikit/gestures';
+export {timing} from '../motion/uikit/timing';
+export {claimFocusMoves} from '../utils/claimFocusMoves';
+export {lockSelection} from '../utils/selectionLock';
+export {useTouchPresentation} from '../utils/touchPresentation';
+export {TOUCH_QUERY} from '../utils/touchQueries';

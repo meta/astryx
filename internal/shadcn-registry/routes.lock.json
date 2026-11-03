@@ -643,6 +643,11 @@
       "aliases": []
     },
     {
+      "name": "component-lab-search-field",
+      "path": "components/lab/search-field",
+      "aliases": []
+    },
+    {
       "name": "component-lab-stat",
       "path": "components/lab/stat",
       "aliases": []
@@ -650,6 +655,26 @@
     {
       "name": "component-lab-svg-icon",
       "path": "components/lab/svg-icon",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-tab-bar",
+      "path": "components/lab/tab-bar",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-tab-bar-item",
+      "path": "components/lab/tab-bar-item",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-tab-bar-more-list",
+      "path": "components/lab/tab-bar-more-list",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-tab-bar-search-tab",
+      "path": "components/lab/tab-bar-search-tab",
       "aliases": []
     },
     {

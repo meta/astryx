@@ -333,6 +333,26 @@ export {
   type MobilePowerSearchProps,
 } from './MobilePowerSearch';
 
+// SearchField: the phone search field of iOS 26's UISearchController.
+export {
+  SearchField,
+  type SearchFieldHandle,
+  type SearchFieldProps,
+} from './SearchField';
+
+// TabBar: the floating bottom tab bar of iOS 26's UITabBarController.
+export {
+  TabBar,
+  TabBarItem,
+  TabBarMoreList,
+  TabBarSearchTab,
+  type TabBarAccessoryPlacement,
+  type TabBarItemProps,
+  type TabBarMoreListProps,
+  type TabBarProps,
+  type TabBarSearchTabProps,
+} from './TabBar';
+
 // RichTextEditor (RFC meta/astryx#3899) moved out of @astryxdesign/lab into
 // its own package, @astryxdesign/richtext. Import it from there:
 //   import {RichTextEditor, RichTextView} from '@astryxdesign/richtext';

@@ -811,9 +811,21 @@
     "defaultMessage": "Maximum value",
     "description": "Accessible name of the upper thumb of a range Slider (two thumbs), announced together with the Slider's own label, for example \"Price range, Maximum value, 80\". Never shown on screen."
   },
+  "@astryx.tabBar.badgedItem": {
+    "defaultMessage": "{label}, {badge}",
+    "description": "Screen-reader name of a bottom tab bar item that shows a badge (\"Library, 3\"). {label} is the tab's visible name; {badge} is the badge's count or its own label (\"3 unread\"). Translators may reorder the two or change the separator."
+  },
   "@astryx.tabList.label": {
     "defaultMessage": "Tabs",
     "description": "Screen-reader-only fallback name for a horizontal tab bar. Plural noun; \"Tabs\" here = UI tab panels, not browser tabs or the Tab key."
+  },
+  "@astryx.tabBar.more": {
+    "defaultMessage": "More",
+    "description": "Label of the tab that collects a phone tab bar's sections past the fourth (iOS's More tab), and the name of the list of those sections it shows. One short word."
+  },
+  "@astryx.tabBar.cancelSearch": {
+    "defaultMessage": "Cancel",
+    "description": "Name of the button that ends search in a phone tab bar's search tab. The tab bar draws it over its search circle, beside the active field, as iOS draws its cancel button. It is the tab bar's own button, not the search field's own Cancel button. One short word."
   },
   "@astryx.table.label": {
     "defaultMessage": "Table",
@@ -2278,5 +2290,13 @@
   "@astryx.infoTip.label": {
     "defaultMessage": "More information",
     "description": "Default accessible name of an InfoTip, the small info-icon button whose press reveals help about the label, value, or metric beside it."
+  },
+  "@astryx.searchField.cancel": {
+    "defaultMessage": "Cancel",
+    "description": "Accessible name of a lab SearchField's close button, which ends the search: it clears the query, ends editing and deactivates the field."
+  },
+  "@astryx.searchField.clear": {
+    "defaultMessage": "Clear text",
+    "description": "Accessible name of a lab SearchField's clear button, which empties the query."
   }
 }
