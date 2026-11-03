@@ -49,11 +49,11 @@ async function axDisabled(
 ): Promise<boolean | null> {
   const cdp = await page.context().newCDPSession(page);
   const {nodes} = (await cdp.send('Accessibility.getFullAXTree')) as {
-    nodes: Array<{
+    nodes: {
       role?: {value?: string};
       name?: {value?: string};
-      properties?: Array<{name: string; value: {value?: unknown}}>;
-    }>;
+      properties?: {name: string; value: {value?: unknown}}[];
+    }[];
   };
   await cdp.detach();
   const node = nodes.find(
