@@ -17,6 +17,15 @@ import {
 } from './index';
 import type {BreadcrumbMenuDividerProps, BreadcrumbMenuOption} from './index';
 import {LinkProvider} from '../Link/LinkProvider';
+import {AppShellMobileContext} from '../AppShell/AppShellMobileContext';
+import {
+  SideNavRenderContext,
+  type SideNavRenderMode,
+} from '../SideNav/SideNavRenderContext';
+import {
+  TopNavRenderContext,
+  type TopNavRenderMode,
+} from '../TopNav/TopNavRenderContext';
 
 function CustomLink({
   children,
@@ -368,6 +377,105 @@ describe('BreadcrumbItem', () => {
     // Current item is still a span
     const current = screen.getByText('Current');
     expect(current.tagName).toBe('SPAN');
+  });
+});
+
+describe('BreadcrumbItem in the AppShell mobile drawer', () => {
+  function renderInDrawer(
+    crumbs: React.ReactNode,
+    {
+      topNavMode = 'drawer',
+      sideNavMode = 'default',
+    }: {
+      topNavMode?: TopNavRenderMode;
+      sideNavMode?: SideNavRenderMode;
+    } = {},
+  ) {
+    const calls: string[] = [];
+    const closeMobileNav = vi.fn(() => calls.push('close'));
+    render(
+      <AppShellMobileContext
+        value={{
+          isMobile: true,
+          isMobileNavOpen: true,
+          toggleMobileNav: () => {},
+          openMobileNav: () => {},
+          closeMobileNav,
+          isMobileNavEnabled: true,
+          hasAutoToggle: true,
+        }}>
+        <SideNavRenderContext value={sideNavMode}>
+          <TopNavRenderContext value={topNavMode}>
+            <Breadcrumbs>{crumbs}</Breadcrumbs>
+          </TopNavRenderContext>
+        </SideNavRenderContext>
+      </AppShellMobileContext>,
+    );
+    return {calls, closeMobileNav};
+  }
+
+  it('a crumb link calls onClick and then closes the drawer', () => {
+    const {calls} = renderInDrawer(
+      <>
+        <BreadcrumbItem
+          href="#/projects"
+          onClick={event => {
+            event.preventDefault();
+            calls.push('onClick');
+          }}>
+          Projects
+        </BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Detail</BreadcrumbItem>
+      </>,
+    );
+    fireEvent.click(screen.getByRole('link', {name: 'Projects'}));
+    expect(calls).toEqual(['onClick', 'close']);
+  });
+
+  it('a crumb button calls onClick and then closes the drawer', () => {
+    const {calls} = renderInDrawer(
+      <>
+        <BreadcrumbItem onClick={() => calls.push('onClick')}>
+          Projects
+        </BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Detail</BreadcrumbItem>
+      </>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Projects'}));
+    expect(calls).toEqual(['onClick', 'close']);
+  });
+
+  it('the current crumb leaves the drawer open', () => {
+    const {closeMobileNav} = renderInDrawer(
+      <>
+        <BreadcrumbItem href="#/projects">Projects</BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Detail</BreadcrumbItem>
+      </>,
+    );
+    fireEvent.click(screen.getByText('Detail'));
+    expect(closeMobileNav).not.toHaveBeenCalled();
+  });
+
+  it('a crumb link in the side navigation drawer closes it too', () => {
+    const {closeMobileNav} = renderInDrawer(
+      <BreadcrumbItem href="#/projects" onClick={e => e.preventDefault()}>
+        Projects
+      </BreadcrumbItem>,
+      {topNavMode: 'default', sideNavMode: 'drawer-content'},
+    );
+    fireEvent.click(screen.getByRole('link', {name: 'Projects'}));
+    expect(closeMobileNav).toHaveBeenCalledTimes(1);
+  });
+
+  it('a crumb outside the drawer does not touch it', () => {
+    const {closeMobileNav} = renderInDrawer(
+      <BreadcrumbItem href="#/projects" onClick={e => e.preventDefault()}>
+        Projects
+      </BreadcrumbItem>,
+      {topNavMode: 'mobile-bar'},
+    );
+    fireEvent.click(screen.getByRole('link', {name: 'Projects'}));
+    expect(closeMobileNav).not.toHaveBeenCalled();
   });
 });
 
