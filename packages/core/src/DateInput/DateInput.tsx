@@ -79,10 +79,10 @@ import {isRenderable} from '../utils/isRenderable';
 import {typedDateError, useTypedDate} from './useTypedDate';
 import type {TimestampFormat} from '../Timestamp';
 import {
-  effectivePickerPresentation,
   resolvePickerPresentation,
   type PickerPresentation,
 } from '../utils/inputPresentation';
+import {useCalendarPresentation} from './useCalendarPresentation';
 import {useDevWarning} from '../hooks/useDevWarning';
 
 const styles = stylex.create({
@@ -410,15 +410,19 @@ export interface DateInputProps extends Omit<
   format?: DateInputFormat | ((value: ISODateString) => string);
 
   /**
-   * The calendar the text field reads and writes dates in, such as
-   * `'persian'`, `'hebrew'`, or `'buddhist'`. `value`, `onChange`, `min`, and
-   * `max` stay Gregorian ISO dates in every calendar. People type a date the
-   * way the locale writes it in this calendar, and the committed text uses it.
+   * The calendar the text field and its calendar popover show dates in, such
+   * as `'persian'`, `'hebrew'`, or `'buddhist'`. `value`, `onChange`, `min`,
+   * and `max` stay Gregorian ISO dates in every calendar. People type a date the way the locale writes
+   * it in this calendar, and the committed text uses it.
    * Years are years of this calendar, so a Buddhist field reads `2026` as
    * Buddhist year 2026; set `min` and `max` to catch a year typed in the
    * wrong calendar. Calendars other than `gregory`, `iso8601`, `buddhist`,
    * `roc`, and `japanese` need `Temporal`, native or a polyfill the
    * application loads; without it the field uses the Gregorian calendar.
+   * The native date control is Gregorian, so with a calendar other than
+   * `gregory` or `iso8601` every presentation that would show it uses the
+   * popover on a fine pointer and the bottom sheet on a coarse pointer. The
+   * bottom sheet's months and wheels stay Gregorian.
    *
    * @default the InternationalizationProvider's calendar, else `'gregory'`
    * @example
@@ -453,6 +457,9 @@ export interface DateInputProps extends Omit<
    * picker. `dateConstraints` is enforced the same way, on commit, and is
    * reason enough to prefer `'never'` on a field that uses it.
    *
+   * In a calendar other than `gregory` or `iso8601`, `'touch'` and `'always'`
+   * use the calendar popover on a mouse and the touch picker on a finger.
+   *
    * @default 'touch'
    * @deprecated Use `presentation` (`spec:AST-043` FR3):
    * `'touch'` → `'adaptive-native'`, `'always'` → `'native'`,
@@ -468,12 +475,15 @@ export interface DateInputProps extends Omit<
    * - `'popover'`: Astryx's typed field + calendar popover on every pointer
    * - `'bottom-sheet'`: Astryx's bottom-sheet calendar on every pointer
    * - `'native'`: the browser/OS picker on every pointer, with no Astryx
-   *   fallback (FR2)
+   *   fallback (FR2), except in a calendar other than `gregory` or
+   *   `iso8601`, where it is `'adaptive-bottom-sheet'` and warns in
+   *   development
    * - `'adaptive-bottom-sheet'`: popover on a fine pointer, bottom sheet on
    *   a coarse pointer
    * - `'adaptive-native'` (default): popover on a fine pointer, browser/OS
    *   picker on a coarse pointer, keeping the released Astryx fallbacks
-   *   where a native control cannot express the value (FR2)
+   *   where a native control cannot express the value (FR2), and the bottom
+   *   sheet in a calendar other than `gregory` or `iso8601`
    *
    * @default 'adaptive-native'
    */
@@ -1201,14 +1211,17 @@ export function DateInput(props: DateInputProps) {
     '`nativePicker` is deprecated; use `presentation` instead (`touch` → `adaptive-native`, `always` → `native`, `never` → `adaptive-bottom-sheet`). `presentation` wins when both are set.',
     props.nativePicker !== undefined,
   );
-  const surface = resolvePickerPresentation(
-    effectivePickerPresentation(props.presentation, props.nativePicker),
-    isTouch,
+  const {calendar, presentation} = useCalendarPresentation(
+    'DateInput',
+    props.calendar,
+    props.presentation,
+    props.nativePicker,
   );
+  const surface = resolvePickerPresentation(presentation, isTouch);
   const {
     presentation: _presentation,
     nativePicker: _nativePicker,
-    calendar,
+    calendar: _calendar,
     ...rest
   } = props;
   switch (surface) {

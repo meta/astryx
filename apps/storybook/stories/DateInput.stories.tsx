@@ -3,7 +3,7 @@
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {expect, userEvent, waitFor, within} from 'storybook/test';
-import {DateInput} from '@astryxdesign/core/DateInput';
+import {DateInput, type DateInputProps} from '@astryxdesign/core/DateInput';
 import {FormLayout} from '@astryxdesign/core/FormLayout';
 import {Text} from '@astryxdesign/core/Text';
 import {InputGroup, InputGroupText} from '@astryxdesign/core/InputGroup';
@@ -330,6 +330,97 @@ export const CalendarSystems: Story = {
     <div style={{display: 'flex', flexDirection: 'column', gap: 24}}>
       {CALENDAR_FIELDS.map(field => (
         <CalendarField key={`${field.locale}-${field.calendar}`} {...field} />
+      ))}
+    </div>
+  ),
+};
+
+const PRESENTATION_FIELDS: ReadonlyArray<{
+  id: string;
+  locale: string;
+  calendar: CalendarSystem;
+  label: string;
+  dir: 'ltr' | 'rtl';
+  value: ISODateString;
+  min?: ISODateString;
+  max?: ISODateString;
+  presentation?: DateInputProps['presentation'];
+}> = [
+  {
+    id: 'fa-persian',
+    locale: 'fa-IR',
+    calendar: 'persian',
+    label: 'تاریخ شروع',
+    dir: 'rtl',
+    value: '2026-11-02' as ISODateString,
+  },
+  {
+    id: 'en-persian-native',
+    locale: 'en',
+    calendar: 'persian',
+    label: 'Start date (Persian, presentation="native")',
+    dir: 'ltr',
+    value: '2026-11-02' as ISODateString,
+    presentation: 'native',
+  },
+  {
+    id: 'en-gregory',
+    locale: 'en',
+    calendar: 'gregory',
+    label: 'Start date (Gregorian)',
+    dir: 'ltr',
+    value: '2026-11-02' as ISODateString,
+  },
+];
+
+function PresentationField({
+  id,
+  locale,
+  calendar,
+  label,
+  dir,
+  value: initialValue,
+  min,
+  max,
+  presentation,
+}: (typeof PRESENTATION_FIELDS)[number]) {
+  const [value, setValue] = useState<ISODateString | undefined>(initialValue);
+  return (
+    <InternationalizationProvider locale={locale}>
+      <div
+        dir={dir}
+        lang={locale}
+        data-calendar-field={id}
+        style={{display: 'flex', flexDirection: 'column', gap: 4}}>
+        <DateInput
+          label={label}
+          calendar={calendar}
+          value={value}
+          onChange={setValue}
+          min={min}
+          max={max}
+          presentation={presentation}
+          width={320}
+        />
+        <Text type="supporting" color="secondary">
+          <code data-value>{`value: ${value ?? '—'}`}</code>
+        </Text>
+      </div>
+    </InternationalizationProvider>
+  );
+}
+
+/**
+ * In a calendar other than Gregorian, the field never shows the native date
+ * control, which is Gregorian: the default and `presentation="native"` open
+ * the calendar popover on a mouse and the bottom sheet on a touch screen.
+ * Values stay Gregorian ISO dates.
+ */
+export const CalendarSystemPresentations: Story = {
+  render: () => (
+    <div style={{display: 'flex', flexDirection: 'column', gap: 24}}>
+      {PRESENTATION_FIELDS.map(field => (
+        <PresentationField key={field.id} {...field} />
       ))}
     </div>
   ),

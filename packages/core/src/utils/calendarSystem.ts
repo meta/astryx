@@ -7,7 +7,7 @@
  *   month numbers, month and year steps, dates from calendar fields,
  *   availability of each calendar, and calendar labels and digits
  * @position Shared date utility; read by the i18n calendar resolution, by
- *   Calendar, and by its public hooks. Values stay Gregorian PlainDates. Temporal owns the arithmetic of
+ *   the date components, and by Calendar's public hooks. Values stay Gregorian PlainDates. Temporal owns the arithmetic of
  *   every calendar whose months are not Gregorian.
  */
 
@@ -81,6 +81,14 @@ const GREGORIAN_ALIGNED: ReadonlySet<CalendarSystem> = new Set([
   'roc',
   'japanese',
 ]);
+
+/**
+ * Whether `<input type="date">` can show the calendar. The native control is
+ * Gregorian by specification, so only `gregory` and `iso8601` qualify.
+ */
+export function isGregorianCalendar(calendar: CalendarSystem): boolean {
+  return calendar === 'gregory' || calendar === 'iso8601';
+}
 
 /** Whether the calendar's months and days are the Gregorian ones. */
 export function isGregorianAligned(calendar: CalendarSystem): boolean {

@@ -114,10 +114,10 @@ import {NativeDateSegment} from './NativeDateSegment';
 import {NativeTimeSegment} from './NativeTimeSegment';
 import {TouchDateTimeField} from './TouchDateTimeField';
 import {
-  effectivePickerPresentation,
   resolvePickerPresentation,
   type PickerPresentation,
 } from '../utils/inputPresentation';
+import {useCalendarPresentation} from '../DateInput/useCalendarPresentation';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {
   registerEnglishFallback,
@@ -547,6 +547,10 @@ export interface DateTimeInputProps extends Omit<
    * JavaScript. `hourFormat` formats the closed value; the OS picker follows the
    * user's locale.
    *
+   * In a calendar other than `gregory` or `iso8601`, `'touch'` and `'always'`
+   * use Astryx's popovers on a fine pointer and the bottom sheet on a coarse
+   * pointer.
+   *
    * @default 'touch'
    * @deprecated Use `presentation` (`spec:AST-043` FR3):
    * `'touch'` → `'adaptive-native'`, `'always'` → `'native'`,
@@ -563,13 +567,16 @@ export interface DateTimeInputProps extends Omit<
    * - `'popover'`: Astryx's typed fields + popovers on every pointer
    * - `'bottom-sheet'`: Astryx's bottom-sheet date/time wheels on every pointer
    * - `'native'`: browser/OS date and time pickers on every pointer, with no
-   *   Astryx fallback (FR2)
+   *   Astryx fallback (FR2), except in a calendar other than `gregory` or
+   *   `iso8601`, where it is `'adaptive-bottom-sheet'` and warns in
+   *   development
    * - `'adaptive-bottom-sheet'`: popovers on a fine pointer, bottom sheet on
    *   a coarse pointer
    * - `'adaptive-native'` (default): popovers on a fine pointer, browser/OS
    *   pickers on a coarse pointer, keeping the released per-segment Astryx
    *   fallbacks (seconds, non-default `timeIncrement`, `timeOptionInterval`)
-   *   where a native control cannot express the value (FR2)
+   *   where a native control cannot express the value (FR2), and the bottom
+   *   sheet in a calendar other than `gregory` or `iso8601`
    *
    * @default 'adaptive-native'
    */
@@ -2143,7 +2150,9 @@ export function DateTimeInput(props: DateTimeInputProps) {
     '`nativePicker` is deprecated; use `presentation` instead (`touch` → `adaptive-native`, `always` → `native`, `never` → `adaptive-bottom-sheet`). `presentation` wins when both are set.',
     props.nativePicker !== undefined,
   );
-  const effective = effectivePickerPresentation(
+  const {calendar, presentation: effective} = useCalendarPresentation(
+    'DateTimeInput',
+    props.calendar,
     props.presentation,
     props.nativePicker,
   );
@@ -2157,6 +2166,7 @@ export function DateTimeInput(props: DateTimeInputProps) {
   // field's resting text, preset times, and the sheet wheels agree.
   const rest = {
     ...surfaceProps,
+    calendar,
     hourFormat: resolveHourFormat(locale, props.hourFormat),
   };
   if (effective === 'native') {

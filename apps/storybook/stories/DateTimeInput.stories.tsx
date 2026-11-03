@@ -8,6 +8,7 @@ import {FormLayout} from '@astryxdesign/core/FormLayout';
 import {Text} from '@astryxdesign/core/Text';
 import type {ISODateTimeString} from '@astryxdesign/core/DateTimeInput';
 import {Theme, defineTheme} from '@astryxdesign/core/theme';
+import {InternationalizationProvider} from '@astryxdesign/core/i18n';
 
 const meta: Meta<typeof DateTimeInput> = {
   title: 'Core/DateTimeInput',
@@ -716,4 +717,31 @@ export const StylingParts: Story = {
       </div>
     </div>
   ),
+};
+
+function PersianDateTimeField() {
+  const [value, setValue] = useState<ISODateTimeString | undefined>(
+    '2026-11-02T09:30' as ISODateTimeString,
+  );
+  return (
+    <InternationalizationProvider locale="en" calendar="persian">
+      <div
+        data-calendar-field="en-persian"
+        style={{display: 'flex', flexDirection: 'column', gap: 4}}>
+        <DateTimeInput label="Appointment" value={value} onChange={setValue} />
+        <Text type="supporting" color="secondary">
+          <code data-value>{`value: ${value ?? '—'}`}</code>
+        </Text>
+      </div>
+    </InternationalizationProvider>
+  );
+}
+
+/**
+ * In a calendar other than Gregorian, DateTimeInput never shows native date
+ * and time controls: it opens the popovers on a mouse and the bottom sheet on
+ * a touch screen. The value stays a Gregorian ISO date-time.
+ */
+export const CalendarSystems: Story = {
+  render: () => <PersianDateTimeField />,
 };
