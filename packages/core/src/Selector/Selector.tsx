@@ -67,13 +67,8 @@ import {
   borderVars,
 } from '../theme/tokens.stylex';
 import type {SelectorOptionType, SelectorOptionData} from './types';
-import {
-  isOptionData,
-  isDivider,
-  isSection,
-  normalizeOption,
-  getSelectableOptionEntries,
-} from './utils';
+import {isOptionData, isDivider, isSection, normalizeOption} from './utils';
+import {getSelectableOptionEntries} from './selectableOptionEntries';
 import {useCombobox, useSelectedItemOffset} from './hooks';
 import {useMenuPress} from '../hooks/useMenuPress';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
