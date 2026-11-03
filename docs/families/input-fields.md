@@ -259,17 +259,16 @@ another implementation helper.
   on-screen keyboard opens, a member's focused text-entry field stays visible
   above it, wherever the member renders: in the page, a sheet, a bottom bar, or
   a fixed toolbar. A member docked at the bottom of the viewport rides the
-  keyboard, moving its docked container up and back with it, including an
-  app-owned container docked to the viewport's bottom edge. This covers
-  TextInput, TextArea, NumberInput, the typed fields of DateInput,
-  DateTimeInput, and TimeInput, the inputs of Typeahead and Tokenizer, and the
-  search row of Selector and MultiSelector. It is internal behavior with no prop
-  or other public API: the member decides it in its focus handling and reads the
-  keyboard module, as `spec:AST-099` FR9 requires, which owns the full list of
-  covered fields, including those of PowerSearch, CommandPalette, and
-  ChatComposer. A member whose field brings up no keyboard, such as
-  DateRangeInput, FileInput, ComplexSelector, or a touch picker field with no
-  input mode, is outside it.
+  keyboard: its docked container moves up and back with it, including an
+  app-owned container docked to the viewport's bottom edge, by the part the
+  keyboard still covers. This covers TextInput, TextArea, NumberInput, the typed
+  fields of DateInput, DateTimeInput, and TimeInput, the inputs of Typeahead and
+  Tokenizer, and the search row of Selector and MultiSelector. It is internal
+  behavior with no prop or other public API, as `spec:AST-099` FR9 requires;
+  that record owns the observable rule and the full list of covered fields,
+  including those of PowerSearch, CommandPalette, and ChatComposer. A member
+  whose field brings up no keyboard, such as DateRangeInput, FileInput,
+  ComplexSelector, or a touch picker field with no input mode, is outside it.
 
 ## Allowed component variation
 
@@ -411,7 +410,7 @@ DEC-6 does not require unrelated components to add a new floor.
   error surfaces those callsites.
 
 - **On-screen keyboard (FR13):** no member meets FR13 on current main. No
-  member has keyboard focus handling, and the keyboard module does not exist
+  member has keyboard handling, and the keyboard module does not exist
   yet; `spec:AST-099` lists each gap.
 - **Verification coverage:** current unit tests prove composition, semantics, and
   individual state behavior, but do not yet provide the complete real-browser
