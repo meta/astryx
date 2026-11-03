@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] `Step` and `Stepper` reflect `disabled` state on the `step` and `step-indicator` theming targets when `isDisabled` is true (`architecture:component-theming-surface` INV6; `component:Stepper` FR10; `component:Step` FR6). This enables themes to restyle disabled steps and indicators in compact horizontal layouts where inactive step labels are omitted.
+[fix] A disabled `Step` now reflects `disabled` on the `step-indicator` theming target, beside `step-label`, so a theme can restyle a disabled step's indicator. In a compact horizontal `Stepper`, where a disabled step's label is not shown, the indicator is the only target a theme can reach. The `step` and `step-description` targets do not gain the selector. (#8997)
 
-@Geervan
+@Geervan @duytbp

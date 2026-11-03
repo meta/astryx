@@ -16,12 +16,12 @@ import {generateThemeCSS} from '../theme/generateThemeRules';
  *
  * Contract:
  * - In compact on-track layout (where step-label is omitted for non-active steps),
- *   `step-indicator` and `step` reflect `data-disabled="disabled"`.
- * - In expanded horizontal and vertical layouts, `step`, `step-indicator`, and
+ *   `step-indicator` reflects `data-disabled="disabled"`.
+ * - In expanded horizontal and vertical layouts, `step-indicator` and
  *   `step-label` reflect `data-disabled="disabled"`.
- * - `step-description` does not reflect `disabled` (keeps its phase vocabulary).
- * - Theme rules generated for `.astryx-step[data-disabled="disabled"]` and
- *   `.astryx-step-indicator[data-disabled="disabled"]` are supported.
+ * - `step` and `step-description` do not reflect `disabled`.
+ * - Theme rules generated for `.astryx-step-indicator[data-disabled="disabled"]`
+ *   are supported.
  */
 
 function atWidth(width: number, ui: React.ReactElement) {
@@ -50,7 +50,7 @@ function atWidth(width: number, ui: React.ReactElement) {
 }
 
 describe('Stepper disabled theming surface (architecture:component-theming-surface INV6)', () => {
-  it('reflects disabled on step and step-indicator in compact on-track layout', () => {
+  it('reflects disabled on step-indicator, not step, in compact on-track layout', () => {
     atWidth(
       240,
       <Stepper
@@ -89,8 +89,8 @@ describe('Stepper disabled theming surface (architecture:component-theming-surfa
     expect(shippingIndicator).not.toHaveAttribute('data-disabled');
 
     // Delivery (isDisabled=true):
-    // step-indicator and owning step must reflect data-disabled="disabled"
-    expect(deliveryStep).toHaveAttribute('data-disabled', 'disabled');
+    // step-indicator reflects data-disabled="disabled"; the step does not
+    expect(deliveryStep).not.toHaveAttribute('data-disabled');
     expect(deliveryStep).toHaveAttribute('data-progress', 'not-started');
     expect(deliveryIndicator).toHaveAttribute('data-disabled', 'disabled');
     expect(deliveryIndicator).toHaveAttribute('data-progress', 'not-started');
@@ -103,7 +103,7 @@ describe('Stepper disabled theming surface (architecture:component-theming-surfa
     expect(deliveryStep.querySelector('.astryx-step-label')).toBeNull();
   });
 
-  it('reflects disabled on step, step-indicator, and step-label in expanded horizontal layout', () => {
+  it('reflects disabled on step-indicator and step-label, not step, in expanded horizontal layout', () => {
     render(
       <Stepper activeStep={0} label="Checkout">
         <Step step={0} label="Shipping" />
@@ -125,7 +125,7 @@ describe('Stepper disabled theming surface (architecture:component-theming-surfa
     const deliveryLabel = deliveryStep.querySelector('.astryx-step-label');
     const deliveryDesc = deliveryStep.querySelector('.astryx-step-description');
 
-    expect(deliveryStep).toHaveAttribute('data-disabled', 'disabled');
+    expect(deliveryStep).not.toHaveAttribute('data-disabled');
     expect(deliveryIndicator).toHaveAttribute('data-disabled', 'disabled');
     expect(deliveryLabel).toHaveAttribute('data-disabled', 'disabled');
     // Description does not carry disabled selector
@@ -150,17 +150,14 @@ describe('Stepper disabled theming surface (architecture:component-theming-surfa
     for (const item of items) {
       const indicator = item.querySelector('.astryx-step-indicator');
       expect(indicator).toHaveAttribute('data-disabled', 'disabled');
-      expect(item).toHaveAttribute('data-disabled', 'disabled');
+      expect(item).not.toHaveAttribute('data-disabled');
     }
   });
 
-  it('supports theme rules targeting disabled step and step-indicator via defineTheme', () => {
+  it('supports theme rules targeting a disabled step-indicator and step-label via defineTheme', () => {
     const theme = defineTheme({
       name: 'stepper-disabled-theming-test',
       components: {
-        step: {
-          'disabled:disabled': {opacity: '0.6'},
-        },
         'step-indicator': {
           'disabled:disabled': {filter: 'grayscale(1)'},
         },
@@ -171,7 +168,6 @@ describe('Stepper disabled theming surface (architecture:component-theming-surfa
     });
 
     const {component: css} = generateThemeCSS(theme);
-    expect(css).toContain('.astryx-step[data-disabled="disabled"]');
     expect(css).toContain('.astryx-step-indicator[data-disabled="disabled"]');
     expect(css).toContain('.astryx-step-label[data-disabled="disabled"]');
   });

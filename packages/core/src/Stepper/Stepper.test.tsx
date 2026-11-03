@@ -2027,10 +2027,10 @@ describe('step-label and step-description theme targets', () => {
     expect(descriptions[2].dataset.status).toBe('error');
   });
 
-  it('reflects disabled on step, step-indicator, and label targets and emits theme selectors', () => {
+  it('reflects disabled on the indicator and label targets, not the step or description, and emits theme selectors', () => {
     // The indicator and label own disabled paint (`styles.numberDisabled` /
-    // `styles.labelDisabled`); the description does not. The owning step,
-    // indicator, and label targets reflect disabled (architecture:component-theming-surface INV6).
+    // `styles.labelDisabled`), so each carries the selector. The step and the
+    // description paint nothing of their own when disabled.
     const {container} = render(
       <Stepper activeStep={0}>
         <Step
@@ -2045,7 +2045,7 @@ describe('step-label and step-description theme targets', () => {
     const indicator = container.querySelector('.astryx-step-indicator');
     const label = container.querySelector('.astryx-step-label');
     const description = container.querySelector('.astryx-step-description');
-    expect(step).toHaveAttribute('data-disabled', 'disabled');
+    expect(step).not.toHaveAttribute('data-disabled');
     expect(indicator).toHaveAttribute('data-disabled', 'disabled');
     expect(label).toHaveAttribute('data-disabled', 'disabled');
     expect(description).not.toHaveAttribute('data-disabled');
@@ -2055,9 +2055,6 @@ describe('step-label and step-description theme targets', () => {
     const theme = defineTheme({
       name: 'step-disabled-state-test',
       components: {
-        step: {
-          'disabled:disabled': {opacity: '0.6'},
-        },
         'step-indicator': {
           'disabled:disabled': {filter: 'grayscale(1)'},
         },
@@ -2067,7 +2064,6 @@ describe('step-label and step-description theme targets', () => {
       },
     });
     const {component: css} = generateThemeCSS(theme);
-    expect(css).toContain('.astryx-step[data-disabled="disabled"]');
     expect(css).toContain('.astryx-step-indicator[data-disabled="disabled"]');
     expect(css).toContain('.astryx-step-label[data-disabled="disabled"]');
     expect(css).toContain('opacity: 0.4');

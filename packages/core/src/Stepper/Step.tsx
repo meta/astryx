@@ -1317,8 +1317,8 @@ export function Step({
         : undefined;
 
   // Both text parts carry {progress, status}, the phase vocabulary of
-  // `step-indicator` above. The indicator, label, and step own disabled paint
-  // or structure, so they reflect disabled (architecture:component-theming-surface INV6).
+  // `step-indicator` above. The indicator and the label each own disabled
+  // paint, so each carries disabled; the description does not.
   const labelThemeProps = themeProps('step-label', {
     progress,
     status: status ?? undefined,
@@ -1400,12 +1400,12 @@ export function Step({
     </div>
   ) : null;
 
-  // Theme data attributes reflect progress, optional semantic status, and
-  // disabled state (architecture:component-theming-surface INV6).
+  // Theme data attributes reflect progress + optional semantic status. The
+  // step paints nothing of its own when disabled, so it carries no disabled
+  // selector; the indicator and label that dim carry it.
   const stepThemeProps = themeProps('step', {
     progress,
     status: status ?? undefined,
-    disabled: isDisabled ? 'disabled' : null,
   });
 
   // ======= SUMMARY: this step, drawn below a collapsed track =======
