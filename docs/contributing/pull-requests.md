@@ -208,9 +208,11 @@ each finding at its file and line.
   DEC-14). The description also reports `## Writing rubric results`
   ([Writing specification records](spec-writing.md)).
 - **h. Size (automatic).** More than 2,000 authored lines, without lockfiles,
-  snapshots, or generated files, is a finding unless the description declares a
-  behavior-module pull request or a `Batch:` row. For a stacked pull request,
-  pass `--base` the branch below it, so the count covers only its own lines.
+  snapshots, or generated files, is a finding. A description line that declares
+  a behavior-module pull request and names the module (`Behavior module: <name>`)
+  removes the limit. A `Batch:` row raises it to 8,000. For a stacked pull
+  request, pass `--base` the branch below it, so the count covers only its own
+  lines.
 - **i. Shared owners (automatic).** In Core source, an added resize observer,
   document or window listener, module-level warn-once set, or parent walk
   across shadow roots is a finding: call `observeResize`,

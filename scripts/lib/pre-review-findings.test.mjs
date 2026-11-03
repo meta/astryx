@@ -76,17 +76,27 @@ describe('sizeFindings', () => {
     expect(finding.fix).toContain('--body-file');
   });
 
-  it('accepts a behavior-module or Batch declaration', () => {
+  it('accepts a declared behavior module at any size', () => {
     for (const body of [
+      'Behavior module: the gesture host wheel module',
       'This behavior-module pull request adds the wheel module.',
-      'Batch: Slider · finger tracking',
     ]) {
-      expect(sizeFindings(5000, body)).toEqual([]);
+      expect(sizeFindings(20000, body)).toEqual([]);
     }
-    expect(sizeFindings(5000, 'One fix. No batch here.')).toHaveLength(1);
-    expect(
-      sizeFindings(5000, 'This is not a behavior-module pull request.'),
-    ).toHaveLength(1);
+    for (const body of [
+      "This isn't a behavior-module PR.",
+      'This is not a behavior-module pull request.',
+      'One fix.',
+    ]) {
+      expect(sizeFindings(5000, body)).toHaveLength(1);
+    }
+  });
+
+  it('raises the limit to 8,000 for a Batch row', () => {
+    const body = 'Batch: Slider · finger tracking';
+    expect(sizeFindings(8000, body)).toEqual([]);
+    const [finding] = sizeFindings(8001, body);
+    expect(finding.rule).toBe('8001 authored lines, over 8000 for a batch');
   });
 
   it('counts a stacked pull request, and names the base to count against', () => {
@@ -126,6 +136,7 @@ describe('sharedOwnerFindings', () => {
           '// A new ResizeObserver here would duplicate observeResize.',
           'const warned = useRef(false);',
           'const shadow = tree instanceof ShadowRoot ? tree : null;',
+          'if (node.nodeType === 11) return host;',
         ]),
         ...addedLinesOf('packages/core/src/utils/sharedResizeObserver.ts', [
           'observer = new ResizeObserver(notify);',

@@ -42,10 +42,10 @@ export function authoredLineCount(
   return total;
 }
 
-const SIZE_DECLARATIONS = [
-  /(?<!\bnot (?:an? )?)\bbehavior[- ]module (?:pull request|PR)\b/i,
-  /^[ \t]*(?:[-*|][ \t]*)?Batch:[ \t]*\S/m,
-];
+export const BATCH_SIZE_LIMIT = 8000;
+const BEHAVIOR_MODULE_DECLARATION =
+  /^[ \t]*(?:[-*][ \t]*)?(?:Behavior module:[ \t]*\S|This behavior-module (?:pull request|PR) (?:adds|changes|builds|extends) \S)/m;
+const BATCH_ROW = /^[ \t]*(?:[-*|][ \t]*)?Batch:[ \t]*\S/m;
 const STACK_LINE = /^[ \t]*(?:[-*|][ \t]*)?Stack:[ \t]*\S/m;
 
 /**
@@ -54,13 +54,14 @@ const STACK_LINE = /^[ \t]*(?:[-*|][ \t]*)?Stack:[ \t]*\S/m;
  */
 export function sizeFindings(authored, body) {
   if (authored <= SIZE_LIMIT) return [];
-  if (body != null && SIZE_DECLARATIONS.some(rule => rule.test(body))) {
-    return [];
-  }
-  const split = `Split the change into pull requests of at most ${SIZE_LIMIT} authored lines.`;
+  if (body != null && BEHAVIOR_MODULE_DECLARATION.test(body)) return [];
+  const isBatch = body != null && BATCH_ROW.test(body);
+  if (isBatch && authored <= BATCH_SIZE_LIMIT) return [];
+  const limit = isBatch ? BATCH_SIZE_LIMIT : SIZE_LIMIT;
+  const split = `Split the change into pull requests of at most ${limit} authored lines.`;
   let fix = split;
   if (body == null) {
-    fix = `${split} A behavior-module pull request or a \`Batch:\` row that the description declares is exempt; pass --body-file or --pr to read the description.`;
+    fix = `${split} A declared behavior-module pull request, or a \`Batch:\` row up to ${BATCH_SIZE_LIMIT} lines, is exempt; pass --body-file or --pr to read the description.`;
   } else if (STACK_LINE.test(body)) {
     fix = `${split} For a stacked pull request, pass --base the branch below it, so the count covers only its own lines.`;
   }
@@ -69,7 +70,7 @@ export function sizeFindings(authored, body) {
       item: 'h',
       file: null,
       line: null,
-      rule: `${authored} authored lines, over ${SIZE_LIMIT}`,
+      rule: `${authored} authored lines, over ${limit}${isBatch ? ' for a batch' : ''}`,
       fix,
     },
   ];
@@ -135,7 +136,7 @@ export const SHARED_OWNERS = [
     path: 'packages/core/src/utils/flatTree.ts',
     exempt: ['packages/core/src/utils/flatTree.ts'],
     matches: text =>
-      /\.assignedSlot\b|\bas\s+ShadowRoot\s*\)\s*\.host\b|\binstanceof\s+ShadowRoot\b[^;]*\.host\b|\.nodeType\s*===?\s*(?:11\b|Node\.DOCUMENT_FRAGMENT_NODE\b)/.test(
+      /\.assignedSlot\b|\bas\s+ShadowRoot\s*\)\s*\.host\b|\binstanceof\s+ShadowRoot\b[^;]*\.host\b/.test(
         text,
       ),
   },

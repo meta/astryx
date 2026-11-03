@@ -61,7 +61,7 @@ export const CHECKS = {
   e: 'New public hook: a runnable example in a template block that names the hook in exampleFor or alsoExampleFor',
   f: 'Comments: new or changed source comments explain only non-obvious work, in Simplified Technical English',
   g: 'Records: a changed record needs a spec owner to approve its spec content',
-  h: `Size: at most ${SIZE_LIMIT.toLocaleString('en-US')} authored lines, or the description declares a behavior module, a Batch row, or a Stack line`,
+  h: `Size: at most ${SIZE_LIMIT.toLocaleString('en-US')} authored lines, unless the description declares a behavior-module pull request or a batch row`,
   i: 'Shared owners: a concern Core owns in a shared module is called through that module',
   j: 'Effects: a new Effect names the system it syncs and does more than copy into a ref; no DOM node in state',
   k: 'Release notes and records: a Changeset names each package that ships a change, its category fits, and no gap row stays for a claim the change builds',
