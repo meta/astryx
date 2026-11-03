@@ -183,11 +183,10 @@ These requirements apply to the text fields of `DateInput` and
   locale's numeric month means for that calendar: the month's position in the
   typed year for Hebrew, and the month number with the locale's leap marker for
   Chinese and Korean. A plain Adar typed for a Hebrew leap year is Adar II. In
-  the Gregorian calendar, text that matches none of these forms, that they
-  cannot finish, or that names a date the locale's numeric order does not have
-  still commits on Enter or blur when `parseDateInput` reads it: `13/5/2026` in
-  `en-US` commits 13 May 2026, and `1/5/2` commits 5 January 2002. Otherwise
-  FR11 applies.
+  the Gregorian calendar, text that matches none of these forms, or that names a
+  date the locale's numeric order does not have, still commits on Enter or blur
+  when `parseDateInput` reads it: `13/5/2026` in `en-US` commits 13 May 2026.
+  Otherwise FR11 applies. A one-digit year is not a date.
 - **FR10 — Years are years of the calendar.** A typed year is a year of the
   active calendar, never a converted Gregorian year: `2026` in a Buddhist field
   is Buddhist year 2026. The format hint and the committed text show the era,
@@ -348,6 +347,9 @@ These requirements apply to the text fields of `DateInput` and
     the latest stable release uses the runtime's `Date` parsing: in 2026,
     `1/5/46` to `1/5/49` in `en-US` commit 1946 to 1949 instead of 2046 to 2049.
     No record documents the `Date` reading: nonbreaking (FR3).
+  - A one-digit year is not a date: `1/5/2`, which the latest stable release
+    reads through the runtime's `Date` as 5 January 2002, does not commit. No
+    record documents that reading: nonbreaking (FR3).
   - `formatSharedDate`, `shortDate`, and `monthYear` gain an optional argument:
     additive (FR5).
 - Consumer docs: the internationalization guide covers choosing a calendar,
