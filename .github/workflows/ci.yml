@@ -2287,9 +2287,19 @@ jobs:
           delete-merged: true
 
   pr-interaction:
+    name: pr-interaction (${{ matrix.leg }}/${{ strategy.job-total }})
     needs: [room, admission, heavy-ci, build-storybook]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true')) }}
     # Frame evidence measures timing: four cores, one Playwright worker.
+    # One runner ran every proof in about ten minutes and passed the job's
+    # fifteen once its checkout was slow. Three legs share the spec files by
+    # their recorded times (interaction-legs.mjs), so each runs in about three
+    # and a half minutes. `test` reads the job's result, which is success only
+    # when every leg passed.
+    strategy:
+      fail-fast: false
+      matrix:
+        leg: [1, 2, 3]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -2375,10 +2385,22 @@ jobs:
         if: steps.scope.outputs.applies == 'true'
         run: pnpm install --frozen-lockfile && npx playwright install chromium
 
-      - name: Run interaction proofs
+      # This leg's share of the spec files, by their recorded times. Every
+      # spec file is in exactly one leg; one with no recorded time counts the
+      # median.
+      - name: Plan this leg's interaction proofs
+        id: plan
         if: steps.scope.outputs.applies == 'true'
+        run: >-
+          node .github/scripts/interaction-legs.mjs plan --project chromium
+          --leg ${{ matrix.leg }} --of ${{ strategy.job-total }}
+          --out "$RUNNER_TEMP/interaction-leg.txt"
+
+      - name: Run interaction proofs
+        if: steps.scope.outputs.applies == 'true' && steps.plan.outputs.files != '0'
         run: |
           pnpm exec playwright test \
+            --test-list "$RUNNER_TEMP/interaction-leg.txt" \
             --config playwright.interaction.config.ts \
             --project chromium \
             --output interaction-proof-output
@@ -2388,7 +2410,7 @@ jobs:
         if: always() && steps.scope.outputs.applies == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: interaction-evidence
+          name: interaction-evidence-${{ matrix.leg }}
           path: test-results/interaction-evidence
           if-no-files-found: ignore
           retention-days: 7
@@ -2405,9 +2427,16 @@ jobs:
   # required context. Specs that need Chromium-only evidence skip themselves
   # in WebKit.
   pr-interaction-webkit:
+    name: pr-interaction-webkit (${{ matrix.leg }}/${{ strategy.job-total }})
     needs: [room, admission, heavy-ci, build-storybook]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true')) }}
     # Frame evidence measures timing: four cores, one Playwright worker.
+    # Two legs share the spec files by their recorded times, as the Chromium
+    # proofs' three do.
+    strategy:
+      fail-fast: false
+      matrix:
+        leg: [1, 2]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -2495,6 +2524,21 @@ jobs:
         if: steps.scope.outputs.applies == 'true'
         run: pnpm install --frozen-lockfile && npx playwright install --with-deps webkit
 
+      # This leg's share of the WebKit spec files, from the paths the lane
+      # covers, by their recorded times.
+      - name: Plan this leg's WebKit interaction proofs
+        id: plan
+        if: steps.scope.outputs.applies == 'true'
+        run: >-
+          node .github/scripts/interaction-legs.mjs plan --project webkit
+          --leg ${{ matrix.leg }} --of ${{ strategy.job-total }}
+          --out "$RUNNER_TEMP/interaction-leg.txt" --
+          packages/core/src/gestures/
+          packages/core/src/motion/__tests__/animatedLayout.interaction
+          packages/core/src/motion/__tests__/animator.interaction
+          packages/core/src/hooks/__tests__/usePager.interaction
+          internal/interaction-harness/
+
       # WebKit renders through Mesa's llvmpipe, which sizes its thread pool
       # from the CPUs the process may run on. A container's CPU quota is not
       # that mask, so a runner that shows the host's CPUs oversubscribes the
@@ -2502,7 +2546,7 @@ jobs:
       # set (the job's share, rounded up); without a quota the count stays
       # nproc, llvmpipe's own default.
       - name: Run WebKit interaction proofs
-        if: steps.scope.outputs.applies == 'true'
+        if: steps.scope.outputs.applies == 'true' && steps.plan.outputs.files != '0'
         run: |
           LP_NUM_THREADS="$(nproc)"
           if [ -r /sys/fs/cgroup/cpu.max ]; then
@@ -2517,11 +2561,7 @@ jobs:
           export LP_NUM_THREADS
           echo "llvmpipe threads: $LP_NUM_THREADS"
           pnpm exec playwright test \
-            packages/core/src/gestures/ \
-            packages/core/src/motion/__tests__/animatedLayout.interaction \
-            packages/core/src/motion/__tests__/animator.interaction \
-            packages/core/src/hooks/__tests__/usePager.interaction \
-            internal/interaction-harness/ \
+            --test-list "$RUNNER_TEMP/interaction-leg.txt" \
             --config playwright.interaction.config.ts \
             --project webkit \
             --output interaction-proof-output-webkit
@@ -2530,7 +2570,7 @@ jobs:
         if: always() && steps.scope.outputs.applies == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: interaction-evidence-webkit
+          name: interaction-evidence-webkit-${{ matrix.leg }}
           path: test-results/interaction-evidence
           if-no-files-found: ignore
           retention-days: 7
