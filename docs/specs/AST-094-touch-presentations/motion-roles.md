@@ -9,6 +9,7 @@ Every motion role a registered table lists (`spec:AST-094` FR4, DEC-5): its kind
 | `progress.curves.fill`          | curve    | cubic-bezier(0, 0, 1, 1)                                        | `component:ProgressBar` |
 | `progress.fillTrackMs`          | duration | 1000 ms                                                         | `component:ProgressBar` |
 | `progress.reducedMotionPulseMs` | duration | 2000 ms                                                         | `component:ProgressBar` |
+| `segmented.lift`                | spring   | response 0.25 s, damping ratio 1                                | `spec:AST-094` FR4      |
 | `segmented.selectionSpring`     | spring   | response 0.4 s, damping ratio 0.85                              | `spec:AST-094` FR4      |
 | `springs.contextMenuDismiss`    | spring   | response 0.35 s, damping ratio 0.85                             | `spec:AST-094` FR4      |
 | `springs.contextMenuLift`       | spring   | response 0.32 s, damping ratio 0.8                              | `spec:AST-094` FR4      |

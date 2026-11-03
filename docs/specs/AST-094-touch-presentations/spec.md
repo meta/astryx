@@ -170,6 +170,7 @@ a measured, sourced difference exists.
   | `springs.contextMenuDismiss` | damping ratio 0.85, response 0.35 s | measured: UIContextMenuInteraction's dismissal, iOS 26.2 simulator, 2026-10-23                        |
   | `springs.contextMenuMorph`   | damping ratio 0.8, response 0.3 s   | measured: UIContextMenuInteraction's menu entrance and preview shadow, iOS 26.2 simulator, 2026-10-23 |
   | `segmented.selectionSpring`  | response 0.4 s, damping ratio 0.85  | measured: UISegmentedControl's selection slide, iOS 26.2 simulator, 2026-10-23                        |
+  | `segmented.lift`             | response 0.25 s, damping ratio 1    | measured: UISegmentedControl's lens lift and settle under a finger, iOS 26.2 simulator, 2026-10-23    |
   | `timing.stateChangeMs`       | 250 ms                              | measured: Core Animation's implicit transaction, iOS 26.2 simulator, 2026-10-23                       |
   | `timing.curves.viewChange`   | cubic-bezier(0.25, 0.1, 0.25, 1)    | Apple: `CAMediaTimingFunctionName.default`                                                            |
   | `timing.curves.exit`         | cubic-bezier(0.42, 0, 1, 1)         | measured: UIKit's ease-in, iOS 26.2 simulator, 2026-10-23                                             |
