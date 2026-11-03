@@ -1809,6 +1809,7 @@ component PowerSearch(props: PowerSearchProps)
   prop config: PowerSearchConfig
   prop disabledMessage?: string
   prop endContent?: React.ReactNode
+  prop experimental?: { presentation?: 'popover' | 'bottom-sheet' | 'adaptive' } @experimental
   prop filters: ReadonlyArray<PowerSearchFilter>
   prop handleRef?: React.Ref<PowerSearchHandle>
   prop hasAutoFocus?: boolean = false

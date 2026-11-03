@@ -546,6 +546,23 @@ describe('PowerSearch', () => {
     });
   });
 
+  it('keeps hasAutoFocus on the combobox across re-renders in the popover presentation, so a Dialog that opens later still finds data-autofocus', () => {
+    const field = (count: number) => (
+      <PowerSearch
+        config={config}
+        filters={[]}
+        onChange={() => {}}
+        hasAutoFocus
+        resultCount={count}
+      />
+    );
+    const {rerender} = render(field(1));
+    expect(screen.getByRole('combobox')).toHaveAttribute('data-autofocus');
+    rerender(field(2));
+    rerender(field(3));
+    expect(screen.getByRole('combobox')).toHaveAttribute('data-autofocus');
+  });
+
   describe('result count announcements', () => {
     const politeRegion = () =>
       document.querySelector('[data-astryx-live-region="polite"]');

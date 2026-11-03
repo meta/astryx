@@ -26,12 +26,14 @@ import {RadioListContext} from './RadioList';
 import {RadioListReasonContext} from './RadioListReasonContext';
 import {joinAriaIDs} from '../utils/inputAria';
 import {colorVars, radiusVars} from '../theme/tokens.stylex';
-import {mergeProps, isRenderable, rtlStyles} from '../utils';
+import {isRenderable} from '../utils/isRenderable';
+import {mergeProps} from '../utils/mergeProps';
+import {rtlStyles} from '../utils/rtlStyles';
 import {indicatorScope} from '../Indicator/indicator.markers.stylex';
 import {useIndicatorFocusRing} from '../hooks/useIndicatorFocusRing';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {useIndicator} from '../Indicator';
-import {Item, type ItemAlign} from '../Item';
+import {useIndicator} from '../Indicator/useIndicator';
+import {Item, type ItemAlign} from '../Item/Item';
 import {themeProps} from '../utils/themeProps';
 
 // The touch press's paint, declared by the shared overlay styles on the
