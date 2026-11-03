@@ -56,6 +56,23 @@ describe('internal/touch', () => {
     expect(entry).not.toHaveProperty('touchModule');
   });
 
+  it('re-exports the pan recognizer, the press tracker, the action-group tracker, the finger-scroll reader, the selection lock, the touch query, the rubber band and UIKit gesture values by name', async () => {
+    const entry: Record<string, unknown> = await import('./touch');
+    const modules: Record<string, Record<string, unknown>> = {
+      PanGestureRecognizer: await import('../gestures/PanGestureRecognizer'),
+      useFingerScroll: await import('../gestures/useFingerScroll'),
+      usePressTracker: await import('../gestures/usePressTracker'),
+      createActionGroupTracker: await import('../hooks/actionGroupTracker'),
+      lockSelection: await import('../utils/selectionLock'),
+      TOUCH_QUERY: await import('../utils/touchQueries'),
+      rubberBand: await import('../motion/rubberBand'),
+      UIKIT_GESTURES: await import('../motion/uikit/gestures'),
+    };
+    for (const [name, module] of Object.entries(modules)) {
+      expect(entry[name], name).toBe(module[name]);
+    }
+  });
+
   it('attaches no window or document listeners when it loads', async () => {
     vi.resetModules();
     const onWindow = vi.spyOn(window, 'addEventListener');
