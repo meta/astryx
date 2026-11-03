@@ -751,6 +751,20 @@ export function Slider({ref, ...props}: SliderProps) {
       own(event);
       consumer?.(event);
     };
+
+  // A disabled slider keeps its tab stop (aria-disabled, not the native
+  // attribute), so the browser no longer drops its events and the component
+  // withholds the caller's instead. Like a disabled text field, it runs none
+  // other than focus and blur.
+  const callerProps = isDisabled
+    ? Object.fromEntries(
+        Object.entries(rest).filter(
+          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
+        ),
+      )
+    : rest;
+  const callerHandler = <E,>(handler?: (event: E) => void) =>
+    isDisabled ? undefined : handler;
   const generatedId = useId();
   const id = idProp ?? generatedId;
   const labelID = useId();
@@ -1475,7 +1489,7 @@ export function Slider({ref, ...props}: SliderProps) {
     ) => (
       <div
         key={thumbIndex}
-        {...(!isRange ? rest : undefined)}
+        {...(!isRange ? callerProps : undefined)}
         ref={trigger != null ? trigger.ref : !isRange ? ref : undefined}
         id={!isRange ? id : undefined}
         role="slider"
@@ -1504,7 +1518,7 @@ export function Slider({ref, ...props}: SliderProps) {
         }
         onKeyDown={after(
           e => handleKeyDown(thumbIndex, e),
-          !isRange ? onKeyDown : undefined,
+          !isRange ? callerHandler(onKeyDown) : undefined,
         )}
         onFocus={after(
           e => handleThumbFocus(thumbIndex, e),
@@ -1634,10 +1648,10 @@ export function Slider({ref, ...props}: SliderProps) {
         <div
           // In range mode the role="group" control takes the base props; a
           // single slider gives them to its role="slider" thumb.
-          {...(isRange ? rest : undefined)}
+          {...(isRange ? callerProps : undefined)}
           {...(isRange
             ? {
-                onKeyDown,
+                onKeyDown: callerHandler(onKeyDown),
                 onFocus,
                 onBlur,
                 'aria-describedby': ariaDescribedByProp,
@@ -1655,10 +1669,13 @@ export function Slider({ref, ...props}: SliderProps) {
                 'aria-labelledby': joinAriaIDs(labelID, ariaLabelledByProp),
               }
             : undefined)}
-          onPointerDown={after(handlePointerDown, onPointerDown)}
-          onPointerMove={after(handlePointerMove, onPointerMove)}
-          onPointerUp={after(handlePointerUp, onPointerUp)}
-          onPointerCancel={after(handlePointerUp, onPointerCancel)}
+          onPointerDown={after(handlePointerDown, callerHandler(onPointerDown))}
+          onPointerMove={after(handlePointerMove, callerHandler(onPointerMove))}
+          onPointerUp={after(handlePointerUp, callerHandler(onPointerUp))}
+          onPointerCancel={after(
+            handlePointerUp,
+            callerHandler(onPointerCancel),
+          )}
           {...mergeProps(
             themeProps('slider-control', {
               orientation,
