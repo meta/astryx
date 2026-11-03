@@ -46,7 +46,7 @@ export default function LightboxHookUsage() {
       <Grid columns={3} gap={2} width={304}>
         {PHOTOS.map((photo, i) => (
           <img
-            key={photo.src}
+            key={photo.alt}
             src={photo.src}
             alt={photo.alt}
             width={96}
