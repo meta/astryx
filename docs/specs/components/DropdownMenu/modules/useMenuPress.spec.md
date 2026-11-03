@@ -206,9 +206,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 - **AR1 — Highlight is focus in a menu.** In a menu the highlighted row is the
   focused row, moved with `preventScroll`, so keyboard, mouse and finger share
-  one highlight and one paint; a held finger or pen paints its lit row with the
-  pressed overlay; a row whose root takes no focus is highlighted through the
-  control inside it.
+  one highlight and one paint; in Core's menus, a held finger or pen paints its
+  lit row with the pressed overlay (a public `useMenuPress` caller gets the
+  highlight mark and paints it itself); a row whose root takes no focus is
+  highlighted through the control inside it.
 - **AR2 — A picker keeps its combobox focus.** In a Selector listbox the model
   drives `highlightedIndex` and `aria-activedescendant`; DOM focus never moves
   into the listbox.

@@ -155,8 +155,7 @@ Consumer migration instructions belong in consumer docs and release notes.
   the item remains a single row in that model.
 - **AR4 — Focus perception.** After keyboard input the focused row draws the
   shared focus ring inside its edge in every color mode, forced colors
-  included; after pointer input it shows only its hover background, or the
-  pressed overlay while a held finger or pen lights it (FR8).
+  included; after pointer input its background follows FR8.
 
 ## Design relationships
 
