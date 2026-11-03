@@ -176,7 +176,7 @@ governs them in a touch presentation.
   above it for the whole exit (`spec:AST-003` FR16). When it is hidden, they
   move to the latest remaining outlet with their entries and timers intact
   (`spec:AST-003` FR18, FR19).
-- **FR14 — Touch presentations keep their native exit.** A dialog or layer
+- **FR14 — Touch exits are never removed; tap-started exits play the theme's exit timing.** A dialog or layer
   surface in a touch presentation plays the exit its component's record gives
   it under `spec:AST-094` FR7 and FR8. A touch presentation's exit that a
   tap, key or program starts plays the theme's exit duration and easing,
@@ -250,8 +250,8 @@ governs them in a touch presentation.
   `--ease-exit`. Its touch close keeps its own motion, which the exit tokens do
   not reach (`spec:AST-094` FR7, DEC-15).
 - Consumer docs: `motion` describes both curves, that exits are off by default
-  in a pointer presentation, how a theme turns each kind on, that touch
-  presentations keep their native exits, and that callers keep content rendered
+  in a pointer presentation, how a theme turns each kind on, that a touch
+  exit is never removed and a tap-started one plays the theme's exit timing, and that callers keep content rendered
   while a surface closes. The token tables and the theme template list the new
   tokens, and each member component's docs describe its exit.
 
@@ -333,7 +333,7 @@ is also the default.
 
 Rejected: holding the live layer in the top layer with an `overlay` transition, which plays only in browsers that support that transition.
 
-### DEC-5 — Touch presentations keep their native exit
+### DEC-5 — Touch exits are never removed; tap-started exits play the theme's exit timing
 
 **Reference:** `spec:AST-090/DEC-5`
 **Decider:** `cixzhang`, `2026-10-28`

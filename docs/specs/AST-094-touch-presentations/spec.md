@@ -204,12 +204,14 @@ a measured, sourced difference exists.
   `timing.curves.entrance` and `timing.curves.move`) stay as the measured
   native reference, and no motion plays them: that motion plays the theme's
   duration and easing tokens (FR45), and an exit plays the theme's exit
-  duration and easing (FR7). Three approved motions keep their springs until their own records change: the layout glide (`spec:AST-105` FR4), the animator's `animate` (`spec:AST-107` FR3), and `useDragToSnapPoints`'s `settleTo` (`spec:AST-107`). A component's own record states which of
+  duration and easing (FR7). Three approved motions keep their springs until their own records change: the layout glide (`spec:AST-105` FR4), the animator's `animate` (`spec:AST-107` FR3), and `useDragToSnapPoints`'s `settleTo` (`spec:AST-107`). Reduce Motion substitutions and continuous busy loops (such as ProgressBar's indeterminate pulse, `component:ProgressBar` FR6) keep their named roles; they are neither gesture- nor interaction-started motion. A component's own record states which of
   its roles a gesture drives.
 
-  Implementation gap: the pager's measured paging motion (its settle
-  integrator, its 300 ms animated scroll and that scroll's sinusoidal curve,
-  DEC-25) plays from internal constants and is not yet a named role.
+  Implementation gap: the pager's measured settle after a release (DEC-25)
+  plays from internal constants and is not yet a named role. Its animated
+  scroll to a page that the program asks for is a programmatic move, so it
+  plays the theme's duration and easing tokens (FR45); today it plays a
+  300 ms scroll on a sinusoidal curve.
 
 ### Motion
 
@@ -245,8 +247,9 @@ a measured, sourced difference exists.
   form. Each overlay's own record states its exit, since members own their
   animation (`family:overlay-dismissal` AV6).
 - **FR45 — A gesture's motion springs; other motion plays the theme's
-  motion tokens.** Motion that a gesture drives MUST play a spring that
-  starts at the gesture's velocity, under every pointer (FR43). A gesture is
+  motion tokens.** Motion that a gesture drives MUST play a spring, or for
+  a coast its measured deceleration rate, that starts at the gesture's
+  velocity, under every pointer (FR43). A gesture is
   a continuous pointer movement whose velocity carries into the motion: a
   drag, a flick, a swipe, a pan, a pinch, and the settle and rubber-band
   return after any of them. The theme's `tempo` scales the spring's duration
@@ -257,7 +260,7 @@ a measured, sourced difference exists.
   motion, which a tap, a click, a hold, a key or the program starts, MUST
   play the theme's motion tokens, its duration and easing tokens scaled by
   `tempo` (`architecture:theme-tokens`, `spec:AST-108` FR2), under every
-  pointer, a finger included. Three approved motions keep their springs until their own records change: the layout glide (`spec:AST-105` FR4), the animator's `animate` (`spec:AST-107` FR3), and `useDragToSnapPoints`'s `settleTo` (`spec:AST-107`). A tap has no velocity, so it is not a gesture.
+  pointer, a finger included. Three approved motions keep their springs until their own records change: the layout glide (`spec:AST-105` FR4), the animator's `animate` (`spec:AST-107` FR3), and `useDragToSnapPoints`'s `settleTo` (`spec:AST-107`). Reduce Motion substitutions and continuous busy loops (such as ProgressBar's indeterminate pulse, `component:ProgressBar` FR6) keep their named roles; they are neither gesture- nor interaction-started motion. A tap has no velocity, so it is not a gesture.
   A touch presentation keeps its own look for that motion (FR13), such as a
   menu that grows from its trigger or a thumb that lifts, and plays it on
   those tokens. A press that starts as a tap or a hold and continues as a
@@ -858,7 +861,7 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   component documents its own, including the `presentation` value that keeps
   the released surface (FR25).
 
-Motion that FR45 moves, by component (each record carries its own line):
+Motion that FR45 moves, by component. Each component's record carries its own line, except Carousel, whose trackpad paging this record states through the shared pager (FR43):
 
 | Component             | Motion                                                                  | Today                                                    | Under FR45                                                             |
 | --------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------- |
