@@ -751,9 +751,9 @@ export function Typeahead<T extends SearchableItem>({
                 // FormLayout default hides the visible marker (component:FormLayout
                 // FR5, AR2).
                 aria-required={isEffectivelyRequired || rest['aria-required']}
-                // An error status, its own or a group's, is exposed on the
-                // combobox as on every other field (WCAG 4.1.2). Without one, a
-                // caller's own aria-required / aria-invalid still applies.
+                // The field's own status decides. Without one, a group error
+                // marks the combobox invalid. Otherwise a caller's own
+                // aria-invalid applies.
                 aria-invalid={isMemberInvalid || rest['aria-invalid']}
                 onChangeQuery={onChangeQuery}
                 onOpenChange={handleOpenChange}
