@@ -152,7 +152,7 @@ describe('SelectableCardGroup', () => {
     expect(names.size).toBe(1);
   });
 
-  it('an enabled group submits its choice under htmlName', () => {
+  it("an enabled group submits the chosen card's value under htmlName", () => {
     const {container} = render(
       <form>
         <SelectableCardGroup
@@ -172,7 +172,69 @@ describe('SelectableCardGroup', () => {
     if (form == null) {
       throw new Error('no form');
     }
-    expect([...new FormData(form).entries()]).toEqual([['plan', 'on']]);
+    expect([...new FormData(form).entries()]).toEqual([['plan', 'Pro']]);
+  });
+
+  it("a card disabled on its own stays in its group's form, so the group is one tab stop", () => {
+    render(
+      <form>
+        <SelectableCardGroup label="Plan" value="Pro" onChange={() => {}}>
+          {PLANS.map(plan => (
+            <SelectableCardGroupItem
+              key={plan}
+              value={plan}
+              label={plan}
+              isDisabled={plan === 'Team'}>
+              {plan}
+            </SelectableCardGroupItem>
+          ))}
+        </SelectableCardGroup>
+      </form>,
+    );
+    for (const radio of screen.getAllByRole('radio')) {
+      expect(radio).not.toHaveAttribute('form');
+    }
+  });
+
+  it("keeps the caller's aria-labelledby and aria-describedby beside its own", () => {
+    render(
+      <>
+        <span id="extra-label">Billing</span>
+        <span id="extra-help">Change any time</span>
+        <SelectableCardGroup
+          label="Plan"
+          description="Billed monthly"
+          aria-labelledby="extra-label"
+          aria-describedby="extra-help"
+          value={null}
+          onChange={() => {}}>
+          <SelectableCardGroupItem value="Basic" label="Basic">
+            Basic
+          </SelectableCardGroupItem>
+        </SelectableCardGroup>
+      </>,
+    );
+    const group = screen.getByRole('radiogroup', {name: 'Plan Billing'});
+    expect(group).toHaveAccessibleDescription('Billed monthly Change any time');
+  });
+
+  it('ignores untyped root styling and warns in development', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const untyped = {className: 'root-class'} as Record<string, unknown>;
+    render(
+      <SelectableCardGroup
+        label="Plan"
+        value={null}
+        onChange={() => {}}
+        {...untyped}>
+        <SelectableCardGroupItem value="Basic" label="Basic">
+          Basic
+        </SelectableCardGroupItem>
+      </SelectableCardGroup>,
+    );
+    expect(document.querySelector('.root-class')).toBeNull();
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   it('styles the Field box through container props, not the group', () => {

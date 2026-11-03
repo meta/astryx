@@ -1,11 +1,11 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * @file SelectableCardRadio.a11y.chromium.spec.ts
+ * @file SelectableCardGroupRadio.a11y.chromium.spec.ts
  * @input Uses Playwright and the a11y-spec Storybook server
- * @output Real-browser keyboard checks for SelectableCard's radio input
- * @position Cards with inputType="radio" and one name form a native radio
- * group: one tab stop on the checked card, arrow keys that move and select
+ * @output Real-browser keyboard checks for a single-choice SelectableCardGroup
+ * @position Its cards are native radios with one name, so they form a native
+ * radio group: one tab stop on the checked card, arrow keys that move and select
  * with wrapping, Space on a focused card, and a click that never deselects.
  * jsdom has no native radio-group keyboard, so only a real engine shows it.
  */
@@ -27,7 +27,7 @@ test.afterAll(async () => {
   await storybook?.close();
 });
 
-const STORY = 'core-selectablecard--radio-input';
+const STORY = 'lab-selectablecardgroup--single-choice';
 
 async function open(page: Page): Promise<void> {
   await page.goto(
@@ -49,7 +49,7 @@ async function focusedName(page: Page): Promise<string | null> {
   );
 }
 
-test.describe('SelectableCard inputType="radio"', () => {
+test.describe('SelectableCardGroup, single choice', () => {
   test('is a named radio group of native radios', async ({page}) => {
     await open(page);
     const group = page.getByRole('radiogroup', {name: 'Plan'});
@@ -70,31 +70,29 @@ test.describe('SelectableCard inputType="radio"', () => {
     await page.keyboard.press('Tab');
     expect(await focusedName(page)).toBe('Pro');
     await page.keyboard.press('Tab');
-    expect(['Basic', 'Pro', 'Enterprise']).not.toContain(
-      await focusedName(page),
-    );
+    expect(['Basic', 'Pro', 'Team']).not.toContain(await focusedName(page));
     await page.keyboard.press('Shift+Tab');
     expect(await focusedName(page)).toBe('Pro');
 
     await page.keyboard.press('ArrowRight');
-    expect(await focusedName(page)).toBe('Enterprise');
-    expect(await checkedName(page)).toBe('Enterprise');
+    expect(await focusedName(page)).toBe('Team');
+    expect(await checkedName(page)).toBe('Team');
     await page.keyboard.press('ArrowRight');
     expect(await focusedName(page)).toBe('Basic');
     expect(await checkedName(page)).toBe('Basic');
     await page.keyboard.press('ArrowLeft');
-    expect(await checkedName(page)).toBe('Enterprise');
+    expect(await checkedName(page)).toBe('Team');
   });
 
   test('Space selects the focused card; a click on the chosen card keeps it', async ({
     page,
   }) => {
     await open(page);
-    await page.getByRole('radio', {name: 'Enterprise'}).focus();
+    await page.getByRole('radio', {name: 'Team'}).focus();
     await page.keyboard.press('Space');
-    expect(await checkedName(page)).toBe('Enterprise');
-    await page.getByText('Enterprise', {exact: true}).click();
-    expect(await checkedName(page)).toBe('Enterprise');
+    expect(await checkedName(page)).toBe('Team');
+    await page.getByText('Team', {exact: true}).click();
+    expect(await checkedName(page)).toBe('Team');
     await page.getByText('Basic', {exact: true}).click();
     expect(await checkedName(page)).toBe('Basic');
   });

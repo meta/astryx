@@ -4,8 +4,9 @@
 
 /**
  * @file SelectableCardGroup.tsx
- * @input Uses core SelectableCard (its checkbox or radio input), Field (the
- *   group label and description), useId, StyleX and the spacing tokens
+ * @input Uses core SelectableCard (its input set through Core's internal
+ *   SelectableCardInputContext), Field (the group label and description),
+ *   useFieldInputStyling, useId, StyleX and the spacing tokens
  * @output Exports SelectableCardGroup, SelectableCardGroupItem and their props
  * @position Lab: a set of selectable cards with the semantics of its selection
  *
@@ -37,6 +38,11 @@ import {
   SelectableCard,
   type SelectableCardProps,
 } from '@astryxdesign/core/SelectableCard';
+import {
+  SelectableCardInputContext,
+  useFieldInputStyling,
+  type SelectableCardInput,
+} from '@astryxdesign/core/internal/selectable-card';
 import {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {mergeProps, themeProps} from '@astryxdesign/core/utils';
 
@@ -79,7 +85,7 @@ interface MultipleSelection {
 }
 
 // It composes Field: root styling goes to the Field box through `container*`
-// (input-fields FR10), not onto the group.
+// (the input-fields family), not onto the group.
 export type SelectableCardGroupProps = Omit<
   BaseProps,
   'onChange' | 'xstyle' | 'className' | 'style'
@@ -111,7 +117,7 @@ export type SelectableCardGroupProps = Omit<
 
 export interface SelectableCardGroupItemProps extends Omit<
   SelectableCardProps,
-  'isSelected' | 'onChange' | 'inputType' | 'htmlName'
+  'isSelected' | 'onChange'
 > {
   /** The value this card stands for in the group's `value`. */
   value: string;
@@ -132,6 +138,12 @@ interface GroupContextValue {
 const SelectableCardGroupContext = createContext<GroupContextValue | null>(
   null,
 );
+
+/** Space-separated ids, or undefined when there are none. */
+function joinIds(...ids: (string | undefined)[]): string | undefined {
+  const joined = ids.filter(id => id != null && id !== '').join(' ');
+  return joined === '' ? undefined : joined;
+}
 
 // =============================================================================
 // Components
@@ -173,17 +185,28 @@ export function SelectableCardGroup(props: SelectableCardGroupProps) {
   const descriptionID = useId();
   const generatedName = useId();
   const name = htmlName ?? generatedName;
-  // An untyped caller's root styling never reaches the group element.
+  // Root styling never reaches the group element, and a development build
+  // warns about it (the input-fields family). `container*` reaches the Field box
+  // only when one renders.
+  const {rest: groupProps, container} = useFieldInputStyling(
+    'SelectableCardGroup',
+    rest,
+    {containerXstyle, containerClassName, containerStyle},
+  );
   const {
-    xstyle: _xstyle,
-    className: _className,
-    style: _style,
-    ...groupProps
-  } = rest as typeof rest & {
-    xstyle?: unknown;
-    className?: unknown;
-    style?: unknown;
+    'aria-labelledby': callerLabelledBy,
+    'aria-describedby': callerDescribedBy,
+    ...otherGroupProps
+  } = groupProps as typeof groupProps & {
+    'aria-labelledby'?: string;
+    'aria-describedby'?: string;
   };
+  // The caller's own ids join the group's label and description.
+  const labelledBy = joinIds(labelID, callerLabelledBy);
+  const describedBy = joinIds(
+    description ? descriptionID : undefined,
+    callerDescribedBy,
+  );
   const isMultiple = props.selectionMode === 'multiple';
 
   const context = useMemo<GroupContextValue>(() => {
@@ -226,15 +249,13 @@ export function SelectableCardGroup(props: SelectableCardGroupProps) {
       isGroupLabel
       descriptionID={description ? descriptionID : undefined}
       isDisabled={isDisabled}
-      xstyle={containerXstyle}
-      className={containerClassName}
-      style={containerStyle}>
+      {...container}>
       <div
-        {...groupProps}
+        {...otherGroupProps}
         ref={ref}
         role={isMultiple ? 'group' : 'radiogroup'}
-        aria-labelledby={labelID}
-        aria-describedby={description ? descriptionID : undefined}
+        aria-labelledby={labelledBy}
+        aria-describedby={describedBy}
         aria-disabled={isDisabled || undefined}
         {...mergeProps(
           themeProps('selectable-card-group', {
@@ -266,20 +287,32 @@ export function SelectableCardGroupItem({
   ...props
 }: SelectableCardGroupItemProps) {
   const group = useContext(SelectableCardGroupContext);
+  const input = useMemo<SelectableCardInput | null>(
+    () =>
+      group == null
+        ? null
+        : {
+            type: group.inputType,
+            name: group.name,
+            value,
+            isGroupDisabled: group.isDisabled,
+          },
+    [group, value],
+  );
   if (group == null) {
     throw new Error(
       'SelectableCardGroupItem must be rendered inside a SelectableCardGroup.',
     );
   }
   return (
-    <SelectableCard
-      {...props}
-      inputType={group.inputType}
-      htmlName={group.name}
-      isSelected={group.isSelected(value)}
-      isDisabled={group.isDisabled || isDisabled}
-      onChange={isSelected => group.change(value, isSelected)}
-    />
+    <SelectableCardInputContext value={input}>
+      <SelectableCard
+        {...props}
+        isSelected={group.isSelected(value)}
+        isDisabled={group.isDisabled || isDisabled}
+        onChange={isSelected => group.change(value, isSelected)}
+      />
+    </SelectableCardInputContext>
   );
 }
 

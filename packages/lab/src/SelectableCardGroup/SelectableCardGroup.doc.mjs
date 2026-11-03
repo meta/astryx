@@ -82,7 +82,7 @@ export const docs = {
       name: 'children',
       type: 'ReactNode',
       description:
-        'SelectableCardGroupItem cards. Each takes a `value` and the SelectableCard props other than isSelected, onChange, inputType and htmlName.',
+        'SelectableCardGroupItem cards. Each takes a `value` and the SelectableCard props other than isSelected and onChange.',
       required: true,
     },
     {
@@ -206,7 +206,7 @@ export const docsZh = {
       name: 'children',
       type: 'ReactNode',
       description:
-        'SelectableCardGroupItem 卡片。每张卡片接受一个 `value`，以及除 isSelected、onChange、inputType 和 htmlName 之外的 SelectableCard 属性。',
+        'SelectableCardGroupItem 卡片。每张卡片接受一个 `value`，以及除 isSelected 和 onChange 之外的 SelectableCard 属性。',
       required: true,
     },
     {

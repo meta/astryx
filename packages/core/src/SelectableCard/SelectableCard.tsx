@@ -23,8 +23,8 @@
  * A hidden <input type="checkbox"> inside the card provides the accessible
  * role, label, and checked state — the card surface itself has no role/tabIndex.
  * Space toggles it natively; Enter is wired up as an additional toggle key.
- * With inputType="radio" the input is a radio: the card selects and never
- * deselects itself, and cards sharing an `htmlName` form one native radio group.
+ * Inside a single-choice group (Lab's SelectableCardGroup, through an internal
+ * context) the input is a radio: the card selects and never deselects itself.
  *
  * For static display, use Card.
  * For navigation or action cards, use ClickableCard.
@@ -36,6 +36,7 @@ import {
   type KeyboardEvent,
   useRef,
   useCallback,
+  use,
   type Ref,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
@@ -54,6 +55,7 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {SelectableCardInputContext} from './selectableCardInput';
 // =============================================================================
 // Styles — selection + interaction; Card handles the rest
 // =============================================================================
@@ -279,25 +281,9 @@ export interface SelectableCardProps extends Omit<BaseProps, 'onChange'> {
 
   /**
    * Selection change handler.
-   * Called with the new selection state when the card is toggled. A radio
-   * card only ever calls it with `true`.
+   * Called with the new selection state when the card is toggled.
    */
   onChange: (isSelected: boolean) => void;
-
-  /**
-   * The native control inside the card. `checkbox` toggles. `radio` makes the
-   * card one choice of a single-select set: it selects and never deselects
-   * itself. SelectableCardGroup (lab) builds that set and documents it.
-   * @default 'checkbox'
-   */
-  inputType?: 'checkbox' | 'radio';
-
-  /**
-   * The native input's `name`, as on RadioList and CheckboxInput. Radio cards
-   * that share it form one group. A disabled card is detached from its form,
-   * so it submits nothing.
-   */
-  htmlName?: string;
 
   /**
    * Set to true to disable the card.
@@ -410,8 +396,6 @@ export function SelectableCard({
   label,
   isSelected,
   onChange,
-  inputType = 'checkbox',
-  htmlName,
   onClick: onClickProp,
   onMouseUp: onMouseUpProp,
   isDisabled = false,
@@ -432,9 +416,10 @@ export function SelectableCard({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const interactiveRef = useRef<HTMLInputElement | null>(null);
 
-  // A checkbox toggles; a radio only selects (it never deselects itself, as a
-  // native radio stays checked when clicked again).
-  const isRadio = inputType === 'radio';
+  // A group can make the input a radio. A radio only selects: a native radio
+  // stays checked when it is clicked again.
+  const groupInput = use(SelectableCardInputContext);
+  const isRadio = groupInput?.type === 'radio';
   const requestChange = useCallback(() => {
     if (!isRadio) {
       onChange(!isSelected);
@@ -558,11 +543,18 @@ export function SelectableCard({
       <input
         ref={interactiveRef}
         type={isRadio ? 'radio' : 'checkbox'}
-        name={htmlName}
-        // Detached from its form while disabled, so it neither submits nor
-        // blocks submission (spec:AST-085 FR3); the name keeps the radio
-        // grouping.
-        form={isDisabled ? '' : undefined}
+        name={groupInput?.name}
+        value={groupInput?.value}
+        // A disabled card submits nothing, so it leaves the form. A radio
+        // that is disabled on its own stays in the form: leaving it would
+        // split it from its group and make it an extra tab stop.
+        form={
+          groupInput != null &&
+          isDisabled &&
+          (groupInput.type === 'checkbox' || groupInput.isGroupDisabled)
+            ? ''
+            : undefined
+        }
         checked={isSelected}
         aria-label={label}
         aria-disabled={isDisabled ? 'true' : undefined}
