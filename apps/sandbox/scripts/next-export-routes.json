@@ -781,6 +781,7 @@
     "/templates/table/",
     "/templates/theme-showcase/",
     "/templates/useCollatorHookUsage/",
+    "/templates/useComboboxHookUsage/",
     "/templates/useContainerRevealHookUsage/",
     "/templates/useKeyboardHintHookUsage/",
     "/templates/useListFocusHookUsage/",
