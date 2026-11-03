@@ -94,7 +94,7 @@ export interface CreateResizableOptions {
   /** Called when an interaction collapses or expands the region. */
   onCollapseChange?: (isCollapsed: boolean) => void;
   /**
-   * The handle sits after the panel it resizes (the panel is at the end), so
+   * The handle sits before the panel it resizes (the panel is at the end), so
    * a drag toward the start grows it.
    * @default false
    */
