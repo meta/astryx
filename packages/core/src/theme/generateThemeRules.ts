@@ -493,6 +493,9 @@ const SCOPED_STATUS_ROLE_DEFAULTS: ReadonlyArray<
   ['--color-border-success', '--color-text-success'],
   ['--color-border-warning', '--color-text-warning'],
   ['--color-border-error', '--color-text-error'],
+  // Not a status role: the same rule keeps this duration reference local, so
+  // a nested theme's exit follows that theme's --duration-fast.
+  ['--duration-exit', '--duration-fast'],
 ];
 
 const SCOPED_STATUS_ROLE_SOURCES = new Map(SCOPED_STATUS_ROLE_DEFAULTS);

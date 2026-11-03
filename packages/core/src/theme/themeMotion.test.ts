@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {describe, expect, it} from 'vitest';
 import {defineTheme} from './defineTheme';
-import {generateAdaptationCSS} from './generateThemeRules';
+import {generateAdaptationCSS, generateThemeRules} from './generateThemeRules';
 import {expandMotionScale} from './expandMotionScale';
 import {
   CHARACTER_EASE,
@@ -262,6 +262,39 @@ describe('--duration-exit (spec:AST-090 FR12)', () => {
     expect(
       resolveThemeMotion({motion: {tempo: 1.2}}).durations['--duration-exit'],
     ).toBe(`${Math.round(175 * 1.2)}ms`);
+  });
+
+  it.each([
+    ['a tempo', {name: 'ExitTempo', motion: {tempo: 1.2}}],
+    [
+      'a duration scale',
+      {name: 'ExitScale', motion: {fast: 100, medium: 250, ratio: 0.75}},
+    ],
+    [
+      'an explicit --duration-fast',
+      {name: 'ExitFast', tokens: {'--duration-fast': '120ms'}},
+    ],
+  ] as const)(
+    'is declared again in a theme scope that sets --duration-fast through %s, so a nested theme follows its own value',
+    (_label, config) => {
+      const css = generateThemeRules(defineTheme(config)).join('\n');
+      expect(css).toContain('--duration-exit: var(--duration-fast);');
+    },
+  );
+
+  it('is not declared again where the theme sets it, or sets no --duration-fast', () => {
+    const own = generateThemeRules(
+      defineTheme({
+        name: 'ExitOwn',
+        motion: {tempo: 1.2},
+        tokens: {'--duration-exit': '90ms'},
+      }),
+    ).join('\n');
+    expect(own).not.toContain('--duration-exit: var(--duration-fast);');
+    const plain = generateThemeRules(defineTheme({name: 'ExitPlain'})).join(
+      '\n',
+    );
+    expect(plain).not.toContain('--duration-exit');
   });
 
   it('takes a theme override', () => {
