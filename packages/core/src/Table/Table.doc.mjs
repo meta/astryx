@@ -208,7 +208,7 @@ export const docs = {
       name: 'virtualization',
       type: 'TableVirtualizationCapability',
       description:
-        'Geometry-only capability from useTableRowsVirtualization({rowHeight, viewportHeight}), both positive finite CSS pixels. Pass complete flat data and an explicit idKey. Default text truncates; custom renderers, wrapping, structural plugins, incompatible offsets, invalid identity or unrepresentable geometry use full rendering. Logical row positions include the header.',
+        'Geometry-only capability from useTableRowsVirtualization({rowHeight, viewportHeight}), both positive finite CSS pixels. Pass complete flat data and an explicit idKey. Default text truncates; custom renderers, wrapping, structural plugins, incompatible offsets, invalid identity or unrepresentable geometry use full rendering. Unknown totals remain unknown (`-1`) while admitted incremental loading has more rows, becoming exact only at exhaustion. Logical row positions include the header.',
     },
     {
       name: 'plugins',
