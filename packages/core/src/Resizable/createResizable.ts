@@ -448,7 +448,6 @@ export function createResizableAs(
   // attributes and forwards its events, so the factory adds neither.
   const isRenderedByResizeHandle =
     handle != null && isClaimedResizeHandle(handle);
-  // A plain element the factory drives itself: its listeners and attributes.
   const drivenHandle = isRenderedByResizeHandle ? null : handle;
   let isDragging = false;
   let collapsedText: string | undefined;
