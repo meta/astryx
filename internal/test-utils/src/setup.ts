@@ -3,7 +3,9 @@
 /**
  * @file setup.ts
  * @input Uses @testing-library/jest-dom/vitest
- * @output Extends Vitest expect with jest-dom matchers (toBeInTheDocument, etc.)
+ * @output Extends Vitest expect with jest-dom matchers (toBeInTheDocument, etc.),
+ *   jsdom polyfills, and keeps the group last-member rule out of jsdom's
+ *   stylesheet
  * @position Test setup; loaded by vitest.config.ts before all tests
  *
  * SYNC: When modified, update this header and /internal/test-utils/src/README.md
@@ -12,6 +14,8 @@
 /// <reference types="@testing-library/jest-dom" />
 import '@testing-library/jest-dom/vitest';
 import {configure} from '@testing-library/react';
+import {afterEach} from 'vitest';
+import {__resetClickGuardForTest} from '../../../packages/core/src/utils/clickGuard';
 
 // Text queries (getByText/findByText/…) target VISIBLE text. Astryx's
 // `useAnnounce` renders a visually-hidden aria-live region
@@ -24,6 +28,41 @@ import {configure} from '@testing-library/react';
 // that assert an announcement query the region directly, e.g. by role="status").
 // Keeps the jsdom defaults (script, style).
 configure({defaultIgnore: 'script, style, [data-astryx-live-region]'});
+
+// The click guard (packages/core/src/utils/clickGuard.ts) is armed per
+// document by a gesture that already acted and disarms itself 400 ms later.
+// A test that ends inside that window would leave the timer to fire after
+// the environment tears its window down, during a later file. Disarm every
+// guard as each test ends.
+afterEach(() => {
+  __resetClickGuardForTest();
+});
+
+// jsdom's selector engine evaluates the group last-member rule,
+// `:nth-last-child(1 of S)`, far too slowly and differently from browsers: a
+// document of a few hundred elements took tens of seconds per
+// `getComputedStyle`, which every role-and-name query calls, and a group
+// member between two popovers did not match. So jsdom never receives that
+// rule (ButtonGroup FR3); ButtonGroupCorners.interaction.browser.spec.ts checks
+// group corners in a real browser, and jsdom tests assert group
+// membership only. Other `of S` rules, such as Table's zebra striping, still
+// reach jsdom.
+const GROUP_LAST_MEMBER = ':nth-last-child(1 of ';
+const insertRule = CSSStyleSheet.prototype.insertRule;
+CSSStyleSheet.prototype.insertRule = function insertRuleWithoutGroupLastMember(
+  rule: string,
+  index?: number,
+): number {
+  if (rule.includes(GROUP_LAST_MEMBER)) {
+    // Refuse it as a browser refuses an unsupported rule, so StyleX's
+    // injector records nothing inserted and keeps its group offsets right.
+    throw new DOMException(
+      'jsdom does not receive the group last-member rule',
+      'SyntaxError',
+    );
+  }
+  return insertRule.call(this, rule, index);
+};
 
 // Polyfill for matchMedia (not supported in jsdom).
 //

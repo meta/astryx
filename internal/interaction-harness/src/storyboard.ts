@@ -267,21 +267,31 @@ export interface AnimationStoryboardOptions extends StoryboardOptions {
    * each animation at its own offset (a held end value is not filmed).
    */
   readonly times?: readonly number[];
-  /** Restrict to animations inside this element. */
+  /** Restrict to animations inside this element (when `held` is not passed). */
   readonly scope?: Locator;
+  /**
+   * What an armed hold already took (`armHold`'s `held()`): filmed instead of
+   * holding now, for an animation an action starts that a hold sent after
+   * the action could miss on a loaded runner.
+   */
+  readonly held?: readonly HeldAnimation[];
   /** Measurements per frame (runs after the seek). */
   readonly measure?: () => Promise<Readonly<Record<string, unknown>>>;
 }
 
 /**
  * Holds every running animation, then seeks them together to each time and
- * photographs the clip. Call it right after starting the animation under test.
+ * photographs the clip. Call it right after starting the animation under test,
+ * or pass `held`, what an armed hold took (`armHold`): the film then uses that
+ * held set instead of holding now, and `scope` plays no part.
  */
 export async function animationStoryboard(
   page: Page,
   options: AnimationStoryboardOptions,
 ): Promise<{storyboard: Storyboard; held: HeldAnimation[]}> {
-  const held = await holdAnimations(page, options.scope);
+  const held = options.held
+    ? [...options.held]
+    : await holdAnimations(page, options.scope);
   if (held.length === 0) {
     throw new Error(`storyboard ${options.name}: no running animation to hold`);
   }

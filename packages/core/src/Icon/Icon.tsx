@@ -38,7 +38,7 @@ import {useThemeName} from '../theme/useTheme';
 import {resolveIcon} from './globalIconRegistry';
 import type {IconName, NamespacedIconName} from './globalIconRegistry';
 import type {IconVariant} from './index';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
 import {useIconSize} from './IconDefaultSizeContext';
 import {iconSizeStyles, type IconSize} from './IconSize.stylex';
@@ -176,7 +176,11 @@ export interface IconProps extends Omit<
   SVGProps<SVGSVGElement>,
   'ref' | 'color'
 > {
-  /** Ref forwarded to the root element */
+  /**
+   * Ref to the rendered SVG element when `icon` is an icon component. A
+   * semantic or namespaced name renders inside an internal wrapper, and the
+   * ref is not attached.
+   */
   ref?: React.Ref<SVGSVGElement>;
   /**
    * Icon to render. Can be:
@@ -267,22 +271,26 @@ export interface IconProps extends Omit<
   xstyle?: StyleXStyles;
 }
 
+type IconA11yProps =
+  | {role: 'img'; 'aria-label': string; 'aria-hidden': undefined}
+  | {'aria-hidden': 'true'};
+
 /**
  * Derives the ARIA attributes for an icon from its `label` prop.
  *
  * - Non-empty `label` → meaningful image: `role="img"` + `aria-label`, and no
  *   `aria-hidden` (an `aria-hidden` element is removed from the accessibility
- *   tree, so its accessible name would be ignored).
+ *   tree, so its accessible name would be ignored). Icon passes
+ *   `aria-hidden: undefined`. Many icon components, such as Heroicons, write
+ *   `aria-hidden="true"` unless a prop replaces it.
  * - Omitted or empty `label` → decorative default: `aria-hidden="true"`.
  *
  * The result is spread BEFORE `{...props}` in both render modes so an explicit
  * `aria-hidden` / `role` / `aria-label` from the consumer always wins.
  */
-function getIconA11yProps(
-  label: string | undefined,
-): {role: 'img'; 'aria-label': string} | {'aria-hidden': 'true'} {
+function getIconA11yProps(label: string | undefined): IconA11yProps {
   return label != null && label !== ''
-    ? {role: 'img', 'aria-label': label}
+    ? {role: 'img', 'aria-label': label, 'aria-hidden': undefined}
     : {'aria-hidden': 'true'};
 }
 
@@ -392,7 +400,7 @@ function IconFromRegistry({
   color: IconColor;
   size: IconSize;
   variant: IconVariant | undefined;
-  a11yProps: {role: 'img'; 'aria-label': string} | {'aria-hidden': 'true'};
+  a11yProps: IconA11yProps;
   className?: string;
   style?: React.CSSProperties;
   xstyle?: StyleXStyles;

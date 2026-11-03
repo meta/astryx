@@ -1,8 +1,30 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect} from 'vitest';
+import {describe, it, expect, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import {CircularProgress} from './CircularProgress';
+
+/**
+ * The Web Animations timing objects the component probes the theme's easing
+ * with (`easingOf`). jsdom has none, so a test that stubs `animate` supplies
+ * these too: linear, so progress is the elapsed fraction.
+ */
+function stubLinearTiming() {
+  class LinearEffect {
+    time = 0;
+    getComputedTiming() {
+      return {progress: this.time};
+    }
+  }
+  class LinearProbe {
+    constructor(private effect: LinearEffect) {}
+    set currentTime(ms: number) {
+      this.effect.time = ms / 1000;
+    }
+  }
+  vi.stubGlobal('KeyframeEffect', LinearEffect);
+  vi.stubGlobal('Animation', LinearProbe);
+}
 
 describe('CircularProgress', () => {
   it('renders with default props', () => {
@@ -180,19 +202,376 @@ describe('CircularProgress', () => {
     }
   });
 
-  it('computes stroke-dashoffset from value', () => {
+  it("turns the fill's halves and leading cap from the value", () => {
+    const turnsAt = (value: number) => {
+      const {container, unmount} = render(
+        <CircularProgress value={value} size="md" label="Progress" />,
+      );
+      const fill = container.querySelector(
+        '.astryx-circular-progress-fill',
+      ) as HTMLElement;
+      const [right, left] = Array.from(
+        fill.querySelectorAll<HTMLElement>(':scope > span > span'),
+      ).map(layer => `${layer.style.transform} ${layer.style.opacity}`);
+      const cap = fill.querySelector<HTMLElement>(':scope > span:last-child');
+      const start = fill.querySelector<SVGPathElement>(':scope > svg path');
+      const result = {
+        right,
+        left,
+        cap: cap?.style.transform,
+        caps: [cap?.style.opacity, start?.style.opacity],
+      };
+      unmount();
+      return result;
+    };
+    // The right half fills over the first half of the value, the left half
+    // over the second; the leading cap turns with the value.
+    // A half parked at the edge of its half is hidden (no hairline at 6).
+    expect(turnsAt(0)).toEqual({
+      right: 'rotate(0deg) 0',
+      left: 'rotate(180deg) 0',
+      cap: 'rotate(0deg)',
+      caps: ['0', '0'],
+    });
+    expect(turnsAt(25)).toEqual({
+      right: 'rotate(90deg) 1',
+      left: 'rotate(180deg) 0',
+      cap: 'rotate(90deg)',
+      caps: ['1', '1'],
+    });
+    expect(turnsAt(75)).toEqual({
+      right: 'rotate(180deg) 1',
+      left: 'rotate(270deg) 1',
+      cap: 'rotate(270deg)',
+      caps: ['1', '1'],
+    });
+    expect(turnsAt(100)).toEqual({
+      right: 'rotate(180deg) 1',
+      left: 'rotate(360deg) 1',
+      cap: 'rotate(360deg)',
+      caps: ['1', '1'],
+    });
+  });
+
+  it("draws each half as half the ring's stroke, under the fill theming target", () => {
     const {container} = render(
-      <CircularProgress value={25} max={100} size="md" label="Progress" />,
+      <CircularProgress value={25} size="md" label="Progress" />,
     );
-    // circumference = 2π * 22 ≈ 138.23; offset = circumference * (1 - 0.25)
     const fill = container.querySelector('.astryx-circular-progress-fill');
     expect(fill).not.toBeNull();
-    expect(
-      parseFloat(fill!.getAttribute('stroke-dasharray') ?? ''),
-    ).toBeCloseTo(138.23, 1);
-    expect(
-      parseFloat(fill!.getAttribute('stroke-dashoffset') ?? ''),
-    ).toBeCloseTo(103.67, 1);
+    expect(fill).toHaveAttribute('aria-hidden', 'true');
+    const halves = fill!.querySelectorAll('circle');
+    expect(halves).toHaveLength(2);
+    // circumference = 2π * 22 ≈ 138.23: half of it drawn, from 6 o'clock to 12.
+    for (const half of halves) {
+      const [dash, gap] = (half.getAttribute('stroke-dasharray') ?? '')
+        .split(' ')
+        .map(Number);
+      expect(dash).toBeCloseTo(138.23 / 2, 1);
+      expect(gap).toBeCloseTo(138.23, 1);
+      expect(half).toHaveAttribute('transform', 'rotate(90 24 24)');
+      // The color comes from the target's inherited stroke, never the part.
+      expect(half).not.toHaveAttribute('stroke');
+    }
+  });
+
+  it('animates a value change from where the arc is drawn, each half on time', () => {
+    const calls: {keyframes: Keyframe[]; options: KeyframeAnimationOptions}[] =
+      [];
+    stubLinearTiming();
+    const original = Element.prototype.animate;
+    const originalStyle = window.getComputedStyle;
+    Element.prototype.animate = function (
+      this: Element,
+      keyframes: Keyframe[],
+      options: KeyframeAnimationOptions,
+    ) {
+      calls.push({keyframes, options});
+      return {
+        cancel() {},
+        playState: 'running',
+        effect: {getComputedTiming: () => ({progress: 0})},
+        onfinish: null,
+      } as unknown as Animation;
+    } as typeof Element.prototype.animate;
+    window.getComputedStyle = ((element: Element) => {
+      const real = originalStyle(element);
+      if (element.classList.contains('astryx-circular-progress-fill')) {
+        return {
+          ...real,
+          transitionDuration: '400ms',
+          transitionTimingFunction: 'linear',
+        } as CSSStyleDeclaration;
+      }
+      return real;
+    }) as typeof window.getComputedStyle;
+    try {
+      const {rerender} = render(
+        <CircularProgress value={20} size="md" label="Progress" />,
+      );
+      expect(calls).toHaveLength(0);
+      rerender(<CircularProgress value={80} size="md" label="Progress" />);
+      expect(calls).toHaveLength(4);
+      const [right, left, cap, start] = calls;
+      for (const call of calls) {
+        expect(call.options.duration).toBe(400);
+        expect(call.options.easing).toBe('linear');
+      }
+      const angle = (frame: Keyframe) =>
+        Number(/rotate\(([-\d.]+)deg\)/.exec(String(frame.transform))?.[1]);
+      // From 20% (72deg) to 80% (288deg); linear, so the arc crosses 6
+      // o'clock half way through.
+      expect(angle(cap.keyframes[0])).toBeCloseTo(72, 5);
+      expect(angle(cap.keyframes.at(-1)!)).toBeCloseTo(288, 5);
+      const crossing = right.keyframes.findIndex(f => angle(f) === 180);
+      expect(right.keyframes[crossing].offset).toBeCloseTo(0.5, 5);
+      expect(angle(left.keyframes[crossing])).toBe(180);
+      expect(
+        left.keyframes.slice(0, crossing + 1).every(f => angle(f) === 180),
+      ).toBe(true);
+      expect(angle(left.keyframes.at(-1)!)).toBeCloseTo(288, 5);
+      // Hidden until the arc passes 6 o'clock, then shown at once.
+      expect(left.keyframes[crossing].opacity).toBe(0);
+      expect(left.keyframes[crossing + 1].opacity).toBe(1);
+      expect(
+        Number(left.keyframes[crossing + 1].offset) -
+          Number(left.keyframes[crossing].offset),
+      ).toBeLessThanOrEqual(1e-4);
+      expect(start.keyframes.every(f => f.opacity === 1)).toBe(true);
+    } finally {
+      Element.prototype.animate = original;
+      vi.unstubAllGlobals();
+      window.getComputedStyle = originalStyle;
+    }
+  });
+
+  it('steps the left half at once when the arc shrinks through 6 o\u2019clock', () => {
+    const calls: Keyframe[][] = [];
+    stubLinearTiming();
+    const original = Element.prototype.animate;
+    const originalStyle = window.getComputedStyle;
+    Element.prototype.animate = function (
+      this: Element,
+      keyframes: Keyframe[],
+    ) {
+      calls.push(keyframes);
+      return {
+        cancel() {},
+        playState: 'running',
+        effect: {getComputedTiming: () => ({progress: 0})},
+        onfinish: null,
+      } as unknown as Animation;
+    } as typeof Element.prototype.animate;
+    window.getComputedStyle = ((element: Element) => {
+      const real = originalStyle(element);
+      if (element.classList.contains('astryx-circular-progress-fill')) {
+        return {
+          ...real,
+          transitionDuration: '300ms',
+          transitionTimingFunction: 'linear',
+        } as CSSStyleDeclaration;
+      }
+      return real;
+    }) as typeof window.getComputedStyle;
+    try {
+      const {rerender} = render(
+        <CircularProgress value={80} size="md" label="Progress" />,
+      );
+      rerender(<CircularProgress value={20} size="md" label="Progress" />);
+      const [, left] = calls;
+      const angle = (frame: Keyframe) =>
+        Number(/rotate\(([-\d.]+)deg\)/.exec(String(frame.transform))?.[1]);
+      // Fully shown wherever it still draws part of the arc...
+      for (const frame of left) {
+        if (angle(frame) > 180) {
+          expect(frame.opacity, `at ${frame.offset}`).toBe(1);
+        }
+      }
+      // ...and hidden at once, never faded across a sample interval.
+      for (let i = 1; i < left.length; i += 1) {
+        if (left[i].opacity !== left[i - 1].opacity) {
+          expect(
+            Number(left[i].offset) - Number(left[i - 1].offset),
+          ).toBeLessThanOrEqual(1e-4);
+        }
+      }
+      expect(left.at(-1)!.opacity).toBe(0);
+    } finally {
+      Element.prototype.animate = original;
+      vi.unstubAllGlobals();
+      window.getComputedStyle = originalStyle;
+    }
+  });
+
+  it('restarts an interrupted eased change from where its arc is drawn', () => {
+    const calls: Keyframe[][] = [];
+    const original = Element.prototype.animate;
+    const originalStyle = window.getComputedStyle;
+    // An ease-in curve (t²) evaluated the way the component probes it.
+    class EaseInEffect {
+      time = 0;
+      getComputedTiming() {
+        return {progress: this.time * this.time};
+      }
+    }
+    class Probe {
+      constructor(private effect: EaseInEffect) {}
+      set currentTime(ms: number) {
+        this.effect.time = ms / 1000;
+      }
+    }
+    vi.stubGlobal('KeyframeEffect', EaseInEffect);
+    vi.stubGlobal('Animation', Probe);
+    Element.prototype.animate = function (
+      this: Element,
+      keyframes: Keyframe[],
+    ) {
+      calls.push(keyframes);
+      // Every running change is half way through its time.
+      return {
+        cancel() {},
+        playState: 'running',
+        effect: {getComputedTiming: () => ({progress: 0.5})},
+        onfinish: null,
+      } as unknown as Animation;
+    } as typeof Element.prototype.animate;
+    window.getComputedStyle = ((element: Element) => {
+      const real = originalStyle(element);
+      if (element.classList.contains('astryx-circular-progress-fill')) {
+        return {
+          ...real,
+          transitionDuration: '400ms',
+          transitionTimingFunction: 'ease-in',
+        } as CSSStyleDeclaration;
+      }
+      return real;
+    }) as typeof window.getComputedStyle;
+    try {
+      const {rerender} = render(
+        <CircularProgress value={0} size="md" label="Progress" />,
+      );
+      rerender(<CircularProgress value={100} size="md" label="Progress" />);
+      calls.length = 0;
+      rerender(<CircularProgress value={50} size="md" label="Progress" />);
+      const cap = calls[2];
+      const angle = (frame: Keyframe) =>
+        Number(/rotate\(([-\d.]+)deg\)/.exec(String(frame.transform))?.[1]);
+      // Half its time into 0% → 100% on ease-in, the arc is drawn at 25%
+      // (90deg), not at the 50% its time fraction would give.
+      expect(angle(cap[0])).toBeCloseTo(90, 5);
+    } finally {
+      Element.prototype.animate = original;
+      window.getComputedStyle = originalStyle;
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('stops a running change when the ring turns indeterminate, and draws the next value at once', () => {
+    const calls: Keyframe[][] = [];
+    let cancelled = 0;
+    stubLinearTiming();
+    const original = Element.prototype.animate;
+    const originalStyle = window.getComputedStyle;
+    Element.prototype.animate = function (
+      this: Element,
+      keyframes: Keyframe[],
+    ) {
+      calls.push(keyframes);
+      // Every change is half way through its time when the next render comes.
+      return {
+        cancel() {
+          cancelled += 1;
+        },
+        playState: 'running',
+        effect: {getComputedTiming: () => ({progress: 0.5})},
+        onfinish: null,
+      } as unknown as Animation;
+    } as typeof Element.prototype.animate;
+    window.getComputedStyle = ((element: Element) => {
+      const real = originalStyle(element);
+      if (element.classList.contains('astryx-circular-progress-fill')) {
+        return {
+          ...real,
+          transitionDuration: '400ms',
+          transitionTimingFunction: 'linear',
+        } as CSSStyleDeclaration;
+      }
+      return real;
+    }) as typeof window.getComputedStyle;
+    try {
+      const {rerender} = render(
+        <CircularProgress value={0} size="md" label="Progress" />,
+      );
+      rerender(<CircularProgress value={80} size="md" label="Progress" />);
+      expect(calls).toHaveLength(4);
+      rerender(
+        <CircularProgress
+          value={80}
+          isIndeterminate
+          size="md"
+          label="Progress"
+        />,
+      );
+      // The four layers' animations stop with the determinate ring.
+      expect(cancelled).toBe(4);
+      calls.length = 0;
+      // The indeterminate ring never drew the 80% it held, so the next value
+      // draws at once: nothing sweeps back from 80%.
+      rerender(<CircularProgress value={30} size="md" label="Progress" />);
+      expect(calls).toHaveLength(0);
+      // The change after that starts from the 30% now drawn (108deg).
+      rerender(<CircularProgress value={60} size="md" label="Progress" />);
+      expect(calls).toHaveLength(4);
+      const cap = calls[2];
+      const angle = (frame: Keyframe) =>
+        Number(/rotate\(([-\d.]+)deg\)/.exec(String(frame.transform))?.[1]);
+      expect(angle(cap[0])).toBeCloseTo(108, 5);
+    } finally {
+      Element.prototype.animate = original;
+      vi.unstubAllGlobals();
+      window.getComputedStyle = originalStyle;
+    }
+  });
+
+  it('releases a running change when it unmounts', () => {
+    let cancelled = 0;
+    stubLinearTiming();
+    const original = Element.prototype.animate;
+    const originalStyle = window.getComputedStyle;
+    Element.prototype.animate = function () {
+      return {
+        cancel() {
+          cancelled += 1;
+        },
+        playState: 'running',
+        effect: {getComputedTiming: () => ({progress: 0.5})},
+        onfinish: null,
+      } as unknown as Animation;
+    } as typeof Element.prototype.animate;
+    window.getComputedStyle = ((element: Element) => {
+      const real = originalStyle(element);
+      if (element.classList.contains('astryx-circular-progress-fill')) {
+        return {
+          ...real,
+          transitionDuration: '400ms',
+          transitionTimingFunction: 'linear',
+        } as CSSStyleDeclaration;
+      }
+      return real;
+    }) as typeof window.getComputedStyle;
+    try {
+      const {rerender, unmount} = render(
+        <CircularProgress value={0} size="md" label="Progress" />,
+      );
+      rerender(<CircularProgress value={80} size="md" label="Progress" />);
+      unmount();
+      // The change's cleanup cancels the four layers' animations.
+      expect(cancelled).toBe(4);
+    } finally {
+      Element.prototype.animate = original;
+      vi.unstubAllGlobals();
+      window.getComputedStyle = originalStyle;
+    }
   });
 
   it('handles zero max gracefully', () => {

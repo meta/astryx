@@ -14,6 +14,10 @@ import type {OperatorValue, FilterValue, EnumItem} from './types';
 import type {InternalConfig} from './useInternalConfig';
 import type {Locale, TranslatorFn} from '../i18n';
 import {truncateCharacters} from '../utils/characters';
+import {registerEnglishFallback} from '../i18n/englishFallback';
+import english from '../i18n/generated-english/PowerSearch/formatFilterValue.generated';
+
+registerEnglishFallback(english);
 
 function truncate(str: string, maxLength: number): string {
   return truncateCharacters(str, maxLength);
@@ -28,8 +32,25 @@ function formatEnumLabel(
 }
 
 function formatNumber(value: number, locale: Locale, units?: string): string {
-  const formatted = new Intl.NumberFormat(locale).format(value);
+  const formatted = formatSharedNumber(value, locale);
   return units ? `${formatted} ${units}` : formatted;
+}
+
+/**
+ * A number in the provider locale's digits, decimal mark, and — unless the
+ * options say otherwise — grouping. The shared number helper for
+ * PowerSearch's own readings of a value — this module owns the raw `Intl`
+ * access.
+ */
+export function formatSharedNumber(
+  value: number,
+  locale: Locale,
+  options?: Pick<
+    Intl.NumberFormatOptions,
+    'useGrouping' | 'maximumFractionDigits'
+  >,
+): string {
+  return new Intl.NumberFormat(locale, options).format(value);
 }
 
 export function formatDateAbsolute(

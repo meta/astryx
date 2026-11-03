@@ -364,6 +364,21 @@ test('the hiding affordance releases focus before its fade finishes', async ({
   await affordance.focus();
   await expect(affordance).toBeFocused();
 
+  // `visibility` flips only after the fade. Focus leaving while it is still
+  // visible proves the immediate `inert` state rather than the delayed CSS.
+  // Read it as focus leaves: a check after the focus poll can land after the
+  // fade on a slow runner, and then says nothing about when focus left.
+  await affordance.evaluate((element, pillSelector) => {
+    element.addEventListener(
+      'blur',
+      () => {
+        const pillElement = document.querySelector(pillSelector);
+        (window as unknown as {__visibilityAtBlur: string}).__visibilityAtBlur =
+          pillElement ? getComputedStyle(pillElement).visibility : '';
+      },
+      {once: true},
+    );
+  }, PILL);
   await page.keyboard.press('Enter');
   await expect
     .poll(
@@ -372,10 +387,12 @@ test('the hiding affordance releases focus before its fade finishes', async ({
       {timeout: 5000},
     )
     .toBe(false);
-
-  // `visibility` flips only after the fade. Focus leaving while it is still
-  // visible proves the immediate `inert` state rather than the delayed CSS.
-  await expect(pill).toHaveCSS('visibility', 'visible');
+  expect(
+    await page.evaluate(
+      () =>
+        (window as unknown as {__visibilityAtBlur?: string}).__visibilityAtBlur,
+    ),
+  ).toBe('visible');
   await expect
     .poll(async () => distanceFromBottom(root), {timeout: 5000})
     .toBeLessThan(2);

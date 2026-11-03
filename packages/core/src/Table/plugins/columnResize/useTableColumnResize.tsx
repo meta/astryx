@@ -29,6 +29,14 @@ import {
   DEFAULT_MIN_COLUMN_WIDTH,
 } from '../../columnUtils';
 import {observeResize} from '../../../utils/sharedResizeObserver';
+import {getNodeText} from '../../../utils/getNodeText';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/columnResize/useTableColumnResize.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Config Type
@@ -384,6 +392,7 @@ function ResizeHandle({
   isDraggingRef,
   tableRef,
 }: ResizeHandleProps) {
+  const t = useComponentTranslator();
   const setTableDragging = useCallback(
     (dragging: boolean) => {
       const table = tableRef.current;
@@ -743,10 +752,11 @@ function ResizeHandle({
     ],
   );
 
-  const ariaLabel =
-    typeof columnHeader === 'string'
-      ? `Resize column ${columnHeader}`
-      : `Resize column ${columnKey}`;
+  // Named by the column's visible text, also when its header is a node; the
+  // key is the fallback only for a header with no reachable text (AR1).
+  const ariaLabel = t('@astryx.table.columnResize.resizeColumn', {
+    label: getNodeText(columnHeader) || columnKey,
+  });
 
   return (
     <div

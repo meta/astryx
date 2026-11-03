@@ -33,6 +33,10 @@ const STORIES = [
 const RTL_LOCALE = 'lab-schedule--right-to-left-locale';
 
 let evidence: Evidence;
+
+// The stories show one fixed week, built in the Schedule's own
+// America/Los_Angeles (Schedule.stories.tsx), so this contract reads the same
+// events in any browser zone and on any day; it needs no zone or clock pin.
 test.beforeAll(async () => {
   evidence = await startEvidence();
 });

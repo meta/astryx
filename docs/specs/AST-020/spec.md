@@ -204,9 +204,9 @@ review. It does not claim that one automated pass proves complete accessibility.
 
 ## Current-state impact
 
-[Issue #4112](https://github.com/facebook/astryx/issues/4112) established the
+[Issue #4112](https://github.com/meta/astryx/issues/4112) established the
 reusable pattern-contract direction. The closed
-[Switch prototype](https://github.com/facebook/astryx/pull/4113) demonstrated one
+[Switch prototype](https://github.com/meta/astryx/pull/4113) demonstrated one
 contract running through jsdom and Chromium bindings, source-linked expectation ids,
 and exact known failures. It also showed why axe and pattern contracts are
 complementary: axe finds broad markup violations, while the contract verifies the

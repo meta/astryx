@@ -1,17 +1,17 @@
 {
   "name": "@astryxdesign/build",
-  "version": "0.7.5",
+  "version": "0.7.7",
   "description": "Build plugins for Astryx source builds — babel, PostCSS, and Vite integrations",
   "author": "Meta Open Source",
   "license": "MIT",
-  "homepage": "https://github.com/facebook/astryx#readme",
+  "homepage": "https://github.com/meta/astryx#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/facebook/astryx.git",
+    "url": "git+https://github.com/meta/astryx.git",
     "directory": "packages/build"
   },
   "bugs": {
-    "url": "https://github.com/facebook/astryx/issues"
+    "url": "https://github.com/meta/astryx/issues"
   },
   "keywords": [
     "astryx",
@@ -29,13 +29,28 @@
       "types": "./dist/vite.d.ts",
       "import": "./dist/vite.mjs"
     },
-    "./next": "./src/next.js"
+    "./next": "./src/next.js",
+    "./next/postcss": "./src/next-postcss.js"
   },
   "files": [
     "src",
-    "dist"
+    "dist",
+    "!**/*.test.*",
+    "!**/*.spec.js",
+    "!**/*.spec.jsx",
+    "!**/*.spec.mjs",
+    "!**/*.spec.cjs",
+    "!**/*.spec.ts",
+    "!**/*.spec.tsx",
+    "!**/*.spec.mts",
+    "!**/*.spec.cts",
+    "!**/*.spec.d.ts",
+    "!**/__tests__/**",
+    "!**/__mocks__/**",
+    "!**/*.bench.*"
   ],
   "scripts": {
+    "api:report": "node ../../scripts/api-report/cli.mjs --package .",
     "build": "node build.mjs",
     "prepack": "pnpm build"
   },
@@ -54,8 +69,11 @@
     "lightningcss": "^1.32.0"
   },
   "devDependencies": {
+    "@stylexjs/postcss-plugin": "catalog:",
+    "@stylexjs/stylex": "catalog:",
     "enhanced-resolve": "^5.21.6",
-    "esbuild": "catalog:"
+    "esbuild": "catalog:",
+    "next": "16.3.6"
   },
   "peerDependenciesMeta": {
     "@stylexjs/unplugin": {

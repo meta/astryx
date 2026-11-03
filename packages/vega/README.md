@@ -268,7 +268,7 @@ pnpm -F @astryxdesign/vega build
 
 The committed `private: true` is npm's hard guarantee that no stable publish can ever happen — **do not remove it until the graduation steps below are intentionally taken.**
 
-> **First canary won't publish until the package name is claimed on npm.** npm cannot register OIDC trust for a name that does not yet exist on the registry. An `@astryxdesign` npm org owner must claim the name and register `release.yml` as its trusted publisher once, following [Trusted-publisher setup](https://github.com/facebook/astryx/blob/main/docs/release.md#trusted-publisher-setup) (this also applies before the first stable publish). Until this is done, CI's canary publish for this package will fail.
+> **First canary won't publish until the package name is claimed on npm.** npm cannot register OIDC trust for a name that does not yet exist on the registry. An `@astryxdesign` npm org owner must claim the name and register `release.yml` as its trusted publisher once, following [Trusted-publisher setup](https://github.com/meta/astryx/blob/main/docs/release.md#trusted-publisher-setup) (this also applies before the first stable publish). Until this is done, CI's canary publish for this package will fail.
 
 ### Graduating to a public stable (`latest`) release
 

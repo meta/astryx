@@ -57,11 +57,15 @@ test('the viewer is as tall as the dynamic viewport, so a toolbar never covers i
       }
     };
     for (const sheet of Array.from(document.styleSheets)) {
-      try {
-        walk(sheet.cssRules);
-      } catch {
-        // A cross-origin stylesheet's rules are unreadable and not ours.
+      // A cross-origin stylesheet's rules are unreadable, and not ours: skip
+      // only such a sheet, so any other error still fails the proof.
+      if (
+        sheet.href != null &&
+        new URL(sheet.href, document.baseURI).origin !== location.origin
+      ) {
+        continue;
       }
+      walk(sheet.cssRules);
     }
     return {heights, supported: CSS.supports('height', '100dvh')};
   });

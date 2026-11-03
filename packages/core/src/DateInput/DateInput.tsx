@@ -26,6 +26,7 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {
   colorVars,
   sizeVars,
@@ -41,7 +42,6 @@ import {
   inputStatusBorderStyles,
   inputStatusHoverShadowStyles,
   inputStatusFocusWithinStyles,
-  type FieldStatusVariant,
 } from '../Field';
 import {Icon} from '../Icon';
 import {VisuallyHidden} from '../VisuallyHidden';
@@ -63,6 +63,11 @@ import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {usePopover} from '../Popover';
+import {
+  isFocusInsideOwnedLayer,
+  isPressInsideOwnedLayer,
+  useOutsidePress,
+} from '../Layer/outsidePress';
 import {NativeDateField} from './NativeDateField';
 import {TouchDateField} from './TouchDateField';
 import {useTooltip} from '../Tooltip';
@@ -82,19 +87,6 @@ import {
 import {useDevWarning} from '../hooks/useDevWarning';
 
 const styles = stylex.create({
-  // While disabled or busy the field takes no hover ring, but the focus ring
-  // returns while this field's own input holds focus (spec:AST-085 FR6).
-  // Defaults repeat the shared border and shadow.
-  disabledFocusRing: {
-    borderColor: {
-      default: colorVars['--color-border-emphasized'],
-      ':has(input:focus)': colorVars['--color-accent'],
-    },
-    boxShadow: {
-      default: 'none',
-      ':has(input:focus)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
-    },
-  },
   iconButton: {
     display: 'flex',
     alignItems: 'center',
@@ -212,9 +204,17 @@ import {
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
-import {useLocale, useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/DateInput/DateInput.generated';
+
+registerEnglishFallback(english);
 export interface DateInputProps extends Omit<
   FieldInputBaseProps<HTMLInputElement>,
   'onChange' | 'defaultValue'
@@ -344,7 +344,7 @@ export interface DateInputProps extends Omit<
    * - 'tooltip': no message box; the status icon becomes a focusable info-tip button that reveals the message on hover, keyboard focus, or tap
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
 
   /**
    * Width of the field. Numbers are treated as pixels, strings are used as-is
@@ -481,6 +481,20 @@ export interface DateInputProps extends Omit<
 const TOUCH_POINTER_QUERY = '(pointer: coarse)';
 
 /**
+ * Whether `target` is a label whose control is `input`. Checked by nodeType
+ * and tag name, so a label in a same-origin iframe counts.
+ */
+function isLabelFor(target: EventTarget, input: HTMLInputElement | null) {
+  const node = target as Partial<HTMLLabelElement>;
+  return (
+    input != null &&
+    node.nodeType === 1 &&
+    node.localName === 'label' &&
+    node.control === input
+  );
+}
+
+/**
  * The pointer-driven field: a text input you can type into, with a calendar
  * in a popover beside it. `DateInput` renders this whenever the primary
  * pointer is not a finger — see {@link TOUCH_POINTER_QUERY}.
@@ -533,7 +547,7 @@ function PointerDateField({
     onKeyDown: onKeyDownProp,
     ...controlProps
   } = rest;
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder =
@@ -642,18 +656,44 @@ function PointerDateField({
       ? true
       : parseDateInput(pendingInput, locale) !== null;
 
+  const fieldElementRef = useRef<HTMLDivElement | null>(null);
+  // Set just before a close that focus already left the field for, so onHide
+  // does not pull focus back to the input.
+  const isFocusMovingAwayRef = useRef(false);
+  const outsidePress = useOutsidePress();
   const popover = usePopover({
+    // A text input cannot be an invoker. Light dismiss would count a press in
+    // it as outside and close the calendar.
+    hasLightDismiss: false,
+    onShow: () => {
+      const field = fieldElementRef.current;
+      if (field == null) {
+        return;
+      }
+      outsidePress.start(
+        field,
+        // The label counts too: a press there focuses the input, which would
+        // otherwise close the calendar and reopen it on the same press.
+        path =>
+          isPressInsideOwnedLayer(path, field, popover.id) ||
+          path.some(target => isLabelFor(target, inputRef.current)),
+        // Called after usePopover has returned, so `popover` is assigned.
+        () => popover.hide(),
+      );
+    },
     dialogLabel: t('@astryx.dateInput.dialogLabel'),
     closeButtonLabel: t('@astryx.dateInput.closeCalendar'),
     // Return focus to the input when the calendar closes — but only when the
     // dismiss left focus detached (Escape, or a click on non-focusable empty
-    // space), which the focus trap can't restore on its own. A native
-    // popover="auto" light-dismiss fires synchronously with the pointer event
-    // that moved focus, so if the user clicked another control — the clear
-    // button, another field, anywhere — focus has already landed there;
-    // reclaiming it would fight their click.
+    // space), which the focus trap can't restore on its own. An outside press
+    // closes the calendar after the pointer event that moved focus, so if the
+    // user clicked another control — another field, anywhere — focus has
+    // already landed there; reclaiming it would fight their click.
     onHide: () => {
-      if (isFocusDetached()) {
+      outsidePress.stop();
+      const isFocusMovingAway = isFocusMovingAwayRef.current;
+      isFocusMovingAwayRef.current = false;
+      if (!isFocusMovingAway && isFocusDetached()) {
         inputRef.current?.focus();
       }
     },
@@ -680,7 +720,7 @@ function PointerDateField({
   // Unified change handler that fires both onChange and changeAction
   const fireChange = useCallback(
     (newValue: ISODateString | undefined) => {
-      if (isBusy) {
+      if (isEffectivelyDisabled) {
         return;
       }
       onChange?.(newValue);
@@ -691,7 +731,13 @@ function PointerDateField({
         });
       }
     },
-    [isBusy, onChange, changeAction, startTransition, setOptimisticValue],
+    [
+      isEffectivelyDisabled,
+      onChange,
+      changeAction,
+      startTransition,
+      setOptimisticValue,
+    ],
   );
 
   // Handle clear button click
@@ -714,11 +760,16 @@ function PointerDateField({
   // Handle date selection from calendar
   const handleDateSelect = useCallback(
     (selectedDate: ISODateString) => {
+      // An already-open calendar can outlive an enabled owner. Reject the
+      // whole selection, including dismissal, so its focused day stays put.
+      if (isDisabled) {
+        return;
+      }
       fireChange(selectedDate);
       setPendingInput(null);
       popover.hide();
     },
-    [fireChange, popover],
+    [isDisabled, fireChange, popover],
   );
 
   // Handle input text change - update immediately if valid and allowed
@@ -785,10 +836,29 @@ function PointerDateField({
     locale,
   ]);
 
-  // Handle blur - validate, check constraints, and clear pending input
+  // Handle blur - validate, check constraints, and clear pending input.
   const handleBlur = useCallback(() => {
     commitPendingInput();
   }, [commitPendingInput]);
+
+  // A manual popover has no auto-popover exclusivity, so without this close
+  // the next field's calendar would open beside this one. Focus going nowhere
+  // (a window switch) leaves it open.
+  const handleFieldBlur = useCallback(
+    (e: React.FocusEvent<HTMLDivElement>) => {
+      const next = e.relatedTarget;
+      if (
+        !popover.isOpen ||
+        next == null ||
+        isFocusInsideOwnedLayer(next, fieldElementRef.current, popover.id)
+      ) {
+        return;
+      }
+      isFocusMovingAwayRef.current = true;
+      popover.hide();
+    },
+    [popover],
+  );
 
   // Handle keyboard events on input
   const handleInputKeyDown = useCallback(
@@ -814,23 +884,31 @@ function PointerDateField({
         if (!isEffectivelyDisabled) {
           popover.show({skipAutoFocus: true});
         }
-      } else if (e.key === 'Enter') {
+      } else if (
+        e.key === 'Enter' &&
+        (pendingInput !== null || isEffectivelyDisabled)
+      ) {
+        // Typed text holds Enter back, or a form would submit the value from
+        // before the commit. A disabled or busy field must not submit its
+        // form either. Otherwise Enter keeps its default, as in any text field.
         e.preventDefault();
         commitPendingInput();
       }
     },
-    [popover, commitPendingInput, isEffectivelyDisabled],
+    [popover, commitPendingInput, isEffectivelyDisabled, pendingInput],
   );
 
   const inputWrapper = (
     <div
       ref={el => {
+        fieldElementRef.current = el;
         popover.triggerRef(el);
         // Anchor + hover/focus listeners for the disabled-message tooltip.
         // Handlers are gated internally by isEnabled, and anchor names
         // compose, so attaching unconditionally is safe.
         disabledMessageTooltip.ref(el);
       }}
+      onBlur={handleFieldBlur}
       {...(inputGroup ? inputGroupItemProps : undefined)}
       {...mergeProps(
         themeProps('date-input', {
@@ -845,7 +923,7 @@ function PointerDateField({
           // keeps its ordinary paint and shows the Spinner (spec:AST-085
           // FR6, family:buttons FR4).
           isDisabled && inputWrapperStyles.disabled,
-          isEffectivelyDisabled && styles.disabledFocusRing,
+          isEffectivelyDisabled && inputDisabledFocusStyles.inputFocusRing,
           status && inputStatusBorderStyles[status.type],
           status &&
             !isEffectivelyDisabled &&
@@ -948,17 +1026,21 @@ function PointerDateField({
       {isBusy && <Spinner size="sm" aria-hidden="true" />}
       {statusIcon}
       {popover.render(
-        <Calendar
-          handleRef={calendarRef}
-          mode="single"
-          value={optimisticValue ?? null}
-          onChange={handleDateSelect}
-          min={min}
-          max={max}
-          dateConstraints={dateConstraints}
-          numberOfMonths={numberOfMonths}
-          weekStartsOn={weekStartsOn}
-        />,
+        // The layer renders its children open or closed, so mount the
+        // calendar only while it is open; it opens on the current value.
+        !popover.isOpen ? null : (
+          <Calendar
+            handleRef={calendarRef}
+            mode="single"
+            value={optimisticValue ?? null}
+            onChange={handleDateSelect}
+            min={min}
+            max={max}
+            dateConstraints={dateConstraints}
+            numberOfMonths={numberOfMonths}
+            weekStartsOn={weekStartsOn}
+          />
+        ),
         {placement: 'below', alignment: 'start'},
       )}
       {showsDisabledMessage &&

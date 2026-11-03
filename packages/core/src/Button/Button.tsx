@@ -4,7 +4,7 @@
 
 /**
  * @file Button.tsx
- * @input Uses React, ButtonHTMLAttributes, ReactNode, i18n (useTranslator), group contexts
+ * @input Uses React, ButtonHTMLAttributes, ReactNode, i18n (useComponentTranslator), group contexts
  * @output Exports Button component, ButtonProps, ButtonVariant types
  * @position Core implementation; consumed by index.ts, tested by Button.test.tsx
  *
@@ -19,6 +19,7 @@
  */
 
 import {
+  isValidElement,
   use,
   useEffect,
   useRef,
@@ -43,21 +44,23 @@ import {
   shadowVars,
   focusVars,
 } from '../theme/tokens.stylex';
-import {Spinner} from '../Spinner';
-import {VisuallyHidden} from '../VisuallyHidden';
+import {Spinner} from '../Spinner/Spinner';
+import {Icon} from '../Icon/Icon';
+import {VisuallyHidden} from '../VisuallyHidden/VisuallyHidden';
 import {IconDefaultSizeProvider} from '../Icon/IconDefaultSizeContext';
 import {iconBoxSizeStyles, type IconSize} from '../Icon/IconSize.stylex';
 
 import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {useButtonGroup} from '../ButtonGroup/ButtonGroupContext';
+import {PressGroupContext} from '../hooks/pressGroupContext';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {
   groupStyles as inputGroupStyles,
   inputGroupItemProps,
 } from '../InputGroup/groupStyles';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
@@ -65,8 +68,21 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {useTranslator} from '../i18n';
 import type {ButtonVariantMap} from './index';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Button/Button.generated';
+import {isRenderable} from '../utils/isRenderable';
+
+registerEnglishFallback(english);
+
+/**
+ * Written by the press controller or a group's tracker while a press is
+ * believed. Typed `string`, so StyleX reads it as a computed key.
+ */
+const PRESSED_ON: string = '[data-astryx-press="on"]';
 
 /**
  * Base button styles
@@ -129,7 +145,19 @@ const styles = stylex.create({
         default: 'scale(0.98)',
         '@media (pointer: coarse)': 'scale(1)',
       },
-      '[data-astryx-press="on"]': 'scale(0.98)',
+      [PRESSED_ON]: 'scale(0.98)',
+    },
+  },
+  // A tracked action's own `:active` image paints nothing: the tracker paints
+  // the action under the pointer, which need not be the one pressed first.
+  trackedOverlay: {
+    backgroundSize: {default: null, [`:active:not(${PRESSED_ON})`]: '0 0'},
+  },
+  // A tracked action's press is painted by its group's tracker alone.
+  pressableTracked: {
+    transform: {
+      default: 'scale(1)',
+      [PRESSED_ON]: 'scale(0.98)',
     },
   },
   inactive: {
@@ -138,7 +166,7 @@ const styles = stylex.create({
     transform: {
       default: 'none',
       ':active': 'none',
-      '[data-astryx-press="on"]': 'none',
+      [PRESSED_ON]: 'none',
     },
   },
   disabled: {
@@ -151,7 +179,7 @@ const styles = stylex.create({
     backgroundImage: {
       default: 'none',
       ':active': 'none',
-      '[data-astryx-press="on"]': 'none',
+      [PRESSED_ON]: 'none',
     },
   },
   iconOnly: {
@@ -463,8 +491,14 @@ const loadingStyles = stylex.create({
  * popover is never an in-flow member — it is `display: none` until shown, then
  * promoted to the top layer. Context layers also retain an inert `<template>`
  * marker so they can re-resolve their JSX position. Neither element is a group
- * member, so "last member" is: no following element sibling besides those two
- * pieces of layer infrastructure.
+ * member, so "last member" is: no following element sibling besides those
+ * pieces of layer infrastructure — the last sibling that is not one of them.
+ *
+ * Written as `:nth-last-child(1 of …)`, not `:not(:has(~ …))`: the stylesheet
+ * is global, and WebKit re-evaluates a sibling-relative `:has()` against every
+ * earlier sibling on each insertion, so filling any container on the page
+ * became quadratic (ButtonGroup FR3). A member is never layer infrastructure,
+ * so being the last such sibling is the same as having none after it.
  *
  * Reading it the other way round — marking the *buttons* and testing for a
  * marked sibling — is the trap: it silently reclassifies anything it doesn't
@@ -480,7 +514,8 @@ const loadingStyles = stylex.create({
  * The leading edge still uses `:first-child` — a member's button always precedes
  * its own layer, so the first button is genuinely `:first-child`.
  */
-const IS_LAST_ITEM = ':not(:has(~ *:not([popover]):not(template):not(dialog)))';
+const IS_LAST_ITEM =
+  ':nth-last-child(1 of :not([popover]):not(template):not(dialog))';
 
 const groupStyles = stylex.create({
   horizontal: {
@@ -546,6 +581,21 @@ const groupStyles = stylex.create({
 });
 
 /**
+ * Whether `node` adds nothing to a content name: nothing renders, or an Icon
+ * with no label. Any other node can add text.
+ */
+function addsNoName(node: ReactNode): boolean {
+  if (!isRenderable(node)) {
+    return true;
+  }
+  if (!isValidElement<{label?: unknown}>(node) || node.type !== Icon) {
+    return false;
+  }
+  const {label} = node.props;
+  return typeof label !== 'string' || label.trim() === '';
+}
+
+/**
  * A versatile button component with multiple variants.
  *
  * Styles use Astryx theme tokens via StyleX.
@@ -598,9 +648,10 @@ export function Button({
   ...props
 }: ButtonProps): ReactNode {
   const pressFeedback = usePressFeedback();
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const size = useSize(sizeProp, 'md');
   const buttonGroup = useButtonGroup();
+  const isGroupTracked = use(PressGroupContext);
   const inputGroup = useInputGroup();
 
   const [isPending, startTransition] = useTransition();
@@ -729,11 +780,13 @@ export function Button({
     sizeStyles[size],
     isIconOnly && styles.iconOnly,
     interactionOverlayStyles.backgroundImage,
+    isGroupTracked && styles.trackedOverlay,
     buttonDisabled && styles.inactive,
     isTrueDisabled && styles.disabled,
     useAriaDisabled && styles.ariaDisabled,
     renderAsLink && styles.link,
-    !buttonGroup && styles.pressable,
+    !buttonGroup &&
+      (isGroupTracked ? styles.pressableTracked : styles.pressable),
     buttonGroup &&
       (buttonGroup.orientation === 'horizontal'
         ? groupStyles.horizontal
@@ -790,7 +843,7 @@ export function Button({
               : loadingStyles.hiddenContent),
         )}
         aria-hidden={isLoadingState || undefined}>
-        {icon && (
+        {isRenderable(icon) && (
           <span
             {...stylex.props(styles.iconWrapper, iconBoxSizeStyles[iconSize])}>
             <IconDefaultSizeProvider value={iconSize}>
@@ -801,7 +854,7 @@ export function Button({
         {isIconOnly ? null : (
           <span {...stylex.props(styles.labelText)}>{children ?? label}</span>
         )}
-        {!isIconOnly && endContent && (
+        {!isIconOnly && isRenderable(endContent) && (
           <span {...stylex.props(styles.endContentWrapper)}>{endContent}</span>
         )}
       </span>
@@ -822,10 +875,29 @@ export function Button({
     (children != null && children !== label);
   const ariaLabelProp = needsAriaLabel ? {'aria-label': label} : null;
 
+  // The Button's accessible name when props decide it: the derived
+  // aria-label, else a caller aria-label, else the label text alone. It is
+  // not known here when a caller aria-labelledby names the Button from other
+  // elements, or when `icon` or `endContent` can add text to its content
+  // name (a count, for example). A decorative Icon in either slot adds none.
+  const accessibleName =
+    props['aria-labelledby'] != null
+      ? undefined
+      : needsAriaLabel
+        ? label
+        : (props['aria-label'] ??
+          (addsNoName(icon) && addsNoName(endContent) ? label : undefined));
+  // A tooltip that repeats the name adds nothing to the description, so a
+  // screen reader does not read the same words twice.
+  const isTooltipName =
+    tooltip != null &&
+    accessibleName != null &&
+    tooltip.trim() === accessibleName.trim();
+
   // When a tooltip is attached via the hook, point aria-describedby at the
   // tooltip content (composing with any consumer-provided value).
   const describedByProp =
-    tooltip != null
+    tooltip != null && !isTooltipName
       ? {
           'aria-describedby':
             [props['aria-describedby'], tooltipHook.describedBy]

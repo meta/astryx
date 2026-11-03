@@ -72,7 +72,8 @@ export const docs = {
     {
       name: 'labelTooltip',
       type: 'string',
-      description: 'Tooltip text for the info icon after the label.',
+      description:
+        'Tooltip text for the info icon after the label. Hover shows it; on a touch screen a tap on the icon opens it without focusing the field or toggling the control, while a mouse click on the icon activates the control like the rest of the label.',
     },
     {
       name: 'description',
@@ -176,7 +177,8 @@ export const docsZh = {
     {
       name: 'labelTooltip',
       type: 'string',
-      description: '标签后信息图标的工具提示文本。',
+      description:
+        '标签后信息图标的工具提示文本。悬停即可显示；在触摸屏上点按图标即可打开，不会聚焦字段或切换控件；用鼠标点击图标则与点击标签其他部分一样激活控件。',
     },
     {
       name: 'description',
