@@ -19,6 +19,7 @@ deciding_specs:
   [
     spec:AST-086/DEC-2,
     spec:AST-099/DEC-1,
+    spec:AST-099/DEC-5,
     spec:AST-105/DEC-1,
     spec:AST-107/DEC-2,
   ]
@@ -171,27 +172,33 @@ those contracts.
   adopting components hold no Effect, observer, timer, or
   listener of their own to detect page load, read rendered text, or write that
   announcement. The module follows INV3 and INV5.
-- **INV11 — The on-screen keyboard has one owner.** In `@astryxdesign/core`,
-  one shared internal hook in the keyboard module (`packages/core/src/keyboard/`)
-  measures the on-screen keyboard, keeps the page
-  from panning on focus, and dismisses the keyboard when a surface moves
-  (`spec:AST-099`); it is not exported. The keyboard height and each keyboard
-  change's transition (start time, resting value, curve) reach styles only as
-  the hook's value and live only in the hook: each consumer applies them
-  through a StyleX functional style on its own element, and no CSS custom
-  property on the document root or a shared ancestor carries them. No Core
+- **INV11 — The on-screen keyboard has one owner.** In `@astryxdesign/core`, one
+  shared internal hook in the keyboard module (`packages/core/src/keyboard/`)
+  measures the on-screen keyboard, keeps the page from panning on focus, and
+  dismisses the keyboard when a surface moves (`spec:AST-099`); it is not
+  exported. The keyboard height and each keyboard change's transition (start
+  time, resting value, curve) reach styles only as the hook's value and live
+  only in the hook: each consumer applies them through a StyleX functional style
+  on its own element, and no CSS custom property on the document root or a
+  shared ancestor carries them. The keyboard module may also write, and remove
+  when the keyboard hides, a translate on the nearest fixed-position ancestor of
+  a focused Core field that is docked to the viewport's bottom edge
+  (`spec:AST-099` FR9); it writes nothing else on app elements. This exception
+  is the owner's decision of 2026-11-03 (`spec:AST-099/DEC-5`): a field docked
+  in an app's own bottom bar rides the keyboard like one in a Core host. The
+  module owns that write as an INV5 resource: it removes the translate when the
+  keyboard hides, focus leaves the field, or the field unmounts. No Core
   component keeps its own visual-viewport listener for the keyboard. The hook
   publishes each keyboard change as one transition: a start time, a resting
   value, and a curve. Every Core consumer that rides the keyboard rides that
-  transition with compositor animations, a translate to the resting value,
-  never JavaScript per frame, and the hook makes at most one layout read per
-  keyboard change. A component outside Core does not ride; it commits the
-  resting value once. Packages outside Core cannot import the hook; a
-  component there that responds to the keyboard keeps one listener that
-  measures as `spec:AST-099` FR2 defines, keeps focus from panning as FR4
-  does, blurs as FR5 does, applies the height through a functional style on
-  its own elements, and follows INV3 and INV5. The hook follows INV3 and
-  INV5.
+  transition with compositor animations, a translate to the resting value, never
+  JavaScript per frame, and the hook makes at most one layout read per keyboard
+  change. A component outside Core does not ride; it commits the resting value
+  once. Packages outside Core cannot import the hook; a component there that
+  responds to the keyboard keeps one listener that measures as `spec:AST-099`
+  FR2 defines, keeps focus from panning as FR4 does, blurs as FR5 does, applies
+  the height through a functional style on its own elements, and follows INV3
+  and INV5. The hook follows INV3 and INV5.
 - **INV12 — Size changes inside a container have one module.** In
   `@astryxdesign/core`, one internal module produces the size-change glide
   `spec:AST-105` defines. It measures the layout before and after a reported
@@ -455,6 +462,9 @@ contracts.
   component that announces its own rendered content (INV10).
 - `spec:AST-099/DEC-1` — one keyboard height for every component, kept
   internal and applied through functional styles (INV11).
+- `spec:AST-099/DEC-5` — every Core field that brings up the keyboard stays
+  above it with no prop, and a field docked at the bottom rides it, moving an
+  app's bottom-docked fixed container too (INV11).
 - `spec:AST-105/DEC-1` — the size-change glide's public shape and behavior
   (INV12).
 - `spec:AST-107/DEC-2` — factories under every hook, the class and
