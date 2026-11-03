@@ -162,6 +162,10 @@
         },
         {
           "kind": "component",
+          "name": "SearchField"
+        },
+        {
+          "kind": "component",
           "name": "Stat"
         },
         {
