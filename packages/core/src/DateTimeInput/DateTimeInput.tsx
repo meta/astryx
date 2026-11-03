@@ -1143,12 +1143,18 @@ function PointerDateTimeField({
         if (!isEffectivelyDisabled) {
           popover.show({skipAutoFocus: true});
         }
-      } else if (e.key === 'Enter') {
+      } else if (
+        e.key === 'Enter' &&
+        (datePendingInput !== null || isEffectivelyDisabled)
+      ) {
+        // Typed text holds Enter back, or a form would submit the value from
+        // before the commit. A disabled or busy field must not submit its
+        // form either. Otherwise Enter keeps its default, as in any text field.
         e.preventDefault();
         commitDatePendingInput();
       }
     },
-    [popover, commitDatePendingInput, isEffectivelyDisabled],
+    [popover, commitDatePendingInput, isEffectivelyDisabled, datePendingInput],
   );
 
   // --- Time-option popover (#2727) ---

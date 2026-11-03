@@ -116,6 +116,14 @@ beforeEach(() => {
   tmpDir = fs.mkdtempSync(
     path.join(previousCwd, '.astryx-doctor-integration-'),
   );
+  // The fixture's own TypeScript config, scoped to its own files: a package
+  // with none in a folder inside the repository gets the repository's root
+  // config, as `tsc` reads it, and the props comparison compiles every file
+  // in the repository.
+  fs.writeFileSync(
+    path.join(tmpDir, 'tsconfig.json'),
+    `${JSON.stringify({extends: '../tsconfig.json', include: ['**/*']})}\n`,
+  );
   logCalls = [];
   vi.spyOn(console, 'log').mockImplementation((...args) => {
     logCalls.push(args.join(' '));

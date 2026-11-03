@@ -443,38 +443,74 @@ test('long popover content scrolls from the keyboard: Tab reaches its named grou
       top: Math.round(element.scrollTop),
       max: element.scrollHeight - element.clientHeight,
     }));
-  // Keyboard scrolling is smooth, so each press is followed until the region
-  // settles; the key is pressed until a press no longer moves it.
-  const settle = async () => {
-    let last = -1;
-    for (let frame = 0; frame < 40; frame += 1) {
-      const {top} = await scroll();
-      if (top === last) {
-        return top;
-      }
-      last = top;
-      await page.waitForTimeout(50);
-    }
-    return last;
+  // Keyboard scrolling is smooth, and a busy browser can start it frames after
+  // the press, so each press is followed to the region's `scrollend`. A press
+  // that starts no scroll within 60 frames of its keydown is one that cannot
+  // move the region.
+  const press = async (key: string) => {
+    await region.evaluate(element => {
+      (window as unknown as {scrolled?: Promise<boolean>}).scrolled =
+        new Promise<boolean>(resolve => {
+          const listening = new AbortController();
+          const end = (scrolled: boolean) => {
+            listening.abort();
+            resolve(scrolled);
+          };
+          let started = false;
+          element.addEventListener(
+            'scroll',
+            () => {
+              started = true;
+            },
+            {signal: listening.signal},
+          );
+          element.addEventListener('scrollend', () => end(true), {
+            signal: listening.signal,
+          });
+          // The frames count from the key's own keydown, so a slow runner
+          // between this setup and the press does not use them up.
+          window.addEventListener(
+            'keydown',
+            () => {
+              let frames = 0;
+              const wait = () => {
+                if (started || listening.signal.aborted) {
+                  return;
+                }
+                frames += 1;
+                if (frames > 60) {
+                  end(false);
+                  return;
+                }
+                requestAnimationFrame(wait);
+              };
+              requestAnimationFrame(wait);
+            },
+            {capture: true, once: true, signal: listening.signal},
+          );
+        });
+    });
+    await page.keyboard.press(key);
+    return page.evaluate(
+      () => (window as unknown as {scrolled?: Promise<boolean>}).scrolled,
+    );
   };
-  const pressUntilStill = async (key: string) => {
-    let top = await settle();
+  // The key is pressed until the region reaches its end or a press no longer
+  // moves it.
+  const pressUntilEnd = async (key: string) => {
     for (let presses = 0; presses < 200; presses += 1) {
-      await page.keyboard.press(key);
-      const next = await settle();
-      if (next === top) {
+      const {top, max} = await scroll();
+      if (top >= max - 1 || !(await press(key))) {
         break;
       }
-      top = next;
     }
     return scroll();
   };
   const atStart = await scroll();
-  const afterPageDown = await pressUntilStill('PageDown');
-  await page.keyboard.press('Home');
-  await settle();
+  const afterPageDown = await pressUntilEnd('PageDown');
+  await press('Home');
   const afterHome = await scroll();
-  const afterArrowDown = await pressUntilStill('ArrowDown');
+  const afterArrowDown = await pressUntilEnd('ArrowDown');
   // The surface itself stays inside the viewport.
   const surface = await dialog.boundingBox();
   const viewportHeight = page.viewportSize()?.height ?? 0;

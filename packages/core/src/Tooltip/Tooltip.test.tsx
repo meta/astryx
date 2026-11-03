@@ -25,8 +25,8 @@ import {
   fireEvent,
   waitFor,
 } from '@testing-library/react';
-import {useRef} from 'react';
-import {Tooltip} from './Tooltip';
+import {useRef, type ComponentProps} from 'react';
+import {Tooltip, TooltipWithTriggerBehavior} from './Tooltip';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
 import {Item} from '../Item/Item';
 import {Token} from '../Token/Token';
@@ -976,5 +976,141 @@ describe('Tooltip surface press', () => {
     // Positive control: a click on the label's own text still toggles it.
     fireEvent.click(screen.getByText('Accept'));
     expect(screen.getByRole('checkbox')).toBeChecked();
+  });
+});
+
+describe('Tooltip, and its press-to-pin path, on every input (component:Tooltip FR5, FR9)', () => {
+  beforeEach(() => {
+    __resetInteractionModalityForTest();
+  });
+
+  type Behavior = 'adaptive' | 'toggle';
+
+  /** An info-only trigger: a span, or under the toggle the button it pins. */
+  function setup(
+    triggerBehavior?: Behavior,
+    touchTrigger?: 'auto' | 'tap' | 'none',
+    trigger = triggerBehavior === 'toggle' ? 'button' : 'span',
+  ) {
+    const onOpenChange = vi.fn<(open: boolean) => void>();
+    render(
+      <TooltipWithTriggerBehavior
+        content="Billed monthly"
+        delay={0}
+        onOpenChange={onOpenChange}
+        triggerBehavior={triggerBehavior}
+        touchTrigger={touchTrigger}>
+        {trigger === 'button' ? (
+          <button type="button">Billing</button>
+        ) : (
+          <span tabIndex={0}>Billing</span>
+        )}
+      </TooltipWithTriggerBehavior>,
+    );
+    const opened = () => onOpenChange.mock.calls.some(([open]) => open);
+    return {trigger: screen.getByText('Billing'), opened};
+  }
+
+  /** A finger or a landed pen: down, up, then the click (a pen hovers, so no arrival). */
+  function tap(element: HTMLElement, pointerType: 'touch' | 'pen') {
+    if (pointerType === 'touch') {
+      fireEvent.pointerEnter(element, {pointerType});
+    }
+    fireEvent.pointerDown(element, {pointerType});
+    fireEvent.pointerUp(element, {pointerType});
+    fireEvent.click(element);
+  }
+
+  const settle = async () =>
+    new Promise(resolve => {
+      setTimeout(resolve, 50);
+    });
+
+  describe.each([
+    ['adaptive by default', undefined, true],
+    ['adaptive', 'adaptive', true],
+    ['toggle', 'toggle', true],
+  ] as const)('%s', (_, behavior, tapOpens) => {
+    it('a mouse hover previews it', async () => {
+      const {trigger, opened} = setup(behavior);
+      fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(trigger);
+      await waitFor(() => expect(opened()).toBe(true));
+    });
+
+    it('keyboard focus previews it', async () => {
+      const {trigger, opened} = setup(behavior);
+      const realMatches = trigger.matches.bind(trigger);
+      vi.spyOn(trigger, 'matches').mockImplementation((selector: string) =>
+        selector === ':focus-visible' ? true : realMatches(selector),
+      );
+      fireEvent.keyDown(document, {key: 'Tab'});
+      fireEvent.focusIn(trigger);
+      await waitFor(() => expect(opened()).toBe(true));
+    });
+
+    it.each(['touch', 'pen'] as const)(
+      `a %s tap ${tapOpens ? 'opens' : 'never opens'} it`,
+      async pointerType => {
+        const {trigger, opened} = setup(behavior);
+        tap(trigger, pointerType);
+        await settle();
+        expect(opened()).toBe(tapOpens);
+      },
+    );
+
+    it.each(['mouse click', 'touch tap'] as const)(
+      `a %s on a button trigger ${behavior === 'toggle' ? 'pins it' : 'pins nothing'}`,
+      async press => {
+        const {trigger} = setup(behavior, undefined, 'button');
+        if (press === 'mouse click') {
+          fireEvent.pointerDown(trigger, {pointerType: 'mouse'});
+          fireEvent.pointerUp(trigger, {pointerType: 'mouse'});
+          fireEvent.click(trigger);
+        } else {
+          tap(trigger, 'touch');
+        }
+        await settle();
+        expect(trigger.getAttribute('aria-expanded')).toBe(
+          behavior === 'toggle' ? 'true' : null,
+        );
+      },
+    );
+  });
+
+  it.each([
+    ['adaptive', 'none', 'span', 'decides: no tap opens it', false],
+    ['adaptive', 'tap', 'button', 'decides: every tap opens it', true],
+    ['toggle', 'none', 'button', 'is ignored: a tap pins it', true],
+  ] as const)(
+    'beside triggerBehavior="%s", touchTrigger="%s" on a %s %s',
+    async (behavior, touchTrigger, trigger, _, tapOpens) => {
+      const tip = setup(behavior, touchTrigger, trigger);
+      tap(tip.trigger, 'touch');
+      await settle();
+      expect(tip.opened()).toBe(tapOpens);
+      if (behavior === 'toggle') {
+        expect(tip.trigger.getAttribute('aria-expanded')).toBe('true');
+      }
+    },
+  );
+});
+
+describe('Tooltip keeps press-to-pin internal', () => {
+  it('a spread props object that carries triggerBehavior at runtime pins nothing', () => {
+    const props = {
+      content: 'Billed monthly',
+      triggerBehavior: 'toggle',
+    } as unknown as ComponentProps<typeof Tooltip>;
+    render(
+      <Tooltip {...props}>
+        <button type="button">Billing</button>
+      </Tooltip>,
+    );
+    const trigger = screen.getByRole('button', {name: 'Billing'});
+    fireEvent.pointerDown(trigger, {pointerType: 'mouse'});
+    fireEvent.pointerUp(trigger, {pointerType: 'mouse'});
+    fireEvent.click(trigger, {detail: 1});
+    expect(trigger).not.toHaveAttribute('aria-expanded');
   });
 });

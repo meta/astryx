@@ -23,6 +23,8 @@ const originalLoad = Module._load;
 let requestedUrl = '';
 let reads = 0;
 let selectorResolved = false;
+// The audit answers remote images locally before it opens any story.
+let remoteImagesRouted = false;
 // The layout-settle step waits two frames before sampling geometry.
 global.requestAnimationFrame = callback => setTimeout(callback, 0);
 
@@ -87,6 +89,9 @@ const page = {
   // A real request, so a run only passes when the audit opens the port its
   // server actually holds.
   goto: async url => {
+    if (!remoteImagesRouted) {
+      throw new Error('a story opened before remote images were routed locally');
+    }
     requestedUrl = url;
     const response = await fetch(url);
     if (!response.ok) {
@@ -110,6 +115,11 @@ const page = {
 };
 const context = {
   addInitScript: async () => {},
+  route: async (pattern, handler) => {
+    if (pattern === '**/*' && typeof handler === 'function') {
+      remoteImagesRouted = true;
+    }
+  },
   newPage: async () => page,
   close: async () => {},
 };

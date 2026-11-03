@@ -1121,6 +1121,45 @@ test.describe('frame evidence', () => {
     expect(proof.monotonic).toBe(true);
   });
 
+  test('a block holds the thread for the whole time asked, on a clock that steps back between two reads', async ({
+    page,
+  }) => {
+    await page.setContent('<!doctype html><body></body>');
+    // A coarsened clock with jitter, as WebKit's: its second reading is one
+    // ms behind its first, then it runs on.
+    await page.evaluate(() => {
+      const real = performance.now.bind(performance);
+      let reads = 0;
+      performance.now = () => {
+        reads += 1;
+        const t = Math.floor(real());
+        return reads === 2 ? t - 1 : t;
+      };
+    });
+    const busy = await blockMainThread(page, 50);
+    expect(busy.to - busy.from).toBeGreaterThan(50 - 0.01);
+    expect(busy.spanMs).toBeGreaterThanOrEqual(50);
+  });
+
+  test('a block holds the thread for the whole time asked, on a clock whose sum of start and length rounds down', async ({
+    page,
+  }) => {
+    await page.setContent('<!doctype html><body></body>');
+    // Chromium's clock is microseconds over 1000. Its 1050.1 less 1000.1 is
+    // just under 50, so a loop that tests the sum of start and length ends
+    // early.
+    await page.evaluate(() => {
+      const readings = [1000.1, 1050.1];
+      let reads = 0;
+      performance.now = () => {
+        reads += 1;
+        return reads <= readings.length ? readings[reads - 1] : 1050.1 + reads;
+      };
+    });
+    const busy = await blockMainThread(page, 50);
+    expect(busy.spanMs).toBeGreaterThanOrEqual(50);
+  });
+
   test('in the WebKit container, compiled shaders outlive the run', async ({
     browser,
   }, testInfo) => {
