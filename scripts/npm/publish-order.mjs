@@ -6,8 +6,9 @@
  *   @astryxdesign packages it depends on or peers on.
  * @input Package directories as arguments; a directory without a
  *   package.json is left out.
- * @output The directories, one per line, dependencies first. Packages that
- *   do not depend on each other keep the given order. Exit 1 on a cycle.
+ * @output The directories, one per line, dependencies first: each step takes
+ *   the earliest listed package whose dependencies are already placed. Exit 1
+ *   on a cycle.
  * @position The stable publish step in .github/workflows/release.yml walks
  *   this order. That step holds back a package whose dependency failed to
  *   publish in the same run, which works only when every dependency is
@@ -20,8 +21,8 @@ import {pathToFileURL} from 'node:url';
 
 /**
  * Orders `packages` (`{dir, name, dependsOn}`, where `dependsOn` lists
- * package names) dependencies first, keeping the given order between
- * packages that do not depend on each other. Names outside `packages` are
+ * package names) dependencies first: each step takes the earliest listed
+ * package whose dependencies are already placed. Names outside `packages` are
  * ignored. Throws on a cycle.
  */
 export function publishOrder(packages) {

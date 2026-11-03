@@ -505,6 +505,7 @@ describe('stable and canary publication authority', () => {
       .filter(Boolean)
       .map(line => line.split(' ')[1]);
 
+    expect(order.indexOf('./packages/core')).toBeGreaterThanOrEqual(0);
     expect(order.indexOf('./packages/core')).toBeLessThan(
       order.indexOf('./packages/cli'),
     );
