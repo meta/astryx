@@ -901,6 +901,7 @@ component DateInput(props: DateInputProps)
   prop width?: SizeValue
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component DateRangeInput(props: DateRangeInputProps)
+  prop calendar?: CalendarSystem = the InternationalizationProvider's calendar, else `'gregory'`
   prop changeAction?: (value: DateRange | null) => void | Promise<void>
   prop containerClassName?: string
   prop containerStyle?: CSSProperties

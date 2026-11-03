@@ -166,6 +166,13 @@ export const docs = {
       default: '0',
     },
     {
+      name: 'calendar',
+      type: "'gregory' | 'iso8601' | 'buddhist' | 'roc' | 'japanese' | 'persian' | 'indian' | 'hebrew' | 'chinese' | 'dangi' | 'coptic' | 'ethiopic' | 'ethioaa' | 'islamic-civil' | 'islamic-tbla' | 'islamic-umalqura'",
+      description:
+        "The calendar the trigger text and the popover calendar show, such as persian, hebrew, or buddhist. value, onChange, min, max, and presets stay Gregorian ISO dates. The field has no typed entry. Calendars other than gregory, iso8601, buddhist, roc, and japanese need Temporal, native or a polyfill the application loads; without it the field shows Gregorian dates and warns in development. Chinese and Korean month starts come from the runtime's Temporal; when you render on the server, load the same Temporal implementation on the server and in the browser.",
+      default: "the InternationalizationProvider's calendar, else 'gregory'",
+    },
+    {
       name: 'width',
       type: 'SizeValue',
       description:
@@ -379,6 +386,8 @@ export const docsDense = {
       'How status message is placed: attached overlaps below input; detached floats below w/ spacing; tooltip hides the box and shows it on the status icon.',
     labelTooltip: 'tooltip via info icon at label end',
     numberOfMonths: 'months in calendar (default 2)',
+    calendar:
+      "calendar for the trigger text + popover calendar (default: provider's, else 'gregory'); values and presets stay Gregorian ISO; no typed entry; non-Gregorian-aligned calendars need Temporal (native or app-loaded polyfill), else Gregorian",
     weekStartsOn:
       'first day of week in calendar (0=Sunday, or name e.g. "mon")',
     changeAction:

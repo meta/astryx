@@ -8,6 +8,10 @@ import {Text} from '@astryxdesign/core/Text';
 import type {DateRange} from '@astryxdesign/core/DateRangeInput';
 import type {ISODateString} from '@astryxdesign/core/Calendar';
 import {Theme, defineTheme} from '@astryxdesign/core/theme';
+import {
+  type CalendarSystem,
+  InternationalizationProvider,
+} from '@astryxdesign/core/i18n';
 
 function daysAgo(n: number): ISODateString {
   const d = new Date();
@@ -533,6 +537,93 @@ export const StylingParts: Story = {
           </FormLayout>
         </div>
       </div>
+    </div>
+  ),
+};
+
+const RANGE_CALENDAR_FIELDS: ReadonlyArray<{
+  id: string;
+  locale: string;
+  calendar: CalendarSystem;
+  label: string;
+  dir: 'ltr' | 'rtl';
+}> = [
+  {
+    id: 'en-persian',
+    locale: 'en',
+    calendar: 'persian',
+    label: 'Stay',
+    dir: 'ltr',
+  },
+  {
+    id: 'fa-persian',
+    locale: 'fa-IR',
+    calendar: 'persian',
+    label: 'اقامت',
+    dir: 'rtl',
+  },
+  {
+    id: 'he-hebrew',
+    locale: 'he',
+    calendar: 'hebrew',
+    label: 'שהייה',
+    dir: 'rtl',
+  },
+  {
+    id: 'th-buddhist',
+    locale: 'th-TH',
+    calendar: 'buddhist',
+    label: 'การเข้าพัก',
+    dir: 'ltr',
+  },
+];
+
+function RangeCalendarField({
+  id,
+  locale,
+  calendar,
+  label,
+  dir,
+}: (typeof RANGE_CALENDAR_FIELDS)[number]) {
+  const [value, setValue] = useState<DateRange | null>({
+    start: '2026-10-30' as ISODateString,
+    end: '2026-11-02' as ISODateString,
+  });
+  return (
+    <InternationalizationProvider locale={locale}>
+      <div
+        dir={dir}
+        lang={locale}
+        data-calendar-field={id}
+        style={{display: 'flex', flexDirection: 'column', gap: 4}}>
+        <DateRangeInput
+          label={label}
+          calendar={calendar}
+          value={value}
+          onChange={setValue}
+          width={360}
+        />
+        <Text type="supporting" color="secondary">
+          <code data-value>
+            {`value: ${value == null ? '—' : `${value.start} – ${value.end}`}`}
+          </code>
+        </Text>
+      </div>
+    </InternationalizationProvider>
+  );
+}
+
+/**
+ * `calendar` sets the calendar the trigger text and the popover calendar
+ * show. The range stays Gregorian ISO dates. Calendars other than Gregorian,
+ * Buddhist, ROC, and Japanese need `Temporal`.
+ */
+export const CalendarSystems: Story = {
+  render: () => (
+    <div style={{display: 'flex', flexDirection: 'column', gap: 24}}>
+      {RANGE_CALENDAR_FIELDS.map(field => (
+        <RangeCalendarField key={field.id} {...field} />
+      ))}
     </div>
   ),
 };

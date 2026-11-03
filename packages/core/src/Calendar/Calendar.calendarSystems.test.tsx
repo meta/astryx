@@ -316,6 +316,15 @@ describe('date inputs under a provider calendar', () => {
       <DateInput key="d" label="Date" value="2026-10-30" onChange={() => {}} />,
     ],
     [
+      'DateRangeInput',
+      <DateRangeInput
+        key="dr"
+        label="Dates"
+        value={{start: '2026-10-30', end: '2026-11-02'}}
+        onChange={() => {}}
+      />,
+    ],
+    [
       'DateTimeInput',
       <DateTimeInput
         key="dt"
@@ -326,18 +335,5 @@ describe('date inputs under a provider calendar', () => {
     ],
   ])('%s opens its popover calendar in the calendar', async (_name, field) => {
     expect(await openGridLabel(field)).toContain('1405');
-  });
-
-  // Its trigger text is Gregorian, so its popover calendar stays Gregorian.
-  it('DateRangeInput keeps a Gregorian popover calendar', async () => {
-    const label = await openGridLabel(
-      <DateRangeInput
-        label="Dates"
-        value={{start: '2026-10-30', end: '2026-11-02'}}
-        onChange={() => {}}
-      />,
-    );
-    expect(label).toContain('2026');
-    expect(label).not.toContain('1405');
   });
 });
