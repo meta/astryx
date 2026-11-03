@@ -622,3 +622,65 @@ describe('review-signal review-app approval for write-access authors', () => {
     ]);
   });
 });
+
+describe("a fork's review never depends on a held review run (spec:AST-030 FR15)", () => {
+  // GitHub can hold a fork's pull_request_review run for approval, and its API
+  // cannot approve that run. So every writer of the gate must also run on the
+  // owner command and on a dispatch, which GitHub does not hold.
+  const writers = Object.entries(parsed.jobs).filter(
+    ([, job]) => job.permissions?.statuses === 'write',
+  );
+
+  it('has gate writers, and each runs on the owner command and on a dispatch', () => {
+    expect(writers.map(([name]) => name).sort()).toEqual([
+      'flag',
+      'spec-owner',
+    ]);
+    expect(parsed.on.issue_comment).toBeDefined();
+    expect(parsed.on.workflow_dispatch.inputs.pr).toBeDefined();
+    for (const [, job] of writers) {
+      const condition = job.if.replace(/\s+/g, ' ');
+      expect(condition).toContain(
+        "startsWith(github.event.comment.body, '/approve-spec')",
+      );
+      // Neither writer requires a review event to run.
+      expect(condition).not.toMatch(
+        /^github\.event_name == 'pull_request_review'/,
+      );
+    }
+    expect(parsed.jobs.flag.if).toContain(
+      "github.event_name == 'workflow_dispatch'",
+    );
+    // spec-owner runs on a dispatch that names a pull request.
+    expect(parsed.jobs['spec-owner'].if).toContain(
+      "(github.event_name != 'workflow_dispatch' || github.event.inputs.pr != '')",
+    );
+  });
+
+  it("skips a fork's review event in every writer, so a held run blocks no write", () => {
+    const flag = parsed.jobs.flag.if.replace(/\s+/g, ' ');
+    expect(flag).not.toContain("'pull_request_review'");
+    expect(parsed.jobs['spec-owner'].if.replace(/\s+/g, ' ')).toContain(
+      "(github.event_name != 'pull_request_review' || github.event.pull_request.head.repo.full_name == github.repository)",
+    );
+  });
+
+  it('gives the review-event job no token, so nothing waits on its run but the code-half reconcile the command repeats', () => {
+    const reviewJobs = Object.entries(parsed.jobs).filter(([, job]) =>
+      String(job.if ?? '').includes(
+        "github.event_name == 'pull_request_review'",
+      ),
+    );
+    expect(reviewJobs.map(([name]) => name)).toEqual(['review-anchor']);
+    expect(parsed.jobs['review-anchor'].permissions).toEqual({});
+  });
+
+  it('tells owners that a held review run never needs approving, and names the dispatch fallback', () => {
+    const gate = fs.readFileSync(
+      path.join(root, '.github/REVIEW_GATE.md'),
+      'utf8',
+    );
+    expect(gate).toContain('Nothing waits on the held review run');
+    expect(gate).toContain('run the "Review signal" workflow by hand');
+  });
+});
