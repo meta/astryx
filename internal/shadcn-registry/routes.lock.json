@@ -4997,6 +4997,11 @@
       "aliases": []
     },
     {
+      "name": "template-course-detail",
+      "path": "templates/course-detail",
+      "aliases": []
+    },
+    {
       "name": "template-dashboard",
       "path": "templates/dashboard",
       "aliases": []

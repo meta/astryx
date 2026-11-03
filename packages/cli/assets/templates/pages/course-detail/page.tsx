@@ -28,7 +28,7 @@ import {
   SegmentedControl,
   SegmentedControlItem,
 } from '@astryxdesign/core/SegmentedControl';
-import {SelectableCard} from '@astryxdesign/core/SelectableCard';
+import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 import type {CSSProperties, ReactNode} from 'react';
 
 // Custom CSS here is limited to what Astryx components can't express today:
@@ -637,24 +637,16 @@ function EnrollRail() {
               </Text>
             </VStack>
           ) : (
-            <VStack gap={2}>
+            <RadioList label="Cohort start" value={cohort} onChange={setCohort}>
               {COHORTS.map(option => (
-                <SelectableCard
+                <RadioListItem
                   key={option.id}
+                  value={option.id}
                   label={option.date}
-                  isSelected={cohort === option.id}
-                  onChange={() => setCohort(option.id)}>
-                  <VStack gap={1}>
-                    <Text type="body" weight="bold">
-                      {option.date}
-                    </Text>
-                    <Text type="supporting" color="secondary">
-                      {option.detail}
-                    </Text>
-                  </VStack>
-                </SelectableCard>
+                  description={option.detail}
+                />
               ))}
-            </VStack>
+            </RadioList>
           )}
         </VStack>
         <Divider />

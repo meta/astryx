@@ -27,7 +27,6 @@ export const doc = {
     PlayIcon: 'play',
     CheckIcon: 'check',
     StarIcon: 'star',
-    StarIconSolid: 'star',
     ClockIcon: 'clock',
     UsersIcon: 'users',
     GlobeAltIcon: 'globe',
