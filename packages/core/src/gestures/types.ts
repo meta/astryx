@@ -203,6 +203,12 @@ export interface TouchConsumer {
    */
   readonly selectionLock?: SelectionLock;
   /**
+   * Whether this touch's press holds the browser's context menu closed now.
+   * A control whose hold acts uses it (a switch's hold toggles it). The host
+   * then cancels the menu, as for a claimed touch.
+   */
+  holdsContextMenu?(touchId: number): boolean;
+  /**
    * Whether the consumer takes touches now (a disabled control does not).
    * The host listens only while something enabled is attached
    * (`spec:AST-094` FR24); after this changes, call `host.update(element)`.
