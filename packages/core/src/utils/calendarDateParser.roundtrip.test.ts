@@ -50,17 +50,21 @@ const NATIVE_LOCALES: Readonly<Record<CalendarSystem, string>> = {
   'islamic-umalqura': 'ar-SA',
 };
 
-// Weekday words that name months or eras, digit month names, cycle years.
+// Weekday words that name months or eras, digit month names, cycle years,
+// eras left out of a numeric pattern, numeric patterns with two separators.
 const MORE_LOCALES: Partial<Record<CalendarSystem, string>> = {
   gregory: 'fr-FR it-IT es-ES ro-RO vi-VN',
-  buddhist: 'fr-FR',
-  roc: 'de-DE',
-  japanese: 'it-IT hu-HU',
+  buddhist: 'fr-FR hi-IN',
+  roc: 'de-DE am-ET',
+  japanese: 'it-IT hu-HU am-ET',
   persian: 'nb-NO',
+  hebrew: 'lv-LV',
   chinese: 'ca-ES cs-CZ de-DE fi-FI fr-FR it-IT nl-NL pl-PL pt-PT ru-RU',
   dangi: 'pt-BR fi-FI',
   ethiopic: 'pt-BR',
-  'islamic-civil': 'fr-FR hu-HU sr-RS',
+  'islamic-civil': 'fr-FR hu-HU sr-RS lv-LV',
+  'islamic-tbla': 'lv-LV',
+  'islamic-umalqura': 'lv-LV',
 };
 
 // Text in the lunisolar calendars costs far more to compose under the
@@ -80,12 +84,11 @@ function sampleDays(step: number, offset: number): PlainDate[] {
 function failures(
   locale: string,
   calendar: CalendarSystem,
-  step: number,
-  offset: number,
+  dates: ReadonlyArray<PlainDate>,
 ) {
   const lexicon = getCalendarDateLexicon(locale, calendar);
   const failed: string[] = [];
-  for (const date of sampleDays(step, offset)) {
+  for (const date of dates) {
     const texts = [
       formatCalendarDateHint(date, locale, calendar),
       formatCalendarDateText(date, 'date', locale, calendar),
@@ -115,14 +118,28 @@ describe('committed text reads back as the same date (FR13)', () => {
     const isLunisolar = calendar === 'chinese' || calendar === 'dangi';
     it(`${calendar} in ${native}, en, and sv-SE`, () => {
       const step = isLunisolar ? 42 : 14;
-      expect(failures(native, calendar, step, 0)).toEqual([]);
-      expect(failures('en', calendar, step * 3, 2)).toEqual([]);
-      expect(failures('sv-SE', calendar, step * 3, 4)).toEqual([]);
+      expect(failures(native, calendar, sampleDays(step, 0))).toEqual([]);
+      expect(failures('en', calendar, sampleDays(step * 3, 2))).toEqual([]);
+      expect(failures('sv-SE', calendar, sampleDays(step * 3, 4))).toEqual([]);
     });
   }
   it.each(Object.entries(MORE_LOCALES))('%s in %s', (calendar, locales) => {
     for (const locale of locales.split(' ')) {
-      expect(failures(locale, calendar as CalendarSystem, 997, 1)).toEqual([]);
+      expect(
+        failures(locale, calendar as CalendarSystem, sampleDays(997, 1)),
+      ).toEqual([]);
     }
+  });
+  // Month names that start with a number, an era that the locale's numeric
+  // pattern leaves out, and a numeric pattern with two separators.
+  it.each<[string, CalendarSystem, ...[number, number, number][]]>([
+    ['lv-LV', 'hebrew', [1900, 2, 1], [1900, 3, 2], [1901, 2, 20]],
+    ['lv-LV', 'islamic-civil', [1900, 7, 1], [1900, 8, 26]],
+    ['am-ET', 'roc', [1900, 1, 1], [1911, 12, 31], [1912, 1, 1]],
+    ['am-ET', 'japanese', [1900, 1, 1], [1950, 6, 15], [2000, 6, 15]],
+    ['hi-IN', 'buddhist', [1900, 1, 1], [2026, 11, 2]],
+  ])('%s %s', (locale, calendar, ...dates) => {
+    const days = dates.map(([year, month, day]) => ({year, month, day}));
+    expect(failures(locale, calendar, days)).toEqual([]);
   });
 });
