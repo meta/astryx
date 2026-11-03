@@ -1322,9 +1322,6 @@ export function Step({
   const labelThemeProps = themeProps('step-label', {
     progress,
     status: status ?? undefined,
-    // The label owns Stepper's disabled text paint (`styles.labelDisabled` above).
-    // The description does not change under disabled and keeps the smaller
-    // {progress, status} surface.
     disabled: isDisabled ? 'disabled' : null,
   });
   const descriptionThemeProps = themeProps('step-description', {
@@ -1400,9 +1397,8 @@ export function Step({
     </div>
   ) : null;
 
-  // Theme data attributes reflect progress + optional semantic status. The
-  // step paints nothing of its own when disabled, so it carries no disabled
-  // selector; the indicator and label that dim carry it.
+  // The step paints nothing of its own when disabled, so it carries no
+  // `disabled` selector.
   const stepThemeProps = themeProps('step', {
     progress,
     status: status ?? undefined,
