@@ -396,8 +396,6 @@ export function Wheel({
       dipRef.current?.cancel();
       const landing = {top};
       pendingFadeRef.current = landing;
-      // The rows land when the fade-out ends on the dip's own timeline, so a
-      // late frame cannot show them moving at full opacity.
       dipRef.current = playReducedMotionDip(
         scroller,
         fadeTiming,

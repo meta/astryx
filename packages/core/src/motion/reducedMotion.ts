@@ -146,10 +146,20 @@ export function playReducedMotionDip(
         return;
       }
       land();
+      // The fade-in holds 0 until it starts: after a long stall, its start can
+      // come after the frame that runs this.
       fadeIn = element.animate(
         [{opacity: 0, easing: fade.easing}, {opacity: 1}],
-        {duration: half},
+        {duration: half, fill: 'backwards'},
       );
+      // The fade-in keeps the dip's own schedule: it starts where the fade-out
+      // ended, so the dip keeps its length. The clock is read after the
+      // landing, because a frame's timestamp does not count the landing's own
+      // work. After a long stall, half of the fade-in still plays.
+      const fadeOutEnd = endTime(fadeOut, half);
+      if (fadeOutEnd != null) {
+        fadeIn.startTime = Math.max(fadeOutEnd, performance.now() - half / 2);
+      }
       // The fade-in now holds the opacity, so the held 0 can go.
       fadeOut.cancel();
     },
@@ -163,4 +173,10 @@ export function playReducedMotionDip(
       fadeIn?.cancel();
     },
   };
+}
+
+/** When `animation` was due to end, on its timeline (ms), if it has started. */
+function endTime(animation: Animation, duration: number): number | null {
+  const start = animation.startTime;
+  return typeof start === 'number' ? start + duration : null;
 }

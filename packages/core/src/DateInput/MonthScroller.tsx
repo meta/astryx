@@ -505,10 +505,7 @@ export function MonthScroller({
           land();
           return;
         }
-        // A second step within the dip has replaced the first (above): only
-        // its scroll lands, at its own dip's middle. It lands when the
-        // fade-out ends on the dip's own timeline, so a late frame cannot
-        // show the month changing at full opacity.
+        // A newer step replaces this one: only its scroll lands.
         dipRef.current = playReducedMotionDip(scroller, fade, () => {
           dipRef.current = null;
           // The fade-in starts as soon as this returns. So render now: the
