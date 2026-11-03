@@ -508,10 +508,11 @@ function BaseTableInner<T extends Record<string, unknown>>({
       resolvedContent
     ) : namesOwnHeader ? (
       <>
-        <div id={labelId}>
+        {/* Inline, so the cell's text-overflow still reaches the label. */}
+        <span id={labelId}>
           {before}
           {labelRow}
-        </div>
+        </span>
         {overlay}
         {hasBelow && <div id={belowId}>{below}</div>}
       </>

@@ -605,6 +605,10 @@ describe('useTableColumnResize', () => {
         expect(header.textContent).not.toBe('');
         expect(header).not.toHaveAccessibleName(/Resize column|\d{2,}/);
       }
+      // The label stays inline, so the cell's ellipsis still reaches it.
+      const labelId = headers[0].getAttribute('aria-labelledby')?.split(' ')[0];
+      expect(labelId).toBeDefined();
+      expect(document.getElementById(labelId ?? '')?.tagName).toBe('SPAN');
     });
 
     it('handle has aria-valuemin', () => {
