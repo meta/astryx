@@ -218,10 +218,7 @@ describe('BottomSheet close order for focus', () => {
     const done = screen.getByRole('button', {name: 'Done'});
     act(() => done.focus());
     fireEvent.click(done);
-    // jsdom drops focus on removal without the blur a browser sends, so send
-    // it here.
     await act(async () => {
-      fireEvent.blur(done);
       await Promise.resolve();
     });
 

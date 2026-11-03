@@ -803,18 +803,26 @@ function StandaloneBottomSheet({
   const isInert = (isExiting && !isExitHoldingFocus) || stackView.isBlocked;
 
   // Ends the hold once focus has left the sheet: moved elsewhere, or dropped
-  // to the page because the focused control was removed or disabled. Read
-  // after the blur, when the new focus is known.
-  const releaseHoldWhenFocusLeaves = (
-    event: React.FocusEvent<HTMLDialogElement>,
-  ) => {
-    const dialog = event.currentTarget;
-    queueMicrotask(() => {
-      if (!dialog.contains(dialog.ownerDocument.activeElement)) {
+  // to the page because the focused control was removed or disabled. A native
+  // listener, because React drops the `focusout` a browser sends while React
+  // removes the focused element. Read after the event, when the new focus is
+  // known; also read once at the start, for focus that left first.
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current;
+    if (!isExitHoldingFocus || dialog == null) {
+      return;
+    }
+    const doc = dialog.ownerDocument;
+    const releaseIfFocusLeft = () => {
+      if (!dialog.contains(doc.activeElement)) {
         setIsExitFocusHeld(false);
       }
-    });
-  };
+    };
+    releaseIfFocusLeft();
+    const onFocusOut = () => queueMicrotask(releaseIfFocusLeft);
+    dialog.addEventListener('focusout', onFocusOut);
+    return () => dialog.removeEventListener('focusout', onFocusOut);
+  }, [isExitHoldingFocus]);
 
   return (
     <dialog
@@ -856,9 +864,6 @@ function StandaloneBottomSheet({
       onClickCapture={isExitHoldingFocus ? ignoreActivation : undefined}
       onKeyDownCapture={isExitHoldingFocus ? ignoreKeyDuringExit : undefined}
       onKeyUpCapture={isExitHoldingFocus ? ignoreKeyDuringExit : undefined}
-      onBlurCapture={
-        isExitHoldingFocus ? releaseHoldWhenFocusLeaves : undefined
-      }
       // Presses inside the sheet do not reach handlers around where it is
       // written. The dialog, not the panel, is the root, as in a switcher.
       {...layerClickBoundary({onClick: handleClick})}>
