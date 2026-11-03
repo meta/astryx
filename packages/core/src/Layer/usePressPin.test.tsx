@@ -23,8 +23,15 @@ import {
   afterEach,
 } from 'vitest';
 import {render, screen, fireEvent, act} from '@testing-library/react';
-import {useRef, useState, type ReactElement, type ReactNode} from 'react';
+import {
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactElement,
+  type ReactNode,
+} from 'react';
 import {Tooltip} from '../Tooltip/Tooltip';
+import {HoverCard} from '../HoverCard/HoverCard';
 import {ClickableCard} from '../ClickableCard/ClickableCard';
 import {Dialog} from '../Dialog/Dialog';
 import {Item} from '../Item/Item';
@@ -188,8 +195,59 @@ describe('Tooltip triggerBehavior="toggle" (component:Tooltip FR9)', () => {
     fireEvent.keyDown(trigger, {key: 'Enter'});
     expect(shows(TIP)).toBe(true);
     fireEvent.keyDown(trigger, {key: ' '});
+    fireEvent.keyUp(trigger, {key: ' '});
     expect(shows(TIP)).toBe(false);
   });
+
+  it('Space on a role="button" trigger presses it on keyup, as on a native button', () => {
+    render(
+      <InfoTooltip>
+        <span role="button" tabIndex={0}>
+          About billing
+        </span>
+      </InfoTooltip>,
+    );
+    const trigger = screen.getByRole('button', {name: 'About billing'});
+    // The keydown scrolls nothing and pins nothing yet.
+    expect(fireEvent.keyDown(trigger, {key: ' '})).toBe(false);
+    expect(shows(TIP)).toBe(false);
+    fireEvent.keyUp(trigger, {key: ' '});
+    expect(shows(TIP)).toBe(true);
+    // A keyup with no keydown on the trigger presses nothing.
+    fireEvent.keyUp(trigger, {key: ' '});
+    expect(shows(TIP)).toBe(true);
+  });
+
+  it.each(['keydown', 'keyup'] as const)(
+    'a role="button" trigger that clicks itself on Space %s pins once',
+    async timing => {
+      const clickOnSpace = (event: ReactKeyboardEvent<HTMLElement>) => {
+        if (event.key === ' ') {
+          event.currentTarget.click();
+        }
+      };
+      render(
+        <InfoTooltip>
+          <span
+            role="button"
+            tabIndex={0}
+            onKeyDown={timing === 'keydown' ? clickOnSpace : undefined}
+            onKeyUp={timing === 'keyup' ? clickOnSpace : undefined}>
+            About billing
+          </span>
+        </InfoTooltip>,
+      );
+      const trigger = screen.getByRole('button', {name: 'About billing'});
+      fireEvent.keyDown(trigger, {key: ' '});
+      // A browser dispatches the keyup in a later task.
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+      fireEvent.keyUp(trigger, {key: ' '});
+      expect(shows(TIP)).toBe(true);
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    },
+  );
 
   it('Escape closes a pinned tooltip', () => {
     render(<InfoTooltip />);
@@ -718,11 +776,11 @@ describe('a pin inside a modal Dialog (spec:AST-086 FR14)', () => {
   });
 });
 
-describe('a toggle trigger in another document', () => {
-  it('closes the pin when focus moves to another control in that document', () => {
+describe('a hover layer whose trigger is in another document', () => {
+  /** Renders `ui` into an iframe whose HTMLElement gets this file's popover stubs. */
+  function renderInFrame(ui: ReactElement) {
     const iframe = document.body.appendChild(document.createElement('iframe'));
     const frame = iframe.contentWindow as Window & typeof globalThis;
-    // The frame has its own HTMLElement, without this file's popover stubs.
     const proto = frame.HTMLElement.prototype;
     const frameMatches = proto.matches;
     proto.showPopover = HTMLElement.prototype.showPopover;
@@ -736,12 +794,20 @@ describe('a toggle trigger in another document', () => {
     const container = frame.document.body.appendChild(
       frame.document.createElement('div'),
     );
-    const view = render(
+    const view = render(ui, {container, baseElement: frame.document.body});
+    const done = () => {
+      view.unmount();
+      iframe.remove();
+    };
+    return {view, frame, done};
+  }
+
+  it('closes a pin when focus moves to another control in that document', () => {
+    const {view, done} = renderInFrame(
       <>
         <InfoTooltip />
         <button type="button">Next</button>
       </>,
-      {container, baseElement: frame.document.body},
     );
     try {
       const trigger = view.getByRole('button', {name: 'About billing'});
@@ -751,8 +817,91 @@ describe('a toggle trigger in another document', () => {
       fireEvent.focusOut(trigger, {relatedTarget: next});
       expect(trigger).toHaveAttribute('aria-expanded', 'false');
     } finally {
-      view.unmount();
-      iframe.remove();
+      done();
+    }
+  });
+
+  it('closes a pin on a press outside in that document', () => {
+    const {view, done} = renderInFrame(
+      <>
+        <InfoTooltip />
+        <p>Elsewhere</p>
+      </>,
+    );
+    try {
+      const trigger = view.getByRole('button', {name: 'About billing'});
+      click(trigger);
+      expect(trigger).toHaveAttribute('aria-expanded', 'true');
+      // A press on content that takes no focus reaches only the listener.
+      const elsewhere = view.getByText('Elsewhere');
+      fireEvent.pointerDown(elsewhere);
+      fireEvent.pointerUp(elsewhere);
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    } finally {
+      done();
+    }
+  });
+
+  // A trigger that takes focus also closes through focus leaving in a real
+  // engine, so these triggers take none.
+  it('closes a tap-opened tooltip on a tap outside in that document', () => {
+    const {view, frame, done} = renderInFrame(
+      <>
+        <Tooltip content={TIP}>
+          <span>Billing date</span>
+        </Tooltip>
+        <p>Elsewhere</p>
+      </>,
+    );
+    const open = () =>
+      [document, frame.document].some(
+        doc =>
+          doc
+            .querySelector<HTMLElement>('[popover]')
+            ?.matches(':popover-open') === true,
+      );
+    try {
+      tap(view.getByText('Billing date'));
+      expect(open()).toBe(true);
+      const elsewhere = view.getByText('Elsewhere');
+      fireEvent.pointerDown(elsewhere, {pointerType: 'touch'});
+      fireEvent.pointerUp(elsewhere, {pointerType: 'touch'});
+      expect(open()).toBe(false);
+      // A scroll that starts outside closes it too.
+      tap(view.getByText('Billing date'));
+      expect(open()).toBe(true);
+      fireEvent.pointerCancel(elsewhere, {pointerType: 'touch'});
+      expect(open()).toBe(false);
+    } finally {
+      done();
+    }
+  });
+
+  it('closes a tap-opened HoverCard on a tap outside in that document', () => {
+    const {view, frame, done} = renderInFrame(
+      <>
+        <HoverCard content={<p>Ada Lovelace, analyst</p>}>
+          <span>Ada</span>
+        </HoverCard>
+        <p>Elsewhere</p>
+      </>,
+    );
+    const open = () =>
+      [document, frame.document].some(
+        doc =>
+          doc
+            .querySelector<HTMLElement>('[popover]')
+            ?.matches(':popover-open') === true,
+      );
+    try {
+      tap(view.getByText('Ada'));
+      expect(open()).toBe(true);
+      const elsewhere = view.getByText('Elsewhere');
+      fireEvent.pointerDown(elsewhere, {pointerType: 'touch'});
+      fireEvent.pointerUp(elsewhere, {pointerType: 'touch'});
+      expect(open()).toBe(false);
+    } finally {
+      done();
     }
   });
 });

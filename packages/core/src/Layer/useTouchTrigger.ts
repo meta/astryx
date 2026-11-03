@@ -367,6 +367,9 @@ export function useTouchTriggerInternal(
   const outsideListenerRef = useRef<((event: PointerEvent) => void) | null>(
     null,
   );
+  // The documents the outside dismissal listens on: the page's, and the
+  // trigger's own when it renders in another document, such as an iframe.
+  const outsideDocumentsRef = useRef<Document[]>([]);
   // A touch press on the trigger still waiting for its tap: calling it stops
   // waiting. The next press, a cancel, the tap itself or unmounting calls it.
   const forgetPendingTapRef = useRef<(() => void) | null>(null);
@@ -380,8 +383,11 @@ export function useTouchTriggerInternal(
       return;
     }
     outsideListenerRef.current = null;
-    document.removeEventListener('pointerup', listener, true);
-    document.removeEventListener('pointercancel', listener, true);
+    for (const doc of outsideDocumentsRef.current) {
+      doc.removeEventListener('pointerup', listener, true);
+      doc.removeEventListener('pointercancel', listener, true);
+    }
+    outsideDocumentsRef.current = [];
   }, []);
 
   // Capture phase, so a trigger that stops propagation cannot strand an open
@@ -395,6 +401,8 @@ export function useTouchTriggerInternal(
       return;
     }
 
+    const own = triggerRef.current?.ownerDocument ?? document;
+    const docs = own === document ? [document] : [document, own];
     const handleOutsidePointerEnd = (event: PointerEvent) => {
       const target = event.target as Node | null;
       if (target != null) {
@@ -408,7 +416,10 @@ export function useTouchTriggerInternal(
         }
         // Hover card content is interactive; a tap inside it is not a dismiss.
         if (
-          document.getElementById(layerIdRef.current)?.contains(target) === true
+          docs.some(
+            doc =>
+              doc.getElementById(layerIdRef.current)?.contains(target) === true,
+          )
         ) {
           return;
         }
@@ -418,8 +429,11 @@ export function useTouchTriggerInternal(
     };
 
     outsideListenerRef.current = handleOutsidePointerEnd;
-    document.addEventListener('pointerup', handleOutsidePointerEnd, true);
-    document.addEventListener('pointercancel', handleOutsidePointerEnd, true);
+    outsideDocumentsRef.current = docs;
+    for (const doc of docs) {
+      doc.addEventListener('pointerup', handleOutsidePointerEnd, true);
+      doc.addEventListener('pointercancel', handleOutsidePointerEnd, true);
+    }
   }, [triggerRef, disarmOutsideDismiss]);
 
   useEffect(() => disarmOutsideDismiss, [disarmOutsideDismiss]);

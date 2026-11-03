@@ -177,7 +177,7 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
     setIsPinnedState(next);
   }, []);
 
-  // Refs hold the wired trigger and last offered element for a later rewire.
+  // The last offered element lets a `triggerBehavior` change rewire it.
   const triggerRef = useRef<HTMLElement | null>(null);
   const offeredRef = useRef<HTMLElement | null>(null);
   // A primitive: re-attaching the same trigger renders nothing.
@@ -280,9 +280,12 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
     }
   }, [setPinned, announceName, armOutsideDismiss, clearTapOpen]);
 
-  // Enter or Space presses a non-native button, which gets no click from the
-  // browser. A same-task click from its own key handler is that press.
+  // A non-native button gets no click from the browser for a key. So Enter
+  // presses it on keydown, and Space on keyup, as on a native button. A click
+  // with no pointer (`detail` 0) while Space is down, or in a key press's
+  // task, is that same press.
   const keyPressedRef = useRef(false);
+  const spaceHeldRef = useRef(false);
   const handlePress = useCallback(
     (event: MouseEvent) => {
       const current = optionsRef.current;
@@ -292,33 +295,61 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
       // The press stops at its trigger: no label control, link, or submit.
       event.preventDefault();
       pressPinClicks.add(event);
-      if (keyPressedRef.current && event.detail === 0) {
+      if (
+        event.detail === 0 &&
+        (keyPressedRef.current || spaceHeldRef.current)
+      ) {
         return;
       }
       toggle();
     },
     [toggle],
   );
+  const pressFromKey = useCallback(() => {
+    keyPressedRef.current = true;
+    setTimeout(() => {
+      keyPressedRef.current = false;
+    }, 0);
+    toggle();
+  }, [toggle]);
   const handleKeyDown = useCallback(
     (event: KeyboardEvent) => {
       const current = optionsRef.current;
       if (
         !current.isEnabled ||
         current.triggerBehavior !== 'toggle' ||
-        event.repeat ||
         event.isComposing ||
         (event.key !== 'Enter' && event.key !== ' ')
       ) {
         return;
       }
+      // The press replaces the key's own action, such as a page scroll on Space.
       event.preventDefault();
-      keyPressedRef.current = true;
-      setTimeout(() => {
-        keyPressedRef.current = false;
-      }, 0);
-      toggle();
+      if (event.repeat) {
+        return;
+      }
+      if (event.key === ' ') {
+        spaceHeldRef.current = true;
+        return;
+      }
+      pressFromKey();
     },
-    [toggle],
+    [pressFromKey],
+  );
+  // Only a Space that went down on the trigger presses it when it comes up.
+  const handleKeyUp = useCallback(
+    (event: KeyboardEvent) => {
+      if (event.key !== ' ' || !spaceHeldRef.current) {
+        return;
+      }
+      spaceHeldRef.current = false;
+      const current = optionsRef.current;
+      if (!current.isEnabled || current.triggerBehavior !== 'toggle') {
+        return;
+      }
+      pressFromKey();
+    },
+    [pressFromKey],
   );
 
   const isHeldOpen = useCallback(() => {
@@ -333,6 +364,8 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
 
   const handleFocusLeave = useCallback(
     (event: FocusEvent) => {
+      // A Space that comes up after focus left presses nothing.
+      spaceHeldRef.current = false;
       if (!isHeldOpen()) {
         return false;
       }
@@ -366,6 +399,7 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
     }
     previous.removeEventListener('click', handlePress);
     previous.removeEventListener('keydown', handleKeyDown);
+    previous.removeEventListener('keyup', handleKeyUp);
     previous.removeEventListener('focusout', handleFocusLeave);
     const own = ownStateRef.current;
     if (own != null) {
@@ -374,7 +408,7 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
     }
     ownStateRef.current = null;
     triggerRef.current = null;
-  }, [handlePress, handleKeyDown, handleFocusLeave]);
+  }, [handlePress, handleKeyDown, handleKeyUp, handleFocusLeave]);
 
   // The element and mode last settled; the same pair again does nothing.
   const settledRef = useRef<{
@@ -404,6 +438,7 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
       element.addEventListener('click', handlePress);
       if (element.tagName !== 'BUTTON') {
         element.addEventListener('keydown', handleKeyDown);
+        element.addEventListener('keyup', handleKeyUp);
       }
       // Its own focus-leave listener: `focusTrigger="never"` attaches none.
       element.addEventListener('focusout', handleFocusLeave);
@@ -413,7 +448,7 @@ export function usePressPin(options: UsePressPinOptions): UsePressPinReturn {
       };
       triggerRef.current = element;
     },
-    [unwire, handlePress, handleKeyDown, handleFocusLeave],
+    [unwire, handlePress, handleKeyDown, handleKeyUp, handleFocusLeave],
   );
 
   const attach = useCallback(
