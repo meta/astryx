@@ -222,9 +222,9 @@ export interface TooltipReturn {
 
   /**
    * Opens the tooltip now and keeps it open until `hide()`, Escape, a press
-   * outside, or focus leaving its trigger. Called during a press on the
-   * trigger, it keeps the tooltip open only until that press ends: a press
-   * that ends off the trigger, with no click, leaves it to the hover rules.
+   * outside, or focus leaving its trigger. If a press on the trigger is down
+   * when you call it, and the press ends off the trigger with no click, the
+   * hold ends. The hover rules then decide.
    * Its text is announced once. Reports through `onShow`. Under a controlled `isOpen`,
    * it calls `onShow` and does not change `isOpen`. Does nothing while
    * `isEnabled` is false.
@@ -641,7 +641,16 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       return;
     }
     isTriggerPressedRef.current = true;
-    const stop = () => {
+    const trigger = triggerRef.current;
+    const stop = (event?: Event) => {
+      // A press that ends on the trigger keeps its hold, as a click does.
+      if (
+        event?.type === 'pointerup' &&
+        event.target instanceof view.Node &&
+        trigger?.contains(event.target) === true
+      ) {
+        isHoldFromPressRef.current = false;
+      }
       view.removeEventListener('pointerup', stop, true);
       view.removeEventListener('pointercancel', stop, true);
       isTriggerPressedRef.current = false;
@@ -656,8 +665,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     (event: PointerEvent) => {
       trackTriggerPress();
       // The app's hide() closes a held tooltip. A press neither hides it here
-      // nor waits for a tap verdict. A show() from a capture handler of this
-      // same press ran just before this listener.
+      // nor waits for a tap verdict. A show() in a capture handler of this
+      // press runs before this listener. Tie that hold to the press.
       if (isHeldRef.current) {
         if (isHoldInThisTaskRef.current) {
           isHoldFromPressRef.current = true;

@@ -265,6 +265,27 @@ describe('useTooltip show() and hide() (component:Tooltip FR12)', () => {
     }
   });
 
+  it('a show() during a press that ends on the trigger keeps its hold through a later press released on the tooltip', () => {
+    vi.useFakeTimers();
+    try {
+      render(<PressShowTip />);
+      fireEvent.pointerDown(trigger(), {pointerType: 'mouse', button: 0});
+      fireEvent.pointerUp(trigger(), {pointerType: 'mouse', button: 0});
+      fireEvent.click(trigger(), {detail: 1});
+      const layer = screen.getByRole('tooltip', {hidden: true});
+      fireEvent.pointerDown(layer, {pointerType: 'mouse', button: 0});
+      fireEvent.pointerUp(layer, {pointerType: 'mouse', button: 0});
+      fireEvent.mouseLeave(trigger());
+      fireEvent.mouseLeave(layer);
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      expect(shows()).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('show() does nothing while isEnabled is false', () => {
     const onShow = vi.fn();
     render(<ToggleTip isEnabled={false} onShow={onShow} />);
