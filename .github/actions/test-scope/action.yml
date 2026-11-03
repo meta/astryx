@@ -203,7 +203,10 @@ runs:
               '.github/scripts/knowledge-paths.cjs',
               'scripts/component-packages.cjs',
               ...(audit ? ['.github/scripts/component-audit-scope.cjs'] : []),
+              // Data, not code: the Lab entry check reads the base's copy.
+              'packages/cli/assets/discover/official-packages.json',
             ];
+            const optionalPolicy = new Set(['packages/cli/assets/discover/official-packages.json']);
             const {repository} = await github.graphql(
               `query($owner: String!, $repo: String!, ${policy.map((_, i) => `$f${i}: String!`).join(', ')}) {
                 repository(owner: $owner, name: $repo) {
@@ -214,6 +217,8 @@ runs:
             );
             for (const [i, file] of policy.entries()) {
               const blob = repository?.[`f${i}`];
+              // A missing data file only keeps the change out of the Lab-only lane.
+              if (optionalPolicy.has(file) && (typeof blob?.text !== 'string' || blob.isTruncated)) continue;
               if (typeof blob?.text !== 'string' || blob.isTruncated) throw new Error(`the base has no readable ${file}`);
               fs.mkdirSync(path.join(root, path.dirname(file)), {recursive: true});
               fs.writeFileSync(path.join(root, file), blob.text);
@@ -232,8 +237,21 @@ runs:
             .join('\n');
           const outputFile = path.join(root, 'classification');
           fs.writeFileSync(outputFile, '');
+          // GitHub's patch text for the Lab entry files, handed over as data:
+          // the classifier reads it and never runs it. GitHub leaves out the
+          // patch of a large diff; such a file then keeps full CI.
+          const LAB_ENTRY = /^(internal\/shadcn-registry\/routes\.lock\.json|packages\/cli\/assets\/discover\/official-packages\.json|apps\/storybook\/stories\/[A-Z][A-Za-z0-9]*\.stories\.tsx)$/;
+          const patchesFile = path.join(root, 'lab-entry-patches.json');
+          fs.writeFileSync(patchesFile, JSON.stringify(Object.fromEntries(
+            files.filter(f => LAB_ENTRY.test(f.filename)).map(f => [f.filename, typeof f.patch === 'string' ? f.patch : null]),
+          )));
           try {
-            execFileSync('node', [path.join(root, '.github/scripts/change-scope.cjs'), '--github-output'], {
+            execFileSync('node', [
+              path.join(root, '.github/scripts/change-scope.cjs'),
+              '--github-output',
+              '--patches', patchesFile,
+              '--official-packages-base', path.join(root, 'packages/cli/assets/discover/official-packages.json'),
+            ], {
               input: `${nameStatus}\n`,
               env: {...process.env, GITHUB_OUTPUT: outputFile},
               stdio: ['pipe', 'inherit', 'inherit'],

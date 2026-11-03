@@ -40,6 +40,7 @@ const CLASSIFIER_FILES = new Set([
   'scripts/component-packages.cjs',
 ]);
 const AUDIT_FILE = '.github/scripts/component-audit-scope.cjs';
+const OFFICIAL_PACKAGES = 'packages/cli/assets/discover/official-packages.json';
 
 function pullRequestContext(baseRef = 'main') {
   return {
@@ -100,7 +101,10 @@ async function decide({
         if (!/^f\d+$/.test(key)) continue;
         const [ref, file] = [expression.slice(0, 40), expression.slice(41)];
         contentCalls.push({file, ref});
-        const known = CLASSIFIER_FILES.has(file) || file === AUDIT_FILE;
+        const known =
+          CLASSIFIER_FILES.has(file) ||
+          file === AUDIT_FILE ||
+          file === OFFICIAL_PACKAGES;
         const text = ref === BASE_SHA && known ? policyText(file) : null;
         repository[key] =
           text == null ? null : {text, isTruncated: truncated.includes(file)};
@@ -240,6 +244,7 @@ describe('per-job scope step', () => {
       f1: `${BASE_SHA}:.github/scripts/knowledge-paths.cjs`,
       f2: `${BASE_SHA}:scripts/component-packages.cjs`,
       f3: `${BASE_SHA}:${AUDIT_FILE}`,
+      f4: `${BASE_SHA}:${OFFICIAL_PACKAGES}`,
     });
     expect(contentCalls.filter(call => call.rest)).toEqual([]);
   });
@@ -595,5 +600,116 @@ describe('per-job scope step', () => {
         expect.stringContaining('Component audit scope could not be decided'),
       ]);
     });
+  });
+});
+
+describe('a new Lab component (spec:AST-030 FR26)', () => {
+  const component = [
+    {filename: 'packages/lab/src/CommentPin/CommentPin.tsx', status: 'added'},
+    {filename: 'packages/lab/src/CommentPin/index.ts', status: 'added'},
+    {filename: 'packages/lab/src/index.ts', status: 'modified'},
+  ];
+  const routes = {
+    filename: 'internal/shadcn-registry/routes.lock.json',
+    status: 'modified',
+    patch: [
+      '@@ -556,6 +556,11 @@',
+      '       "path": "components/lab/code-editor",',
+      '       "aliases": []',
+      '     },',
+      '+    {',
+      '+      "name": "component-lab-comment-pin",',
+      '+      "path": "components/lab/comment-pin",',
+      '+      "aliases": []',
+      '+    },',
+      '@@ -1885,6 +1890,11 @@',
+      '+    {',
+      '+      "name": "example-comment-pin-host-owned-placement",',
+      '+      "path": "examples/comment-pin/host-owned-placement",',
+      '+      "aliases": []',
+      '+    },',
+    ].join('\n'),
+  };
+  const labStory = {
+    filename: 'apps/storybook/stories/CommentPin.stories.tsx',
+    status: 'added',
+    patch: [
+      '@@ -0,0 +1,3 @@',
+      "+import type {Meta} from '@storybook/react';",
+      "+import {CommentPin} from '@astryxdesign/lab';",
+      "+import {Text} from '@astryxdesign/core/Text';",
+    ].join('\n'),
+  };
+  const officialLines = fs
+    .readFileSync(path.join(root, OFFICIAL_PACKAGES), 'utf8')
+    .split('\n');
+  const labLine =
+    officialLines.findIndex(line =>
+      line.includes('"package": "@astryxdesign/lab"'),
+    ) + 1;
+  const official = at => ({
+    filename: OFFICIAL_PACKAGES,
+    status: 'modified',
+    patch: [
+      `@@ -${at},3 +${at},7 @@`,
+      ` ${officialLines[at - 1]}`,
+      '+        {',
+      '+          "kind": "component",',
+      '+          "name": "CommentPin"',
+      '+        },',
+      ` ${officialLines[at]}`,
+      ` ${officialLines[at + 1]}`,
+    ].join('\n'),
+  });
+
+  it('stays in the Lab-only lane with its routes, discovery entry and story', async () => {
+    const {outputs} = await decide({
+      files: [...component, routes, labStory, official(labLine + 6)],
+    });
+    expect(outputs.lab_only).toBe('true');
+    expect(outputs.full_suite).toBe('false');
+  });
+
+  it('runs full CI when a core story changes with it', async () => {
+    const {outputs} = await decide({
+      files: [
+        ...component,
+        routes,
+        labStory,
+        {
+          filename: 'apps/storybook/stories/Button.stories.tsx',
+          status: 'added',
+          patch: "@@ -0,0 +1 @@\n+import {Button} from '@astryxdesign/core';",
+        },
+      ],
+    });
+    expect(outputs.lab_only).toBe('false');
+  });
+
+  it("runs full CI when a route names another component, or the discovery edit is outside Lab's entry", async () => {
+    const otherRoute = {
+      ...routes,
+      patch: routes.patch.replaceAll('comment-pin', 'button'),
+    };
+    expect(
+      (await decide({files: [...component, otherRoute]})).outputs.lab_only,
+    ).toBe('false');
+    expect(
+      (await decide({files: [...component, official(10)]})).outputs.lab_only,
+    ).toBe('false');
+  });
+
+  it('runs full CI when GitHub leaves out a patch, or the story does not import Lab', async () => {
+    const {patch: _omitted, ...noPatch} = routes;
+    expect(
+      (await decide({files: [...component, noPatch]})).outputs.lab_only,
+    ).toBe('false');
+    const coreOnlyStory = {
+      ...labStory,
+      patch: "@@ -0,0 +1 @@\n+import {Text} from '@astryxdesign/core/Text';",
+    };
+    expect(
+      (await decide({files: [...component, coreOnlyStory]})).outputs.lab_only,
+    ).toBe('false');
   });
 });
