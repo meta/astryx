@@ -23,9 +23,8 @@
  *
  * The handle's input (the pointer drag, the keys, the double-click) is
  * resizeGesture.ts. ResizeHandle forwards its React events to it, over the
- * region its `resizable` prop describes. A drag takes pointer capture on the grab zone.
- * The gesture's move, up and cancel events then go there, as in Slider, even
- * over an embedded frame.
+ * region its `resizable` prop describes. A drag takes pointer capture on the
+ * element it starts on, so moves over an embedded frame still arrive.
  */
 
 import {useEffect, useRef, useState} from 'react';
@@ -188,7 +187,6 @@ const styles = stylex.create({
     insetBlockStart: '50%',
     transform: 'translateY(-50%)',
   },
-  // Inside an overlay Handle, the zone never outgrows the Handle.
   hitAreaWithinHandleX: {
     width: `min(${spacingVars['--spacing-4']}, 100%)`,
   },
