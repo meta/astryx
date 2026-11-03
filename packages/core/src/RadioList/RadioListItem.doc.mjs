@@ -53,7 +53,8 @@ export const docs = {
     {
       name: 'isDisabled',
       type: 'boolean',
-      description: 'Whether this individual radio item is disabled.',
+      description:
+        "Whether this individual radio item is disabled. It stays focusable with aria-disabled and refuses selection, and the group's arrow keys skip it.",
       default: 'false',
     },
     {
@@ -134,7 +135,8 @@ export const docsZh = {
     {
       name: 'isDisabled',
       type: 'boolean',
-      description: '是否禁用此单个单选选项。',
+      description:
+        '是否禁用此单个单选选项。禁用后仍可通过 aria-disabled 获得焦点，但不能被选中，组内方向键会跳过它。',
       default: 'false',
     },
     {
