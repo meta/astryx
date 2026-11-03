@@ -630,12 +630,29 @@ export function ComplexSelector<Value>({
     onOpenChange?.(true);
   }, [onOpenChange]);
 
+  // The popup's content element, read when it closes.
+  const popupContentRef = useRef<HTMLElement | null>(null);
+  const hasCallerTrigger = renderTrigger != null;
   const handlePopoverHide = useCallback(() => {
+    const trigger = triggerRef.current;
+    // A light dismiss caused by pressing another focusable element has already
+    // moved focus there, so the built-in trigger leaves it there. Escape, a
+    // close from the content, or a press on nothing focusable still returns
+    // focus to it. A caller's control always gets focus back.
+    const active = trigger?.ownerDocument.activeElement;
+    const focusLandedElsewhere =
+      !hasCallerTrigger &&
+      active instanceof HTMLElement &&
+      active !== active.ownerDocument.body &&
+      active !== trigger &&
+      !popupContentRef.current?.contains(active);
     // Focus is restored first so a consumer that moves focus elsewhere from
     // the callback wins, instead of being overwritten a line later.
-    triggerRef.current?.focus();
+    if (!focusLandedElsewhere) {
+      trigger?.focus();
+    }
     onOpenChange?.(false);
-  }, [onOpenChange]);
+  }, [hasCallerTrigger, onOpenChange]);
 
   const popover = usePopover({
     dialogLabel: label,
@@ -645,6 +662,7 @@ export function ComplexSelector<Value>({
     onShow: handlePopoverShow,
     onHide: handlePopoverHide,
   });
+  popupContentRef.current = popover.contentRef.current;
 
   const isOpen = popover.isOpen;
 
