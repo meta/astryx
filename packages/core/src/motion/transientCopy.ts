@@ -3,13 +3,13 @@
 /**
  * @file transientCopy.ts
  * @input The DOM
- * @output Exports `isCopyable`, `inertCopy`, `visiblePartCopy`, `placeOver`,
- *   `paintedBackground` and `wrapText`: how Core makes, lays out and fades one
- *   transient copy of old content
+ * @output Exports `isCopyable`, `inertCopy`, `restoreScrollOffsets`,
+ *   `visiblePartCopy`, `placeOver`, `paintedBackground` and `wrapText`: how
+ *   Core makes, lays out and fades one transient copy of old content
  * @position Motion foundation, internal to core; the copy mechanism the
  *   in-place swap uses (`spec:AST-105` FR8,
- *   `architecture:component-style-authoring` INV7). Only
- *   motion/animatedLayout.ts imports it.
+ *   `architecture:component-style-authoring` INV7), and the layer's exit copy.
+ *   motion/animatedLayout.ts and Layer/layerExitCopy.ts import it.
  *
  * A copy takes no part in the page: it is inert and hidden from assistive
  * technology, carries no ids or test ids, joins no form or radio group (a
@@ -25,7 +25,9 @@
  * canvas that cannot be read back (a WebGL canvas without
  * `preserveDrawingBuffer`, a tainted one) or a blank one.
  *
- * SYNC: When modified, update /packages/core/src/motion/animatedLayout.ts
+ * SYNC: When modified, update:
+ * - /packages/core/src/motion/animatedLayout.ts
+ * - /packages/core/src/Layer/layerExitCopy.ts
  */
 
 /** Above this many elements, old content is not copied: the new one enters. */
@@ -201,6 +203,22 @@ export function inertCopy(element: HTMLElement): HTMLElement | null {
   return copy;
 }
 
+/**
+ * Puts a copy's scrolled descendants, and the copy, at the offsets its element
+ * had when `inertCopy` made it. It scrolls at once, whatever their
+ * `scroll-behavior`. A box keeps no scroll position until it is laid out.
+ */
+export function restoreScrollOffsets(copy: HTMLElement): void {
+  for (const [node, top, left] of scrollOffsets.get(copy) ?? []) {
+    if (typeof node.scrollTo === 'function') {
+      node.scrollTo({top, left, behavior: 'instant'});
+    } else {
+      node.scrollTop = top;
+      node.scrollLeft = left;
+    }
+  }
+}
+
 /** The background `element` shows: its own, or the nearest ancestor's. */
 export function paintedBackground(element: Element): string {
   for (let node: Element | null = element; node; node = node.parentElement) {
@@ -268,15 +286,7 @@ export function placeOver(
   element.style.height = `${rect.height / scaleY}px`;
   element.style.left = `${(rect.left - origin.left) / scaleX}px`;
   element.style.top = `${(rect.top - origin.top) / scaleY}px`;
-  for (const [node, top, left] of scrollOffsets.get(element) ?? []) {
-    // At once, whatever the element's own `scroll-behavior`.
-    if (typeof node.scrollTo === 'function') {
-      node.scrollTo({top, left, behavior: 'instant'});
-    } else {
-      node.scrollTop = top;
-      node.scrollLeft = left;
-    }
-  }
+  restoreScrollOffsets(element);
 }
 
 /**
