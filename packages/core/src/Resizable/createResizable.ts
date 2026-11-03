@@ -606,7 +606,6 @@ export function createResizableAs(
     }
   }
 
-  // --- State changes ---
   const setCollapsed = (value: boolean) => {
     if (!isControlled()) {
       uncontrolledIsCollapsed = value;
