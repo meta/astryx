@@ -527,6 +527,23 @@ describe('Button', () => {
       expect(button).toHaveAttribute('aria-describedby', 'hint');
     });
 
+    it('keeps the description when aria-labelledby names the button', () => {
+      render(
+        <>
+          <span id="close-name">Close the editor</span>
+          <Button
+            label="Close"
+            tooltip="Close"
+            icon={<span>x</span>}
+            isIconOnly
+            aria-labelledby="close-name"
+          />
+        </>,
+      );
+      const button = screen.getByRole('button', {name: 'Close the editor'});
+      expect(button).toHaveAccessibleDescription('Close');
+    });
+
     it('compares with a caller aria-label, not the visible text', () => {
       render(
         <Button label="Clear" aria-label="Clear Search" tooltip="Clear" />,

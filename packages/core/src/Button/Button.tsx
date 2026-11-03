@@ -835,19 +835,16 @@ export function Button({
     (children != null && children !== label);
   const ariaLabelProp = needsAriaLabel ? {'aria-label': label} : null;
 
-  // The Button's accessible name when it can be read from props: the derived
-  // aria-label, else a caller aria-label, else the visible text. A name from
-  // aria-labelledby or from element children is not known here.
-  const accessibleName = needsAriaLabel
-    ? label
-    : (props['aria-label'] ??
-      (props['aria-labelledby'] != null
-        ? undefined
-        : typeof children === 'string'
-          ? children
-          : children == null
-            ? label
-            : undefined));
+  // The Button's accessible name when props decide it. A caller
+  // aria-labelledby names it from other elements, so it is not known here;
+  // otherwise it is the derived aria-label, else a caller aria-label, else
+  // the label text.
+  const accessibleName =
+    props['aria-labelledby'] != null
+      ? undefined
+      : needsAriaLabel
+        ? label
+        : (props['aria-label'] ?? label);
   // A tooltip that repeats the name adds nothing to the description, so a
   // screen reader does not read the same words twice.
   const isTooltipName =
