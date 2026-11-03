@@ -357,9 +357,9 @@ export function Timestamp({
         : 'date_time'
       : format;
 
-  // Format the display text in the viewer's own zone; only the tooltip names
-  // others. The one exception is the pre-hydration placeholder, written in
-  // UTC with its label so every zone produces the same markup.
+  // Absolute text uses `timezoneID`, else the viewer's zone. A named zone makes
+  // the text the same on the server and the client. The pre-hydration
+  // placeholder stays in UTC with its label, so every zone writes the same markup.
   //
   // A named zone makes absolute text the same on the server and the client.
   // It does not reach the placeholder, the default card row or the relative name.

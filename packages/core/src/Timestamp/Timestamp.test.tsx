@@ -1905,7 +1905,7 @@ describe('Timestamp server rendering', () => {
     process.env.TZ = 'America/Los_Angeles';
     const html = renderToString(element);
     expect(html).toContain('UTC');
-    expect(html).not.toContain('Los Angeles');
+    expect(html).not.toContain('PDT');
   });
 
   it('ignores timezoneID in the relative accessible name', () => {
