@@ -66,13 +66,13 @@ const d = <Tokenizer label="Tags" experimental={{...base, presentation: 'adaptiv
     expect(flat(output)).toContain('experimental={options}');
   });
 
-  it('moves the value past a spread that comes before experimental', async () => {
+  it('puts the value before a spread that comes before experimental, so a presentation in the spread still wins', async () => {
     const output = flat(
       await applyTransform(`import {Tokenizer} from '@astryxdesign/core';
 const a = <Tokenizer {...args} label="Tags" experimental={{presentation: 'bottom-sheet'}} />;`),
     );
     expect(output).toContain(
-      '<Tokenizer {...args} label="Tags" presentation="bottom-sheet" />',
+      '<Tokenizer presentation="bottom-sheet" {...args} label="Tags" />',
     );
     expect(output).not.toContain('TODO');
   });

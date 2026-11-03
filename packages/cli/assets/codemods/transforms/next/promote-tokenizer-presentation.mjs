@@ -12,12 +12,10 @@
  * keeps the deprecated spelling, which still works, and leaves a TODO: an
  * `experimental` value that is not an object literal, a spread or computed
  * key in it, a Tokenizer that already passes `presentation`, and a spread of
- * props after `experimental`, which could set `presentation` over the moved
- * value. A spread before `experimental` is safe: the moved attribute takes
- * `experimental`'s place, so it still wins over the spread, as the
- * experimental value did, and before this release a spread's `presentation`
- * did nothing. Each TODO is added once, so a second run changes
- * nothing.
+ * props after `experimental`, which can replace the `experimental` object.
+ * The stable attribute goes before the first spread, so a `presentation`
+ * that a spread carries still wins, as it wins over the experimental value.
+ * Each TODO is added once, so a second run changes nothing.
  */
 
 import {transformProp} from '../../transform-prop.mjs';
@@ -158,11 +156,20 @@ export default function transformer(file, api) {
       );
       value.properties = entries.filter((/** @type {any} */ e) => e !== entry);
       const index = opening.attributes.indexOf(prop);
+      const firstSpread = opening.attributes.findIndex(
+        (/** @type {any} */ a) => a.type === 'JSXSpreadAttribute',
+      );
       if (value.properties.length === 0) {
-        opening.attributes.splice(index, 1, presentation);
-      } else {
-        opening.attributes.splice(index + 1, 0, presentation);
+        opening.attributes.splice(index, 1);
       }
+      // A spread can carry its own `presentation`, which wins over the
+      // experimental value. Before the spread, the stable attribute still
+      // loses to it.
+      let insertAt = value.properties.length === 0 ? index : index + 1;
+      if (firstSpread !== -1) {
+        insertAt = firstSpread;
+      }
+      opening.attributes.splice(insertAt, 0, presentation);
       hasChanges = true;
     },
   );
