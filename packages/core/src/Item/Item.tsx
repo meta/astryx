@@ -826,8 +826,8 @@ export function Item({
     }
     const target = e.target as HTMLElement;
     if (
-      // React bubbles a click through a portal rendered from the row (a
-      // MoreMenu's menu in `endContent`), but its target is not in the row.
+      // React bubbles a click through a portal the caller renders from the
+      // row (its own `createPortal`), but its target is not in the row.
       !e.currentTarget.contains(target) ||
       // A native control owns the click, as it always has (this also keeps a
       // read-only input and a row inside a link or button inert).
