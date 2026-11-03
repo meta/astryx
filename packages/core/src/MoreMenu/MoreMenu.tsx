@@ -99,9 +99,9 @@ export interface MoreMenuProps extends Pick<
   /**
    * Menu presentation policy, forwarded to DropdownMenu. `adaptive` uses a
    * BottomSheet on compact coarse-pointer viewports and an anchored popover
-   * elsewhere. Omitted, the menu is the anchored popover, and the finger that
-   * opened it follows UIMenu's handoff on every device. `'popover'` pins the
-   * pointer behavior on every device.
+   * elsewhere. Omitted, the menu is the anchored popover, and a finger follows
+   * UIMenu's press on every device. `'popover'` pins the pointer behavior on
+   * every device.
    */
   presentation?: DropdownMenuPresentation;
 

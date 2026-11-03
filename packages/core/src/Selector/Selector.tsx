@@ -74,7 +74,7 @@ import {
   getSelectableOptions,
 } from './utils';
 import {useCombobox, useSelectedItemOffset} from './hooks';
-import {useMenuPress} from '../hooks/useMenuPress';
+import {useMenuSurfacePress} from '../hooks/useMenuPress';
 import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
@@ -1439,7 +1439,7 @@ export function Selector<T extends SelectorOptionType>(
     surface.isOpen,
     filteredItems.length > MOST_ROWS_THAT_FIT,
   );
-  const listboxPress = useMenuPress({
+  const listboxPress = useMenuSurfacePress({
     menuRef: listboxRef,
     itemSelector: '[role="option"]:not([aria-disabled="true"])',
     onHighlight: row => {

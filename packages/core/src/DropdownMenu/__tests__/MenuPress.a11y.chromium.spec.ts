@@ -407,6 +407,42 @@ test.describe('DropdownMenu press model (Chromium)', () => {
       .toBe('pinch-zoom');
   });
 
+  test('pen and mouse on the trigger, a fine primary pointer: a pen opens the menu as it presses, as a finger does, and a mouse press opens it at once, as before (spec:AST-094 FR29, FR43; spec:AST-017 FR59)', async ({
+    page,
+  }) => {
+    const activations = collectActivations(page);
+    const cdp = await page.context().newCDPSession(page);
+    await mount(page, MENU_STORY);
+    const trigger = page.getByRole('button', {name: /Actions|File/});
+    expect(
+      await page.evaluate(() => matchMedia('(pointer: fine)').matches),
+    ).toBe(true);
+    const at = await center(page, TRIGGER);
+
+    // A pen: the menu opens with the pen still down, well before the
+    // 500 ms hold the released behavior waited for.
+    await pen.press(cdp, at);
+    await expect(page.getByRole('menu')).toBeVisible({timeout: 300});
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    // Its lift, and the click the browser sends for it, pick nothing and
+    // leave the menu open.
+    await pen.release(cdp, at);
+    await page.waitForTimeout(300);
+    await expect(page.getByRole('menu')).toBeVisible();
+    expect(activations).toEqual([]);
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menu')).toBeHidden();
+
+    // A mouse: unchanged, its press opens the menu at once.
+    await page.mouse.move(at.x, at.y);
+    await page.mouse.down();
+    await expect(page.getByRole('menu')).toBeVisible({timeout: 300});
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+    await expect(page.getByRole('menu')).toBeVisible();
+    expect(activations).toEqual([]);
+  });
+
   test('pen: a drag released over another row acts on it once; a release outside leaves the menu open', async ({
     page,
   }) => {

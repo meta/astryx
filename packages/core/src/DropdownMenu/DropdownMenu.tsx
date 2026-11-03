@@ -71,6 +71,7 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useListFocus} from '../hooks/useListFocus';
 import {useDropdownMenuPress} from '../hooks/useMenuPress';
+import {isInScrollView} from '../hooks/menuScrollView';
 import type {MenuPressPointerType} from '../hooks/menuPressGesture';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {useFocusReturnVisibility} from '../hooks/useFocusReturnVisibility';
@@ -461,9 +462,9 @@ interface DropdownMenuDataProps extends DropdownMenuBaseProps {
    * policy (for example, a compact-touch media query) when the presentation
    * should adapt. Bottom-sheet presentation is intended for short action sets.
    * Omitted, the menu is the anchored popover. Under a finger, on every
-   * device, the finger that opened it picks as UIMenu's does, once it has
-   * moved. `'popover'` pins the anchored popover with the pointer behavior on
-   * every device (the opening press follows the settle rule, as before).
+   * device, its trigger opens as UIMenu's pull-down button does. `'popover'`
+   * pins the anchored popover with the pointer behavior on every device (a
+   * finger held for 500 ms opens it, as before).
    */
   presentation?: DropdownMenuPresentation;
   items: DropdownMenuOption[];
@@ -472,9 +473,9 @@ interface DropdownMenuDataProps extends DropdownMenuBaseProps {
 
 interface DropdownMenuCompoundProps extends DropdownMenuBaseProps {
   /**
-   * `'popover'` pins the pointer behavior on every device (the opening press
-   * follows the settle rule, as before). Omitted, on every device, the finger
-   * that opened the menu picks as UIMenu's does, once it has moved.
+   * `'popover'` pins the pointer behavior on every device (a finger held for
+   * 500 ms opens the menu, as before). Omitted, on every device, a finger's
+   * press opens the menu as UIMenu's pull-down button does.
    */
   presentation?: 'popover';
   items?: undefined;
@@ -1380,9 +1381,8 @@ function DropdownMenuPopover({
     itemSelector: MENU_ITEM_SELECTOR,
     onTriggerPress: handleTriggerPress,
     onDismiss: closeMenu,
-    // Under a finger, on every device, the opening finger picks as UIMenu's
-    // does. `presentation="popover"` pins the pointer model.
     touchModel: pressTouchModel,
+    isInScrollView,
   });
   cancelMenuPressRef.current = menuPress.cancel;
 
