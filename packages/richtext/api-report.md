@@ -11,8 +11,11 @@ component RichTextEditor(props: RichTextEditorProps)
   prop codeLanguages?: ReadonlyArray<CodeLanguage>
   prop defaultValue?: string
   prop description?: string
+  prop extensions?: ReadonlyArray<AnyLexicalExtension>
   prop hasAutoFocus?: boolean = false
+  prop hasHistory?: boolean = true, or false when `isCollaborative` is set
   prop hasMarkdownShortcuts?: boolean = true
+  prop isCollaborative?: boolean = false
   prop isDisabled?: boolean = false
   prop isLabelHidden?: boolean = false
   prop isOptional?: boolean = false

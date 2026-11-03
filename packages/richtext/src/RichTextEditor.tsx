@@ -25,6 +25,7 @@
  */
 
 import {
+  use,
   useEffect,
   useId,
   useImperativeHandle,
@@ -68,6 +69,12 @@ import {RichTextPlugin} from '@lexical/react/LexicalRichTextPlugin';
 import {ContentEditable} from '@lexical/react/LexicalContentEditable';
 import {LexicalErrorBoundary} from '@lexical/react/LexicalErrorBoundary';
 import {HistoryPlugin} from '@lexical/react/LexicalHistoryPlugin';
+// Carries no Yjs code — the context holds a document map the binding fills in,
+// so this import does not pull `yjs` into a bundle that never collaborates.
+import {
+  CollaborationContext,
+  LexicalCollaboration,
+} from '@lexical/react/LexicalCollaborationContext';
 import {ListPlugin} from '@lexical/react/LexicalListPlugin';
 import {LinkPlugin} from '@lexical/react/LexicalLinkPlugin';
 import {TabIndentationPlugin} from '@lexical/react/LexicalTabIndentationPlugin';
@@ -414,6 +421,32 @@ export interface RichTextEditorProps extends Omit<
    */
   plugins?: ReactNode;
   /**
+   * Additional Lexical extensions to build the editor from, appended to the
+   * ones this editor always carries.
+   *
+   * An extension configures the editor itself, so it cannot arrive through
+   * `plugins`: a plugin is a React child of a built editor, while an
+   * extension is read while the editor is being built. Reach for this where
+   * a plugin cannot go — a binding that owns the editor's content, a node
+   * structure contract, anything that must be in place before the first
+   * editor state exists.
+   *
+   * A collaborative binding that ships as an extension is wired here, with
+   * `isCollaborative` to stop this editor seeding content the document owns:
+   *
+   * ```tsx
+   * <RichTextEditor
+   *   isCollaborative
+   *   extensions={[configExtension(YCollabExtension, {doc, schemaVersion: 1})]}
+   * />
+   * ```
+   *
+   * Read once, when the editor is built. Later changes to the array are
+   * ignored, because applying them would mean rebuilding the editor and
+   * discarding its content.
+   */
+  extensions?: ReadonlyArray<AnyLexicalExtension>;
+  /**
    * Whether to enable Markdown shortcut typing (e.g. `# ` for a heading,
    * `- ` for a list). Uses the `transformers` prop (defaults to the standard
    * `@lexical/markdown` transformers plus GFM tables).
@@ -480,6 +513,60 @@ export interface RichTextEditorProps extends Omit<
    * @default 'astryx-editor'
    */
   namespace?: string;
+  /**
+   * Whether the editor keeps its own undo history.
+   *
+   * Turn this off when something else owns undo — a collaborative binding
+   * with its own history, or a history plugin you pass through `plugins`.
+   * Two history stacks over one editor fight each other, so only one may be
+   * active.
+   *
+   * @default true, or false when `isCollaborative` is set
+   */
+  hasHistory?: boolean;
+  /**
+   * Whether this editor's content comes from a collaborative binding rather
+   * than from `defaultValue`.
+   *
+   * The editor then provides the collaboration context a Yjs binding reads,
+   * and keeps no undo history of its own, because the binding's history owns
+   * undo.
+   *
+   * This does not connect anything. Render the binding itself through
+   * `plugins` — Lexical's `CollaborationPlugin` for a Yjs document, which
+   * receives this editor through `useLexicalComposerContext()`:
+   *
+   * ```tsx
+   * <RichTextEditor
+   *   isCollaborative
+   *   plugins={
+   *     <CollaborationPlugin
+   *       id={documentID}
+   *       providerFactory={providerFactory}
+   *       shouldBootstrap={false}
+   *     />
+   *   }
+   * />
+   * ```
+   *
+   * A binding that ships as a Lexical extension rather than a plugin goes
+   * through `extensions` instead; `isCollaborative` means the same thing for
+   * either.
+   *
+   * The editor provides the collaboration context the binding reads, unless
+   * it is already inside a `LexicalCollaboration` — wrap several editors in
+   * one yourself to have them share a context.
+   *
+   * Keeping the binding outside this component leaves the transport, the
+   * provider's lifecycle and presence to the host, and keeps `yjs` out of the
+   * dependencies of every app that installs this package.
+   *
+   * At most one client in a document may bootstrap it; prefer seeding the
+   * document server-side. See Lexical's `shouldBootstrap` documentation.
+   *
+   * @default false
+   */
+  isCollaborative?: boolean;
 }
 
 /**
@@ -526,6 +613,7 @@ export const RichTextEditor = function RichTextEditor({
   nodes,
   toolbar,
   plugins,
+  extensions,
   hasMarkdownShortcuts = true,
   transformers = DEFAULT_TRANSFORMERS,
   markdownExtensions,
@@ -534,6 +622,8 @@ export const RichTextEditor = function RichTextEditor({
   tabEscapeHint: tabEscapeHintFromProps,
   maxLength,
   namespace = 'astryx-editor',
+  isCollaborative = false,
+  hasHistory = !isCollaborative,
   xstyle,
   className,
   style,
@@ -541,6 +631,10 @@ export const RichTextEditor = function RichTextEditor({
   ...rest
 }: RichTextEditorProps) {
   const size = useSize(sizeProp, 'md');
+  // A host wrapping several editors in its own `LexicalCollaboration` shares
+  // one context between them deliberately; only provide one where there is
+  // none to share.
+  const collaborationContext = use(CollaborationContext);
   const t = useTranslator();
   const tabEscapeHint =
     tabEscapeHintFromProps ?? t('@astryx.richTextEditor.tabEscapeHint');
@@ -589,8 +683,11 @@ export const RichTextEditor = function RichTextEditor({
       editable,
       nodes: nodes ? [...DEFAULT_NODES, ...nodes] : [...DEFAULT_NODES],
       // Horizontal rules select on click and show their selection; struck
-      // text is a deletion.
-      dependencies: [HorizontalRuleExtension, TextSemanticsExtension],
+      // text is a deletion. A host's extensions come last, so one of them can
+      // configure an extension named here.
+      dependencies: extensions
+        ? [HorizontalRuleExtension, TextSemanticsExtension, ...extensions]
+        : [HorizontalRuleExtension, TextSemanticsExtension],
       // `undefined` (not `null`) leaves Lexical's default initializer in place,
       // which seeds the empty document with one paragraph — what
       // LexicalComposer did when no `editorState` was given. `null` would mean
@@ -626,7 +723,7 @@ export const RichTextEditor = function RichTextEditor({
       .filter(Boolean)
       .join(' ') || undefined;
 
-  return (
+  const field = (
     <Field
       label={label}
       isLabelHidden={isLabelHidden}
@@ -705,7 +802,7 @@ export const RichTextEditor = function RichTextEditor({
                 placeholder={null}
                 ErrorBoundary={LexicalErrorBoundary}
               />
-              <HistoryPlugin />
+              {hasHistory && <HistoryPlugin />}
               <ListPlugin />
               <TaskCheckboxPlugin isReadOnly={isReadOnly || isDisabled} />
               <LinkPlugin />
@@ -783,6 +880,15 @@ export const RichTextEditor = function RichTextEditor({
         </div>
       )}
     </Field>
+  );
+
+  // A collaborative binding reads this context for the document map it fills
+  // in. Without a provider Lexical warns and falls back to one shared by every
+  // editor in the page, which it documents as a source of bugs.
+  return isCollaborative && collaborationContext == null ? (
+    <LexicalCollaboration>{field}</LexicalCollaboration>
+  ) : (
+    field
   );
 };
 

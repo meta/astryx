@@ -156,8 +156,11 @@
     "@lexical/selection": "^0.52.0",
     "@lexical/table": "^0.52.0",
     "@lexical/utils": "^0.52.0",
+    "@lexical/yjs": "^0.52.0",
     "@stylexjs/babel-plugin": "catalog:",
     "@testing-library/react": "catalog:",
-    "lexical": "^0.52.0"
+    "lexical": "^0.52.0",
+    "y-protocols": "^1.0.7",
+    "yjs": "^13.6.31"
   }
 }
