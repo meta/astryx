@@ -3,7 +3,8 @@
 /**
  * @file useTooltip.test.tsx
  * @input Uses vitest, @testing-library/react, useTooltip hook
- * @output Unit tests for the tooltip show/hide timers and controlled state
+ * @output Unit tests for the tooltip show/hide timers and controlled state,
+ *   and for a press on a caller's trigger under `triggerBehavior="toggle"`
  * @position Testing; validates useTooltip.tsx timing contract. Component-level
  *   behavior lives in Tooltip.test.tsx — this file pins the delays, the
  *   hover-bridge constant, and timer teardown, which are invisible from there.
@@ -24,6 +25,8 @@ import {
 import {render, screen, fireEvent, act} from '@testing-library/react';
 import {useTooltip, type TooltipOptions} from './useTooltip';
 import {useLayer} from '../Layer/useLayer';
+import {ClickableCard} from '../ClickableCard/ClickableCard';
+import type {MouseEvent as ReactMouseEvent} from 'react';
 
 // jsdom implements neither the Popover API nor `:popover-open`; mirror
 // Tooltip.test.tsx's shims so the layer can open.
@@ -593,5 +596,62 @@ describe('useTooltip — focusTrigger="auto" decides when focus arrives', () => 
     fireEvent.focusOut(screen.getByLabelText('Amount'));
     tick(100);
     expect(onHide).not.toHaveBeenCalled();
+  });
+});
+
+describe('useTooltip with a caller’s trigger under triggerBehavior="toggle" (component:Tooltip FR9)', () => {
+  function Tip({
+    onTriggerClick,
+  }: {
+    onTriggerClick?: (event: ReactMouseEvent) => void;
+  }) {
+    const tooltip = useTooltip({triggerBehavior: 'toggle', delay: 0});
+    return (
+      <>
+        <button type="button" ref={tooltip.ref} onClick={onTriggerClick}>
+          What is this?
+        </button>
+        {tooltip.renderTooltip('Billed monthly')}
+      </>
+    );
+  }
+  const trigger = () => screen.getByRole('button', {name: 'What is this?'});
+
+  it('the trigger’s own onClick runs, and an Astryx ClickableCard around it does not activate', () => {
+    const onCard = vi.fn();
+    const onTrigger = vi.fn();
+    render(
+      <ClickableCard label="Card" onClick={onCard}>
+        <Tip onTriggerClick={onTrigger} />
+      </ClickableCard>,
+    );
+
+    fireEvent.click(trigger());
+
+    expect(onTrigger).toHaveBeenCalledTimes(1);
+    expect(onCard).not.toHaveBeenCalled();
+    expect(trigger()).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('a plain onClick element around it receives the press, unless the trigger’s onClick stops it', () => {
+    const onRow = vi.fn();
+    const {unmount} = render(
+      <div onClick={onRow}>
+        <Tip />
+      </div>,
+    );
+    fireEvent.click(trigger());
+    expect(onRow).toHaveBeenCalledTimes(1);
+    expect(trigger()).toHaveAttribute('aria-expanded', 'true');
+    unmount();
+
+    onRow.mockClear();
+    render(
+      <div onClick={onRow}>
+        <Tip onTriggerClick={event => event.stopPropagation()} />
+      </div>,
+    );
+    fireEvent.click(trigger());
+    expect(onRow).not.toHaveBeenCalled();
   });
 });

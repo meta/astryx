@@ -57,6 +57,7 @@ import {
   typographyVars,
 } from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
+import {textEntryTraitAttributes} from './textEntryTraits';
 
 const styles = stylex.create({
   // Gutter only. Matches the option list's own padding so the field below
@@ -273,6 +274,11 @@ export function PanelSearchInput({
         <input
           ref={mergedInputRef}
           type="text"
+          // Autocorrect would rewrite names and identifiers.
+          {...textEntryTraitAttributes({
+            enterKeyHint: 'search',
+            hasAutoCorrect: false,
+          })}
           aria-label={label}
           placeholder={placeholder}
           value={value}

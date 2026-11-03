@@ -466,6 +466,13 @@
       "aliases": []
     },
     {
+      "name": "component-info-tip",
+      "path": "components/info-tip",
+      "aliases": [
+        "components/lab/info-tip"
+      ]
+    },
+    {
       "name": "component-input-group",
       "path": "components/input-group",
       "aliases": []
@@ -598,11 +605,6 @@
     {
       "name": "component-lab-emoji-picker",
       "path": "components/lab/emoji-picker",
-      "aliases": []
-    },
-    {
-      "name": "component-lab-info-tip",
-      "path": "components/lab/info-tip",
       "aliases": []
     },
     {
@@ -3650,8 +3652,18 @@
       "aliases": []
     },
     {
+      "name": "example-use-combobox-assign-to-field",
+      "path": "examples/use-combobox/assign-to-field",
+      "aliases": []
+    },
+    {
       "name": "example-use-container-reveal-reveal-on-hover-row-actions",
       "path": "examples/use-container-reveal/reveal-on-hover-row-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-use-grid-focus-color-swatch-grid",
+      "path": "examples/use-grid-focus/color-swatch-grid",
       "aliases": []
     },
     {
@@ -3672,6 +3684,11 @@
     {
       "name": "example-use-list-focus-recent-files",
       "path": "examples/use-list-focus/recent-files",
+      "aliases": []
+    },
+    {
+      "name": "example-use-overflow-editor-toolbar",
+      "path": "examples/use-overflow/editor-toolbar",
       "aliases": []
     },
     {

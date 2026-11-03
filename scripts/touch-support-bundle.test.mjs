@@ -118,7 +118,16 @@ function filesUnder(dir, pattern) {
  * gives a component its gesture adds that component's import, and each import
  * that reaches it, with a comment naming the gesture.
  */
-const GESTURE_USERS = new Set([]);
+const GESTURE_USERS = new Set([
+  // Slider's thumb.
+  'Slider',
+  // Switch: its press tracking and its drag, for every pointer.
+  'Switch',
+  // SegmentedControl: its press tracking and its drag, for every pointer.
+  'SegmentedControl',
+  // DateTimeInput: through the SegmentedControl its touch field renders.
+  'DateTimeInput',
+]);
 
 /** Public imports that carry no gesture code, whatever the list above says. */
 const NEVER_GESTURE_USERS = ['Button', 'TextInput'];

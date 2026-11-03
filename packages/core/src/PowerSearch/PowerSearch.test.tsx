@@ -250,6 +250,100 @@ describe('PowerSearch', () => {
     expect(screen.getByText('Open')).toBeInTheDocument();
   });
 
+  it('a read-only field removes no filter, by control or by Backspace', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <PowerSearch
+        config={config}
+        filters={[
+          {
+            field: 'title',
+            operator: 'contains',
+            value: {type: 'string', value: 'login'},
+          },
+        ]}
+        onChange={onChange}
+        isReadOnly
+      />,
+    );
+    expect(
+      screen.queryByRole('button', {name: 'Clear all'}),
+    ).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('button', {name: /^Remove /})).toHaveLength(0);
+    await user.click(screen.getByRole('combobox', {name: 'Search'}));
+    await user.keyboard('{Backspace}');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  describe('read-only filters', () => {
+    const readOnlyFilter: PowerSearchFilter = {
+      field: 'status',
+      operator: 'is',
+      value: {type: 'enum', value: 'open'},
+      isReadOnly: true,
+    };
+    const titleFilter: PowerSearchFilter = {
+      field: 'title',
+      operator: 'contains',
+      value: {type: 'string', value: 'login'},
+    };
+    const closedFilter: PowerSearchFilter = {
+      field: 'status',
+      operator: 'is',
+      value: {type: 'enum', value: 'closed'},
+    };
+    const politeRegion = () =>
+      document.querySelector('[data-astryx-live-region="polite"]');
+
+    it('Clear all keeps a read-only filter and reports the first removed index', async () => {
+      const onChange = vi.fn();
+      render(
+        <PowerSearch
+          config={config}
+          filters={[readOnlyFilter, titleFilter, closedFilter]}
+          onChange={onChange}
+        />,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Clear all'}));
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenCalledWith([readOnlyFilter], 'remove', 1);
+      await waitFor(() => {
+        expect(politeRegion()).toHaveTextContent('Editable filters removed');
+      });
+      expect(politeRegion()).not.toHaveTextContent('All filters removed');
+    });
+
+    it('has no Clear all when every filter is read-only', () => {
+      render(
+        <PowerSearch
+          config={config}
+          filters={[readOnlyFilter]}
+          onChange={() => {}}
+        />,
+      );
+      expect(
+        screen.queryByRole('button', {name: 'Clear all'}),
+      ).not.toBeInTheDocument();
+    });
+
+    it('Backspace on an empty input keeps a read-only last filter', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <PowerSearch
+          config={config}
+          filters={[titleFilter, readOnlyFilter]}
+          onChange={onChange}
+        />,
+      );
+      await user.click(screen.getByRole('combobox', {name: 'Search'}));
+      await user.keyboard('{Backspace}');
+      expect(onChange).not.toHaveBeenCalled();
+      expect(politeRegion()?.textContent ?? '').not.toMatch(/removed/i);
+    });
+  });
+
   describe('token value truncation (#4759)', () => {
     it('truncates token values by characters, not code units', () => {
       const truncConfig: PowerSearchConfig = {

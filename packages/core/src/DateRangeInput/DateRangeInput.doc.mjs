@@ -115,7 +115,7 @@ export const docs = {
       name: 'presets',
       type: 'Array<DateRangePreset>',
       description:
-        'Preset ranges shown as quick-select options beside the calendar. A preset is disabled when either endpoint violates min, max, or dateConstraints, or when its span violates minRangeSpan or maxRangeSpan.',
+        'Preset ranges shown as quick-select options beside the calendar, or above it when the two do not fit side by side. A preset is disabled when either endpoint violates min, max, or dateConstraints, or when its span violates minRangeSpan or maxRangeSpan.',
     },
     {
       name: 'hasClear',
@@ -277,7 +277,8 @@ export const docs = {
       {
         name: 'Preset sidebar',
         required: false,
-        description: 'A list of preset range options beside the calendar.',
+        description:
+          'A list of preset range options beside the calendar, or above it when the two do not fit side by side.',
       },
       {
         name: 'Preset button',

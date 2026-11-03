@@ -40,31 +40,66 @@ async function mount(page: Page, story: string, args = '', timeout = 5000) {
 }
 
 /**
- * Toggles a row and holds every animation `ms` into its run, so the frame
- * can be read.
+ * Toggles a row and holds every animation `ms` into its run, so a test can read
+ * the frame. Returns how many row glides it held, and throws when a row
+ * animation starts another way. A glide starts on the timeline's time in the
+ * click's own task. On a loaded runner, its first frame can come after the
+ * glide ends. So the helper holds each animation the click starts before any
+ * frame runs.
  */
 async function toggleAndHold(page: Page, index: number, ms: number) {
   return page.evaluate(
     async ({index, ms}) => {
-      (
-        document.querySelectorAll('[data-expansion-toggle]')[index] as
-          HTMLElement | undefined
-      )?.click();
-      await new Promise(resolve => requestAnimationFrame(resolve));
-      // The glide's own motion on rows (script animations), not a CSS
-      // transition a row's hover or press state runs.
-      const rows = document
-        .getAnimations()
-        .filter(
-          animation =>
-            !(animation instanceof CSSTransition) &&
-            !(animation instanceof CSSAnimation) &&
-            (animation.effect as KeyframeEffect | null)?.target?.nodeName ===
-              'TR',
-        );
-      for (const animation of document.getAnimations()) {
+      const hold = (animation: Animation) => {
         animation.pause();
         animation.currentTime = ms;
+      };
+      const before = new Set(document.getAnimations());
+      const held: Animation[] = [];
+      const animate = Element.prototype.animate;
+      Element.prototype.animate = function (
+        this: Element,
+        ...args: Parameters<Element['animate']>
+      ) {
+        const animation = animate.apply(this, args);
+        held.push(animation);
+        // After the code that starts it has set its start time.
+        queueMicrotask(() => hold(animation));
+        return animation;
+      };
+      try {
+        (
+          document.querySelectorAll('[data-expansion-toggle]')[index] as
+            HTMLElement | undefined
+        )?.click();
+        await new Promise(resolve => requestAnimationFrame(resolve));
+      } finally {
+        Element.prototype.animate = animate;
+      }
+      const live = document.getAnimations();
+      const isRowMotion = (animation: Animation) =>
+        !(animation instanceof CSSTransition) &&
+        !(animation instanceof CSSAnimation) &&
+        (animation.effect as KeyframeEffect | null)?.target?.nodeName === 'TR';
+      // A row animation the click started that the patch did not hold escapes
+      // the hold.
+      const stray = live.filter(
+        animation =>
+          isRowMotion(animation) &&
+          !before.has(animation) &&
+          !held.includes(animation),
+      );
+      if (stray.length > 0) {
+        throw new Error(
+          `${stray.length} row animations started outside Element.prototype.animate`,
+        );
+      }
+      const rows = held.filter(
+        animation => live.includes(animation) && isRowMotion(animation),
+      );
+      // A CSS transition starts on the first frame, so the loop below holds it.
+      for (const animation of document.getAnimations()) {
+        hold(animation);
       }
       return rows.length;
     },
@@ -325,7 +360,8 @@ test('under Reduce Motion a finger sees the rows fade in place, not move', async
   });
   const page = await context.newPage();
   await mount(page, 'gliding-rows');
-  await toggleAndHold(page, 0, 0);
+  // The rows animate, so the check below has animations to read.
+  expect(await toggleAndHold(page, 0, 0)).toBeGreaterThan(0);
   // The size-change module's Reduce Motion under a coarse pointer: a short
   // fade at the new place (design:reduced-motion DR2), never a translate.
   const moves = await page.evaluate(

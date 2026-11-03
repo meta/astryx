@@ -1325,6 +1325,13 @@ component IconButton(props: IconButtonProps)
   prop width?: SizeValue
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
+component InfoTip(props: InfoTipProps)
+  prop content: ReactNode
+  prop label?: string = A translated "More information"
+  prop ref?: Ref<HTMLButtonElement>
+  prop size?: InfoTipSize = 'sm'
+  prop xstyle?: StyleXStyles
+  inherits HTMLAttributes
 component InputClearButton(props: InputClearButtonProps)
   prop iconClassName?: string
   prop label: string
@@ -2674,6 +2681,7 @@ component Tooltip(props: TooltipProps)
   prop onOpenChange?: (isOpen: boolean) => void
   prop placement?: LayerPlacement = 'above'
   prop touchTrigger?: TooltipTouchTrigger = 'auto'
+  prop triggerBehavior?: TooltipTriggerBehavior = 'adaptive'
 component TopNav(props: TopNavProps)
   prop centerContent?: ReactNode
   prop children?: ReactNode
@@ -4482,6 +4490,8 @@ type IndicatorRegistrySource = DefinedTheme | string | null | undefined
 type IndicatorSize = 'sm' | 'md'
 type IndicatorState<F extends IndicatorFamily = IndicatorFamily> = IndicatorFamilyMap[F]
 type InferData<D extends ReadonlyArray<FieldDefinition>> = { [F in D[number] as F['key']]: FieldTypeToJS[F['type']] }
+interface InfoTipProps extends Pick<BaseProps, 'xstyle' | 'className' | 'style'> (props of InfoTip)
+type InfoTipSize = IconSize
 type InlineNode<Extension extends MarkdownExtensionNode = never> = { type: 'text'; content: string } | { type: 'bold'; children: InlineNode<Extension>[] } | { type: 'italic'; children: InlineNode<Extension>[] } | { type: 'strik … #7f5046d1
 type InlineNodeWithMath<Extension extends MarkdownExtensionNode = never> = { type: 'text'; content: string } | { type: 'bold'; children: InlineNodeWithMath<Extension>[] } | { type: 'italic'; children: InlineNodeWithMath<Extension>[] }  … #7144a813
 interface InputARIA
@@ -5654,6 +5664,7 @@ interface TooltipOptions
   onShow?: () => void
   placement?: LayerPlacement = 'above'
   touchTrigger?: TooltipTouchTrigger = 'auto'
+  triggerBehavior?: TooltipTriggerBehavior = 'adaptive'
 interface TooltipProps (props of Tooltip)
 interface TooltipReturn
   anchorId: string
@@ -5663,6 +5674,7 @@ interface TooltipReturn
   ref: RefCallback<HTMLElement>
   renderTooltip: (children: ReactNode, props?: Omit<ContextRenderProps, 'positioning'>) => ReactNode
 type TooltipTouchTrigger = LayerTouchTrigger
+type TooltipTriggerBehavior = 'adaptive' | 'hover' | 'toggle'
 interface TopNavHeadingProps extends BaseProps<HTMLElement> (props of TopNavHeading)
 interface TopNavItemProps extends BaseProps<HTMLAnchorElement> (props of TopNavItem)
 interface TopNavMegaMenuFeaturedCardProps extends BaseProps<HTMLDivElement> (props of TopNavMegaMenuFeaturedCard)
@@ -7156,6 +7168,16 @@ useIndicator (.)
 
 ```text
 indicatorScope (.)
+```
+
+## `./InfoTip`
+
+### Also exported from an earlier entry point
+
+```text
+InfoTip (.)
+InfoTipProps (.)
+InfoTipSize (.)
 ```
 
 ## `./InputGroup`
@@ -8902,6 +8924,7 @@ TooltipOptions (.)
 TooltipProps (.)
 TooltipReturn (.)
 TooltipTouchTrigger (.)
+TooltipTriggerBehavior (.)
 useTooltip (.)
 ```
 
@@ -9986,7 +10009,6 @@ var --text-supporting-size (./astryx.css)
 var --text-supporting-weight (./astryx.css)
 var --tree-list-indent (./astryx.css)
 var --tree-list-row-gap (./astryx.css)
-var --x1ue0wla (./astryx.css)
 var --border-color-error (./tailwind-theme.css)
 var --border-color-info (./tailwind-theme.css)
 var --border-color-success (./tailwind-theme.css)

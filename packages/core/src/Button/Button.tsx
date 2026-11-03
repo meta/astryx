@@ -74,6 +74,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Button/Button.generated';
+import {isRenderable} from '../utils/isRenderable';
 
 registerEnglishFallback(english);
 
@@ -821,7 +822,7 @@ export function Button({
               : loadingStyles.hiddenContent),
         )}
         aria-hidden={isLoadingState || undefined}>
-        {icon && (
+        {isRenderable(icon) && (
           <span
             {...stylex.props(styles.iconWrapper, iconBoxSizeStyles[iconSize])}>
             <IconDefaultSizeProvider value={iconSize}>
@@ -832,7 +833,7 @@ export function Button({
         {isIconOnly ? null : (
           <span {...stylex.props(styles.labelText)}>{children ?? label}</span>
         )}
-        {!isIconOnly && endContent && (
+        {!isIconOnly && isRenderable(endContent) && (
           <span {...stylex.props(styles.endContentWrapper)}>{endContent}</span>
         )}
       </span>
