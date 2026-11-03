@@ -58,6 +58,31 @@ test('hovering a post heading reveals a control that copies its permalink', asyn
   expect(new URL(copied).hash).toBe(`#${HEADING_ID}`);
 });
 
+test('a copied heading link opened in a new page lands below the sticky header', async ({
+  page,
+}) => {
+  await page.setViewportSize({width: 1280, height: 900});
+  // The browser scrolls to the fragment while the page parses, before React
+  // runs, so the header offset must already hold then.
+  await page.goto(`${POST}#${HEADING_ID}`);
+
+  const heading = page.getByRole('heading', {name: HEADING});
+  const header = page.locator('.astryx-app-shell-header').first();
+  await expect(heading).toBeInViewport();
+  const headerBox = await header.boundingBox();
+  const headingBox = await heading.boundingBox();
+  if (headerBox == null || headingBox == null) {
+    throw new Error('missing layout');
+  }
+  // The header and the heading are on screen.
+  expect(headerBox.height).toBeGreaterThan(0);
+  expect(headingBox.height).toBeGreaterThan(0);
+  // The heading sits below the whole header, banner included.
+  expect(headingBox.y).toBeGreaterThanOrEqual(
+    headerBox.y + headerBox.height - 1,
+  );
+});
+
 for (const [dir, colorScheme] of [
   ['ltr', 'light'],
   ['rtl', 'dark'],

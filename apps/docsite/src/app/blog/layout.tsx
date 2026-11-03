@@ -7,6 +7,7 @@
  */
 
 import {AppShell} from '@astryxdesign/core/AppShell';
+import {HeaderHeightSeed} from '../../components/HeaderHeightSeed';
 import {SharedTopNav} from '../../components/SharedTopNav';
 import {DocsBanner} from '../../components/InternalDocsPrompt';
 import {SiteFooter} from '../../components/SiteFooter';
@@ -25,7 +26,14 @@ export default async function BlogLayout({
       height="auto"
       mobileNav={false}
       banner={<DocsBanner />}
-      topNav={<SharedTopNav />}>
+      topNav={
+        <>
+          <SharedTopNav />
+          {/* A copied heading link scrolls to its heading while the page
+              parses, so the header offset is measured before the post. */}
+          <HeaderHeightSeed />
+        </>
+      }>
       {children}
       <SiteFooter year={year} />
     </AppShell>
