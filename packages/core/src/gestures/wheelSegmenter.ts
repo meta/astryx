@@ -104,7 +104,9 @@ export class WheelSegmenter {
     let liftNow = false;
     let decaying = false;
     if (this.phase === 'finger' && this.count >= 3 && size > 0) {
-      decaying = size <= this.previous * 0.995 && size >= this.previous * 0.5;
+      // A bunched wheel is read by its last step, as the decay goes on from it.
+      const step = size / steps;
+      decaying = step <= this.previous * 0.995 && step >= this.previous * 0.5;
       if (decaying) {
         if (this.run === 0) {
           this.runStart = this.previous;
@@ -113,7 +115,7 @@ export class WheelSegmenter {
       } else {
         this.run = 0;
       }
-      if (this.run >= LIFT_RUN && size <= this.runStart * LIFT_DECAY) {
+      if (this.run >= LIFT_RUN && step <= this.runStart * LIFT_DECAY) {
         this.phase = 'momentum';
         liftNow = true;
       }

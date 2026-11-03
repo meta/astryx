@@ -266,3 +266,36 @@ describe("WheelSegmenter's reading of a stall's merge: no jump, no lift", () => 
     }).toEqual({lift: false, afterMerge: false});
   });
 });
+
+describe('WheelSegmenter: a slowing drag with a merged wheel', () => {
+  it("reads a slowing drag's lift at the same frame whether or not a stall merged two of its steps", () => {
+    // Steady 10 px steps every 16 ms, then a drag slowing 1 % a frame.
+    const sizes = [10, 10, 10, 10];
+    for (let frame = 1; frame <= 30; frame++) {
+      sizes.push(10 * 0.99 ** frame);
+    }
+    const times = sizes.map((_, index) => index * 16);
+    const liftTime = (merge: number | null) => {
+      const segmenter = new WheelSegmenter();
+      for (let index = 0; index < sizes.length; index++) {
+        let size = sizes[index];
+        let time = times[index];
+        if (index === merge) {
+          // A stalled page receives this step and the next as one wheel,
+          // 1 ms after the one before.
+          size += sizes[index + 1];
+          time = times[index - 1] + 1;
+        } else if (merge != null && index === merge + 1) {
+          continue;
+        }
+        if (segmenter.push(time, size, 180).liftNow) {
+          return times[index];
+        }
+      }
+      return null;
+    };
+    const control = liftTime(null);
+    expect(control).not.toBeNull();
+    expect(liftTime(10)).toBe(control);
+  });
+});
