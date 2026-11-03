@@ -80,11 +80,7 @@ import {themeProps} from '../utils/themeProps';
 import type {DialogVariantMap} from './index';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
-import {
-  focusForLastInput,
-  isFocusDetached,
-  isFocusLost,
-} from '../utils/focusReturn';
+import {focusForLastInput, isFocusLost} from '../utils/focusReturn';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -647,6 +643,9 @@ export function Dialog({
       return;
     }
     const dialog = dialogRef.current;
+    // Read now: a removed iframe's document has no window, so its frame
+    // element can no longer be found once the dialog is gone.
+    const host = dialog?.ownerDocument.defaultView?.frameElement ?? null;
     return () => {
       const trigger = triggerElementRef.current;
       if (dialog == null || trigger == null) {
@@ -662,13 +661,9 @@ export function Dialog({
         // isFocusLost reads the dialog's own document. For a dialog in an
         // iframe, the document that hosts the frame must also have lost focus
         // or keep it on that frame, wherever the opener is: a control the
-        // user pressed outside the frame to remove the dialog keeps its focus.
-        const host = dialog.ownerDocument.defaultView?.frameElement ?? null;
-        const isHostFocusLost =
-          host == null ||
-          isFocusDetached(host.ownerDocument) ||
-          host.ownerDocument.activeElement === host;
-        if (isFocusLost(dialog) && isHostFocusLost) {
+        // user pressed outside the frame to remove the dialog, or the frame
+        // itself, keeps its focus.
+        if (isFocusLost(dialog) && (host == null || isFocusLost(host))) {
           focusForLastInput(trigger);
         }
       });

@@ -304,6 +304,58 @@ describe('Dialog', () => {
       }
     });
 
+    it('keeps the focus of a page control that removes the whole iframe holding an open dialog', async () => {
+      const frame = document.createElement('iframe');
+      document.body.append(frame);
+      const frameDocument = frame.contentDocument!;
+      // jsdom gives each document its own HTMLDialogElement prototype.
+      const {prototype} = frameDocument.defaultView!.HTMLDialogElement;
+      prototype.showModal = HTMLDialogElement.prototype.showModal;
+      prototype.close = HTMLDialogElement.prototype.close;
+      function PageWithFrame() {
+        const [isOpen, setIsOpen] = useState(false);
+        return (
+          <>
+            <button type="button" onClick={() => setIsOpen(true)}>
+              Open framed dialog
+            </button>
+            {isOpen
+              ? createPortal(
+                  <Dialog isOpen onOpenChange={setIsOpen} aria-label="Framed">
+                    <button type="button">Inside the frame</button>
+                  </Dialog>,
+                  frameDocument.body,
+                )
+              : null}
+            <button type="button" onClick={() => setIsOpen(false)}>
+              Close the frame
+            </button>
+          </>
+        );
+      }
+      const {unmount} = render(<PageWithFrame />);
+      const open = screen.getByRole('button', {name: 'Open framed dialog'});
+      open.focus();
+      fireEvent.click(open);
+      frameDocument.querySelector('button')!.focus();
+      const closeFrame = screen.getByRole('button', {name: 'Close the frame'});
+      closeFrame.focus();
+
+      // The click unmounts the dialog, and the frame goes in the same task,
+      // before the focus check runs.
+      fireEvent.click(closeFrame);
+      frame.remove();
+      // A browser drops a removed frame's window; jsdom keeps it.
+      Object.defineProperty(frameDocument, 'defaultView', {
+        configurable: true,
+        get: () => null,
+      });
+      await Promise.resolve();
+
+      expect(document.activeElement).toBe(closeFrame);
+      unmount();
+    });
+
     it('leaves focus that moved elsewhere when the dialog unmounts', async () => {
       function Page() {
         const [isOpen, setIsOpen] = useState(true);
