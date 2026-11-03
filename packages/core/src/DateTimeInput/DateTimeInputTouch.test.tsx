@@ -29,6 +29,7 @@ import {Profiler, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {readFileSync} from 'node:fs';
 import {render, screen, fireEvent, within} from '@testing-library/react';
+import {InternationalizationProvider} from '../i18n';
 import {DateTimeInput as CoreDateTimeInput} from './DateTimeInput';
 import type {DateTimeInputProps, ISODateTimeString} from './DateTimeInput';
 
@@ -210,6 +211,32 @@ describe('DateTimeInput touch surface', () => {
       );
     });
   });
+
+  it.each([
+    ['en-US', ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']],
+    ['pt-PT', ['dom.', 'seg.', 'ter.', 'qua.', 'qui.', 'sex.', 'sáb.']],
+    ['id-ID', ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']],
+  ])(
+    'labels the date sheet columns in %s with the Calendar header names',
+    (locale, names) => {
+      withMonthLayout(() => {
+        render(
+          <InternationalizationProvider locale={locale}>
+            <DateTimeInput label="Meeting" onChange={() => {}} />
+          </InternationalizationProvider>,
+        );
+        openDateSheet();
+        // The decorative weekday row is the only 7-cell aria-hidden block.
+        const row = [...document.querySelectorAll('[aria-hidden="true"]')].find(
+          el => el.children.length === 7,
+        );
+        expect(row).toBeDefined();
+        expect([...row!.children].map(c => c.textContent?.trim())).toEqual(
+          names,
+        );
+      });
+    },
+  );
 
   it('uses intrinsic wrapping for the closed touch segments', () => {
     const {container} = render(

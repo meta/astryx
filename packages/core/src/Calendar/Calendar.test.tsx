@@ -26,7 +26,7 @@ import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
-import {standaloneShortWeekdayNamesByLocale} from './standaloneShortWeekdayNames.generated';
+import {weekdayHeaderNamesByLocale} from './weekdayHeaderNames.generated';
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
@@ -149,18 +149,18 @@ describe('Calendar', () => {
   it('displays day names', () => {
     render(<Calendar />);
 
-    expect(screen.getByText('Su')).toBeInTheDocument();
-    expect(screen.getByText('Mo')).toBeInTheDocument();
-    expect(screen.getByText('Tu')).toBeInTheDocument();
-    expect(screen.getByText('We')).toBeInTheDocument();
-    expect(screen.getByText('Th')).toBeInTheDocument();
-    expect(screen.getByText('Fr')).toBeInTheDocument();
-    expect(screen.getByText('Sa')).toBeInTheDocument();
+    expect(screen.getByText('Sun')).toBeInTheDocument();
+    expect(screen.getByText('Mon')).toBeInTheDocument();
+    expect(screen.getByText('Tue')).toBeInTheDocument();
+    expect(screen.getByText('Wed')).toBeInTheDocument();
+    expect(screen.getByText('Thu')).toBeInTheDocument();
+    expect(screen.getByText('Fri')).toBeInTheDocument();
+    expect(screen.getByText('Sat')).toBeInTheDocument();
   });
 
-  it('uses the provider locale for stand-alone short day names', () => {
-    const localizedNames = standaloneShortWeekdayNamesByLocale.es;
-    const englishNames = standaloneShortWeekdayNamesByLocale.en;
+  it('uses the provider locale for weekday header names', () => {
+    const localizedNames = weekdayHeaderNamesByLocale.es;
+    const englishNames = weekdayHeaderNamesByLocale.en;
     expect(localizedNames).not.toEqual(englishNames);
 
     const {rerender} = render(
@@ -184,7 +184,7 @@ describe('Calendar', () => {
   });
 
   it('rotates localized day names by numeric weekday index', () => {
-    const localizedNames = standaloneShortWeekdayNamesByLocale.es;
+    const localizedNames = weekdayHeaderNamesByLocale.es;
 
     render(
       <InternationalizationProvider locale="es-ES">
@@ -195,6 +195,48 @@ describe('Calendar', () => {
     expect(
       screen.getAllByRole('columnheader').map(header => header.textContent),
     ).toEqual([...localizedNames.slice(1), localizedNames[0]]);
+  });
+
+  it('shows abbreviated weekday names in a locale where all seven fit in four characters', () => {
+    render(
+      <InternationalizationProvider locale="fr-FR">
+        <Calendar />
+      </InternationalizationProvider>,
+    );
+
+    expect(
+      screen.getAllByRole('columnheader').map(header => header.textContent),
+    ).toEqual(['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.']);
+  });
+
+  it.each([
+    ['pt-PT', ['dom.', 'seg.', 'ter.', 'qua.', 'qui.', 'sex.', 'sáb.']],
+    ['pl-PL', ['nie', 'pon', 'wto', 'śro', 'czw', 'pią', 'sob']],
+  ])(
+    'keeps short weekday names in %s, where an abbreviated name runs past four characters',
+    (locale, shortNames) => {
+      render(
+        <InternationalizationProvider locale={locale}>
+          <Calendar />
+        </InternationalizationProvider>,
+      );
+
+      expect(
+        screen.getAllByRole('columnheader').map(header => header.textContent),
+      ).toEqual(shortNames);
+    },
+  );
+
+  it('shows the platform abbreviated names for a locale with no shipped weekday data', () => {
+    render(
+      <InternationalizationProvider locale="id-ID">
+        <Calendar />
+      </InternationalizationProvider>,
+    );
+
+    expect(
+      screen.getAllByRole('columnheader').map(header => header.textContent),
+    ).toEqual(['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']);
   });
 
   it('updates the month header and subsequent navigation with provider locale', async () => {
@@ -803,23 +845,23 @@ describe('Calendar', () => {
     render(<Calendar weekStartsOn={1} />);
 
     // First day name should be Monday
-    const dayNames = screen.getAllByText(/^(Mo|Tu|We|Th|Fr|Sa|Su)$/);
-    expect(dayNames[0]).toHaveTextContent('Mo');
+    const dayNames = screen.getAllByText(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$/);
+    expect(dayNames[0]).toHaveTextContent('Mon');
   });
 
   it('accepts a three-letter day name for weekStartsOn', () => {
     render(<Calendar weekStartsOn="mon" />);
 
     // "mon" should behave exactly like the numeric 1 (Monday first).
-    const dayNames = screen.getAllByText(/^(Mo|Tu|We|Th|Fr|Sa|Su)$/);
-    expect(dayNames[0]).toHaveTextContent('Mo');
+    const dayNames = screen.getAllByText(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$/);
+    expect(dayNames[0]).toHaveTextContent('Mon');
   });
 
   it('treats weekStartsOn day names case-insensitively', () => {
     render(<Calendar weekStartsOn={'WED' as 'wed'} />);
 
-    const dayNames = screen.getAllByText(/^(Mo|Tu|We|Th|Fr|Sa|Su)$/);
-    expect(dayNames[0]).toHaveTextContent('We');
+    const dayNames = screen.getAllByText(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)$/);
+    expect(dayNames[0]).toHaveTextContent('Wed');
   });
 
   // ─── Range Mode ──────────────────────────────────────────────
@@ -2072,7 +2114,7 @@ describe('Calendar', () => {
 
     // Verify they contain day name abbreviations
     const dayNames = columnHeaders.map(h => h.textContent);
-    expect(dayNames).toEqual(['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']);
+    expect(dayNames).toEqual(['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']);
   });
 
   it('button inside gridcell does not duplicate role="gridcell"', () => {

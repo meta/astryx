@@ -29,6 +29,7 @@ import {
   plainDateGetWeekNumber,
   plainDateFormat,
   plainDateFormatStandaloneMonthYear,
+  plainDateWeekdayNames,
   plainDateFormatDayNumber,
   formatSharedDate,
   DATE_FORMAT_LONG,
@@ -982,5 +983,32 @@ describe('plainDateFormatDayNumber', () => {
 
   it('adds no grouping separator', () => {
     expect(plainDateFormatDayNumber(1234, 'en')).toBe('1234');
+  });
+});
+
+describe('plainDateWeekdayNames', () => {
+  it('formats the abbreviated weekday names Sunday first', () => {
+    expect(plainDateWeekdayNames('en')).toEqual([
+      'Sun',
+      'Mon',
+      'Tue',
+      'Wed',
+      'Thu',
+      'Fri',
+      'Sat',
+    ]);
+    expect(plainDateWeekdayNames('id-ID')).toEqual([
+      'Min',
+      'Sen',
+      'Sel',
+      'Rab',
+      'Kam',
+      'Jum',
+      'Sab',
+    ]);
+  });
+
+  it('returns null for a language the platform has no data for', () => {
+    expect(plainDateWeekdayNames('xx-ZZ')).toBeNull();
   });
 });
