@@ -53,6 +53,7 @@ export const NESTED_NAMESPACE_PAGES = new Map();
  * @type {Map<string, string>}
  */
 export const SIDEBAR_PARENTS = new Map([
+  ['cli-experimental-icon-sets', 'icons'],
   ['cli-experimental-icon-set-files', 'icons'],
   ['styling', 'styling-overview'],
 ]);

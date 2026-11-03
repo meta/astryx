@@ -96,7 +96,8 @@ describe('route resolution', () => {
     // `use-integrations` is the guide for apps that install one;
     // `cli-experimental-render-pages` is the experimental render guide.
     // `styling` shows under `styling-overview`, and
-    // `cli-experimental-icon-set-files` under Icons in Foundations.
+    // `cli-experimental-icon-sets` and `cli-experimental-icon-set-files`
+    // under Icons in Foundations.
     const sidebarGuides = docsSidebarGroups(docTopics)
       .guide.flatMap(({page, children}) => [page, ...children])
       .map(d => d.topic)
@@ -106,7 +107,6 @@ describe('route resolution', () => {
         'authoring',
         'browser-support',
         'cli-component-lookups',
-        'cli-experimental-icon-sets',
         'cli-experimental-render-pages',
         'cli-host-entry',
         'global',
