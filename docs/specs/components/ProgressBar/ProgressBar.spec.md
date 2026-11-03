@@ -111,6 +111,11 @@ Consumer migration instructions belong in consumer docs and release notes.
   exported for themes to extend, but an added variant matches no built-in fill
   or on-fill mark color, so the fill paints nothing until a theme styles it, where
   `architecture:component-theming-surface` INV14 asks for a safe baseline.
+- **Touch fill still plays the measured timing (FR4).** Under a coarse
+  primary pointer a value change still moves the fill linearly for
+  `progress.fillTrackMs` times the share of the track moved, where
+  `spec:AST-094` FR45 has it move on `--duration-medium` and the theme's
+  easing under every pointer.
 - **Indeterminate slide follows any right-to-left ancestor (FR6).** The
   indeterminate slide and the centering of marks mirror under any
   right-to-left ancestor rather than the bar's own direction, so in a
