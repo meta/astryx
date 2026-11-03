@@ -12,6 +12,8 @@
  * SYNC: When modified, update actionGroupTracker.test.ts
  */
 
+import {clickAndReport, clickForLift} from '../utils/browserClickWait';
+import {armClickGuard} from '../utils/clickGuard';
 import {PRESSED_ATTRIBUTE} from '../utils/pressFeedback';
 import {PRESS_FADE_MS} from '../utils/pressGesture';
 
@@ -70,9 +72,9 @@ export interface ActionGroupTrackerOptions {
    */
   onActivated?: (item: HTMLElement, cancelled: boolean) => void;
   /**
-   * After the lift ran an action, take the browser's own click for that
-   * touch (left to it by a recognizer that did not claim the touch), so the
-   * action runs once. @default false
+   * After the lift ran an action, the shared click guard takes the browser's
+   * own click for that touch, so the action runs once. A recognizer that did
+   * not claim the touch leaves that click to the browser. @default false
    */
   swallowsNativeClick?: boolean;
 }
@@ -124,54 +126,6 @@ interface TrackedAction {
   top: number;
   right: number;
   bottom: number;
-}
-
-/**
- * Swallow the browser's own click for a touch that the lift already acted
- * on. The listeners exist only from that lift until the click, the next
- * press, or the next key. An activation with `detail === 0` (a key or
- * assistive technology) always passes, and the swallower keeps waiting
- * (`AST-094`).
- */
-function swallowNextClick(view: Window): void {
-  const disarm = () => {
-    view.removeEventListener('click', onClick, true);
-    view.removeEventListener('pointerdown', disarm, true);
-    view.removeEventListener('keydown', disarm, true);
-  };
-  const onClick = (event: MouseEvent) => {
-    if (!event.isTrusted || event.detail === 0) {
-      return;
-    }
-    disarm();
-    event.preventDefault();
-    event.stopImmediatePropagation();
-  };
-  view.addEventListener('click', onClick, true);
-  view.addEventListener('pointerdown', disarm, true);
-  view.addEventListener('keydown', disarm, true);
-}
-
-/**
- * Click `element` (its own `click()`, so its activation behavior and every
- * handler run as for any click) and report whether a handler cancelled it.
- * The event is read from a capture listener that exists only for the call.
- */
-function clickAndReport(element: HTMLElement): boolean {
-  const view = element.ownerDocument.defaultView;
-  let clicked: Event | null = null;
-  const grab = (event: Event) => {
-    if (clicked == null && event.target === element) {
-      clicked = event;
-    }
-  };
-  view?.addEventListener('click', grab, true);
-  try {
-    element.click();
-  } finally {
-    view?.removeEventListener('click', grab, true);
-  }
-  return (clicked as Event | null)?.defaultPrevented === true;
 }
 
 /**
@@ -358,13 +312,15 @@ export function createActionGroupTracker(
       const {onActivate, onActivated, swallowsNativeClick} = getOptions();
       if (onActivate != null) {
         onActivate(lifted);
+        if (swallowsNativeClick === true) {
+          armClickGuard(lifted.ownerDocument);
+        }
       } else {
-        const cancelled = clickAndReport(lifted);
+        const cancelled =
+          swallowsNativeClick === true
+            ? clickForLift(lifted)
+            : clickAndReport(lifted);
         onActivated?.(lifted, cancelled);
-      }
-      const view = lifted.ownerDocument.defaultView;
-      if (swallowsNativeClick === true && view != null) {
-        swallowNextClick(view);
       }
       return lifted;
     },

@@ -88,6 +88,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/DateRangeInput/DateRangeInput.generated';
+import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 
 registerEnglishFallback(english);
 
@@ -160,8 +161,28 @@ const styles = stylex.create({
   iconButtonDisabled: {
     cursor: 'default',
   },
+  // The popover content scrolls inside the layer's block cap, so a stacked
+  // calendar stays reachable on a short screen.
+  popoverScroll: {
+    overflowY: 'auto',
+    overscrollBehavior: 'contain',
+    maxBlockSize: stylex.firstThatWorks(
+      `calc(${layerViewportInset.maxBlockSize})`,
+      `calc(${layerViewportInset.maxBlockSizeFallback})`,
+    ),
+  },
+  // When the presets and a one-month calendar do not fit side by side, the
+  // row wraps and the presets stack above the calendar, in DOM order. The
+  // preset group draws a divider on its inline end and its block end. A
+  // negative margin moves each divider 1 border width past the group's margin
+  // box, and this row clips at its edges. Thus only the divider between the
+  // two parts shows: the inline-end one side by side, the block-end one when
+  // stacked. The row clips, not the scroller, so the overhang is never
+  // scrollable overflow.
   popoverLayout: {
     display: 'flex',
+    flexWrap: 'wrap',
+    overflow: 'clip',
   },
   presetSidebar: {
     display: 'flex',
@@ -171,7 +192,25 @@ const styles = stylex.create({
     borderInlineEndWidth: borderVars['--border-width'],
     borderInlineEndStyle: 'solid',
     borderInlineEndColor: colorVars['--color-border-emphasized'],
+    borderBlockEndWidth: borderVars['--border-width'],
+    borderBlockEndStyle: 'solid',
+    borderBlockEndColor: colorVars['--color-border-emphasized'],
+    marginInlineEnd: `calc(-1 * ${borderVars['--border-width']})`,
+    marginBlockEnd: `calc(-1 * ${borderVars['--border-width']})`,
+    // Alone on its line, the group fills the line, so its inline-end divider
+    // reaches the clipped edge.
+    flexGrow: 1,
     minWidth: 140,
+  },
+  calendarPane: {
+    // Gives back the border width the preset group's margin takes, so the
+    // calendar keeps its side-by-side position.
+    marginInlineStart: borderVars['--border-width'],
+    // The row wraps on the calendar's one-month width, and the calendar then
+    // takes the free space, so its months sit in a row where they fit. The
+    // large factor keeps the preset group at its own width beside it.
+    flexBasis: 'min-content',
+    flexGrow: 1_000_000,
   },
   presetButton: {
     display: 'block',
@@ -805,79 +844,86 @@ export function DateRangeInput({
         </VisuallyHidden>
       )}
       {popover.render(
-        <div {...stylex.props(styles.popoverLayout)}>
-          {presets && presets.length > 0 && (
-            <div
-              role="group"
-              aria-label={t('@astryx.dateRangeInput.presetDateRanges')}
-              {...mergeProps(
-                themeProps('date-range-input-presets'),
-                stylex.props(styles.presetSidebar),
-              )}>
-              {presets.map(preset => {
-                const presetRange = preset.getRange();
-                const isActive = isRangeEqual(value, presetRange);
-                const isPresetDisabled =
-                  isDisabled ||
-                  !isRangeWithinSpan(presetRange, maxRangeSpan, minRangeSpan) ||
-                  isDateDisabled(plainDateFromISO(presetRange.start)) ||
-                  isDateDisabled(plainDateFromISO(presetRange.end));
-                return (
-                  <button
-                    key={preset.label}
-                    type="button"
-                    // These presets are independent action buttons navigated by
-                    // Tab, not a single-tab-stop listbox — so they are a labeled
-                    // group of buttons, and the currently-applied preset is
-                    // marked with aria-current (not aria-selected, a listbox
-                    // concept that contradicted the Tab interaction) (forms-5).
-                    aria-current={isActive ? 'true' : undefined}
-                    // Focusable while disabled (AR3, spec:AST-085 FR1).
-                    aria-disabled={isPresetDisabled || undefined}
-                    aria-describedby={
-                      showsDisabledMessage
-                        ? disabledMessageTooltip.describedBy
-                        : undefined
-                    }
-                    onClick={() => {
-                      if (!isPresetDisabled) {
-                        handleRangeSelect(presetRange);
+        <div {...stylex.props(styles.popoverScroll)}>
+          <div {...stylex.props(styles.popoverLayout)}>
+            {presets && presets.length > 0 && (
+              <div
+                role="group"
+                aria-label={t('@astryx.dateRangeInput.presetDateRanges')}
+                {...mergeProps(
+                  themeProps('date-range-input-presets'),
+                  stylex.props(styles.presetSidebar),
+                )}>
+                {presets.map(preset => {
+                  const presetRange = preset.getRange();
+                  const isActive = isRangeEqual(value, presetRange);
+                  const isPresetDisabled =
+                    isDisabled ||
+                    !isRangeWithinSpan(
+                      presetRange,
+                      maxRangeSpan,
+                      minRangeSpan,
+                    ) ||
+                    isDateDisabled(plainDateFromISO(presetRange.start)) ||
+                    isDateDisabled(plainDateFromISO(presetRange.end));
+                  return (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      // These presets are independent action buttons navigated by
+                      // Tab, not a single-tab-stop listbox — so they are a labeled
+                      // group of buttons, and the currently-applied preset is
+                      // marked with aria-current (not aria-selected, a listbox
+                      // concept that contradicted the Tab interaction) (forms-5).
+                      aria-current={isActive ? 'true' : undefined}
+                      // Focusable while disabled (AR3, spec:AST-085 FR1).
+                      aria-disabled={isPresetDisabled || undefined}
+                      aria-describedby={
+                        showsDisabledMessage
+                          ? disabledMessageTooltip.describedBy
+                          : undefined
                       }
-                    }}
-                    {...mergeProps(
-                      themeProps('date-range-input-preset', {
-                        selected: isActive ? 'selected' : null,
-                        disabled: isPresetDisabled ? 'disabled' : null,
-                      }),
-                      stylex.props(
-                        focusOutlineStyles.focusVisible,
-                        styles.presetButton,
-                        isActive && styles.presetButtonActive,
-                        isPresetDisabled && styles.presetButtonDisabled,
-                      ),
-                    )}>
-                    {preset.label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-          {/* The layer renders its children open or closed, so mount the
+                      onClick={() => {
+                        if (!isPresetDisabled) {
+                          handleRangeSelect(presetRange);
+                        }
+                      }}
+                      {...mergeProps(
+                        themeProps('date-range-input-preset', {
+                          selected: isActive ? 'selected' : null,
+                          disabled: isPresetDisabled ? 'disabled' : null,
+                        }),
+                        stylex.props(
+                          focusOutlineStyles.focusVisible,
+                          styles.presetButton,
+                          isActive && styles.presetButtonActive,
+                          isPresetDisabled && styles.presetButtonDisabled,
+                        ),
+                      )}>
+                      {preset.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {/* The layer renders its children open or closed, so mount the
               calendar only while it is open. */}
-          {popover.isOpen && (
-            <Calendar
-              mode="range"
-              value={optimisticValue}
-              onChange={handleRangeSelect}
-              min={min}
-              max={max}
-              dateConstraints={dateConstraints}
-              maxRangeSpan={maxRangeSpan}
-              minRangeSpan={minRangeSpan}
-              numberOfMonths={numberOfMonths}
-              weekStartsOn={weekStartsOn}
-            />
-          )}
+            {popover.isOpen && (
+              <Calendar
+                mode="range"
+                value={optimisticValue}
+                onChange={handleRangeSelect}
+                min={min}
+                max={max}
+                dateConstraints={dateConstraints}
+                maxRangeSpan={maxRangeSpan}
+                minRangeSpan={minRangeSpan}
+                numberOfMonths={numberOfMonths}
+                weekStartsOn={weekStartsOn}
+                xstyle={presets && presets.length > 0 && styles.calendarPane}
+              />
+            )}
+          </div>
         </div>,
         {placement: 'below', alignment: 'start'},
       )}

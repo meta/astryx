@@ -948,6 +948,18 @@ describe('ResizeHandle', () => {
     expect(document.body.style.userSelect).toBe('');
   });
 
+  it('releases body styles and tells the region the gesture is over when its resizable prop goes away mid-drag', () => {
+    const resizable = {...makeResizable(), _onResizeCancel: vi.fn()};
+    const view = render(<ResizeHandle resizable={resizable} label="Resize" />);
+    fireEvent.pointerDown(getHitArea(), {pointerId: 1, clientX: 0, clientY: 0});
+    expect(document.body.style.cursor).not.toBe('');
+    view.rerender(<ResizeHandle label="Resize" />);
+    expect(document.body.style.cursor).toBe('');
+    expect(document.body.style.userSelect).toBe('');
+    expect(resizable._onResizeCancel).toHaveBeenCalledTimes(1);
+    expect(resizable._onResizeEnd).not.toHaveBeenCalled();
+  });
+
   // --- Persistence ---
 
   it.each([

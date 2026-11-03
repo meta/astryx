@@ -47,7 +47,7 @@ describe('interaction proof routing', () => {
     // Behind the pull-request gate (spec:AST-030 FR17).
     expect(proofs.if).toMatch(/^\$\{\{ \(github\.event_name != 'pull_request'/);
     expect(ungated(proofs.if)).toBe(
-      "github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true'",
+      "github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true'",
     );
     // Admission too: the Storybook build starts beside it (spec:AST-030 FR16).
     expect(proofs.needs).toEqual([

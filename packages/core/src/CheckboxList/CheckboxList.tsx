@@ -246,6 +246,7 @@ export function CheckboxList({
         ? disabledMessageTooltip.describedBy
         : undefined,
       isReadOnly,
+      isInvalid: status?.type === 'error',
       loadingValues,
     }),
     [
@@ -256,6 +257,7 @@ export function CheckboxList({
       showsDisabledMessage,
       disabledMessageTooltip.describedBy,
       isReadOnly,
+      status?.type,
       loadingValues,
     ],
   );

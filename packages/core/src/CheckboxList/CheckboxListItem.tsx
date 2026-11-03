@@ -24,6 +24,7 @@ import {colorVars} from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
 import {CheckboxInput} from '../CheckboxInput/CheckboxInput';
 import type {CheckboxInputProps} from '../CheckboxInput/CheckboxInput';
+import type {InputStatus} from '../Field/types';
 import {ListItem} from '../List/ListItem';
 import {ListContext} from '../List/ListContext';
 import {CheckboxListContext} from './CheckboxListContext';
@@ -149,6 +150,8 @@ export interface CheckboxListItemProps extends BaseProps<HTMLLIElement> {
 // Component
 // =============================================================================
 
+const ERROR_STATUS: InputStatus = {type: 'error'};
+
 /**
  * The row's visible description is the checkbox's accessible description. Item
  * renders that element and owns its id, and publishes the id through
@@ -167,11 +170,17 @@ function DescribedCheckboxInput(
   props: Omit<CheckboxInputProps, 'aria-describedby'>,
 ) {
   const describedBy = use(ItemDescriptionContext);
-  const reasonID = use(CheckboxListContext)?.disabledMessageID;
+  const listContext = use(CheckboxListContext);
   return (
     <CheckboxInput
       {...props}
-      aria-describedby={joinAriaIDs(describedBy ?? undefined, reasonID)}
+      aria-describedby={joinAriaIDs(
+        describedBy ?? undefined,
+        listContext?.disabledMessageID,
+      )}
+      // The status has no message, so CheckboxInput renders nothing. The list
+      // renders the message.
+      status={listContext?.isInvalid ? ERROR_STATUS : undefined}
     />
   );
 }
