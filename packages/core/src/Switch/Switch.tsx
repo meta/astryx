@@ -277,9 +277,12 @@ const styles = stylex.create({
     alignItems: 'center',
     flexShrink: 0,
     isolation: 'isolate',
-    // Horizontal touch moves are the switch's drag and vertical ones the
-    // page's scroll, under any primary pointer. A touchscreen laptop's finger
-    // counts too. It is set in CSS so it holds before hydration.
+  },
+  // Horizontal touch moves are the switch's drag and vertical ones the page's
+  // scroll, under any primary pointer. A touchscreen laptop's finger counts
+  // too. It is set in CSS so it holds before hydration. A disabled or loading
+  // switch takes no drag, so it leaves every move to the page.
+  switchWrapperInteractive: {
     touchAction: 'pan-y pinch-zoom',
   },
   input: {
@@ -982,7 +985,11 @@ export function Switch({
   const switchElement = (
     <div
       ref={surfaceRef}
-      {...stylex.props(styles.switchWrapper, wrapperSizeStyles[size])}>
+      {...stylex.props(
+        styles.switchWrapper,
+        wrapperSizeStyles[size],
+        !isDisabled && !isBusy && styles.switchWrapperInteractive,
+      )}>
       <input
         ref={useMergedRefs(ref, disabledMessageTooltip.positionRef, inputRef)}
         id={id}
@@ -1101,7 +1108,6 @@ export function Switch({
           disabledMessageTooltip.interactionRef(el);
         }}
         {...(isDisabled ? undefined : pressable)}
-        // The thumb's drag keeps the row's press painted.
         {...pressHoldsDragProps(!isDisabled)}
         {...stylex.props(
           styles.container,

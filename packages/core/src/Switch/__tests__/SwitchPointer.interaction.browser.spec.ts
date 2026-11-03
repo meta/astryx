@@ -305,6 +305,26 @@ test.describe('Switch under a mouse (spec:AST-094 FR43)', () => {
     }
   });
 
+  test('a disabled or a loading switch takes no drag, so it leaves horizontal touch moves to the page', async ({
+    browser,
+  }) => {
+    for (const storyId of ['core-switch--disabled', 'core-switch--loading']) {
+      const sw = await openMouseSwitch(browser, storyId);
+      try {
+        const touchAction = await sw.page.evaluate(
+          () =>
+            getComputedStyle(
+              document.querySelector('#storybook-root [role="switch"]')!
+                .parentElement!,
+            ).touchAction,
+        );
+        expect(touchAction, storyId).toBe('auto');
+      } finally {
+        await sw.close();
+      }
+    }
+  });
+
   test('a pen drag past the flip distance flips the switch, and the release commits it off the switch too (Switch FR15)', async ({
     browser,
   }) => {

@@ -1398,7 +1398,7 @@ describe('touch listeners (spec:AST-094 FR24)', () => {
   // React's root delegates touch events too: count against a plain element.
   const listenersWhileRendering = (
     isDisabled: boolean | 'none' | 'busy',
-  ): {touch: number; pointer: number} => {
+  ): {touch: number; pointer: number; contextMenu: number} => {
     vi.spyOn(window, 'matchMedia').mockImplementation(coarseMedia);
     const types: string[] = [];
     const record = function (this: unknown, type: string) {
@@ -1430,6 +1430,7 @@ describe('touch listeners (spec:AST-094 FR24)', () => {
     return {
       touch: types.filter(type => type.startsWith('touch')).length,
       pointer: types.filter(type => type.startsWith('pointer')).length,
+      contextMenu: types.filter(type => type === 'contextmenu').length,
     };
   };
 
@@ -1439,8 +1440,11 @@ describe('touch listeners (spec:AST-094 FR24)', () => {
     const disabled = listenersWhileRendering(true);
     const busy = listenersWhileRendering('busy');
     // No state adds a touch listener, so a scroll never waits on the switch.
+    // Nor a context-menu one: the gesture host keeps a held switch's menu
+    // closed.
     for (const counts of [enabled, disabled, busy]) {
       expect(counts.touch).toBe(baseline.touch);
+      expect(counts.contextMenu).toBe(baseline.contextMenu);
     }
     // The gesture host arms a press listener for an enabled switch only.
     expect(enabled.pointer).toBeGreaterThan(disabled.pointer);

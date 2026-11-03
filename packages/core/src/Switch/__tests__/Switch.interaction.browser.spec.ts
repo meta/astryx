@@ -1490,6 +1490,36 @@ test.describe('Switch touch presentation (UISwitch, iOS 26.2), under a finger', 
     }
   });
 
+  test('a held switch opens no context menu, as UISwitch shows none: the gesture host cancels it while the press is held', async ({
+    page,
+  }) => {
+    const {driver, input, center} = await openSwitch(page);
+    const opensMenu = async () =>
+      page.evaluate(({x, y}) => {
+        const event = new MouseEvent('contextmenu', {
+          bubbles: true,
+          cancelable: true,
+          clientX: x,
+          clientY: y,
+        });
+        document.elementFromPoint(x, y)!.dispatchEvent(event);
+        return !event.defaultPrevented;
+      }, center);
+    expect(await opensMenu()).toBe(true);
+    let whileHeld: boolean | null = null;
+    await driver.play(tap(center, {holdMs: 600}), {
+      onEvent: async step => {
+        if (step.type === 'touchStart') {
+          await expect.poll(async () => pressState(page)).toBe('on');
+          whileHeld = await opensMenu();
+        }
+      },
+    });
+    expect(whileHeld).toBe(false);
+    // The hold still toggles the switch at the release.
+    await expect(input).toBeChecked();
+  });
+
   test('P12 · with Reduce Motion a tap cross-fades the change: no lift, no travel, opacity only, within 200 ms (design:reduced-motion DR1, DR2)', async ({
     page,
   }) => {

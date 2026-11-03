@@ -175,9 +175,10 @@ interface Drag {
  *   The browser sends no click for a finger's hold, so the switch clicks its
  *   input once the click window passes. A mouse or a pen gets a click when
  *   it is released on the input. A drag that flipped the switch gets no
- *   click, so the switch cancels its `touchend` and clicks its input. A
- *   finger's press slid off and lifted outside toggles too, as UISwitch's
- *   does. Forms, `onChange` and the keyboard stay the native checkbox's.
+ *   click, so the switch clicks its input, and the shared click guard
+ *   swallows the browser's late click. A finger's press slid off and lifted
+ *   outside toggles too, as UISwitch's does. Forms, `onChange` and the
+ *   keyboard stay the native checkbox's.
  * - The drag never renders: each move retargets the thumb's tracking spring
  *   and steps the flip rule on the finger's travel.
  * - The thumb lifts while a finger presses, into half of the gap around it,
@@ -198,8 +199,8 @@ interface Drag {
  *   thumb: that is direct manipulation.
  * - Under a fine primary pointer the switch keeps its own look. The same
  *   tracking, flip rule and release decide the value, with no animator, and
- *   the thumb moves when the value does. Only its press listens at rest. The
- *   click guard and the context-menu block come with a press.
+ *   the thumb moves when the value does. Only its press listens at rest. Its
+ *   click listener comes with a press.
  */
 export class SwitchTouchController {
   private elements: Elements | null = null;
@@ -283,7 +284,6 @@ export class SwitchTouchController {
       this.detachers = this.attachPassive(host, elements);
       return;
     }
-    // The switch's springs play as its motion roles.
     registerSwitchTable();
     this.thumb = createAnimator(elements.thumb);
     // The layer rests clear (its class's opacity 0) while the visuals show
@@ -319,6 +319,8 @@ export class SwitchTouchController {
       getBounds: () => surface.getBoundingClientRect(),
       isEnabled: () => this.isInteractive,
       isBraking: () => host.isScrollBraking(surface),
+      // A held switch opens no menu (UISwitch shows none).
+      holdsContextMenu: () => this.pressTime != null,
       onControlEvent: (event, touch) => this.onControlEvent(event, touch),
       onHighlightChange: isHighlighted => {
         if (isHighlighted && this.isTracking && this.pressTime == null) {
@@ -335,24 +337,16 @@ export class SwitchTouchController {
         this.scheduleReconcile();
       }
     };
-    // A held switch opens no menu (UISwitch shows none).
-    const onContextMenu = (event: Event) => {
-      if (this.pressTime != null) {
-        event.preventDefault();
-      }
-    };
     const listen = (): (() => void) => {
       surface.addEventListener('click', onClick, true);
-      surface.addEventListener('contextmenu', onContextMenu);
       return () => {
         surface.removeEventListener('click', onClick, true);
-        surface.removeEventListener('contextmenu', onContextMenu);
       };
     };
     if (this.presentation === 'pointer') {
       // Under a fine pointer only the press the host arms listens at rest.
-      // The switch's own listeners come with a press and go after its click
-      // window.
+      // The switch's click listener comes with a press and goes after its
+      // click wait.
       this.listenForPress = listen;
       return [
         host.attachConsumer(surface, tracker),
@@ -961,8 +955,6 @@ export class SwitchTouchController {
       return;
     }
     this.liftTime = null;
-    // The switch's motion roles: the animator resolves each one it is
-    // handed.
     const lift = switchControl.lift;
     const settle = switchControl.settle;
     this.settleAt = settleTime(time, liftTime);

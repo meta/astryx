@@ -110,8 +110,9 @@
  *   click; a click held for a recognizer that may still recognize is
  *   replayed if they all fail. Keyboard and assistive-technology clicks
  *   (`detail === 0`) always pass.
- * - A `contextmenu` while a recognizer owns a touch is cancelled, so a long
- *   press never also opens the browser's menu.
+ * - A `contextmenu` while a recognizer owns a touch, or while a press
+ *   consumer holds the menu closed (`holdsContextMenu`), is cancelled. So a
+ *   long press never also opens the browser's menu.
  * - When the app loses focus (a window blur, a hidden page), every touch in
  *   flight is cancelled, as in UIKit; a finger the browser keeps alive lifts
  *   on nothing: its `touchend` is cancelled (`spec:AST-094` FR28).
@@ -3767,7 +3768,10 @@ export class GestureHost {
 
   private readonly onContextMenu = (event: MouseEvent): void => {
     for (const touch of this.arena.touches) {
-      if (this.arena.isClaimed(touch.id)) {
+      if (
+        this.arena.isClaimed(touch.id) ||
+        this.arena.consumerOf(touch.id)?.holdsContextMenu?.(touch.id) === true
+      ) {
         event.preventDefault();
         return;
       }
