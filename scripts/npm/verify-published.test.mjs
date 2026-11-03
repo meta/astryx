@@ -265,4 +265,26 @@ describe('verification window', () => {
     expect(result.status).toBe(2);
     expect(result.stderr).toContain('not yet readable on the registry');
   });
+
+  it('refuses a window that is not a number, which would never end', () => {
+    const root = path.resolve(import.meta.dirname, '../..');
+    const {version} = JSON.parse(
+      fs.readFileSync(path.join(root, 'packages/core/package.json'), 'utf8'),
+    );
+    const result = spawnSync(
+      process.execPath,
+      [
+        'scripts/npm/verify-published.mjs',
+        '--version',
+        version,
+        '--window-ms',
+        '8m',
+      ],
+      {cwd: root, encoding: 'utf8'},
+    );
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      '--window-ms must be a non-negative number of milliseconds',
+    );
+  });
 });

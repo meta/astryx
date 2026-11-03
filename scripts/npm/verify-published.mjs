@@ -204,6 +204,21 @@ async function main() {
     path.dirname(fileURLToPath(import.meta.url)),
     '../..',
   );
+  const timing = Object.fromEntries(
+    [
+      ['interval-ms', DEFAULT_INTERVAL_MS],
+      ['max-interval-ms', DEFAULT_MAX_INTERVAL_MS],
+      ['window-ms', DEFAULT_WINDOW_MS],
+    ].map(([key, fallback]) => {
+      const value = Number(values[key] ?? fallback);
+      if (!Number.isFinite(value) || value < 0) {
+        throw new Error(
+          `--${key} must be a non-negative number of milliseconds`,
+        );
+      }
+      return [key, value];
+    }),
+  );
   const packages = stablePackageNames(root, version);
   if (packages.length === 0) throw new Error('no stable packages found');
   await verifyPublishedPackages({
@@ -211,9 +226,9 @@ async function main() {
     version,
     tag: values.tag ?? 'latest',
     registry: values.registry ?? DEFAULT_REGISTRY,
-    intervalMs: Number(values['interval-ms'] ?? DEFAULT_INTERVAL_MS),
-    maxIntervalMs: Number(values['max-interval-ms'] ?? DEFAULT_MAX_INTERVAL_MS),
-    windowMs: Number(values['window-ms'] ?? DEFAULT_WINDOW_MS),
+    intervalMs: timing['interval-ms'],
+    maxIntervalMs: timing['max-interval-ms'],
+    windowMs: timing['window-ms'],
     onAttempt({attempt, names, elapsedMs}) {
       console.log(
         `Registry verification ${attempt} after ${Math.round(elapsedMs / 1000)} s: ${names.length} package(s) pending`,

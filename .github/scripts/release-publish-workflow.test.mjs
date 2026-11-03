@@ -696,7 +696,7 @@ describe('stable publish requires the cut commit release-check (spec:AST-030 FR1
       expect(job['timeout-minutes']).toBeLessThanOrEqual(10);
       expect(job.permissions).toEqual({contents: 'read'});
       expect(step(job, 'Verify published packages').run).toContain(
-        'node scripts/npm/verify-published.mjs --version "$RELEASE_VERSION" --tag latest',
+        'node scripts/npm/verify-published.mjs --version "$RELEASE_VERSION" --tag latest --window-ms 420000',
       );
     }
   });

@@ -270,6 +270,8 @@ jobs:
   # packages that were published but not yet readable, with the same exact-
   # version proofs. The last one fails the release if a package is still not
   # readable.
+  # A follow-up starts no check after 7 minutes, which leaves room in its
+  # 10-minute limit for checkout, Node setup and a last slow check.
   verify-registry-1:
     name: Verify registry (follow-up 1)
     needs: publish
@@ -294,7 +296,7 @@ jobs:
         run: |
           set -eu
           STATUS=0
-          node scripts/npm/verify-published.mjs --version "$RELEASE_VERSION" --tag latest || STATUS=$?
+          node scripts/npm/verify-published.mjs --version "$RELEASE_VERSION" --tag latest --window-ms 420000 || STATUS=$?
           case "$STATUS" in
             0) echo "verified=true" >> "$GITHUB_OUTPUT" ;;
             2)
@@ -325,7 +327,7 @@ jobs:
         run: |
           set -eu
           STATUS=0
-          node scripts/npm/verify-published.mjs --version "$RELEASE_VERSION" --tag latest || STATUS=$?
+          node scripts/npm/verify-published.mjs --version "$RELEASE_VERSION" --tag latest --window-ms 420000 || STATUS=$?
           if [ "$STATUS" -eq 2 ]; then
             echo "::error::Published packages are still not readable on the registry after three verification windows."
           fi
