@@ -46,7 +46,7 @@ import {useEffect} from 'react';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {mergeRegister} from '@lexical/utils';
 import {HeadingNode, QuoteNode} from '@lexical/rich-text';
-import {$isListNode, ListItemNode, ListNode} from '@lexical/list';
+import {ListItemNode, ListNode} from '@lexical/list';
 import {CodeNode} from '@lexical/code';
 import {TableCellNode, TableNode, TableRowNode} from '@lexical/table';
 import {
@@ -88,14 +88,18 @@ const CONTAINER_NODES: ReadonlyArray<Klass<ElementNode>> = [
   TableCellNode,
 ];
 
-/** Whether this node is a prose container that carries its own `dir`. */
+/**
+ * Whether this node is a prose container that carries its own `dir`.
+ *
+ * A list item holding a nested list takes one too, from the text of
+ * everything under it. The nesting step is an inline margin on the item, so
+ * it resolves against that item's own direction: left at `auto` it puts the
+ * step on the document's side while the items inside start on theirs, and
+ * every level of an English list in a right-to-left document then begins at
+ * the same edge, with only the marker shape showing the depth.
+ */
 function $isOwnDirectionBlock(node: LexicalNode): node is ElementNode {
-  if (!$isElementNode(node) || !PROSE_NODES.some(k => node instanceof k)) {
-    return false;
-  }
-  // A list item that only holds a nested list is structure, not prose: its
-  // text is its descendants' and belongs to each of them.
-  return !node.getChildren().some($isListNode);
+  return $isElementNode(node) && PROSE_NODES.some(k => node instanceof k);
 }
 
 /**
@@ -118,14 +122,18 @@ const STRONG_RTL =
   /[\p{Script=Adlam}\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Mandaic}\p{Script=Nko}\p{Script=Samaritan}\p{Script=Syriac}\p{Script=Thaana}\u200F\u061C\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]/u;
 
 /**
- * Arabic-Indic digits, their extended forms and the Arabic number signs.
- * They sit in the Arabic script but are Bidi_Class `AN` or `EN` — weak, not
+ * The Arabic script's weak characters: its digits and their extended forms,
+ * the number signs that introduce them, and the currency and per-cent marks
+ * that sit beside them. All are Bidi_Class `AN`, `EN` or `ET` — weak, not
  * strong — so the first-strong scan passes over them and `۱۴۰۳ Annual
- * report` reads left-to-right. Not every right-to-left digit is weak: NKo's
- * and Adlam's are Bidi_Class `R`, so they stay strong and are not listed.
+ * report` and `٪50 off` both read left-to-right.
+ *
+ * Not every right-to-left digit is weak: NKo's (`U+07C0`–`U+07C9`) and
+ * Adlam's (`U+1E950`–`U+1E959`) are Bidi_Class `R`, so they are deliberately
+ * absent here and a block opening with one reads right-to-left.
  */
 const WEAK_ARABIC_NUMBER =
-  /[\u0600-\u0605\u0660-\u0669\u066B\u066C\u06DD\u06F0-\u06F9\u08E2]/u;
+  /[\u0600-\u0605\u0609\u060A\u0660-\u0669\u066A-\u066C\u06DD\u06F0-\u06F9\u0890\u0891\u08E2]/u;
 
 /**
  * Bidi_Class `L`: any other letter, plus the left-to-right mark. Digits,

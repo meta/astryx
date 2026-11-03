@@ -207,6 +207,24 @@ describe('a top-level block carries its own direction (spec:AST-061 FR6)', () =>
     expect(firstStrongDirection('123 456')).toBeNull();
   });
 
+  it('gives a nesting list item a direction, so its step follows its text', async () => {
+    const {container} = render(
+      <RichTextView
+        value={markdownToEditorStateJSON(
+          '- Level one\n  - Level two\n    - Level three\n',
+        )}
+      />,
+    );
+    await waitFor(() => expect(container.querySelector('ul')).not.toBeNull());
+    // Every item is English, including the two that only hold a nested list.
+    // A wrapper left without a direction would put its nesting margin on the
+    // document's side while the text inside started on the other, and all
+    // three levels would begin at the same edge.
+    expect(
+      [...container.querySelectorAll('li')].map(li => li.getAttribute('dir')),
+    ).toEqual(['ltr', 'ltr', 'ltr', 'ltr', 'ltr']);
+  });
+
   it('passes over Arabic-Indic digits, which are weak, not strong', async () => {
     // Arabic-Indic and Persian digits sit in the Arabic script but are
     // Bidi_Class AN/EN, so the first-strong scan must not stop on them.
@@ -216,6 +234,16 @@ describe('a top-level block carries its own direction (spec:AST-061 FR6)', () =>
 
     // They still do not override a strong character that follows.
     expect(firstStrongDirection('١٢٣ تقرير سنوي')).toBe('rtl');
+
+    // The per-cent, per-mille, per-ten-thousand, pound and piastre marks sit
+    // in the Arabic script too, and are Bidi_Class ET or AN.
+    expect(firstStrongDirection('\u066A50 off')).toBe('ltr');
+    expect(firstStrongDirection('\u060950 off')).toBe('ltr');
+    expect(firstStrongDirection('\u060A50 off')).toBe('ltr');
+    expect(firstStrongDirection('\u089050 off')).toBe('ltr');
+    expect(firstStrongDirection('\u089150 off')).toBe('ltr');
+    // Still right-to-left when the text that follows them is.
+    expect(firstStrongDirection('\u066A50 \u062E\u0635\u0645')).toBe('rtl');
 
     // Not every right-to-left digit is weak: NKo's and Adlam's are
     // Bidi_Class R, so they stay strong.

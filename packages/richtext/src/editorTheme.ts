@@ -294,9 +294,8 @@ const editorTheme = stylex.create({
       ':has(ol)': 'none',
       ':is([data-richtext-task])': 'none',
     },
-    // A task item's text starts 28px in from the list's edge, after core's
-    // small checkbox (20px) and its 8px gap, like core Markdown's task lists:
-    // the item cancels the list's bullet indent and pads for the checkbox.
+    // A task item's text starts 28px in, after core's small checkbox (20px)
+    // and its 8px gap, like core Markdown's task lists.
     marginInlineStart: {
       default: spacingVars['--spacing-6'],
       // A task item draws a checkbox inside its own padding instead of a
