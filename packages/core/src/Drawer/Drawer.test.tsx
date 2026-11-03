@@ -1338,6 +1338,32 @@ describe('Drawer', () => {
 // removed with the rest of a view) returns focus to the element focused before
 // it opened, as a close does.
 describe('Drawer unmounting while open', () => {
+  // A browser hides a popover host when it leaves the document, and a
+  // non-modal drawer sets no `open` attribute. The file's stand-ins set
+  // `open`, which jsdom keeps after removal.
+  beforeEach(() => {
+    const showing = new WeakSet<HTMLElement>();
+    const matches = HTMLElement.prototype.matches;
+    HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
+      showing.add(this);
+    });
+    HTMLElement.prototype.hidePopover = vi.fn(function (this: HTMLElement) {
+      showing.delete(this);
+    });
+    vi.spyOn(HTMLElement.prototype, 'matches').mockImplementation(function (
+      this: HTMLElement,
+      selector: string,
+    ) {
+      return selector === ':popover-open'
+        ? showing.has(this) && this.isConnected
+        : matches.call(this, selector);
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   function Inspector({
     unmountWith,
     hasScrim,

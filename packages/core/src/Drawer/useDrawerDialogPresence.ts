@@ -32,7 +32,7 @@ import {
   type SetStateAction,
 } from 'react';
 import {flushSync} from 'react-dom';
-import {isFocusLost} from '../utils/focusReturn';
+import {returnFocusIfLost} from '../utils/focusReturn';
 
 /** Slack past the computed transition before the backstop gives up waiting. */
 const EXIT_BACKSTOP_BUFFER_MS = 50;
@@ -185,6 +185,10 @@ export function useDrawerDialogPresence({
           // immediately (still exactly once).
           dispatchDialogClose(dialog);
         }
+      }
+      // Removal already hid a popover host, so this runs outside the check
+      // above. The trigger is null outside an open cycle.
+      if (dialog) {
         returnFocusAfterRemoval(dialog, triggerElementRef.current);
       }
     };
@@ -192,11 +196,10 @@ export function useDrawerDialogPresence({
 }
 
 /**
- * A drawer that unmounts while open never runs the close path. Removing it
- * drops the focus inside it to the page. Focus goes back to the trigger only
- * when it would otherwise be lost. The check waits for the commit to finish:
- * StrictMode's simulated unmount and a hidden Activity keep the drawer in the
- * document, so they are not a removal.
+ * Removing an open drawer drops its focus to the page. Return focus to the
+ * trigger only when focus is lost. StrictMode replay and a hidden Activity
+ * keep the drawer in the document, so they are not a removal. The check waits
+ * for the commit to finish.
  */
 function returnFocusAfterRemoval(
   dialog: HTMLDialogElement,
@@ -206,8 +209,8 @@ function returnFocusAfterRemoval(
     return;
   }
   queueMicrotask(() => {
-    if (!dialog.isConnected && trigger.isConnected && isFocusLost(dialog)) {
-      trigger.focus();
+    if (!dialog.isConnected) {
+      returnFocusIfLost(dialog, trigger);
     }
   });
 }

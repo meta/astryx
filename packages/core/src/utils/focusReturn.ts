@@ -56,6 +56,26 @@ export function isFocusLost(surface: Element | null, doc?: Document): boolean {
   );
 }
 
+/**
+ * Focus `target` when focus would be lost because `surface` hid or left the
+ * document (see isFocusLost). Focus that moved to another element stays
+ * there. A `target` that left the document is skipped. Internal.
+ */
+export function returnFocusIfLost(
+  surface: Element | null,
+  target: HTMLElement | null,
+  doc?: Document,
+): void {
+  if (
+    target != null &&
+    target.isConnected &&
+    typeof target.focus === 'function' &&
+    isFocusLost(surface, doc)
+  ) {
+    target.focus();
+  }
+}
+
 /** Where focus was, inside a container, before a change removed or hid content. */
 export interface FocusWithin {
   readonly element: Element;

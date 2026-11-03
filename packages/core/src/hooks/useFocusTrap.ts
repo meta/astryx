@@ -17,7 +17,7 @@
  */
 
 import {useCallback, useEffect, useRef} from 'react';
-import {isFocusLost} from '../utils/focusReturn';
+import {returnFocusIfLost} from '../utils/focusReturn';
 
 import {FOCUSABLE_SELECTOR} from './focusableSelector';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
@@ -325,17 +325,7 @@ export function useFocusTrap<T extends HTMLElement = HTMLElement>(
         return;
       }
 
-      if (!isFocusLost(container, doc)) {
-        return;
-      }
-
-      if (
-        previouslyFocused != null &&
-        previouslyFocused.isConnected &&
-        typeof previouslyFocused.focus === 'function'
-      ) {
-        previouslyFocused.focus();
-      }
+      returnFocusIfLost(container, previouslyFocused, doc);
     };
   }, [isActive]);
 
