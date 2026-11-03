@@ -46,6 +46,7 @@ import {
 } from '../Field';
 import {Divider} from '../Divider';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {useKeepLayerOpenProps, type LayerPlacement} from '../Layer/useLayer';
 import {InternalInputClearButton} from '../Field/InputClearButton';
 import {Spinner} from '../Spinner';
@@ -112,6 +113,14 @@ import {
 import english from '../i18n/generated-english/Selector/Selector.generated';
 
 registerEnglishFallback(english);
+
+/**
+ * A guess, confirmed by the open measure: more options than this overflow
+ * the popover listbox's 300 px block size even at 24 px rows, under the
+ * smallest default row (28 px). A wrong guess (a theme with shorter rows, a
+ * taller bottom sheet) costs only the measure's correction.
+ */
+const MOST_ROWS_THAT_FIT = 12;
 
 const styles = stylex.create({
   // Trigger container — the enhanced click target wrapping the combobox button and clear button as siblings
@@ -350,7 +359,21 @@ const styles = stylex.create({
     paddingBlock: spacingVars['--spacing-1'],
     paddingInline: spacingVars['--spacing-1'],
     opacity: 1,
-    transition: `opacity ${durationVars['--duration-fast']}`,
+    // Under Reduce Motion the list appears at once on a fine pointer, and
+    // takes the shared cross-fade on a coarse one.
+    transitionProperty: 'opacity',
+    transitionDuration: {
+      default: durationVars['--duration-fast'],
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.duration,
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        '0s',
+    },
+    transitionTimingFunction: {
+      default: 'ease',
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        reducedMotionFadeConsts.easing,
+    },
   },
   dropdownInput: {
     // The input trigger's text inset includes its border. Mirror that extra
@@ -376,7 +399,8 @@ const styles = stylex.create({
   },
   dropdownHidden: {
     opacity: 0,
-    transition: 'none',
+    // A longhand: the shorthand would lose to the list's longhands.
+    transitionProperty: 'none',
   },
 
   // Popover container (for anchor positioning)
@@ -1407,10 +1431,13 @@ export function Selector<T extends SelectorOptionType>(
     return match == null ? -1 : Number(match[1]);
   }, []);
   // Re-measured when the option set changes; the count is the dependency.
+  // A list longer than the most rows that can fit cannot fit, so it starts
+  // as a scroll container and the open measure only confirms it.
   const listboxHasOverflow = useMenuOverflow(
     listboxRef,
     filteredItems.length,
     surface.isOpen,
+    filteredItems.length > MOST_ROWS_THAT_FIT,
   );
   const listboxPress = useMenuPress({
     menuRef: listboxRef,

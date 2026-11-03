@@ -424,6 +424,15 @@
     }
   },
   {
+    "component": "HStack",
+    "storyId": "core-hstack--alignment-matrix",
+    "dims": ["D2"],
+    "selectors": {
+      "prev": "[data-audit-case=\"default\"] > [data-audit-item=\"0\"]",
+      "next": "[data-audit-case=\"default\"] > [data-audit-item=\"1\"]"
+    }
+  },
+  {
     "component": "InputGroup",
     "storyId": "core-inputgroup--with-prefix",
     "dims": []

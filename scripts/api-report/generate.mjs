@@ -25,6 +25,7 @@ import * as fs from 'node:fs';
 import {createRequire} from 'node:module';
 import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
+import {STYLEX_GENERATED_VARIABLE} from '../lib/stylex-generated-variable.mjs';
 
 const require = createRequire(import.meta.url);
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -67,6 +68,17 @@ const cap = s =>
     : `${s.slice(0, MAX_TYPE - 40)} … #${createHash('sha1').update(s).digest('hex').slice(0, 8)}`;
 const kebabAttr = p =>
   `data-${p.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}`;
+
+const STYLEX_HASHED_NAME = new RegExp(`^${STYLEX_GENERATED_VARIABLE}$`);
+
+/**
+ * Whether a stylesheet's custom property is public: not a private `--_*`
+ * name and not a name StyleX hashed.
+ * @param {string} name
+ * @returns {boolean}
+ */
+const isPublicCustomProperty = name =>
+  !name.startsWith('--_') && !STYLEX_HASHED_NAME.test(name);
 
 /**
  * The file an entry point publishes: its stylesheet for a stylesheet entry,
@@ -535,8 +547,8 @@ export async function generateReport(opts) {
   for (const e of entries.filter(e => e.kind === 'css')) {
     const css = fs.readFileSync(e.abs, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const names = new Set();
-    for (const m of css.matchAll(/(?:^|[;{\s])(--[A-Za-z][\w-]*)\s*:/g))
-      names.add(m[1]);
+    for (const m of css.matchAll(/(?:^|[;{\s])(--[\w-]+)\s*:/g))
+      if (isPublicCustomProperty(m[1])) names.add(m[1]);
     for (const n of [...names].sort(byName))
       cssLines.push(`var ${n} (${e.subpath})`);
   }

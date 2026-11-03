@@ -455,6 +455,33 @@ export const KEYBOARD_SPRING = {
 export const BANNER_SPRING = {mass: 3, stiffness: 1000, damping: 500} as const;
 
 /**
+ * UISlider's release: after a finger lifts, the thumb settles on this spring
+ * toward 0.4 of the release's momentum projection. It is critically damped,
+ * so it never overshoots a target ahead of it.
+ * @source measured: UIKit lab, iOS 26.2 simulator, iPhone 17 Pro. The
+ *   `UIViewSpringAnimationBehavior` at the lift reads response 0.4 and
+ *   damping ratio 1. Four releases fit it per frame (the UIKit slider
+ *   table). Oct 23 2026
+ */
+export const SLIDER_RELEASE_SPRING = {response: 0.4, dampingRatio: 1} as const;
+
+/**
+ * UISlider's lift: a finger's touch-down scales the thumb up on this spring.
+ * @source measured: UIKit lab, iOS 26.2 simulator, iPhone 17 Pro. The
+ *   thumb's scale per frame after touch-down (the UIKit slider table).
+ *   Oct 23 2026
+ */
+export const SLIDER_LIFT_SPRING = {response: 0.215, dampingRatio: 0.6} as const;
+
+/**
+ * UISlider's drop: the lift's end scales the thumb back down on this spring.
+ * @source measured: UIKit lab, iOS 26.2 simulator, iPhone 17 Pro. The
+ *   thumb's scale per frame after the lift (the UIKit slider table).
+ *   Oct 23 2026
+ */
+export const SLIDER_DROP_SPRING = {response: 0.5, dampingRatio: 0.7} as const;
+
+/**
  * Every spring above, by row name: the table the existing readers use. A
  * component imports only the rows it plays (`architecture:component-style-authoring`
  * INV6), each the same object as its row here.
@@ -494,10 +521,15 @@ export const springs = {
   segmentedThumb: SEGMENTED_THUMB_SPRING,
   keyboard: KEYBOARD_SPRING,
   banner: BANNER_SPRING,
+  sliderRelease: SLIDER_RELEASE_SPRING,
+  sliderLift: SLIDER_LIFT_SPRING,
+  sliderDrop: SLIDER_DROP_SPRING,
 } as const;
 
 /**
- * The springs spec:AST-094 FR4 names: the only ones that are motion roles.
+ * The only springs that are motion roles. The touch presentations' record
+ * names some, and a component's own record names others, such as Slider's
+ * three. The generated motion role table lists each with its record.
  * The registry takes these rows alone, so registering ships no other spring.
  */
 const SPRING_ROLES = {
@@ -516,10 +548,13 @@ const SPRING_ROLES = {
   contextMenuLift: CONTEXT_MENU_LIFT_SPRING,
   contextMenuDismiss: CONTEXT_MENU_DISMISS_SPRING,
   contextMenuMorph: CONTEXT_MENU_MORPH_SPRING,
+  sliderRelease: SLIDER_RELEASE_SPRING,
+  sliderLift: SLIDER_LIFT_SPRING,
+  sliderDrop: SLIDER_DROP_SPRING,
 };
 
 /**
- * Registers the springs spec:AST-094 FR4 names as internal motion roles
+ * Registers the role springs (`SPRING_ROLES`) as internal motion roles
  * (motion/roles.ts), by their row names (`springs.settle`). Every other
  * spring, UIKit's menu spring under Reduce Motion and the keyboard's
  * included, is not a role. Nothing registers on import: the touch code that
