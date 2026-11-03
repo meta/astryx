@@ -4,7 +4,7 @@
 
 /**
  * @file DateInput.tsx
- * @input Uses React, useId, useState, useCallback, useRef, Field, Icon, Calendar, usePopover, InputGroupContext
+ * @input Uses React, useId, useCallback, useRef, useTypedDateField, Field, Icon, Calendar, usePopover, InputGroupContext
  * @output Exports DateInput component, DateInputProps
  * @position Core implementation; consumed by index.ts, tested by DateInput.test.tsx
  *
@@ -19,7 +19,6 @@
 import {
   use,
   useId,
-  useState,
   useCallback,
   useRef,
   useOptimistic,
@@ -73,10 +72,9 @@ import {TouchDateField} from './TouchDateField';
 import {useTooltip} from '../Tooltip';
 import {getInputARIA, isImeKeyEvent} from '../utils';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
-import {plainDateToISO} from '../utils/plainDate';
 import type {CalendarSystem} from '../utils/calendarSystem';
 import {isRenderable} from '../utils/isRenderable';
-import {typedDateError, useTypedDate} from './useTypedDate';
+import {useTypedDateField} from './useTypedDate';
 import type {TimestampFormat} from '../Timestamp';
 import {
   resolvePickerPresentation,
@@ -592,7 +590,6 @@ function PointerDateField({
   const calendarDescriptionID = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const calendarRef = useRef<CalendarHandle | null>(null);
-  const lastFiredValueRef = useRef<ISODateString | undefined>(undefined);
   const inputGroup = useInputGroup();
 
   const [, startTransition] = useTransition();
@@ -621,39 +618,69 @@ function PointerDateField({
 
   // Constraint checking for text input validation (reuses calendar logic)
   const {isDateDisabled} = useCalendarConstraints({min, max, dateConstraints});
-  const typedDate = useTypedDate({
+
+  // Unified change handler that fires both onChange and changeAction
+  const fireChange = useCallback(
+    (newValue: ISODateString | undefined) => {
+      if (isEffectivelyDisabled) {
+        return;
+      }
+      onChange?.(newValue);
+      if (changeAction) {
+        startTransition(async () => {
+          setOptimisticValue(newValue);
+          await changeAction(newValue);
+        });
+      }
+    },
+    [
+      isEffectivelyDisabled,
+      onChange,
+      changeAction,
+      startTransition,
+      setOptimisticValue,
+    ],
+  );
+
+  const clearTypedDate = useCallback(() => {
+    if (value !== undefined) {
+      fireChange(undefined);
+    }
+  }, [value, fireChange]);
+  const navigateToTypedDate = useCallback((date: ISODateString) => {
+    calendarRef.current?.navigateTo(date);
+  }, []);
+  const {
+    typedDate,
+    displayValue,
+    formatHint,
+    isPending,
+    isInvalid,
+    fieldStatus,
+    alertMessage,
+    handleChange: handleTypedChange,
+    commit: commitPendingInput,
+    handleFocus,
+    handleBlur,
+    reset: resetTypedInput,
+  } = useTypedDateField({
     source: 'DateInput',
     calendar,
     format,
     min,
     max,
     isDateDisabled,
+    value,
+    shownValue: optimisticValue,
+    onChange: fireChange,
+    onClear: clearTypedDate,
+    onTypedDate: navigateToTypedDate,
+    isDisabled: isEffectivelyDisabled,
+    dropsDraftWhenDisabled: true,
+    status,
+    isStatusAnnounced: !inputGroup,
+    hasPlaceholder: placeholderFromProps != null,
   });
-
-  // Pending input while user is typing (null = show formatted value)
-  const [pendingInput, setPendingInput] = useState<string | null>(null);
-  // Set when Enter or blur keeps rejected text so the person can correct it.
-  const [isRejectionCommitted, setIsRejectionCommitted] = useState(false);
-  const [isFocused, setIsFocused] = useState(false);
-  const typedResult =
-    pendingInput !== null && pendingInput.trim()
-      ? typedDate.parse(pendingInput)
-      : null;
-  const typedError = typedDateError(typedResult, isRejectionCommitted);
-  const typedErrorMessage =
-    typedError != null && typedResult != null
-      ? typedDate.errorMessage(typedResult)
-      : null;
-  // Text that stays in the field shows its reason as well as announcing it.
-  const typedStatus: InputStatus | undefined =
-    typedErrorMessage != null &&
-    (typedError !== 'unreadable' || isRejectionCommitted)
-      ? {type: 'error', message: typedErrorMessage}
-      : undefined;
-  const fieldStatus = typedStatus ?? status;
-  // Field announces a status it shows; the alert carries any other rejection.
-  const alertMessage =
-    typedStatus != null && !inputGroup ? '' : (typedErrorMessage ?? '');
 
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
     useInputStatusIcon({
@@ -678,37 +705,6 @@ function PointerDateField({
     ],
     inputGroup,
   );
-
-  // Clear pending input when value changes externally (computed during render
-  // via prev-value ref instead of useEffect to avoid an extra render cycle)
-  const prevValueRef = useRef(value);
-  if (value !== prevValueRef.current) {
-    prevValueRef.current = value;
-    if (value !== lastFiredValueRef.current) {
-      lastFiredValueRef.current = undefined;
-      if (pendingInput !== null) {
-        setPendingInput(null);
-        setIsRejectionCommitted(false);
-      }
-    }
-  }
-
-  // Applies only to the committed value, never to in-progress typed input.
-  const formatCommittedValue = typedDate.formatCommitted;
-
-  // Display value: pending input if typing, otherwise formatted value
-  const displayValue =
-    pendingInput !== null
-      ? pendingInput
-      : optimisticValue && /^\d{4}-\d{2}-\d{2}$/.test(optimisticValue)
-        ? formatCommittedValue(optimisticValue)
-        : '';
-
-  const isInputValid = typedError == null;
-  const formatHint =
-    placeholderFromProps == null && isFocused && !displayValue
-      ? typedDate.getFormatHint()
-      : null;
 
   const fieldElementRef = useRef<HTMLDivElement | null>(null);
   // Set just before a close that focus already left the field for, so onHide
@@ -771,29 +767,6 @@ function PointerDateField({
     }
   }, [isEffectivelyDisabled, popover]);
 
-  // Unified change handler that fires both onChange and changeAction
-  const fireChange = useCallback(
-    (newValue: ISODateString | undefined) => {
-      if (isEffectivelyDisabled) {
-        return;
-      }
-      onChange?.(newValue);
-      if (changeAction) {
-        startTransition(async () => {
-          setOptimisticValue(newValue);
-          await changeAction(newValue);
-        });
-      }
-    },
-    [
-      isEffectivelyDisabled,
-      onChange,
-      changeAction,
-      startTransition,
-      setOptimisticValue,
-    ],
-  );
-
   // Handle clear button click
   const handleClear = useCallback(
     (e?: React.MouseEvent<HTMLButtonElement>) => {
@@ -820,93 +793,18 @@ function PointerDateField({
         return;
       }
       fireChange(selectedDate);
-      setPendingInput(null);
-      setIsRejectionCommitted(false);
+      resetTypedInput();
       popover.hide();
     },
-    [isDisabled, fireChange, popover],
+    [isDisabled, fireChange, resetTypedInput, popover],
   );
 
-  // Handle input text change - update immediately if valid and allowed
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      // The input is never natively disabled (spec:AST-085 FR1), so guard
-      // value mutation explicitly (readOnly also blocks typing).
-      if (isEffectivelyDisabled) {
-        return;
-      }
-      const newValue = e.target.value;
-      setPendingInput(newValue);
-      setIsRejectionCommitted(false);
-
-      // Report a date only once more typing cannot change it.
-      const result = typedDate.parse(newValue);
-      if (result.kind !== 'value' || !result.isComplete) {
-        return;
-      }
-      const parsedISO = plainDateToISO(result.date);
-      if (parsedISO !== value && parsedISO !== lastFiredValueRef.current) {
-        lastFiredValueRef.current = parsedISO;
-        fireChange(parsedISO);
-        // Navigate calendar to show the parsed date's month
-        calendarRef.current?.navigateTo(parsedISO);
-      }
+      handleTypedChange(e.target.value);
     },
-    [value, fireChange, isEffectivelyDisabled, typedDate],
+    [handleTypedChange],
   );
-
-  // Commit pending input (shared by blur and Enter key)
-  const commitPendingInput = useCallback(() => {
-    if (pendingInput === null) {
-      return;
-    }
-    // Disabled or busy: keep the value, drop the draft (spec:AST-085 FR2).
-    if (isEffectivelyDisabled) {
-      setPendingInput(null);
-      return;
-    }
-
-    if (!pendingInput.trim()) {
-      if (value !== undefined) {
-        fireChange(undefined);
-      }
-      setPendingInput(null);
-      return;
-    }
-
-    const result = typedDate.parse(pendingInput);
-    if (
-      result.kind === 'incomplete' ||
-      result.kind === 'nonexistent' ||
-      result.kind === 'outOfRange'
-    ) {
-      // Keep the text and show why it cannot commit; never finish or adjust
-      // the date.
-      setIsRejectionCommitted(true);
-      return;
-    }
-    if (result.kind === 'value') {
-      const parsedISO = plainDateToISO(result.date);
-      if (parsedISO !== value && parsedISO !== lastFiredValueRef.current) {
-        lastFiredValueRef.current = parsedISO;
-        fireChange(parsedISO);
-      }
-    }
-    // A new typing session reports a retyped date again.
-    lastFiredValueRef.current = undefined;
-    setPendingInput(null);
-  }, [pendingInput, isEffectivelyDisabled, value, fireChange, typedDate]);
-
-  // Handle blur - validate, check constraints, and clear pending input.
-  const handleBlur = useCallback(() => {
-    setIsFocused(false);
-    commitPendingInput();
-  }, [commitPendingInput]);
-
-  const handleFocus = useCallback(() => {
-    setIsFocused(true);
-    typedDate.prepare();
-  }, [typedDate]);
 
   // A manual popover has no auto-popover exclusivity, so without this close
   // the next field's calendar would open beside this one. Focus going nowhere
@@ -951,10 +849,7 @@ function PointerDateField({
         if (!isEffectivelyDisabled) {
           popover.show({skipAutoFocus: true});
         }
-      } else if (
-        e.key === 'Enter' &&
-        (pendingInput !== null || isEffectivelyDisabled)
-      ) {
+      } else if (e.key === 'Enter' && (isPending || isEffectivelyDisabled)) {
         // Typed text holds Enter back, or a form would submit the value from
         // before the commit. A disabled or busy field must not submit its
         // form either. Otherwise Enter keeps its default, as in any text field.
@@ -962,7 +857,7 @@ function PointerDateField({
         commitPendingInput();
       }
     },
-    [popover, commitPendingInput, isEffectivelyDisabled, pendingInput],
+    [popover, commitPendingInput, isEffectivelyDisabled, isPending],
   );
 
   const inputWrapper = (
@@ -1063,7 +958,7 @@ function PointerDateField({
         aria-describedby={ariaDescribedBy}
         aria-required={isEffectivelyRequired ? 'true' : undefined}
         aria-invalid={
-          fieldStatus?.type === 'error' || !isInputValid ? 'true' : undefined
+          fieldStatus?.type === 'error' || isInvalid ? 'true' : undefined
         }
         aria-busy={isBusy || undefined}
         aria-expanded={popover.isOpen}
@@ -1074,12 +969,13 @@ function PointerDateField({
         {...stylex.props(
           styles.input,
           isEffectivelyDisabled && styles.inputDisabled,
-          !isInputValid && styles.inputInvalid,
+          isInvalid && styles.inputInvalid,
         )}
       />
       {/*
-          Announces a typed rejection that the field status does not announce.
-          The field status announces the rest.
+          Announces a typed rejection that no shown status carries, with one
+          message for each kind of rejection (WCAG 3.3.1). The field status
+          announces the rest itself.
         */}
       <VisuallyHidden as="div" role="alert" aria-live="assertive">
         {alertMessage}

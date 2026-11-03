@@ -85,10 +85,9 @@ import {
 } from '../utils';
 import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {joinAriaIDs} from '../utils/inputAria';
-import {plainDateToISO} from '../utils/plainDate';
 import type {CalendarSystem} from '../utils/calendarSystem';
 import {isRenderable} from '../utils/isRenderable';
-import {typedDateError, useTypedDate} from '../DateInput/useTypedDate';
+import {useTypedDateField} from '../DateInput/useTypedDate';
 
 import {
   useFieldInputStyling,
@@ -733,7 +732,6 @@ function PointerDateTimeField({
   const timeInputRef = useRef<HTMLInputElement | null>(null);
   const timeContainerRef = useRef<HTMLDivElement | null>(null);
   const calendarRef = useRef<CalendarHandle | null>(null);
-  const lastFiredDateRef = useRef<ISODateString | undefined>(undefined);
 
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
@@ -782,68 +780,6 @@ function PointerDateTimeField({
     dateConstraints,
   });
 
-  const typedDate = useTypedDate({
-    source: 'DateTimeInput',
-    calendar,
-    format: 'date_long',
-    min: calendarMin,
-    max: calendarMax,
-    isDateDisabled,
-  });
-
-  // --- Date input state ---
-  const [datePendingInput, setDatePendingInput] = useState<string | null>(null);
-  // Set when Enter or blur keeps rejected text so the person can correct it.
-  const [isDateRejectionCommitted, setIsDateRejectionCommitted] =
-    useState(false);
-  const [isDateFocused, setIsDateFocused] = useState(false);
-  const dateTypedResult =
-    datePendingInput !== null && datePendingInput.trim()
-      ? typedDate.parse(datePendingInput)
-      : null;
-  const dateTypedError = typedDateError(
-    dateTypedResult,
-    isDateRejectionCommitted,
-  );
-  const dateTypedErrorMessage =
-    dateTypedError != null && dateTypedResult != null
-      ? typedDate.errorMessage(dateTypedResult)
-      : null;
-  // Text that stays in the field shows its reason as well as announcing it.
-  const dateTypedStatus: InputStatus | undefined =
-    dateTypedErrorMessage != null &&
-    (dateTypedError !== 'unreadable' || isDateRejectionCommitted)
-      ? {type: 'error', message: dateTypedErrorMessage}
-      : undefined;
-  const fieldStatus = dateTypedStatus ?? status;
-  // Field announces a status it shows; the alert carries any other rejection.
-  const dateAlertMessage =
-    dateTypedStatus != null ? '' : (dateTypedErrorMessage ?? '');
-
-  // DateTimeInput fixes its status presentation to the detached message box,
-  // so the shared helper suppresses the on-field icon (the message box carries
-  // its own leading glyph). Routed through the helper for consistency with the
-  // rest of the bordered input family.
-  const {statusIcon, describedBy: statusTooltipDescribedBy} =
-    useInputStatusIcon({
-      status: fieldStatus,
-      statusVariant: 'detached',
-    });
-
-  const ariaDescribedBy =
-    [
-      description ? descriptionID : null,
-      !usesNativePicker && typedDate.calendarDescription != null
-        ? calendarDescriptionID
-        : null,
-      fieldStatus?.message ? statusMessageID : null,
-      statusTooltipDescribedBy,
-      showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
-      ariaDescribedByProp,
-    ]
-      .filter(Boolean)
-      .join(' ') || undefined;
-
   // Time constraints change depending on selected date
   const timeMin = useMemo(() => {
     if (!minParts.date || !minParts.time || !valueParts.date) {
@@ -858,31 +794,6 @@ function PointerDateTimeField({
     }
     return valueParts.date === maxParts.date ? maxParts.time : undefined;
   }, [maxParts.date, maxParts.time, valueParts.date]);
-
-  const prevDateRef = useRef(valueParts.date);
-  if (valueParts.date !== prevDateRef.current) {
-    prevDateRef.current = valueParts.date;
-    if (valueParts.date !== lastFiredDateRef.current) {
-      lastFiredDateRef.current = undefined;
-      if (datePendingInput !== null) {
-        setDatePendingInput(null);
-        setIsDateRejectionCommitted(false);
-      }
-    }
-  }
-
-  const dateDisplayValue =
-    datePendingInput !== null
-      ? datePendingInput
-      : valueParts.date && /^\d{4}-\d{2}-\d{2}$/.test(valueParts.date)
-        ? typedDate.formatCommitted(valueParts.date)
-        : '';
-
-  const isDateInputValid = dateTypedError == null;
-  const dateFormatHint =
-    placeholderFromProps == null && isDateFocused && !dateDisplayValue
-      ? typedDate.getFormatHint()
-      : null;
 
   // --- Time input state ---
   const [timePendingInput, setTimePendingInput] = useState<string | null>(null);
@@ -1064,8 +975,6 @@ function PointerDateTimeField({
         fireChange(combined);
       }
       if (source === 'calendar') {
-        setDatePendingInput(null);
-        setIsDateRejectionCommitted(false);
         popover.hide();
       }
     },
@@ -1079,6 +988,74 @@ function PointerDateTimeField({
       popover,
     ],
   );
+
+  const handleTypedDateChange = useCallback(
+    (date: ISODateString) => handleDateChange(date, 'input'),
+    [handleDateChange],
+  );
+  const clearTypedDate = useCallback(() => {
+    if (value !== undefined) {
+      fireChange(undefined);
+    }
+  }, [value, fireChange]);
+  const navigateToTypedDate = useCallback((date: ISODateString) => {
+    calendarRef.current?.navigateTo(date);
+  }, []);
+  const {
+    typedDate,
+    displayValue: dateDisplayValue,
+    formatHint: dateFormatHint,
+    isPending: isDatePending,
+    isInvalid: isDateInvalid,
+    fieldStatus,
+    alertMessage: dateAlertMessage,
+    handleChange: handleTypedDateInput,
+    commit: commitDatePendingInput,
+    handleFocus: handleDateFocus,
+    handleBlur: handleDateBlur,
+    reset: resetTypedDate,
+  } = useTypedDateField({
+    source: 'DateTimeInput',
+    calendar,
+    format: 'date_long',
+    min: calendarMin,
+    max: calendarMax,
+    isDateDisabled,
+    value: valueParts.date,
+    shownValue: valueParts.date,
+    onChange: handleTypedDateChange,
+    onClear: clearTypedDate,
+    onTypedDate: navigateToTypedDate,
+    isDisabled: isEffectivelyDisabled,
+    dropsDraftWhenDisabled: false,
+    status,
+    isStatusAnnounced: true,
+    hasPlaceholder: placeholderFromProps != null,
+  });
+
+  // DateTimeInput fixes its status presentation to the detached message box,
+  // so the shared helper suppresses the on-field icon (the message box carries
+  // its own leading glyph). Routed through the helper for consistency with the
+  // rest of the bordered input family.
+  const {statusIcon, describedBy: statusTooltipDescribedBy} =
+    useInputStatusIcon({
+      status: fieldStatus,
+      statusVariant: 'detached',
+    });
+
+  const ariaDescribedBy =
+    [
+      description ? descriptionID : null,
+      !usesNativePicker && typedDate.calendarDescription != null
+        ? calendarDescriptionID
+        : null,
+      fieldStatus?.message ? statusMessageID : null,
+      statusTooltipDescribedBy,
+      showsDisabledMessage ? disabledMessageTooltip.describedBy : null,
+      ariaDescribedByProp,
+    ]
+      .filter(Boolean)
+      .join(' ') || undefined;
 
   const handleNativeDateChange = useCallback(
     (newDate: ISODateString | undefined) => {
@@ -1117,88 +1094,10 @@ function PointerDateTimeField({
 
   const handleDateInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      // The input is never natively disabled (AST-085 FR1), so
-      // guard value mutation explicitly (readOnly also blocks typing).
-      if (isEffectivelyDisabled) {
-        return;
-      }
-      const text = e.target.value;
-      setDatePendingInput(text);
-      setIsDateRejectionCommitted(false);
-
-      // Report a date only once more typing cannot change it.
-      const result = typedDate.parse(text);
-      if (result.kind !== 'value' || !result.isComplete) {
-        return;
-      }
-      const parsedISO = plainDateToISO(result.date);
-      if (
-        parsedISO !== valueParts.date &&
-        parsedISO !== lastFiredDateRef.current
-      ) {
-        lastFiredDateRef.current = parsedISO;
-        handleDateChange(parsedISO, 'input');
-        calendarRef.current?.navigateTo(parsedISO);
-      }
+      handleTypedDateInput(e.target.value);
     },
-    [valueParts.date, handleDateChange, isEffectivelyDisabled, typedDate],
+    [handleTypedDateInput],
   );
-
-  const commitDatePendingInput = useCallback(() => {
-    if (datePendingInput === null) {
-      return;
-    }
-
-    if (!datePendingInput.trim()) {
-      if (value !== undefined) {
-        fireChange(undefined);
-      }
-      setDatePendingInput(null);
-      return;
-    }
-
-    const result = typedDate.parse(datePendingInput);
-    if (
-      result.kind === 'incomplete' ||
-      result.kind === 'nonexistent' ||
-      result.kind === 'outOfRange'
-    ) {
-      // Keep the text and show why it cannot commit; never finish or adjust
-      // the date.
-      setIsDateRejectionCommitted(true);
-      return;
-    }
-    if (result.kind === 'value') {
-      const parsedISO = plainDateToISO(result.date);
-      if (
-        parsedISO !== valueParts.date &&
-        parsedISO !== lastFiredDateRef.current
-      ) {
-        lastFiredDateRef.current = parsedISO;
-        handleDateChange(parsedISO, 'input');
-      }
-    }
-    // A new typing session reports a retyped date again.
-    lastFiredDateRef.current = undefined;
-    setDatePendingInput(null);
-  }, [
-    datePendingInput,
-    value,
-    valueParts.date,
-    fireChange,
-    handleDateChange,
-    typedDate,
-  ]);
-
-  const handleDateBlur = useCallback(() => {
-    setIsDateFocused(false);
-    commitDatePendingInput();
-  }, [commitDatePendingInput]);
-
-  const handleDateFocus = useCallback(() => {
-    setIsDateFocused(true);
-    typedDate.prepare();
-  }, [typedDate]);
 
   const handleDateKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -1224,7 +1123,7 @@ function PointerDateTimeField({
         }
       } else if (
         e.key === 'Enter' &&
-        (datePendingInput !== null || isEffectivelyDisabled)
+        (isDatePending || isEffectivelyDisabled)
       ) {
         // Typed text holds Enter back, or a form would submit the value from
         // before the commit. A disabled or busy field must not submit its
@@ -1233,7 +1132,7 @@ function PointerDateTimeField({
         commitDatePendingInput();
       }
     },
-    [popover, commitDatePendingInput, isEffectivelyDisabled, datePendingInput],
+    [popover, commitDatePendingInput, isEffectivelyDisabled, isDatePending],
   );
 
   // --- Time-option popover (#2727) ---
@@ -1888,7 +1787,7 @@ function PointerDateTimeField({
                 aria-describedby={ariaDescribedBy}
                 aria-required={isEffectivelyRequired ? 'true' : undefined}
                 aria-invalid={
-                  fieldStatus?.type === 'error' || !isDateInputValid
+                  fieldStatus?.type === 'error' || isDateInvalid
                     ? 'true'
                     : undefined
                 }
@@ -1901,12 +1800,13 @@ function PointerDateTimeField({
                 {...stylex.props(
                   styles.input,
                   isEffectivelyDisabled && styles.inputDisabled,
-                  !isDateInputValid && styles.inputInvalid,
+                  isDateInvalid && styles.inputInvalid,
                 )}
               />
               {/*
-            Announces a typed rejection that the field status does not
-            announce. The field status announces the rest.
+            Announces a typed date rejection that no shown status carries,
+            with one message for each kind of rejection (WCAG 3.3.1). The
+            field status announces the rest itself.
           */}
               <VisuallyHidden as="div" role="alert" aria-live="assertive">
                 {dateAlertMessage}
@@ -2064,7 +1964,10 @@ function PointerDateTimeField({
               calendar={typedDate.calendar}
               mode="single"
               value={valueParts.date ?? null}
-              onChange={(d: ISODateString) => handleDateChange(d, 'calendar')}
+              onChange={(d: ISODateString) => {
+                handleDateChange(d, 'calendar');
+                resetTypedDate();
+              }}
               min={calendarMin}
               max={calendarMax}
               dateConstraints={dateConstraints}
