@@ -4,7 +4,7 @@
 
 /**
  * @file CheckboxList.tsx
- * @input Uses React, useId, useOptimistic, useTransition, Field, List, CheckboxListContext, FormLayoutContext
+ * @input Uses React, useId, useOptimistic, useTransition, Field, List, CheckboxListContext
  * @output Exports CheckboxList component, CheckboxListProps
  * @position Core implementation; consumed by index.ts, tested by CheckboxList.test.tsx
  *
@@ -17,7 +17,6 @@
  */
 
 import {
-  use,
   useCallback,
   useId,
   useMemo,
@@ -32,7 +31,6 @@ import {
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {SizeValue} from '../utils/types';
 import {Field} from '../Field/Field';
-import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
 import type {InputStatus} from '../Field/types';
 import {List} from '../List/List';
 import type {ListDensity} from '../List/ListContext';
@@ -190,13 +188,6 @@ export function CheckboxList({
     containerClassName,
     containerStyle,
   });
-  const formLayout = use(FormLayoutContext);
-  // The items' checkboxes resolve `aria-required` from the form default. A
-  // checkbox group has no required state, so its items must not inherit it.
-  const itemFormLayout = useMemo(
-    () => ({...formLayout, defaultOptionality: undefined}),
-    [formLayout],
-  );
   const inputID = useId();
   const labelID = useId();
   const descriptionID = useId();
@@ -335,9 +326,7 @@ export function CheckboxList({
               .join(' ') || undefined
           }>
           <List density={density} hasDividers={hasDividers}>
-            <FormLayoutContext value={itemFormLayout}>
-              {children}
-            </FormLayoutContext>
+            {children}
           </List>
         </div>
       </CheckboxListContext>
