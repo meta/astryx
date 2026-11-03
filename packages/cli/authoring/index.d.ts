@@ -137,6 +137,8 @@ export type {
   ComponentThemingTarget,
   ComponentThemingVar,
   ComponentThemingDerivedVar,
+  ComponentIconSlotDoc,
+  ComponentIconSlotStateDoc,
   UsageDoc,
   // hook
   HookParamDoc,

@@ -905,7 +905,8 @@
       "custom-icons",
       "theme-overrides",
       "icon-variants",
-      "component-and-library-icons"
+      "component-and-library-icons",
+      "component-icon-slots"
     ],
     "mentions": [
       "This lets you swap the icon set (e.g."
