@@ -33,7 +33,6 @@ import {useEffect, useRef, useState} from 'react';
 import type {ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
-import {devWarn} from '../utils/devWarning';
 import {
   colorVars,
   durationVars,
@@ -55,6 +54,7 @@ import {
 } from './resizeGesture';
 import {themeProps} from '../utils/themeProps';
 
+import {useDevWarning} from '../hooks/useDevWarning';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {
   registerEnglishFallback,
@@ -406,8 +406,8 @@ export function ResizeHandle({
   const dragRegionRef = useRef<ResizableProps | undefined>(undefined);
   const configRef = useRef({direction, isReversed, isDisabled});
   configRef.current = {direction, isReversed, isDisabled};
-  const [isLegacyDragging, setIsLegacyDragging] = useState(false);
-  const [legacyGesture] = useState<ResizeGesture>(() => {
+  const [isDragging, setIsDragging] = useState(false);
+  const [regionGesture] = useState<ResizeGesture>(() => {
     const model: ResizeGestureModel = {
       state() {
         const region = resizableRef.current;
@@ -457,14 +457,11 @@ export function ResizeHandle({
         isDisabled:
           configRef.current.isDisabled || resizableRef.current == null,
       }),
-      setIsLegacyDragging,
+      setIsDragging,
     );
   });
 
-  const gesture: ResizeGesture | null =
-    resizable != null ? legacyGesture : null;
-  const isDragging = isLegacyDragging;
-  const isInputDisabled = isDisabled;
+  const gesture = resizable != null ? regionGesture : null;
   const isCollapsed = resizable?._isCollapsed ?? false;
   const effectiveSide = resolveEffectiveSide(
     pillPlacement,
@@ -480,22 +477,14 @@ export function ResizeHandle({
   // the region measures percentage bounds on the other. `ResizableProps` is
   // exported, so `_direction` is optional for old hand-built objects; absent
   // means there is no region axis to compare, not that it is horizontal.
-  const didWarnAxisRef = useRef(false);
   const regionDirection = resizable?._direction;
-  useEffect(() => {
-    if (didWarnAxisRef.current) {
-      return;
-    }
-    if (regionDirection != null && regionDirection !== direction) {
-      didWarnAxisRef.current = true;
-      devWarn(
-        'ResizeHandle',
-        `direction="${direction}" but its useResizable region is ` +
-          `"${regionDirection}". They must match: the hook measures one axis ` +
-          'and the handle drags the other.',
-      );
-    }
-  }, [direction, regionDirection]);
+  useDevWarning(
+    'ResizeHandle',
+    `direction="${direction}" but its useResizable region is ` +
+      `"${regionDirection}". They must match: the hook measures one axis ` +
+      'and the handle drags the other.',
+    regionDirection != null && regionDirection !== direction,
+  );
 
   // --- Cleanup on unmount, or when the `resizable` prop goes ---
 
@@ -510,9 +499,9 @@ export function ResizeHandle({
       return;
     }
     return () => {
-      legacyGesture.interrupt();
+      regionGesture.interrupt();
     };
-  }, [hasRegion, legacyGesture]);
+  }, [hasRegion, regionGesture]);
 
   // --- ARIA ---
   // When collapsed the panel's real size (0) sits below aria-valuemin, which
@@ -554,10 +543,10 @@ export function ResizeHandle({
       aria-valuemax={ariaValueMax}
       aria-valuetext={ariaValueText}
       aria-label={label}
-      aria-disabled={isInputDisabled || undefined}
-      tabIndex={isInputDisabled ? -1 : 0}
+      aria-disabled={isDisabled || undefined}
+      tabIndex={isDisabled ? -1 : 0}
       onDoubleClick={() => {
-        if (!isInputDisabled) {
+        if (!isDisabled) {
           gesture?.doubleClick();
         }
       }}
@@ -583,7 +572,7 @@ export function ResizeHandle({
             !isDragging &&
             styles.handleHover,
           !isOverlay && hasDivider && isDragging && styles.handleActive,
-          isInputDisabled && styles.disabled,
+          isDisabled && styles.disabled,
           xstyle,
         ),
         className,
@@ -596,7 +585,7 @@ export function ResizeHandle({
       // this accessibility-critical handler can't be clobbered by a passed prop.
       onKeyDown={e => {
         props.onKeyDown?.(e);
-        if (!isInputDisabled) {
+        if (!isDisabled) {
           gesture?.keyDown(e);
         }
       }}>
@@ -616,10 +605,10 @@ export function ResizeHandle({
             : isHorizontal
               ? dynamicStyles.hitAreaOffsetX(hitBiasDir)
               : dynamicStyles.hitAreaOffsetY(hitBiasDir),
-          isInputDisabled && styles.disabled,
+          isDisabled && styles.disabled,
         )}
         onPointerDown={e => {
-          if (!isInputDisabled) {
+          if (!isDisabled) {
             gesture?.pointerDown(e);
           }
         }}
