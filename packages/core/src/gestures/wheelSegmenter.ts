@@ -3,8 +3,9 @@
 /**
  * @file wheelSegmenter.ts
  * @input A wheel stream's deltas along one axis, with their event times
- * @output Exports WheelSegmenter: splits the stream into gestures and reads
- *   a trackpad's lift (the onset of momentum)
+ * @output Exports WheelSegmenter and isBunched. WheelSegmenter splits the
+ *   stream into gestures and reads a trackpad's lift (the onset of momentum).
+ *   isBunched tells one stall's merge from a frame.
  * @position Read by GestureHost.ts's wheel input: the web reports no
  *   trackpad contact or phase, so both are inferred.
  */
@@ -22,14 +23,31 @@ export interface WheelSegment {
   readonly liftNow: boolean;
   /** This event shrank, so it may be momentum: hold it until known. */
   readonly decaying: boolean;
+  /** This event came so soon after the one before that it is a merge. */
+  readonly bunched: boolean;
 }
 
 /** Momentum arrives at frame rate: a pause this long ends it. */
 const MOMENTUM_GAP_MS = 50;
+/**
+ * A wheel this close to the one before, ms, is one stall's merge. Frames come
+ * further apart at every display rate up to 500 Hz, which is 2 ms.
+ */
+const BUNCHED_MS = 1.5;
 /** Shrinking deltas in a row before the lift is read. */
 const LIFT_RUN = 4;
 /** And how much of its size the run has lost by then. */
 const LIFT_DECAY = 0.8;
+
+/**
+ * Whether a wheel `intervalMs` after the one before is one stall's merge, not
+ * a frame. A stalled page receives the wheels it held back together, within
+ * 1.5 ms of each other. The rule reads no history, so slow wheels never make
+ * a real frame look like a merge.
+ */
+export function isBunched(intervalMs: number): boolean {
+  return intervalMs <= BUNCHED_MS;
+}
 
 /**
  * A trackpad gesture has a finger phase and, after a fling, a momentum phase.
@@ -55,6 +73,7 @@ export class WheelSegmenter {
     const size = Math.abs(delta);
     const sign = Math.sign(delta);
     const gap = time - this.last;
+    const bunched = this.count > 0 && isBunched(gap);
     let boundary: WheelBoundary | null = null;
     if (this.count === 0) {
       boundary = this.gesture === 0 ? 'first' : 'idle';
@@ -104,6 +123,7 @@ export class WheelSegmenter {
       gesture: this.gesture,
       liftNow,
       decaying: decaying && !liftNow,
+      bunched: boundary == null && bunched,
     };
   }
 
