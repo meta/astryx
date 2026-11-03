@@ -5,7 +5,8 @@
 /**
  * @file Tooltip.tsx
  * @input Uses React, useTooltip hook
- * @output Exports Tooltip component for hover/focus triggered tooltips
+ * @output Exports Tooltip component for hover/focus triggered tooltips, and the
+ *   module-only TooltipWithTriggerBehavior that InfoTip's press-to-pin uses
  * @position Layer component; uses display:contents wrapper to avoid cloneElement
  *
  * SYNC: When modified, update these files to stay in sync:
@@ -23,20 +24,18 @@ import React, {
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
 import {
-  useTooltip,
+  useTooltipWithTriggerBehavior,
   type TooltipFocusTrigger,
-  type TooltipTriggerBehavior,
   type TooltipTouchTrigger,
 } from './useTooltip';
-import {stopPressPinClick} from '../Layer/usePressPin';
+import {
+  stopPressPinClick,
+  type LayerTriggerBehavior,
+} from '../Layer/usePressPin';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {colorVars} from '../theme/tokens.stylex';
 
-export type {
-  TooltipFocusTrigger,
-  TooltipTriggerBehavior,
-  TooltipTouchTrigger,
-} from './useTooltip';
+export type {TooltipFocusTrigger, TooltipTouchTrigger} from './useTooltip';
 
 const styles = stylex.create({
   wrapperContents: {
@@ -118,36 +117,9 @@ export interface TooltipProps {
    * - `tap`: tap always opens the tooltip, even on a trigger that acts
    * - `none`: touch never opens the tooltip
    *
-   * It decides only under `triggerBehavior="adaptive"`, the default.
-   *
    * @default 'auto'
    */
   touchTrigger?: TooltipTouchTrigger;
-
-  /**
-   * How the trigger opens the tooltip:
-   * - `adaptive` (the default): hover and focus preview it. A tap opens it
-   *   unless the trigger performs an action of its own. While `touchTrigger`
-   *   remains, it decides those taps.
-   * - `hover`: hover and focus preview it; no touch or pen tap opens it.
-   * - `toggle`: on a button trigger, a click, a tap, Enter, or Space pins the
-   *   tooltip open, and the same press closes it. Hover and keyboard focus
-   *   still preview it. A pinned tooltip stays until Escape, a second press,
-   *   a press outside, or focus leaving. The press stops at the trigger. Its
-   *   default action is prevented, and the trigger's own handlers still run.
-   *   No clickable row or card around the trigger activates. With
-   *   `anchorRef`, the anchor's own `onClick` runs, and a plain `onClick`
-   *   element around it receives the press unless that `onClick` stops it.
-   *   Astryx clickable rows, cards, and containers ignore it, except an Item
-   *   row when the anchor is not a native button. The trigger reports
-   *   `aria-expanded` and `aria-controls`, and the tooltip's text is
-   *   announced once when it pins. Use it for a trigger whose information
-   *   lives only in the tooltip, such as an info icon. `touchTrigger` is
-   *   ignored.
-   *
-   * @default 'adaptive'
-   */
-  triggerBehavior?: TooltipTriggerBehavior;
 
   /**
    * Whether the tooltip is enabled.
@@ -222,7 +194,32 @@ function mergeIds(...ids: (string | undefined | null)[]): string | undefined {
  * </Tooltip>
  * ```
  */
-export function Tooltip({
+export function Tooltip(props: TooltipProps): ReactElement {
+  // The option is fixed to `adaptive`, so a spread object that carries it at
+  // runtime cannot reach the press-to-pin path.
+  return <TooltipWithTriggerBehavior {...props} triggerBehavior="adaptive" />;
+}
+
+/**
+ * Module-only props for `TooltipWithTriggerBehavior`. Not exported from the
+ * package.
+ */
+export interface TooltipWithTriggerBehaviorProps extends TooltipProps {
+  /**
+   * How the trigger opens the tooltip. `toggle` pins it on a click, a tap,
+   * Enter, or Space on a button trigger, and stops that press at the trigger
+   * (see `useTooltipWithTriggerBehavior`). InfoTip uses it.
+   *
+   * @default 'adaptive'
+   */
+  triggerBehavior?: LayerTriggerBehavior;
+}
+
+/**
+ * `Tooltip` with a trigger behavior. Module-only: InfoTip's press-to-pin goes
+ * through it, and the package does not export it.
+ */
+export function TooltipWithTriggerBehavior({
   children,
   anchorRef,
   content,
@@ -238,7 +235,7 @@ export function Tooltip({
   hasHoverIndication = 'auto',
   isOpen,
   isDefaultOpen,
-}: TooltipProps): ReactElement {
+}: TooltipWithTriggerBehaviorProps): ReactElement {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const textOnly = children != null ? isTextOnly(children) : false;
 
@@ -255,7 +252,7 @@ export function Tooltip({
   }, [onOpenChange]);
 
   // Use the hook for all tooltip behavior
-  const tooltip = useTooltip({
+  const tooltip = useTooltipWithTriggerBehavior({
     placement,
     alignment,
     delay,

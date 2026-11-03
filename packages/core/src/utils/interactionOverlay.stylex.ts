@@ -15,8 +15,9 @@
  * SYNC: When modified, update pressFeedback.ts, pressGesture.ts (the fade
  * clock), hooks/usePressFeedback.doc.mjs, the components that paint the touch
  * press off an ancestor scope or a pseudo-element (Switch, Tab,
- * CheckboxInput, RadioListItem, ClickableCard, SelectableCard, Thumbnail)
- * and scripts/build-css.test.mjs.
+ * CheckboxInput, RadioListItem, ClickableCard, SelectableCard, Thumbnail),
+ * Button (a tracked action sizes its `:active` image to zero) and
+ * scripts/build-css.test.mjs.
  */
 
 // Every surface that paints a press uses one of these styles, so a change to

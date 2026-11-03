@@ -27,6 +27,16 @@ import {Drawer} from '../Drawer/Drawer';
 import {getActiveModalOutlet} from '../Layer/modalOutlet';
 import type {ToastDismissReason} from './types';
 
+// jsdom reports no window focus until an element is focused, but a test page
+// stands for a focused window: a toast raised while the window is blurred
+// starts held (FR2), which the blur tests set up on purpose.
+beforeEach(() => {
+  vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+});
+afterEach(() => {
+  vi.mocked(document.hasFocus).mockRestore?.();
+});
+
 // jsdom does not implement the native dialog methods.
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = vi.fn(function (
@@ -231,6 +241,39 @@ function trackPopoverState() {
 }
 
 describe('ToastViewport modal hosting', () => {
+  // spec:AST-086 FR10: an open modal hides the body-level channel, so while
+  // the viewport is hosted in one each card announces itself; outside a modal
+  // the cards carry no live region and the viewport's channel announces once.
+  it('gives each card its own live region only while a modal hosts the viewport', () => {
+    render(
+      <ToastViewport>
+        <ToastButton />
+        <DialogFixture label="Edit">
+          <ToastButton label="Show toast from dialog" />
+        </DialogFixture>
+      </ToastViewport>,
+    );
+    // The live region the toast's own text sits in, inside its row.
+    const liveRegionOf = (text: string) => {
+      const node = screen.getByText(text);
+      const row = node.closest('[data-toast-id]');
+      const region = node.closest(
+        '[aria-live], [role="status"], [role="alert"]',
+      );
+      return region != null && row?.contains(region) ? region : null;
+    };
+
+    fireEvent.click(screen.getByRole('button', {name: 'Show toast'}));
+    expect(liveRegionOf('Saved')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', {name: 'Toggle Edit'}));
+    expect(getDialog('Edit').contains(getViewport())).toBe(true);
+    expect(liveRegionOf('Saved')).toHaveAttribute('aria-live', 'polite');
+
+    fireEvent.click(screen.getByRole('button', {name: 'Close Edit'}));
+    expect(liveRegionOf('Saved')).toBeNull();
+  });
+
   it('moves into an open Dialog and back when it closes, keeping the toast', () => {
     const {container} = render(
       <ToastViewport>
@@ -524,10 +567,10 @@ describe('ToastViewport above a BottomSheet', () => {
     expect(viewport.closest('dialog')).toBe(getDialog('Filters'));
 
     fireEvent.click(screen.getByRole('button', {name: 'Close Filters'}));
-    // The sheet stays an open modal through its exit animation, but inert and
-    // hidden; toasts must not go down with it.
+    // The sheet stays an open dialog through its exit animation, no longer
+    // modal and taking no presses; toasts must not go down with it.
     expect(getDialog('Filters')).toHaveAttribute('open');
-    expect(getDialog('Filters')).toHaveAttribute('inert');
+    expect(getDialog('Filters')).not.toHaveAttribute('aria-modal');
     expect(viewport.closest('dialog')).toBe(getDialog('Edit'));
     expect(viewport.closest('[inert], [aria-hidden="true"]')).toBeNull();
   });
@@ -741,18 +784,44 @@ describe('ToastViewport above a Drawer', () => {
     );
   });
 
-  it('stays in place when a drawer without a scrim opens', () => {
-    trackPopoverState();
+  it('re-enters the top layer in place when a drawer without a scrim opens after it', () => {
+    // A `hasScrim={false}` drawer is a manual popover: it enters the top
+    // layer above the viewport and blocks nothing, so the viewport stays
+    // where it is and leaves and re-enters to paint above the drawer again.
+    const {showPopover, hidePopover} = trackPopoverState();
     const {container} = render(
       <ToastViewport>
+        <ToastButton />
         <DrawerFixture label="Candidate" hasScrim={false} />
       </ToastViewport>,
     );
+    const viewport = getViewport();
+    const onViewport = (spy: typeof showPopover) =>
+      spy.mock.contexts.filter(context => context === viewport).length;
+    fireEvent.click(screen.getByRole('button', {name: 'Show toast'}));
+    expect(onViewport(showPopover)).toBe(1);
+
     fireEvent.click(screen.getByRole('button', {name: 'Open Candidate'}));
-    // A non-modal drawer leaves the page operable, so it supplies no outlet.
+    expect(getDialog('Candidate')).toHaveAttribute('popover', 'manual');
+    // Re-entered (hide, then show) after the drawer's own showPopover, and
+    // not moved: a non-modal drawer is not an outlet.
+    expect(onViewport(hidePopover)).toBe(1);
+    expect(onViewport(showPopover)).toBe(2);
+    const drawerShow = showPopover.mock.contexts.indexOf(
+      getDialog('Candidate'),
+    );
+    expect(drawerShow).toBeGreaterThan(-1);
+    expect(showPopover.mock.contexts.lastIndexOf(viewport)).toBeGreaterThan(
+      drawerShow,
+    );
     expect(getViewport().closest('dialog')).toBeNull();
     expect(container.contains(getViewport())).toBe(true);
     expect(getActiveModalOutlet()).toBeNull();
+
+    // Closing the drawer moves nothing and re-enters nothing.
+    fireEvent.click(screen.getByRole('button', {name: 'Close Candidate'}));
+    expect(onViewport(hidePopover)).toBe(1);
+    expect(onViewport(showPopover)).toBe(2);
   });
 });
 

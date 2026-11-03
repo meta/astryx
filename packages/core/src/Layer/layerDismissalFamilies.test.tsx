@@ -3,7 +3,7 @@
 /**
  * @file layerDismissalFamilies.test.tsx
  * @input Uses vitest, @testing-library/react, BottomSheet, Dialog, Lightbox,
- *   MobileNav, HoverCard, Tooltip (also pinned by `triggerBehavior="toggle"`)
+ *   MobileNav, HoverCard, Tooltip (also pinned through its press-to-pin path)
  * @output Tests that every overlay family shares the one dismissal stack
  * @position Colocated with layerStack; the families' own behavior is tested in
  *   their own files, this one only asks who takes the press
@@ -37,7 +37,7 @@ import {Dialog} from '../Dialog/Dialog';
 import {HoverCard} from '../HoverCard/HoverCard';
 import {Lightbox} from '../Lightbox/Lightbox';
 import {MobileNav} from '../MobileNav/MobileNav';
-import {Tooltip} from '../Tooltip/Tooltip';
+import {Tooltip, TooltipWithTriggerBehavior} from '../Tooltip/Tooltip';
 import {resetLayerStackForTests} from './layerStack';
 
 const originalMatches = HTMLElement.prototype.matches;
@@ -438,9 +438,11 @@ describe('overlay families on the shared dismissal stack', () => {
 
       render(
         <Dialog isOpen={true} onOpenChange={onDialogChange} aria-label="Host">
-          <Tooltip content="Pinned tip" triggerBehavior="toggle">
+          <TooltipWithTriggerBehavior
+            content="Pinned tip"
+            triggerBehavior="toggle">
             <button type="button">Info</button>
-          </Tooltip>
+          </TooltipWithTriggerBehavior>
         </Dialog>,
       );
       fireEvent.click(screen.getByRole('button', {name: 'Info'}));
