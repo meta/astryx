@@ -107,7 +107,7 @@ export interface TimestampProps extends BaseProps<HTMLTimeElement> {
    * formats name no instant and ignore it. An unknown identifier warns once
    * in development and falls back to the viewer's zone.
    */
-  timeZone?: string;
+  timezoneID?: string;
   /**
    * Threshold in seconds for 'auto' format to switch from relative to date_time.
    * @default 604800 (7 days)
@@ -290,7 +290,7 @@ function isRelativeFormat(
 export function Timestamp({
   value,
   format = 'auto',
-  timeZone: timeZoneProp,
+  timezoneID: timezoneIDProp,
   autoThreshold = DEFAULT_AUTO_THRESHOLD,
   hasTooltip = true,
   tooltipEntries,
@@ -361,14 +361,9 @@ export function Timestamp({
   // others. The one exception is the pre-hydration placeholder, written in
   // UTC with its label so every zone produces the same markup.
   //
-  // An explicit `timeZone` pins absolute display output: the named zone
-  // renders identically on the server and the client, so absolute output no
-  // longer depends on the server's zone. It never reaches the placeholder
-  // (always UTC-labelled per FR3/ORD1), the default hover-card row (always
-  // the viewer's zone per FR7), or a relative format's accessible name
-  // (relative formats ignore it) — those stay viewer- or UTC-based so the
-  // spec's zone guarantees hold whatever is pinned.
-  const timeZone = resolveTimezoneID(timeZoneProp, 'timeZone');
+  // A named zone makes absolute text the same on the server and the client.
+  // It does not reach the placeholder, the default card row or the relative name.
+  const timezoneID = resolveTimezoneID(timezoneIDProp, 'timezoneID');
   const displayText = !isValidDate
     ? ''
     : effectiveFormat === 'relative'
@@ -382,10 +377,10 @@ export function Timestamp({
               locale,
               // The pre-hydration placeholder is written in UTC, labelled, so
               // the server and the hydrating client produce the same text in
-              // every time zone — whatever `timeZone` pins.
+              // every time zone — whatever `timezoneID` pins.
               isClockPending
                 ? {timeZone: 'UTC', isTimezoneShown: true}
-                : {timeZone, isTimezoneShown},
+                : {timeZone: timezoneID, isTimezoneShown},
             )
           : '';
 
@@ -394,7 +389,7 @@ export function Timestamp({
   // out in full: abbreviations like "PST" or "GMT+2" are unexpanded
   // abbreviations to a screen-reader user (WCAG 3.1.4). Both stay in the
   // viewer's zone: the default hover-card row per FR7, and the relative
-  // accessible name because relative formats ignore `timeZone`.
+  // accessible name because relative formats ignore `timezoneID`.
   const fullAbsoluteText = isValidDate
     ? formatInstant(date, 'full', locale, {timeZone: undefined})
     : '';

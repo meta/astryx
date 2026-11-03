@@ -248,17 +248,17 @@ export const ExplicitTimeZone: Story = {
       <Timestamp
         value="2026-02-19T17:00:00Z"
         format="date_time"
-        timeZone="UTC"
+        timezoneID="UTC"
       />
       <Timestamp
         value="2026-02-19T17:00:00Z"
         format="date_time"
-        timeZone="America/Los_Angeles"
+        timezoneID="America/Los_Angeles"
       />
       <Timestamp
         value="2026-02-19T17:00:00Z"
         format="date_time"
-        timeZone="Asia/Tokyo"
+        timezoneID="Asia/Tokyo"
       />
     </div>
   ),

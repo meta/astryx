@@ -877,14 +877,14 @@ describe('Timestamp', () => {
       expect(normalize(card.textContent ?? '')).toContain(normalize(expected));
     });
 
-    it('keeps the default hover-card row in the viewer zone with timeZone set', async () => {
+    it('keeps the default hover-card row in the viewer zone with timezoneID set', async () => {
       const user = userEvent.setup();
       process.env.TZ = 'UTC';
       render(
         <Timestamp
           value={new Date('2026-03-25T10:00:00Z').getTime() / 1000}
           format="relative"
-          timeZone="Asia/Tokyo"
+          timezoneID="Asia/Tokyo"
           data-testid="ts"
         />,
       );
@@ -1822,7 +1822,7 @@ describe('Timestamp server rendering', () => {
       <Timestamp
         value={1665792474000}
         format="date"
-        timeZone="UTC"
+        timezoneID="UTC"
         hasTooltip={false}
       />
     );
@@ -1841,7 +1841,7 @@ describe('Timestamp server rendering', () => {
       <Timestamp
         value={1665792474000}
         format="date"
-        timeZone="America/Los_Angeles"
+        timezoneID="America/Los_Angeles"
         hasTooltip={false}
       />,
     );
@@ -1850,7 +1850,7 @@ describe('Timestamp server rendering', () => {
       <Timestamp
         value={1665792474000}
         format="date"
-        timeZone="Asia/Tokyo"
+        timezoneID="Asia/Tokyo"
         hasTooltip={false}
       />,
     );
@@ -1862,7 +1862,7 @@ describe('Timestamp server rendering', () => {
       <Timestamp
         value={1665792474000}
         format="date_time"
-        timeZone="UTC"
+        timezoneID="UTC"
         hasTooltip={false}
       />
     );
@@ -1891,14 +1891,14 @@ describe('Timestamp server rendering', () => {
     }
   });
 
-  it('keeps the UTC-labelled placeholder for a relative format with timeZone', () => {
+  it('keeps the UTC-labelled placeholder for a relative format with timezoneID', () => {
     // FR3/ORD1: while the clock is pending the server placeholder is UTC
-    // with its label, whatever `timeZone` pins.
+    // with its label, whatever `timezoneID` pins.
     const element = (
       <Timestamp
         value={new Date('2026-03-25T10:00:00Z').getTime() / 1000}
         format="relative"
-        timeZone="America/Los_Angeles"
+        timezoneID="America/Los_Angeles"
         hasTooltip={false}
       />
     );
@@ -1908,7 +1908,7 @@ describe('Timestamp server rendering', () => {
     expect(html).not.toContain('Los Angeles');
   });
 
-  it('ignores timeZone in the relative accessible name', () => {
+  it('ignores timezoneID in the relative accessible name', () => {
     const value = Date.now() / 1000 - 3600;
     const {rerender} = render(
       <Timestamp
@@ -1923,7 +1923,7 @@ describe('Timestamp server rendering', () => {
       <Timestamp
         value={value}
         format="relative"
-        timeZone="Asia/Tokyo"
+        timezoneID="Asia/Tokyo"
         hasTooltip={false}
         data-testid="ts"
       />,
@@ -1941,7 +1941,7 @@ describe('Timestamp server rendering', () => {
         <Timestamp
           value={1665792474000}
           format="date"
-          timeZone="Never/Whence"
+          timezoneID="Never/Whence"
           hasTooltip={false}
         />,
       );

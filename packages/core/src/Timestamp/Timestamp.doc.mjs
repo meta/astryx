@@ -32,7 +32,7 @@ export const docs = {
       default: "'auto'",
     },
     {
-      name: 'timeZone',
+      name: 'timezoneID',
       type: 'string',
       description:
         "IANA time zone the absolute formats render in, such as 'UTC' or 'America/Los_Angeles'. Omit (or pass 'local') for the viewer's own zone. An explicit zone renders identically on the server and the client, so it is the way to show an absolute time without a hydration mismatch; relative formats ignore it. An unknown identifier warns once in development and falls back to the viewer's zone.",
@@ -125,7 +125,7 @@ export const docs = {
       {guidance: true, description: 'Keep formatting consistent within the same list or table; mixing relative and absolute timestamps in the same column confuses scanning.'},
       {guidance: true, description: 'Enable isTimezoneShown when the audience spans multiple time zones, like a global team calendar or audit log.'},
       {guidance: true, description: 'Use tooltipEntries when readers must compare zones, such as an incident log where the reader\'s time and the event\'s origin zone both matter.'},
-      {guidance: true, description: 'Pass timeZone when an absolute time must read the same for every viewer and on the server, like an incident log timestamp or anything server-rendered; without it the server markup depends on the server zone.'},
+      {guidance: true, description: 'Pass timezoneID when an absolute time must read the same for every viewer and on the server, like an incident log timestamp or anything server-rendered; without it the server markup depends on the server zone.'},
       {guidance: true, description: 'Label every entry once a tooltip shows more than one zone; a bare abbreviation is not always recognizable (Tokyo renders as "GMT+9", not "JST").'},
       {guidance: true, description: 'Use isLive for active dashboards or real-time feeds so the relative time stays accurate without a page refresh.'},
       {guidance: true, description: 'Reach for tooltipEntries when readers need to grab an exact value: an incident log or deploy record where someone pastes the UTC time or Unix seconds elsewhere; configuring entries turns the hover into copy-to-clipboard rows.'},
@@ -169,7 +169,7 @@ export const docsZh = {
       {guidance: true, description: 'Keep formatting consistent within the same list or table; mixing relative and absolute timestamps in the same column confuses scanning.'},
       {guidance: true, description: 'Enable isTimezoneShown when the audience spans multiple time zones, like a global team calendar or audit log.'},
       {guidance: true, description: 'Use tooltipEntries when readers must compare zones, such as an incident log where the reader\'s time and the event\'s origin zone both matter.'},
-      {guidance: true, description: 'Pass timeZone when an absolute time must read the same for every viewer and on the server, like an incident log timestamp or anything server-rendered; without it the server markup depends on the server zone.'},
+      {guidance: true, description: 'Pass timezoneID when an absolute time must read the same for every viewer and on the server, like an incident log timestamp or anything server-rendered; without it the server markup depends on the server zone.'},
       {guidance: true, description: 'Label every entry once a tooltip shows more than one zone; a bare abbreviation is not always recognizable (Tokyo renders as "GMT+9", not "JST").'},
       {guidance: true, description: 'Use isLive for active dashboards or real-time feeds so the relative time stays accurate without a page refresh.'},
       {guidance: true, description: 'Reach for tooltipEntries when readers need to grab an exact value: an incident log or deploy record where someone pastes the UTC time or Unix seconds elsewhere; configuring entries turns the hover into copy-to-clipboard rows.'},
