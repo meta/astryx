@@ -7,6 +7,7 @@ import {
   mapRange,
   presentedProgressVelocity,
   progressCurve,
+  timedProgressCurve,
   type ProgressChannel,
 } from './progress';
 import {solveSpring, toSpring} from './spring';
@@ -168,5 +169,24 @@ describe('presentedProgressVelocity', () => {
     };
     presentedProgressVelocity(animator, line({x: 0, y: 0}, {x: 1, y: 1}), 1234);
     expect(times).toEqual([1234, 1234]);
+  });
+});
+
+describe('timedProgressCurve', () => {
+  it('runs from 0 to 1 over the duration on the easing, then holds 1', () => {
+    const curve = timedProgressCurve(300, [0.25, 0.1, 0.25, 1]);
+    expect(curve.duration).toBeCloseTo(0.3, 9);
+    expect(curve.at(0)).toBeCloseTo(0, 9);
+    expect(curve.at(0.15)).toBeGreaterThan(0.5);
+    expect(curve.at(0.3)).toBe(1);
+    expect(curve.at(1)).toBe(1);
+    expect(curve.velocity(0.3)).toBe(0);
+    expect(curve.velocity(0.1)).toBeGreaterThan(0);
+  });
+
+  it('lands at once for a zero duration', () => {
+    const curve = timedProgressCurve(0, [0, 0, 1, 1]);
+    expect(curve.duration).toBe(0);
+    expect(curve.at(0)).toBe(1);
   });
 });

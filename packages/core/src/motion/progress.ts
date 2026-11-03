@@ -4,7 +4,8 @@
  * @file progress.ts
  * @input A spring, a normalized progress, an animator's presented velocities
  * @output Exports `progressCurve` (a spring's progress from 0 to 1 as a
- *   MotionCurve), `mapProgress` (one curve as a function of another),
+ *   MotionCurve), `timedProgressCurve` (the same over a duration and
+ *   easing), `mapProgress` (one curve as a function of another),
  *   `mapRange` (the clamped linear map most companions use) and
  *   `presentedProgressVelocity` (the progress velocity that continues what
  *   an animator shows)
@@ -39,6 +40,7 @@
  */
 
 import type {Animator, MotionCurve, MotionProperty} from './animator';
+import {cubicBezier, type BezierPoints} from './bezier';
 import {
   SETTLING_EPSILON,
   solveSpring,
@@ -66,6 +68,33 @@ export function progressCurve(
     duration,
     at: t => (t >= duration ? 1 : curve.value(t)),
     velocity: t => (t >= duration ? 0 : curve.velocity(t)),
+  };
+}
+
+/**
+ * A progress from 0 to 1 over `durationMs`, eased by the cubic-bézier
+ * `easing`: the curve a timed motion (a theme duration and easing) plays.
+ * Its velocity is in progress per second.
+ */
+export function timedProgressCurve(
+  durationMs: number,
+  easing: BezierPoints,
+): MotionCurve {
+  const duration = Math.max(0, durationMs) / 1000;
+  const ease = cubicBezier(easing);
+  const at = (t: number) =>
+    duration === 0 || t >= duration ? 1 : ease(Math.max(0, t) / duration);
+  return {
+    duration,
+    at,
+    velocity: t => {
+      if (duration === 0 || t >= duration) {
+        return 0;
+      }
+      const t0 = Math.max(0, t - STEP);
+      const t1 = Math.min(duration, t + STEP);
+      return (at(t1) - at(t0)) / (t1 - t0);
+    },
   };
 }
 
