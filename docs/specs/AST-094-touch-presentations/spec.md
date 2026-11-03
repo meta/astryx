@@ -184,6 +184,10 @@ a measured, sourced difference exists.
   integrator, its 300 ms animated scroll and that scroll's sinusoidal curve,
   DEC-25) plays from internal constants and is not yet a named role.
 
+  Implementation gap: the sheet picker wheel's snap rate (UIKit's measured
+  picker deceleration) plays from an internal constant and is not yet a named
+  role; a role kind for rates comes with a later change.
+
 ### Motion
 
 - **FR5 — Motion runs on the compositor.** Every release and every
