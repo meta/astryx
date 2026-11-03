@@ -445,7 +445,7 @@ describe('BreadcrumbItem in the AppShell mobile drawer', () => {
     expect(calls).toEqual(['onClick', 'close']);
   });
 
-  it('the current crumb leaves the drawer open', () => {
+  it('a crumb marked isCurrent leaves the drawer open', () => {
     const {closeMobileNav} = renderInDrawer(
       <>
         <BreadcrumbItem href="#/projects">Projects</BreadcrumbItem>
@@ -454,6 +454,23 @@ describe('BreadcrumbItem in the AppShell mobile drawer', () => {
     );
     fireEvent.click(screen.getByText('Detail'));
     expect(closeMobileNav).not.toHaveBeenCalled();
+  });
+
+  it('a last crumb that is current only by position is still a link and closes the drawer', () => {
+    const {closeMobileNav} = renderInDrawer(
+      <>
+        <BreadcrumbItem href="#/projects">Projects</BreadcrumbItem>
+        <BreadcrumbItem
+          href="#/projects/detail"
+          onClick={e => e.preventDefault()}>
+          Detail
+        </BreadcrumbItem>
+      </>,
+    );
+    const last = screen.getByRole('link', {name: 'Detail'});
+    expect(last).toHaveAttribute('aria-current', 'page');
+    fireEvent.click(last);
+    expect(closeMobileNav).toHaveBeenCalledTimes(1);
   });
 
   it('a crumb link in the side navigation drawer closes it too', () => {

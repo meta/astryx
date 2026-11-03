@@ -7,8 +7,8 @@
  * @input Uses React use/useRef/useEffect, stylex, theme tokens, BreadcrumbContext,
  *   rtlStyles for the contextual default slash, and (for the menu trigger)
  *   usePopover + the shared DropdownMenu item API (renderDropdownItems,
- *   DropdownMenuContext, MENU_ITEM_SELECTOR, useListFocus), and the AppShell
- *   mobile context with the TopNav and SideNav render modes to close the drawer
+ *   DropdownMenuContext, MENU_ITEM_SELECTOR, useListFocus), and
+ *   useCloseMobileDrawerOnActivate
  * @output Exports BreadcrumbItem component and BreadcrumbItemProps
  * @position Individual breadcrumb item; used inside Breadcrumbs
  *
@@ -73,9 +73,7 @@ import {
 import type {DropdownMenuOption} from '../DropdownMenu/DropdownMenu';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
-import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
-import {useSideNavRenderMode} from '../SideNav/SideNavRenderContext';
-import {useTopNavRenderMode} from '../TopNav/TopNavRenderContext';
+import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOnActivate';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 // =============================================================================
 // Props
@@ -309,21 +307,7 @@ export function BreadcrumbItem({
   // aria-current on this instead of guessing the <li>'s last child.
   const contentRef = useRef<HTMLElement>(null);
 
-  // A crumb in the AppShell mobile drawer closes the drawer when it is
-  // activated, like the TopNav and SideNav rows beside it.
-  const topNavRenderMode = useTopNavRenderMode();
-  const sideNavRenderMode = useSideNavRenderMode();
-  const {closeMobileNav} = useAppShellMobile();
-  const isInMobileDrawer =
-    topNavRenderMode === 'drawer' ||
-    sideNavRenderMode === 'drawer' ||
-    sideNavRenderMode === 'drawer-content';
-  const handleActivate = isInMobileDrawer
-    ? (event: MouseEvent<HTMLElement>) => {
-        onClick?.(event);
-        closeMobileNav();
-      }
-    : onClick;
+  const handleActivate = useCloseMobileDrawerOnActivate(onClick);
 
   const isCurrent = isCurrentProp === true;
   const isAutoCandidate = isCurrentProp == null;
