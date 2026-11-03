@@ -4,7 +4,8 @@
 
 /**
  * @file CheckboxListItem.tsx
- * @input Uses React, CheckboxInput, ListItem, CheckboxListContext
+ * @input Uses React, CheckboxInput, ListItem, CheckboxListContext,
+ *   CheckboxRowPressContext, the touch-pointer store and the row press paint
  * @output Exports CheckboxListItem component, CheckboxListItemProps
  * @position Core implementation; consumed by index.ts, tested by CheckboxList.test.tsx
  *
@@ -25,6 +26,10 @@ import type {BaseProps} from '../BaseProps';
 import {CheckboxInput} from '../CheckboxInput/CheckboxInput';
 import type {CheckboxInputProps} from '../CheckboxInput/CheckboxInput';
 import type {InputStatus} from '../Field/types';
+import {CheckboxRowPressContext} from '../CheckboxInput/CheckboxRowPressContext';
+import {rowPressPaintStyles} from '../privateAttributes/press.stylex';
+import {usePressFeedback} from '../hooks/usePressFeedback';
+import {useIsTouchPointer} from '../utils/touchPointerStore';
 import {ListItem} from '../List/ListItem';
 import {ListContext} from '../List/ListContext';
 import {CheckboxListContext} from './CheckboxListContext';
@@ -284,6 +289,22 @@ export function CheckboxListItem({
   const checkboxRef = useRef<HTMLInputElement | null>(null);
   const hasRowInteraction = isInteractive || onClickProp != null;
 
+  // Under a coarse primary pointer, a row that delegates its surface clicks
+  // is the option's one press surface. Item marks it pressable and declares
+  // its press paint, and its own checkbox carries no press marker
+  // (CheckboxRowPressContext). So a finger on the label, the description or
+  // the box presses the row. The box then paints the row's press, as a radio
+  // row's circle does. Under a fine primary pointer the box stays its own
+  // press owner, so a pen on a fine-pointer page presses the box. Every row
+  // reads one shared answer, so a long list adds no touch observer per row.
+  // Server and hydrating renders read the fine-pointer answer.
+  const isTouch = useIsTouchPointer();
+  const rowOwnsPress = isTouch && hasRowInteraction && !effectiveDisabled;
+  // The row names itself pressable, so the touch press controller finds it
+  // and writes its press attribute. The row's press paint keys on that
+  // attribute (privateAttributes/press.stylex.ts).
+  const pressable = usePressFeedback();
+
   // A read-only checkbox carries aria-readonly, which the row's clickable
   // container treats as a non-interactive target, so a click on it would be
   // delegated straight back to the checkbox without end. Stop that click at
@@ -323,6 +344,7 @@ export function CheckboxListItem({
   return (
     <ListItem
       {...restProps}
+      {...(rowOwnsPress ? pressable : undefined)}
       ref={ref}
       label={namesFromVisibleLabel ? <span id={labelID}>{label}</span> : label}
       description={description}
@@ -338,6 +360,8 @@ export function CheckboxListItem({
       aria-busy={isBusy || undefined}
       xstyle={
         [
+          // The row's own press paint, which the layer over its box reads.
+          rowOwnsPress && rowPressPaintStyles.checkboxRow,
           resolvedChecked === true &&
             !effectiveDisabled &&
             !effectiveReadOnly &&
@@ -348,19 +372,23 @@ export function CheckboxListItem({
       className={className}
       style={style}
       startContent={
-        <DescribedCheckboxInput
-          ref={checkboxRef}
-          label={checkboxLabel}
-          aria-labelledby={namesFromVisibleLabel ? labelID : undefined}
-          isLabelHidden
-          value={resolvedChecked}
-          onChange={() => handleToggle()}
-          onClick={handleCheckboxClick}
-          isDisabled={effectiveDisabled}
-          isReadOnly={effectiveReadOnly}
-          isLoading={isBusy}
-          size={checkboxSize}
-        />
+        // Only the row's own checkbox: a checkbox placed in the row's content
+        // keeps its own press.
+        <CheckboxRowPressContext value={rowOwnsPress}>
+          <DescribedCheckboxInput
+            ref={checkboxRef}
+            label={checkboxLabel}
+            aria-labelledby={namesFromVisibleLabel ? labelID : undefined}
+            isLabelHidden
+            value={resolvedChecked}
+            onChange={() => handleToggle()}
+            onClick={handleCheckboxClick}
+            isDisabled={effectiveDisabled}
+            isReadOnly={effectiveReadOnly}
+            isLoading={isBusy}
+            size={checkboxSize}
+          />
+        </CheckboxRowPressContext>
       }
     />
   );

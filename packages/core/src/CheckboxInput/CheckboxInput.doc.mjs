@@ -88,7 +88,7 @@ export const docs = {
       name: 'isReadOnly',
       type: 'boolean',
       description:
-        'Whether the checkbox is read-only. Displays the current state at full opacity but prevents interaction. Unlike `isDisabled`, read-only checkboxes are not visually dimmed.',
+        'Whether the checkbox is read-only. Displays the current state at full opacity but prevents interaction, and shows no pressed feedback. Unlike `isDisabled`, read-only checkboxes are not visually dimmed.',
       default: 'false',
     },
     {
@@ -155,7 +155,7 @@ export const docs = {
       {
         name: '--_indicator-press-image',
         description:
-          "The row's touch press image, handed down to a first-party indicator that paints its own press. Set from the press paint only while the row itself is pressed; only this row declares it.",
+          "The row's touch press image, handed down to a first-party indicator that paints its own press. Set from the press paint only while the row itself is pressed, or, under a CheckboxList row that owns the press, from that row's press paint. Only this row declares it.",
         default: 'none',
         private: true,
       },
@@ -343,7 +343,7 @@ export const docsZh = {
       name: 'isReadOnly',
       type: 'boolean',
       description:
-        '复选框是否为只读。以完整不透明度显示当前状态但阻止交互。与 isDisabled 不同，只读复选框不会变暗。',
+        '复选框是否为只读。以完整不透明度显示当前状态但阻止交互，也不显示按下反馈。与 isDisabled 不同，只读复选框不会变暗。',
       default: 'false',
     },
     {
@@ -403,7 +403,7 @@ export const docsZh = {
       {
         name: '--_indicator-press-image',
         description:
-          '复选框行的触摸按下图像，传递给自行绘制按下效果的第一方指示器。仅在该行自身被按下时根据按下涂层设置，只有该行声明它。',
+          '复选框行的触摸按下图像，传递给自行绘制按下效果的第一方指示器。仅在该行自身被按下时根据按下涂层设置；在拥有按下效果的 CheckboxList 行中，取该行的按下涂层。只有该行声明它。',
         default: 'none',
         private: true,
       },

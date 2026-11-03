@@ -910,6 +910,27 @@ describe('pressed state', () => {
     expect(hasPressedArm(wrapper)).toBe(false);
   });
 
+  it('paints no press on a read-only checkbox, which cannot change', () => {
+    const {container} = render(
+      <CheckboxInput
+        label="Locked by policy"
+        value
+        onChange={() => {}}
+        isReadOnly
+      />,
+    );
+    const box = container.querySelector('.astryx-checkbox-indicator');
+    const wrapper = box?.parentElement?.parentElement;
+    if (wrapper == null) {
+      throw new Error('the checkbox has no indicator wrapper');
+    }
+    // Nothing for the touch press controller to write, and no arm that
+    // would paint a mouse or touch press over the box.
+    expect(container.querySelector('[data-astryx-pressable]')).toBeNull();
+    expect(hasPressedArm(wrapper)).toBe(false);
+    expect(readsPressStrength(wrapper, '[data-astryx-press="on"]')).toBe(false);
+  });
+
   it('fades the touch press out from the row, with the overlay reading its strength', () => {
     const {container} = render(
       <CheckboxInput label="Accept terms" value={false} onChange={() => {}} />,
@@ -968,13 +989,16 @@ describe('an indicator that paints its own press', () => {
     ).toBe(true);
   });
 
-  it('hands nothing down from a disabled checkbox', () => {
+  it.each([
+    ['disabled', {isDisabled: true}],
+    ['read-only', {isReadOnly: true}],
+  ] as const)('hands nothing down from a %s checkbox', (_, state) => {
     const {container} = render(
       <CheckboxInput
         label="Unavailable"
         value={false}
         onChange={() => {}}
-        isDisabled
+        {...state}
       />,
     );
     const {row} = partsOf(container);
