@@ -277,7 +277,7 @@ and references from other packages are an open question (OQ2).
   group MUST be the namespace's own `category`; without one, `foundations`
   when every guide below it is a foundations doc, and `guide` otherwise. The
   docsite MAY name a sidebar parent page for any page: the page keeps its
-  slug and its own group, and its sidebar entry sits under the parent's
+  slug and its `category`, and its sidebar entry sits under the parent's
   entry, in the parent's group. Sidebar nesting is one level deep. A
   namespace with no guide below it, such as a generated topic level (FR12), has
   no page. The docsite build MUST fail when a slug is both a page and a
