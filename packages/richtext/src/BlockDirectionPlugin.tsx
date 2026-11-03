@@ -118,6 +118,16 @@ const STRONG_RTL =
   /[\p{Script=Adlam}\p{Script=Arabic}\p{Script=Hebrew}\p{Script=Mandaic}\p{Script=Nko}\p{Script=Samaritan}\p{Script=Syriac}\p{Script=Thaana}\u200F\u061C\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]/u;
 
 /**
+ * Arabic-Indic digits, their extended forms and the Arabic number signs.
+ * They sit in the Arabic script but are Bidi_Class `AN` or `EN` — weak, not
+ * strong — so the first-strong scan passes over them and `۱۴۰۳ Annual
+ * report` reads left-to-right. Not every right-to-left digit is weak: NKo's
+ * and Adlam's are Bidi_Class `R`, so they stay strong and are not listed.
+ */
+const WEAK_ARABIC_NUMBER =
+  /[\u0600-\u0605\u0660-\u0669\u066B\u066C\u06DD\u06F0-\u06F9\u08E2]/u;
+
+/**
  * Bidi_Class `L`: any other letter, plus the left-to-right mark. Digits,
  * punctuation, emoji and other symbols are deliberately absent: the
  * algorithm's P2 rule skips them, so `123 — מזל טוב` and `🎉 מזל טוב` both read right-to-left.
@@ -132,6 +142,9 @@ const STRONG_LTR = /[\p{Letter}\u200E]/u;
  */
 export function firstStrongDirection(text: string): 'ltr' | 'rtl' | null {
   for (const character of text) {
+    if (WEAK_ARABIC_NUMBER.test(character)) {
+      continue;
+    }
     if (STRONG_RTL.test(character)) {
       return 'rtl';
     }

@@ -224,7 +224,13 @@ const editorTheme = stylex.create({
       ':last-child': spacingVars['--spacing-0'],
     },
     maxWidth: PROSE_MEASURE,
-    paddingInlineStart: spacingVars['--spacing-6'],
+    // The indent lives on the item, not here. An `outside` marker is drawn
+    // beyond the item's own start edge, which is the opposite edge from the
+    // list's when the two directions disagree; an indent held by the list
+    // would then reserve room on the side the marker is not on, and a task
+    // item's negative compensation would push it past the field. Held by
+    // the item, the room is always on the side the marker uses. A list whose
+    // items all agree with it lays out exactly as before.
     listStylePosition: 'outside',
   },
   ol: {
@@ -237,7 +243,13 @@ const editorTheme = stylex.create({
       ':last-child': spacingVars['--spacing-0'],
     },
     maxWidth: PROSE_MEASURE,
-    paddingInlineStart: spacingVars['--spacing-6'],
+    // The indent lives on the item, not here. An `outside` marker is drawn
+    // beyond the item's own start edge, which is the opposite edge from the
+    // list's when the two directions disagree; an indent held by the list
+    // would then reserve room on the side the marker is not on, and a task
+    // item's negative compensation would push it past the field. Held by
+    // the item, the room is always on the side the marker uses. A list whose
+    // items all agree with it lays out exactly as before.
     listStylePosition: 'outside',
   },
   // Markers by depth (spec:AST-061 DEC-6): a list nested inside n lists, of
@@ -286,8 +298,10 @@ const editorTheme = stylex.create({
     // small checkbox (20px) and its 8px gap, like core Markdown's task lists:
     // the item cancels the list's bullet indent and pads for the checkbox.
     marginInlineStart: {
-      default: LIST_ROW_FLUSH,
-      ':is([data-richtext-task])': `calc(-1 * ${spacingVars['--spacing-6']})`,
+      default: spacingVars['--spacing-6'],
+      // A task item draws a checkbox inside its own padding instead of a
+      // marker, so it needs no room outside itself.
+      ':is([data-richtext-task])': LIST_ROW_FLUSH,
     },
     paddingInlineStart: {
       default: LIST_ROW_FLUSH,

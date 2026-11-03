@@ -207,6 +207,22 @@ describe('a top-level block carries its own direction (spec:AST-061 FR6)', () =>
     expect(firstStrongDirection('123 456')).toBeNull();
   });
 
+  it('passes over Arabic-Indic digits, which are weak, not strong', async () => {
+    // Arabic-Indic and Persian digits sit in the Arabic script but are
+    // Bidi_Class AN/EN, so the first-strong scan must not stop on them.
+    expect(firstStrongDirection('۱۴۰۳ Annual report')).toBe('ltr');
+    expect(firstStrongDirection('١٢٣ Annual report')).toBe('ltr');
+    expect(firstStrongDirection('۱۴۰۳')).toBeNull();
+
+    // They still do not override a strong character that follows.
+    expect(firstStrongDirection('١٢٣ تقرير سنوي')).toBe('rtl');
+
+    // Not every right-to-left digit is weak: NKo's and Adlam's are
+    // Bidi_Class R, so they stay strong.
+    expect(firstStrongDirection('߀߁߂')).toBe('rtl');
+    expect(firstStrongDirection('𞥐𞥑𞥒')).toBe('rtl');
+  });
+
   it('writes rtl on a paragraph whose Hebrew text opens with an emoji', async () => {
     const {container} = render(
       <RichTextView value={markdownToEditorStateJSON('🎉 מזל טוב')} />,

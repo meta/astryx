@@ -116,7 +116,14 @@ for (const direction of ['ltr', 'rtl'] as const) {
       'ltr',
     );
 
+    // Empty the block before retyping, and prove it is empty: a select-all
+    // that silently failed would leave the Hebrew appended to `Hello`, whose
+    // `H` is still the first strong character, and the assertion below would
+    // pass or fail for the wrong reason.
     await page.keyboard.press('ControlOrMeta+a');
+    await page.keyboard.press('Backspace');
+    await expect(page.locator(EDITOR)).toHaveText('');
+
     await page.keyboard.type('\u05e9\u05dc\u05d5\u05dd');
     await expect(paragraph).toHaveAttribute('dir', 'rtl');
     expect(await paragraph.evaluate(el => getComputedStyle(el).direction)).toBe(
