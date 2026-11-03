@@ -64,6 +64,10 @@ registerEnglishFallback(english);
 
 type PillPlacement = 'start' | 'end' | 'center' | 'auto';
 
+// A pill beside an overlay Handle can sit outside the Grab zone. The hover
+// stays this long after the pointer leaves, so the pointer can cross to it.
+const PILL_HOVER_GRACE_MS = 150;
+
 function resolveEffectiveSide(
   pillPlacement: PillPlacement,
   isReversed: boolean,
@@ -253,16 +257,14 @@ const dynamicStyles = stylex.create({
   hitAreaLengthY: (pane: number) => ({
     height: `min(${spacingVars['--spacing-4']}, ${pane}px)`,
   }),
-  // The pill's offset takes a direction multiplier: -1 for the start side, 1
-  // for the end side.
-  pillOffsetX: (dir: number) => ({
+  pillOffsetX: (dir: -1 | 1) => ({
     insetInlineStart: 0,
     transform: `translate(calc(${dir} * (100% + ${spacingVars['--spacing-1']})), -50%)`,
   }),
   // Vertical offset: no rotation — use explicit landscape dimensions.
   // Rotation + offset creates confusing coordinate math since translate
   // operates in pre-rotation local space.
-  pillOffsetY: (dir: number) => ({
+  pillOffsetY: (dir: -1 | 1) => ({
     top: 0,
     transform: `translate(-50%, calc(${dir} * (100% + ${spacingVars['--spacing-1']})))`,
   }),
@@ -378,6 +380,15 @@ export function ResizeHandle({
   const label = labelFromProps ?? t('@astryx.resizable.handle.label');
   const handleRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
+  const hoverExitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (hoverExitRef.current != null) {
+        clearTimeout(hoverExitRef.current);
+      }
+    },
+    [],
+  );
   const [isFocused, setIsFocused] = useState(false);
   const isHorizontal = direction === 'horizontal';
   const isOverlay = positionMode === 'overlay';
@@ -544,10 +555,19 @@ export function ResizeHandle({
     onPointerUp: e => gesture?.pointerUp(e),
     onPointerCancel: e => gesture?.pointerCancel(e),
     onLostPointerCapture: e => gesture?.pointerCancel(e),
-    onPointerEnter: () => setIsHovered(true),
+    onPointerEnter: () => {
+      if (hoverExitRef.current != null) {
+        clearTimeout(hoverExitRef.current);
+        hoverExitRef.current = null;
+      }
+      setIsHovered(true);
+    },
     onPointerLeave: () => {
-      if (!isDragging) {
-        setIsHovered(false);
+      if (!isDragging && hoverExitRef.current == null) {
+        hoverExitRef.current = setTimeout(() => {
+          hoverExitRef.current = null;
+          setIsHovered(false);
+        }, PILL_HOVER_GRACE_MS);
       }
     },
   };
