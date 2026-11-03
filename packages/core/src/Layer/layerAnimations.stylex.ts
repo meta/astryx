@@ -86,8 +86,10 @@ const enterStartRtl = stylex.keyframes({
 
 // Reduce Motion under a finger: the same entrance without its travel. A touch
 // presentation substitutes a cross-fade for motion, never a jump.
+// The fade's curve rides in its first keyframe, so the published class type
+// of `animationTimingFunction` stays the theme ease's.
 const fadeIn = stylex.keyframes({
-  from: {opacity: 0},
+  from: {opacity: 0, animationTimingFunction: reducedMotionFadeConsts.easing},
   to: {opacity: 1},
 });
 
@@ -100,11 +102,7 @@ const animationBase = {
     '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
       reducedMotionFadeConsts.duration,
   },
-  animationTimingFunction: {
-    default: easeVars['--ease-standard'],
-    '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
-      reducedMotionFadeConsts.easing,
-  },
+  animationTimingFunction: easeVars['--ease-standard'],
   animationFillMode: 'backwards' as const,
 };
 

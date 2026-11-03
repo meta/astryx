@@ -71,9 +71,10 @@ async function entranceOf(page: Page, selector: string) {
     }
     const computed = getComputedStyle(layer);
     const name = computed.animationName;
-    // Seconds; the first animation's duration and curve.
+    // Seconds; the first animation's duration.
     const duration = parseFloat(computed.animationDuration.split(',')[0]);
-    const easing = computed.animationTimingFunction.split(/,(?![^(]*\))/)[0];
+    // A curve set in the first keyframe overrides the element's.
+    let easing = computed.animationTimingFunction.split(/,(?![^(]*\))/)[0];
     const properties = new Set<string>();
     for (const sheet of Array.from(document.styleSheets)) {
       let rules: CSSRuleList;
@@ -86,9 +87,20 @@ async function entranceOf(page: Page, selector: string) {
         for (const rule of Array.from(list)) {
           if (rule instanceof CSSKeyframesRule && rule.name === name) {
             for (const frame of Array.from(rule.cssRules)) {
-              const style = (frame as CSSKeyframeRule).style;
+              const keyframe = frame as CSSKeyframeRule;
+              const style = keyframe.style;
               for (let i = 0; i < style.length; i += 1) {
-                properties.add(style.item(i));
+                const property = style.item(i);
+                if (property === 'animation-timing-function') {
+                  if (
+                    keyframe.keyText === '0%' ||
+                    keyframe.keyText === 'from'
+                  ) {
+                    easing = style.getPropertyValue(property).trim();
+                  }
+                } else {
+                  properties.add(property);
+                }
               }
             }
           } else if ('cssRules' in rule) {
