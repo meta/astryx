@@ -4982,11 +4982,6 @@
       "aliases": []
     },
     {
-      "name": "template-blank",
-      "path": "templates/blank",
-      "aliases": []
-    },
-    {
       "name": "template-canvas-editor",
       "path": "templates/canvas-editor",
       "aliases": []

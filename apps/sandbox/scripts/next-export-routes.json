@@ -389,6 +389,7 @@
     "/templates/LayoutShowcase/",
     "/templates/LayoutSidebarLayout/",
     "/templates/LightboxGallery/",
+    "/templates/LightboxHookUsage/",
     "/templates/LightboxShowcase/",
     "/templates/LightboxVideo/",
     "/templates/LightboxZoom/",
