@@ -344,14 +344,17 @@ export function withinBudget(selected, limit = CHANGED_SPEC_LIMIT) {
   };
 }
 
+/** Whether a path is inside a component folder (`packages/<pkg>/src/<Name>/`). */
+export function isComponentPath(file) {
+  return /^packages\/[^/]+\/src\/[A-Z][^/]*\//.test(file);
+}
+
 /**
- * The `scoped` and `release-only` specs the touched components own, by the
- * mapping the labelled run uses: the spec is named for a touched component or
- * sits in its folder, the spec's component folder changed, or (for a `scoped`
- * spec) one of its component `scope` tokens names a touched component. A path
- * `scope` token matches shared modules, so it selects none of them. An
- * `audit` or `always` spec is never owned. With no touched component nothing
- * is owned.
+ * The `scoped` and `release-only` specs the touched components own. It is the
+ * labelled run's selection (`selectSpecs`) with two limits: only changes inside
+ * a component folder count, so a change to a shared module, the contract
+ * harness or a story selects nothing; and an `audit` or `always` spec is never
+ * owned. With no touched component nothing is owned.
  * @param {object} options
  * @param {{file: string, routing: ReturnType<typeof parseRouting>}[]} options.specs
  * @param {string[]} options.components package-qualified touched components
@@ -360,29 +363,16 @@ export function withinBudget(selected, limit = CHANGED_SPEC_LIMIT) {
  */
 export function ownedSpecs({specs, components, changedPaths}) {
   if (components.length === 0) return [];
-  const rendered = changedPaths.filter(p => !isKnowledgeRecord(p));
-  const owned = [];
-  for (const {file, routing} of specs) {
-    if (routing.mode !== 'scoped' && routing.mode !== 'release-only') continue;
-    const reason = (() => {
-      const owners = specOwners(file);
-      const owner = owners.components.find(c => components.includes(c));
-      if (owner) return `owned by ${owner}`;
-      // A pattern stem is shared contract code, not a component folder.
-      const folders = owners.components.length ? owners.prefixes : [];
-      for (const prefix of folders) {
-        const hit = rendered.find(p => p.startsWith(prefix));
-        if (hit) return `changed ${hit}`;
-      }
-      if (routing.mode === 'release-only') return null;
-      const token = routing.scope.find(
-        t => !t.startsWith('^') && componentMatches(t, components),
-      );
-      return token ? `scope ${token}` : null;
-    })();
-    if (reason) owned.push({file, reason});
-  }
-  return owned;
+  return selectSpecs({
+    specs: specs.filter(
+      ({routing}) =>
+        routing.mode === 'scoped' || routing.mode === 'release-only',
+    ),
+    isPullRequest: true,
+    changedPaths: changedPaths.filter(isComponentPath),
+    components,
+    title: '',
+  });
 }
 
 /**

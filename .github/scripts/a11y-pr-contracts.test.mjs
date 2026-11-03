@@ -190,7 +190,7 @@ describe('the default check of the touched components', () => {
 
   it("selects a touched component's own scoped and release-only specs, and nothing else", () => {
     expect(owns(['core/Switch'])).toEqual([
-      {file: SWITCH, reason: 'owned by core/Switch'},
+      {file: SWITCH, reason: 'component core/Switch'},
     ]);
     // Not the always spec or the audit spec in the same folder.
     expect(files(owns(['core/Selector']))).toEqual([LISTBOX, COMBOBOX_FIELD]);
@@ -204,7 +204,7 @@ describe('the default check of the touched components', () => {
       ['// @pr-a11y scope core/Switch'],
     );
     expect(owns(['core/Switch'], [], [pattern])).toEqual([
-      {file: pattern.file, reason: 'scope core/Switch'},
+      {file: pattern.file, reason: 'component core/Switch'},
     ]);
     expect(owns(['core/Slider'], [], [pattern])).toEqual([]);
   });
@@ -234,6 +234,31 @@ describe('the default check of the touched components', () => {
         ['core/ChatComposer'],
         ['docs/specs/components/Chat/Chat.spec.md'],
         [named],
+      ),
+    ).toEqual([]);
+  });
+
+  it("owns a scoped spec whose path token names a touched component's folder", () => {
+    const slider = spec(
+      'internal/a11y-spec/src/patterns/slider.chromium.spec.ts',
+      [
+        '// @pr-a11y scope ^(internal/a11y-spec/src/patterns/slider|internal/a11y-spec/src/harness|packages/core/src/Slider/)',
+      ],
+    );
+    expect(
+      owns(['core/Slider'], ['packages/core/src/Slider/Slider.tsx'], [slider]),
+    ).toEqual([
+      {
+        file: slider.file,
+        reason: 'changed packages/core/src/Slider/Slider.tsx',
+      },
+    ]);
+    // A change to the harness the same token names is shared contract code.
+    expect(
+      owns(
+        ['core/Slider'],
+        ['internal/a11y-spec/src/harness/chromium.ts'],
+        [slider],
       ),
     ).toEqual([]);
   });
@@ -270,7 +295,7 @@ describe('the default check of the touched components', () => {
 
   it('runs every owned file that fits the budget at its recorded time', () => {
     expect(plan(['core/Switch'])).toEqual({
-      run: [{file: SWITCH, reason: 'owned by core/Switch'}],
+      run: [{file: SWITCH, reason: 'component core/Switch'}],
       notRun: [],
     });
     expect(files(plan(['core/Selector']).run).sort()).toEqual(
@@ -284,7 +309,7 @@ describe('the default check of the touched components', () => {
     const {run, notRun} = plan(['core/Selector', 'core/Switch'], [], 1);
     expect(files(run)).toEqual([COMBOBOX_FIELD, SWITCH]);
     expect(files(notRun)).toEqual([LISTBOX]);
-    expect(notRun[0].reason).toContain('owned by core/Selector');
+    expect(notRun[0].reason).toContain('component core/Selector');
     expect(notRun[0].reason).toContain('ci:run-a11y');
     expect(notRun[0].reason).toContain('8-minute budget');
     // On four workers they run side by side.
@@ -313,7 +338,7 @@ describe('the default check of the touched components', () => {
     expect(plan(['core/Selector'], [LISTBOX])).toEqual({
       run: [
         {file: LISTBOX, reason: 'spec changed'},
-        {file: COMBOBOX_FIELD, reason: 'owned by core/Selector'},
+        {file: COMBOBOX_FIELD, reason: 'component core/Selector'},
       ],
       notRun: [],
     });
@@ -384,11 +409,11 @@ describe('the default check of the touched components', () => {
   it('summarizes what ran and what did not, never as passed', () => {
     const summary = summaryMarkdown({
       components: ['core/Switch'],
-      selected: [{file: SWITCH, reason: 'owned by core/Switch'}],
+      selected: [{file: SWITCH, reason: 'component core/Switch'}],
       notRun: [{file: LISTBOX, reason: 'does not fit'}],
     });
     expect(summary).toContain('`core/Switch`');
-    expect(summary).toContain(`- \`${SWITCH}\` (owned by core/Switch)`);
+    expect(summary).toContain(`- \`${SWITCH}\` (component core/Switch)`);
     expect(summary).toContain('Not run: 1 spec file(s)');
     expect(summary).toContain('did not pass or fail here');
     expect(
@@ -969,6 +994,14 @@ describe('repository specs', () => {
     expect(owned).not.toContain(
       'packages/core/src/Chat/__tests__/ChatMessageList.a11y.chromium.spec.ts',
     );
+    // A pattern contract whose path token names the touched folder.
+    expect(
+      ownedSpecs({
+        specs,
+        components: ['core/Slider'],
+        changedPaths: ['packages/core/src/Slider/Slider.tsx'],
+      }).map(({file}) => file),
+    ).toContain('internal/a11y-spec/src/patterns/slider.chromium.spec.ts');
   });
 });
 
