@@ -76,10 +76,10 @@ server code stay calendar-neutral.
 - Equivalent internal implementations remain valid when they satisfy this
   contract.
 - Internal modules, files, function names, algorithms, data structures, storage
-  layouts, manifests, journals, locks, transaction protocols, and CI job/workflow
-  topology belong in architecture or implementation unless callers or
-  interoperating systems intentionally depend on that exact mechanism as a public
-  protocol. In that case, state who depends on it and why an equivalent
+  layouts, manifests, journals, locks, transaction protocols, and CI
+  job/workflow topology belong in architecture or implementation unless callers
+  or interoperating systems intentionally depend on that exact mechanism as a
+  public protocol. In that case, state who depends on it and why an equivalent
   implementation would not satisfy the contract.
 
 ## Public contract
@@ -137,25 +137,16 @@ optional `calendar` argument that defaults to `gregory` (FR18).
   calendar.
 - **FR4 — Structure comes from the calendar.** Month lengths, the number of
   months in a year, leap months, and eras come from the calendar. No grid,
-  wheel, list, or step assumes 12 months or Gregorian month lengths. A leap month
-  is a distinct month with its own name: Adar I and Adar II in a Hebrew leap
-  year, or the leap month of a Chinese or Korean year.
-- **FR5 — Calendars outside the Gregorian-aligned set need Temporal.** `gregory`,
-  `iso8601`, `buddhist`, `roc`, and `japanese` have Gregorian months and days
-  and work in every supported environment. The other calendars use the
-  runtime's `Temporal`, native or loaded by the application as a polyfill.
-  Astryx bundles no polyfill. Where `Temporal` is missing, a component that
-  resolves one of those calendars renders and accepts Gregorian dates and warns
-  once in development, on the server and in the browser, naming the polyfill.
-  The component resolves its calendar during render, so the server and the
-  browser render the same markup whenever they resolve it the same way: both
-  have a `Temporal` that supports the calendar, native or a polyfill the
-  application loads, or both lack one. An application that renders on the
-  server and shows a calendar that needs `Temporal` loads it on the server too,
-  as on Node.js before 26; a server without it renders Gregorian dates while the
-  browser renders the calendar, which is a hydration mismatch. The
-  internationalization guide documents this setup. FR19 names the one remaining
-  difference.
+  wheel, list, or step assumes 12 months or Gregorian month lengths. A leap
+  month is a distinct month with its own name: Adar I and Adar II in a Hebrew
+  leap year, or the leap month of a Chinese or Korean year.
+- **FR5 — Some calendars need Temporal.** `gregory`, `iso8601`, `buddhist`,
+  `roc`, and `japanese` work everywhere. The other calendars use the runtime's
+  `Temporal`, native or a polyfill the application loads; Astryx bundles none.
+  Without it, a component that resolves one of them shows and accepts Gregorian
+  dates and warns once in development, naming the polyfill. Server and browser
+  markup match when both resolve the calendar the same way, so a server-rendered
+  application loads `Temporal` on the server too. FR19 names the one exception.
 
 ### Calendar
 
@@ -164,9 +155,9 @@ optional `calendar` argument that defaults to `gregory` (FR18).
   grid lays out one calendar month: its first day sits in its weekday column and
   outside days fill the remaining cells. The default fixed six-row grid applies
   to every month, including the five- or six-day thirteenth month of the Coptic
-  and Ethiopic calendars; `hasVariableRowCount` gives each month only the rows it
-  needs. Day numbers use the locale's digits in every calendar, as the heading
-  does.
+  and Ethiopic calendars; `hasVariableRowCount` gives each month only the rows
+  it needs. Day numbers use the locale's digits in every calendar, as the
+  heading does.
 - **FR7 — Navigation steps calendar months and years.** Previous and Next move
   one calendar month. PageUp and PageDown move the focused day one calendar
   month, keep its day of the month, and clamp to the target month's length.
@@ -191,20 +182,23 @@ These requirements apply to the text fields of `DateInput` and
   ignoring case and Latin diacritics. A typed month number means what the
   locale's numeric month means for that calendar: the month's position in the
   typed year for Hebrew, and the month number with the locale's leap marker for
-  Chinese and Korean. A plain Adar typed for a Hebrew leap year is Adar II. In the Gregorian calendar, text that matches none of these forms, or that
-  names a date the locale's numeric order does not have, still commits on Enter
-  or blur when `parseDateInput` reads it, so `13/5/2026` in `en-US` commits 13
-  May 2026. Otherwise FR11 applies.
+  Chinese and Korean. A plain Adar typed for a Hebrew leap year is Adar II. In
+  the Gregorian calendar, text that matches none of these forms, that they
+  cannot finish, or that names a date the locale's numeric order does not have
+  still commits on Enter or blur when `parseDateInput` reads it: `13/5/2026` in
+  `en-US` commits 13 May 2026, and `1/5/2` commits 5 January 2002. Otherwise
+  FR11 applies.
 - **FR10 — Years are years of the calendar.** A typed year is a year of the
   active calendar, never a converted Gregorian year: `2026` in a Buddhist field
   is Buddhist year 2026. The format hint and the committed text show the era,
-  such as `พ.ศ.` (B.E., the Buddhist Era) or `民國` (Minguo, the ROC era). Without a typed era, a one- or two-digit Japanese year
-  is in the current era and a four-digit Japanese year is Gregorian, an ROC year
-  of up to three digits is in the 民國 (Minguo) era, and an Ethiopic year is in the AM
-  era. A two-digit year resolves to the year within the 80 years before and 19
-  years after the current year of the calendar. A Japanese era year outside its
-  era is rejected. No default year range applies; `min` and `max` catch a year
-  typed in the wrong calendar.
+  such as `พ.ศ.` (B.E., the Buddhist Era) or `民國` (Minguo, the ROC era). Without
+  a typed era, a one- or two-digit Japanese year is in the current era and a
+  four-digit Japanese year is Gregorian, an ROC year of up to three digits is in
+  the 民國 (Minguo) era, and an Ethiopic year is in the AM era. A two-digit year
+  resolves to the year within the 80 years before and 19 years after the current
+  year of the calendar. A Japanese era year outside its era is rejected. No
+  default year range applies; `min` and `max` catch a year typed in the wrong
+  calendar.
 - **FR11 — Dates that the calendar does not have are rejected.** The field
   rejects and announces a date that does not exist in the calendar, such as 30
   Esfand in a common Persian year, Adar I in a common Hebrew year, or day 6 of
@@ -237,15 +231,15 @@ These requirements apply to the text fields of `DateInput` and
   bottom sheet on a coarse pointer. This covers `adaptive-native`, the default,
   the deprecated `nativePicker` values, and an explicit `presentation="native"`,
   which also warns in development.
-- **FR16 — The bottom sheet follows the calendar.** Its scrolling month
-  calendar shows calendar months, labels, and digits as FR6 requires for
-  `Calendar`, and keeps one fixed pane height. Its month wheel lists the months
-  of the selected calendar year, including leap months by name. When the year
-  changes, the month stays if the new year has it and otherwise becomes its
-  common counterpart. Year labels include the era where the calendar has eras,
-  such as `令和8` (Reiwa 8). A year that an era change splits takes the era of
-  the selected date, as the native iOS picker does: 2019 reads `平成31` (Heisei 31) with January selected and `令和元` (Reiwa 1, the era's first year) with July
-  selected.
+- **FR16 — The bottom sheet follows the calendar.** Its scrolling month calendar
+  shows calendar months, labels, and digits as FR6 requires for `Calendar`, and
+  keeps one fixed pane height. Its month wheel lists the months of the selected
+  calendar year, including leap months by name. When the year changes, the month
+  stays if the new year has it and otherwise becomes its common counterpart.
+  Year labels include the era where the calendar has eras, such as `令和8` (Reiwa
+  8). A year that an era change splits takes the era of the selected date, as
+  the native iOS picker does: 2019 reads `平成31` (Heisei 31) with January
+  selected and `令和元` (Reiwa 1, the era's first year) with July selected.
 - **FR17 — `DateRangeInput` shows the range in the calendar.** Its trigger text
   and its calendar use the calendar. It has no typed entry.
 
@@ -301,17 +295,17 @@ These requirements apply to the text fields of `DateInput` and
   internationalization guide lists the runtimes that ship it.
 - Unsupported behavior: without `Temporal`, FR5's Gregorian fallback and
   development warning. Safari on macOS and iOS lacks `Temporal`, and
-  `spec:AST-013` FR3 names iOS Safari explicitly, so the `Calendar`, `DateInput`,
-  `DateRangeInput`, and `DateTimeInput` component records each record a
-  `spec:AST-013` FR12 exception. The exception names the capability (calendars
-  that need `Temporal`), the reduction (FR5's fallback unless the application
-  loads a polyfill; an application that renders on the server loads it on the
-  server too), the preserved obligations (`spec:AST-013` FR7 and FR8, and FR9
-  whenever the server and the browser resolve the calendar the same way,
-  outside FR19's Chinese and Korean case), the
-  evidence (real-browser runs with `Temporal` removed, with and without a
-  polyfill), the owner (`nynexman4464`), and the review condition (Safari ships
-  `Temporal`).
+  `spec:AST-013` FR3 names iOS Safari explicitly, so every component that
+  resolves a calendar records a `spec:AST-013` FR12 exception: `Calendar`,
+  `DateInput`, `DateRangeInput`, `DateTimeInput`, and FR18's `Timestamp` and
+  `PowerSearch`. The exception names the capability (calendars that need
+  `Temporal`), the reduction (FR5's fallback unless the application loads a
+  polyfill; an application that renders on the server loads it on the server
+  too), the preserved obligations (`spec:AST-013` FR7 and FR8, and FR9 whenever
+  the server and the browser resolve the calendar the same way, outside FR19's
+  Chinese and Korean case), the evidence (real-browser runs with `Temporal`
+  removed, with and without a polyfill), the owner (`nynexman4464`), and the
+  review condition (Safari ships `Temporal`).
 - Browser evidence: real Chromium and Firefox with native `Temporal`; real
   Chromium, Firefox, and WebKit with `Temporal` removed, with and without the
   polyfill; server render and hydration with and without `Temporal`.
@@ -350,6 +344,10 @@ These requirements apply to the text fields of `DateInput` and
     commits 1 May 2026, where the latest stable release commits the
     month-first 5 January 2026. This restores the locale order that
     `parseDateInput` applies to four-digit years: a fix (FR5).
+  - In month-first locales a two-digit year reads within FR10's window, where
+    the latest stable release uses the runtime's `Date` parsing: in 2026,
+    `1/5/46` to `1/5/49` in `en-US` commit 1946 to 1949 instead of 2046 to 2049.
+    No record documents the `Date` reading: nonbreaking (FR3).
   - `formatSharedDate`, `shortDate`, and `monthYear` gain an optional argument:
     additive (FR5).
 - Consumer docs: the internationalization guide covers choosing a calendar,
