@@ -97,13 +97,15 @@ function waitForOutput(
 }
 
 /**
- * Resolves with the child's exit code once it exits. Only the test's timeout
- * bounds the wait, and each test kills its watcher when it finishes.
+ * Resolves with the child's exit code once it exits and its output is read.
+ * Only the test's timeout bounds the wait, and each test kills its watcher
+ * when it finishes.
  */
 function waitForExit(child) {
-  if (child.exitCode != null || child.signalCode != null)
+  // `close` comes after the output streams end, so the last output is read.
+  if (child.stdout?.readableEnded && child.exitCode != null)
     return Promise.resolve(child.exitCode);
-  return new Promise(resolve => child.once('exit', code => resolve(code)));
+  return new Promise(resolve => child.once('close', code => resolve(code)));
 }
 
 beforeAll(() => {
@@ -237,6 +239,9 @@ describe('theme build --watch', () => {
       });
       // Queue a change behind the rebuild in progress (debounce is 100 ms).
       fs.writeFileSync(themeFile, `${slow}// queued\n`);
+      // Let the 100 ms debounce queue the change. This is not a deadline: a slow
+      // runner can only leave the change unqueued, never fail the test.
+      await new Promise(resolve => setTimeout(resolve, 500));
     } finally {
       child.kill('SIGINT');
     }
