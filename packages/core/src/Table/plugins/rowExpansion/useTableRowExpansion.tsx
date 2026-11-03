@@ -4,7 +4,8 @@
 
 /**
  * @file useTableRowExpansion.tsx
- * @input React, StyleX, Icon, Table types, table context (density), i18n
+ * @input React, StyleX, Icon, the theme's `table-row-expand` icon slot, Table
+ *   types, table context (density), i18n
  *   (useComponentTranslator)
  * @output Exports useTableRowExpansion hook + config type
  * @position Row-expansion plugin (detail panel); consumed by Table via plugins prop
@@ -39,6 +40,7 @@ import {tableRowMarker} from '../../table.stylex';
 import {panelDividerFor} from '../../rowDivider';
 import {useTheme, useThemeName} from '../../../theme/useTheme';
 import {Icon} from '../../../Icon';
+import {ComponentIcon} from '../../../Icon/ComponentIcon';
 import {VisuallyHidden} from '../../../VisuallyHidden';
 import {resolveContextActions} from '../../tableContextMenu';
 import {useTableContext} from '../../useTableCellStyles';
@@ -371,9 +373,10 @@ function ExpansionChevron({
           : t('@astryx.tableRowExpansion.expandRow')
       }
       aria-expanded={isExpanded}>
-      <Icon
-        icon="chevronRight"
-        size="xsm"
+      <ComponentIcon
+        slot="table-row-expand"
+        state={{expanded: isExpanded}}
+        fallback={{icon: 'chevronRight', size: 'xsm'}}
         xstyle={[
           expansionStyles.chevron,
           isExpanded

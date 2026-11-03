@@ -7,6 +7,9 @@ import {Table} from '../../Table';
 import type {TableColumn} from '../../types';
 import {useTableRowExpansion} from './useTableRowExpansion';
 import {InternationalizationProvider} from '../../../i18n';
+import type {ComponentIconMap} from '../../../Icon/index';
+import {defineTheme} from '../../../theme/defineTheme';
+import {Theme} from '../../../theme/Theme';
 
 // popover mock for context-menu tests
 beforeEach(() => {
@@ -677,5 +680,81 @@ describe('useTableRowExpansion (detail panel)', () => {
     expect(
       screen.getAllByRole('button', {name: 'Développer la ligne'}).length,
     ).toBeGreaterThan(0);
+  });
+});
+
+describe('row expansion icon slot', () => {
+  // Label each shared icon's artwork, so a test reads which name rendered.
+  const icons = {
+    chevronRight: <span data-icon="chevronRight" />,
+    chevronDown: <span data-icon="chevronDown" />,
+    menu: <span data-icon="menu" />,
+  };
+  let themeCount = 0;
+
+  function renderInTheme(componentIcons?: ComponentIconMap<never>) {
+    const theme = defineTheme({
+      name: `table-row-expand-slot-${themeCount++}`,
+      icons,
+      componentIcons,
+    });
+    render(
+      <Theme theme={theme}>
+        <Harness initialExpanded={new Set(['a'])} />
+      </Theme>,
+    );
+  }
+
+  const toggles = () =>
+    screen.getAllByRole('button', {name: /(expand|collapse) row/i});
+  const glyph = (button: HTMLElement) =>
+    button.querySelector('[data-icon]')?.getAttribute('data-icon') ?? null;
+
+  it('draws chevronRight in both states when the theme maps nothing, turned while expanded', () => {
+    renderInTheme();
+    const [expanded, collapsed] = toggles();
+
+    expect(glyph(expanded)).toBe('chevronRight');
+    expect(glyph(collapsed)).toBe('chevronRight');
+    // The component keeps the turn: the two states style the glyph apart.
+    expect(expanded.querySelector('.astryx-icon')?.className).not.toBe(
+      collapsed.querySelector('.astryx-icon')?.className,
+    );
+  });
+
+  it('passes `expanded` to a slot function and draws the name it returns', () => {
+    const slot = vi.fn(({expanded}: {expanded: boolean}) => ({
+      icon: expanded ? ('menu' as const) : ('chevronRight' as const),
+    }));
+    renderInTheme({'table-row-expand': slot});
+    const [expanded, collapsed] = toggles();
+
+    expect(glyph(expanded)).toBe('menu');
+    expect(glyph(collapsed)).toBe('chevronRight');
+    expect(slot).toHaveBeenCalledWith({expanded: true});
+    expect(slot).toHaveBeenCalledWith({expanded: false});
+    fireEvent.click(collapsed);
+    expect(glyph(toggles()[1])).toBe('menu');
+  });
+
+  it('hides only the glyph for null; the toggle keeps its name, state, and action', () => {
+    renderInTheme({'table-row-expand': null});
+    const [expanded, collapsed] = toggles();
+
+    expect(expanded.querySelector('.astryx-icon')).toBeNull();
+    expect(expanded).toHaveAttribute('aria-expanded', 'true');
+    expect(collapsed).toHaveAccessibleName(/expand row/i);
+    fireEvent.click(collapsed);
+    expect(screen.getAllByTestId('panel')).toHaveLength(2);
+  });
+
+  it('changes only the icon size for a size request', () => {
+    renderInTheme({'table-row-expand': {size: 'sm'}});
+
+    expect(toggles()[0].querySelector('.astryx-icon')).toHaveAttribute(
+      'data-size',
+      'sm',
+    );
+    expect(glyph(toggles()[0])).toBe('chevronRight');
   });
 });
