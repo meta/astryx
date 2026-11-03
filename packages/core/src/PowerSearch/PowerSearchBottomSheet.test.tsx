@@ -542,6 +542,22 @@ beforeAll(async () => {
   }
 }, 20000);
 
+// A list value's Tokenizer sheet is loaded with React.lazy too. Open one up
+// front, so every later Tokenizer sheet renders synchronously inside its press.
+beforeAll(async () => {
+  stubEnvironment();
+  try {
+    setup({config: valueTypesConfig});
+    openAddFlow();
+    tapRow('ID');
+    fireEvent.click(within(sheet()).getByRole('button', {name: 'ID'}));
+    await screen.findByRole('dialog', {name: 'ID'}, {timeout: 15000});
+  } finally {
+    cleanup();
+    vi.unstubAllGlobals();
+  }
+}, 20000);
+
 beforeEach(() => {
   __resetLiveRegionsForTest();
   stubEnvironment();
