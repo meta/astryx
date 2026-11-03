@@ -348,7 +348,6 @@ export function Token({
     <>
       {icon}
       <span
-        id={naming?.labelId}
         {...stylex.props(styles.label, isLabelHidden && styles.labelHidden)}>
         {label}
       </span>
@@ -469,7 +468,6 @@ export function Token({
         {...pressable}
         labelContent={
           <span
-            id={naming?.labelId}
             {...stylex.props(
               styles.label,
               isLabelHidden && styles.labelHidden,
@@ -540,12 +538,12 @@ export function Token({
         <button
           type="button"
           onClick={effectiveOnClick}
+          aria-label={ariaLabelledBy == null ? naming?.actionName : undefined}
           {...labellingProps}
           aria-disabled={isDisabled || undefined}
           {...(isDisabled ? disabledInteractionProps() : null)}
           {...stylex.props(styles.invisibleButton)}>
           <span
-            id={naming?.labelId}
             {...stylex.props(
               styles.label,
               isLabelHidden && styles.labelHidden,

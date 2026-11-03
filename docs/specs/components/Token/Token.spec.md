@@ -182,7 +182,10 @@ Consumer migration instructions belong in consumer docs and release notes.
   from a caller `aria-labelledby` (FR10). In the link structure the link
   is the root and takes its name from all of its content, including End content
   (a label "Inbox" with a count reads "Inbox 12"). The
-  Remove button is named by the translated "Remove {label}" string.
+  Remove button is named by the translated "Remove {label}" string. A token
+  whose visible text runs past its Label, as a PowerSearch filter token's value
+  does, names its inner button by that full text, and its Remove button by the
+  same translated string over that text.
 - **AR3 — Hidden label.** With `isLabelHidden`, the Label text stays in the
   accessibility tree and names the token, and no element with the generic role
   carries a name (WAI-ARIA 1.2). The root carries `aria-label` equal to the

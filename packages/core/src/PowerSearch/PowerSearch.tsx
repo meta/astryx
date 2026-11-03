@@ -17,7 +17,6 @@
 import React, {
   useCallback,
   useEffect,
-  useId,
   useImperativeHandle,
   useMemo,
   useRef,
@@ -36,7 +35,6 @@ import {TypeaheadItem} from '../Typeahead/TypeaheadItem';
 import {Token} from '../Token';
 import {TokenNamingContext} from '../Token/TokenNamingContext';
 import {Avatar} from '../Avatar';
-import {isRenderable} from '../utils/isRenderable';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {Icon} from '../Icon';
 import type {IconType} from '../Icon';
@@ -121,10 +119,6 @@ const OPERATOR_VALUE_TYPE_TO_ICON: Record<string, IconName> = {
 // =============================================================================
 
 const tokenValueStyles = stylex.create({
-  // Gives the rendered value an id for the token's name without adding a box.
-  nameSource: {
-    display: 'contents',
-  },
   value: {
     fontWeight: fontWeightVars['--font-weight-bold'],
   },
@@ -555,10 +549,20 @@ export function PowerSearch({
     },
     [config, maxTokenLength, t, locale],
   );
-  const tokenIdBase = useId();
+  // The built-in token being edited. A token from a `components` override
+  // names itself, so its editor keeps the plain popover.
   const editedFilter =
     popoverState.type === 'editing'
       ? filters[popoverState.filterIndex]
+      : undefined;
+  const editedOperator =
+    editedFilter != null
+      ? config.getOperator(editedFilter.field, editedFilter.operator)
+      : undefined;
+  const editedBuiltInFilter =
+    editedOperator != null &&
+    componentOverrides?.[editedOperator.value.type]?.Token == null
+      ? editedFilter
       : undefined;
 
   // Layer for positioning the edit popover anchored to the tokenizer
@@ -575,10 +579,12 @@ export function PowerSearch({
     // and focus stays on the tokenizer input, so a dialog wrapper is
     // incorrect. Editing a token: focus moves into the editor's controls, so
     // the editor is a non-modal dialog named by the token's visible text.
-    role: editedFilter != null ? 'dialog' : 'none',
+    role: editedBuiltInFilter != null ? 'dialog' : 'none',
     isModal: false,
     dialogLabel:
-      editedFilter != null ? tokenText(editedFilter).full : undefined,
+      editedBuiltInFilter != null
+        ? tokenText(editedBuiltInFilter).full
+        : undefined,
   });
 
   // Wrapper that manages layer visibility and tokenizer focus alongside state
@@ -840,6 +846,8 @@ export function PowerSearch({
           ? tokenText(filter)
           : {label: `${fieldLabel}: ${operatorLabel}`.trim(), value: null};
       const tokenLabel = text.label;
+      const fullText =
+        text.value != null ? `${text.label} ${text.value}` : text.label;
       const valueContent =
         text.value != null ? (
           <PowerSearchTokenValue text={text.value} />
@@ -856,16 +864,11 @@ export function PowerSearch({
         tokenIcon = <Avatar src={entity.photo} name={entity.label} size={16} />;
       }
 
-      // A token that opens its editor is named by all its visible text
-      // (field, operator and value) and says that it opens a dialog.
-      const labelId = `${tokenIdBase}-${filterIndex}-label`;
-      const valueId = `${tokenIdBase}-${filterIndex}-value`;
+      // A token that opens its editor says that it opens a dialog, and the
+      // naming context names it by all its visible text.
       const editorProps =
         handleClick != null
           ? {
-              'aria-labelledby': isRenderable(valueContent)
-                ? `${labelId} ${valueId}`
-                : labelId,
               'aria-haspopup': 'dialog' as const,
               'aria-expanded':
                 popoverState.type === 'editing' &&
@@ -875,25 +878,13 @@ export function PowerSearch({
 
       return (
         <TokenNamingContext
-          value={{
-            labelId,
-            removeName:
-              text.value != null ? `${text.label} ${text.value}` : text.label,
-          }}>
+          value={{actionName: fullText, removeName: fullText}}>
           <Token
             label={tokenLabel}
             size={size}
             icon={tokenIcon}
             {...editorProps}
-            endContent={
-              isRenderable(valueContent) ? (
-                <span
-                  id={valueId}
-                  {...stylex.props(tokenValueStyles.nameSource)}>
-                  {valueContent}
-                </span>
-              ) : undefined
-            }
+            endContent={valueContent}
             onMouseDown={
               handleClick
                 ? e => {
@@ -928,7 +919,6 @@ export function PowerSearch({
       handleTokenClick,
       componentOverrides,
       t,
-      tokenIdBase,
       popoverState,
       tokenText,
     ],

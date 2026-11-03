@@ -16,7 +16,11 @@ import userEvent from '@testing-library/user-event';
 import {describe, expect, it} from 'vitest';
 import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
 import {PowerSearch} from './PowerSearch';
-import type {PowerSearchConfig, PowerSearchFilter} from './types';
+import type {
+  PowerSearchConfig,
+  PowerSearchFilter,
+  PowerSearchTokenProps,
+} from './types';
 
 const config: PowerSearchConfig = {
   name: 'Issues',
@@ -138,6 +142,32 @@ describe('a PowerSearch filter token', () => {
         hidden: true,
       }),
     ).toBeInTheDocument();
+  });
+
+  it('keeps the plain popover for a token from a components override', async () => {
+    const user = userEvent.setup();
+    function CustomToken({onClick}: PowerSearchTokenProps) {
+      return (
+        <button type="button" onClick={onClick}>
+          Custom status
+        </button>
+      );
+    }
+    render(
+      <PowerSearch
+        config={config}
+        filters={[openFilter]}
+        onChange={() => {}}
+        components={{enum: {Token: CustomToken}}}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', {name: 'Custom status'}));
+
+    expect(
+      await screen.findByRole('button', {name: 'Apply', hidden: true}),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', {hidden: true})).toBeNull();
   });
 
   it('offers no editor on a read-only token', () => {
