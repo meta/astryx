@@ -612,11 +612,53 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // is owned by the consumer. `hideLayer()` self-guards when already closed.
   // A touch press is a different gesture (it may be the only way to open the
   // tooltip at all), so the touch path answers it first.
+  // A hold that show() starts during a press on the trigger lasts only as
+  // long as that press when the press ends off the trigger: no click on the
+  // trigger follows, so nothing pins it. The hover rules then decide, as
+  // for a preview.
+  const isFreshHoldRef = useRef(false);
+  const stopPressHoldRef = useRef<(() => void) | null>(null);
+  const holdForPress = useCallback(() => {
+    stopPressHoldRef.current?.();
+    const trigger = triggerRef.current;
+    const view = trigger?.ownerDocument.defaultView;
+    if (trigger == null || view == null) {
+      return;
+    }
+    const stop = () => {
+      view.removeEventListener('pointerup', end, true);
+      view.removeEventListener('pointercancel', end, true);
+      stopPressHoldRef.current = null;
+    };
+    const end = (event: Event) => {
+      stop();
+      const target = event.target;
+      const isNode = target instanceof view.Node;
+      if (event.type === 'pointerup' && isNode && trigger.contains(target)) {
+        return;
+      }
+      if (!isHeldRef.current) {
+        return;
+      }
+      dropHold();
+      const surface = trigger.ownerDocument.getElementById(layerId);
+      if (!isNode || surface?.contains(target) !== true) {
+        scheduleHide();
+      }
+    };
+    view.addEventListener('pointerup', end, true);
+    view.addEventListener('pointercancel', end, true);
+    stopPressHoldRef.current = stop;
+  }, [dropHold, layerId, scheduleHide]);
+
   const handlePointerDown = useCallback(
     (event: PointerEvent) => {
       // The app's hide() closes a held tooltip. A press neither hides it here
       // nor waits for a tap verdict.
       if (isHeldRef.current) {
+        if (isFreshHoldRef.current) {
+          holdForPress();
+        }
         return;
       }
       if (handleTouchPointerDown(event)) {
@@ -628,7 +670,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       clearTimeouts();
       hideLayer();
     },
-    [handleTouchPointerDown, isOpen, clearTimeouts, hideLayer],
+    [handleTouchPointerDown, holdForPress, isOpen, clearTimeouts, hideLayer],
   );
 
   // Interaction ref that handles event listeners only
@@ -641,6 +683,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         triggerRef.current.removeEventListener('focusin', handleFocusIn);
         triggerRef.current.removeEventListener('focusout', handleFocusOut);
         triggerRef.current.removeEventListener('focusout', handleHeldFocusOut);
+        stopPressHoldRef.current?.();
         triggerRef.current.removeEventListener(
           'pointerenter',
           handlePointerEnter,
@@ -826,6 +869,12 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     }
     setHeld(true);
     armOutsideDismiss();
+    // A press on the trigger that is being dispatched now started this hold.
+    // The trigger's own pointerdown listener runs before the timer.
+    isFreshHoldRef.current = true;
+    triggerRef.current?.ownerDocument.defaultView?.setTimeout(() => {
+      isFreshHoldRef.current = false;
+    }, 0);
     const latest = latestRef.current;
     if (latest.isOpen !== undefined) {
       latest.onShow?.();
