@@ -5179,8 +5179,10 @@ describe('Selector press model', () => {
     fireEvent.pointerMove(rows[20], {screenX: 100, screenY: 200});
     fireEvent.mouseOver(rows[20]);
     expect(active()).toBe(rows[29].id);
-    // The mouse moves: the row under it takes the highlight, even when the
-    // browser reported entering that row before the move (Chrome's order).
+    // The mouse moves. The browser reports entering the next row before the
+    // move that reaches it; that row takes the highlight with the move.
+    fireEvent.mouseOver(rows[21]);
+    expect(active()).toBe(rows[29].id);
     fireEvent.pointerMove(rows[21], {screenX: 100, screenY: 230});
     expect(active()).toBe(rows[21].id);
     fireEvent.mouseOver(rows[22]);

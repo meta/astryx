@@ -2032,6 +2032,7 @@ describe('ChatComposerInput', () => {
 
       const options = await getMenuOptions(textbox);
       fireEvent.mouseEnter(options[1]);
+      fireEvent.pointerMove(options[1], {screenX: 107, screenY: 107});
 
       expect(options[1]).toHaveAttribute('aria-selected', 'true');
       expect(spy.mock.calls.length).toBe(callsAfterOpen);

@@ -1580,6 +1580,7 @@ describe('DateTimeInput', () => {
           .querySelector('[role="listbox"]')!
           .querySelectorAll('[role="option"]');
         fireEvent.mouseEnter(options[5]);
+        fireEvent.pointerMove(options[5], {screenX: 114, screenY: 114});
 
         expect(timeInput.getAttribute('aria-activedescendant')).toBe(
           options[5].id,

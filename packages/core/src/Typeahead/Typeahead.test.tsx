@@ -2310,6 +2310,7 @@ describe('BaseTypeahead paste behavior', () => {
 
       scrollIntoView.mockClear();
       const options = screen.getAllByRole('option', {hidden: true});
+      fireEvent.pointerMove(options[1], {screenX: 156, screenY: 156});
       fireEvent.mouseMove(options[1]);
 
       expect(input.getAttribute('aria-activedescendant')).toBe(options[1].id);
@@ -2350,8 +2351,10 @@ describe('BaseTypeahead highlight under a resting pointer', () => {
     expect(input.getAttribute('aria-activedescendant')).toBe(options[0].id);
 
     fireEvent.mouseEnter(options[2]);
+    fireEvent.pointerMove(options[2], {screenX: 163, screenY: 163});
     expect(input.getAttribute('aria-activedescendant')).toBe(options[0].id);
 
+    fireEvent.pointerMove(options[2], {screenX: 170, screenY: 170});
     fireEvent.mouseMove(options[2]);
     expect(input.getAttribute('aria-activedescendant')).toBe(options[2].id);
   });

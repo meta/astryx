@@ -1378,20 +1378,6 @@ export function Selector<T extends SelectorOptionType>(
     onSearchSeed: appendSearchQuery,
     listboxId,
   });
-  // A key that scrolls the list (End, PageDown, typeahead) moves rows under
-  // a still mouse, and the browser reports the row now under it as entered.
-  // That is not the person moving the mouse, so the row does not take the
-  // highlight until the pointer moves.
-  const isKeyNavigatingRef = useRef(false);
-  const lastPointerRef = useRef<{x: number; y: number} | null>(null);
-  const onRowPointerEnter = useCallback(
-    (item: SelectorOptionData, index: number) => {
-      if (!isKeyNavigatingRef.current) {
-        onItemMouseEnter(item, index);
-      }
-    },
-    [onItemMouseEnter],
-  );
 
   // Type-to-select, shared with the other collections (menus, listboxes).
   // Open, it walks the highlight — aria-activedescendant announces each match.
@@ -1428,31 +1414,6 @@ export function Selector<T extends SelectorOptionType>(
     const match = /-item-(\d+)$/.exec(row.id);
     return match == null ? -1 : Number(match[1]);
   }, []);
-  const handleListPointerMove = useCallback(
-    (e: React.PointerEvent) => {
-      // Screen coordinates: a scroll moves the rows, not the pointer.
-      const last = lastPointerRef.current;
-      lastPointerRef.current = {x: e.screenX, y: e.screenY};
-      if (
-        !isKeyNavigatingRef.current ||
-        (last != null && last.x === e.screenX && last.y === e.screenY)
-      ) {
-        return;
-      }
-      isKeyNavigatingRef.current = false;
-      // The browser reports entering a row before the move that reaches it,
-      // so the row under the pointer takes the highlight here.
-      const row = (e.target as Element).closest('[role="option"]');
-      if (row instanceof HTMLElement) {
-        const index = optionIndexFromRow(row);
-        const item = filteredItems[index];
-        if (item != null) {
-          onItemMouseEnter(item, index);
-        }
-      }
-    },
-    [filteredItems, onItemMouseEnter, optionIndexFromRow],
-  );
   // Re-measured when the option set changes; the count is the dependency.
   // A list longer than the most rows that can fit cannot fit, so it starts
   // as a scroll container and the open measure only confirms it.
@@ -1494,7 +1455,6 @@ export function Selector<T extends SelectorOptionType>(
       if (isDisabled || isEffectivelyReadOnly) {
         return;
       }
-      isKeyNavigatingRef.current = true;
       // With hasSearch the query input owns typing, so type-to-select is off.
       if (!hasSearch && typeahead.onKeyDown(e)) {
         e.preventDefault();
@@ -1579,7 +1539,6 @@ export function Selector<T extends SelectorOptionType>(
           }
         }}
         onKeyDown={e => {
-          isKeyNavigatingRef.current = true;
           // An in-progress IME composition uses these same keys (Enter to
           // commit the candidate, Escape/Arrows to navigate the candidate
           // window); the composing keydown fires before compositionend, so
@@ -1689,7 +1648,7 @@ export function Selector<T extends SelectorOptionType>(
           aria-selected={isSelected}
           aria-disabled={item.disabled}
           onClick={() => onItemSelect(item)}
-          onMouseEnter={() => onRowPointerEnter(item, flatIndex)}
+          onMouseEnter={() => onItemMouseEnter(item, flatIndex)}
           {...mergeProps(
             // Stable theme target on the option row itself, mirroring
             // `multi-selector-option`: it carries the row's size and runtime
@@ -1724,7 +1683,7 @@ export function Selector<T extends SelectorOptionType>(
       normalizedValue,
       getItemId,
       onItemSelect,
-      onRowPointerEnter,
+      onItemMouseEnter,
       SelectionMark,
     ],
   );
@@ -1887,7 +1846,6 @@ export function Selector<T extends SelectorOptionType>(
         role="listbox"
         aria-labelledby={triggerId}
         {...listboxPress.menuProps}
-        onPointerMove={handleListPointerMove}
         {...stylex.props(
           styles.dropdown,
           listboxHasOverflow
@@ -1906,7 +1864,6 @@ export function Selector<T extends SelectorOptionType>(
       id={listboxId}
       role="listbox"
       {...listboxPress.menuProps}
-      onPointerMove={handleListPointerMove}
       // The bottom sheet is a modal layer, so Chromium drops the trigger
       // outside it from the accessibility tree and a reference to it yields
       // no name. Name only this no-search sheet directly from the component's
