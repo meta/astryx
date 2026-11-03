@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] BottomSheet: in Playwright's WebKit on a phone-sized page, an update inside an open sheet no longer holds up the page about 40 ms longer than it should; the iOS 26.2 simulator showed no difference. The open sheet's dialog places its panel with a flex row instead of a grid; the layout is the same.
+[fix] BottomSheet: the open sheet's dialog places its panel with a flex row instead of a grid. In WebKit, an update inside an open sheet lays out faster. A percentage `height` (for example `'50%'`) now takes that share of the screen at the bottom edge; before, a short sheet was cut short and a long one hung from the top of the screen.
 
 @vjeux
