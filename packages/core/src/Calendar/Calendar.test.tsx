@@ -243,6 +243,30 @@ describe('Calendar', () => {
   );
 
   it.each([
+    ['fa-IR', '۱۵', '۴۲'],
+    ['ar-EG', '١٥', '٤٢'],
+    ['en', '15', '42'],
+  ])(
+    'shows day and week numbers in the locale digits in %s',
+    (locale, day15, week42) => {
+      render(
+        <InternationalizationProvider locale={locale}>
+          <Calendar focusDate="2026-10-01" hasWeekNumbers />
+        </InternationalizationProvider>,
+      );
+      const october15 = document.querySelector(
+        'button[data-date="2026-10-15"]',
+      );
+      expect(october15).toHaveTextContent(new RegExp(`^${day15}$`));
+      // October 15, 2026 is in ISO week 42.
+      const weekHeaders = screen
+        .getAllByRole('rowheader')
+        .map(header => header.textContent);
+      expect(weekHeaders).toContain(week42);
+    },
+  );
+
+  it.each([
     ['vi-VN', 'tháng 10 năm 2026'],
     ['de-DE', 'Oktober 2026'],
     ['en-US', 'October 2026'],

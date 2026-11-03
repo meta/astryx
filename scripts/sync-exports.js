@@ -239,7 +239,6 @@ const FILE_MODULE_SUBPATH_EXPORTS = [
   // (architecture:react-component-runtime INV13).
   'internal/indicatorPress.stylex',
   'internal/touch',
-  'internal/touch-sheet',
   'internal/selectable-card',
 ];
 

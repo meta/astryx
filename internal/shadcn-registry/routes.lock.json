@@ -618,16 +618,6 @@
       "aliases": []
     },
     {
-      "name": "component-lab-mobile-power-search",
-      "path": "components/lab/mobile-power-search",
-      "aliases": []
-    },
-    {
-      "name": "component-lab-mobile-tokenizer",
-      "path": "components/lab/mobile-tokenizer",
-      "aliases": []
-    },
-    {
       "name": "component-lab-radial-chart",
       "path": "components/lab/radial-chart",
       "aliases": []
