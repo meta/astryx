@@ -430,7 +430,6 @@ export function createResizableAs(
   let uncontrolledIsCollapsed =
     persisted?.isCollapsed ?? opts.defaultIsCollapsed ?? false;
 
-  // What the region last computed, notified, wrote, and announced.
   let derived = {
     size: 0,
     isCollapsed: false,
