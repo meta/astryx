@@ -91,6 +91,31 @@ describe('ResizeHandle on a useResizable(handleRef) region (component:Resizable 
     expect(document.body.style.cursor).toBe('');
   });
 
+  it('keeps a drag going through an inline ref callback, which is new on every render', () => {
+    function InlineRef() {
+      const handleRef = useRef<HTMLDivElement | null>(null);
+      const region = useResizable(handleRef, {defaultSize: 200, maxSize: 400});
+      return (
+        <>
+          <output data-testid="size">{region.size}</output>
+          <ResizeHandle
+            ref={element => {
+              handleRef.current = element;
+            }}
+            label="Sidebar width"
+          />
+        </>
+      );
+    }
+    render(<InlineRef />);
+    fireEvent.pointerDown(grabZone(), {pointerId: 1, clientX: 0});
+    fireEvent.pointerMove(grabZone(), {pointerId: 1, clientX: 40});
+    expect(size()).toBe(240);
+    fireEvent.pointerMove(grabZone(), {pointerId: 1, clientX: 80});
+    expect(size()).toBe(280);
+    fireEvent.pointerUp(grabZone(), {pointerId: 1, clientX: 80});
+  });
+
   it('keeps the whole grab zone, and its drag, on a region at 0px that is not collapsed', () => {
     render(<Split options={{defaultSize: 0, minSize: 0, maxSize: 400}} />);
     expect(separator()).toHaveAttribute('aria-valuenow', '0');
