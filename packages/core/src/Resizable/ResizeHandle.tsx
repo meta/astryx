@@ -223,23 +223,56 @@ const styles = stylex.create({
     backgroundColor: colorVars['--color-border-emphasized'],
   },
   // A pill shown on hover can sit outside the Grab zone. This invisible
-  // extension spans the gap along the resize axis, so the pointer keeps the
-  // hover on its way to the pill. It takes the pointer only while the pill
-  // does.
-  pillBridgeHorizontal: {
+  // extension spans the gap toward the Handle, so the pointer keeps the hover
+  // on its way to the pill. It reaches no further than the pill, and it takes
+  // the pointer only while the pill does. The pill's offset is a physical
+  // translate, so the side toward the Handle is physical too.
+  pillBridgeRight: {
     '::before': {
       content: '""',
       position: 'absolute',
       insetBlock: 0,
-      insetInline: `calc(-1 * ${spacingVars['--spacing-1']} - 1px)`,
+      insetInlineStart: {
+        default: 0,
+        ':is([dir="rtl"] *)': `calc(-1 * ${spacingVars['--spacing-1']} - 1px)`,
+      },
+      insetInlineEnd: {
+        default: `calc(-1 * ${spacingVars['--spacing-1']} - 1px)`,
+        ':is([dir="rtl"] *)': 0,
+      },
     },
   },
-  pillBridgeVertical: {
+  pillBridgeLeft: {
+    '::before': {
+      content: '""',
+      position: 'absolute',
+      insetBlock: 0,
+      insetInlineStart: {
+        default: `calc(-1 * ${spacingVars['--spacing-1']} - 1px)`,
+        ':is([dir="rtl"] *)': 0,
+      },
+      insetInlineEnd: {
+        default: 0,
+        ':is([dir="rtl"] *)': `calc(-1 * ${spacingVars['--spacing-1']} - 1px)`,
+      },
+    },
+  },
+  pillBridgeDown: {
     '::before': {
       content: '""',
       position: 'absolute',
       insetInline: 0,
-      insetBlock: `calc(-1 * ${spacingVars['--spacing-1']} - 1px)`,
+      insetBlockStart: 0,
+      insetBlockEnd: `calc(-1 * ${spacingVars['--spacing-1']} - 1px)`,
+    },
+  },
+  pillBridgeUp: {
+    '::before': {
+      content: '""',
+      position: 'absolute',
+      insetInline: 0,
+      insetBlockStart: `calc(-1 * ${spacingVars['--spacing-1']} - 1px)`,
+      insetBlockEnd: 0,
     },
   },
 });
@@ -658,8 +691,12 @@ export function ResizeHandle({
               !isAlwaysVisible &&
                 effectiveSide !== 'center' &&
                 (isHorizontal
-                  ? styles.pillBridgeHorizontal
-                  : styles.pillBridgeVertical),
+                  ? effectiveSide === 'start'
+                    ? styles.pillBridgeRight
+                    : styles.pillBridgeLeft
+                  : effectiveSide === 'start'
+                    ? styles.pillBridgeDown
+                    : styles.pillBridgeUp),
               isInteracting && !isDragging && styles.pillHover,
               isDragging && styles.pillActive,
               isDisabled && styles.disabled,
