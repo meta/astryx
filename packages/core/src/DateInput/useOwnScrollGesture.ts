@@ -137,6 +137,8 @@ export function useOwnScrollGesture(
   const onSwipeRef = useRef(onSwipe);
   onSwipeRef.current = onSwipe;
 
+  // Syncs touch listeners on the element with `isEnabled`. They decide which
+  // gesture owns a horizontal scroll.
   useEffect(() => {
     const element = ref.current;
     if (element == null || !isEnabled) {

@@ -591,6 +591,7 @@ export function MonthScroller({
    * it cannot oscillate.
    */
   const settleFrameRef = useRef<number | undefined>(undefined);
+  // Releases the settle frame on unmount.
   useEffect(
     () => () => {
       if (settleFrameRef.current != null) {
@@ -663,6 +664,8 @@ export function MonthScroller({
   // rAF-throttled: a touch scroll fires far more scroll events than frames,
   // and all this does is move a label and widen a window.
   const frameRef = useRef<number | undefined>(undefined);
+  // Syncs scroll, touch and wheel listeners on the scroller with its measured
+  // height.
   useEffect(() => {
     const scroller = scrollerRef.current;
     // Not before the height is known. A listener attached while it was zero

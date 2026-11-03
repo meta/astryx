@@ -265,7 +265,8 @@ export function ChatMessageList({
     children !== false &&
     !(Array.isArray(children) && children.length === 0);
 
-  // IntersectionObserver for scroll-to-top infinite scroll
+  // Syncs an IntersectionObserver on the top sentinel with `scrollToTopAction`.
+  // The action runs when the sentinel comes into view.
   useEffect(() => {
     const scrollContainer = layoutContext?.scrollContainerRef?.current;
     if (!scrollToTopAction || !sentinelRef.current) {

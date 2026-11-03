@@ -710,6 +710,8 @@ export function BottomSheetPanel({
   const isCoarseCrossFade = useMediaQuery(REDUCED_MOTION_COARSE_QUERY);
   const isCrossFade =
     isCoarseCrossFade || (isReducedMotion && isDismissedByTouchDrag);
+  // Syncs the motion with the panel's CSS transition or animation. The motion
+  // completes when that transition or animation ends.
   useLayoutEffect(() => {
     if (motion == null) {
       return;

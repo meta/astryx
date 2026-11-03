@@ -803,6 +803,8 @@ function SpanCodeContent({
   hasLineNumbers: boolean;
   maxDigits: number;
 }) {
+  // Syncs the document's ::highlight() stylesheet. The rules go in one time,
+  // before layout reads.
   useInsertionEffect(() => {
     ensureHighlightStyles();
   }, []);
@@ -902,6 +904,8 @@ function RangeCodeContent({
     }
   }, []);
 
+  // Syncs the CSS.highlights registry with the token ranges. It applies them in
+  // chunks.
   useEffect(() => {
     if (!hasHighlightAPI()) {
       return;
