@@ -2,15 +2,16 @@
 // @pr-a11y always
 
 /**
- * @file BottomSheetExitFocus.a11y.chromium.spec.ts
+ * @file BottomSheetExitFocus.a11y.browser.spec.ts
  * @input The `Core/BottomSheet` exit-focus fixtures in a built Storybook: Done
  *   closes the sheet, and during the exit the Done control is removed or
  *   disabled.
  * @output Real-engine proof that a closing sheet that held focus goes inert
  *   and aria-hidden as soon as that focus drops to the page, while its exit
  *   still runs.
- * @position Chromium only. jsdom sends no focusout when a focused element is
- *   removed or disabled, so this path is observable only in a browser.
+ * @position Chromium and WebKit; the disabled case runs in Chromium only. The
+ *   removed case needs a real engine: React drops Chromium's focusout for an
+ *   element it removes, and WebKit sends none.
  */
 
 import {expect, test, type Page} from '@playwright/test';
@@ -94,7 +95,12 @@ for (const [story, change] of [
 ] as const) {
   test(`goes inert once its focused control is ${change} during the exit`, async ({
     page,
+    browserName,
   }) => {
+    test.skip(
+      change === 'disabled' && browserName !== 'chromium',
+      'Where focus goes from a disabled control is engine-specific; Chromium moves it to the page.',
+    );
     expect(await sawInertExit(page, story)).toBe(true);
   });
 }

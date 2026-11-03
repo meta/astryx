@@ -201,12 +201,12 @@ describe('BottomSheet close order for focus', () => {
     expect(keys).toEqual(['Enter', 'Tab']);
   });
 
-  it('goes inert and hidden once its focused control is removed', async () => {
-    function Removing() {
+  it('goes inert and hidden once its focused control is removed during the exit', async () => {
+    function Removing({isDoneShown}: {isDoneShown: boolean}) {
       const [isOpen, setIsOpen] = useState(true);
       return (
         <BottomSheet isOpen={isOpen} onOpenChange={setIsOpen} label="Filters">
-          {isOpen && (
+          {isDoneShown && (
             <button type="button" onClick={() => setIsOpen(false)}>
               Done
             </button>
@@ -214,10 +214,13 @@ describe('BottomSheet close order for focus', () => {
         </BottomSheet>
       );
     }
-    render(<Removing />);
+    const {rerender} = render(<Removing isDoneShown />);
     const done = screen.getByRole('button', {name: 'Done'});
     act(() => done.focus());
     fireEvent.click(done);
+    expect(sheet()).not.toHaveAttribute('inert');
+
+    rerender(<Removing isDoneShown={false} />);
     await act(async () => {
       await Promise.resolve();
     });
