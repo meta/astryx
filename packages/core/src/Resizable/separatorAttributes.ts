@@ -38,14 +38,15 @@ export interface SeparatorAttributes {
   readonly 'aria-valuemax': number | undefined;
   readonly 'aria-valuetext': string | undefined;
   readonly 'aria-disabled': true | undefined;
-  readonly tabIndex: 0 | -1;
+  readonly tabIndex: 0;
 }
 
 /**
  * The separator's ARIA attributes and tab stop. A collapsed region's real
  * size, 0, sits below aria-valuemin, which is invalid. So a collapsed
  * separator announces its minimum, and its value text says it is collapsed.
- * A disabled separator leaves the tab order.
+ * A disabled separator keeps its tab stop, so keyboard users can reach it and
+ * hear that it is disabled.
  */
 export function separatorAttributes(
   state: SeparatorState,
@@ -67,6 +68,6 @@ export function separatorAttributes(
         : undefined,
     'aria-valuetext': value?.isCollapsed ? value.collapsedText : undefined,
     'aria-disabled': state.isDisabled || undefined,
-    tabIndex: state.isDisabled ? -1 : 0,
+    tabIndex: 0,
   };
 }
