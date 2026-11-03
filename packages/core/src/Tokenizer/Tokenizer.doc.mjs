@@ -304,7 +304,7 @@ export const docs = {
       type: "{presentation?: 'popover' | 'bottom-sheet' | 'adaptive'}",
       stability: 'experimental',
       description:
-        'Experimental options: anything in this object may change or be removed in a patch release. Deprecated: experimental.presentation is the earlier spelling of presentation; use presentation. It still works with the same values, and presentation wins when both are set.',
+        'Experimental options: anything in this object may change or be removed in a patch release. Deprecated: experimental.presentation is the earlier spelling of presentation. Use the stable presentation prop; astryx upgrade rewrites static uses. It still works with the same values, and presentation wins when both are set.',
     },
   ],
   theming: {
@@ -657,7 +657,7 @@ export const docsZh = {
       type: "{presentation?: 'popover' | 'bottom-sheet' | 'adaptive'}",
       stability: 'experimental',
       description:
-        '实验性选项：此对象中的任何内容都可能在补丁版本中更改或移除。已弃用：experimental.presentation 是 presentation 的旧写法，请改用 presentation。它仍以相同的取值生效，两者同时设置时以 presentation 为准。',
+        '实验性选项：此对象中的任何内容都可能在补丁版本中更改或移除。已弃用：experimental.presentation 是 presentation 的旧写法。请改用稳定的 presentation 属性；astryx upgrade 会改写静态用法。它仍以相同的取值生效，两者同时设置时以 presentation 为准。',
     },
   ],
   theming: {
@@ -861,6 +861,6 @@ export const docsDense = {
     presentation:
       "'adaptive' (default: sheet on compact touch, else popover; SSR/hydration render popover) | 'popover' (inline combobox, every device) | 'bottom-sheet' (trigger + one searchable modal sheet of checkbox rows editing a draft that Save commits; onChange fires once, on Save). Sheet: ref reaches the trigger button; renderItem/renderToken/endContent/hasClear/hasEntriesOnFocus/menuWidth/tokenOverflowBehavior/hasAutoFocus inert (dev warning). presentation=\"popover\" keeps them on every device.",
     experimental:
-      'Experimental; may change in a patch. Deprecated presentation: old spelling of presentation; presentation wins if both set.',
+      'Experimental; may change in a patch. Deprecated presentation: old spelling of presentation; use presentation (astryx upgrade rewrites static uses); presentation wins if both set.',
   },
 };

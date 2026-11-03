@@ -345,7 +345,8 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
      * The earlier spelling of `presentation`, with the same values. The
      * top-level `presentation` wins when both are set.
      * @experimental
-     * @deprecated Use the stable `presentation` prop.
+     * @deprecated Use the stable `presentation` prop; `astryx upgrade` rewrites
+     *   static uses.
      */
     presentation?: TokenizerPresentation;
   };
