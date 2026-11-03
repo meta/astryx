@@ -547,6 +547,8 @@ function useResizableController(
     },
     [slot],
   );
+  // The factory, a store outside React: each new options object reaches it
+  // through update().
   useIsomorphicLayoutEffect(() => {
     const entry = slot.get();
     if (entry != null && options !== entry.passed) {
