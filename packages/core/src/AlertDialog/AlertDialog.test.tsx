@@ -540,6 +540,27 @@ describe('AlertDialog action tracking', () => {
     element.getBoundingClientRect = () => rect;
   }
 
+  function mouse(
+    type: 'pointerdown' | 'pointermove' | 'pointerup',
+    target: Element,
+    point: {x: number; y: number},
+  ): void {
+    touchClock += 16;
+    const event = new PointerEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      pointerId: 1,
+      pointerType: 'mouse',
+      isPrimary: true,
+      button: 0,
+      buttons: type === 'pointerup' ? 0 : 1,
+      clientX: point.x,
+      clientY: point.y,
+    });
+    Object.defineProperty(event, 'timeStamp', {value: touchClock});
+    target.dispatchEvent(event);
+  }
+
   function renderOpen(props: {isInline?: boolean; coarse?: boolean} = {}) {
     const isCoarse = props.coarse ?? true;
     stubAlertDialogMedia({
@@ -589,6 +610,26 @@ describe('AlertDialog action tracking', () => {
       expect(isTrackedByGroup(button)).toBe(false);
       expect(button).toHaveAttribute('data-astryx-pressable');
     }
+  });
+
+  it("tracks nothing under a fine primary pointer: a desktop press stays the native button's (family:action-groups FR1)", () => {
+    const {cancel, action} = renderOpen({coarse: false});
+    for (const button of [cancel, action]) {
+      expect(isTrackedByGroup(button)).toBe(false);
+      expect(button).toHaveAttribute('data-astryx-pressable');
+    }
+  });
+
+  it('leaves a mouse press to the native button under the touch presentation: one slid from the action to Cancel runs nothing (family:action-groups FR1)', () => {
+    const {onOpenChange, onAction, cancel, action} = renderOpen();
+    mouse('pointerdown', action, {x: 60, y: 116});
+    mouse('pointermove', action, {x: 60, y: 156});
+    // The press paint stays on the pressed action, as `:active` does.
+    expect(action).toHaveAttribute('data-astryx-press', 'on');
+    expect(cancel).not.toHaveAttribute('data-astryx-press');
+    mouse('pointerup', cancel, {x: 60, y: 156});
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(onAction).not.toHaveBeenCalled();
   });
 
   it('runs the action a finger lifts on: from the action to Cancel cancels, from Cancel to the action runs it', () => {
