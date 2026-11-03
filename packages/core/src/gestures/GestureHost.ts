@@ -2286,8 +2286,10 @@ export class GestureHost {
       const debtY = absorbedDebt(gesture.y - beforeY, dy);
       const trueX = beforeX - dx;
       const trueY = beforeY - dy;
+      // A wheel the splitter reads as one stall's merge sets no speed. Its
+      // speed is one the fingers never had.
       const elapsed = time - f.lastMove;
-      if (elapsed > 0) {
+      if (elapsed > 0 && this.wheelSegment?.bunched !== true) {
         f.speedX = (trueX - f.trueX) / elapsed;
         f.speedY = (trueY - f.trueY) / elapsed;
       }
