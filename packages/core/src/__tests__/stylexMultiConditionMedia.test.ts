@@ -12,7 +12,7 @@
  */
 
 import * as stylex from '@stylexjs/stylex';
-import {expect, it} from 'vitest';
+import {expect, it, vi} from 'vitest';
 
 // Two styles, each with one declaration under the same two-condition query.
 const first = stylex.create({
@@ -199,4 +199,28 @@ it('leaves the rule the test setup keeps out of jsdom out, and copies no rule St
     text.startsWith('@media (hover: none) and (pointer: coarse)'),
   );
   expect(coarse).toHaveLength(1);
+});
+
+it('keeps its record across vi.resetModules(): no rule is restored twice, and a later rule imported first after a reset is restored', async () => {
+  // StyleX's own injector keeps its keys through a reset.
+  const a = await import('./stylexResetA.fixture');
+  const b = await import('./stylexResetB.fixture');
+  stylex.props(a.styles.rule, b.styles.rule);
+  vi.resetModules();
+  const a2 = await import('./stylexResetA.fixture');
+  const b2 = await import('./stylexResetB.fixture');
+  stylex.props(a2.styles.rule, b2.styles.rule);
+  const fast = allRules().filter(text =>
+    text.startsWith('@media (hover: hover) and (update: fast)'),
+  );
+  expect(fast.filter(text => text.includes('opacity'))).toHaveLength(1);
+
+  const c = await import('./stylexResetC.fixture');
+  stylex.props(c.styles.rule);
+  vi.resetModules();
+  const d = await import('./stylexResetD.fixture');
+  stylex.props(d.styles.rule);
+  expect(rulesUnder('(hover: none) and (update: slow)')).toContain(
+    'opacity: 0.5',
+  );
 });

@@ -66,23 +66,34 @@ function keyedByPrelude(cssText: string): boolean {
   return rest.startsWith('@');
 }
 
-// The keys StyleX has inserted a rule under, and every rule under such a key
-// that is in the page: the first, which StyleX inserted, and this module's.
-const keys = new Set<string>();
-const present = new Set<string>();
-let sheet: CSSStyleSheet | null = null;
+// The keys StyleX has inserted a rule under, every rule under such a key that
+// is in the page (the first, which StyleX inserted, and this module's), and
+// this module's sheet. They live on globalThis: `vi.resetModules()` loads this
+// module again, but StyleX's injector keeps its keys, so a record kept in
+// module state would insert restored rules again and lose a later rule
+// imported first after a reset.
+interface InjectRecord {
+  readonly keys: Set<string>;
+  readonly present: Set<string>;
+  sheet: CSSStyleSheet | null;
+}
+const RECORD = Symbol.for('astryx.stylexTestInject');
+const record: InjectRecord = ((
+  globalThis as unknown as Record<symbol, InjectRecord | undefined>
+)[RECORD] ??= {keys: new Set(), present: new Set(), sheet: null});
+const {keys, present} = record;
 
 function ownSheet(): CSSStyleSheet | null {
   if (typeof document === 'undefined') {
     return null;
   }
-  if (sheet == null || !(sheet.ownerNode?.isConnected ?? false)) {
+  if (record.sheet == null || !(record.sheet.ownerNode?.isConnected ?? false)) {
     const style = document.createElement('style');
     style.setAttribute('data-stylex-test-inject', '');
     document.head.append(style);
-    sheet = style.sheet;
+    record.sheet = style.sheet;
   }
-  return sheet;
+  return record.sheet;
 }
 
 export default function stylexTestInject(args: InjectArgs): string {
