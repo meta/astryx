@@ -333,7 +333,10 @@ export function useClickableContainer({
     (event: PointerEvent<HTMLElement>) => {
       const containerEl = containerRef.current;
       const eventTarget = event.target;
+      // Only a primary press paints, so only it can need the mark. Touch and
+      // pen presses report button 0.
       if (
+        event.button !== 0 ||
         disabled ||
         containerEl == null ||
         !(eventTarget instanceof Element) ||

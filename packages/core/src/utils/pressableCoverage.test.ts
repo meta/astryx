@@ -93,7 +93,6 @@ function referrers(name: string, except: string): string[] {
     .map(([file]) => file);
 }
 
-/** Files that import the module at `file` (by its relative specifier). */
 /** The names a module exports from `stylex.create`. */
 function styleExports(file: string): string[] {
   const text = source.get(file) ?? '';
@@ -119,6 +118,7 @@ function importsAnyOf(text: string, file: string, names: string[]): boolean {
   return false;
 }
 
+/** Files that import the module at `file` (by its relative specifier). */
 function importers(file: string): string[] {
   const stem = file.replace(/\.tsx?$/, '');
   return [...source.entries()]

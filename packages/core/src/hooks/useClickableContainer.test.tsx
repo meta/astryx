@@ -265,6 +265,17 @@ describe('onPointerDown', () => {
     expect(container.hasAttribute('data-astryx-nested-press')).toBe(false);
   });
 
+  it('leaves the container unmarked for a secondary-button press on a nested control', () => {
+    render(<Harness />);
+    fireEvent.pointerDown(screen.getByRole('button', {name: 'Nested'}), {
+      pointerType: 'mouse',
+      button: 2,
+    });
+    expect(
+      screen.getByTestId('container').hasAttribute('data-astryx-nested-press'),
+    ).toBe(false);
+  });
+
   it('leaves the container unmarked for a press on its surface or while disabled', () => {
     const {unmount} = render(<Harness />);
     fireEvent.pointerDown(screen.getByText('Surface'), {pointerType: 'mouse'});
