@@ -52,7 +52,6 @@ import type {BaseProps} from '../BaseProps';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 import {useAnnounce} from '../hooks/useAnnounce';
-import {useResolvedRequired} from '../hooks/useResolvedRequired';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {usePressFeedback} from '../hooks/usePressFeedback';
@@ -867,10 +866,6 @@ export function Switch({
   const pressable = usePressFeedback();
   const descriptionID = useId();
   const statusMessageID = useId();
-  // Announce the effective required state (form default included) while the
-  // native `required` stays bound to the explicit `isRequired` so a layout
-  // default never switches on browser validation.
-  const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
 
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
@@ -1003,7 +998,8 @@ export function Switch({
         aria-disabled={isDisabled ? 'true' : undefined}
         form={isDisabled ? '' : undefined}
         required={isRequired}
-        aria-required={isEffectivelyRequired ? 'true' : undefined}
+        // A form's required default sets nothing here: an off switch is an answer.
+        aria-required={isRequired ? 'true' : undefined}
         onChange={e => {
           if (isDisabled || isBusy) {
             return;
