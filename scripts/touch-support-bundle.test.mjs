@@ -178,8 +178,9 @@ const GESTURE_USERS = new Set([
   'SideNav',
   'TimeInput',
   'TopNav',
-  // Toast: its swipe's claim, a one-way pan whose first move decides. Layer,
-  // listed above, reaches it through LayerProvider's ToastViewport too.
+  // Toast: its swipe's claim, a one-way pan whose first move decides, which
+  // loads at idle or with the first toast. Layer, listed above, reaches it
+  // through LayerProvider's ToastViewport too.
   'Toast',
 ]);
 
@@ -360,6 +361,54 @@ describe('the touch module in bundles', () => {
     for (const bytes of outputsOf([path.join(CORE_SRC, 'utils/index.ts')])) {
       expect(bytesOf(bytes)).toEqual([]);
     }
+  });
+
+  it('stays out of the Toast and Layer imports, which load it on their own', () => {
+    const eagerGestureModules = Object.fromEntries(
+      publicImports()
+        .filter(({name}) => name === 'Toast' || name === 'Layer')
+        .map(({name, source}) => {
+          const file = entryWith(`first-toast-${name}.ts`, source);
+          const {outputs} = esbuild.buildSync({
+            ...BUILD_OPTIONS,
+            entryPoints: [file],
+            splitting: true,
+          }).metafile;
+          // What loads with the import: its output and every chunk that output
+          // imports statically, not the chunks behind an `import()`.
+          const loaded = new Set();
+          const load = output => {
+            if (loaded.has(output)) {
+              return;
+            }
+            loaded.add(output);
+            for (const {path: chunk, kind} of outputs[output].imports) {
+              if (kind === 'import-statement' && chunk in outputs) {
+                load(chunk);
+              }
+            }
+          };
+          load(
+            Object.keys(outputs).find(
+              output =>
+                outputs[output].entryPoint === path.relative(REPO, file),
+            ),
+          );
+          return [
+            name,
+            [...loaded].flatMap(output =>
+              bytesOf(
+                Object.fromEntries(
+                  Object.entries(outputs[output].inputs).map(
+                    ([input, {bytesInOutput}]) => [input, bytesInOutput],
+                  ),
+                ),
+              ).map(([input]) => input.replace('packages/core/src/', '')),
+            ),
+          ];
+        }),
+    );
+    expect(eagerGestureModules).toEqual({Layer: [], Toast: []});
   });
 
   it('is one copy that two components importing it share', () => {

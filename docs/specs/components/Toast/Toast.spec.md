@@ -15,6 +15,8 @@ verified_by:
     packages/core/src/Layer/LayerProvider.test.tsx,
     packages/core/src/Toast/ToastViewport.test.tsx,
     packages/core/src/Toast/ToastViewport.modalHost.test.tsx,
+    packages/core/src/Toast/lazyToastSwipeClaim.test.tsx,
+    packages/core/src/Toast/lazyToastSwipeClaim.idle.test.tsx,
     packages/core/src/Toast/__tests__/ToastSafeArea.a11y.chromium.spec.ts,
     packages/core/src/Toast/__tests__/ToastSwipeScroll.interaction.browser.spec.ts,
     packages/core/src/Toast/__tests__/ToastEmptyViewport.interaction.browser.spec.ts,
@@ -147,7 +149,7 @@ Consumer migration instructions belong in consumer docs and release notes.
   swiped toast's exit can tint iOS Safari's bottom toolbar until the last
   toast leaves.
 
-FR4's first-move rule has two accepted tradeoffs, which are not gaps:
+FR4's first-move rule has three accepted tradeoffs, which are not gaps:
 
 - **A slight first move toward the edge keeps the page still.** A touch whose
   first move goes 1 px toward the dismiss edge belongs to the swipe. If it
@@ -155,6 +157,10 @@ FR4's first-move rule has two accepted tradeoffs, which are not gaps:
 - **A wobbly first move gives the touch to the page.** A swipe whose first
   move is sideways, diagonal, or 1 px away from the edge does not start, and
   that touch scrolls the page instead.
+- **A touch before the swipe's code loads stays the page's.** The swipe's code
+  loads when the page is idle after its load event, or when the first toast
+  shows if that comes first. A touch that begins on a toast before the code
+  loads does not swipe, and it scrolls the page instead.
 
 ## Ownership boundary
 
@@ -262,7 +268,7 @@ button), so no anatomy part can own the `toast` target.
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
 | FR1, FR3      | `ToastViewport.test.tsx` layout, custom content, and onHide tests                                                                                                                                                                                                                                                                                                                                | Default, custom content, double dismiss                                                                                      | Dropped controls or a repeated `onHide` fails.                                                                                                                | `audit:Toast/behavior`      |
 | FR2           | `ToastViewport.test.tsx` blur-pause, pause-source and raised-while-blurred tests                                                                                                                                                                                                                                                                                                                 | Window blur, toast raised while blurred, new toast during pause, overlapping pointer/focus/window holds, focus moving inside | A timer running while paused, or resuming while another hold remains, fails.                                                                                  | `audit:Toast/behavior`      |
-| FR4, FR5      | `ToastViewport.test.tsx` gesture and motion tests; `ToastSwipeScroll.interaction.browser.spec.ts` first move toward and away from the edge, slow and quick, from three offsets                                                                                                                                                                                                                   | Pen and touch thresholds, short drag, horizontal intent, second touch, interactive descendant, RTL                           | A dismissal from a rejected gesture, a lost snap-back, or off-axis drift fails.                                                                               | `audit:Toast/behavior`      |
+| FR4, FR5      | `ToastViewport.test.tsx` gesture and motion tests; `ToastSwipeScroll.interaction.browser.spec.ts` first move toward and away from the edge, slow and quick, from three offsets; `lazyToastSwipeClaim.test.tsx`; `lazyToastSwipeClaim.idle.test.tsx`                                                                                                                                              | Pen and touch thresholds, short drag, horizontal intent, second touch, interactive descendant, RTL                           | A dismissal from a rejected gesture, a lost snap-back, or off-axis drift fails.                                                                               | `audit:Toast/behavior`      |
 | FR6–FR8       | `ToastViewport.test.tsx` placement, cap, and uniqueID tests; `Layer/LayerProvider.test.tsx` inset tests; `ToastSafeArea.a11y.chromium.spec.ts` bottom gutter, under a finger and a mouse, with insets of 0, 34 and 48 px                                                                                                                                                                         | Each position, cap 1 and an explicit cap, overwrite, ignore                                                                  | Wrong order, cap, or collision, or a bottom gap other than 16 px beyond the inset, or beyond the larger of the inset and 34 px under a coarse pointer, fails. | `audit:Toast/layout`        |
 | FR9–FR11      | `ToastViewport.test.tsx` announcement, F6, focus, landmark and empty-viewport tests; `ToastEmptyViewport.interaction.browser.spec.ts` no box once the last toast leaves                                                                                                                                                                                                                          | Info, error, StrictMode, nested viewports                                                                                    | A repeated or wrong-urgency announcement, or focus to the body after F6 entry, fails.                                                                         | `audit:Toast/accessibility` |
 | FR2, FR8–FR10 | `ToastViewport.test.tsx` "keeps focus on a control inside a toast that an overwrite updates", "hands focus off when an overwrite removes the focused control", "updates a settled toast in place when an overwrite replaces it through uniqueID", "announces an overwrite once, through the viewport only", "auto-hides a control-free replacement after the update removes the focused control" | Overwrite with focus inside; overwrite that removes the focused control                                                      | A remounted card, or focus dropping to the page body, fails.                                                                                                  | `audit:Toast/accessibility` |

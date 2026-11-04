@@ -1697,6 +1697,13 @@ describe('Toast swipe dismissal', () => {
     };
   }
 
+  /** Lets the swipe's claim load, as it does when the first toast shows. */
+  async function claimLoads(): Promise<void> {
+    await act(async () => {
+      await vi.dynamicImportSettled();
+    });
+  }
+
   function renderSwipeToast(
     options: ToastOptions = SWIPE_TOAST,
     position: React.ComponentProps<
@@ -1872,7 +1879,7 @@ describe('Toast swipe dismissal', () => {
     }
   });
 
-  it('dismisses a quick touch flick on a one-line toast at the top', () => {
+  it('dismisses a quick touch flick on a one-line toast at the top', async () => {
     const clock = mockClock();
     const restorePointer = onTouchScreen();
     try {
@@ -1882,6 +1889,7 @@ describe('Toast swipe dismissal', () => {
         'Swipe toast',
         56,
       );
+      await claimLoads();
       const touchEvent = (
         type: 'touchstart' | 'touchmove' | 'touchend',
         clientY: number,
@@ -1919,7 +1927,7 @@ describe('Toast swipe dismissal', () => {
     }
   });
 
-  it('times a flick by its input events, not by when the handlers run', () => {
+  it('times a flick by its input events, not by when the handlers run', async () => {
     // Browsers can run move handlers well after the finger moved. Here the
     // 40 px flick takes 30 ms, and the page handles its moves and lift 60 ms
     // after touch-down.
@@ -1931,6 +1939,7 @@ describe('Toast swipe dismissal', () => {
         'Swipe toast',
         56,
       );
+      await claimLoads();
       const touchEvent = (
         type: 'touchstart' | 'touchmove' | 'touchend',
         clientY: number,
@@ -2334,7 +2343,7 @@ describe('Toast swipe dismissal', () => {
     expect(getComputedStyle(visualToast).transform).not.toContain('translateX');
   });
 
-  it('allows native page scrolling until touch intent matches the dismiss edge', () => {
+  it('allows native page scrolling until touch intent matches the dismiss edge', async () => {
     const restorePointer = onTouchScreen();
     onTestFinished(restorePointer);
     const {visualToast, onHide} = renderSwipeToast(
@@ -2342,6 +2351,7 @@ describe('Toast swipe dismissal', () => {
       'topEnd',
       'Swipe toast',
     );
+    await claimLoads();
     const touchEvent = (
       type: 'touchstart' | 'touchmove' | 'touchend',
       clientY: number,
@@ -2396,10 +2406,11 @@ describe('Toast swipe dismissal', () => {
     expect(onHide).toHaveBeenCalledWith('manual');
   });
 
-  it("ends the swipe when the gesture host leaves the touch to the page, in Chromium's pointer-before-touch order", () => {
+  it("ends the swipe when the gesture host leaves the touch to the page, in Chromium's pointer-before-touch order", async () => {
     const restorePointer = onTouchScreen();
     onTestFinished(restorePointer);
     const {visualToast, onHide} = renderSwipeToast();
+    await claimLoads();
     const touchEvent = (
       type: 'touchstart' | 'touchmove' | 'touchend',
       clientY: number,
@@ -2448,10 +2459,11 @@ describe('Toast swipe dismissal', () => {
     expect(onHide).not.toHaveBeenCalled();
   });
 
-  it('swipes normally on the next touch after a first touch the page took', () => {
+  it('swipes normally on the next touch after a first touch the page took', async () => {
     const restorePointer = onTouchScreen();
     onTestFinished(restorePointer);
     const {visualToast, onHide} = renderSwipeToast();
+    await claimLoads();
     const touchEvent = (
       type: 'touchstart' | 'touchmove' | 'touchend',
       identifier: number,
@@ -2498,10 +2510,11 @@ describe('Toast swipe dismissal', () => {
     expect(onHide).toHaveBeenCalledWith('manual');
   });
 
-  it('resets an accepted touch gesture on native touchcancel', () => {
+  it('resets an accepted touch gesture on native touchcancel', async () => {
     const restorePointer = onTouchScreen();
     onTestFinished(restorePointer);
     const {visualToast, onHide} = renderSwipeToast();
+    await claimLoads();
     const touch = (type: 'touchstart' | 'touchmove', clientY: number) => {
       const event = new Event(type, {bubbles: true, cancelable: true});
       const point = {identifier: 44, clientX: 10, clientY};
@@ -2534,8 +2547,9 @@ describe('Toast swipe dismissal', () => {
     );
   });
 
-  it('abandons a one-finger swipe when a second touch starts', () => {
+  it('abandons a one-finger swipe when a second touch starts', async () => {
     const {visualToast, onHide} = renderSwipeToast();
+    await claimLoads();
     const dispatchTouch = (
       type: 'touchstart' | 'touchmove',
       touches: {identifier: number; clientX: number; clientY: number}[],
@@ -2569,8 +2583,9 @@ describe('Toast swipe dismissal', () => {
     expect(onHide).not.toHaveBeenCalled();
   });
 
-  it('does not dismiss when another touch remains outside the Toast', () => {
+  it('does not dismiss when another touch remains outside the Toast', async () => {
     const {visualToast, onHide} = renderSwipeToast();
+    await claimLoads();
     const first = {identifier: 61, clientX: 10, clientY: 0};
     const second = {identifier: 62, clientX: 200, clientY: 200};
     const dispatchTouch = (
@@ -2609,8 +2624,9 @@ describe('Toast swipe dismissal', () => {
     );
   });
 
-  it('does not let a pen event with the same numeric ID control a touch gesture', () => {
+  it('does not let a pen event with the same numeric ID control a touch gesture', async () => {
     const {visualToast, onHide} = renderSwipeToast();
+    await claimLoads();
     const touch = {identifier: 7, clientX: 10, clientY: 0};
     const touchStart = new Event('touchstart', {
       bubbles: true,
@@ -2645,8 +2661,9 @@ describe('Toast swipe dismissal', () => {
     });
   });
 
-  it('removes native touch listeners when a Toast unmounts', () => {
+  it('removes native touch listeners when a Toast unmounts', async () => {
     const {visualToast, unmount} = renderSwipeToast();
+    await claimLoads();
     const removeListener = vi.spyOn(visualToast, 'removeEventListener');
 
     unmount();

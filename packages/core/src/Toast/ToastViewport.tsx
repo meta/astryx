@@ -47,6 +47,7 @@ import {
 } from '../Layer/modalOutlet';
 import {ToastSurface} from './Toast';
 import {ToastContext, type ToastContextValue} from './ToastContext';
+import {preloadToastSwipeClaimWhenIdle} from './lazyToastSwipeClaim';
 import type {ToastEntry, ToastPosition, ToastDismissReason} from './types';
 import {layerInsetProperties} from '../Layer/layerInset';
 import type {LayerInset} from '../Layer/LayerContext';
@@ -847,6 +848,9 @@ export function ToastViewport({
   // or the viewport container if none. Toasts are non-modal, so this only
   // moves focus in; Shift+Tab / Escape let focus leave naturally.
   const hasToasts = toasts.length > 0;
+  // Syncs with the browser's idle time. The toast swipe's code loads once the
+  // page is idle, so the first toast's swipe need not wait.
+  useEffect(() => preloadToastSwipeClaimWhenIdle(window), []);
   useEffect(() => {
     if (!hasToasts) {
       return;

@@ -362,7 +362,12 @@ export function ToastSurface({
   const dismissFromGesture = useCallback(() => {
     onDismissRef.current('manual');
   }, []);
-  const {rootRef, bindings: gestureBindings} = useToastGesture({
+  const {
+    rootRef,
+    setRootRef,
+    bindings: gestureBindings,
+    claim: gestureClaim,
+  } = useToastGesture({
     direction: gestureDirection,
     enabled: !isExiting,
     canPauseTimer: isAutoHide,
@@ -387,7 +392,7 @@ export function ToastSurface({
 
   return (
     <div
-      ref={rootRef}
+      ref={setRootRef}
       role={isLiveRegion ? (isError ? 'alert' : 'status') : undefined}
       aria-live={isLiveRegion ? (isError ? 'assertive' : 'polite') : undefined}
       aria-atomic={isLiveRegion ? 'true' : undefined}
@@ -432,6 +437,7 @@ export function ToastSurface({
           </div>
         )}
       </MediaTheme>
+      {gestureClaim}
     </div>
   );
 }

@@ -6,15 +6,20 @@
  * @file useToastGesture.ts
  * @input Uses a resolved Toast edge direction, timer pause/resume hooks,
  *   dismissal callback, enabled state, and interactive-descendant policy
- * @output Returns the Toast card root ref and touch/pen gesture bindings; the
- *   gesture host claims a finger's touch through a one-way pan
+ * @output Returns the Toast card root ref, touch/pen gesture bindings, and the
+ *   claim element the card renders. The claim is the gesture host's one-way
+ *   pan; it loads at idle or with the first toast.
  * @position Internal Toast gesture unit; attached to the Toast card root
  */
 
-import {useCallback, useEffect, useRef} from 'react';
-import type {PointerEvent as ReactPointerEvent, RefObject} from 'react';
-import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
-import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
+import {createElement, useCallback, useEffect, useRef, useState} from 'react';
+import type {
+  PointerEvent as ReactPointerEvent,
+  ReactElement,
+  RefObject,
+} from 'react';
+import type {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
+import {ToastSwipeClaim} from './lazyToastSwipeClaim';
 
 const DRAG_PROMOTION_SLOP = 8;
 const SWIPE_DISMISS_RATIO = 0.4;
@@ -78,7 +83,9 @@ interface ToastGestureBindings {
 
 interface UseToastGestureResult {
   rootRef: RefObject<HTMLDivElement | null>;
+  setRootRef: (node: HTMLDivElement | null) => void;
   bindings: ToastGestureBindings;
+  claim: ReactElement | null;
 }
 
 function swipeProgressValue(travel: number, surfaceSize: number): number {
@@ -104,38 +111,24 @@ export function useToastGesture({
   shouldIgnoreTarget,
 }: UseToastGestureOptions): UseToastGestureResult {
   const rootRef = useRef<HTMLDivElement>(null);
+  // The claim mounts after the card root is in the DOM. Its pan attaches to
+  // that element in the claim's own commit.
+  const [hasRoot, setHasRoot] = useState(false);
+  const setRootRef = useCallback((node: HTMLDivElement | null) => {
+    rootRef.current = node;
+    setHasRoot(node != null);
+  }, []);
   const gestureRef = useRef<GestureState | null>(null);
   const shouldIgnoreTargetRef = useRef(shouldIgnoreTarget);
   shouldIgnoreTargetRef.current = shouldIgnoreTarget;
 
-  // The gesture host's pan only claims the touch and never begins. This hook
-  // draws the swipe.
-  const claim = useGestureRecognizer(
-    rootRef,
-    () =>
-      new PanGestureRecognizer({
-        name: 'toast-swipe',
-        direction: direction === 1 ? 'down' : 'up',
-        firstMoveDecides: true,
-        maximumNumberOfTouches: 1,
-        hysteresis: Number.POSITIVE_INFINITY,
-        cancelsTouchesInView: false,
-        shouldReceiveTouch: (_recognizer, touch) => {
-          const root = rootRef.current;
-          return (
-            touch.pointerType === 'touch' &&
-            root != null &&
-            !shouldIgnoreTargetRef.current(touch.target as EventTarget, root)
-          );
-        },
-      }),
-    undefined,
-    {isEnabled: enabled, manageStyle: false},
-  );
-  // Syncs the gesture host's pan with the edge this toast dismisses toward.
-  useEffect(() => {
-    claim.setDirection(direction === 1 ? 'down' : 'up');
-  }, [claim, direction]);
+  // The gesture host's pan claims a finger's touch for the swipe, and this
+  // hook draws the swipe. The pan's code loads at idle or with the first
+  // toast.
+  const claimRef = useRef<PanGestureRecognizer | null>(null);
+  const setClaim = useCallback((claim: PanGestureRecognizer | null) => {
+    claimRef.current = claim;
+  }, []);
 
   const resetGesture = useCallback(
     (shouldResume: boolean) => {
@@ -404,6 +397,11 @@ export function useToastGesture({
         resetGesture(true);
         return;
       }
+      // The gesture host holds only a touch it saw begin. Until the pan
+      // loads, the page keeps every touch.
+      if (claimRef.current == null) {
+        return;
+      }
       const touch = event.changedTouches[0];
       if (touch != null) {
         beginGesture(point(touch, event), event.target);
@@ -416,7 +414,7 @@ export function useToastGesture({
       }
       // The gesture host's pan decides the touch from its first move. Once
       // the pan fails, the page has the touch, so the swipe ends too.
-      if (gestureRef.current != null && claim.state === 'failed') {
+      if (gestureRef.current != null && claimRef.current?.state === 'failed') {
         resetGesture(true);
         return;
       }
@@ -449,10 +447,11 @@ export function useToastGesture({
       root.removeEventListener('touchend', handleTouchEnd);
       root.removeEventListener('touchcancel', handleTouchCancel);
     };
-  }, [beginGesture, claim, enabled, endGesture, moveGesture, resetGesture]);
+  }, [beginGesture, enabled, endGesture, moveGesture, resetGesture]);
 
   return {
     rootRef,
+    setRootRef,
     bindings: {
       onPointerDown: handlePointerDown,
       onPointerMove: handlePointerMove,
@@ -460,5 +459,14 @@ export function useToastGesture({
       onPointerCancel: handlePointerCancel,
       onLostPointerCapture: handlePointerCancel,
     },
+    claim: hasRoot
+      ? createElement(ToastSwipeClaim, {
+          rootRef,
+          direction,
+          isEnabled: enabled,
+          shouldIgnoreTargetRef,
+          onClaim: setClaim,
+        })
+      : null,
   };
 }
