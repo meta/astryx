@@ -1453,7 +1453,7 @@ component LayoutPanel(props: LayoutPanelProps)
   prop label?: string
   prop padding?: SpacingStep
   prop ref?: React.Ref<HTMLDivElement>
-  prop resizable?: ResizableProps
+  prop resizable?: ResizableRegion | ResizableProps
   prop role?: AriaRole
   prop width?: SizeValue
   prop xstyle?: StyleXStyles
@@ -1932,7 +1932,7 @@ component ResizeHandle(props: ResizeHandleProps)
   prop pillPlacement?: PillPlacement = 'auto'
   prop position?: 'inline' | 'overlay' = 'inline'
   prop ref?: React.Ref<HTMLDivElement>
-  prop resizable?: ResizableProps
+  prop resizable?: ResizableRegion | ResizableProps
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component ScrollableArea(props: ScrollableAreaProps)
@@ -2076,7 +2076,7 @@ component SideNav(props: SideNavProps)
   prop handleRef?: React.Ref<SideNavImperativeCollapseHandle> @deprecated
   prop header?: ReactNode
   prop ref?: React.Ref<HTMLElement>
-  prop resizable?: boolean | ResizableConfig = false
+  prop resizable?: boolean | ResizableConfig | ResizableRegion = false
   prop style?: React.CSSProperties
   prop topContent?: ReactNode
   prop xstyle?: StyleXStyles

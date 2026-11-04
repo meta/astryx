@@ -27,7 +27,11 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useScrollRegionProps} from '../hooks/useScrollRegionProps';
 import {mergeProps} from '../utils';
 import type {SizeValue, SpacingStep} from '../utils/types';
-import type {ResizableProps} from '../Resizable/useResizable';
+import {
+  resizablePropsOf,
+  type ResizableProps,
+  type ResizableRegion,
+} from '../Resizable/useResizable';
 import {
   createResizablePaneLink,
   resizeHandleBeside,
@@ -176,20 +180,20 @@ export interface LayoutPanelProps extends BaseProps<HTMLDivElement> {
   width?: SizeValue;
 
   /**
-   * Resize props from `useResizable()`. When provided, the panel width
-   * is driven by the hook and a resize handle should be placed adjacent
-   * to this panel.
+   * The output of `useResizable()`, or its `props`. When provided, the panel
+   * width is driven by the hook and a resize handle should be placed
+   * adjacent to this panel.
    *
    * @example
    * ```
-   * const sidebar = useResizable({ defaultSize: 250, minSize: 200 });
-   * <LayoutPanel resizable={sidebar.props}>
+   * const resizable = useResizable({ defaultSize: 250, minSize: 200 });
+   * <LayoutPanel resizable={resizable}>
    *   <Navigation />
    * </LayoutPanel>
-   * <ResizeHandle resizable={sidebar.props} />
+   * <ResizeHandle resizable={resizable} />
    * ```
    */
-  resizable?: ResizableProps;
+  resizable?: ResizableRegion | ResizableProps;
 }
 
 /**
@@ -228,13 +232,15 @@ export function LayoutPanel({
   padding,
   role,
   width,
-  resizable,
+  resizable: resizableValue,
   xstyle,
   className,
   style,
   ref,
   ...props
 }: LayoutPanelProps) {
+  const resizable =
+    resizableValue == null ? undefined : resizablePropsOf(resizableValue);
   const area = use(LayoutAreaContext);
   const {hasHeader, hasFooter} = use(LayoutSlotsContext);
 

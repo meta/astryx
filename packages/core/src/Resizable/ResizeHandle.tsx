@@ -28,7 +28,9 @@ import {mergeProps, rtlStyles} from '../utils';
 import {
   getCollapseControls,
   getEffectiveMaxPx,
+  resizablePropsOf,
   type ResizableProps,
+  type ResizableRegion,
 } from './useResizable';
 import {
   createResizeGesture,
@@ -378,8 +380,8 @@ export interface ResizeHandleProps extends Omit<
    */
   label?: string;
 
-  /** Resize props from useResizable region. */
-  resizable?: ResizableProps;
+  /** The output of `useResizable()`, or its `props`. */
+  resizable?: ResizableRegion | ResizableProps;
 
   /** Custom handle content. Overrides the default pill. */
   children?: ReactNode;
@@ -395,7 +397,7 @@ export interface ResizeHandleProps extends Omit<
  * @example
  * ```
  * <ResizeHandle
- *   resizable={sidebar.props}
+ *   resizable={resizable}
  *   direction="horizontal"
  *   hasDivider />
  * ```
@@ -410,13 +412,15 @@ export function ResizeHandle({
   isAlwaysVisible = true,
   pillPlacement = 'auto',
   label: labelFromProps,
-  resizable,
+  resizable: resizableValue,
   children,
   xstyle,
   className,
   ref,
   ...props
 }: ResizeHandleProps) {
+  const resizable =
+    resizableValue == null ? undefined : resizablePropsOf(resizableValue);
   const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.resizable.handle.label');
   const handleRef = useRef<HTMLDivElement>(null);
