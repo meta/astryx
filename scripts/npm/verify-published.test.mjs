@@ -260,7 +260,7 @@ describe('verification window', () => {
         '--window-ms',
         '0',
       ],
-      {cwd: root, encoding: 'utf8'},
+      {cwd: root, encoding: 'utf8', timeout: 20_000},
     );
     expect(result.status).toBe(2);
     expect(result.stderr).toContain('not yet readable on the registry');
@@ -280,7 +280,7 @@ describe('verification window', () => {
         '--window-ms',
         '8m',
       ],
-      {cwd: root, encoding: 'utf8'},
+      {cwd: root, encoding: 'utf8', timeout: 20_000},
     );
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(
