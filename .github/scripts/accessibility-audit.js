@@ -13,8 +13,9 @@
  *   --fail-on-new (exit 1 when violations not present in the baseline exist)
  *   --update-baseline (rewrite the baseline file from this run's report)
  * @output JSON report with accessibility violations; with --baseline, a gate
- *   summary (new / baselined / resolved) on stdout and a non-zero exit code
- *   when --fail-on-new finds regressions. Diff logic lives in
+ *   summary (new / baselined / resolved) on stdout, a warning annotation on
+ *   GitHub Actions when baseline entries no longer occur, and a non-zero exit
+ *   code when --fail-on-new finds regressions. Diff logic lives in
  *   lib/a11y-baseline.js. Pages are scanned with animations held at their end
  *   state.
  * @position Blocking PR accessibility audit; scoped stories share canonical
@@ -35,6 +36,7 @@ const {
   buildBaseline,
   diffAgainstBaseline,
   formatDiffSummary,
+  formatResolvedWarning,
   storyKey,
 } = require('./lib/a11y-baseline');
 const {waitForStoryReadiness} = require('./lib/a11y-story-readiness');
@@ -689,6 +691,10 @@ function applyBaselineGate(report) {
   const baseline = loadBaselineFile(baselineFile);
   const diff = diffAgainstBaseline(report, baseline);
   console.log(formatDiffSummary(diff, { baselinePath: baselineFile }));
+  const resolvedWarning = formatResolvedWarning(diff, { baselinePath: baselineFile });
+  if (resolvedWarning && process.env.GITHUB_ACTIONS === 'true') {
+    console.log(resolvedWarning);
+  }
 
   if (diff.newViolations.length > 0 && failOnNew) {
     console.error(
