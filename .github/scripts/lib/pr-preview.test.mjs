@@ -1544,18 +1544,19 @@ describe('CI impact in the report', () => {
 
   it('reaches the comment for a pull request that changes CI, with the merge base as before', async () => {
     let seen;
+    let impactText;
     const {github} = await reconcile({
       extendGithub: ciChange,
       execute: (_node, args) => {
         seen = args;
         const file = args[args.indexOf('--ci-impact') + 1];
-        return `## PR Analysis Report\n${fs.readFileSync(file, 'utf8')}`;
+        impactText = fs.readFileSync(file, 'utf8');
+        return `## PR Analysis Report\n${impactText}`;
       },
     });
     expect(seen).toContain('--ci-impact');
-    const impact = JSON.parse(
-      fs.readFileSync(seen[seen.indexOf('--ci-impact') + 1], 'utf8'),
-    );
+    // The input folder is removed once the report renders.
+    const impact = JSON.parse(impactText);
     expect(impact.flags).toContain('extra moves onto a non-standard runner');
     expect(github.rest.repos.getContent).toHaveBeenCalledWith(
       expect.objectContaining({ref: 'c'.repeat(40)}),
@@ -1563,7 +1564,7 @@ describe('CI impact in the report', () => {
   });
 
   it('names a composite-action-only change as not measured', async () => {
-    let seen;
+    let impactText;
     await reconcile({
       extendGithub: github => {
         ciChange(github);
@@ -1572,16 +1573,47 @@ describe('CI impact in the report', () => {
         }));
       },
       execute: (_node, args) => {
-        seen = args;
+        impactText = fs.readFileSync(
+          args[args.indexOf('--ci-impact') + 1],
+          'utf8',
+        );
         return '## PR Analysis Report\n';
       },
     });
-    const impact = JSON.parse(
-      fs.readFileSync(seen[seen.indexOf('--ci-impact') + 1], 'utf8'),
-    );
+    // The input folder is removed once the report renders.
+    const impact = JSON.parse(impactText);
     expect(impact.unmeasuredFiles).toEqual([
       '.github/actions/setup/action.yml',
     ]);
+  });
+
+  it("removes the generator's input folder after the report renders", async () => {
+    let folder;
+    await reconcile({
+      extendGithub: ciChange,
+      execute: (_node, args) => {
+        folder = path.dirname(args[args.indexOf('--ci-impact') + 1]);
+        expect(fs.existsSync(folder)).toBe(true);
+        return '## PR Analysis Report\n';
+      },
+    });
+    expect(folder).toMatch(/pr-report-/);
+    expect(fs.existsSync(folder)).toBe(false);
+  });
+
+  it("removes the generator's input folder when the generator fails", async () => {
+    let folder;
+    const {result} = await reconcile({
+      extendGithub: ciChange,
+      createIfMissing: true,
+      execute: (_node, args) => {
+        folder = path.dirname(args[args.indexOf('--ci-impact') + 1]);
+        throw new Error('malformed analysis');
+      },
+    });
+    expect(result.body).toContain('trusted analysis is unavailable');
+    expect(folder).toMatch(/pr-report-/);
+    expect(fs.existsSync(folder)).toBe(false);
   });
 
   it('passes no impact for a pull request that does not change CI', async () => {

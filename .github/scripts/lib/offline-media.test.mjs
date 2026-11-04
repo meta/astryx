@@ -6,7 +6,11 @@ import {createRequire} from 'node:module';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 
 const require = createRequire(import.meta.url);
-const {isRemoteImage, routeRemoteImages} = require('./offline-media.js');
+const {
+  isRemoteImage,
+  isRemoteNonImage,
+  routeRemoteImages,
+} = require('./offline-media.js');
 
 const ORIGIN = 'http://localhost:6006';
 
@@ -28,6 +32,37 @@ describe('isRemoteImage', () => {
     [{url: 'data:image/png;base64,AAAA', resourceType: 'image'}, false],
   ])('%j → %s', (request, expected) => {
     expect(isRemoteImage(request, ORIGIN)).toBe(expected);
+  });
+});
+
+describe('isRemoteNonImage', () => {
+  it.each([
+    [{url: 'https://fonts.example.com/font.woff2', resourceType: 'font'}, true],
+    [{url: 'https://api.example.com/data', resourceType: 'fetch'}, true],
+    [{url: 'https://cdn.example.com/app.js', resourceType: 'script'}, true],
+    // A remote image gets the stand-in, so it is not blocked.
+    [{url: 'https://picsum.photos/400', resourceType: 'image'}, false],
+    [{url: 'https://placehold.co/600x400.png', resourceType: 'fetch'}, false],
+    // The story origin, the loopback host and URLs with no network pass.
+    [{url: `${ORIGIN}/iframe.html`, resourceType: 'document'}, false],
+    [{url: 'http://127.0.0.1:9000/fixture.js', resourceType: 'script'}, false],
+    [{url: 'http://[::1]:9000/fixture.js', resourceType: 'script'}, false],
+    [{url: 'http://localhost:9000/a.css', resourceType: 'stylesheet'}, false],
+    [{url: 'data:text/css,a{}', resourceType: 'stylesheet'}, false],
+    [{url: 'blob:http://localhost:6006/1', resourceType: 'fetch'}, false],
+  ])('%j → %s', (request, expected) => {
+    expect(isRemoteNonImage(request, ORIGIN)).toBe(expected);
+  });
+
+  it('with no story origin, only the loopback host is local', () => {
+    const request = {url: `${ORIGIN}/iframe.html`, resourceType: 'document'};
+    expect(isRemoteNonImage(request, undefined)).toBe(false);
+    expect(
+      isRemoteNonImage(
+        {url: 'https://stories.example.com/', resourceType: 'document'},
+        undefined,
+      ),
+    ).toBe(true);
   });
 });
 
@@ -67,6 +102,13 @@ describe.runIf(chromiumInstalled)('routeRemoteImages in a real browser', () => {
     // A story page whose only image lives on the stalling host.
     server = http.createServer((request, response) => {
       response.setHeader('content-type', 'text/html');
+      if (request.url === '/with-script') {
+        // A page that also loads a script from the stalling host.
+        response.end(
+          `<!doctype html><img id="photo" alt="photo" src="http://${REMOTE_HOST}/photo.jpg"><script src="http://${REMOTE_HOST}/app.js"></script>`,
+        );
+        return;
+      }
       response.end(
         `<!doctype html><img id="photo" alt="photo" src="http://${REMOTE_HOST}/photo.jpg">`,
       );
@@ -96,6 +138,45 @@ describe.runIf(chromiumInstalled)('routeRemoteImages in a real browser', () => {
       });
       expect(elapsed).toBeLessThan(5_000);
       expect(image).toEqual({complete: true, width: 400});
+    } finally {
+      await browser.close();
+    }
+  }, 30_000);
+
+  it('with abortOther, a remote script fails at once and the page still loads', async () => {
+    const browser = await launch();
+    try {
+      const context = await browser.newContext();
+      await routeRemoteImages(context, origin, {abortOther: true});
+      const page = await context.newPage();
+      const failed = [];
+      page.on('requestfailed', request => failed.push(request.url()));
+      const started = Date.now();
+      await page.goto(`${origin}/with-script`, {
+        waitUntil: 'load',
+        timeout: 10_000,
+      });
+      const elapsed = Date.now() - started;
+      const width = await page.evaluate(
+        () => document.getElementById('photo').naturalWidth,
+      );
+      expect(elapsed).toBeLessThan(5_000);
+      expect(width).toBe(400);
+      expect(failed).toEqual([`http://${REMOTE_HOST}/app.js`]);
+    } finally {
+      await browser.close();
+    }
+  }, 30_000);
+
+  it('without abortOther, the remote script still holds the page', async () => {
+    const browser = await launch();
+    try {
+      const context = await browser.newContext();
+      await routeRemoteImages(context, origin);
+      const page = await context.newPage();
+      await expect(
+        page.goto(`${origin}/with-script`, {waitUntil: 'load', timeout: 3_000}),
+      ).rejects.toThrow(/Timeout/);
     } finally {
       await browser.close();
     }

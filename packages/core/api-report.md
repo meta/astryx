@@ -570,6 +570,7 @@ component CheckboxList(props: CheckboxListProps)
   prop hasDividers?: boolean = false
   prop isDisabled?: boolean = false
   prop isLabelHidden?: boolean = false
+  prop isOptional?: boolean = false
   prop isReadOnly?: boolean = false
   prop label: string
   prop onChange?: (values: string[]) => void
@@ -640,6 +641,7 @@ component CodeBlock(props: CodeBlockProps)
   prop onCopy?: () => void
   prop ref?: React.Ref<HTMLPreElement>
   prop size?: 'sm' | 'md'
+  prop startLineNumber?: number = 1
   prop syntaxTheme?: SyntaxThemeDefinition
   prop title?: string
   prop tokenizer?: (code: string, language: string) => { type: string; start: number; end: number }[] @deprecated
@@ -3344,7 +3346,8 @@ const durationDefaults: object
   --duration-slow-min: '730ms'
   --duration-slow: '975ms'
   --duration-slow-max: '1300ms'
-const durationVars: stylex.VarGroup<Readonly<{ readonly '--duration-fast-min': "130ms"; readonly '--duration-fast': "175ms"; readonly '--duration-fast-max': "230ms"; readonly '--du … #4dd3e52f
+  --duration-exit: 'var(--duration-fast)'
+const durationVars: stylex.VarGroup<Readonly<{ readonly '--duration-fast-min': "130ms"; readonly '--duration-fast': "175ms"; readonly '--duration-fast-max': "230ms"; readonly '--du … #f2df5593
 const easeDefaults: object
   --ease-standard: 'cubic-bezier(0.24, 1, 0.4, 1)'
   --ease-entrance: 'cubic-bezier(0.24, 1, 0.4, 1)'
@@ -6164,6 +6167,7 @@ interface UseTableRowExpansionConfig<T extends Record<string, unknown>>
   expandedKeys: Set<string>
   getIsItemExpandable?: (item: T) => boolean = all rows expandable
   getRowKey: (item: T) => string
+  getRowLabel?: (item: T) => string
   hasRowClickExpansion?: boolean = false (only the chevron toggles expansion).
   onToggle: (key: string) => void
   panelVariant?: 'muted' | 'transparent' = 'transparent'
@@ -6217,6 +6221,7 @@ interface UseTableStickyColumnsConfig
   endKeys?: string[]
   startKeys?: string[]
 interface UseTableTreeDataConfig<T extends Record<string, unknown>>
+  getRowLabel?: (item: T) => string
   getRowMeta: (item: T) => TableTreeRowMeta | undefined
   hasExpandAllControl?: boolean = false
   hasExpandableRows: boolean
@@ -9903,6 +9908,7 @@ var --container-padding-block-end (./astryx.css)
 var --container-padding-block-start (./astryx.css)
 var --container-padding-inline-end (./astryx.css)
 var --container-padding-inline-start (./astryx.css)
+var --duration-exit (./astryx.css)
 var --duration-fast (./astryx.css)
 var --duration-fast-max (./astryx.css)
 var --duration-fast-min (./astryx.css)

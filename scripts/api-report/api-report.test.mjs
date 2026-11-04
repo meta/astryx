@@ -2,10 +2,10 @@
 
 /**
  * @file Tests for the API report generator and the API changes renderer.
- * @input  `__fixtures__/repo`: a built fixture package with every row kind, an
- *         overloaded component, an `./internal/*` entry point, a stylesheet,
- *         a component doc with theming targets, a private package, and a
- *         public-attribute record
+ * @input  `__fixtures__/repo`: a built fixture package with every row kind,
+ *         overloaded components, hooks and functions, an `./internal/*` entry
+ *         point, a stylesheet, a component doc with theming targets, a
+ *         private package, and a public-attribute record
  * @output Vitest assertions on report content, order, determinism, and change rows
  * @position scripts/api-report — guards architecture:public-component-api INV24
  */
@@ -111,6 +111,35 @@ describe('generateReport', () => {
   it('lists an overloaded component as internal when its row is', () => {
     expect(report).toMatch(/^component Pill\(props: PillProps\) @internal$/m);
     expect(report).toContain('internal Pill via .');
+  });
+
+  it("tags each overload of a hook or a function with its own declaration's tags", () => {
+    expect(report).toContain(
+      [
+        'hook useChipMode',
+        "  overload (mode: 'a') => string",
+        '  overload () => string @deprecated',
+        "  overload (mode: 'b') => number",
+      ].join('\n'),
+    );
+    expect(report).toContain(
+      [
+        'function parseChip',
+        '  overload (label: string, legacy: true) => string @deprecated',
+        '  overload (label: string) => string',
+      ].join('\n'),
+    );
+  });
+
+  it('tags the row of an overloaded hook or function only with the tags every overload has', () => {
+    expect(report).toMatch(/^function parseChip$/m);
+    expect(report).toContain(
+      [
+        'function legacyChip @deprecated',
+        '  overload (label: string) => string @deprecated',
+        '  overload (label: string, size: ChipSize) => string @deprecated',
+      ].join('\n'),
+    );
   });
 
   it('leaves out ./internal/*, commented-out custom properties, and unlisted attributes', () => {
