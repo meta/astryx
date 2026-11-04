@@ -534,9 +534,10 @@ export function sharedEditorTheme(): EditorThemeClasses {
   const block = (...styles: Array<stylex.StyleXStyles>): string =>
     stylex.props(...styles, editorTheme.blockDirection).className ?? '';
   // A class for a container — a list, a table and its parts — which orders
-  // its contents in the document's direction whatever they hold, and
-  // unconditionally, so a `dir` that arrives with a paste or an older
-  // stored document cannot turn the container around.
+  // its contents in its parent's direction: the document's at the top level,
+  // its wrapper item's when nested. It takes that direction whatever the
+  // contents hold, so a `dir` that arrives with a paste or an older stored
+  // document cannot turn the container around.
   const container = (...styles: Array<stylex.StyleXStyles>): string =>
     stylex.props(...styles, editorTheme.surfaceDirection).className ?? '';
   const className = (style: stylex.StyleXStyles): string =>

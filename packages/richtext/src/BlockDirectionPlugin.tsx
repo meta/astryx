@@ -4,40 +4,13 @@
 
 /**
  * @file BlockDirectionPlugin.tsx
- * @input Uses @lexical/react (composer context), lexical's `getTextDirection`,
- *   and the prose container classes.
+ * @input Uses @lexical/react (composer context) and the prose container
+ *   classes, and classifies text with `firstStrongDirection` below.
  * @output Exports BlockDirectionPlugin, which gives each prose container an
  *   explicit `dir` taken from its own text, and registerBlockDirection for
  *   a caller driving a Lexical editor directly.
  * @position Rendered by RichTextEditor and RichTextView inside the composer,
  *   so a document reads the same way in both.
- *
- * Lexical leaves a top-level block's `dir` as `auto` and writes none below
- * that. Neither state can say "this block has no direction of its own":
- * under `auto`, digits, an image and an empty block all resolve
- * left-to-right, exactly like English. An English list item in a
- * right-to-left document is then a left-to-right run in a right-to-left
- * box — it flushes right and its arrow keys move the caret the wrong way.
- *
- * Writing the direction out resolves both. A prose container whose own text
- * is strongly directional gets `dir="ltr"` or `dir="rtl"` and reads that way
- * wherever it sits; one with no strong character is left alone, so it
- * follows the document. Lexical serializes the value, so a stored document
- * reopens the way it was written, and `$setDirectionFromDOM` already
- * preserves the same attribute when HTML is pasted in.
- *
- * Only a container read as one piece of prose takes part, and each one takes
- * part on its own: a paragraph, a heading, a quote, and a list item, at any
- * depth. A paragraph inside a table cell is prose too, so a cell of English
- * in a right-to-left document reads left-to-right.
- *
- * Their containers are not prose and keep `dir="auto"`, which the theme
- * styles as the document's direction: a list, whose markers and indent order
- * the items; a table, whose columns are read in the document's order; and a
- * fenced code block, which is several lines under one element, where the
- * theme sets `unicode-bidi: plaintext` so each line reads on its own. That
- * last one is the single place RichText and core `Markdown` disagree: core
- * reorders a whole code block to the document's direction.
  *
  * SYNC: When modified, keep RichTextEditor.tsx and RichTextView.tsx in sync.
  */
@@ -63,8 +36,17 @@ import {
 
 /**
  * The containers read as one piece of prose, so one direction covers the
- * whole of each. A list, a fenced code block and a table are not here: they
- * hold several items, lines or cells that are read on their own terms.
+ * whole of each, at any depth — a paragraph inside a table cell included.
+ *
+ * Lexical leaves a top-level block at `dir="auto"` and writes none below
+ * that, and neither state can say "this block has no direction of its own":
+ * under `auto`, digits, an image and an empty block all resolve
+ * left-to-right, exactly like English. Writing the direction out separates
+ * the two, and Lexical serializes it, so a stored document reopens the way
+ * it was written.
+ *
+ * A list, a fenced code block and a table are not here: they hold several
+ * items, lines or cells that are read on their own terms.
  */
 const PROSE_NODES: ReadonlyArray<Klass<ElementNode>> = [
   ParagraphNode,
@@ -79,6 +61,10 @@ const PROSE_NODES: ReadonlyArray<Klass<ElementNode>> = [
  * pasted HTML (`$setDirectionFromDOM`) or an older stored document, which
  * would turn a list's markers or a table's columns around; clearing it keeps
  * the stored state saying what the document shows.
+ *
+ * A fenced code block is the one place this surface and core `Markdown`
+ * disagree: the theme gives it `unicode-bidi: plaintext` so each line reads
+ * its own way, where core reorders the whole block to the document's.
  */
 const CONTAINER_NODES: ReadonlyArray<Klass<ElementNode>> = [
   ListNode,
@@ -195,18 +181,28 @@ function $writeOwnDirection(node: LexicalNode): void {
   }
 }
 
-/** The nearest prose container at or above this node, if there is one. */
-function $proseContainer(node: LexicalNode): ElementNode | null {
+/**
+ * Every prose container at or above this node, nearest first.
+ *
+ * A nesting wrapper takes its direction from the text under it, so a
+ * keystroke deep in a list changes its own item and every wrapper above it.
+ * All of them have to be written inside the keystroke's own update: the
+ * sweep that follows is tagged `history-merge`, which `OnChangePlugin`
+ * does not report, so a wrapper left to the sweep would hold a stale
+ * direction in the value a caller stores until the next edit.
+ */
+function $proseContainers(node: LexicalNode): ElementNode[] {
+  const found: ElementNode[] = [];
   for (
     let current: LexicalNode | null = node;
     current !== null;
     current = current.getParent()
   ) {
     if ($isOwnDirectionBlock(current)) {
-      return current;
+      found.push(current);
     }
   }
-  return null;
+  return found;
 }
 
 /** Every node whose direction this plugin owns, in document order. */
@@ -236,10 +232,7 @@ export function registerBlockDirection(editor: LexicalEditor): () => void {
     // and so in that keystroke's own history entry: a later `editor.update`
     // would be a history step of its own, and undo would bounce off it.
     editor.registerNodeTransform(TextNode, node => {
-      const container = $proseContainer(node);
-      if (container !== null) {
-        $writeOwnDirection(container);
-      }
+      $proseContainers(node).forEach($writeOwnDirection);
     }),
     // A container that gains or loses its text without a text node of its
     // own being dirtied — a new empty paragraph, a heading conversion, a
@@ -283,6 +276,8 @@ export function registerBlockDirection(editor: LexicalEditor): () => void {
  */
 export function BlockDirectionPlugin(): null {
   const [editor] = useLexicalComposerContext();
+  // Registers the direction transforms and listener on the Lexical editor.
+  // The teardown removes them.
   useEffect(() => registerBlockDirection(editor), [editor]);
   return null;
 }

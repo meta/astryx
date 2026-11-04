@@ -207,6 +207,24 @@ describe('a top-level block carries its own direction (spec:AST-061 FR6)', () =>
     expect(firstStrongDirection('123 456')).toBeNull();
   });
 
+  it('writes every prose ancestor, so a wrapper never holds a stale direction', async () => {
+    const {container} = render(
+      <RichTextView
+        value={markdownToEditorStateJSON(
+          '- \u05e9\u05dc\u05d5\u05dd\n  - \u05e2\u05d5\u05dc\u05dd\n',
+        )}
+      />,
+    );
+    await waitFor(() => expect(container.querySelector('ul')).not.toBeNull());
+    // The wrapper is written from the text of everything under it, in the
+    // same update as the item that holds the text. Left to the follow-up
+    // sweep it would be tagged history-merge, which OnChangePlugin does not
+    // report, so a caller's stored value would lag by one edit.
+    expect(
+      [...container.querySelectorAll('li')].map(li => li.getAttribute('dir')),
+    ).toEqual(['rtl', 'rtl', 'rtl']);
+  });
+
   it('gives a nesting list item a direction, so its step follows its text', async () => {
     const {container} = render(
       <RichTextView
