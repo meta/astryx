@@ -288,7 +288,10 @@ for (const story of [LIST_ROW, SCROLLER_ROW, TREE_ROW]) {
     await page.waitForTimeout(150);
     const frames = await cast.stop();
     const pixels = await samplePixel(page, frames, probe);
-    const rest = pixels[0].value;
+    // The last frame is the row at rest: the release ended inside the block.
+    // The first frame can already show the press, because a row outside a
+    // scroller paints in the frame the finger lands.
+    const rest = pixels[pixels.length - 1].value;
     const pressedFrames = pixels.filter(p => p.t < release.from);
     const pressed = Math.min(...pressedFrames.map(p => p.value));
     const strength = (v: number) => (rest - v) / (rest - pressed);
