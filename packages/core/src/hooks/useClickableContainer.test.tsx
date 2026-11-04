@@ -273,12 +273,26 @@ describe('onPointerDown', () => {
     expect(cancelPress).toHaveBeenCalledWith(screen.getByTestId('container'));
   });
 
-  it('leaves a mouse or pen press to the paint it has today', () => {
+  it('marks the container for a mouse press on a nested control, until it ends', () => {
     render(<Harness />);
+    const container = screen.getByTestId('container');
     const nested = screen.getByRole('button', {name: 'Nested'});
-    fireEvent.pointerDown(nested, {pointerType: 'mouse'});
-    fireEvent.pointerDown(nested, {pointerType: 'pen'});
+    fireEvent.pointerDown(nested, {pointerType: 'mouse', button: 0});
     expect(cancelPress).not.toHaveBeenCalled();
+    expect(container.hasAttribute('data-astryx-nested-press')).toBe(true);
+    fireEvent.pointerUp(nested, {pointerType: 'mouse', button: 0});
+    expect(container.hasAttribute('data-astryx-nested-press')).toBe(false);
+  });
+
+  it('leaves the container unmarked for a secondary-button press on a nested control', () => {
+    render(<Harness />);
+    fireEvent.pointerDown(screen.getByRole('button', {name: 'Nested'}), {
+      pointerType: 'mouse',
+      button: 2,
+    });
+    expect(
+      screen.getByTestId('container').hasAttribute('data-astryx-nested-press'),
+    ).toBe(false);
   });
 
   it('leaves a finger press on the surface, or in a disabled container, alone', () => {

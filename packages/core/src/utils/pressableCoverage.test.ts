@@ -23,7 +23,8 @@
  *    marker is marked, since the controller writes `data-astryx-press` on the
  *    element carrying the scope.
  *  - A styles-only module (`*.stylex.ts`) is covered when every file that
- *    imports it is marked.
+ *    composes one of its `stylex.create` exports is marked. A file that
+ *    imports only its plain functions paints nothing from it.
  */
 
 import fs from 'node:fs';
@@ -92,6 +93,31 @@ function referrers(name: string, except: string): string[] {
     .map(([file]) => file);
 }
 
+/** The names a module exports from `stylex.create`. */
+function styleExports(file: string): string[] {
+  const text = source.get(file) ?? '';
+  return [...text.matchAll(/export const (\w+) = stylex\.create\(/g)].map(
+    m => m[1],
+  );
+}
+
+/** Whether `text` imports at least one of `names` from the module `file`. */
+function importsAnyOf(text: string, file: string, names: string[]): boolean {
+  const stem = path.basename(file).replace(/\.tsx?$/, '');
+  for (const m of text.matchAll(/import\s*\{([^}]*)\}\s*from\s+'([^']+)'/g)) {
+    if (!m[2].endsWith(stem)) {
+      continue;
+    }
+    const imported = m[1]
+      .split(',')
+      .map(part => part.trim().split(/\s+as\s+/)[0]);
+    if (imported.some(name => names.includes(name))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** Files that import the module at `file` (by its relative specifier). */
 function importers(file: string): string[] {
   const stem = file.replace(/\.tsx?$/, '');
@@ -122,6 +148,26 @@ describe('every surface that paints a press is reachable by the touch press cont
     expect(pressArmFiles.length).toBeGreaterThan(25);
   });
 
+  it('counts a file that imports a style export, and not one that imports only a function', () => {
+    const module = 'privateAttributes/nestedPress.stylex.ts';
+    const names = styleExports(module);
+    expect(names).toContain('nestedPressStyles');
+    expect(
+      importsAnyOf(
+        "import {nestedPressStyles} from '../privateAttributes/nestedPress.stylex';",
+        module,
+        names,
+      ),
+    ).toBe(true);
+    expect(
+      importsAnyOf(
+        "import {markNestedPress} from '../privateAttributes/nestedPress.stylex';",
+        module,
+        names,
+      ),
+    ).toBe(false);
+  });
+
   it.each(pressArmFiles)(
     '%s carries the marker, or its scope owners do',
     file => {
@@ -135,8 +181,13 @@ describe('every surface that paints a press is reachable by the touch press cont
       if (file.endsWith('.stylex.ts')) {
         // A styles-only module: its arms land on whichever component composes
         // it, so each importer must be a marked surface.
-        const users = importers(file);
-        expect(users, `${file} is imported by nobody`).not.toHaveLength(0);
+        const styles = styleExports(file);
+        const users = importers(file).filter(
+          user =>
+            styles.length === 0 ||
+            importsAnyOf(source.get(user) ?? '', file, styles),
+        );
+        expect(users, `${file} is composed by nobody`).not.toHaveLength(0);
         for (const user of users) {
           if (!isMarked(user)) {
             problems.push(`${user} composes ${file} unmarked`);
