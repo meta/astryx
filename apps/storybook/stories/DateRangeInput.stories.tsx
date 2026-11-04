@@ -616,7 +616,7 @@ function RangeCalendarField({
 /**
  * `calendar` sets the calendar the trigger text and the popover calendar
  * show. The range stays Gregorian ISO dates. Calendars other than Gregorian,
- * Buddhist, ROC, and Japanese need `Temporal`.
+ * Buddhist, Minguo, and Japanese need `Temporal`.
  */
 export const CalendarSystems: Story = {
   render: () => (

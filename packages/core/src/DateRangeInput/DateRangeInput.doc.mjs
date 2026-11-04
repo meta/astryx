@@ -169,7 +169,7 @@ export const docs = {
       name: 'calendar',
       type: "'gregory' | 'iso8601' | 'buddhist' | 'roc' | 'japanese' | 'persian' | 'indian' | 'hebrew' | 'chinese' | 'dangi' | 'coptic' | 'ethiopic' | 'ethioaa' | 'islamic-civil' | 'islamic-tbla' | 'islamic-umalqura'",
       description:
-        "The calendar the trigger text and the popover calendar show, such as persian, hebrew, or buddhist. value, onChange, min, max, and presets stay Gregorian ISO dates. The field has no typed entry. Calendars other than gregory, iso8601, buddhist, roc, and japanese need Temporal, native or a polyfill the application loads; without it the field shows Gregorian dates and warns in development. Chinese and Korean month starts come from the runtime's Temporal; when you render on the server, load the same Temporal implementation on the server and in the browser.",
+        "The calendar the trigger text and the popover calendar show, such as persian, hebrew, or buddhist. value, onChange, min, max, and presets stay Gregorian ISO dates. The field has no typed entry. Calendars other than gregory, iso8601, buddhist, roc, and japanese need Temporal, native or a polyfill the application loads; without it the field shows Gregorian dates and warns in development. Month starts in the Chinese and Dangi calendars come from the runtime's Temporal; when you render on the server, load the same Temporal implementation on the server and in the browser.",
       default: "the InternationalizationProvider's calendar, else 'gregory'",
     },
     {

@@ -206,7 +206,7 @@ fill measures 3.88:1 on the popover surface, under 4.5:1.
   differing text again on the client (`spec:AST-111` FR19).
 - **Preserved obligations:** `spec:AST-013` FR7 and FR8, and FR9 outside that
   `chinese` and `dangi` case. The Gregorian field keeps every interaction,
-  label, and announcement, and Buddhist, ROC, and Japanese text works without
+  label, and announcement, and Buddhist, Minguo, and Japanese text works without
   `Temporal`.
 - **Evidence:** real Chromium and Firefox with native `Temporal`, and real
   Chromium, Firefox, and WebKit with `Temporal` removed, with and without a
