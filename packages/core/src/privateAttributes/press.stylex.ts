@@ -91,6 +91,8 @@ export const rowPressLayerStyles = stylex.create({
    * a row's own `::before` and its stacking are as they were; during a press
    * the layer is the row's `::before`, so a caller's decoration there merges
    * into the layer for that time (decorate with `::after` or a child).
+   * Under a finger an interactive List row's `::after` is its touch hit area,
+   * so decorate that row with a child.
    *
    * Under a finger only (a coarse primary pointer): a fine pointer keeps the
    * variant exactly, with no layer, no stacking context and its own touch
