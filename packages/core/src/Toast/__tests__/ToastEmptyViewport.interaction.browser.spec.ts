@@ -5,8 +5,8 @@
  * @input The ErrorPersists story, whose toast stays until dismissed, on a
  *   phone page, with a finger, in Chromium and WebKit.
  * @output Tests that the toast viewport has no box once its last toast has
- *   left, by a swipe or by its dismiss button, and has one again for the next
- *   toast.
+ *   left, by a swipe or by its dismiss button. The viewport has a box again
+ *   for the next toast.
  * @position iOS Safari colors its toolbar from a fixed element at the bottom
  *   edge. A swiped toast leaves through that edge, and Safari keeps its color
  *   while the viewport has a box.

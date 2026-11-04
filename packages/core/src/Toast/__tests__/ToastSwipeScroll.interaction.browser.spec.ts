@@ -4,10 +4,10 @@
  * @file ToastSwipeScroll.interaction.browser.spec.ts
  * @input The ErrorPersists story, whose toast stays until dismissed, on a
  *   phone page taller than the screen, with a finger, in Chromium and WebKit.
- * @output Tests that a bottom toast decides a touch on its first move: from
- *   three offsets on the card, slowly and quickly, a first move toward the
- *   edge is the swipe's and never scrolls the page, and one away from it
- *   leaves the page its scroll.
+ * @output Tests that a bottom toast decides a touch on its first move. The
+ *   test starts from three offsets on the card, slowly and quickly. A first
+ *   move toward the edge is the swipe's and never scrolls the page. A first
+ *   move away from the edge leaves the page its scroll.
  * @position iOS commits a page scroll on the first move that no listener
  *   prevents, so the first move decides.
  */
