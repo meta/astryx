@@ -67,9 +67,12 @@ function triggerText(): string {
 }
 
 describe('DateRangeInput in a calendar', () => {
-  it('writes the trigger text in the Persian calendar', () => {
+  it('writes the trigger text and its accessible name in the Persian calendar', () => {
     renderRange('en', {calendar: 'persian'});
     expect(triggerText()).toContain('Aban 8 – Aban 11');
+    expect(
+      screen.getByRole('button', {name: 'Stay: Aban 8 – Aban 11'}),
+    ).toBeInTheDocument();
   });
 
   it('takes the calendar from the provider', () => {
