@@ -43,7 +43,11 @@ affects_consumer_docs:
     "packages/core/src/CommandPalette/**",
     "packages/core/src/Chat/ChatComposer.tsx",
     "packages/core/src/Chat/ChatComposerInput.tsx",
-    "packages/core/src/Chat/ChatLayout.tsx"
+    "packages/core/src/Chat/ChatLayout.tsx",
+    "packages/core/src/keyboard/**",
+    "packages/core/src/motion/android/**",
+    "packages/core/src/utils/layoutViewport.ts",
+    "packages/core/src/utils/layoutViewport.test.ts"
   ]
 }
 ```
@@ -142,7 +146,14 @@ app to turn on.
   keyboard-aware surfaces ride the keyboard on show and on hide: they move with
   the keyboard's slide, within one frame of it on the measured keyboards, with
   no one-step jump and no surface left under the keyboard, no JavaScript per
-  frame, and one layout commit at rest (FR3). Under reduced motion nothing
+  frame, and one layout commit at rest (FR3). Two exceptions apply (DEC-6). In
+  Chrome on Android, at the keyboard's first report the content is placed in
+  one frame so the focused field's bottom sits just above the keyboard's top,
+  then rides the rest of the keyboard's slide. Chrome pans the page itself if
+  the field is still below the keyboard about 100–170 ms after the report, so
+  a slide cannot be relied on. In Chrome on Android, a hide nothing on the
+  page predicts, such as Back, is reported partway through the keyboard's
+  slide; the content rides down from that report. Under reduced motion nothing
   travels with the keyboard, and the change follows `design:reduced-motion`
   DR2, a cross-fade on a touch screen. A Lab surface commits the resting value without riding
   (`architecture:react-component-runtime` INV11). Astryx never overrides
@@ -256,15 +267,12 @@ app to turn on.
 
 ## Current-state impact
 
-- BottomSheet's internal keyboard hook implements FR2, FR4, and FR5 for a
-  fully expanded Tall sheet on iOS, detects iOS from the user agent, and writes
-  a private inset on the sheet body as the custom property
-  `--_sheet-keyboard-inset`, which retires: the sheet applies the height
-  through a functional style on its own element. It moves into Core's
-  keyboard module, `packages/core/src/keyboard/`, the single source
-  `architecture:react-component-runtime` INV11 names: FR6 replaces the
-  user-agent check, FR3 keeps the height internal, and BottomSheet consumes the
-  shared source (`component:BottomSheet`).
+- BottomSheet's keyboard hook lives in Core's keyboard module,
+  `packages/core/src/keyboard/`, the single source
+  `architecture:react-component-runtime` INV11 names. It implements FR2, FR4,
+  and FR5 for a fully expanded Tall sheet, decides by capability (FR6), and
+  applies the height through a functional style on the sheet's own element
+  (FR3). BottomSheet consumes it (`component:BottomSheet`).
 - No other component on `main` measures the keyboard; BaseTypeahead reads the
   visual-viewport height only to size its list (Gap 4). A component that later
   responds to the keyboard uses the same height (FR1).
@@ -297,14 +305,14 @@ app to turn on.
 - Layer caps do not account for the keyboard: `spec:AST-059` owns layer
   geometry, and keeping Popover and other anchor-mode layers above the keyboard
   is an amendment to that record that consumes this height.
-- Today's hook omits FR2's zoom term, so a pinch-zoomed page reads as a
-  keyboard; FR2 corrects that.
-- Today's hook gates only its focus claim on an iOS user agent. Under FR8, a
-  fully expanded Tall sheet in
-  Chrome on Android keeps the keyboard accommodation `BottomSheet.doc.mjs`
-  documents and moves with the keyboard, so no consumer loses behavior and no
-  breaking change applies; `BottomSheet.doc.mjs` states each platform's
-  behavior. Firefox for Android gets FR2–FR5.
+- The keyboard module's height includes FR2's zoom term, so a pinch-zoomed
+  page does not read as a keyboard.
+- The hook claims focus under a coarse pointer wherever the keyboard can be
+  measured; no user-agent check gates it. Under FR8, a fully expanded Tall
+  sheet in Chrome on Android keeps the keyboard accommodation
+  `BottomSheet.doc.mjs` documents and moves with the keyboard, so no consumer
+  loses behavior and no breaking change applies; `BottomSheet.doc.mjs` states
+  each platform's behavior. Firefox for Android gets FR2–FR5.
 - No public API exposes the keyboard height, and FR3 keeps it that way.
 - The consumer documentation gains the Android viewport setting (FR8).
 
@@ -312,10 +320,10 @@ app to turn on.
 
 No covered field meets FR9 on `main`. Each gap below is open.
 
-- **Gap 1 — The keyboard module.** `packages/core/src/keyboard/` does not
-  exist. The only keyboard handling is BottomSheet's internal hook, which acts
-  only in a fully expanded Tall sheet and gates its focus claim on an iOS user
-  agent.
+- **Gap 1 — The keyboard module.** Partly met: the keyboard module
+  (`packages/core/src/keyboard/`) measures the keyboard and keeps focus from
+  panning the page. BottomSheet's Tall sheet reads it. No covered field reads
+  it yet (Gaps 2–9), and ChatLayout's dock does not (Gap 11).
 - **Gap 2 — TextInput, TextArea, and NumberInput.** None has keyboard focus
   handling. In the page, only the browser's own reveal scroll brings the field
   into view, and nothing proves it stays above the keyboard.
@@ -327,19 +335,18 @@ No covered field meets FR9 on `main`. Each gap below is open.
   itself to size its list, outside the keyboard module.
 - **Gap 5 — Tokenizer's sheet search field.** Partly met: the field sits in a
   Tall sheet, so BottomSheet's hook covers it only when the sheet is fully
-  expanded and only on an iOS user agent. Chrome and Firefox on Android, and a
-  partly expanded sheet, get nothing.
+  expanded. A partly expanded sheet gets nothing.
 - **Gap 6 — The search row of Selector and MultiSelector.** On a coarse
   pointer the row sits in a `hug` BottomSheet, which BottomSheet's hook does
   not cover, and it has no keyboard handling of its own.
 - **Gap 7 — PowerSearch.** On a compact coarse-pointer screen its default
   presentation is its sheet flow (`component:PowerSearch` DEC-3): Tall bottom
-  sheets, where BottomSheet's hook partly covers the search and value fields, as
-  Gap 5 states for Tokenizer. Its query input (Gap 4) and the text and number
-  fields of its popover value editor render there only with
-  `presentation="popover"`, and everywhere else by default; they have no
-  keyboard handling. Keeping the popover itself above the keyboard is
-  `spec:AST-059`'s.
+  sheets, where BottomSheet's hook covers the search and value fields only
+  while the sheet is fully expanded, as Gap 5 states for Tokenizer. Its query
+  input (Gap 4) and the text and number fields of its popover value editor
+  render there only with `presentation="popover"`, and everywhere else by
+  default; they have no keyboard handling. Keeping the popover itself above the
+  keyboard is `spec:AST-059`'s.
 - **Gap 8 — CommandPalette's search input.** It sits in a Dialog and has no
   keyboard handling.
 - **Gap 9 — ChatComposer's input.** ChatLayout docks the composer with a fixed
@@ -352,9 +359,9 @@ No covered field meets FR9 on `main`. Each gap below is open.
   that is not a fully expanded Tall sheet, has no handling that keeps it above
   the keyboard.
 - **Gap 11 — The docked ride and the page-content reveal.** No covered field
-  rides the keyboard on `main`. The keyboard module that would carry the ride
-  does not exist (Gap 1), nothing moves an app's docked fixed container to the
-  keyboard's top, no field scrolls its nearest scroller to put itself 10 CSS px
+  rides the keyboard outside a fully expanded Tall sheet. The keyboard module
+  (Gap 1) carries no docked ride: nothing moves an app's docked fixed container
+  to the keyboard's top, no field scrolls its nearest scroller to put itself 10 CSS px
   above the keyboard in the frame the keyboard is reported, no field adds the
   missing scroll range at its scroller's end, and ChatLayout's dock does not
   apply the keyboard height. BottomSheet's inset stays local to its own sheet.
@@ -379,7 +386,7 @@ that sets its own `translate`, to the app.
 | FR5      | Surface move tests                                                                                           | sheet drag between heights, drag to dismiss, close, with a focused field                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | The field stays focused after a move starts, or content jumps on the first frame                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | FR6      | Capability tests with the user agent varied                                                                  | visual viewport shrinking with a fixed layout viewport; Chrome on Android reporting keyboard geometry; a desktop browser with the API and no on-screen keyboard; a page that is not a secure context; neither                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | Behavior that changes with the user agent alone, or a height taken from the browser's keyboard geometry report instead of FR2's measurement                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | FR7      | Tests in an iframe and in a top-level document                                                               | the same keyboard event sequence in both                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | A non-zero value or a claimed focus inside an iframe                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| FR8      | Chrome on Android in the emulator with Gboard, top-level document, plus a consumer documentation check       | keyboard show and hide with the composer and a Tall sheet; a Lab bottom search field; reduced motion on; focus inside a keyboard-aware field, which rides by the visual-viewport height; an app with `interactive-widget=resizes-content`, focus inside and outside keyboard-aware fields, where a field's keyboard height is 0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | A Core surface jumping after the keyboard settles, lagging the keyboard by more than a frame, left under the keyboard, moved by JavaScript per frame, or committing layout more than once; a Lab surface riding instead of committing at rest; anything travelling with the keyboard under reduced motion instead of DR2's cross-fade; the app's viewport setting overridden; a keyboard-aware field not riding by the visual-viewport height, or adding an offset under `interactive-widget=resizes-content`; or the setting missing from the docs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| FR8      | Chrome on Android in the emulator with Gboard, top-level document, plus a consumer documentation check       | keyboard show and hide with the composer and a Tall sheet; a Lab bottom search field; reduced motion on; focus inside a keyboard-aware field, which rides by the visual-viewport height; an app with `interactive-widget=resizes-content`, focus inside and outside keyboard-aware fields, where a field's keyboard height is 0; Back: the ride starts at Chrome's hide report                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | A Core surface jumping after the keyboard settles, lagging the keyboard by more than a frame, left under the keyboard, moved by JavaScript per frame, or committing layout more than once; a Lab surface riding instead of committing at rest; anything travelling with the keyboard under reduced motion instead of DR2's cross-fade; the app's viewport setting overridden; a keyboard-aware field not riding by the visual-viewport height, or adding an offset under `interactive-widget=resizes-content`; or the setting missing from the docs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | FR8      | Firefox for Android in the emulator, top-level document                                                      | focus routes, keyboard shown and hidden, page panned and pinch-zoomed, a sheet moved                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | The page lurches, the field ends under the keyboard, or the height is wrong after a pan or zoom                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | FR2–FR5  | Safari on iOS in the iOS Simulator or on a device, top-level document                                        | focus routes, keyboard shown and hidden, page panned and pinch-zoomed, a sheet moved, in Safari and as a home-screen app                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | The page lurches, the field ends under the keyboard, or the height is wrong after a pan or zoom                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | FR2–FR5  | Release gate: a physical iPhone in a top-level document (DEC-3)                                              | iPhone Safari with the toolbar expanded and collapsed; iPhone home-screen app; the phone's refresh rate                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | The page lurches, the field ends under the keyboard, or the surface does not follow the keyboard                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -501,6 +508,30 @@ than its own overlap, so the field stays in view even if the container's top
 leaves the screen.
 
 Rejected: an opt-in prop or per-component keyboard handling; leaving an app's docked bar to the browser's reveal.
+
+### DEC-6 — In Chrome on Android, the focused field is placed above the keyboard at its first report
+
+**Reference:** `spec:AST-099/DEC-6`
+**Decider:** `cixzhang`, `2026-11-03`
+
+In Chrome on Android, at the keyboard's first report the content is placed
+in one frame so the focused field's bottom sits just above the keyboard's
+top, and the content then rides the rest of the keyboard's slide. Chrome
+pans the page itself, by the keyboard's whole height, if the focused field is
+still drawn below the keyboard about 100–170 ms after the report. The page
+gets no frame until that pan ends, so a pan can only be put back as a snap.
+Chrome blanks the area below the keyboard's top while the placement happens.
+On the Android emulator with Gboard, the one-frame placement showed no pan in
+12 shows, including at 4× CPU and with the ride slowed 5×. A slide that
+reached the keyboard's top within 50 ms showed a pan in 1 of 8 shows, and in
+1 of 4 at 4× CPU. The owner team's side-by-side recording showed a pan in 0
+of 5 shows for the placement and in 7 of 8 for the slide.
+
+In Chrome on Android, a hide nothing on the page predicts, such as Back, is
+reported partway through the keyboard's slide; the content rides down from
+that report.
+
+Rejected: a fast slide, which Chrome's pan still overtakes when the page stalls; the VirtualKeyboard overlay setting, which changes DEC-4's measurement source and the page's layout.
 
 ## Open questions
 
