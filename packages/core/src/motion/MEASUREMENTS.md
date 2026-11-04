@@ -268,6 +268,16 @@ match the probe.
 | M-SH21  | SheetProbe on iPad, iOS 27 `preferredPlacement` each case, RTL                                                         | present                                                                                                                             | placement geometry and motion                                                                                                                           | B, C    |
 | M-SH22  | SheetProbe iOS 26 `preferredTransition = .zoom` from a bar button                                                      | present, dismiss                                                                                                                    | morph geometry per frame                                                                                                                                | A, C    |
 
+## Date picker (UIDatePicker)
+
+Rules the DateInput, DateTimeInput and TimeInput touch sheets follow, in their
+own table (`uikit/datePicker.ts`). The wheels' physics are UIPickerView's: the
+table only names them, and their values belong to the wheel's own table.
+
+Done (UIKit lab, iOS 26.2 simulator, Oct 23 2026; in the date picker's table):
+the month/year wheels changing the date, the AM/PM column following the hour,
+the turn back onto a bound, and the day clamped to the month.
+
 ## Context menu (UIContextMenuInteraction)
 
 Values the context menu reads from its own table, which lands with the
@@ -286,3 +296,32 @@ fades in, with Prefer Cross-Fade Transitions on or off.
 | M-CM4 | Reduce Motion press feedback    | Probe app with Reduce Motion on: long press, then dismiss                                                                   | press feedback, lift and dismiss animations under Reduce Motion                                                                                                                           | A, B   |
 | M-CM5 | Commit haptic stand-in          | An Android device: `navigator.vibrate` patterns against the platform's HapticFeedbackConstants for the context-click moment | the pattern that matches; not a UIKit parity value (as M-G18)                                                                                                                             | H      |
 | M-CM6 | Press thresholds                | Probe app: repeated long presses at random vsync phases                                                                     | from touch receipt and from the HID timestamp, the tick before and the tick at the press observer's began and at the click commit; the intersection pins the 150 ms and 400 ms thresholds | C      |
+
+## Picker (UIPickerView)
+
+Values the Wheel reads from its own table (`uikit/picker.ts`).
+
+The recordings are of a 402 × 216 pt UIPickerView with two columns of 24 and
+60 rows. It runs in an instrumented host app on the iOS 26.2 simulator
+(iPhone 17 Pro), driven by real HID touches. They hold per-frame offsets, the
+table views' and cells' layers, the delegate calls and the haptics.
+
+Done (UIKit lab, iOS 26.2 simulator, Oct 23 2026; in the picker's table): the
+row pitch, the picker's height, the rubber band's dimension, the coast's stop
+speed, the velocity floor, the snap at rest, the tap spin and the selection
+tick. Measured and kept by the gesture system instead: the
+scroll view coasts with 0.25 × the pan's velocity plus 0.75 × its value one
+event earlier (four HID releases; `velocity.scrollReleaseWeight`, which a
+pan's `scrollVelocity()` reads). On UIKit, Reduce Motion with Prefer Cross-Fade changes
+nothing on a picker; the Wheel follows design:reduced-motion instead.
+
+## Menus (UIMenu)
+
+Probe: the UIKit lab host app with a UIButton whose `UIMenu` is its primary
+action (`showsMenuAsPrimaryAction`), three to twelve items, on a plain view
+and inside a UIScrollView; the gesture-state, presentation-modifier,
+display-link and feedback hooks; real HID touches.
+
+| ID    | Scene                  | Gesture                                                                                                                                                 | Extract                                                                                                                                 | Method |
+| ----- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| M-MN2 | button on a plain view | hold until the menu is open, then lift still; move 8 pt down, 8 pt right, 12 pt down, (7, 7), (8, 8) and lift; move 6 pt before the open and 6 pt after | row picked or not; handoff and list-selection recognizer states; highlighted row per frame: threshold, metric, where it is counted from | C      |

@@ -141,7 +141,8 @@ const GESTURE_USERS = new Set([
   // AlertDialog: its actions' press, tracked across both for every pointer.
   'AlertDialog',
   // Through AlertDialog: Tokenizer's bottom sheet confirms with an alert, and
-  // PowerSearch and Table's filtering render a Tokenizer.
+  // PowerSearch and Table's filtering render a Tokenizer. Both also reach
+  // TimeInput's wheels: PowerSearch's edit popover and Table's filtering.
   'PowerSearch',
   'Table',
   'Tokenizer',
@@ -153,7 +154,9 @@ const GESTURE_USERS = new Set([
   'SegmentedControl',
   // DateTimeInput: through the SegmentedControl its touch field renders.
   'DateTimeInput',
-  // useScrollLock's page hold, and the imports that reach it.
+  // useScrollLock's page hold, and the imports that reach it. The sheet
+  // wheels of DateInput, TimeInput and DateTimeInput also drag and tap
+  // through the gesture system's pan and tap (DateInput/PickerWheel.tsx).
   'hooks: useScrollLock',
   'AppShell',
   'BottomSheet',
@@ -352,6 +355,22 @@ describe('the touch module in bundles', () => {
 
   it('is absent from the utils entry', () => {
     for (const bytes of outputsOf([path.join(CORE_SRC, 'utils/index.ts')])) {
+      expect(bytesOf(bytes)).toEqual([]);
+    }
+  });
+
+  it('is absent from a component that holds its layer (Layer/inputHold)', () => {
+    // A component in the root entry may hold its layer's input statically
+    // (a popover's presentation): the hold brings no gesture code with it.
+    const holder = entryWith(
+      'Holder.ts',
+      `import {holdInput} from ${JSON.stringify(
+        path.join(CORE_SRC, 'Layer/inputHold.ts'),
+      )};
+export const Holder = holdInput;
+`,
+    );
+    for (const bytes of outputsOf([holder])) {
       expect(bytesOf(bytes)).toEqual([]);
     }
   });

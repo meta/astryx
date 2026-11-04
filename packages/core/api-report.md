@@ -570,7 +570,9 @@ component CheckboxList(props: CheckboxListProps)
   prop hasDividers?: boolean = false
   prop isDisabled?: boolean = false
   prop isLabelHidden?: boolean = false
+  prop isOptional?: boolean = false
   prop isReadOnly?: boolean = false
+  prop isRequired?: boolean = false
   prop label: string
   prop onChange?: (values: string[]) => void
   prop ref?: React.Ref<HTMLDivElement>
@@ -640,6 +642,7 @@ component CodeBlock(props: CodeBlockProps)
   prop onCopy?: () => void
   prop ref?: React.Ref<HTMLPreElement>
   prop size?: 'sm' | 'md'
+  prop startLineNumber?: number = 1
   prop syntaxTheme?: SyntaxThemeDefinition
   prop title?: string
   prop tokenizer?: (code: string, language: string) => { type: string; start: number; end: number }[] @deprecated
@@ -1810,7 +1813,6 @@ component PowerSearch(props: PowerSearchProps)
   prop config: PowerSearchConfig
   prop disabledMessage?: string
   prop endContent?: React.ReactNode
-  prop experimental?: { presentation?: 'popover' | 'bottom-sheet' | 'adaptive' } @experimental
   prop filters: ReadonlyArray<PowerSearchFilter>
   prop handleRef?: React.Ref<PowerSearchHandle>
   prop hasAutoFocus?: boolean = false
@@ -1828,6 +1830,7 @@ component PowerSearch(props: PowerSearchProps)
   prop onFocus?: (e: React.FocusEvent) => void
   prop placeholder?: string = 'Search...'
   prop popoverSaveButtonLabel?: string = 'Apply'
+  prop presentation?: PowerSearchPresentation = 'adaptive'
   prop ref?: React.Ref<HTMLDivElement>
   prop resultCount?: number | string
   prop size?: PowerSearchSize = 'md'
@@ -1856,6 +1859,7 @@ component PowerSearchToken(props: PowerSearchTokenProps)
   prop onClick?: () => void
   prop onRemove?: () => void
   prop operator: PowerSearchOperator
+  prop timezoneID?: string
 component ProgressBar(props: ProgressBarProps)
   prop data-testid?: string
   prop formatValueLabel?: (value: number, max: number) => string = (value, max) => `${Math.round((value / max) * 100)}%`
@@ -2610,7 +2614,7 @@ component Token(props: TokenProps)
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component Tokenizer(props: TokenizerProps)
-  overload <T extends SearchableItem>(props: Omit<TokenizerProps<T>, 'ref' | 'experimental'> & { experimental: NonNullable<TokenizerProps<T>['experimental']>; ref?: React.Ref<HTMLInputElement | HTMLButtonElement> }) => React.JSX.Element @experimental
+  overload <T extends SearchableItem>(props: Omit<TokenizerProps<T>, 'ref'> & { ref?: React.Ref<HTMLInputElement | HTMLButtonElement> }) => React.JSX.Element
   prop containerClassName?: string
   prop containerStyle?: CSSProperties
   prop containerXstyle?: StyleXStyles
@@ -2622,7 +2626,6 @@ component Tokenizer(props: TokenizerProps)
   prop disabledMessage?: string
   prop emptySearchText?: ReactNode = 'No results found'
   prop endContent?: ReactNode
-  prop experimental?: { presentation?: 'popover' | 'bottom-sheet' | 'adaptive' } @experimental
   prop handleRef?: React.Ref<TokenizerHandle>
   prop hasAutoFocus?: boolean = false
   prop hasClear?: boolean = false
@@ -2645,6 +2648,7 @@ component Tokenizer(props: TokenizerProps)
   prop onFocus?: (e: React.FocusEvent) => void
   prop onKeyDown?: React.KeyboardEventHandler<HTMLElement>
   prop placeholder?: string
+  prop presentation?: TokenizerPresentation = 'adaptive'
   prop ref?: React.Ref<HTMLInputElement>
   prop renderItem?: (item: T) => ReactNode
   prop renderToken?: (item: T, onRemove: () => void) => ReactNode
@@ -3175,7 +3179,7 @@ const WIDTH_BREAKPOINT_NAMES: readonly ["sm", "md", "lg", "xl", "2xl"]
 const borderDefaults: { readonly '--border-width': "1px" }
 const borderVars: stylex.VarGroup<Readonly<{ readonly '--border-width': "1px" }>, symbol>
 const colorDefaults: object
-  --color-accent: 'light-dark(#0064E0, #2694FE)'
+  --color-accent: 'light-dark(#0064E0, #0171E3)'
   --color-accent-muted: 'light-dark(#0082FB33, #0082FB3F)'
   --color-on-accent: 'light-dark(#FFFFFF, #FFFFFF)'
   --color-neutral: 'light-dark(rgba(5, 54, 89, 0.1), rgba(223, 226, 229, 0.2))'
@@ -3273,7 +3277,7 @@ const colorDefaults: object
   --color-border-yellow: 'light-dark(#C58600, #B47700)'
   --color-icon-yellow: 'light-dark(#FBC02D, #FFEE58)'
   --color-text-yellow: 'light-dark(#753F07, #FBCE03)'
-const colorVars: stylex.VarGroup<Readonly<{ readonly '--color-accent': "light-dark(#0064E0, #2694FE)"; readonly '--color-accent-muted': "light-dark(#0082FB33, #0082FB3F)"; reado … #a042f923
+const colorVars: stylex.VarGroup<Readonly<{ readonly '--color-accent': "light-dark(#0064E0, #0171E3)"; readonly '--color-accent-muted': "light-dark(#0082FB33, #0082FB3F)"; reado … #a042f923
 const dataTokenDefaults: object
   --color-data-categorical-blue: 'light-dark(#0171E3, #0171E3)'
   --color-data-categorical-orange: 'light-dark(#EB6E00, #EB6E00)'
@@ -3343,7 +3347,8 @@ const durationDefaults: object
   --duration-slow-min: '730ms'
   --duration-slow: '975ms'
   --duration-slow-max: '1300ms'
-const durationVars: stylex.VarGroup<Readonly<{ readonly '--duration-fast-min': "130ms"; readonly '--duration-fast': "175ms"; readonly '--duration-fast-max': "230ms"; readonly '--du … #4dd3e52f
+  --duration-exit: 'var(--duration-fast)'
+const durationVars: stylex.VarGroup<Readonly<{ readonly '--duration-fast-min': "130ms"; readonly '--duration-fast': "175ms"; readonly '--duration-fast-max': "230ms"; readonly '--du … #f2df5593
 const easeDefaults: object
   --ease-standard: 'cubic-bezier(0.24, 1, 0.4, 1)'
   --ease-entrance: 'cubic-bezier(0.24, 1, 0.4, 1)'
@@ -3866,6 +3871,7 @@ interface ClickableCardProps extends BaseProps (props of ClickableCard)
 interface ClickableContainerResult
   onClick: (event: MouseEvent<HTMLElement>) => void
   onMouseUp: (event: MouseEvent<HTMLElement>) => void
+  onPointerDown: (event: PointerEvent<HTMLElement>) => void
 interface CodeBlockProps extends BaseProps<HTMLPreElement> (props of CodeBlock)
 type CodeColor = 'primary' | 'secondary' | 'inherit'
 type CodeLanguage
@@ -4989,6 +4995,7 @@ interface PowerSearchOperatorWithLabel extends PowerSearchOperatorBase
   key: string
   label: string
   value: OperatorValue
+type PowerSearchPresentation = AdaptivePresentation
 interface PowerSearchProps extends Omit<BaseProps<HTMLElement>, 'onChange'> (props of PowerSearch)
 type PowerSearchSize = 'sm' | 'md' | 'lg'
 interface PowerSearchTokenProps (props of PowerSearchToken)
@@ -5663,6 +5670,7 @@ interface TokenizerHandle
   blur: () => void
   focus: () => void
 type TokenizerOverflowBehavior = 'none' | 'unfocusedInline' | 'unfocusedLayer'
+type TokenizerPresentation = AdaptivePresentation
 interface TokenizerProps<T extends SearchableItem> extends Omit<FieldInputBaseProps<HTMLInputElement>, 'onChange' | 'onFocus' | 'onBlur' | 'onKeyDown'> (props of Tokenizer)
 type TokenizerSize = 'sm' | 'md' | 'lg'
 interface TokenizerStatus
@@ -6160,6 +6168,7 @@ interface UseTableRowExpansionConfig<T extends Record<string, unknown>>
   expandedKeys: Set<string>
   getIsItemExpandable?: (item: T) => boolean = all rows expandable
   getRowKey: (item: T) => string
+  getRowLabel?: (item: T) => string
   hasRowClickExpansion?: boolean = false (only the chevron toggles expansion).
   onToggle: (key: string) => void
   panelVariant?: 'muted' | 'transparent' = 'transparent'
@@ -6213,6 +6222,7 @@ interface UseTableStickyColumnsConfig
   endKeys?: string[]
   startKeys?: string[]
 interface UseTableTreeDataConfig<T extends Record<string, unknown>>
+  getRowLabel?: (item: T) => string
   getRowMeta: (item: T) => TableTreeRowMeta | undefined
   hasExpandAllControl?: boolean = false
   hasExpandableRows: boolean
@@ -8236,6 +8246,7 @@ PowerSearchOperator (.)
 PowerSearchOperatorBase (.)
 PowerSearchOperatorWithI18nKey (.)
 PowerSearchOperatorWithLabel (.)
+PowerSearchPresentation (.)
 PowerSearchProps (.)
 PowerSearchSize (.)
 PowerSearchToken (.)
@@ -8917,6 +8928,7 @@ Tokenizer (.)
 TokenizerChange (.)
 TokenizerHandle (.)
 TokenizerOverflowBehavior (.)
+TokenizerPresentation (.)
 TokenizerProps (.)
 TokenizerSize (.)
 TokenizerStatus (.)
@@ -9897,6 +9909,7 @@ var --container-padding-block-end (./astryx.css)
 var --container-padding-block-start (./astryx.css)
 var --container-padding-inline-end (./astryx.css)
 var --container-padding-inline-start (./astryx.css)
+var --duration-exit (./astryx.css)
 var --duration-fast (./astryx.css)
 var --duration-fast-max (./astryx.css)
 var --duration-fast-min (./astryx.css)

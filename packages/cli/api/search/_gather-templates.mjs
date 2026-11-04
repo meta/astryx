@@ -4,10 +4,15 @@
  * @file Search's template and theme candidates. Imported only by the adapter.
  */
 
+import fs from 'node:fs';
 import {CORE_PACKAGE} from '../../foundation/discovery/component-discovery.mjs';
-import {discoverTemplates, extractComponents} from '../template/template.mjs';
+import {discoverTemplates} from '../template/template.mjs';
 import {listAvailableThemes} from '../theme/_adapter.mjs';
-import {templateLookupIds} from '../../foundation/discovery/template-adapter.mjs';
+import {
+  componentNameBound,
+  componentsInSource,
+  templateLookupIds,
+} from '../../foundation/discovery/template-adapter.mjs';
 import {sameWord, wordsOf} from './_words.mjs';
 
 /** @typedef {import('./_lexical.mjs').Candidate} Candidate */
@@ -66,12 +71,29 @@ export async function gatherTemplates(cwd) {
       ? [...t.componentsUsed]
       : [];
     keywords.push(...templateLookupIds(t).filter(id => id !== commandName));
-    /** @type {string[]} */
-    let weakKeywords = [];
+    /** @type {() => string[]} */
+    let derive = () => [];
+    /** @type {string[] | null} */
+    let weakKeywordBound = null;
     if (t.type === 'page') {
       if (t.filePath) {
         try {
-          weakKeywords = extractComponents(t.filePath);
+          const source = fs.readFileSync(t.filePath, 'utf-8');
+          // Parsing the source costs more than the rest of the page's gather.
+          // It waits until a term could match a name the source can yield.
+          /** @type {string[] | undefined} */
+          let derived;
+          derive = () => {
+            if (derived === undefined) {
+              try {
+                derived = componentsInSource(source);
+              } catch {
+                derived = [];
+              }
+            }
+            return derived;
+          };
+          weakKeywordBound = componentNameBound(source);
         } catch {
           // Best-effort: skip keyword enrichment if the source can't be read.
         }
@@ -83,7 +105,10 @@ export async function gatherTemplates(cwd) {
       domain: 'template',
       name: commandName,
       keywords,
-      weakKeywords,
+      get weakKeywords() {
+        return derive();
+      },
+      ...(weakKeywordBound ? {weakKeywordBound} : {}),
       description: t.description || '',
       // A template's own keywords name the many ideas it serves, so they score
       // as its prose does, not as a name: one of them matching one word of a

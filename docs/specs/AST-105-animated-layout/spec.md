@@ -32,8 +32,8 @@ affects_consumer_docs:
 ## Intent
 
 When something inside an area changes size, the changed element and the
-content after it animate together on one shared motion role instead of
-jumping. An app opts in once per area; without it, nothing changes, except where a
+content after it animate together on one shared motion instead of jumping,
+on the theme's curve tokens, timed by its `character` and `tempo`. An app opts in once per area; without it, nothing changes, except where a
 component's record animates its own change (FR2).
 
 ## Non-goals
@@ -85,13 +85,17 @@ const animatedLayout = useAnimatedLayout({containerRef: scrollRef});
   of it opts in. Several changes in one area, nested or not, compose: each
   element moves once, by its total change. The area never scrolls because of
   the glide.
-- **FR4 — One shared motion.** The changed element plays its own animation,
-  entering, exiting, or resizing, and the content after it moves with it.
-  Both read the same motion role, `springs.settle` (`spec:AST-094`
-  FR4), so the timing is governed centrally, never per component; both start
-  on the same frame, and Reduce Motion reaches both through that role, as
-  `design:reduced-motion` DR1–DR3 require: a cross-fade under a coarse
-  primary pointer, an immediate change otherwise.
+- **FR4 — One shared motion on the theme's curve tokens.** The changed
+  element plays its own animation, entering, exiting, or resizing, and the
+  content after it moves with it. Both play the same motion, so the timing is
+  governed centrally, never per component: the theme's move curve,
+  `--ease-move`, over `--duration-medium-min`, which follow the theme's
+  `character` and `tempo` (`spec:AST-108` FR1, FR2). The glide is curve
+  tokens, never a spring, and no character or option plays a
+  platform-measured curve for it (`spec:AST-094` FR45). Both start on the same
+  frame, and Reduce Motion reaches both, as `design:reduced-motion` DR1–DR3
+  require: a cross-fade under a coarse primary pointer, an immediate change
+  otherwise.
 - **FR5 — Every pointer.** The glide applies under every pointer, a mouse
   included: it removes a layout jump that people using a fine pointer see
   too, so it is a named fine-pointer change under `spec:AST-017` FR59, and
@@ -104,7 +108,8 @@ const animatedLayout = useAnimatedLayout({containerRef: scrollRef});
 - **FR7 — Documentation.** The hook's documentation reads: "Returns a handle
   to pass to a component whose size changes, such as TreeList or Collapsible.
   When that component changes size, it and the content after it inside
-  `containerRef` animate together on one shared motion role. Fixed and stuck
+  `containerRef` animate together on one shared motion that follows the
+  theme's motion tokens and tempo. Fixed and stuck
   sticky elements stay put, the glide never scrolls the area, and Reduce
   Motion is respected."
 - **FR8 — Two elements can swap in place.** An area can swap one element for
@@ -133,7 +138,7 @@ const animatedLayout = useAnimatedLayout({containerRef: scrollRef});
   so the content beside the edge glides with it and no gap opens. An optional
   two-state form holds the element's old state as FR8's swap holds it, while
   the element rides the glide of the content beside its moving edge; a reversal
-  from the shown state springs from where it is. Under Reduce Motion it follows
+  from the shown state starts from where it is. Under Reduce Motion it follows
   `design:reduced-motion` DR2 under a coarse primary pointer and DR3 otherwise.
   Every edge reveal in Core is this one:
   - Collapsible, TreeList and Table's row expansion keep its block-end form
@@ -211,20 +216,24 @@ Out of coverage, each taking its final place at once:
 - `architecture:react-component-runtime` INV12 produces the glide.
 - `architecture:react-component-runtime` INV12 also gains the in-place swap
   (FR8); no component swaps yet.
+- The glide, the in-place swap and the edge reveal play `springs.settle`
+  today; FR4 moves them to `--ease-move` over `--duration-medium-min`. The
+  SideNav rail and AppShell's content area, which share that motion
+  (`component:SideNav` FR6, `component:AppShell` FR17), follow with them.
 - INV12 also produces the edge reveal (FR9). SideNav's rail clip and ride move
   into it from SideNav's own code, and a resizable LayoutPanel's collapse and
   open, which today jump, adopt it; LayoutPanel's docs say a collapse slides.
 
 ## Verification
 
-| Contract      | Verification                                                                                               | Representative states                                                                                                                                                                                                                                                                               | Mutation or failure expectation                                                                                                                                                                                                                  |
-| ------------- | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| FR1, FR2      | Unit and browser tests with and without a handle                                                           | a handle on TreeList; no handle; a ScrollableArea ref                                                                                                                                                                                                                                               | a handle with public members, behavior that changes without a handle, or ScrollableArea registering itself fails                                                                                                                                 |
-| FR3, Coverage | Real-browser tests, one per Coverage row                                                                   | each Coverage row; mixed Astryx and plain content; two changes in one frame; an area scrolled mid-list                                                                                                                                                                                              | an element that behaves other than its row says, an element moved twice for one frame, content past the area that moves, or the area scrolling fails                                                                                             |
-| FR4           | Real-browser frame capture under a coarse and a fine pointer, with and without Reduce Motion               | a changed element and its visible followers                                                                                                                                                                                                                                                         | starting on different frames or reading different motion, a component-specific timing, or Reduce Motion applied to one and not the other fails                                                                                                   |
-| FR5           | Fine-pointer before-and-after evidence on each adopting pull request, from the component's Storybook story | a mouse on each adopting component                                                                                                                                                                                                                                                                  | a glide missing under a mouse, or an adopting pull request without that evidence, fails                                                                                                                                                          |
-| FR8           | Unit tests of the swap and real-browser proofs of its adopters                                             | a fast load, a slow load, a forward and a back page change, Reduce Motion                                                                                                                                                                                                                           | an empty area during a swap, a placeholder flashed for a fast load, travel under Reduce Motion, a layer exit played by it, or a public export fails                                                                                              |
-| FR9           | Unit tests of the reveal's measurement and real-browser frame capture of each adopter                      | Collapsible opening; the SideNav rail collapsing and expanding; a start and an end LayoutPanel collapsing and opening by toggle, Enter, the grow arrow, a controlled change and a drag past the threshold; a drag reopening a pane; a hook-only pane; focus inside a collapsing pane; Reduce Motion | a gap opening beside a moving edge, two motions for one rail collapse, a reveal during a drag that reopens a pane, a reveal on a hook-only pane, focus left inside a concealed pane, a concealed pane reachable by Tab, or a public export fails |
+| Contract      | Verification                                                                                               | Representative states                                                                                                                                                                                                                                                                               | Mutation or failure expectation                                                                                                                                                                                                                                     |
+| ------------- | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1, FR2      | Unit and browser tests with and without a handle                                                           | a handle on TreeList; no handle; a ScrollableArea ref                                                                                                                                                                                                                                               | a handle with public members, behavior that changes without a handle, or ScrollableArea registering itself fails                                                                                                                                                    |
+| FR3, Coverage | Real-browser tests, one per Coverage row                                                                   | each Coverage row; mixed Astryx and plain content; two changes in one frame; an area scrolled mid-list                                                                                                                                                                                              | an element that behaves other than its row says, an element moved twice for one frame, content past the area that moves, or the area scrolling fails                                                                                                                |
+| FR4           | Real-browser frame capture under a coarse and a fine pointer, with and without Reduce Motion               | a changed element and its visible followers at each `character`, and at `tempo` 0.75 and 1.5                                                                                                                                                                                                        | starting on different frames or reading different motion, a component-specific timing, a glide that ignores the theme's `character` or `tempo`, a spring or a platform-measured curve played for the glide, or Reduce Motion applied to one and not the other fails |
+| FR5           | Fine-pointer before-and-after evidence on each adopting pull request, from the component's Storybook story | a mouse on each adopting component                                                                                                                                                                                                                                                                  | a glide missing under a mouse, or an adopting pull request without that evidence, fails                                                                                                                                                                             |
+| FR8           | Unit tests of the swap and real-browser proofs of its adopters                                             | a fast load, a slow load, a forward and a back page change, Reduce Motion                                                                                                                                                                                                                           | an empty area during a swap, a placeholder flashed for a fast load, travel under Reduce Motion, a layer exit played by it, or a public export fails                                                                                                                 |
+| FR9           | Unit tests of the reveal's measurement and real-browser frame capture of each adopter                      | Collapsible opening; the SideNav rail collapsing and expanding; a start and an end LayoutPanel collapsing and opening by toggle, Enter, the grow arrow, a controlled change and a drag past the threshold; a drag reopening a pane; a hook-only pane; focus inside a collapsing pane; Reduce Motion | a gap opening beside a moving edge, two motions for one rail collapse, a reveal during a drag that reopens a pane, a reveal on a hook-only pane, focus left inside a concealed pane, a concealed pane reachable by Tab, or a public export fails                    |
 
 ## Decision log
 
@@ -243,6 +252,19 @@ element, inside the area and only where it is visible.
 
 Rejected: wrapping following content in an element, and opting in each
 following element.
+
+### DEC-2 — The glide plays the theme's curve tokens
+
+**Reference:** `spec:AST-105/DEC-2`
+**Decider:** `cixzhang`, `2026-11-04`
+
+A glide is a move like any other, so it takes the theme's move curve and
+duration, and a theme that sets `character` or `tempo` sees its glides change
+with the rest of its motion, under every pointer. A tap that expands or
+collapses content carries no velocity, so the glide that follows plays curve
+tokens, never a spring (`spec:AST-094` FR45).
+
+Rejected: the measured spring as the glide; a platform-measured opt-in, such as a separate character.
 
 ## Open questions
 

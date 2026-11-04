@@ -16,6 +16,7 @@ import * as stylex from '@stylexjs/stylex';
 import {describe, it, expect, vi, beforeAll, afterAll} from 'vitest';
 import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import {Icon} from '../Icon/Icon';
 import {InternationalizationProvider} from '../i18n';
 import type * as HitAreaModule from '../utils/hitArea';
 import type {HitInsets} from '../utils/hitArea';
@@ -226,6 +227,36 @@ describe('InfoTip', () => {
     });
   });
 
+  it('shows the registry info icon at each size, sm by default (FR1)', () => {
+    const cases = [
+      [undefined, 'sm'],
+      ['xsm', 'xsm'],
+      ['sm', 'sm'],
+      ['md', 'md'],
+      ['lg', 'lg'],
+    ] as const;
+    for (const [size, expected] of cases) {
+      const {unmount} = render(
+        <>
+          <InfoTip content="Helpful context" size={size} />
+          <span data-testid="reference">
+            <Icon icon="info" size={expected} />
+          </span>
+        </>,
+      );
+      const icon = screen
+        .getByRole('button', {name: 'More information'})
+        .querySelector('.astryx-icon');
+      const reference = screen
+        .getByTestId('reference')
+        .querySelector('.astryx-icon');
+      expect(icon).toHaveAttribute('data-size', expected);
+      expect(reference?.innerHTML).not.toBe('');
+      expect(icon?.innerHTML).toBe(reference?.innerHTML);
+      unmount();
+    }
+  });
+
   it('renders ReactNode tooltip content', () => {
     render(<InfoTip content={<span data-testid="rich-content">Rich</span>} />);
     expect(screen.getByTestId('rich-content')).toBeInTheDocument();
@@ -257,7 +288,7 @@ describe('InfoTip', () => {
     expect(trigger.style.marginBlockStart).toBe('4px');
   });
 
-  describe('a press pins the help (FR2, Tooltip FR9 and FR10)', () => {
+  describe('a press pins the help (FR2)', () => {
     it('reports the pin on the button: aria-expanded and aria-controls', async () => {
       render(<InfoTip content="Helpful context" />);
       const trigger = screen.getByRole('button', {name: 'More information'});
@@ -330,9 +361,8 @@ describe('InfoTip', () => {
       const trigger = screen.getByRole('button');
       const layer = screen.getByRole('tooltip', {hidden: true});
 
-      // Revealing the help is the button's whole purpose, so a tap pins it
-      // (Tooltip's press-to-pin path). Without that its content is unreachable on
-      // a phone.
+      // Revealing the help is the button's whole purpose, so a tap pins it.
+      // Without that its content is unreachable on a phone.
       tap(trigger);
 
       await waitFor(() => {

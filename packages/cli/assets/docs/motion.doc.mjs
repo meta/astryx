@@ -35,7 +35,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Nine duration tokens in fast, medium, and slow bands.',
+          text: 'Nine duration tokens in fast, medium, and slow bands, and `--duration-exit`, the standard dismissal duration, which follows `--duration-fast`.',
         },
         {
           type: 'token-ref',
