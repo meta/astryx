@@ -842,6 +842,117 @@ describe('DateInput', () => {
     );
   });
 
+  describe('typed text while the field is disabled or busy', () => {
+    const locks = ['isLoading', 'isDisabled'] as const;
+    type Lock = (typeof locks)[number];
+
+    function renderField(value: ISODateString) {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const props = {label: 'Date', value, onChange} satisfies DateInputProps;
+      const {rerender} = render(<DateInput {...props} />);
+      const setProps = (lock?: Lock, next?: {value: ISODateString}) =>
+        rerender(
+          <DateInput
+            {...props}
+            isLoading={lock === 'isLoading'}
+            isDisabled={lock === 'isDisabled'}
+            {...next}
+          />,
+        );
+      return {user, onChange, input: screen.getByRole('combobox'), setProps};
+    }
+
+    function expectNoRejection(input: HTMLElement) {
+      expect(input).not.toHaveAttribute('aria-invalid');
+      expect(screen.queryByText('Invalid date')).not.toBeInTheDocument();
+    }
+
+    it.each(locks)(
+      'ignores Enter and blur while %s, then rejects the text once editable',
+      async lock => {
+        const {user, onChange, input, setProps} = renderField('2026-03-15');
+        await user.clear(input);
+        await user.type(input, '3/15/2');
+
+        setProps(lock);
+        await user.keyboard('{Enter}');
+        await user.tab();
+        expect(input).toHaveValue('3/15/2');
+        expect(onChange).not.toHaveBeenCalled();
+        expectNoRejection(input);
+
+        setProps();
+        act(() => input.focus());
+        await user.tab();
+        expect(input).toHaveValue('3/15/2');
+        expect(onChange).not.toHaveBeenCalled();
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.getByText('Invalid date')).toBeInTheDocument();
+      },
+    );
+
+    it.each(locks)(
+      'hides a shown rejection while %s and shows it again once editable',
+      async lock => {
+        const {user, input, setProps} = renderField('2026-03-15');
+        await user.clear(input);
+        await user.type(input, '3/15/2');
+        await user.tab();
+        expect(screen.getByText('Invalid date')).toBeInTheDocument();
+
+        setProps(lock);
+        expect(input).toHaveValue('3/15/2');
+        expectNoRejection(input);
+
+        setProps();
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.getByText('Invalid date')).toBeInTheDocument();
+      },
+    );
+
+    it.each(locks)(
+      'commits a date typed before %s only once editable',
+      async lock => {
+        const {user, onChange, input, setProps} = renderField('2026-01-12');
+        await user.clear(input);
+        // A two-digit year commits only on Enter or blur.
+        await user.type(input, '3/15/26');
+
+        setProps(lock);
+        await user.tab();
+        expect(input).toHaveValue('3/15/26');
+        expect(onChange).not.toHaveBeenCalled();
+
+        setProps();
+        act(() => input.focus());
+        await user.tab();
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(onChange).toHaveBeenCalledWith('2026-03-15');
+      },
+    );
+
+    it.each(locks)(
+      'replaces the text with a new value while %s',
+      async lock => {
+        const {user, onChange, input, setProps} = renderField('2026-03-15');
+        await user.clear(input);
+        await user.type(input, '3/15/2');
+
+        setProps(lock);
+        setProps(lock, {value: '2026-04-01'});
+        expect(input).toHaveValue('April 1, 2026');
+
+        setProps(undefined, {value: '2026-04-01'});
+        act(() => input.focus());
+        await user.tab();
+        expect(input).toHaveValue('April 1, 2026');
+        expect(onChange).not.toHaveBeenCalled();
+        expectNoRejection(input);
+      },
+    );
+  });
+
   // --- Enter key commits typed date ---
 
   it('commits typed date and fires onChange on Enter key', () => {
@@ -1231,7 +1342,7 @@ describe('DateInput', () => {
       ).toContain(tooltip.id);
     });
 
-    it('drops a draft instead of committing it when the field becomes disabled (AST-085 FR2)', async () => {
+    it('keeps a cleared draft without committing it when the field becomes disabled (AST-085 FR2)', async () => {
       const user = userEvent.setup();
       const onChange = vi.fn();
       const {rerender} = render(
@@ -1252,6 +1363,7 @@ describe('DateInput', () => {
       await user.keyboard('{Enter}');
       await user.tab();
       expect(onChange).not.toHaveBeenCalled();
+      expect(input).toHaveValue('');
     });
 
     it('links the reason tooltip from the input via aria-describedby', () => {

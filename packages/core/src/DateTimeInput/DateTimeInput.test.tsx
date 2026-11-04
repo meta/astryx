@@ -11,7 +11,7 @@
 
 import {useState} from 'react';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {render, screen, fireEvent, waitFor} from '@testing-library/react';
+import {act, render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
@@ -852,46 +852,121 @@ describe('DateTimeInput', () => {
     });
   });
 
-  describe('typed text when the field becomes disabled or busy', () => {
-    // An unfinished year makes the commit reject the text, which a commit
-    // while enabled keeps and marks invalid.
-    it.each([
-      ['isLoading', 'blur'],
-      ['isLoading', 'Enter'],
-      ['isDisabled', 'blur'],
-      ['isDisabled', 'Enter'],
-    ] as const)(
-      'keeps the value and drops typed text on %s, then %s',
-      async (state, gesture) => {
-        const user = userEvent.setup();
-        const onChange = vi.fn();
-        const value = '2026-01-12T09:00' as ISODateTimeString;
-        const {rerender} = render(
-          <DateTimeInput label="Starts" value={value} onChange={onChange} />,
-        );
-        const dateInput = screen.getByRole('combobox');
-        await user.clear(dateInput);
-        await user.type(dateInput, '3/15/2');
-        expect(onChange).not.toHaveBeenCalled();
+  describe('typed text while the field is disabled or busy', () => {
+    const locks = ['isLoading', 'isDisabled'] as const;
+    type Lock = (typeof locks)[number];
+    type Props = React.ComponentProps<typeof DateTimeInput>;
 
+    function renderField(value: string) {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const props = {
+        label: 'Starts',
+        value: value as ISODateTimeString,
+        onChange,
+      } satisfies Props;
+      const {rerender} = render(<DateTimeInput {...props} />);
+      const setProps = (lock?: Lock, value?: string) =>
         rerender(
           <DateTimeInput
-            label="Starts"
-            value={value}
-            onChange={onChange}
-            {...{[state]: true}}
+            {...props}
+            isLoading={lock === 'isLoading'}
+            isDisabled={lock === 'isDisabled'}
+            {...(value != null && {value: value as ISODateTimeString})}
           />,
         );
-        if (gesture === 'Enter') {
-          await user.keyboard('{Enter}');
-        } else {
-          await user.tab();
-        }
+      return {user, onChange, input: screen.getByRole('combobox'), setProps};
+    }
 
-        expect(dateInput).toHaveValue('January 12, 2026');
+    function expectNoRejection(input: HTMLElement) {
+      expect(input).not.toHaveAttribute('aria-invalid');
+      expect(screen.queryByText('Invalid date')).not.toBeInTheDocument();
+    }
+
+    it.each(locks)(
+      'ignores Enter and blur while %s, then rejects the text once editable',
+      async lock => {
+        const {user, onChange, input, setProps} =
+          renderField('2026-03-15T09:00');
+        await user.clear(input);
+        await user.type(input, '3/15/2');
+
+        setProps(lock);
+        await user.keyboard('{Enter}');
+        await user.tab();
+        expect(input).toHaveValue('3/15/2');
         expect(onChange).not.toHaveBeenCalled();
-        expect(dateInput).not.toHaveAttribute('aria-invalid');
-        expect(screen.queryByText('Invalid date')).not.toBeInTheDocument();
+        expectNoRejection(input);
+
+        setProps();
+        act(() => input.focus());
+        await user.tab();
+        expect(input).toHaveValue('3/15/2');
+        expect(onChange).not.toHaveBeenCalled();
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.getByText('Invalid date')).toBeInTheDocument();
+      },
+    );
+
+    it.each(locks)(
+      'hides a shown rejection while %s and shows it again once editable',
+      async lock => {
+        const {user, input, setProps} = renderField('2026-03-15T09:00');
+        await user.clear(input);
+        await user.type(input, '3/15/2');
+        await user.tab();
+        expect(screen.getByText('Invalid date')).toBeInTheDocument();
+
+        setProps(lock);
+        expect(input).toHaveValue('3/15/2');
+        expectNoRejection(input);
+
+        setProps();
+        expect(input).toHaveAttribute('aria-invalid', 'true');
+        expect(screen.getByText('Invalid date')).toBeInTheDocument();
+      },
+    );
+
+    it.each(locks)(
+      'commits a date typed before %s only once editable',
+      async lock => {
+        const {user, onChange, input, setProps} =
+          renderField('2026-01-12T09:00');
+        await user.clear(input);
+        // A two-digit year commits only on Enter or blur.
+        await user.type(input, '3/15/26');
+
+        setProps(lock);
+        await user.tab();
+        expect(input).toHaveValue('3/15/26');
+        expect(onChange).not.toHaveBeenCalled();
+
+        setProps();
+        act(() => input.focus());
+        await user.tab();
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(onChange).toHaveBeenCalledWith('2026-03-15T09:00');
+      },
+    );
+
+    it.each(locks)(
+      'replaces the text with a new value while %s',
+      async lock => {
+        const {user, onChange, input, setProps} =
+          renderField('2026-03-15T09:00');
+        await user.clear(input);
+        await user.type(input, '3/15/2');
+
+        setProps(lock);
+        setProps(lock, '2026-04-01T09:00');
+        expect(input).toHaveValue('April 1, 2026');
+
+        setProps(undefined, '2026-04-01T09:00');
+        act(() => input.focus());
+        await user.tab();
+        expect(input).toHaveValue('April 1, 2026');
+        expect(onChange).not.toHaveBeenCalled();
+        expectNoRejection(input);
       },
     );
   });

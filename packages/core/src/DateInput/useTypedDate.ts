@@ -251,7 +251,10 @@ export interface UseTypedDateFieldOptions extends UseTypedDateOptions {
   onClear: () => void;
   /** Runs when typing completes a new date, such as to show its month. */
   onTypedDate?: (value: ISODateString) => void;
-  /** A disabled or busy field ignores typing and drops typed text on commit. */
+  /**
+   * A disabled or busy field ignores typing, Enter and blur, and hides a typed
+   * rejection. Typed text stays until the field is editable or `value` changes.
+   */
   isDisabled: boolean;
   /** The caller's status. Rejected text that stays shows its own error instead. */
   status?: InputStatus;
@@ -310,7 +313,11 @@ export function useTypedDateField({
     pendingInput !== null && pendingInput.trim()
       ? typedDate.parse(pendingInput)
       : null;
-  const typedError = typedDateError(typedResult, isRejectionCommitted);
+  // A locked field hides the rejection but keeps its state, so the rejection
+  // shows again once the field is editable.
+  const typedError = isDisabled
+    ? null
+    : typedDateError(typedResult, isRejectionCommitted);
   const errorMessage =
     typedError != null && typedResult != null
       ? typedDate.errorMessage(typedResult)
@@ -377,12 +384,7 @@ export function useTypedDateField({
   );
 
   const commit = useCallback(() => {
-    if (pendingInput === null) {
-      return;
-    }
-    // Text typed before the field became disabled or busy never commits.
-    if (isDisabled) {
-      reset();
+    if (pendingInput === null || isDisabled) {
       return;
     }
     if (!pendingInput.trim()) {
