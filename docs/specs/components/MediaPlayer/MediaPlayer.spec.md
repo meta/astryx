@@ -308,6 +308,12 @@ through its own system player.
 - **OQ7 — What evidence gates graduation?** Real-browser runs including WebKit,
   screen reader passes, and rendered review over light, dark, and mixed
   footage. (`checkable`)
+- **OQ8 — Is the video control bar a Toolbar?** The bar is a plain row of
+  controls, so every control is its own tab stop. The Toolbar component gives
+  one tab stop with arrow keys between controls, but the timeline and volume
+  sliders and the player's seek and volume shortcuts also use the arrow keys.
+  Adopting Toolbar means arrow keys move focus while a control has focus;
+  keeping the row keeps the shortcuts and the extra tab stops. (`human-api`)
 
 ## Content boundary
 

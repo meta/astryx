@@ -24,7 +24,6 @@ import {
   durationVars,
   easeVars,
   radiusVars,
-  shadowVars,
   spacingVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
 import {MediaPlayer, type MediaPlayerProps} from './MediaPlayer';
@@ -90,7 +89,6 @@ const styles = stylex.create({
       default: 'blur(12px)',
       '@media (prefers-reduced-transparency: reduce)': 'none',
     },
-    boxShadow: shadowVars['--shadow-low'],
   },
   bigPlay: {
     padding: spacingVars['--spacing-2'],
@@ -104,8 +102,7 @@ const styles = stylex.create({
     display: 'flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-2'],
-    paddingBlock: spacingVars['--spacing-1'],
-    paddingInline: spacingVars['--spacing-2'],
+    padding: spacingVars['--spacing-1'],
     borderRadius: BAR_RADIUS,
     color: colorVars['--color-text-primary'],
     opacity: 1,
