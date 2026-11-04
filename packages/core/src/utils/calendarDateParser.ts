@@ -1252,8 +1252,8 @@ function hasEraChange(calendar: CalendarSystem): boolean {
 /**
  * Adds the era to a format that omits it, so a year never reads as a
  * Gregorian year. Keeps the locale's own pattern when the era would reorder
- * the fields. Where the era changes, a narrow era that keeps the order is
- * used instead, such as Amharic Japanese "1/1/8 R".
+ * the fields. Where the era changes, it uses a narrow era that keeps the
+ * order instead, such as Amharic Japanese "1/1/8 R".
  */
 function displayOptions(
   locale: Locale,
@@ -1307,9 +1307,9 @@ function formatInCalendar(
   const display = displayOptions(locale, calendar, options);
   const text = plainDateFormat(pd, {...display, calendar}, locale);
   // When every era width reorders the fields, such as the Amharic short-month
-  // date, the text has no era. Text without an era reads in the latest era,
-  // so a date of an earlier era adds it on the side where the era format has
-  // it.
+  // date, the text has no era. Text without an era reads in the latest era.
+  // So a date of an earlier era adds the era. It goes at the start or the
+  // end, as in the era format.
   const eraOf = (date: PlainDate) => calendarEraYear('en', calendar, date).era;
   if (
     !hasEraChange(calendar) ||
