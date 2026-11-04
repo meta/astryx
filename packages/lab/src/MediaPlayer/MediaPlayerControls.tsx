@@ -19,6 +19,7 @@ import {
   useState,
   type KeyboardEvent,
   type PointerEvent,
+  type ReactNode,
   type Ref,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
@@ -30,6 +31,7 @@ import {
   DropdownMenuRadioItem,
 } from '@astryxdesign/core/DropdownMenu';
 import {IconButton, type IconButtonProps} from '@astryxdesign/core/IconButton';
+import {Popover} from '@astryxdesign/core/Popover';
 import {useLocale, useTranslator} from '@astryxdesign/core/i18n';
 import {Slider} from '@astryxdesign/core/Slider';
 import {
@@ -42,6 +44,7 @@ import {
 import {ToggleButton} from '@astryxdesign/core/ToggleButton';
 import {
   composeEventHandlers,
+  focusOutlineProps,
   mergeProps,
   observeResize,
   themeProps,
@@ -50,6 +53,7 @@ import {
   DEFAULT_PLAYBACK_RATES,
   formatClock,
   formatSpokenTime,
+  useMediaPlaybackTime,
   useMediaPlayerContext,
   useMediaSelector,
 } from './MediaPlayerContext';
@@ -82,6 +86,10 @@ const CHAPTER_GAP = 2;
 const TIMELINE_MARKER_SIZE = 6;
 /** How near, in pixels, the pointer or the value must be to name a marker. */
 const MARKER_REACH = 6;
+/** Pointer target of a marker that opens a popover. */
+const MARKER_HIT_SIZE = 24;
+/** Width of a marker's popover, which fits a comment thread. */
+const MARKER_POPOVER_WIDTH = 360;
 
 const styles = stylex.create({
   timeline: {
@@ -145,6 +153,40 @@ const styles = stylex.create({
     backgroundColor: colorVars['--color-text-primary'],
     boxShadow: `0 0 0 2px ${colorVars['--color-background-surface']}`,
   }),
+  markerButtons: {
+    position: 'absolute',
+    inset: 0,
+    pointerEvents: 'none',
+  },
+  markerAnchor: (x: number) => ({
+    position: 'absolute',
+    top: '50%',
+    insetInlineStart: x,
+    transform: 'translate(-50%, -50%)',
+    pointerEvents: 'auto',
+  }),
+  markerButton: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: MARKER_HIT_SIZE,
+    height: MARKER_HIT_SIZE,
+    padding: 0,
+    borderWidth: 0,
+    borderRadius: radiusVars['--radius-full'],
+    backgroundColor: 'transparent',
+    cursor: {
+      default: 'pointer',
+      ':is(:disabled,[aria-disabled="true"])': 'default',
+    },
+  },
+  markerDot: {
+    width: TIMELINE_MARKER_SIZE,
+    height: TIMELINE_MARKER_SIZE,
+    borderRadius: radiusVars['--radius-full'],
+    backgroundColor: colorVars['--color-text-primary'],
+    boxShadow: `0 0 0 2px ${colorVars['--color-background-surface']}`,
+  },
   thumb: (x: number) => ({
     position: 'absolute',
     top: '50%',
@@ -176,6 +218,12 @@ const styles = stylex.create({
     whiteSpace: 'nowrap',
   }),
   previewTime: {
+    fontVariantNumeric: 'tabular-nums',
+  },
+  // Fits the widest speed label, such as "1.75×", so the control keeps its
+  // width when the speed changes.
+  rateLabel: {
+    minWidth: `calc(4.5ch + ${spacingVars['--spacing-3']} * 2)`,
     fontVariantNumeric: 'tabular-nums',
   },
   previewLine: {
@@ -430,6 +478,12 @@ export interface MediaTimelineMarker {
    * it when its value reaches the marker.
    */
   label: string;
+  /**
+   * Content of a popover that opens when the marker is pressed, such as a
+   * CommentThread. A marker with content is a button that also jumps to its
+   * time; a marker without it is a dot.
+   */
+  content?: ReactNode;
 }
 
 export interface MediaTimeSliderProps extends Omit<
@@ -510,10 +564,6 @@ export function MediaTimeSlider({
 }: MediaTimeSliderProps) {
   const {store, scrubTime, setScrubTime, holdControls, wakeControls} =
     useMediaPlayerContext('MediaTimeSlider');
-  const currentTime = useMediaSelector(
-    'MediaTimeSlider',
-    state => state.currentTime,
-  );
   const duration = useMediaSelector('MediaTimeSlider', state => state.duration);
   const bufferedEnd = useMediaSelector(
     'MediaTimeSlider',
@@ -527,7 +577,8 @@ export function MediaTimeSlider({
   const [width, setWidth] = useState(0);
   const [previewX, setPreviewX] = useState<number | null>(null);
   const isSeekable = Number.isFinite(duration) && duration > 0;
-  const value = isSeekable ? Math.min(scrubTime ?? currentTime, duration) : 0;
+  const playbackTime = useMediaPlaybackTime();
+  const value = isSeekable ? Math.min(scrubTime ?? playbackTime, duration) : 0;
   const sortedChapters = useMemo(
     () =>
       [...(chapters ?? [])]
@@ -679,13 +730,15 @@ export function MediaTimeSlider({
           </div>
         ))}
         {isSeekable
-          ? markerList.map(marker => (
-              <div
-                key={`${marker.time}-${marker.label}`}
-                data-media-marker=""
-                {...stylex.props(styles.marker(toX(marker.time)))}
-              />
-            ))
+          ? markerList
+              .filter(marker => marker.content == null)
+              .map(marker => (
+                <div
+                  key={`${marker.time}-${marker.label}`}
+                  data-media-marker=""
+                  {...stylex.props(styles.marker(toX(marker.time)))}
+                />
+              ))
           : null}
         <div {...stylex.props(styles.thumb(playedX))} />
         {previewTime != null && previewAt != null ? (
@@ -751,6 +804,35 @@ export function MediaTimeSlider({
           containerXstyle={xstyle}
         />
       </div>
+      {isSeekable && markerList.some(marker => marker.content != null) ? (
+        <div {...stylex.props(styles.markerButtons)}>
+          {markerList
+            .filter(marker => marker.content != null)
+            .map(marker => (
+              <div
+                key={`${marker.time}-${marker.label}`}
+                {...stylex.props(styles.markerAnchor(toX(marker.time)))}>
+                <Popover
+                  label={marker.label}
+                  content={marker.content}
+                  placement="above"
+                  alignment="center"
+                  width={MARKER_POPOVER_WIDTH}
+                  padding={0}
+                  onOpenChange={isOpen => holdControls('menu', isOpen)}>
+                  <button
+                    type="button"
+                    aria-label={marker.label}
+                    data-media-marker=""
+                    onClick={() => store.actions.seek(marker.time)}
+                    {...focusOutlineProps.focusVisible(styles.markerButton)}>
+                    <span aria-hidden {...stylex.props(styles.markerDot)} />
+                  </button>
+                </Popover>
+              </div>
+            ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -979,7 +1061,7 @@ export function MediaPlaybackRateMenu({
         tooltip: t('@astryx.mediaPlayer.playbackSpeed'),
         variant: 'ghost',
         size,
-        xstyle,
+        xstyle: [styles.rateLabel, xstyle],
         ...mergeProps(themeProps('media-playback-rate-menu'), {
           className,
           style,
@@ -1064,7 +1146,7 @@ export function MediaPlaybackRateButton({
         className,
         style,
       })}
-      xstyle={xstyle}
+      xstyle={[styles.rateLabel, xstyle]}
     />
   );
 }

@@ -7,7 +7,7 @@ import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import type * as CoreHooks from '@astryxdesign/core/hooks';
 import {AudioPlayer} from './AudioPlayer';
 import {MediaPlayer} from './MediaPlayer';
-import {useMediaPlayer} from './MediaPlayerContext';
+import {useMediaPlaybackTime, useMediaPlayer} from './MediaPlayerContext';
 import {MediaPlaybackRateMenu, MediaTimeSlider} from './MediaPlayerControls';
 import {MediaPlayerAudio, MediaPlayerVideo} from './MediaPlayerMedia';
 import {VideoPlayer} from './VideoPlayer';
@@ -667,6 +667,24 @@ describe('useMediaPlayer', () => {
     await user.click(screen.getByRole('button', {name: 'Toggle'}));
     expect(playback.play).toHaveBeenCalledTimes(1);
     expect(screen.getByLabelText('Status')).toHaveTextContent('playing');
+  });
+
+  it('reports the playback time while paused, as the media reports it', () => {
+    function Readout() {
+      return <span data-testid="time">{useMediaPlaybackTime()}</span>;
+    }
+    const {container} = render(
+      <MediaPlayer label="Clip">
+        <MediaPlayerVideo src="/clip.mp4" />
+        <Readout />
+      </MediaPlayer>,
+    );
+    const video = container.querySelector('video')!;
+    fakePlayback(video, {duration: 60});
+    act(() => {
+      video.currentTime = 12;
+    });
+    expect(screen.getByTestId('time')).toHaveTextContent('12');
   });
 
   it('throws outside a MediaPlayer', () => {

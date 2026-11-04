@@ -569,6 +569,20 @@ export const docs = {
       ],
       relatedComponents: ['MediaPlayer'],
     },
+    {
+      name: 'useMediaPlaybackTime',
+      displayName: 'Use Media Playback Time',
+      description:
+        'Returns the playback position, advanced on every animation frame while the media plays, so custom progress moves smoothly between the browser’s time updates. Seeks, pauses, and stalls snap it back to the reported time; under reduced motion it follows the time updates only.',
+      returns: [
+        {
+          name: 'time',
+          type: 'number',
+          description: 'Playback position in seconds.',
+        },
+      ],
+      relatedComponents: ['MediaPlayer', 'MediaTimeSlider'],
+    },
   ],
   examples: [
     {

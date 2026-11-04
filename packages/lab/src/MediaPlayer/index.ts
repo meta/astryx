@@ -11,7 +11,11 @@
 
 export {AudioPlayer, type AudioPlayerProps} from './AudioPlayer';
 export {MediaPlayer, type MediaPlayerProps} from './MediaPlayer';
-export {useMediaPlayer, type UseMediaPlayerResult} from './MediaPlayerContext';
+export {
+  useMediaPlaybackTime,
+  useMediaPlayer,
+  type UseMediaPlayerResult,
+} from './MediaPlayerContext';
 export {
   MediaCaptionsButton,
   MediaFullscreenButton,

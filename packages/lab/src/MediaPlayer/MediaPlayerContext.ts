@@ -10,7 +10,15 @@
  * @position Internal to MediaPlayer; every part reads its player from here
  */
 
-import {createContext, use, useMemo, useSyncExternalStore} from 'react';
+import {
+  createContext,
+  use,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import {
   INITIAL_MEDIA_STATE,
   type MediaPlayerActions,
@@ -111,6 +119,74 @@ function pad(value: number): string {
 }
 
 /** Formats seconds as m:ss, or h:mm:ss when `hasHours` is true. */
+/**
+ * Returns the playback position, advanced on every animation frame while the
+ * media plays, so progress moves smoothly between the browser's time
+ * updates, which come about four times a second. Each update, seek, pause,
+ * and stall snaps it back to the reported time. Under reduced motion it
+ * follows the time updates only.
+ *
+ * @example
+ * ```
+ * function ClipProgress() {
+ *   const {state} = useMediaPlayer();
+ *   const time = useMediaPlaybackTime();
+ *   return <ProgressBar label="Progress" value={time} max={state.duration} />;
+ * }
+ * ```
+ */
+export function useMediaPlaybackTime(): number {
+  const currentTime = useMediaSelector(
+    'useMediaPlaybackTime',
+    state => state.currentTime,
+  );
+  const isAdvancing = useMediaSelector(
+    'useMediaPlaybackTime',
+    state => !state.isPaused && !state.isEnded && !state.isWaiting,
+  );
+  const duration = useMediaSelector(
+    'useMediaPlaybackTime',
+    state => state.duration,
+  );
+  const playbackRate = useMediaSelector(
+    'useMediaPlaybackTime',
+    state => state.playbackRate,
+  );
+  const anchorRef = useRef({time: currentTime, at: 0});
+  const [smoothTime, setSmoothTime] = useState(currentTime);
+
+  // Syncs the anchor with each reported time.
+  useEffect(() => {
+    anchorRef.current = {time: currentTime, at: performance.now()};
+    setSmoothTime(currentTime);
+  }, [currentTime]);
+
+  // Syncs the smoothed time with the animation frames while the media plays.
+  useEffect(() => {
+    if (
+      !isAdvancing ||
+      typeof requestAnimationFrame !== 'function' ||
+      (typeof matchMedia === 'function' &&
+        matchMedia('(prefers-reduced-motion: reduce)').matches)
+    ) {
+      return;
+    }
+    const end = Number.isFinite(duration) && duration > 0 ? duration : Infinity;
+    let frame = 0;
+    const tick = (now: number) => {
+      const {time, at} = anchorRef.current;
+      setSmoothTime(
+        Math.min(time + (Math.max(now - at, 0) / 1000) * playbackRate, end),
+      );
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [isAdvancing, duration, playbackRate]);
+
+  return isAdvancing ? smoothTime : currentTime;
+}
+
 export function formatClock(seconds: number, hasHours = false): string {
   const total = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0;
   const hours = Math.floor(total / 3600);

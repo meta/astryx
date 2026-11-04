@@ -2,9 +2,10 @@
 
 import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
-import {useEffect, useRef, useState, type RefObject} from 'react';
+import {useEffect, useState} from 'react';
 import {
   AudioPlayer,
+  CommentThread,
   MediaMuteButton,
   MediaPlayButton,
   MediaPlayer,
@@ -13,10 +14,10 @@ import {
   MediaTime,
   MediaTimeSlider,
   VideoPlayer,
+  useMediaPlaybackTime,
   useMediaPlayer,
 } from '@astryxdesign/lab';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
-import {ProgressBar} from '@astryxdesign/core/ProgressBar';
 import {Text} from '@astryxdesign/core/Text';
 import {
   durationVars,
@@ -60,32 +61,116 @@ const CHAPTERS = [
   {start: 3.4, title: 'Take-off'},
 ];
 
-const COMMENT_MARKERS = [
-  {time: 0.8, label: 'Ana Ruiz: Love the light here.'},
-  {time: 2.2, label: 'Lin Park: Can we hold on this?'},
-  {time: 3.9, label: 'Mira Chen: Cut before the blur.'},
+const VIEWER = {id: 'sam', name: 'Sam Lee'};
+const ANA = {id: 'ana', name: 'Ana Ruiz'};
+const LIN = {id: 'lin', name: 'Lin Park'};
+const MIRA = {id: 'mira', name: 'Mira Chen'};
+
+const COMMENT_THREADS = [
+  {
+    time: 0.8,
+    thread: {
+      id: 'c1',
+      author: ANA,
+      body: 'Love the light here.',
+      createdAt: '2026-11-04T17:02:00Z',
+      replies: [
+        {
+          id: 'c1-r1',
+          author: LIN,
+          body: 'Same. Can we keep this take?',
+          createdAt: '2026-11-04T17:10:00Z',
+        },
+      ],
+    },
+  },
+  {
+    time: 2.2,
+    thread: {
+      id: 'c2',
+      author: LIN,
+      body: 'Can we hold on this for a beat longer?',
+      createdAt: '2026-11-04T17:05:00Z',
+    },
+  },
+  {
+    time: 3.9,
+    thread: {
+      id: 'c3',
+      author: MIRA,
+      body: 'Cut before the blur.',
+      createdAt: '2026-11-04T17:20:00Z',
+      isUnread: true,
+    },
+  },
 ];
 
+const COMMENT_MARKERS = COMMENT_THREADS.map(({time, thread}) => ({
+  time,
+  label: `${thread.author.name}: ${thread.body}`,
+  content: (
+    <CommentThread comment={thread} currentUser={VIEWER} container="card" />
+  ),
+}));
+
+const FEED_CLIPS = ['Bee on a flower', 'Second clip', 'Third clip'];
+
 const styles = stylex.create({
-  frame: {
+  controlless: {
     position: 'relative',
     width: '100%',
+    aspectRatio: '16 / 9',
+    overflow: 'hidden',
+    borderRadius: radiusVars['--radius-container'],
+    backgroundColor: 'black',
   },
-  // Sits where the control bar sits: one bar inset from the edges.
-  ticker: {
+  controllessVideo: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+  },
+  // Fades in while the player is hovered or holds keyboard focus.
+  hoverLine: {
     position: 'absolute',
     insetInline: spacingVars['--spacing-2'],
     insetBlockEnd: spacingVars['--spacing-2'],
     pointerEvents: 'none',
-    opacity: 0,
+    opacity: {
+      default: 0,
+      [stylex.when.ancestor(':hover')]: 1,
+      [stylex.when.ancestor(':focus-within')]: 1,
+    },
     transitionProperty: 'opacity',
     transitionDuration: {
       default: durationVars['--duration-fast'],
       '@media (prefers-reduced-motion: reduce)': '0s',
     },
   },
-  tickerShown: {
-    opacity: 1,
+  // A 3px line: thinner than ProgressBar's 8px track.
+  line: {
+    position: 'relative',
+    height: 3,
+    overflow: 'hidden',
+    borderRadius: radiusVars['--radius-full'],
+    backgroundColor: 'oklch(1 0 0 / 0.35)',
+  },
+  lineFill: (fraction: number) => ({
+    position: 'absolute',
+    insetBlock: 0,
+    insetInlineStart: 0,
+    width: `${Math.min(Math.max(fraction, 0), 1) * 100}%`,
+    backgroundColor: 'white',
+  }),
+  stepper: {
+    position: 'absolute',
+    insetInline: spacingVars['--spacing-2'],
+    insetBlockStart: spacingVars['--spacing-2'],
+    display: 'flex',
+    gap: spacingVars['--spacing-1'],
+  },
+  step: {
+    flexGrow: 1,
+    flexBasis: 0,
   },
   feed: {
     position: 'relative',
@@ -103,89 +188,69 @@ const styles = stylex.create({
   },
   feedMute: {
     position: 'absolute',
-    insetBlockStart: spacingVars['--spacing-2'],
+    insetBlockStart: spacingVars['--spacing-4'],
     insetInlineEnd: spacingVars['--spacing-2'],
     color: 'white',
     backgroundColor: 'oklch(0 0 0 / 0.45)',
     borderRadius: radiusVars['--radius-full'],
   },
-  feedTicker: {
-    position: 'absolute',
-    insetInline: spacingVars['--spacing-2'],
-    insetBlockEnd: spacingVars['--spacing-2'],
-  },
 });
 
-/**
- * Reads a VideoPlayer's clock and controls state from outside it, for the
- * ticker story only.
- */
-function usePlaybackOf(frameRef: RefObject<HTMLDivElement | null>) {
-  const [playback, setPlayback] = useState({
-    time: 0,
-    duration: 0,
-    isBarHidden: false,
-  });
-  // Syncs the snapshot with the video element and the player root.
-  useEffect(() => {
-    const frame = frameRef.current;
-    const video = frame?.querySelector('video');
-    const root = frame?.querySelector('[data-controls]');
-    if (video == null || root == null) {
-      return;
-    }
-    let frameId = 0;
-    // Animation frames keep the ticker smooth between time updates.
-    const tick = () => {
-      setPlayback({
-        time: video.currentTime,
-        duration: Number.isFinite(video.duration) ? video.duration : 0,
-        isBarHidden: root.getAttribute('data-controls') === 'hidden',
-      });
-      frameId = requestAnimationFrame(tick);
-    };
-    tick();
-    return () => cancelAnimationFrame(frameId);
-  }, [frameRef]);
-  return playback;
-}
-
-function TickerWhenBarHides() {
-  const frameRef = useRef<HTMLDivElement>(null);
-  const playback = usePlaybackOf(frameRef);
+function ProgressLine({fraction}: {fraction: number}) {
   return (
-    <div ref={frameRef} {...stylex.props(styles.frame)}>
-      <VideoPlayer src={VIDEO_SRC} label="Bee on a flower" isLooping />
-      {/* The timeline already reports progress, so the ticker is hidden from
-          assistive technology. */}
-      <div
-        aria-hidden
-        {...stylex.props(
-          styles.ticker,
-          playback.isBarHidden && styles.tickerShown,
-        )}>
-        <ProgressBar
-          label="Playback progress"
-          isLabelHidden
-          value={playback.time}
-          max={playback.duration || 1}
-        />
-      </div>
+    <div {...stylex.props(styles.line)}>
+      <div {...stylex.props(styles.lineFill(fraction))} />
     </div>
   );
 }
 
-function FeedTicker() {
+/** The only chrome of a controlless player: a progress line on hover. */
+function HoverProgress() {
   const {state} = useMediaPlayer();
+  const time = useMediaPlaybackTime();
   return (
-    <div aria-hidden {...stylex.props(styles.feedTicker)}>
-      <ProgressBar
-        label="Playback progress"
-        isLabelHidden
-        value={state.currentTime}
-        max={state.duration || 1}
-      />
+    <div aria-hidden {...stylex.props(styles.hoverLine)}>
+      <ProgressLine fraction={state.duration > 0 ? time / state.duration : 0} />
     </div>
+  );
+}
+
+/** One segment per clip, like stories: done, playing, then still to come. */
+function FeedStepper({count, index}: {count: number; index: number}) {
+  const {state} = useMediaPlayer();
+  const time = useMediaPlaybackTime();
+  const playing = state.duration > 0 ? time / state.duration : 0;
+  return (
+    <div aria-hidden {...stylex.props(styles.stepper)}>
+      {Array.from({length: count}, (_, step) => (
+        <div key={step} {...stylex.props(styles.step)}>
+          <ProgressLine
+            fraction={step < index ? 1 : step === index ? playing : 0}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FeedStories() {
+  const [index, setIndex] = useState(0);
+  return (
+    <MediaPlayer
+      key={index}
+      label={FEED_CLIPS[index] ?? 'Clip'}
+      onEnded={() => setIndex(current => (current + 1) % FEED_CLIPS.length)}
+      xstyle={styles.feed}>
+      <MediaPlayerVideo
+        src={VIDEO_SRC}
+        autoPlay
+        muted
+        playsInline
+        xstyle={styles.feedVideo}
+      />
+      <FeedStepper count={FEED_CLIPS.length} index={index} />
+      <MediaMuteButton xstyle={styles.feedMute} />
+    </MediaPlayer>
   );
 }
 
@@ -328,8 +393,8 @@ export const Chapters: Story = {
 
 /**
  * Timestamped comments as markers on the timeline. A pointer near a marker
- * previews its comment, and the timeline speaks the comment when its value
- * reaches the marker.
+ * previews its comment; pressing a marker jumps to it and opens its comment
+ * thread. The timeline speaks the comment when its value reaches the marker.
  */
 export const CommentMarkers: Story = {
   args: {
@@ -349,30 +414,32 @@ export const BufferedRange: Story = {
 };
 
 /**
- * A ProgressBar ticker takes the bar's place while the controls hide, like
- * a thin progress line. Play the video and wait two seconds.
+ * A video with no controls: it plays muted on a loop, and hovering it or
+ * giving it keyboard focus shows only a 3px progress line.
  */
 export const ProgressTicker: Story = {
-  render: () => <TickerWhenBarHides />,
+  render: () => (
+    <div {...stylex.props(stylex.defaultMarker())}>
+      <MediaPlayer label="Bee on a flower" xstyle={styles.controlless}>
+        <MediaPlayerVideo
+          src={VIDEO_SRC}
+          autoPlay
+          muted
+          loop
+          playsInline
+          xstyle={styles.controllessVideo}
+        />
+        <HoverProgress />
+      </MediaPlayer>
+    </div>
+  ),
 };
 
 /**
- * A feed clip with no control bar: it plays muted on a loop, and a
- * ProgressBar ticker is its only timeline.
+ * Feed clips with no control bar, like stories: each clip plays muted, and
+ * a thin segment per clip shows which ones are done, the progress of the one
+ * playing, and how many are left.
  */
 export const FeedClip: Story = {
-  render: () => (
-    <MediaPlayer label="Bee on a flower" xstyle={styles.feed}>
-      <MediaPlayerVideo
-        src={VIDEO_SRC}
-        autoPlay
-        muted
-        loop
-        playsInline
-        xstyle={styles.feedVideo}
-      />
-      <MediaMuteButton xstyle={styles.feedMute} />
-      <FeedTicker />
-    </MediaPlayer>
-  ),
+  render: () => <FeedStories />,
 };

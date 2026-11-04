@@ -342,6 +342,7 @@ export {
   MediaTimeSlider,
   MediaVolumeSlider,
   VideoPlayer,
+  useMediaPlaybackTime,
   useMediaPlayer,
   type AudioPlayerProps,
   type MediaButtonPartProps,
