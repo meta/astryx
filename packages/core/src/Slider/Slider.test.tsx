@@ -496,6 +496,99 @@ describe('Slider', () => {
     expect(handleChange).not.toHaveBeenCalled();
   });
 
+  describe('caller handlers while disabled (spec:AST-085 FR2)', () => {
+    // A disabled slider stays focusable (aria-disabled, not native disabled),
+    // so the browser no longer blocks its events: the component withholds
+    // every caller handler except focus and blur, as a disabled text field does.
+    const makeHandlers = () => ({
+      onPointerDown: vi.fn(),
+      onPointerMove: vi.fn(),
+      onPointerUp: vi.fn(),
+      onPointerCancel: vi.fn(),
+      onKeyDown: vi.fn(),
+      onClick: vi.fn(),
+      onDoubleClick: vi.fn(),
+    });
+
+    const exercise = async (
+      user: ReturnType<typeof userEvent.setup>,
+      thumb: HTMLElement,
+    ) => {
+      const control = thumb.parentElement!;
+      fireEvent.pointerDown(control, {clientX: 10, clientY: 10, pointerId: 1});
+      fireEvent.pointerMove(control, {clientX: 20, clientY: 10, pointerId: 1});
+      fireEvent.pointerUp(control, {clientX: 20, clientY: 10, pointerId: 1});
+      fireEvent.pointerCancel(control, {pointerId: 1});
+      await user.dblClick(thumb);
+      act(() => thumb.focus());
+      await user.keyboard('{ArrowRight}');
+    };
+
+    it('runs no caller handler from a disabled single slider, but still reports focus and blur', async () => {
+      const user = userEvent.setup();
+      const handlers = makeHandlers();
+      const onFocus = vi.fn();
+      const onBlur = vi.fn();
+      render(
+        <Slider
+          label="Volume"
+          value={50}
+          isDisabled
+          onFocus={onFocus}
+          onBlur={onBlur}
+          {...handlers}
+        />,
+      );
+      const thumb = screen.getByRole('slider');
+      await exercise(user, thumb);
+      for (const [name, handler] of Object.entries(handlers)) {
+        expect(handler, name).not.toHaveBeenCalled();
+      }
+      expect(onFocus).toHaveBeenCalled();
+      act(() => thumb.blur());
+      expect(onBlur).toHaveBeenCalled();
+    });
+
+    it('runs no caller handler from a disabled range slider', async () => {
+      const user = userEvent.setup();
+      const handlers = makeHandlers();
+      render(
+        <Slider label="Price" value={[20, 80]} isDisabled {...handlers} />,
+      );
+      const [thumb] = screen.getAllByRole('slider');
+      await exercise(user, thumb);
+      // The base props of a range slider land on the role="group" control.
+      await user.click(screen.getByRole('group', {name: 'Price'}));
+      for (const [name, handler] of Object.entries(handlers)) {
+        expect(handler, name).not.toHaveBeenCalled();
+      }
+    });
+
+    it('still runs every caller handler when the slider is enabled', async () => {
+      const user = userEvent.setup();
+      const handlers = makeHandlers();
+      render(<Slider label="Volume" value={50} {...handlers} />);
+      const thumb = screen.getByRole('slider');
+      await exercise(user, thumb);
+      for (const [name, handler] of Object.entries(handlers)) {
+        expect(handler, name).toHaveBeenCalled();
+      }
+    });
+
+    it('resumes caller handlers once re-enabled', async () => {
+      const user = userEvent.setup();
+      const onClick = vi.fn();
+      const {rerender} = render(
+        <Slider label="Volume" value={50} isDisabled onClick={onClick} />,
+      );
+      await user.click(screen.getByRole('slider'));
+      expect(onClick).not.toHaveBeenCalled();
+      rerender(<Slider label="Volume" value={50} onClick={onClick} />);
+      await user.click(screen.getByRole('slider'));
+      expect(onClick).toHaveBeenCalledOnce();
+    });
+  });
+
   // --- onChangeEnd on keyboard ---
 
   it('fires onChangeEnd on keyboard ArrowRight', async () => {
