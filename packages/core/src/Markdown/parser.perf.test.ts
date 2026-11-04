@@ -414,6 +414,7 @@ describe('GFM autolink scanning is linear in the input length (Markdown Performa
       'a long word, then an email and a URL',
       `${'a'.repeat(100_000)} me@example.com https://example.com`,
     ],
+    ['a URL closed by a long run of )', `https://a${')'.repeat(100_000)}`],
   ])('parses %s with autolink within the budget', (_label, text) => {
     const startedAt = performance.now();
     const nodes = parseInline(text, {autolink: 'gfm'});

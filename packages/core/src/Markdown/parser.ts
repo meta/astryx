@@ -2749,10 +2749,9 @@ const URL_LITERAL_RE = new RegExp(
 const WWW_LITERAL_RE = new RegExp(`www\\.${ANY_NON_WHITESPACE_OR_ANGLE}`, 'g');
 
 /**
- * The domain of a bare email (at least one dot), matched at the position after
- * its `@`. The scan starts at each `@`, not at each character: an unanchored
- * local-part pattern retries from every character of a long run, so its time
- * grows with the square of the run.
+ * The domain of a bare email, with at least one dot. The scan matches it after
+ * each `@`. A pattern that starts at every character rereads a long run each
+ * time, so its cost grows with the square of the run.
  */
 const EMAIL_DOMAIN_RE = new RegExp(DOMAIN_WITH_DOT, 'y');
 
@@ -2793,35 +2792,30 @@ interface AutolinkMatch {
  * `https://example.com/Foo_(bar)` keeps the inner pair).
  */
 function peelTrailingPunctAndParens(url: string): string {
-  let s = url;
-  while (s.length > 0) {
-    // Peel trailing punctuation characters in one pass.
-    if (TRAILING_PUNCT_CHARS.has(s[s.length - 1])) {
-      let end = s.length - 1;
-      while (end > 0 && TRAILING_PUNCT_CHARS.has(s[end - 1])) {
-        end--;
-      }
-      s = s.slice(0, end);
-      continue;
+  // The parens are counted once; each peeled `)` then lowers the count, so a
+  // long run of `)` costs one pass.
+  let open = 0;
+  let close = 0;
+  for (let idx = 0; idx < url.length; idx++) {
+    if (url[idx] === '(') {
+      open++;
+    } else if (url[idx] === ')') {
+      close++;
     }
-    if (s.endsWith(')')) {
-      let open = 0;
-      let close = 0;
-      for (let idx = 0; idx < s.length; idx++) {
-        if (s[idx] === '(') {
-          open++;
-        } else if (s[idx] === ')') {
-          close++;
-        }
-      }
-      if (close > open) {
-        s = s.slice(0, -1);
-        continue;
-      }
-    }
-    break;
   }
-  return s;
+  let end = url.length;
+  while (end > 0) {
+    const ch = url[end - 1];
+    if (TRAILING_PUNCT_CHARS.has(ch)) {
+      end--;
+    } else if (ch === ')' && close > open) {
+      close--;
+      end--;
+    } else {
+      break;
+    }
+  }
+  return url.slice(0, end);
 }
 
 /** Characters that, when preceding a URL, indicate it's part of a larger token. */
