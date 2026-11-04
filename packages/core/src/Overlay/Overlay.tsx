@@ -19,7 +19,6 @@ import type {ReactNode, Ref} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {composeEventHandlers, mergeProps} from '../utils';
 import {useOverlay} from './useOverlay';
-import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {overlayScope, overlayContainerStyles} from './overlay.markers.stylex';
 import {themeProps} from '../utils/themeProps';
 import type {BaseProps} from '../BaseProps';
@@ -48,6 +47,39 @@ export interface OverlayProps extends BaseProps<HTMLDivElement> {
   position?: OverlayPosition;
   /** @default "end" */
   align?: OverlayAlign;
+}
+
+// The scrim clips to the media's rounded corners.
+// A useOverlay consumer sets the radius on its own element.
+const wrapperStates = new WeakMap<HTMLElement, 'attached' | 'detaching'>();
+
+// Read the radius each time React attaches a wrapper, also when a hidden
+// Activity shows it again: the child can change while the wrapper is hidden.
+// When a caller's ref changes identity, React detaches and attaches the same
+// wrapper in one commit. That is not a new attach. The detach mark lasts until
+// the commit ends, so the attach in the same commit does not read again.
+function mirrorFirstChildRadius(container: HTMLElement | null) {
+  if (container == null) {
+    return;
+  }
+  const previousState = wrapperStates.get(container);
+  wrapperStates.set(container, 'attached');
+  if (previousState == null) {
+    const firstChild = container.firstElementChild;
+    const radius =
+      firstChild == null ? null : getComputedStyle(firstChild).borderRadius;
+    if (radius && radius !== '0px') {
+      container.style.borderRadius = radius;
+    }
+  }
+  return () => {
+    wrapperStates.set(container, 'detaching');
+    queueMicrotask(() => {
+      if (wrapperStates.get(container) === 'detaching') {
+        wrapperStates.delete(container);
+      }
+    });
+  };
 }
 
 /**
@@ -94,28 +126,10 @@ export function Overlay({
     align,
   });
 
-  // Border radius: mirror first child's radius onto the wrapper.
-  // Only the component needs this — hook consumers have their own radius.
-  useIsomorphicLayoutEffect(() => {
-    const el = overlay.containerRef.current;
-    if (!el) {
-      return;
-    }
-    const firstChild = el.firstElementChild as HTMLElement | null;
-    if (!firstChild) {
-      return;
-    }
-    const radius = getComputedStyle(firstChild).borderRadius;
-    if (radius && radius !== '0px') {
-      // eslint-disable-next-line react-compiler/react-compiler -- imperative DOM: syncing border-radius from child
-      el.style.borderRadius = radius;
-    }
-  }, []);
-
   return (
     <div
       {...rest}
-      ref={useMergedRefs(ref, overlay.containerRef)}
+      ref={useMergedRefs(ref, overlay.containerRef, mirrorFirstChildRadius)}
       {...mergeProps(
         themeProps('overlay'),
         stylex.props(overlayScope, overlayContainerStyles.root, xstyle),
