@@ -576,6 +576,10 @@ describe('Table render performance', () => {
 describe('re-sort', () => {
   const sortedRows = createTestData(1000);
   const reversedRows = [...sortedRows].reverse();
+  // By default, a role query reads each row's computed style to check that
+  // the row is not hidden. Over 1,000 rows in jsdom that costs seconds. These
+  // cases assert which rows come first, so they skip that check.
+  const rows = () => screen.getAllByRole('row', {hidden: true});
 
   function renderSortable(
     renderCell: (row: TestRow) => string,
@@ -612,7 +616,7 @@ describe('re-sort', () => {
     resort();
 
     expect(renderCell).not.toHaveBeenCalled();
-    expect(screen.getAllByRole('row')[1]).toHaveTextContent('Item 999');
+    expect(rows()[1]).toHaveTextContent('Item 999');
   });
 
   it('re-renders the rows when a plugin reads the row index', () => {
@@ -629,7 +633,7 @@ describe('re-sort', () => {
     resort();
 
     expect(renderCell).toHaveBeenCalledTimes(1000);
-    const [, first, second] = screen.getAllByRole('row');
+    const [, first, second] = rows();
     expect(first).toHaveTextContent('Item 999');
     expect(first).toHaveAttribute('data-odd', 'false');
     expect(second).toHaveAttribute('data-odd', 'true');
