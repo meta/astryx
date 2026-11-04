@@ -310,8 +310,8 @@ import {childTheme} from '../child/source.mjs';
 export default defineTheme({name: 'slots-inherit', extends: childTheme, tokens: {}});
 `,
     );
-    // The child's inline slot function cannot be carried in family output;
-    // a family child supplies its own static slots only.
+    // A family member supplies its own slot functions through a named import
+    // of its whole componentIcons map, so this child sets only static slots.
     write(
       'child/source.mjs',
       `import {defineTheme} from '@astryxdesign/core/theme';
@@ -323,8 +323,28 @@ export const childTheme = defineTheme({
 export default childTheme;
 `,
     );
+    // A member whose imported map leaves a slot undefined keeps the parent's.
+    write(
+      'imported/slots.mjs',
+      `export const importedSlots = {'code-block-copy': undefined, 'parity-tab-close': 'menu'};\n`,
+    );
+    write(
+      'imported/source.mjs',
+      `import {defineTheme} from '@astryxdesign/core/theme';
+import {childTheme} from '../child/source.mjs';
+import {importedSlots} from './slots.mjs';
+export default defineTheme({
+  name: 'slots-imported', extends: childTheme, tokens: {}, componentIcons: importedSlots,
+});
+`,
+    );
     const receipt = await themeBuildFamily(
-      ['base/source.mjs', 'child/source.mjs', 'inherit/source.mjs'],
+      [
+        'base/source.mjs',
+        'child/source.mjs',
+        'inherit/source.mjs',
+        'imported/source.mjs',
+      ],
       {familyKey: 'slots-family'},
       {cwd: tmpDir},
     );
@@ -347,14 +367,107 @@ export default childTheme;
         built: `${familyModule}#slotsInheritTheme`,
         runtime: './inherit/source.mjs#default',
       },
+      {
+        label: 'imported',
+        built: `${familyModule}#slotsImportedTheme`,
+        runtime: './imported/source.mjs#default',
+      },
     ]);
 
     expect(result.base.built).toEqual(result.base.runtime);
     expect(result.child.built).toEqual(result.child.runtime);
     expect(result.inherit.built).toEqual(result.inherit.runtime);
+    expect(result.imported.built).toEqual(result.imported.runtime);
+    expect(
+      result.imported.built.resolved['code-block-copy|{"copied":true}'],
+    ).toEqual({icon: 'checkDouble', size: 'lg'});
     expect(
       result.child.built.resolved['code-block-copy|{"copied":true}'],
     ).toEqual({icon: 'checkDouble', size: 'lg'});
+  });
+});
+
+describe('built slot values follow defineTheme', () => {
+  it('keeps an inherited slot under an undefined own slot, and reads static values through constants', async () => {
+    writeLineage();
+    write(
+      'undefined-own/slots.mjs',
+      `export const childSlots = {'code-block-copy': undefined, 'parity-tab-close': 'menu'};\n`,
+    );
+    write(
+      'undefined-own/source.mjs',
+      `import {defineTheme} from '@astryxdesign/core/theme';
+import {baseTheme} from '../base/source.mjs';
+import {childSlots} from './slots.mjs';
+export default defineTheme({
+  name: 'slots-undefined-own', extends: baseTheme, tokens: {}, componentIcons: childSlots,
+});
+`,
+    );
+    write(
+      'constants/source.mjs',
+      `import {defineTheme} from '@astryxdesign/core/theme';
+import {baseTheme} from '../base/source.mjs';
+import {copySlot} from '../base/slots.mjs';
+const SIZE = 'xsm';
+const DISMISS = {icon: 'close', size: SIZE};
+export default defineTheme({
+  name: 'slots-constants', extends: baseTheme, tokens: {},
+  componentIcons: {'parity-panel-dismiss': DISMISS, 'parity-tab-close': {size: SIZE}, 'parity-copy-again': copySlot},
+});
+`,
+    );
+    // Inside one object, a later undefined slot replaces a spread value, so the
+    // theme keeps no value for it.
+    write(
+      'spread-undefined/source.mjs',
+      `import {defineTheme} from '@astryxdesign/core/theme';
+import {baseSlots} from '../base/slots.mjs';
+export default defineTheme({
+  name: 'slots-spread-undefined', tokens: {},
+  componentIcons: {...baseSlots, 'code-block-copy': undefined},
+});
+`,
+    );
+    for (const file of [
+      'undefined-own/source.mjs',
+      'constants/source.mjs',
+      'spread-undefined/source.mjs',
+    ]) {
+      await buildAndCheck(file);
+    }
+
+    const result = inspect([
+      {
+        label: 'undefinedOwn',
+        built: './undefined-own/slots-undefined-own.js#slotsUndefinedOwnTheme',
+        runtime: './undefined-own/source.mjs#default',
+      },
+      {
+        label: 'constants',
+        built: './constants/slots-constants.js#slotsConstantsTheme',
+        runtime: './constants/source.mjs#default',
+      },
+      {
+        label: 'spreadUndefined',
+        built:
+          './spread-undefined/slots-spread-undefined.js#slotsSpreadUndefinedTheme',
+        runtime: './spread-undefined/source.mjs#default',
+      },
+    ]);
+    for (const {built, runtime} of Object.values(result)) {
+      expect(built).toEqual(runtime);
+    }
+    expect(
+      result.undefinedOwn.built.resolved['code-block-copy|{"copied":false}'],
+    ).toEqual({icon: 'clock', size: 'sm'});
+    expect(result.constants.built.componentIcons).toMatchObject({
+      'parity-panel-dismiss': {icon: 'close', size: 'xsm'},
+      'parity-tab-close': {size: 'xsm'},
+    });
+    expect(
+      result.spreadUndefined.built.resolved['code-block-copy|{"copied":true}'],
+    ).toEqual({icon: 'copy', size: 'sm'});
   });
 });
 

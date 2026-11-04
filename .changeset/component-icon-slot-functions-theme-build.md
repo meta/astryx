@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[feat] `astryx theme build` keeps a theme's `componentIcons` slot functions. The built module imports each slot function from the module the theme source imports it from, writes static slot values beside it as JSON, and reads back the same static `componentIcons` view, so component icon slots resolve the same for the built theme as for the runtime theme. This includes slots inherited from a built, package, or family base. A slot function defined in the theme file still fails the build: move it to its own module and import it.
+[feat] `astryx theme build` keeps a theme's `componentIcons` slot functions. The built module imports each slot function from the module the theme source imports it from, writes static slot values beside it as JSON, and reads back the same static `componentIcons` view, so component icon slots resolve the same for the built theme as for the runtime theme. This includes slots inherited from a built, package, or family base. A slot function defined in the theme file still fails the build: move it to its own module and import it. In `--family` output, a member supplies its own slot functions through a named import of its whole `componentIcons` map.
 
 @imdreamrunner

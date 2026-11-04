@@ -2179,6 +2179,24 @@ function themeComponentIcons(theme) {
 }
 
 /**
+ * The generated function that merges a theme's own slot values over its
+ * base's, as `defineTheme` does: an own slot replaces the inherited one whole,
+ * and an `undefined` own slot leaves it in place. It reads no global.
+ * @param {string} name - A reserved function name.
+ * @returns {string}
+ */
+function componentIconMergeFunction(name) {
+  return `function ${name}(base, own) {
+  const merged = {...base};
+  for (const slot in own) {
+    if (own[slot] !== undefined) merged[slot] = own[slot];
+  }
+  return merged;
+}
+`;
+}
+
+/**
  * The generated code that reads the static view of a theme's slot values:
  * every slot without a function. Like the icon node view, it reads no global
  * and declares only reserved local names.
@@ -2190,7 +2208,8 @@ function componentIconViewExpression(valuesName, viewName) {
   return `(() => {
   const ${viewName} = {};
   for (const slot in ${valuesName}) {
-    if (typeof ${valuesName}[slot] !== 'function') ${viewName}[slot] = ${valuesName}[slot];
+    const value = ${valuesName}[slot];
+    if (value !== undefined && typeof value !== 'function') ${viewName}[slot] = value;
   }
   return ${viewName};
 })()`;
@@ -2259,7 +2278,7 @@ function importStatement({importPath, importedName, localName}, specifier) {
  * @param {any} themeDef
  * @param {import('./icon-imports.mjs').IconImports | null} iconInfo
  * @param {string} [iconsSpecifier] - Overrides the selected registry specifier.
- * @param {{themeBinding?: string, iconsExpression?: string, indicatorsExpression?: string, artifactBaseName?: string, exportIcons?: boolean, componentIconInfo?: {imports: import('./icon-imports.mjs').IconImports['imports'], expression: string} | null}} [moduleOptions]
+ * @param {{themeBinding?: string, iconsExpression?: string, indicatorsExpression?: string, artifactBaseName?: string, exportIcons?: boolean, componentIconInfo?: {imports: import('./icon-imports.mjs').IconImports['imports'], expression: string, mergeName?: string} | null}} [moduleOptions]
  * @returns {string}
  */
 function generateBuiltModule(
@@ -2329,6 +2348,9 @@ function generateBuiltModule(
       ? componentIconInfo.imports
           .map(binding => importStatement(binding))
           .join('') +
+        (componentIconInfo.mergeName
+          ? componentIconMergeFunction(componentIconInfo.mergeName)
+          : '') +
         `const ${componentIconValuesName} = ${componentIconInfo.expression};\n`
       : '';
 
@@ -2984,10 +3006,12 @@ async function themeBuildInternal(
         ]
       : []),
   ];
-  // Names the slot values and their static view take in the built module.
+  // Names the slot values, their static view, and their merge function take
+  // in the built module.
   const componentIconNames = [
     `${toIdentifier(themeDef.name)}ThemeComponentIconValues`,
     `${toIdentifier(themeDef.name)}ThemeComponentIconView`,
+    `${toIdentifier(themeDef.name)}ThemeMergeComponentIcons`,
   ];
   const iconResolution = {
     readSource: (/** @type {string} */ file) => fs.readFileSync(file, 'utf8'),
@@ -3163,6 +3187,7 @@ async function themeBuildInternal(
       componentIconInfo = await resolveIconImports(filePath, themeExportName, {
         ...iconResolution,
         field: 'componentIcons',
+        mergeName: `${toIdentifier(themeDef.name)}ThemeMergeComponentIcons`,
         hasIcons: true,
         functionEntries: true,
         reservedNames: [
@@ -3758,13 +3783,14 @@ function allocateFamilyBindings(members) {
 }
 /**
  * How a family member's module carries slot functions: its parent's values,
- * then its own. Own slot functions come from a named import of the whole map;
+ * then its own. A member supplies its own slot functions through a named
+ * import of its whole `componentIcons` map, merged as `defineTheme` merges;
  * own static values are written as JSON. Null when the member has no slot
  * function, so its static values are written as JSON alone.
  * @param {any} member
  * @param {any} parent - The member's parent in the family, if any.
  * @param {{themeBinding: string | undefined, parentBinding: string | null | undefined, outDir: string, registryImports: Array<{specifier: string, exportName: string}>, expression: (own: string | null, inherited: string | null) => string | undefined}} context
- * @returns {{imports: Array<{importPath: string, importedName: string, localName: string}>, expression: string} | null}
+ * @returns {{imports: Array<{importPath: string, importedName: string, localName: string}>, expression: string, mergeName?: string} | null}
  */
 function familyComponentIcons(member, parent, context) {
   const values = themeComponentIcons(member.theme);
@@ -3777,6 +3803,8 @@ function familyComponentIcons(member, parent, context) {
   /** @type {Array<{importPath: string, importedName: string, localName: string}>} */
   const imports = [];
   let own = null;
+  const binding =
+    context.themeBinding ?? `${toIdentifier(member.theme.name)}Theme`;
   const info = member.componentIconInfo;
   if (info) {
     const input = familyRegistryInput(
@@ -3786,7 +3814,7 @@ function familyComponentIcons(member, parent, context) {
       undefined,
     );
     const importPath = input.specifier ?? info.importPath;
-    own = `${context.themeBinding ?? `${toIdentifier(member.theme.name)}Theme`}ComponentIconSource`;
+    own = `${binding}ComponentIconSource`;
     imports.push({importPath, importedName: info.exportName, localName: own});
     context.registryImports.push({
       specifier: importPath,
@@ -3806,7 +3834,7 @@ function familyComponentIcons(member, parent, context) {
         continue;
       if (typeof value === 'function') {
         throw new AstryxError(
-          `Theme "${member.theme.name}" must supply componentIcons slot functions through a named import for family output.`,
+          `Theme "${member.theme.name}" must supply its componentIcons slot functions through a named import of its whole componentIcons map for family output.`,
           undefined,
           ERROR_CODES.ERR_THEME_INVALID,
         );
@@ -3814,6 +3842,15 @@ function familyComponentIcons(member, parent, context) {
       ownValues[slot] = value;
     }
     if (Object.keys(ownValues).length > 0) own = JSON.stringify(ownValues);
+  }
+  if (info && inherited) {
+    // An imported map can hold an `undefined` slot, which keeps the parent's.
+    const mergeName = `${binding}MergeComponentIcons`;
+    return {
+      imports,
+      expression: `${mergeName}(${inherited}, ${own})`,
+      mergeName,
+    };
   }
   const expression = context.expression(own, inherited);
   return expression ? {imports, expression} : null;
