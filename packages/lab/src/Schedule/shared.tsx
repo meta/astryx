@@ -15,6 +15,7 @@ import * as stylex from '@stylexjs/stylex';
 import {useScrollableArea} from '@astryxdesign/core/hooks';
 import {getLocaleDirection, type Locale} from '@astryxdesign/core/i18n';
 import {
+  calendarMonthLabelDay,
   calendarMonthOf,
   formatCalendarDate,
   formatCalendarDateToParts,
@@ -36,7 +37,6 @@ import {Spinner} from '@astryxdesign/core/Spinner';
 import {HStack} from '@astryxdesign/core/Stack';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {
-  plainDateAddDays,
   plainDateFromInstant,
   plainDateIsEqual,
   plainDateIsBefore,
@@ -187,7 +187,6 @@ export function ScheduleRangeMonthTitle({
 
   const startMonth = formatWithPlainDate(
     monthLabelDate(start, calendar),
-    timezoneID,
     {month: 'long'},
     locale,
     calendar,
@@ -490,7 +489,6 @@ export function eventPastSurfaceColorStyle(
 
 export function formatWithPlainDate(
   date: PlainDate,
-  _timezoneID: string,
   options: Intl.DateTimeFormatOptions,
   locale: Locale,
   calendar: CalendarSystem,
@@ -500,11 +498,8 @@ export function formatWithPlainDate(
   return formatCalendarDate(calendar, date, options, locale);
 }
 
-// A month takes the name of its middle day, as in Core's Calendar, so an era
-// that starts inside the month does not rename it.
 function monthLabelDate(date: PlainDate, calendar: CalendarSystem): PlainDate {
-  const month = calendarMonthOf(calendar, date);
-  return plainDateAddDays(month.start, Math.floor(month.length / 2));
+  return calendarMonthLabelDay(calendarMonthOf(calendar, date));
 }
 
 // A Gregorian month or year can span two months or years of another calendar,
@@ -531,18 +526,11 @@ function isSameCalendarYear(
   return (
     formatWithPlainDate(
       monthLabelDate(a, calendar),
-      timezoneID,
       options,
       locale,
       calendar,
     ) ===
-    formatWithPlainDate(
-      monthLabelDate(b, calendar),
-      timezoneID,
-      options,
-      locale,
-      calendar,
-    )
+    formatWithPlainDate(monthLabelDate(b, calendar), options, locale, calendar)
   );
 }
 
@@ -554,7 +542,6 @@ export function formatMonthTitle(
 ): string {
   return formatWithPlainDate(
     monthLabelDate(date, calendar),
-    timezoneID,
     {
       month: 'long',
       year: 'numeric',
@@ -576,7 +563,6 @@ export function formatWeekTitle(
   }
   const startMonth = formatWithPlainDate(
     monthLabelDate(start, calendar),
-    timezoneID,
     {month: 'long'},
     locale,
     calendar,
@@ -595,7 +581,6 @@ export function formatFullDate(
 ): string {
   return formatWithPlainDate(
     date,
-    timezoneID,
     {
       weekday: 'long',
       month: 'long',
@@ -632,7 +617,7 @@ export function formatWeekday(
   locale: Locale,
   calendar: CalendarSystem,
 ): string {
-  return formatWithPlainDate(date, timezoneID, {weekday}, locale, calendar);
+  return formatWithPlainDate(date, {weekday}, locale, calendar);
 }
 
 export function formatDayNumber(
@@ -641,13 +626,7 @@ export function formatDayNumber(
   locale: Locale,
   calendar: CalendarSystem,
 ): string {
-  return formatWithPlainDate(
-    date,
-    timezoneID,
-    {day: 'numeric'},
-    locale,
-    calendar,
-  );
+  return formatWithPlainDate(date, {day: 'numeric'}, locale, calendar);
 }
 
 export function formatHour(hour: number, locale: Locale): string {

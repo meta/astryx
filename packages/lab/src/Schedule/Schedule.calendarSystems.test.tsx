@@ -208,6 +208,44 @@ describe('Schedule views under a provider calendar', () => {
     ).toBeInTheDocument();
   });
 
+  it('names a long timed event with Gregorian dates without a provider calendar', () => {
+    const event: CalendarInstantEvent = {
+      id: 'offsite',
+      title: 'Offsite',
+      start: Date.UTC(2026, 9, 26, 9) as Instant,
+      end: Date.UTC(2026, 9, 28, 17) as Instant,
+    };
+    render(
+      <InternationalizationProvider locale="fa-IR">
+        <Schedule
+          view={createScheduleDayView()}
+          events={[event]}
+          date={Date.UTC(2026, 9, 27)}
+          focusDate={Date.UTC(2026, 9, 27)}
+          timezoneID="UTC"
+        />
+      </InternationalizationProvider>,
+    );
+    const range = (calendar: CalendarSystem) =>
+      new Intl.DateTimeFormat('fa-IR', {
+        month: 'long',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZone: 'UTC',
+        calendar,
+      }).formatRange(new Date(event.start), new Date(event.end));
+    const labels = Array.from(
+      document.querySelectorAll('[aria-label]'),
+      element => element.getAttribute('aria-label') ?? '',
+    ).filter(label => label.includes('Offsite'));
+    expect(labels).not.toHaveLength(0);
+    for (const label of labels) {
+      expect(label).toContain(range('gregory'));
+      expect(label).not.toContain(range('persian'));
+    }
+  });
+
   it('writes `iso8601` titles and ranges as Gregorian ones', () => {
     renderMonth({locale: 'en', calendar: 'iso8601'});
     expect(
@@ -262,11 +300,14 @@ describe('Schedule views under a provider calendar', () => {
     });
 
     it('shows Gregorian labels for a calendar that needs Temporal', () => {
-      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       renderMonth({locale: 'en', calendar: 'persian'});
       expect(
         screen.getByRole('table', {name: 'October 2026'}),
       ).toBeInTheDocument();
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('The "persian" calendar needs a Temporal'),
+      );
     });
 
     it('still shows the buddhist calendar, which needs no Temporal', () => {

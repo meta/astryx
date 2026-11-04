@@ -63,7 +63,6 @@ describe('Schedule date formatting', () => {
     expect(
       formatWithPlainDate(
         {year: 2026, month: 8, day: 22},
-        'UTC',
         {
           year: 'numeric',
           calendar: 'buddhist',
@@ -79,7 +78,6 @@ describe('Schedule date formatting', () => {
     expect(
       formatWithPlainDate(
         date,
-        'UTC',
         {month: 'long', year: 'numeric'},
         'th-TH',
         'gregory',

@@ -330,10 +330,17 @@ export function isInCalendarMonth(
 }
 
 /**
+ * The day that names a calendar month: its middle day. In the Japanese
+ * calendar an era can start inside a month, and most days of that month then
+ * belong to the era of its middle day.
+ */
+export function calendarMonthLabelDay(month: CalendarMonth): PlainDate {
+  return plainDateAddDays(month.start, Math.floor(month.length / 2));
+}
+
+/**
  * The stand-alone month and year label of a calendar month, such as
- * "Aban 1405 AP". It formats a day in the middle of the month: in the
- * Japanese calendar an era can start inside a month, and most days of that
- * month then belong to the era of its middle day.
+ * "Aban 1405 AP", named by `calendarMonthLabelDay`.
  */
 export function formatCalendarMonthLabel(
   calendar: CalendarSystem,
@@ -341,7 +348,7 @@ export function formatCalendarMonthLabel(
   locale: Locale,
 ): string {
   return plainDateFormatStandaloneMonthYear(
-    plainDateAddDays(month.start, Math.floor(month.length / 2)),
+    calendarMonthLabelDay(month),
     locale,
     labelCalendar(calendar),
   );

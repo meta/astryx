@@ -17,6 +17,7 @@
 
 export {useCalendarSystem} from '../i18n/useCalendarSystem';
 export {
+  calendarMonthLabelDay,
   calendarMonthOf,
   formatCalendarDate,
   formatCalendarDateToParts,

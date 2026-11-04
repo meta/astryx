@@ -14,6 +14,7 @@ describe('internal/calendar-system', () => {
     const hook = await import('../i18n/useCalendarSystem');
     const helpers = await import('../utils/calendarSystem');
     expect(entry.useCalendarSystem).toBe(hook.useCalendarSystem);
+    expect(entry.calendarMonthLabelDay).toBe(helpers.calendarMonthLabelDay);
     expect(entry.calendarMonthOf).toBe(helpers.calendarMonthOf);
     expect(entry.formatCalendarDate).toBe(helpers.formatCalendarDate);
     expect(entry.formatCalendarDateToParts).toBe(
@@ -23,6 +24,7 @@ describe('internal/calendar-system', () => {
       helpers.formatCalendarInstantRange,
     );
     expect(Object.keys(entry).sort()).toEqual([
+      'calendarMonthLabelDay',
       'calendarMonthOf',
       'formatCalendarDate',
       'formatCalendarDateToParts',
