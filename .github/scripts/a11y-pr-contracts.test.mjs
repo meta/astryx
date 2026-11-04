@@ -44,6 +44,10 @@ import {
   withinBudget,
 } from './a11y-pr-contracts.mjs';
 import {
+  createRepository,
+  importCommits,
+} from '../../scripts/lib/git-fixture.mjs';
+import {
   A11Y_SPEC_GLOBS,
   WEBKIT_A11Y_SPEC_GLOBS,
   isA11ySpecFile,
@@ -890,39 +894,42 @@ describe('component audit axe pass', () => {
 describe('changedSinceMergeBase', () => {
   const git = (cwd, ...args) =>
     execFileSync('git', args, {cwd, encoding: 'utf8', stdio: 'pipe'}).trim();
-  const commit = (cwd, file, text) => {
-    fs.writeFileSync(path.join(cwd, file), text);
-    git(cwd, 'add', file);
-    git(
-      cwd,
-      '-c',
-      'user.email=a@b',
-      '-c',
-      'user.name=a',
-      'commit',
-      '-qm',
-      text,
-    );
-  };
-
-  // An origin whose main has three commits, and a full clone whose feature
-  // branch adds one file; main then moves on. Built once: each lookup below
-  // gets its own test budget, since every git call is a process of its own.
+  // The origin's main has three commits, and its feature branch adds one
+  // file. A full clone sits on that branch, and main moves on after the clone.
+  // Built once, and fast-import writes the commits: five git launches in all.
   const cwd = process.cwd();
   let dir = '';
   let clone = '';
   beforeAll(() => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-pr-a11y-'));
     const origin = path.join(dir, 'origin');
-    fs.mkdirSync(origin);
-    git(origin, 'init', '-q', '-b', 'main');
-    for (const n of ['1', '2', '3']) commit(origin, 'base.txt', n);
+    createRepository(origin, [
+      {ref: 'refs/heads/main', message: '1', files: {'base.txt': '1'}},
+      {ref: 'refs/heads/main', message: '2', files: {'base.txt': '2'}},
+      {
+        ref: 'refs/heads/main',
+        name: '3',
+        message: '3',
+        files: {'base.txt': '3'},
+      },
+      {
+        ref: 'refs/heads/feature',
+        parent: '3',
+        message: 'f',
+        files: {'feature.txt': 'f'},
+      },
+    ]);
     clone = path.join(dir, 'clone');
     git(dir, 'clone', '-q', origin, clone);
-    git(clone, 'checkout', '-qb', 'feature');
-    commit(clone, 'feature.txt', 'f');
-    git(clone, 'push', '-q', 'origin', 'feature');
-    commit(origin, 'later.txt', 'l');
+    git(clone, 'checkout', '-q', 'feature');
+    importCommits(origin, [
+      {
+        ref: 'refs/heads/main',
+        parent: 'main',
+        message: 'l',
+        files: {'later.txt': 'l'},
+      },
+    ]);
   });
   afterAll(() => {
     fs.rmSync(dir, {recursive: true, force: true});
