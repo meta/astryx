@@ -8,7 +8,8 @@
  * @output Exports observeMutations (one shared observer per set of options)
  *   and observeContent, its text-and-children form
  * @position Internal utility; consumed by useTruncation, hitArea, AppShell's
- *   main-overflow observer and ModalAnnounceProvider's presentation watch. The mutation counterpart of sharedResizeObserver:
+ *   main-overflow observer, ModalAnnounceProvider's presentation watch and
+ *   CheckboxList's required group. The mutation counterpart of sharedResizeObserver:
  *   one observer for every element observed with the same options, so a
  *   repeated cell, row or region does not create one observer per instance.
  */

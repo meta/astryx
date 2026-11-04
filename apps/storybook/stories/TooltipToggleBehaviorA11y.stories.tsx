@@ -21,7 +21,7 @@ import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {ClickableCard} from '@astryxdesign/core/ClickableCard';
 import {InfoTip} from '@astryxdesign/core/InfoTip';
-import {VStack} from '@astryxdesign/core/Layout';
+import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Tooltip} from '@astryxdesign/core/Tooltip';
 
 const meta: Meta = {
@@ -60,10 +60,10 @@ function InAClickableCardRender() {
     <div style={{padding: 100, maxWidth: 360}}>
       <VStack gap={2}>
         <ClickableCard label="Icon usage" onClick={() => setOpened(n => n + 1)}>
-          <VStack gap={2}>
+          <HStack gap={1} vAlign="center">
             Icon usage
             <InfoTip content={HELP} label="What is this?" />
-          </VStack>
+          </HStack>
         </ClickableCard>
         <span>Card opened {opened} times</span>
       </VStack>
