@@ -244,6 +244,38 @@ describe('Overlay', () => {
       const root = container.firstElementChild as HTMLElement;
       expect(root.style.opacity).toBe('0.5');
     });
+
+    it('takes the corner radius of its first child', () => {
+      const {container} = render(
+        <Overlay content={<span>c</span>}>
+          <div style={{borderRadius: '12px'}}>b</div>
+        </Overlay>,
+      );
+      const root = container.firstElementChild as HTMLElement;
+      expect(root.style.borderRadius).toBe('12px');
+    });
+
+    it('sets no radius when its first child has none', () => {
+      const {container} = render(
+        <Overlay content={<span>c</span>}>
+          <div>b</div>
+        </Overlay>,
+      );
+      const root = container.firstElementChild as HTMLElement;
+      expect(root.style.borderRadius).toBe('');
+    });
+
+    it('gives a callback ref the root that took the radius', () => {
+      const ref = vi.fn();
+      const {container} = render(
+        <Overlay ref={ref} content={<span>c</span>}>
+          <div style={{borderRadius: '8px'}}>b</div>
+        </Overlay>,
+      );
+      const root = container.firstElementChild as HTMLElement;
+      expect(ref).toHaveBeenCalledWith(root);
+      expect(root.style.borderRadius).toBe('8px');
+    });
   });
 
   describe('host attributes', () => {
