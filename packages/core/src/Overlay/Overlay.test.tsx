@@ -276,6 +276,22 @@ describe('Overlay', () => {
       expect(ref).toHaveBeenCalledWith(root);
       expect(root.style.borderRadius).toBe('8px');
     });
+
+    it('copies the radius once per mount, even with an inline callback ref', () => {
+      const overlay = (label: string) => (
+        <Overlay ref={element => void element} content={<span>{label}</span>}>
+          <div style={{borderRadius: '12px'}}>b</div>
+        </Overlay>
+      );
+      const {container, rerender} = render(overlay('first'));
+      const root = container.firstElementChild as HTMLElement;
+      expect(root.style.borderRadius).toBe('12px');
+
+      root.style.borderRadius = '40px';
+      rerender(overlay('second'));
+      expect(container.firstElementChild).toBe(root);
+      expect(root.style.borderRadius).toBe('40px');
+    });
   });
 
   describe('host attributes', () => {

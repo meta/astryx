@@ -49,12 +49,19 @@ export interface OverlayProps extends BaseProps<HTMLDivElement> {
   align?: OverlayAlign;
 }
 
-// The wrapper takes the radius of its first child, so the scrim clips to the
-// media corners. Only the component does this. A hook consumer sets the
-// radius on its own element.
+// The scrim clips to the media's rounded corners. Copy the radius once per
+// wrapper node: a caller's inline callback ref re-runs the merged ref on each
+// render, and a later radius from the caller must stay.
+// A useOverlay consumer sets the radius on its own element.
+const wrappersWithRadius = new WeakSet<HTMLElement>();
+
 function mirrorFirstChildRadius(container: HTMLElement | null) {
-  const firstChild = container?.firstElementChild;
-  if (container == null || firstChild == null) {
+  if (container == null || wrappersWithRadius.has(container)) {
+    return;
+  }
+  wrappersWithRadius.add(container);
+  const firstChild = container.firstElementChild;
+  if (firstChild == null) {
     return;
   }
   const radius = getComputedStyle(firstChild).borderRadius;
