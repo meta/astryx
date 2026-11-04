@@ -36,6 +36,7 @@ import {
   DATE_FORMAT_WITH_WEEKDAY,
   DATE_FORMAT_MONTH_YEAR,
   plainDateWeekFieldName,
+  plainDateFormatToParts,
 } from './plainDate';
 import type {ISODateString} from './dateTypes';
 
@@ -783,6 +784,20 @@ describe('plainDateFormatStandaloneMonthYear', () => {
   });
 });
 
+describe('plainDateFormatToParts', () => {
+  it.each([
+    [{dateStyle: 'full'}],
+    [{timeZone: 'Asia/Tokyo', dateStyle: 'long'}],
+    [{hour: 'numeric', day: 'numeric'}],
+  ] as const)('joins to the plainDateFormat text for %o', options => {
+    const pd = plainDateFromISO('2026-11-03');
+    const parts = plainDateFormatToParts(pd, options, 'fa-IR');
+    expect(parts.map(part => part.value).join('')).toBe(
+      plainDateFormat(pd, options, 'fa-IR'),
+    );
+  });
+});
+
 describe('plainDateFormat', () => {
   it('keeps one formatter per locale and options, whatever order the options are in', () => {
     // A month of day labels, as a calendar renders them, reuses one formatter.
@@ -983,6 +998,12 @@ describe('plainDateFormatDayNumber', () => {
 
   it('adds no grouping separator', () => {
     expect(plainDateFormatDayNumber(1234, 'en')).toBe('1234');
+  });
+
+  it('writes the digits of a given numbering system', () => {
+    expect(plainDateFormatDayNumber(8, 'fa-IR', 'latn')).toBe('8');
+    expect(plainDateFormatDayNumber(8, 'en', 'arabext')).toBe('۸');
+    expect(plainDateFormatDayNumber(8, 'fa-IR')).toBe('۸');
   });
 });
 

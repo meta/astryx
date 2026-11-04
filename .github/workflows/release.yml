@@ -24,6 +24,13 @@
 #          release branch and head. Stable publication from main is rejected.
 #     Version-gated and idempotent: any version already on the registry is
 #     skipped, so re-running (or a `dry-run` first) is safe.
+#     Registry verification runs in bounded windows: the publish job's own,
+#     then at most two follow-up verification jobs while packages are not yet
+#     readable. Anything that acts on a stable release (the GitHub
+#     Release, deployment, merge-back, release receipts, release tracking)
+#     waits for this workflow run's conclusion, never the publish job's: while
+#     packages are still propagating, the publish job passes and a follow-up
+#     job decides the run.
 #   - canary: push to main only. Main normally declares the next planned version,
 #     so this publishes <declared>-canary.<short-sha> to the `canary` dist-tag.
 #     The trusted release merge-back briefly leaves main equal to the stable tag;
@@ -94,6 +101,8 @@ jobs:
       actions: read
       contents: read
       id-token: write # npm OIDC trusted publishing + provenance
+    outputs:
+      verified: ${{ steps.publish.outputs.verified }}
     steps:
       - name: Checkout immutable release tag
         uses: actions/checkout@v7
@@ -174,6 +183,7 @@ jobs:
         run: pnpm build
 
       - name: Publish changed packages
+        id: publish
         env:
           DRY_RUN: ${{ inputs.dry-run }}
           RELEASE_VERSION: ${{ inputs['release-version'] }}
@@ -233,11 +243,95 @@ jobs:
           if [ "$DRY_RUN" = "true" ]; then
             echo "Dry run complete; no packages were published."
           else
+            # One bounded verification window. Packages that are still not
+            # readable when it ends (exit 2) do not fail the release: the
+            # follow-up verification jobs below continue with windows of
+            # their own.
+            STATUS=0
             node scripts/npm/verify-published.mjs \
               --version "$RELEASE_VERSION" \
-              --tag latest
-            echo "Published $published package(s); registry verification passed."
+              --tag latest || STATUS=$?
+            case "$STATUS" in
+              0)
+                echo "verified=true" >> "$GITHUB_OUTPUT"
+                echo "Published $published package(s); registry verification passed."
+                ;;
+              2)
+                echo "verified=pending" >> "$GITHUB_OUTPUT"
+                echo "::notice::Published $published package(s); some are not yet readable on the registry. A follow-up verification job continues."
+                ;;
+              *)
+                exit "$STATUS"
+                ;;
+            esac
           fi
+
+  # Follow-up registry verification: each job is one more bounded window for
+  # packages that were published but not yet readable, with the same exact-
+  # version proofs. The last one fails the release if a package is still not
+  # readable.
+  # A follow-up starts no check after 7 minutes, which leaves room in its
+  # 10-minute limit for checkout, Node setup and a last slow check.
+  verify-registry-1:
+    name: Verify registry (follow-up 1)
+    needs: publish
+    if: needs.publish.outputs.verified == 'pending'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      verified: ${{ steps.verify.outputs.verified }}
+    steps:
+      - name: Checkout immutable release tag
+        uses: actions/checkout@v7
+      - name: Setup Node
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+      - name: Verify published packages
+        id: verify
+        env:
+          RELEASE_VERSION: ${{ inputs['release-version'] }}
+        run: |
+          set -eu
+          STATUS=0
+          node scripts/npm/verify-published.mjs --version "$RELEASE_VERSION" --tag latest --window-ms 420000 || STATUS=$?
+          case "$STATUS" in
+            0) echo "verified=true" >> "$GITHUB_OUTPUT" ;;
+            2)
+              echo "verified=pending" >> "$GITHUB_OUTPUT"
+              echo "::notice::Some packages are still not readable on the registry. The last follow-up verification job continues."
+              ;;
+            *) exit "$STATUS" ;;
+          esac
+
+  verify-registry-2:
+    name: Verify registry (follow-up 2, last)
+    needs: verify-registry-1
+    if: needs.verify-registry-1.outputs.verified == 'pending'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout immutable release tag
+        uses: actions/checkout@v7
+      - name: Setup Node
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+      - name: Verify published packages
+        env:
+          RELEASE_VERSION: ${{ inputs['release-version'] }}
+        run: |
+          set -eu
+          STATUS=0
+          node scripts/npm/verify-published.mjs --version "$RELEASE_VERSION" --tag latest --window-ms 420000 || STATUS=$?
+          if [ "$STATUS" -eq 2 ]; then
+            echo "::error::Published packages are still not readable on the registry after three verification windows."
+          fi
+          exit "$STATUS"
 
   # Canary publish — runs on every push to main. The @canary dist-tag always
   # points to the latest main commit:

@@ -1030,6 +1030,8 @@ function PointerDateField({
         // calendar only while it is open; it opens on the current value.
         !popover.isOpen ? null : (
           <Calendar
+            // The field text is Gregorian, so the popover calendar is too.
+            calendar="gregory"
             handleRef={calendarRef}
             mode="single"
             value={optimisticValue ?? null}

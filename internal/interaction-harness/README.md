@@ -64,6 +64,16 @@ committed: a pull request links or attaches it.
 | `storyboard.ts` | `animationStoryboard` (seek to t = 0, 16.7, 33.3 … ms), `touchStoryboard` (a frame per scripted event), `castStoryboard` (real screencast frames): PNG contact sheet + JSON trace.                                                                                           |
 | `output.ts`     | `evidenceDir`, `writeEvidence`: where evidence goes and how it is attached to the report.                                                                                                                                                                                    |
 | `story.ts`      | `phone`, `withStorybook`, `openStory`, `frames`, and the timer gate (`installTimerGate`, `freezeTimers`, `thawTimers`).                                                                                                                                                      |
+| `pointer.ts`    | `newFinePointerPage(browser)`: a page under a mouse that really reads `(pointer: fine)`. `assertFinePointer` / `assertCoarsePointer`: fail before a case's checks when the page reads the other pointer.                                                                     |
+
+## A fine pointer
+
+Every interaction project is the touch phone, and a context a test makes with
+`browser.newContext()` inherits it: it reads `(pointer: coarse)` unless it
+passes `hasTouch: false`. A case that shows touch work costs nothing under a
+mouse opens its page with `newFinePointerPage(browser)`, which turns touch and
+mobile off and checks the pointer first. A case that builds its own context
+calls `assertFinePointer(page)` before its checks.
 
 ## The proofs
 
@@ -288,7 +298,9 @@ harness's own animation recorder stands down while the trace runs, since its
 frame loop would make every frame a main-thread one, restyling each running
 animation's target and laying out an anchored one: it reads only the element a
 CSS animation or transition event names, once, when that animation starts, and
-catches up afterwards. A `waitForRest` awaited inside the traced body stands
+catches up afterwards. The frame it requested before the trace runs before the
+start mark, so the whole window counts none of its work. A `waitForRest`
+awaited inside the traced body stands
 down too: it waits on timers for the scheduled ends of the element's curves
 (looking `frames` times a frame apart before settling on none, so an
 animation the action starts a frame or two later is waited for) and polls no
