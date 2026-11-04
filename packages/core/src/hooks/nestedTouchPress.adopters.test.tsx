@@ -164,3 +164,34 @@ describe('a finger press inside a container that paints a press', () => {
     });
   }
 });
+
+describe('the Chevron of a TreeList row', () => {
+  const chevron = () => screen.getByRole('button', {name: /children/i});
+
+  it("paints the row when the row's surface toggles, since the Chevron runs that toggle", () => {
+    render(
+      <TreeList
+        items={[
+          {id: 'p', label: 'Folder', children: [{id: 'k', label: 'File'}]},
+        ]}
+      />,
+    );
+    expect(fingerPaints(chevron())).toBe(true);
+  });
+
+  it("paints no press when the row's surface runs a different action", () => {
+    render(
+      <TreeList
+        items={[
+          {
+            id: 'q',
+            label: 'Open',
+            onClick: () => {},
+            children: [{id: 'm', label: 'Child'}],
+          },
+        ]}
+      />,
+    );
+    expect(fingerPaints(chevron())).toBe(false);
+  });
+});

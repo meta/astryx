@@ -128,6 +128,35 @@ function belongsToSomethingElse(element: Element): boolean {
 }
 
 /**
+ * The touch half of a container's press rule, for a container that cannot
+ * hold refs: a finger press that starts on a nested interactive element
+ * other than the container's own action does not activate the container, so
+ * it ends the press controller's paint on `container`. A mouse or pen press,
+ * and a press on the container's surface or on `ownAction`, are left alone.
+ * Not part of the package's public API.
+ */
+export function cancelNestedTouchPress(
+  event: PointerEvent<HTMLElement>,
+  container: HTMLElement | null,
+  ownAction: Element | null,
+): void {
+  const target = event.target;
+  if (
+    event.pointerType !== 'touch' ||
+    container == null ||
+    !(target instanceof Element) ||
+    target === event.currentTarget ||
+    !hasInteractiveAncestor(target, container) ||
+    // The container's own action, such as the control it delegates to: a
+    // press on it activates the container.
+    ownAction?.contains(target) === true
+  ) {
+    return;
+  }
+  cancelPress(container);
+}
+
+/**
  * Check if there's a text selection inside the node (don't navigate on text select)
  *
  * Exported alongside {@link hasInteractiveAncestor} for the same reason: a
@@ -331,22 +360,14 @@ export function useClickableContainer({
   // pen press keeps its `:active` paint.
   const onPointerDown = useCallback(
     (event: PointerEvent<HTMLElement>) => {
-      const containerEl = containerRef.current;
-      const eventTarget = event.target;
-      if (
-        event.pointerType !== 'touch' ||
-        disabled ||
-        containerEl == null ||
-        !(eventTarget instanceof Element) ||
-        eventTarget === event.currentTarget ||
-        !hasInteractiveAncestor(eventTarget, containerEl) ||
-        // The control the container delegates to is the container's own
-        // action: a press on it activates the container.
-        interactiveRef?.current?.contains(eventTarget) === true
-      ) {
+      if (disabled) {
         return;
       }
-      cancelPress(containerEl);
+      cancelNestedTouchPress(
+        event,
+        containerRef.current,
+        interactiveRef?.current ?? null,
+      );
     },
     [containerRef, interactiveRef, disabled],
   );

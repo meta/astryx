@@ -619,7 +619,11 @@ export function Item({
   // the router link component, which may require a live href. The element type
   // then changes with `isDisabled`, so focus follows the swap (FR4).
   const RowAnchor = isDisabled ? 'a' : LinkComponent;
-  const anchorRef = useFocusAcrossSwap<HTMLAnchorElement>();
+  // The row's own action, its invisible link or button: a press on it
+  // activates the row.
+  const actionLinkRef = useRef<HTMLAnchorElement | null>(null);
+  const actionButtonRef = useRef<HTMLButtonElement | null>(null);
+  const anchorRef = useFocusAcrossSwap<HTMLAnchorElement>(actionLinkRef);
 
   // Delegation mode: the row is an enlarged click/tap target for a nested
   // control (e.g. a checkbox) that owns the keyboard access and action. The
@@ -628,12 +632,11 @@ export function Item({
   const containerRef = useRef<HTMLElement | null>(null);
   // Only onClick is needed: onMouseUp handles middle-click href navigation,
   // which delegation mode never has (href is ignored here).
-  const {onClick: delegatedOnClick, onPointerDown: delegatedOnPointerDown} =
-    useClickableContainer({
-      containerRef,
-      interactiveRef: interactiveRef ?? undefined,
-      disabled: isDisabled,
-    });
+  const {onClick: delegatedOnClick} = useClickableContainer({
+    containerRef,
+    interactiveRef: interactiveRef ?? undefined,
+    disabled: isDisabled,
+  });
 
   useDevWarning(
     'Item',
@@ -653,6 +656,21 @@ export function Item({
   // component means the root itself is the anchor, so the address rides it
   // and the invisible anchor below is not rendered.
   const isLinkRoot = typeof Component !== 'string' && href != null;
+  // A row that runs only its own action: a press on a nested control does not
+  // activate it, so the row shows no touch press for one. A row with a parent
+  // role or a link root activates on such a press, so it keeps its press.
+  const hasOwnActionOnly =
+    isDelegate ||
+    ((onClick != null || href != null) && !hasParentRole && !isLinkRoot);
+  const {onPointerDown: pressOnRow} = useClickableContainer({
+    containerRef,
+    interactiveRef: isDelegate
+      ? interactiveRef
+      : href != null
+        ? actionLinkRef
+        : actionButtonRef,
+    disabled: isDisabled || !hasOwnActionOnly,
+  });
 
   // Swipe actions exist where the row's role permits interactive descendants
   // (a swipe panel's buttons are such descendants): a `listitem`, or no role
@@ -811,6 +829,7 @@ export function Item({
         </RowAnchor>
       ) : onClick != null ? (
         <button
+          ref={actionButtonRef}
           type="button"
           onClick={onClick}
           disabled={isDisabled}
@@ -847,7 +866,7 @@ export function Item({
 
   const mergedRef = useMergedRefs(ref, containerRef);
   const rootRef = useMergedRefs(
-    (isDelegate ? mergedRef : ref) as React.Ref<HTMLElement>,
+    (hasOwnActionOnly ? mergedRef : ref) as React.Ref<HTMLElement>,
     hasSwipe ? swipeRootRef : undefined,
   );
 
@@ -898,11 +917,11 @@ export function Item({
       {...restProps}
       {...swipeHandlers}
       {...linkRootProps}
-      {...(isDelegate
+      {...(hasOwnActionOnly && !isDisabled
         ? {
             onPointerDown: chainEventHandlers(
-              restProps.onPointerDown,
-              delegatedOnPointerDown,
+              swipeHandlers?.onPointerDown ?? restProps.onPointerDown,
+              pressOnRow,
             ),
           }
         : null)}
