@@ -4,41 +4,49 @@
  * @file Codemod: move Tokenizer's experimental presentation to the stable prop
  *
  * `experimental={{presentation: x}}` on a Tokenizer becomes
- * `presentation={x}`, or `presentation="x"` for a string. Other keys stay in
- * the `experimental` object, and an object left empty is removed. The
- * deprecated spelling selects the same surface, so the result renders the
- * same. Built on the shared `transformProp` helper, so it does not follow
- * variables, helpers, wrappers, or types. Where it cannot prove the result it
- * keeps the deprecated spelling, which still works, and leaves a TODO: an
- * `experimental` value that is not an object literal, a spread or computed
- * key in it, a Tokenizer that already passes `presentation`, and a spread of
- * props after `experimental`, which could set `presentation` over the moved
- * value. A spread before `experimental` is safe: the moved attribute takes
- * `experimental`'s place, so it still wins over the spread, as the
- * experimental value did, and before this release a spread's `presentation`
- * did nothing. Each TODO is added once, so a second run changes
- * nothing.
+ * `presentation={x}`, or `presentation="x"` for a string. Tokenizer no longer
+ * reads `experimental`, and `presentation` takes the same values, so the
+ * rewrite restores the surface the call selected. Other keys stay in the
+ * `experimental` object, and an object left empty is removed. Built on the
+ * shared `transformProp` helper, so it does not follow variables, helpers,
+ * wrappers, or types. Where it cannot prove the result it leaves the call
+ * unchanged with a TODO: an `experimental` value that is not an object
+ * literal, a spread or computed key in it, a Tokenizer that already passes
+ * `presentation`, and a Tokenizer that spreads props. A spread can carry
+ * `presentation`, also as `undefined`, and then the result changes with the
+ * moved attribute before or after it. Each TODO names its case and is added
+ * once, so a second run changes nothing.
  */
 
 import {transformProp} from '../../transform-prop.mjs';
 
 export const meta = {
-  title: "Move Tokenizer's experimental presentation to presentation",
+  title: "Move Tokenizer's removed experimental presentation to presentation",
   description:
-    'Rewrites `experimental={{presentation: x}}` on Tokenizer to the stable ' +
-    '`presentation={x}`. Keeps the deprecated spelling, which still works, ' +
-    'with a TODO where the experimental value is not an object literal, ' +
-    'where the Tokenizer already passes presentation, and where it spreads ' +
-    'props after experimental.',
+    'Rewrites `experimental={{presentation: x}}` on Tokenizer to ' +
+    '`presentation={x}`; Tokenizer no longer reads `experimental`. Leaves a ' +
+    'TODO where the experimental value is not an object literal, where the ' +
+    'Tokenizer already passes presentation, and where it spreads props.',
 };
 
 const CORE_IMPORT_RE = /^@(astryxdesign|xds)\/core(?:\/|$)/;
 const COMPONENT_PROPS = new Map([['Tokenizer', new Set(['experimental'])]]);
 
-const TODO_COMMENT =
-  ' TODO(astryx upgrade): experimental.presentation is deprecated. Pass ' +
-  'presentation instead; this one was left unchanged because the codemod ' +
-  'could not prove the rewrite. ';
+const TODO_PREFIX =
+  ' TODO(astryx upgrade): experimental.presentation was removed in favor of ' +
+  'presentation. ';
+/** @param {string} reason */
+const moveTodo = reason =>
+  `${TODO_PREFIX}Move the value to presentation; the codemod left this one ` +
+  `unchanged because ${reason}. `;
+/** One TODO per case, so the reader knows what to check. */
+const TODOS = {
+  notLiteral: moveTodo('the value is not a literal object'),
+  unprovenKey: moveTodo('the object has a spread or a computed key'),
+  repeatedKey: moveTodo('the object sets presentation more than once'),
+  presentationSet: `${TODO_PREFIX}presentation is already set; remove experimental.presentation. `,
+  spread: moveTodo('a spread may also set presentation'),
+};
 
 const TYPE_WRAPPERS = new Set([
   'TSAsExpression',
@@ -129,18 +137,27 @@ export default function transformer(file, api) {
       ) {
         return;
       }
-      const isProvable =
-        value?.type === 'ObjectExpression' &&
-        presentationEntries.length === 1 &&
-        !hasUnprovenEntry &&
-        !attributes.some(
-          (/** @type {any} */ a, /** @type {number} */ index) =>
-            (a.type === 'JSXSpreadAttribute' &&
-              index > attributes.indexOf(prop)) ||
-            (a.type === 'JSXAttribute' && a.name?.name === 'presentation'),
-        );
-      if (!isProvable) {
-        hasChanges = addComment(j, prop, TODO_COMMENT) || hasChanges;
+      const hasPresentation = attributes.some(
+        (/** @type {any} */ a) =>
+          a.type === 'JSXAttribute' && a.name?.name === 'presentation',
+      );
+      const hasSpread = attributes.some(
+        (/** @type {any} */ a) => a.type === 'JSXSpreadAttribute',
+      );
+      const todo =
+        value?.type !== 'ObjectExpression'
+          ? TODOS.notLiteral
+          : hasUnprovenEntry
+            ? TODOS.unprovenKey
+            : hasPresentation
+              ? TODOS.presentationSet
+              : presentationEntries.length > 1
+                ? TODOS.repeatedKey
+                : hasSpread
+                  ? TODOS.spread
+                  : null;
+      if (todo != null) {
+        hasChanges = addComment(j, prop, todo) || hasChanges;
         return;
       }
 
