@@ -8,8 +8,9 @@
  *   shadowRootsOutward
  * @position The flat-tree parent the browser scrolls and dispatches
  *   through, shared by the gesture host's native-scroll probe, the
- *   selection lock (which the press feedback controller uses without the
- *   gesture system) and the Layer module's input hold
+ *   outside-press watch, the selection lock (which the press feedback
+ *   controller uses without the gesture system) and the Layer module's input
+ *   hold
  */
 
 /** The node's parent, crossing out of shadow roots. */

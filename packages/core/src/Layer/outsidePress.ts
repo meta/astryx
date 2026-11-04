@@ -79,7 +79,6 @@ export function watchOutsidePress(
   {pointerTypes, closesOnPan = false, root = null}: OutsidePressOptions = {},
 ): () => void {
   const doc = owner.ownerDocument;
-  // The shadow roots from `root` out to the document, innermost first.
   const shadows = root == null ? [] : shadowRootsOutward(root);
   let startedOutside = false;
   let panStart: {id: number; x: number; y: number} | null = null;
