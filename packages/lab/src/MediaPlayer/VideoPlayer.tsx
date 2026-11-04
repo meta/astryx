@@ -20,7 +20,7 @@ import {useTranslator} from '@astryxdesign/core/i18n';
 import {Spinner} from '@astryxdesign/core/Spinner';
 import {Text} from '@astryxdesign/core/Text';
 import {MediaTheme} from '@astryxdesign/core/theme';
-import {mergeProps} from '@astryxdesign/core/utils';
+import {mergeProps, observeResize} from '@astryxdesign/core/utils';
 import {
   colorVars,
   durationVars,
@@ -125,21 +125,36 @@ const styles = stylex.create({
     pointerEvents: 'none',
   },
   volume: {
-    position: 'relative',
     display: {
-      default: 'flex',
+      default: 'grid',
       '@container (max-width: 480px)': 'none',
     },
     alignItems: 'center',
-    // The hidden slider leaves the flow; clipping keeps its box from
-    // covering, and catching the pointer over, the controls beside it.
+    // The slider's column opens while the volume control is hovered or holds
+    // focus, and stays open on touch, matching the container reveal.
+    gridTemplateColumns: {
+      default: '0fr auto',
+      ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
+        '@media (hover: hover)': '1fr auto',
+      },
+      ':focus-within': '1fr auto',
+      '@media (any-pointer: coarse)': '1fr auto',
+    },
+    transitionProperty: 'grid-template-columns',
+    transitionDuration: {
+      default: durationVars['--duration-fast'],
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
+    transitionTimingFunction: easeVars['--ease-standard'],
+  },
+  volumeSlot: {
+    minWidth: 0,
     overflow: 'clip',
     overflowClipMargin: spacingVars['--spacing-1'],
   },
-  // While hidden, the slider sits past the end of the volume control, inside
-  // the clipped area, so it never covers Mute.
-  volumeSlot: {
-    insetInlineStart: `calc(100% + ${spacingVars['--spacing-2']})`,
+  // The gap sits inside the opening column, so it closes with the slider.
+  volumeGap: {
+    paddingInlineEnd: spacingVars['--spacing-2'],
   },
   time: {
     display: {
@@ -278,14 +293,14 @@ interface SavedCuePosition {
 }
 
 /**
- * Keeps a showing caption above the control bar while the bar shows. Only
- * cues that use the default bottom position move; cues the caption author
- * placed keep their position.
+ * Keeps captions above the control bar, whether the bar shows or hides, so
+ * they never jump and the bar never covers them. The gap above the bar
+ * equals the bar's inset. Only cues that use the default bottom position
+ * move; cues the caption author placed keep their position.
  */
-function useCueClearance(
+function useCueLayout(
   videoRef: RefObject<HTMLVideoElement | null>,
   barRef: RefObject<HTMLDivElement | null>,
-  isRaised: boolean,
 ) {
   // Syncs the caption cue positions on the video's text tracks with the bar.
   useEffect(() => {
@@ -304,10 +319,14 @@ function useCueClearance(
     const apply = () => {
       const bar = barRef.current;
       const height = video.clientHeight;
-      const clearance =
-        isRaised && bar != null && height > 0
-          ? ((height - bar.offsetTop) / height) * 100
-          : 0;
+      if (bar == null || height <= 0) {
+        return;
+      }
+      // Layout offsets ignore the bar's hide transform, so the line holds
+      // still while the bar fades in and out.
+      const inset = height - (bar.offsetTop + bar.offsetHeight);
+      const clearance = height - bar.offsetTop + inset;
+      const line = Math.min(Math.max((1 - clearance / height) * 100, 0), 100);
       for (let index = 0; index < tracks.length; index++) {
         const track = tracks[index];
         if (track == null) {
@@ -317,7 +336,7 @@ function useCueClearance(
           watched.add(track);
           track.addEventListener('cuechange', apply);
         }
-        const cues = track.mode === 'showing' ? track.cues : null;
+        const cues = track.mode === 'disabled' ? null : track.cues;
         for (
           let cueIndex = 0;
           cues != null && cueIndex < cues.length;
@@ -336,22 +355,18 @@ function useCueClearance(
             continue;
           }
           saved.set(cue, original);
-          if (clearance > 0) {
-            cue.snapToLines = false;
-            cue.lineAlign = 'end';
-            cue.line = Math.max(0, 100 - clearance - 2);
-          } else {
-            cue.snapToLines = original.snapToLines;
-            cue.lineAlign = original.lineAlign;
-            cue.line = original.line;
-          }
+          cue.snapToLines = false;
+          cue.lineAlign = 'end';
+          cue.line = line;
         }
       }
     };
     apply();
     tracks.addEventListener('change', apply);
     tracks.addEventListener('addtrack', apply);
+    const stopObserving = observeResize(video, apply);
     return () => {
+      stopObserving();
       tracks.removeEventListener('change', apply);
       tracks.removeEventListener('addtrack', apply);
       for (const track of watched) {
@@ -363,7 +378,7 @@ function useCueClearance(
         cue.line = original.line;
       }
     };
-  }, [videoRef, barRef, isRaised]);
+  }, [videoRef, barRef]);
 }
 
 function VideoControlBar({
@@ -374,7 +389,7 @@ function VideoControlBar({
   const {isControlsVisible} = useMediaPlayerContext('VideoPlayer');
   const barRef = useRef<HTMLDivElement | null>(null);
   const volumeReveal = useContainerReveal();
-  useCueClearance(videoRef, barRef, isControlsVisible);
+  useCueLayout(videoRef, barRef);
   return (
     <MediaTheme mode="dark">
       <div
@@ -394,14 +409,15 @@ function VideoControlBar({
             volumeReveal.getContainerProps(),
             stylex.props(styles.volume),
           )}>
-          <MediaMuteButton />
+          {/* The slider opens to the left, so Mute stays under the pointer. */}
           <span
             {...mergeProps(
-              volumeReveal.getContentRevealProps(),
+              volumeReveal.getContentRevealProps({isLayoutPreserved: true}),
               stylex.props(styles.volumeSlot),
             )}>
-            <MediaVolumeSlider width={72} />
+            <MediaVolumeSlider width={72} xstyle={styles.volumeGap} />
           </span>
+          <MediaMuteButton />
         </div>
         <MediaCaptionsButton />
         <MediaFullscreenButton />

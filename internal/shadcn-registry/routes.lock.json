@@ -643,8 +643,18 @@
       "aliases": []
     },
     {
+      "name": "component-lab-media-playback-rate-button",
+      "path": "components/lab/media-playback-rate-button",
+      "aliases": []
+    },
+    {
       "name": "component-lab-media-playback-rate-menu",
       "path": "components/lab/media-playback-rate-menu",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-media-playback-rate-slider",
+      "path": "components/lab/media-playback-rate-slider",
       "aliases": []
     },
     {

@@ -18,6 +18,8 @@ import {useContainerReveal} from '@astryxdesign/core/hooks';
 import {Section} from '@astryxdesign/core/Section';
 import {
   colorVars,
+  durationVars,
+  easeVars,
   fontWeightVars,
   radiusVars,
   spacingVars,
@@ -29,7 +31,8 @@ import {useMediaPlayerContext} from './MediaPlayerContext';
 import {
   MediaMuteButton,
   MediaPlayButton,
-  MediaPlaybackRateMenu,
+  MediaPlaybackRateButton,
+  MediaPlaybackRateSlider,
   MediaSeekButton,
   MediaTime,
   MediaTimeSlider,
@@ -39,6 +42,7 @@ import {MediaPlayerAudio} from './MediaPlayerMedia';
 
 const styles = stylex.create({
   player: {
+    containerType: 'inline-size',
     display: 'flex',
     flexDirection: 'column',
     gap: spacingVars['--spacing-2'],
@@ -91,23 +95,64 @@ const styles = stylex.create({
     alignItems: 'center',
     gap: spacingVars['--spacing-2'],
   },
-  controlsStart: {
+  speed: {
     justifySelf: 'start',
+    display: 'grid',
+    alignItems: 'center',
+    // The slider's column opens while the speed control is hovered or holds
+    // focus, and stays open on touch, matching the container reveal.
+    gridTemplateColumns: {
+      default: 'auto 0fr',
+      ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
+        '@media (hover: hover)': 'auto 1fr',
+      },
+      ':focus-within': 'auto 1fr',
+      '@media (any-pointer: coarse)': 'auto 1fr',
+    },
+    transitionProperty: 'grid-template-columns',
+    transitionDuration: {
+      default: durationVars['--duration-fast'],
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
+    transitionTimingFunction: easeVars['--ease-standard'],
   },
   volume: {
     justifySelf: 'end',
-    position: 'relative',
-    display: 'flex',
+    display: 'grid',
     alignItems: 'center',
-    // The hidden slider leaves the flow; clipping keeps its box from
-    // covering, and catching the pointer over, the controls beside it.
+    // The slider's column opens while the volume control is hovered or holds
+    // focus, and stays open on touch, matching the container reveal.
+    gridTemplateColumns: {
+      default: '0fr auto',
+      ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
+        '@media (hover: hover)': '1fr auto',
+      },
+      ':focus-within': '1fr auto',
+      '@media (any-pointer: coarse)': '1fr auto',
+    },
+    transitionProperty: 'grid-template-columns',
+    transitionDuration: {
+      default: durationVars['--duration-fast'],
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
+    transitionTimingFunction: easeVars['--ease-standard'],
+  },
+  revealSlot: {
+    minWidth: 0,
     overflow: 'clip',
     overflowClipMargin: spacingVars['--spacing-1'],
+    // Narrow players keep the buttons and drop the sliders.
+    display: {
+      default: 'block',
+      '@container (max-width: 480px)': 'none',
+    },
   },
-  // While hidden, the slider sits past the start of the volume control, inside
-  // the clipped area, so it never covers Mute.
-  volumeSlot: {
-    insetInlineEnd: `calc(100% + ${spacingVars['--spacing-2']})`,
+  speedGap: {
+    paddingInlineStart: spacingVars['--spacing-2'],
+  },
+  // The gap sits inside the opening column, so it closes with the slider.
+  volumeGap: {
+    paddingInlineEnd: spacingVars['--spacing-2'],
   },
 });
 
@@ -251,7 +296,7 @@ function AudioPlayerLayout({
     skipBackSeconds,
     skipForwardSeconds,
   });
-  const volumeReveal = useContainerReveal();
+  const reveal = useContainerReveal();
   return (
     <>
       <div {...stylex.props(styles.header)}>
@@ -271,22 +316,36 @@ function AudioPlayerLayout({
         <MediaTime display="remaining" xstyle={styles.secondaryTime} />
       </div>
       <div dir="ltr" {...stylex.props(styles.controls)}>
-        <MediaPlaybackRateMenu xstyle={styles.controlsStart} />
+        {/* The slider opens to the right, so the speed button stays put. */}
+        <div
+          {...mergeProps(
+            reveal.getContainerProps(),
+            stylex.props(styles.speed),
+          )}>
+          <MediaPlaybackRateButton />
+          <span
+            {...mergeProps(
+              reveal.getContentRevealProps({isLayoutPreserved: true}),
+              stylex.props(styles.revealSlot),
+            )}>
+            <MediaPlaybackRateSlider xstyle={styles.speedGap} />
+          </span>
+        </div>
         <MediaSeekButton offset={-skipBackSeconds} />
         <MediaPlayButton size="lg" variant="primary" />
         <MediaSeekButton offset={skipForwardSeconds} />
         {/* The slider opens toward the center, so Mute keeps its place. */}
         <div
           {...mergeProps(
-            volumeReveal.getContainerProps(),
+            reveal.getContainerProps(),
             stylex.props(styles.volume),
           )}>
           <span
             {...mergeProps(
-              volumeReveal.getContentRevealProps(),
-              stylex.props(styles.volumeSlot),
+              reveal.getContentRevealProps({isLayoutPreserved: true}),
+              stylex.props(styles.revealSlot),
             )}>
-            <MediaVolumeSlider width={72} />
+            <MediaVolumeSlider width={72} xstyle={styles.volumeGap} />
           </span>
           <MediaMuteButton />
         </div>
@@ -297,9 +356,9 @@ function AudioPlayerLayout({
 
 /**
  * A ready-made audio player for episodes, recordings, and music: title and
- * artwork, a timeline, skip back and forward, a playback speed menu, and
- * volume. It sits in a Section container, so its background and padding
- * follow the theme. Queues and playlists belong to the product.
+ * artwork, a timeline, skip back and forward, playback speed, and volume.
+ * It sits in a Section container, so its background and padding follow the
+ * theme. Queues and playlists belong to the product.
  *
  * @example
  * ```

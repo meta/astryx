@@ -6,12 +6,13 @@ export default {
   name: 'Podcast episode',
   displayName: 'Podcast episode',
   description:
-    'An episode player in a Section container: title, timeline, a speed menu, skip back 15 and forward 30 seconds, and a volume slider that appears while the volume control is hovered or focused.',
+    'An episode player in a Section container: title, timeline, skip back 15 and forward 30 seconds, and speed and volume buttons whose sliders open while the button is hovered or focused.',
   exampleFor: 'AudioPlayer',
   alsoExampleFor: [
     'MediaPlayerAudio',
     'MediaSeekButton',
-    'MediaPlaybackRateMenu',
+    'MediaPlaybackRateButton',
+    'MediaPlaybackRateSlider',
   ],
   isReady: true,
   isShowcase: true,

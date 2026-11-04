@@ -15,6 +15,7 @@
 import {useMemo, useRef, type KeyboardEvent, type Ref} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '@astryxdesign/core';
+import {Button} from '@astryxdesign/core/Button';
 import {
   DropdownMenu,
   DropdownMenuRadioGroup,
@@ -37,7 +38,7 @@ import {
   useMediaPlayerContext,
   useMediaSelector,
 } from './MediaPlayerContext';
-import {SkipIcon, useMediaIcon} from './mediaIcons';
+import {useMediaIcon} from './mediaIcons';
 
 /** Control height on the shared element-size scale: 28, 32, or 36px. */
 export type MediaControlSize = 'sm' | 'md' | 'lg';
@@ -155,13 +156,13 @@ export function MediaSeekButton({
     offset < 0
       ? t('@astryx.mediaPlayer.skipBack', {seconds})
       : t('@astryx.mediaPlayer.skipForward', {seconds});
-  const arrow = useMediaIcon(offset < 0 ? 'skipBack' : 'skipForward');
+  const icon = useMediaIcon(offset < 0 ? 'skipBack' : 'skipForward');
   return (
     <IconButton
       {...rest}
       label={label}
       tooltip={label}
-      icon={<SkipIcon arrow={arrow} seconds={seconds} />}
+      icon={icon}
       variant="ghost"
       size={size}
       isDisabled={!(Number.isFinite(duration) && duration > 0)}
@@ -231,8 +232,9 @@ export interface MediaVolumeSliderProps extends Omit<
 }
 
 /**
- * Sets the volume. It renders nothing where script cannot set the volume,
- * such as iOS Safari; MediaMuteButton still works there.
+ * Sets the volume and shows it as a percentage in a tooltip while it is
+ * hovered, dragged, or focused. It renders nothing where script cannot set
+ * the volume, such as iOS Safari; MediaMuteButton still works there.
  *
  * @example
  * ```
@@ -273,7 +275,7 @@ export function MediaVolumeSlider({
       max={100}
       step={1}
       value={Math.round(volume * 100)}
-      valueDisplay="none"
+      valueDisplay="tooltip"
       formatValue={value => percent.format(value / 100)}
       onChange={(value: number) => store.actions.setVolume(value / 100)}
       width={width}
@@ -668,3 +670,151 @@ export function MediaPlaybackRateMenu({
 }
 
 MediaPlaybackRateMenu.displayName = 'MediaPlaybackRateMenu';
+
+export type MediaPlaybackRateButtonProps = MediaButtonPartProps;
+
+/**
+ * Shows the playback speed. A press switches between normal speed and the
+ * last other speed, the way MediaMuteButton switches the sound off and on.
+ * From normal speed with no other speed yet, it steps up one speed.
+ *
+ * @example
+ * ```
+ * <MediaPlaybackRateButton />
+ * <MediaPlaybackRateSlider />
+ * ```
+ */
+export function MediaPlaybackRateButton({
+  size,
+  onClick,
+  xstyle,
+  className,
+  style,
+  ...rest
+}: MediaPlaybackRateButtonProps) {
+  const {store} = useMediaPlayerContext('MediaPlaybackRateButton');
+  const rate = useMediaSelector(
+    'MediaPlaybackRateButton',
+    state => state.playbackRate,
+  );
+  const lastRateRef = useRef<number | null>(null);
+  const t = useTranslator();
+  const locale = useLocale();
+  const formatted = new Intl.NumberFormat(locale, {
+    maximumFractionDigits: 2,
+  }).format(rate);
+  const handleClick = () => {
+    const current = store.getState().playbackRate;
+    if (current !== 1) {
+      lastRateRef.current = current;
+      store.actions.setPlaybackRate(1);
+      return;
+    }
+    const next =
+      lastRateRef.current ??
+      DEFAULT_PLAYBACK_RATES.find(option => option > 1) ??
+      1;
+    store.actions.setPlaybackRate(next);
+  };
+  return (
+    <Button
+      {...rest}
+      label={t('@astryx.mediaPlayer.playbackRate', {rate: formatted})}
+      aria-label={t('@astryx.mediaPlayer.playbackSpeedValue', {
+        rate: formatted,
+      })}
+      tooltip={t('@astryx.mediaPlayer.playbackSpeed')}
+      variant="ghost"
+      size={size}
+      onClick={composeEventHandlers(onClick, handleClick)}
+      {...mergeProps(themeProps('media-playback-rate-button'), {
+        className,
+        style,
+      })}
+      xstyle={xstyle}
+    />
+  );
+}
+
+MediaPlaybackRateButton.displayName = 'MediaPlaybackRateButton';
+
+export interface MediaPlaybackRateSliderProps extends Omit<
+  BaseProps<HTMLDivElement>,
+  'onChange' | 'children'
+> {
+  /**
+   * Speeds the slider steps through, in order. Defaults to 0.5, 0.75, 1,
+   * 1.25, 1.5, 1.75, and 2, the same speeds the `<` and `>` shortcuts use.
+   */
+  rates?: readonly number[];
+  /** Slider width. Defaults to 88px. */
+  width?: number | string;
+  /** Ref to the slider thumb. */
+  ref?: Ref<HTMLDivElement>;
+}
+
+/**
+ * Sets the playback speed in steps and shows the speed in a tooltip while it
+ * is hovered, dragged, or focused.
+ *
+ * @example
+ * ```
+ * <MediaPlaybackRateSlider rates={[0.75, 1, 1.25, 1.5, 2]} />
+ * ```
+ */
+export function MediaPlaybackRateSlider({
+  rates = DEFAULT_PLAYBACK_RATES,
+  width = 88,
+  xstyle,
+  className,
+  style,
+  ...rest
+}: MediaPlaybackRateSliderProps) {
+  const {store} = useMediaPlayerContext('MediaPlaybackRateSlider');
+  const rate = useMediaSelector(
+    'MediaPlaybackRateSlider',
+    state => state.playbackRate,
+  );
+  const t = useTranslator();
+  const locale = useLocale();
+  const numberFormat = useMemo(
+    () => new Intl.NumberFormat(locale, {maximumFractionDigits: 2}),
+    [locale],
+  );
+  // The nearest listed speed, so a speed set elsewhere still places the thumb.
+  const index = rates.reduce(
+    (best, option, candidate) =>
+      Math.abs(option - rate) < Math.abs((rates[best] ?? 1) - rate)
+        ? candidate
+        : best,
+    0,
+  );
+  return (
+    <Slider
+      {...rest}
+      label={t('@astryx.mediaPlayer.playbackSpeed')}
+      isLabelHidden
+      min={0}
+      max={Math.max(rates.length - 1, 1)}
+      step={1}
+      value={index}
+      valueDisplay="tooltip"
+      formatValue={value =>
+        t('@astryx.mediaPlayer.playbackRate', {
+          rate: numberFormat.format(rates[value] ?? 1),
+        })
+      }
+      onChange={(value: number) =>
+        store.actions.setPlaybackRate(rates[value] ?? 1)
+      }
+      width={width}
+      {...mergeProps(themeProps('media-playback-rate-slider'), {
+        className,
+        style,
+      })}
+      containerXstyle={xstyle}
+    />
+  );
+}
+
+MediaPlaybackRateSlider.displayName = 'MediaPlaybackRateSlider';

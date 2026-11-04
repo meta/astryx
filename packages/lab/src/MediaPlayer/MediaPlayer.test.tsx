@@ -8,7 +8,7 @@ import type * as CoreHooks from '@astryxdesign/core/hooks';
 import {AudioPlayer} from './AudioPlayer';
 import {MediaPlayer} from './MediaPlayer';
 import {useMediaPlayer} from './MediaPlayerContext';
-import {MediaTimeSlider} from './MediaPlayerControls';
+import {MediaPlaybackRateMenu, MediaTimeSlider} from './MediaPlayerControls';
 import {MediaPlayerAudio, MediaPlayerVideo} from './MediaPlayerMedia';
 import {VideoPlayer} from './VideoPlayer';
 
@@ -459,24 +459,20 @@ describe('AudioPlayer', () => {
     expect(playback.getCurrentTime()).toBe(15);
   });
 
-  it('sets the playback speed from a menu that checks the current speed', async () => {
-    // jsdom has no popover API.
-    vi.spyOn(HTMLElement.prototype, 'showPopover').mockImplementation(() => {});
-    vi.spyOn(HTMLElement.prototype, 'hidePopover').mockImplementation(() => {});
+  it('switches between normal speed and the chosen speed with its speed button and slider', async () => {
     const user = userEvent.setup();
     const {audio} = renderAudioPlayer();
     const playback = fakePlayback(audio, {duration: 600});
-    await user.click(screen.getByRole('button', {name: 'Playback speed, 1×'}));
-    expect(
-      screen.getByRole('menuitemradio', {name: '1×', hidden: true}),
-    ).toHaveAttribute('aria-checked', 'true');
+    const slider = screen.getByRole('slider', {name: 'Playback speed'});
+    act(() => slider.focus());
+    await user.keyboard('{ArrowRight}');
+    expect(playback.getPlaybackRate()).toBe(1.25);
     await user.click(
-      screen.getByRole('menuitemradio', {name: '1.5×', hidden: true}),
+      screen.getByRole('button', {name: 'Playback speed, 1.25×'}),
     );
-    expect(playback.getPlaybackRate()).toBe(1.5);
-    expect(
-      screen.getByRole('button', {name: 'Playback speed, 1.5×'}),
-    ).toBeInTheDocument();
+    expect(playback.getPlaybackRate()).toBe(1);
+    await user.click(screen.getByRole('button', {name: 'Playback speed, 1×'}));
+    expect(playback.getPlaybackRate()).toBe(1.25);
   });
 
   it('hands its metadata to the system media controls once it plays', () => {
@@ -515,6 +511,35 @@ describe('AudioPlayer', () => {
       vi.unstubAllGlobals();
       Reflect.deleteProperty(navigator, 'mediaSession');
     }
+  });
+});
+
+describe('MediaPlaybackRateMenu', () => {
+  it('sets the playback speed from a menu that checks the current speed', async () => {
+    // jsdom has no popover API.
+    vi.spyOn(HTMLElement.prototype, 'showPopover').mockImplementation(() => {});
+    vi.spyOn(HTMLElement.prototype, 'hidePopover').mockImplementation(() => {});
+    const user = userEvent.setup();
+    const {container} = render(
+      <MediaPlayer label="Episode">
+        <MediaPlayerAudio src="/episode.mp3" />
+        <MediaPlaybackRateMenu />
+      </MediaPlayer>,
+    );
+    const playback = fakePlayback(container.querySelector('audio')!, {
+      duration: 600,
+    });
+    await user.click(screen.getByRole('button', {name: 'Playback speed, 1×'}));
+    expect(
+      screen.getByRole('menuitemradio', {name: '1×', hidden: true}),
+    ).toHaveAttribute('aria-checked', 'true');
+    await user.click(
+      screen.getByRole('menuitemradio', {name: '1.5×', hidden: true}),
+    );
+    expect(playback.getPlaybackRate()).toBe(1.5);
+    expect(
+      screen.getByRole('button', {name: 'Playback speed, 1.5×'}),
+    ).toBeInTheDocument();
   });
 });
 

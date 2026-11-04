@@ -5,13 +5,12 @@
 /**
  * @file mediaIcons.tsx
  * @input The active theme's icon registry
- * @output MEDIA_ICON_KEYS, useMediaIcon, and SkipIcon: the glyphs the media
- *   control parts draw
+ * @output MEDIA_ICON_KEYS and useMediaIcon: the glyphs the media control
+ *   parts draw
  * @position Internal to MediaPlayer; a theme restyles a glyph by its key
  */
 
 import type {ReactNode} from 'react';
-import * as stylex from '@stylexjs/stylex';
 import {getExtendedIcon} from '@astryxdesign/core/Icon';
 import {useThemeName} from '@astryxdesign/core/theme';
 
@@ -53,13 +52,6 @@ const svgProps = {
 const SPEAKER =
   'M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z';
 
-const rotateBack = (
-  <svg {...svgProps}>
-    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-    <path d="M3 3v5h5" />
-  </svg>
-);
-
 const FALLBACK_ICONS: Record<MediaIconName, ReactNode> = {
   play: (
     <svg {...svgProps}>
@@ -72,12 +64,22 @@ const FALLBACK_ICONS: Record<MediaIconName, ReactNode> = {
       <rect x="5" y="3" width="5" height="18" rx="1" />
     </svg>
   ),
-  replay: rotateBack,
-  skipBack: rotateBack,
+  replay: (
+    <svg {...svgProps}>
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+    </svg>
+  ),
+  skipBack: (
+    <svg {...svgProps}>
+      <path d="M12 6a2 2 0 0 0-3.414-1.414l-6 6a2 2 0 0 0 0 2.828l6 6A2 2 0 0 0 12 18z" />
+      <path d="M22 6a2 2 0 0 0-3.414-1.414l-6 6a2 2 0 0 0 0 2.828l6 6A2 2 0 0 0 22 18z" />
+    </svg>
+  ),
   skipForward: (
     <svg {...svgProps}>
-      <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
-      <path d="M21 3v5h-5" />
+      <path d="M12 6a2 2 0 0 1 3.414-1.414l6 6a2 2 0 0 1 0 2.828l-6 6A2 2 0 0 1 12 18z" />
+      <path d="M2 6a2 2 0 0 1 3.414-1.414l6 6a2 2 0 0 1 0 2.828l-6 6A2 2 0 0 1 2 18z" />
     </svg>
   ),
   volumeHigh: (
@@ -134,52 +136,5 @@ export function useMediaIcon(name: MediaIconName): ReactNode {
     MEDIA_ICON_KEYS[name],
     FALLBACK_ICONS[name],
     themeName,
-  );
-}
-
-const styles = stylex.create({
-  skip: {
-    position: 'relative',
-    display: 'inline-flex',
-  },
-  seconds: {
-    position: 'absolute',
-    inset: 0,
-  },
-});
-
-/**
- * A skip arrow with the number of seconds drawn in its center. The arrow
- * comes from the theme; the number stays the player's, so every theme shows
- * how far the button skips.
- */
-export function SkipIcon({
-  arrow,
-  seconds,
-}: {
-  arrow: ReactNode;
-  seconds: number;
-}) {
-  return (
-    <span {...stylex.props(styles.skip)}>
-      {arrow}
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 24 24"
-        width="1em"
-        height="1em"
-        aria-hidden
-        {...stylex.props(styles.seconds)}>
-        <text
-          x="12"
-          y="15"
-          textAnchor="middle"
-          fontSize="8"
-          fontWeight="600"
-          fill="currentColor">
-          {seconds}
-        </text>
-      </svg>
-    </span>
   );
 }

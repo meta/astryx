@@ -15,6 +15,7 @@ import {
   MediaMuteButton,
   MediaPlayButton,
   MediaPlayer,
+  MediaPlaybackRateMenu,
   MediaPlayerAudio,
   MediaTime,
   MediaTimeSlider,
@@ -41,6 +42,7 @@ export default function MediaPlayerShowcase() {
           <MediaTimeSlider />
           <MediaTime display="remaining" />
           <ElapsedPercent />
+          <MediaPlaybackRateMenu />
           <MediaMuteButton />
         </HStack>
       </MediaPlayer>

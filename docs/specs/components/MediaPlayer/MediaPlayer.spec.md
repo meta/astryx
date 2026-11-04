@@ -124,9 +124,9 @@ intentional decision. A `current` contract contains no unresolved rows.
 | FR6  | The VideoPlayer control bar MUST float one spacing step 2 inset from the player's edges with the theme's container radius, and MUST paint the surface color at 80 percent over a 12px backdrop blur in the dark media context, with no shadow. It MUST paint solid under reduced transparency and at 95 percent under increased contrast, and its show and hide transition MUST not move under reduced motion. The player's radius MUST equal the bar's radius plus the bar's inset, so the corners nest, and MUST stay square when the bar is square. The volume slider MUST appear through the shared container reveal: while the volume control is hovered or holds focus, and always on a coarse pointer. | `component:MediaPlayer/DD1`, `component:MediaPlayer/DEC-11`                                                                  | candidate implementation; frost ownership open (OQ2) |
 | FR7  | The volume slider MUST NOT render where script cannot set the volume. The fullscreen control MUST NOT render where neither the root nor the video can go fullscreen, and the captions control MUST NOT render without a caption or subtitle track. Where element fullscreen is missing, the video's own fullscreen presentation MUST be used.                                                                                                                                                                                                                                                                                                                                                                 | platform capability constraints                                                                                              | candidate implementation                             |
 | FR8  | VideoPlayer MUST show a large play control before playback and after the end, a spinner while started playback waits for data, and an error message with a retry action when the media fails; the root announces the failure once, assertively. The large play control and the spinner MUST stay out of the accessibility tree, and the large play control out of the tab order, because the bar's play control does the same job. When the large play control or the retry action leaves while it holds focus, focus MUST move to the player root.                                                                                                                                                           | video playback states; `architecture:interaction-modality`                                                                   | candidate implementation                             |
-| FR9  | AudioPlayer MUST sit in a Section container instead of a card of its own, skip back 15 and forward 30 seconds by default, offer the playback speed as a menu with the current speed checked, reveal its volume slider through the shared container reveal, and hand its title, subtitle, artwork, and transport actions to the system media controls on its first playback. It MUST release the system media controls on unmount only while it still owns them.                                                                                                                                                                                                                                               | `component:MediaPlayer/DEC-6`, `component:MediaPlayer/DEC-9`, `component:MediaPlayer/DEC-10`, `component:MediaPlayer/DEC-11` | candidate implementation                             |
+| FR9  | AudioPlayer MUST sit in a Section container instead of a card of its own, skip back 15 and forward 30 seconds by default, offer a speed button and volume button whose sliders open through the shared container reveal, and hand its title, subtitle, artwork, and transport actions to the system media controls on its first playback. It MUST release the system media controls on unmount only while it still owns them.                                                                                                                                                                                                                                                                                 | `component:MediaPlayer/DEC-6`, `component:MediaPlayer/DEC-9`, `component:MediaPlayer/DEC-10`, `component:MediaPlayer/DEC-11` | candidate implementation                             |
 | FR10 | The root MUST combine `xstyle`, `className`, and `style`, forward neutral DOM props and its ref, compose its own handlers after the caller's, and keep its role, label, tab stop, and reflected state authoritative. Every part MUST extend the base props and forward neutral DOM props to the element that carries its theme target. VideoPlayer MUST fill the width of its container.                                                                                                                                                                                                                                                                                                                      | `architecture:public-component-api`                                                                                          | candidate implementation                             |
-| FR11 | Every media glyph MUST resolve through the icon registry under a `media:*` key, then fall back to a bundled glyph drawn from Lucide. The skip controls MUST draw their number of seconds over whichever arrow the theme supplies.                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `component:MediaPlayer/DEC-12`                                                                                               | decided; pending owner approval                      |
+| FR11 | Every media glyph MUST resolve through the icon registry under a `media:*` key, then fall back to a bundled glyph drawn from Lucide. The skip controls MUST use the rewind and fast-forward glyphs, and their names and tooltips MUST state the number of seconds.                                                                                                                                                                                                                                                                                                                                                                                                                                            | `component:MediaPlayer/DEC-12`                                                                                               | decided; pending owner approval                      |
 
 ### Allowed variation
 
@@ -163,9 +163,9 @@ intentional decision. A `current` contract contains no unresolved rows.
   with the shared focus-visible outline.
 - **AR2 — Control names.** Every control has a translated name that follows its
   state: Play, Pause, Replay; Mute, Unmute; Full screen, Exit full screen. The
-  captions control is a toggle that exposes `aria-pressed`. The speed control
-  is a menu button named "Playback speed" with the current speed, and its menu
-  marks the current speed checked.
+  captions control is a toggle that exposes `aria-pressed`. The speed button,
+  the speed slider's value, and the speed menu button name the current speed,
+  and the speed menu marks the current speed checked.
 - **AR3 — Sliders.** The timeline and volume are sliders with value text in
   words.
 - **AR4 — Announcements.** The root owns every announcement. Shortcut changes
@@ -303,13 +303,15 @@ AudioPlayer paints no card of its own. A Section container gives it the
 theme's section background and padding, and its style props style that
 container.
 
-### DEC-10 — The playback speed is a menu
+### DEC-10 — The playback speed has a button, a slider, and a menu
 
 **Reference:** `component:MediaPlayer/DEC-10`
 **Decider:** ernestt, 2026-11-04
 
-The speed control opens a menu of speeds with the current one checked. The
-menu and the `<` and `>` shortcuts share one default list of speeds.
+AudioPlayer pairs a speed button with a speed slider, revealed like volume.
+The button switches between normal speed and the last other speed, the way
+Mute switches the sound. A speed menu stays available as a part. The slider,
+the menu, and the `<` and `>` shortcuts share one default list of speeds.
 
 ### DEC-11 — Volume sliders appear through the container reveal
 
@@ -364,6 +366,10 @@ Rejected: copied glyphs without registry keys, which no theme can restyle.
   sliders and the player's seek and volume shortcuts also use the arrow keys.
   Adopting Toolbar means arrow keys move focus while a control has focus;
   keeping the row keeps the shortcuts and the extra tab stops. (`human-api`)
+- **OQ9 — Which speed control is the default?** AudioPlayer uses the speed
+  button and slider. The menu shows every speed at once and costs one more
+  press; the slider changes speed in one gesture but hides its stops until it
+  opens. The family can keep both parts or retire one. (`human-design`)
 
 ## Content boundary
 

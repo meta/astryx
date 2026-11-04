@@ -164,6 +164,8 @@ export const docs = {
       {className: 'astryx-media-time', visualProps: ['display']},
       {className: 'astryx-media-captions-button'},
       {className: 'astryx-media-fullscreen-button'},
+      {className: 'astryx-media-playback-rate-button'},
+      {className: 'astryx-media-playback-rate-slider'},
       {className: 'astryx-media-playback-rate-menu'},
     ],
   },
@@ -236,7 +238,7 @@ export const docs = {
       name: 'AudioPlayer',
       displayName: 'Audio Player',
       description:
-        'A ready-made player for episodes, recordings, and music: title and artwork, a timeline, skip back and forward, a playback speed menu, and volume. It sits in a Section container, so its background and padding follow the theme, and `xstyle`, `className`, and `style` style that container. It hands its title and artwork to the system media controls once it plays.',
+        'A ready-made player for episodes, recordings, and music: title and artwork, a timeline, skip back and forward, a speed button with a speed slider, and volume. The speed and volume sliders appear while their buttons are hovered or focused, and always on touch. It sits in a Section container, so its background and padding follow the theme, and `xstyle`, `className`, and `style` style that container. It hands its title and artwork to the system media controls once it plays.',
       props: [
         {
           name: 'src',
@@ -433,6 +435,35 @@ export const docs = {
       description:
         'Enters and exits fullscreen with the player’s own element, so the controls come along. iPhone shows the system player instead. It renders nothing where fullscreen is not available.',
       props: [sizeProp, ...styleProps],
+    },
+    {
+      name: 'MediaPlaybackRateButton',
+      displayName: 'Media Playback Rate Button',
+      description:
+        'Shows the playback speed. A press switches between normal speed and the last other speed, the way the mute button switches the sound off and on; from normal speed with no other speed yet, it steps up one speed.',
+      props: [sizeProp, ...styleProps],
+    },
+    {
+      name: 'MediaPlaybackRateSlider',
+      displayName: 'Media Playback Rate Slider',
+      description:
+        'Sets the playback speed in steps and shows the speed in a tooltip while it is hovered, dragged, or focused. AudioPlayer reveals it beside the speed button.',
+      props: [
+        {
+          name: 'rates',
+          type: 'readonly number[]',
+          description:
+            'Speeds the slider steps through, in order. The `<` and `>` shortcuts step through the default list.',
+          default: '[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]',
+        },
+        {
+          name: 'width',
+          type: 'number | string',
+          description: 'Slider width.',
+          default: '88',
+        },
+        ...styleProps,
+      ],
     },
     {
       name: 'MediaPlaybackRateMenu',
