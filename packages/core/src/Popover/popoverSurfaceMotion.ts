@@ -87,9 +87,10 @@ function readState(animator: Animator, axis: 'x' | 'y'): SurfaceState {
 export interface PopoverSurfaceMotion {
   /**
    * The popover has just been shown in its touch presentation: grow it out
-   * of its source. `measure` reads the geometry; it runs with the element at
-   * its full size. During a dismissal, the popover grows back from where the
-   * dismissal has it, about the same point.
+   * of its source, from the next animation frame, before it paints.
+   * `measure` reads the geometry there, with the element invisible at its
+   * full size. During a dismissal, the popover grows back from where the
+   * dismissal has it, about the same point, at once: it reads nothing.
    */
   enter(measure: () => PopoverSurfaceGeometry): void;
   /**
@@ -122,6 +123,11 @@ const MOTION_STYLE_PROPERTIES = [
  * the compositor. A dismissal during the growth, or a growth during the
  * dismissal, turns back from the frame on screen.
  *
+ * A fresh presentation writes and reads nothing until the next animation
+ * frame, which runs before that frame paints. In the task that opens the
+ * popover, its style writes and box reads would lay the page out. The
+ * layer's own CSS entrance, started meanwhile, is turned off in that frame.
+ *
  * The browser hides a popover as it closes, so the dismissal plays on the
  * layer runtime's exit copy, which is removed when its motion ends.
  *
@@ -131,6 +137,11 @@ const MOTION_STYLE_PROPERTIES = [
  * The browser's light dismiss cannot be cancelled from an event, so the
  * hold's shield covers the viewport from inside the layer. A tap on the
  * shield is then a tap inside the popover, which the browser leaves open.
+ * The hold starts with the growth, in its frame. Holding from the open
+ * would lay the page out twice in the opening task, since the shield's
+ * `showPopover()` lays it out. A touch that starts in the frame before the
+ * hold reaches the page. Its tap does not dismiss the popover: its lift
+ * lands on the hold.
  *
  * Under Reduce Motion the animator's policy applies. On a coarse pointer the
  * popover lands at its full size and cross-fades in, and it cross-fades out
@@ -138,9 +149,39 @@ const MOTION_STYLE_PROPERTIES = [
  */
 export function createPopoverSurfaceMotion(
   element: HTMLElement,
-  options: Pick<AnimatorOptions, 'now'> = {},
+  {
+    requestFrame,
+    cancelFrame,
+    ...animatorOptions
+  }: Pick<AnimatorOptions, 'now'> & {
+    /** Schedules the presentation's read (default: the window's animation frame). */
+    requestFrame?: (callback: () => void) => number;
+    /** Cancels a read that `requestFrame` scheduled. */
+    cancelFrame?: (handle: number) => void;
+  } = {},
 ): PopoverSurfaceMotion {
-  const animator = createMotionAnimator(element, options);
+  const animator = createMotionAnimator(element, animatorOptions);
+  const view = element.ownerDocument.defaultView;
+  const scheduleFrame =
+    requestFrame ??
+    ((callback: () => void) =>
+      typeof view?.requestAnimationFrame === 'function'
+        ? view.requestAnimationFrame(() => callback())
+        : (callback(), 0));
+  const unscheduleFrame =
+    cancelFrame ??
+    ((handle: number) => {
+      if (typeof view?.cancelAnimationFrame === 'function') {
+        view.cancelAnimationFrame(handle);
+      }
+    });
+  let pendingPresentFrame: number | null = null;
+  const cancelPending = () => {
+    if (pendingPresentFrame != null) {
+      unscheduleFrame(pendingPresentFrame);
+      pendingPresentFrame = null;
+    }
+  };
   // The presentation in progress or last played; null while the popover is
   // in a presentation this motion does not drive.
   let collapsed: PopoverCollapsedState | null = null;
@@ -168,6 +209,7 @@ export function createPopoverSurfaceMotion(
   };
 
   const reset = () => {
+    cancelPending();
     collapsed = null;
     measured = null;
     presentHandle = null;
@@ -180,6 +222,7 @@ export function createPopoverSurfaceMotion(
   };
 
   const enter = (measure: () => PopoverSurfaceGeometry) => {
+    cancelPending();
     // A dismissal let the element go (exit, below).
     animator.attach(element);
     let from: SurfaceState | null = null;
@@ -189,14 +232,40 @@ export function createPopoverSurfaceMotion(
       from = readState(exiting.animator, collapsed.axis);
     }
     endExit();
-    if (from == null) {
+    if (from != null && measured != null) {
+      present(from, measured);
+      return;
+    }
+    let presented = false;
+    const frame = scheduleFrame(() => {
+      presented = true;
+      pendingPresentFrame = null;
       // Full size and invisible for the read. The box must not include a
       // scale from the last dismissal, nor the first keyframe of the layer's
       // CSS entrance. The curves below replace these before anything paints.
       element.style.setProperty('animation-name', 'none');
       animator.set({scaleX: 1, scaleY: 1, opacity: 0});
+      present(null, measure());
+    });
+    // Without animation frames the presentation has already run: no frame
+    // is left to wait for, so a close plays the shrink.
+    if (!presented) {
+      pendingPresentFrame = frame;
+      // The layer's CSS entrance goes off as the opening task ends, after
+      // that task's own reads, so the write costs it no layout. A style read
+      // after the task then starts no entrance for the frame to cancel.
+      queueMicrotask(() => {
+        if (pendingPresentFrame === frame) {
+          element.style.setProperty('animation-name', 'none');
+        }
+      });
     }
-    const geometry = from != null && measured != null ? measured : measure();
+  };
+
+  const present = (
+    from: SurfaceState | null,
+    geometry: PopoverSurfaceGeometry,
+  ) => {
     const next =
       from != null && collapsed != null
         ? collapsed
@@ -232,6 +301,22 @@ export function createPopoverSurfaceMotion(
 
   const exit = () => {
     endHold();
+    if (pendingPresentFrame != null) {
+      // Closed before the frame that would have presented it: nothing is on
+      // screen to dismiss. The element is hidden now, so it is left as the
+      // component styles it, with no compositing layer. A promotion would
+      // leave `will-change` on it and a timer to end it, a style write on an
+      // element that no longer paints.
+      cancelPending();
+      collapsed = null;
+      measured = null;
+      presentHandle = null;
+      animator.set({scaleX: 1, scaleY: 1, opacity: 1}, {promote: false});
+      for (const property of MOTION_STYLE_PROPERTIES) {
+        element.style.removeProperty(property);
+      }
+      return;
+    }
     const target = collapsed;
     if (target == null || exiting != null) {
       return;
@@ -251,7 +336,7 @@ export function createPopoverSurfaceMotion(
       'transform-origin',
       `${target.originX}px ${target.originY}px`,
     );
-    const closing = createMotionAnimator(copy, options);
+    const closing = createMotionAnimator(copy, animatorOptions);
     closing.set(frameOf(from, target.axis));
     const handle = closing.play(
       surfaceCurves(

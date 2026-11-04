@@ -73,6 +73,11 @@ rung, so a caller whose content owns its own edges can ask for a flush surface.
 - New hook consumers: a direct `usePopover` composition that needs its own theme
   reachability provides and documents an owned `surfaceTarget`
 
+## Current-state impact
+
+- The input hold starts on the first frame after the open; a touch landing
+  within that frame reaches the page.
+
 ## Ownership boundary
 
 **Owns**
