@@ -24,6 +24,8 @@ const SIGNATURE = 'Fixture <fixture@example.com>';
  * @property {string} [parent] A named commit of this fixture, or any
  *   commit-ish the repository held before this import. Without it, the commit
  *   follows the last one on its ref in this import, or starts a new history.
+ * @property {string[]} [merges] More parents, each named as `parent` is, for a
+ *   merge commit. Its tree is the first parent's tree with `files` applied.
  * @property {string} [message]
  * @property {Record<string, string | null>} [files] Content by path; `null`
  *   deletes the path.
@@ -60,6 +62,12 @@ export function importCommits(root, commits, refs = {}) {
       // from its own name.
       stream.push(
         `from ${parent === undefined ? `${commit.parent}^0` : `:${parent}`}`,
+      );
+    }
+    for (const other of commit.merges ?? []) {
+      const merged = marks.get(other);
+      stream.push(
+        `merge ${merged === undefined ? `${other}^0` : `:${merged}`}`,
       );
     }
     if (commit.snapshot) stream.push('deleteall');

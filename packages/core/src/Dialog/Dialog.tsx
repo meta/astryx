@@ -5,7 +5,7 @@
 /**
  * @file Dialog.tsx
  * @input Uses React, DialogHTMLAttributes, ReactNode, container (Layout), DialogContext, layerTextReset,
- *   layerStructureReset, modalOutlet, interactionModality, chainEventHandlers
+ *   layerStructureReset, modalOutlet, interactionModality, chainEventHandlers, holdEntranceInput
  * @output Exports Dialog component, DialogProps, DialogVariant, DialogPurpose types
  * @position Core implementation; consumed by index.ts, tested by Dialog.test.tsx
  *
@@ -27,6 +27,7 @@
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Dialog/Dialog.doc.mjs (props table, features, implementation notes)
  * - /packages/core/src/Dialog/Dialog.test.tsx (tests for new/changed behavior)
+ * - /packages/core/src/Dialog/__tests__/DialogTouchEntrance.interaction.browser.spec.ts (the touch entrance hold)
  * - /packages/core/src/Dialog/index.ts (exports if types change)
  * - /apps/storybook/stories/Dialog.stories.tsx (storybook stories)
  * - /packages/cli/assets/templates/blocks/components/Dialog/ (showcase blocks)
@@ -51,6 +52,7 @@ import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
 import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
+import {holdEntranceInput} from '../Layer/holdEntranceInput';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {useBackdropPress} from '../Layer/useBackdropPress';
 import {useModalOutlet} from '../Layer/modalOutlet';
@@ -642,6 +644,11 @@ export function Dialog({
           focusForLastInput(autofocusTarget);
         }
       }
+      // Under a coarse primary pointer, a tap or a drag during the entrance
+      // reaches nothing. Keys and assistive technology stay live. The hold
+      // ends with the entrance, or with this effect's cleanup on a close or
+      // unmount.
+      return holdEntranceInput(dialog) ?? undefined;
     } else {
       if (dialog.open) {
         dialog.close();
