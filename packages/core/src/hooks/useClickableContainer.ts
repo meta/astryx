@@ -10,7 +10,7 @@
  *   hasInteractiveAncestor and the shared innermostInteractive walk
  * @position Core hook for clickable containers with nested interactive
  *   elements. A click on a nested button or link does not run the card's
- *   action, and a finger press there shows no press on the card. Each navigation
+ *   action, and a press there shows no press on the card. Each navigation
  *   passes the rule in utils/safeUrl.ts first.
  *
  * SYNC: When modified, update:
@@ -27,6 +27,7 @@ import {
 import {isLayerSurface} from '../Layer/layerSurfacePress';
 import {isSafeUrl} from '../utils/safeUrl';
 import {cancelPress} from '../utils/pressFeedback';
+import {markNestedPress} from '../privateAttributes/nestedPress.stylex';
 
 /**
  * The attribute this hook sets on the container it makes clickable. A click
@@ -326,15 +327,17 @@ export function useClickableContainer({
     [containerRef, href, disabled],
   );
 
-  // The press-state counterpart of onClick's rule, for touch: a finger press
-  // that would not activate the container shows no press on it. A mouse or
-  // pen press keeps its `:active` paint.
+  // The press-state counterpart of onClick's rule: a press that would not
+  // activate the container shows no press on it. A finger press cancels the
+  // press controller's paint. A mouse or pen press marks the container, and
+  // the container's `:active` arm leaves out a marked container.
   const onPointerDown = useCallback(
     (event: PointerEvent<HTMLElement>) => {
       const containerEl = containerRef.current;
       const eventTarget = event.target;
+      // Only a primary press paints. Touch and pen presses report button 0.
       if (
-        event.pointerType !== 'touch' ||
+        event.button !== 0 ||
         disabled ||
         containerEl == null ||
         !(eventTarget instanceof Element) ||
@@ -346,7 +349,11 @@ export function useClickableContainer({
       ) {
         return;
       }
-      cancelPress(containerEl);
+      if (event.pointerType === 'touch') {
+        cancelPress(containerEl);
+      } else {
+        markNestedPress(containerEl);
+      }
     },
     [containerRef, interactiveRef, disabled],
   );
