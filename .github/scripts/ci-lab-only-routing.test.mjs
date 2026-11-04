@@ -128,7 +128,7 @@ describe('Lab-only lane (spec:AST-030 FR26)', () => {
     // The Lab tests, not the module graph's --changed set, then the guards.
     expect(labBranch).not.toContain('pnpm test:ui --changed');
     expect(labBranch).toContain(
-      'node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 > "$RUNNER_TEMP/fs-guards.txt"',
+      '-- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1',
     );
     expect(labBranch).toContain(
       'pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"',
