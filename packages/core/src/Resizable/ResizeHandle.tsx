@@ -39,6 +39,7 @@ import {
 } from './resizeGesture';
 import {
   handOverPane,
+  regionOfProps,
   registerResizeHandle,
   resizablePaneFor,
   watchResizablePanes,
@@ -491,7 +492,15 @@ export function ResizeHandle({
         isDisabled:
           configRef.current.isDisabled || resizableRef.current == null,
       }),
-      setIsDragging,
+      dragging => {
+        setIsDragging(dragging);
+        // The hook's region lets a pointer drag reopen its pane without a
+        // slide; a hand-built object has none.
+        const region = resizableRef.current;
+        if (region != null) {
+          regionOfProps(region)?.setPointerDragging(dragging);
+        }
+      },
     );
   });
 
@@ -564,6 +573,7 @@ export function ResizeHandle({
       heldPaneRef.current = handOverPane(
         heldPaneRef.current,
         null,
+        null,
         false,
         null,
       );
@@ -586,6 +596,7 @@ export function ResizeHandle({
     heldPaneRef.current = handOverPane(
       heldPaneRef.current,
       pane,
+      null,
       isRegionCollapsed,
       element,
     );

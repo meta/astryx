@@ -9,7 +9,8 @@
  *   elements only through parentElement and the element siblings on either
  *   side (and firstElementChild under `display: contents`), stopping at the
  *   band around the visible part, the reporting functions are
- *   not public, and only the hook and the adopting components use it
+ *   not public, and only the hook, the adopting components and the resize
+ *   controller's edge reveal use it
  * @position Testing; the real-browser half of INV12's verification is in
  *   __tests__/animatedLayout.interaction.browser.spec.ts
  */
@@ -150,6 +151,7 @@ describe('architecture:react-component-runtime INV12 source boundary', () => {
     expect(users).toEqual([
       'AppShell/AppShell.tsx',
       'Collapsible/Collapsible.tsx',
+      'Resizable/resizablePane.ts',
       'SideNav/railMotion.ts',
       'Table/plugins/rowExpansion/useTableRowExpansion.tsx',
       'TreeList/TreeList.tsx',

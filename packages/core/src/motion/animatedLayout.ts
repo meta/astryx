@@ -2811,11 +2811,55 @@ const HOLD_PROPERTIES = {
 } as const;
 
 /**
+ * The inside of an element as it was laid out: its padding along an axis, its
+ * overflow and its scroll offset. A size change can change them in the same
+ * commit, as a LayoutPanel at width 0 drops its padding and stops scrolling.
+ */
+interface LaidOutInside {
+  /** Its padding at the axis's start and end. */
+  readonly gutters: readonly [string, string];
+  /** Its overflow across and down. */
+  readonly overflow: readonly [string, string];
+  /** Its scroll offset across and down. */
+  readonly scroll: readonly [number, number];
+}
+
+function insideOf(
+  element: HTMLElement,
+  axis: 'inline' | 'block',
+): LaidOutInside {
+  const style = getComputedStyle(element);
+  return {
+    gutters: [
+      style.getPropertyValue(`padding-${axis}-start`),
+      style.getPropertyValue(`padding-${axis}-end`),
+    ],
+    overflow: [
+      style.getPropertyValue('overflow-x'),
+      style.getPropertyValue('overflow-y'),
+    ],
+    scroll: [element.scrollLeft, element.scrollTop],
+  };
+}
+
+function restoreScroll(element: HTMLElement, inside: LaidOutInside): void {
+  const [across, down] = inside.scroll;
+  if (element.scrollLeft !== across) {
+    element.scrollLeft = across;
+  }
+  if (element.scrollTop !== down) {
+    element.scrollTop = down;
+  }
+}
+
+/**
  * Holds `element` at `extent` own px along `edge`'s axis while it conceals to
  * `keep`, freeing the difference by the margin on that edge's side, so what
- * lies beyond the edge stays where the new size puts it. Returns what puts
- * back every value it set, or null when no margin frees it (the content on
- * that side did not stay put), having set nothing.
+ * lies beyond the edge stays where the new size puts it. Its padding,
+ * overflow and scroll offset stay as `inside` measured them, so nothing in it
+ * moves while it is clipped. Returns what puts back every value it set.
+ * When no margin frees it, as the content on that side did not stay put, it
+ * sets nothing and returns null.
  */
 function holdExtent(
   element: HTMLElement,
@@ -2823,10 +2867,21 @@ function holdExtent(
   edge: LayoutEdge,
   extent: number,
   keep: number,
+  inside: LaidOutInside,
 ): (() => void) | null {
   const axis = edge.startsWith('inline') ? 'inline' : 'block';
   const margin = `margin-${edge}`;
-  const properties = [...HOLD_PROPERTIES[axis], margin];
+  const insideProperties = [
+    [`padding-${axis}-start`, inside.gutters[0]],
+    [`padding-${axis}-end`, inside.gutters[1]],
+    ['overflow-x', inside.overflow[0]],
+    ['overflow-y', inside.overflow[1]],
+  ] as const;
+  const properties = [
+    ...HOLD_PROPERTIES[axis],
+    margin,
+    ...insideProperties.map(([property]) => property),
+  ];
   const prior = properties.map(
     property =>
       [
@@ -2857,6 +2912,11 @@ function holdExtent(
   element.style.setProperty('flex-basis', 'auto', 'important');
   element.style.setProperty('flex-grow', '0', 'important');
   element.style.setProperty('flex-shrink', '0', 'important');
+  for (const [property, value] of insideProperties) {
+    if (value !== '') {
+      element.style.setProperty(property, value, 'important');
+    }
+  }
   element.style.setProperty(margin, `${keep - extent}px`, 'important');
   if (beyond != null && before != null) {
     // One correction from the measured result (a gap, the element's own
@@ -2882,6 +2942,7 @@ function holdExtent(
       return null;
     }
   }
+  restoreScroll(element, inside);
   return restore;
 }
 
@@ -2895,7 +2956,9 @@ function holdExtent(
  * the extent the element showed. A smaller one conceals: the element is held
  * at the extent it was laid out at, the difference freed by the margin on
  * that edge's side so the content beyond it stays where the new size puts it,
- * and clipped down to its new extent; the hold goes when the motion ends. The
+ * and clipped down to its new extent; the hold goes when the motion ends.
+ * Its padding, overflow and scroll offset stay as laid out while it is held,
+ * so nothing inside it jumps when the new size changes them. The
  * moving edge rides the glide of the content on that side, frame by frame,
  * and a change made while it runs starts from the extent it shows. It slides:
  * nothing fades. Under Reduce Motion with a coarse primary pointer a reveal
@@ -2912,7 +2975,13 @@ export function reportLayoutEdge(
    * What the element showed, its laid-out extent and its box, before the
    * change.
    */
-  let measured: {shown: number; box: number; rect: DOMRect} | null = null;
+  let measured: {
+    shown: number;
+    box: number;
+    rect: DOMRect;
+    inside: LaidOutInside;
+  } | null = null;
+  const axis = edge.startsWith('inline') ? 'inline' : 'block';
   const release = (element: HTMLElement | null) => {
     if (element == null) {
       return;
@@ -2928,12 +2997,15 @@ export function reportLayoutEdge(
         const running = resizeReveals.get(element);
         const elapsed = Number(running?.animation?.currentTime);
         const rect = element.getBoundingClientRect();
+        // A running conceal holds the inside as it was laid out.
+        const inside = insideOf(element, axis);
         measured =
           running == null
             ? {
                 shown: extentOf(element, edge),
                 box: extentOf(element, edge),
                 rect,
+                inside,
               }
             : {
                 shown: running.shownAt(
@@ -2941,6 +3013,7 @@ export function reportLayoutEdge(
                 ),
                 box: running.box,
                 rect,
+                inside,
               };
         running?.release();
       }
@@ -2954,6 +3027,8 @@ export function reportLayoutEdge(
       if (handle == null || element == null || before == null) {
         return;
       }
+      // A conceal released to reverse can drop the scroll offset.
+      restoreScroll(element, before.inside);
       const area = areaOf(handle, element);
       if (area == null) {
         return;
@@ -2994,7 +3069,7 @@ export function reportLayoutEdge(
       // the one it was laid out at, held while it runs.
       const box = isConceal ? Math.max(before.box, before.shown) : after;
       const restore = isConceal
-        ? holdExtent(element, area, edge, box, after)
+        ? holdExtent(element, area, edge, box, after, before.inside)
         : () => {};
       if (restore == null) {
         return;

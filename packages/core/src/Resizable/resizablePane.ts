@@ -2,24 +2,53 @@
 
 /**
  * @file resizablePane.ts
- * @input A LayoutPanel's element, and the collapse state the ResizeHandle
- *   beside it reports
- * @output The internal channel through which a LayoutPanel at a region's size
- *   lends its element to the ResizeHandle beside it, and the ResizeHandle a
- *   collapsing panel hands focus to
+ * @input A LayoutPanel's element, its commits and the width it renders; the
+ *   collapse state its resize controller reports; motion/animatedLayout.ts
+ * @output The internal channel through which a LayoutPanel lends its element
+ *   to the resize controller that sizes it, the edge reveal that controller
+ *   plays, and the ResizeHandle a collapsing panel hands focus to
  * @position Internal to Resizable and Layout; no entry point exports it. No
  *   React, and no DOM work on import
  */
 
-/** What a LayoutPanel lends the ResizeHandle beside it. */
+import {
+  createAnimatedLayout,
+  reportLayoutEdge,
+  type LayoutEdge,
+} from '../motion/animatedLayout';
+import type {ResizableProps} from './useResizable';
+
+export type {LayoutEdge};
+
+/** The width a panel renders: pixels, a CSS length, or none. */
+export type RenderedPaneWidth = number | string | null | undefined;
+
+/** What the controller that sizes a pane hears from it. */
+export interface PaneListener {
+  /**
+   * In the commit that renders the pane at width 0, or away from it, before
+   * React changes the DOM.
+   */
+  beforeChange(toCollapsed: boolean): void;
+  /** After every commit of the pane. */
+  committed(): void;
+}
+
+/** What a LayoutPanel lends the resize controller that sizes it. */
 export interface ResizablePane {
   readonly element: HTMLElement;
+  /** The width the panel renders now. */
+  renderedWidth(): RenderedPaneWidth;
+  /** The panel's edge that faces its content, where its ResizeHandle sits. */
+  contentFacingEdge(): LayoutEdge;
   /**
-   * The handle says whether its region is collapsed, and which handle focus
-   * inside the panel moves to as it collapses. The panel is then inert and
-   * hidden from assistive technology while it is collapsed.
+   * The controller says whether its region is collapsed, and which handle
+   * focus inside the panel moves to as it collapses. The panel is then inert
+   * and hidden from assistive technology while it is collapsed.
    */
   setCollapsed(isCollapsed: boolean, focusTarget: HTMLElement | null): void;
+  /** The controller that sizes the pane listens to it; null stops it. */
+  listen(listener: PaneListener | null): void;
 }
 
 const lent = new WeakMap<Element, ResizablePane>();
@@ -43,7 +72,7 @@ function notifyWatchers(): void {
 
 /**
  * Calls `listener` whenever a panel is lent beside a handle or taken back, so
- * a handle looks for its pane again. Returns the function that stops it.
+ * a factory looks for its pane again. Returns the function that stops it.
  */
 export function watchResizablePanes(listener: () => void): () => void {
   watchers.add(listener);
@@ -67,18 +96,26 @@ export function resizablePaneFor(
 }
 
 /**
- * Moves a handle's hold from `held` to `next`, and returns `next`. A pane the
- * handle no longer holds opens. The held pane takes the region's collapse
- * state, and focus inside it moves to `handle` as it collapses.
+ * Moves a region's hold from `held` to `next`, and returns `next`. A pane the
+ * region no longer sizes stops listening and opens. The held pane takes the
+ * region's collapse state, and focus inside it moves to `handle` as it
+ * collapses. A controller that sizes the pane passes its `listener`.
  */
 export function handOverPane(
   held: ResizablePane | null,
   next: ResizablePane | null,
+  listener: PaneListener | null,
   isCollapsed: boolean,
   handle: HTMLElement | null,
 ): ResizablePane | null {
   if (next !== held) {
+    if (listener != null) {
+      held?.listen(null);
+    }
     held?.setCollapsed(false, null);
+    if (listener != null) {
+      next?.listen(listener);
+    }
   }
   next?.setCollapsed(isCollapsed, handle);
   return next;
@@ -106,24 +143,103 @@ export function resizeHandleBeside(
   return null;
 }
 
+/**
+ * The hook's side of a region. The LayoutPanel that takes the hook's own
+ * props hands its pane here as it mounts. The factory the region has, now
+ * or later, follows it.
+ */
+export interface RegionPaneSlot {
+  /** From the LayoutPanel: its pane, or null as it goes. */
+  attach(pane: ResizablePane | null): void;
+  /** Calls `listener` with the pane now and whenever it changes. */
+  follow(listener: (pane: ResizablePane | null) => void): () => void;
+  /**
+   * From the ResizeHandle given the props: whether a pointer drags it, so a
+   * drag that reopens the pane plays nothing while a key step plays.
+   */
+  setPointerDragging(isDragging: boolean): void;
+  isPointerDragging(): boolean;
+}
+
+export function createRegionPaneSlot(): RegionPaneSlot {
+  let current: ResizablePane | null = null;
+  let isDragging = false;
+  const listeners = new Set<(pane: ResizablePane | null) => void>();
+  return {
+    setPointerDragging(next) {
+      isDragging = next;
+    },
+    isPointerDragging: () => isDragging,
+    attach(pane) {
+      if (pane === current) {
+        return;
+      }
+      current = pane;
+      for (const listener of [...listeners]) {
+        listener(pane);
+      }
+    },
+    follow(listener) {
+      listeners.add(listener);
+      listener(current);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+}
+
+/**
+ * Kept off the exported `ResizableProps`, like the hook's collapse controls:
+ * a hand-built object has no region, so its panel never slides.
+ */
+const propsRegions = new WeakMap<ResizableProps, RegionPaneSlot>();
+
+/** The hook registers each `props` object it returns with its region. */
+export function registerPropsRegion(
+  props: ResizableProps,
+  slot: RegionPaneSlot,
+): void {
+  propsRegions.set(props, slot);
+}
+
+/** The region of the hook's own `props`, or undefined for a hand-built object. */
+export function regionOfProps(
+  props: ResizableProps,
+): RegionPaneSlot | undefined {
+  return propsRegions.get(props);
+}
+
 /** LayoutPanel's side of the channel, one per panel. */
 export interface ResizablePaneLink {
-  /** For useSyncExternalStore: whether a handle holds the panel collapsed. */
+  /** For useSyncExternalStore: whether a controller holds the panel collapsed. */
   readonly subscribe: (listener: () => void) => () => void;
   readonly isCollapsed: () => boolean;
-  /** The handle that named itself for focus to move to, if any. */
+  /** The handle the controller named for focus to move to, if any. */
   focusTarget(): HTMLElement | null;
   /**
-   * From the panel's callback ref: its element, lent beside its handle for
-   * the handle to find. Null takes it back.
+   * From the panel: its element, lent beside its handle for a factory to
+   * find (`isFoundBeside`). Or the element is handed to a region.
+   * Null takes it back. Returns the pane lent, if any.
    */
-  attach(element: HTMLElement | null): void;
+  attach(
+    element: HTMLElement | null,
+    isFoundBeside: boolean,
+  ): ResizablePane | null;
+  /** Before the DOM changes in a commit that renders width 0, or away from it. */
+  beforeChange(toCollapsed: boolean): void;
+  /** After every commit of the panel, with the width it rendered and its content-facing edge. */
+  committed(width: RenderedPaneWidth, edge: LayoutEdge): void;
 }
 
 export function createResizablePaneLink(): ResizablePaneLink {
   let isCollapsed = false;
   let focusTarget: HTMLElement | null = null;
+  let width: RenderedPaneWidth = undefined;
+  let edge: LayoutEdge = 'inline-end';
   let attached: ResizablePane | null = null;
+  let isAttachedBeside = false;
+  let listener: PaneListener | null = null;
   const listeners = new Set<() => void>();
 
   const setCollapsed = (next: boolean) => {
@@ -145,35 +261,117 @@ export function createResizablePaneLink(): ResizablePaneLink {
     },
     isCollapsed: () => isCollapsed,
     focusTarget: () => focusTarget,
-    attach(element) {
-      if (attached?.element === element) {
-        return;
+    attach(element, isFoundBeside) {
+      if (attached?.element === element && isAttachedBeside === isFoundBeside) {
+        return attached;
       }
-      const wasLent = attached != null;
+      const wasBeside = attached != null && isAttachedBeside;
       if (attached != null && lent.get(attached.element) === attached) {
         lent.delete(attached.element);
       }
       attached = null;
+      listener = null;
+      isAttachedBeside = isFoundBeside;
       if (element == null) {
-        // Taken back: no handle holds it collapsed any more.
+        // Taken back: no controller holds it collapsed any more.
         focusTarget = null;
         setCollapsed(false);
       } else {
         const pane: ResizablePane = {
           element,
+          renderedWidth: () => width,
+          contentFacingEdge: () => edge,
           setCollapsed(next, nextFocusTarget) {
             if (attached === pane) {
               focusTarget = nextFocusTarget;
               setCollapsed(next);
             }
           },
+          listen(next) {
+            if (attached === pane) {
+              listener = next;
+            }
+          },
         };
         attached = pane;
-        lent.set(element, pane);
+        if (isFoundBeside) {
+          lent.set(element, pane);
+        }
       }
-      if (wasLent || element != null) {
+      if (wasBeside || (element != null && isFoundBeside)) {
         notifyWatchers();
       }
+      return attached;
     },
+    beforeChange(toCollapsed) {
+      listener?.beforeChange(toCollapsed);
+    },
+    committed(nextWidth, nextEdge) {
+      width = nextWidth;
+      edge = nextEdge;
+      listener?.committed();
+    },
+  };
+}
+
+/**
+ * The edge reveal a resize controller plays for its pane. It measures before
+ * the DOM changes and plays on the pane's first commit at a new size. It runs
+ * on the controller's own animated-layout handle over the pane's row, with no
+ * copy.
+ */
+export interface PaneReveal {
+  /** Before the DOM changes: measures `pane` for its reveal from `edge`. */
+  measure(pane: ResizablePane, edge: LayoutEdge): void;
+  /** After a commit of the pane: the one that renders its new size plays. */
+  committed(pane: ResizablePane): void;
+  /** Lands a measured or running reveal at once. */
+  land(): void;
+}
+
+type EdgeReport = ReturnType<typeof reportLayoutEdge>;
+
+export function createPaneReveal(getRow: () => Element | null): PaneReveal {
+  // Measured, waiting for the pane to render its new size; then played.
+  let pending: {
+    report: EdgeReport;
+    pane: ResizablePane;
+    widthBefore: RenderedPaneWidth;
+  } | null = null;
+  let played: EdgeReport | null = null;
+  const layout = createAnimatedLayout(getRow);
+
+  const land = () => {
+    pending?.report.cancel();
+    pending = null;
+    played?.cancel();
+    played = null;
+  };
+
+  return {
+    measure(pane, edge) {
+      // A measured change the pane never rendered is stale; a running one
+      // reverses from what it shows.
+      pending?.report.cancel();
+      pending = null;
+      const element = pane.element;
+      const report = reportLayoutEdge(layout, () => element, {edge});
+      report.measureBefore();
+      pending = {report, pane, widthBefore: pane.renderedWidth()};
+    },
+    committed(pane) {
+      if (
+        pending == null ||
+        pending.pane !== pane ||
+        pane.renderedWidth() === pending.widthBefore
+      ) {
+        return;
+      }
+      const {report} = pending;
+      pending = null;
+      played = report;
+      report.animate();
+    },
+    land,
   };
 }
