@@ -430,8 +430,10 @@ export interface PowerSearchProps extends Omit<
    *   above it with the fields (or the content search with inline
    *   suggestions), and a value step opens above that, stages operator →
    *   value, and confirms from its footer. Dismissing a step reveals the
-   *   one beneath. Suited to compact touch screens, where the editor
-   *   popover competes with the software keyboard.
+   *   one beneath. The flow edits a draft: `onChange` is called when Done
+   *   applies it, once per edit in order, and a dismissal with a changed
+   *   draft asks before discarding it. Suited to compact touch screens,
+   *   where the editor popover competes with the software keyboard.
    * - `'adaptive'`: the bottom sheet on compact coarse-pointer screens,
    *   otherwise the popover — the same resolution Selector uses. The server
    *   render and the hydrating render are the popover.
