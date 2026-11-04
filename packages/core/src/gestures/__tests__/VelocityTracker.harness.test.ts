@@ -17,6 +17,7 @@ import {
   type TouchEventStep,
 } from '@astryxdesign/interaction-harness';
 import {describe, expect, it} from 'vitest';
+import {UIKIT_VELOCITY} from '../../motion/uikit/gestures';
 import {VelocityTracker} from '../VelocityTracker';
 
 /** A finger's samples as [x, y, ms], in order, and its lift time. */
@@ -24,6 +25,23 @@ interface Gesture {
   readonly samples: ReadonlyArray<readonly [number, number, number]>;
   readonly lift: number;
 }
+
+/** Three moves, then a lift `ms` after the last one. */
+function liftAfter(ms: number): Gesture {
+  return {
+    samples: [
+      [100, 50, 0],
+      [116, 50, 16],
+      [132, 50, 32],
+    ],
+    lift: 32 + ms,
+  };
+}
+
+// The tracker reads a speed at the stillness interval and none 1 ms past it.
+// A copy with another interval or bound fails one of these.
+const AT_STILLNESS = liftAfter(UIKIT_VELOCITY.stillness.value);
+const PAST_STILLNESS = liftAfter(UIKIT_VELOCITY.stillness.value + 1);
 
 const GESTURES: Record<string, Gesture> = {
   'a steady flick': {
@@ -89,7 +107,19 @@ const GESTURES: Record<string, Gesture> = {
     ],
     lift: 120,
   },
+  'a lift at the stillness interval': AT_STILLNESS,
+  'a lift 1 ms past the stillness interval': PAST_STILLNESS,
 };
+
+/** The tracker's release speed for the gesture, in px/s. */
+function coreSpeed({samples, lift}: Gesture): number {
+  const tracker = new VelocityTracker();
+  for (const [x, y, t] of samples) {
+    tracker.add(x, y, t);
+  }
+  const velocity = tracker.velocity(lift);
+  return Math.hypot(velocity.x, velocity.y);
+}
 
 /** The gesture as a paced play's touch events, one finger. */
 function stepsOf({samples, lift}: Gesture): TouchEventStep[] {
@@ -115,12 +145,7 @@ function stepsOf({samples, lift}: Gesture): TouchEventStep[] {
 describe("the interaction harness's copy of the release filter", () => {
   for (const [name, gesture] of Object.entries(GESTURES)) {
     it(`reads ${name} as VelocityTracker does`, () => {
-      const tracker = new VelocityTracker();
-      for (const [x, y, t] of gesture.samples) {
-        tracker.add(x, y, t);
-      }
-      const velocity = tracker.velocity(gesture.lift);
-      const core = Math.hypot(velocity.x, velocity.y);
+      const core = coreSpeed(gesture);
       // The page received each event at its scripted time.
       const steps = stepsOf(gesture);
       const reading = readRelease(
@@ -131,4 +156,9 @@ describe("the interaction harness's copy of the release filter", () => {
       expect(reading?.pagePxPerS).toBeCloseTo(core, 6);
     });
   }
+
+  it('straddles the stillness reset with its two boundary lifts', () => {
+    expect(coreSpeed(AT_STILLNESS)).toBeGreaterThan(0);
+    expect(coreSpeed(PAST_STILLNESS)).toBe(0);
+  });
 });
