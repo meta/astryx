@@ -9,7 +9,7 @@ export default function SelectorClearable() {
   const [value, setValue] = useState<string | null>('engineering');
   return (
     <Selector
-      style={{width: 300}}
+      controlStyle={{width: 300}}
       label="Department"
       options={[
         {value: 'engineering', label: 'Engineering'},

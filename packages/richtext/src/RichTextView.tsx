@@ -5,13 +5,15 @@
 /**
  * @file RichTextView.tsx
  * @input Uses React, Lexical (lexical + @lexical/react, composed through
- *   LexicalExtensionComposer), design tokens
+ *   LexicalExtensionComposer), mergeProps from core utils, design tokens,
+ *   TableScrollRegionPlugin
  * @output Exports RichTextView component and RichTextViewProps
- * @position Read-only renderer for serialized Lexical editor state; experimental
- *   (richtext), exported from @astryxdesign/richtext
+ * @position Read-only renderer for serialized Lexical editor state, exposed to
+ *   assistive technology as document content rather than a form field;
+ *   exported from @astryxdesign/richtext
  *
  * SYNC: When modified, update these files to stay in sync:
- * - /packages/richtext/src/RichTextView.test.tsx
+ * - /packages/richtext/src/RichTextEditor.test.tsx
  * - /packages/richtext/src/index.ts
  * - /apps/storybook/stories/RichTextEditor.stories.tsx
  */
@@ -20,16 +22,27 @@ import {useEffect, useRef, useState, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {sharedEditorTheme} from './editorTheme';
 import type {BaseProps} from '@astryxdesign/core';
+import {mergeProps} from '@astryxdesign/core/utils';
+import {
+  colorVars,
+  typeScaleVars,
+  typographyVars,
+} from '@astryxdesign/core/theme/tokens.stylex';
 
 import {LexicalExtensionComposer} from '@lexical/react/LexicalExtensionComposer';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
 import {RichTextPlugin} from '@lexical/react/LexicalRichTextPlugin';
 import {ContentEditable} from '@lexical/react/LexicalContentEditable';
 import {LexicalErrorBoundary} from '@lexical/react/LexicalErrorBoundary';
-import {ListNode, ListItemNode} from '@lexical/list';
-import {HeadingNode, QuoteNode} from '@lexical/rich-text';
-import {LinkNode, AutoLinkNode} from '@lexical/link';
-import {CodeNode, CodeHighlightNode} from '@lexical/code';
+import {TablePlugin} from '@lexical/react/LexicalTablePlugin';
+import {TableScrollRegionPlugin} from './TableScrollRegionPlugin';
+import {TableColumnFloorPlugin} from './TableColumnFloorPlugin';
+import {CodeBlockHeaderPlugin} from './CodeBlockHeaderPlugin';
+import {CodeSyntaxPlugin} from './CodeSyntaxPlugin';
+import {MarkdownExtensionsPlugin} from './MarkdownExtensionsPlugin';
+import type {RichTextMarkdownExtension} from './markdownExtensions';
+import type {CodeLanguage} from '@astryxdesign/core/CodeBlock';
+import {TaskCheckboxPlugin} from './TaskCheckboxPlugin';
 import type {
   AnyLexicalExtension,
   Klass,
@@ -37,23 +50,55 @@ import type {
   EditorThemeClasses,
 } from 'lexical';
 import {defineExtension} from 'lexical';
+import {TextSemanticsExtension} from './textSemantics';
+// The same node set as the editor, so anything it writes renders here.
+import {DEFAULT_NODES} from './editorNodes';
 
 const styles = stylex.create({
   root: {
     width: '100%',
+    // Holds the code block headers and task checkboxes drawn over the
+    // content.
+    position: 'relative',
+    // The document's body text, as core Markdown and the editor set it
+    // (spec:AST-061 FR2). Without it, blocks the theme leaves unsized —
+    // list items, quotes, table cells — take the host page's font.
+    fontFamily: typographyVars['--font-family-body'],
+    fontSize: typeScaleVars['--text-body-size'],
+    lineHeight: typeScaleVars['--text-body-leading'],
+    color: colorVars['--color-text-primary'],
   },
 });
 
-const DEFAULT_NODES: ReadonlyArray<Klass<LexicalNode>> = [
-  HeadingNode,
-  QuoteNode,
-  ListNode,
-  ListItemNode,
-  LinkNode,
-  AutoLinkNode,
-  CodeNode,
-  CodeHighlightNode,
-];
+/**
+ * Lexical's `ContentEditable` renders `role="textbox"` and widget-only ARIA
+ * (`aria-autocomplete`, `aria-readonly`) even when the editor is not editable.
+ * A view renders document content, not a form field, so all three are cleared:
+ *
+ * - A textbox is a widget, so an unnamed one fails axe
+ *   `aria-input-field-name` — and a view has no name to give, because it is
+ *   content rather than a labelled input.
+ * - The widget role exposes the rendered document to assistive technology
+ *   as a form field rather than as the content it is.
+ * - Widget-only ARIA is invalid without a widget role, so clearing only the
+ *   role would trade `aria-input-field-name` for `aria-allowed-attr`.
+ *
+ * `role` must be `null`, not `undefined`: Lexical substitutes its `textbox`
+ * default for `undefined`. The ARIA keys reach the element through Lexical's
+ * trailing prop spread, which is why `undefined` clears them. A proposed
+ * upstream fix (facebook/lexical#9270) would make these overrides no-ops.
+ *
+ * A caller who wants read-only form-field semantics instead wants
+ * `<RichTextEditor isReadOnly />`, which is a labelled field by construction.
+ */
+const VIEW_CONTENT_EDITABLE_PROPS = {
+  'aria-autocomplete': undefined,
+  'aria-readonly': undefined,
+  role: null as unknown as undefined,
+} as const;
+
+/** The view imports and exports no Markdown, so it uses no transformers. */
+const NO_TRANSFORMERS: ReadonlyArray<never> = [];
 
 export interface RichTextViewProps extends BaseProps {
   /**
@@ -66,6 +111,23 @@ export interface RichTextViewProps extends BaseProps {
    * the nodes used to author `value` so custom node types deserialize.
    */
   nodes?: ReadonlyArray<Klass<LexicalNode>>;
+  /**
+   * Markdown plugins whose nodes this surface draws, each adopted with
+   * `createRichTextExtension` (spec:AST-064). A plugin node renders exactly as
+   * core `Markdown` renders it, and one whose plugin is not given here shows
+   * its source. Pass the extensions the content was converted with. Create
+   * them in a client module: they hold the plugins' functions, so they are not
+   * serializable props.
+   */
+  markdownExtensions?: ReadonlyArray<RichTextMarkdownExtension>;
+  /**
+   * CodeBlock language values a fence may name, each imported on its own,
+   * such as `graphql` from `@astryxdesign/core/CodeBlock/languages/graphql`,
+   * or made with `createCodeLanguage`. Pass the same list as `Markdown`'s
+   * `codeLanguages`, so reading and editing paint and label the same
+   * languages (spec:AST-061).
+   */
+  codeLanguages?: ReadonlyArray<CodeLanguage>;
   /**
    * Additional read-only plugins to render inside the composer (e.g. hover
    * cards, decorators).
@@ -133,6 +195,12 @@ function SyncValuePlugin({value}: {value: string}): null {
  * A read-only renderer for serialized Lexical content. Renders the same styled
  * output as {@link RichTextEditor} without any editing affordances.
  *
+ * The output is document content, not a form field: headings, lists and links
+ * keep their own roles for assistive technology, and the view takes no label.
+ * For a labelled, read-only field, use `<RichTextEditor isReadOnly />`. A
+ * table wider than the view scrolls inside a region named "Table" that takes a
+ * tab stop while it overflows, as core `Table` does.
+ *
  * @example
  * ```
  * import {RichTextView} from '@astryxdesign/richtext';
@@ -142,6 +210,8 @@ function SyncValuePlugin({value}: {value: string}): null {
 export function RichTextView({
   value,
   nodes,
+  markdownExtensions,
+  codeLanguages,
   plugins,
   namespace = 'astryx-view',
   onParseError,
@@ -173,8 +243,26 @@ export function RichTextView({
     lastValueRef.current = value;
   }
 
+  // A parse failure is recorded during render (below, or from Lexical's
+  // `onError` while the composer builds the editor) but reported to the
+  // consumer only after commit. Updating this component's own state during
+  // render is allowed; running a consumer's callback is not — a callback that
+  // updates its own component would do so during another component's render,
+  // and StrictMode or a discarded concurrent render would repeat it or run it
+  // for output that never commits. This Effect synchronizes the consumer's
+  // `onParseError`, reporting each distinct failure exactly once.
+  const pendingErrorRef = useRef<Error | null>(null);
+  const reportedErrorRef = useRef<Error | null>(null);
+  useEffect(() => {
+    const error = pendingErrorRef.current;
+    if (error !== null && error !== reportedErrorRef.current) {
+      reportedErrorRef.current = error;
+      onParseError?.(error);
+    }
+  });
+
   const handleError = (error: Error) => {
-    onParseError?.(error);
+    pendingErrorRef.current = error;
     setHasError(true);
   };
 
@@ -197,9 +285,7 @@ export function RichTextView({
     extensionRef.current = null;
     return (
       <div
-        {...stylex.props(styles.root, xstyle)}
-        className={className}
-        style={style}
+        {...mergeProps(stylex.props(styles.root, xstyle), className, style)}
         {...rest}>
         {errorFallback}
       </div>
@@ -213,6 +299,8 @@ export function RichTextView({
       theme: themeRef.current,
       editable: false,
       nodes: nodes ? [...DEFAULT_NODES, ...nodes] : [...DEFAULT_NODES],
+      // Struck text is a deletion.
+      dependencies: [TextSemanticsExtension],
       $initialEditorState: value,
       // A read-only view renders persisted content; a bad node/schema should not
       // crash the host. Surface it via onParseError + fallback instead of re-throwing.
@@ -222,19 +310,38 @@ export function RichTextView({
 
   return (
     <div
-      {...stylex.props(styles.root, xstyle)}
-      className={className}
-      style={style}
+      {...mergeProps(stylex.props(styles.root, xstyle), className, style)}
       {...rest}>
       <LexicalExtensionComposer
         extension={extensionRef.current}
         contentEditable={null}>
         <SyncValuePlugin value={value} />
+        {/* Same table configuration as the editor, so a wide table scrolls
+            inside its own wrapper instead of widening the page. */}
+        <TablePlugin
+          hasCellMerge={false}
+          hasCellBackgroundColor={false}
+          hasTabHandler={false}
+          hasHorizontalScroll
+        />
+        <TableScrollRegionPlugin />
+        <TableColumnFloorPlugin />
         <RichTextPlugin
-          contentEditable={<ContentEditable />}
+          contentEditable={<ContentEditable {...VIEW_CONTENT_EDITABLE_PROPS} />}
           placeholder={null}
           ErrorBoundary={LexicalErrorBoundary}
         />
+        {/* After the content, so the copy buttons and checkboxes follow it
+            in tab order. */}
+        <CodeBlockHeaderPlugin codeLanguages={codeLanguages} />
+        <CodeSyntaxPlugin codeLanguages={codeLanguages} />
+        {markdownExtensions != null && markdownExtensions.length > 0 ? (
+          <MarkdownExtensionsPlugin
+            extensions={markdownExtensions}
+            transformers={NO_TRANSFORMERS}
+          />
+        ) : null}
+        <TaskCheckboxPlugin isReadOnly />
         {plugins}
       </LexicalExtensionComposer>
     </div>

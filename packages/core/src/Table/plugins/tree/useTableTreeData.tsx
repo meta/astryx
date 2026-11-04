@@ -4,7 +4,7 @@
 
 /**
  * @file useTableTreeData.tsx
- * @input React, StyleX, Icon, Table types, theme tokens, i18n (useTranslator),
+ * @input React, StyleX, Icon, Table types, theme tokens, i18n (useComponentTranslator),
  *   useTreeFocus (row-focus keyboard model), isRtlElement (inline arrow keys),
  *   focusOutline (row and chevron focus ring)
  * @output Exports useTableTreeData hook + config/meta types
@@ -71,6 +71,10 @@ import {mergeRefs} from '../../../utils';
 import {focusOutlineStyles} from '../../../utils/focusOutline.stylex';
 import {useTreeFocus} from '../../../hooks/useTreeFocus';
 import {isRtlElement} from '../../../hooks/isRtlElement';
+import {
+  hasInteractiveAncestor,
+  hasTextSelection,
+} from '../../../hooks/useClickableContainer';
 import type {
   TablePlugin,
   TableColumn,
@@ -78,7 +82,13 @@ import type {
   HeaderCellRenderProps,
   TableRenderProps,
 } from '../../types';
-import {useTranslator} from '../../../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../../../i18n/useComponentTranslator';
+import english from '../../../i18n/generated-english/Table/plugins/tree/useTableTreeData.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -304,8 +314,9 @@ const treeStyles = stylex.create({
     justifyContent: 'center',
     width: '24px',
     height: '24px',
-    background: 'transparent',
-    border: 'none',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    borderStyle: 'none',
     borderRadius: radiusVars['--radius-inner'],
     cursor: {
       default: 'pointer',
@@ -392,7 +403,7 @@ function TreeExpander({
   isExpanded: boolean;
   onToggle: () => void;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   return (
     <button
       type="button"
@@ -443,7 +454,7 @@ function TreeExpandAllToggle({
   onExpandAll: () => void;
   onCollapseAll: () => void;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const allExpanded = isAllExpanded === true;
   return (
     <button
@@ -910,16 +921,32 @@ export function useTableTreeData<T extends Record<string, unknown>>(
             onClick: (event: React.MouseEvent<HTMLTableRowElement>) => {
               // Don't hijack clicks on interactive cell content (the chevron
               // already stops propagation, but a composed selection checkbox,
-              // link, or action button does not) or a text selection.
-              const target = event.target as HTMLElement;
+              // link, or action button does not) or a text selection. Shared
+              // with `useClickableContainer` and the row-expansion plugin, so
+              // the three surfaces cannot drift apart on what counts as
+              // "this click belongs to something else".
+              const row = event.currentTarget;
+              const target = event.target;
+              if (!(target instanceof Element)) {
+                return;
+              }
+              if (target !== row && hasInteractiveAncestor(target, row)) {
+                return;
+              }
+              // A click inside a contenteditable region is an edit
+              // action, not a row toggle. The shared guard does not
+              // include contenteditable (it would change ClickableCard
+              // and other consumers), so the Table row-click path
+              // checks it separately.
               if (
+                target !== row &&
                 target.closest(
-                  'button, a, input, select, textarea, [role="button"], [role="checkbox"], [contenteditable="true"]',
+                  '[contenteditable]:not([contenteditable="false"])',
                 )
               ) {
                 return;
               }
-              if ((window.getSelection()?.toString() ?? '') !== '') {
+              if (hasTextSelection(row)) {
                 return;
               }
               cfg.onToggleItem(item);

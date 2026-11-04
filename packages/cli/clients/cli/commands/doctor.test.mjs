@@ -14,13 +14,13 @@ import {
   checkNodeVersion,
   checkCoreInstalled,
   checkVersionAlignment,
-  checkThemes,
   checkConfig,
   checkAgentDocs,
   checkPeerDeps,
   checkPackageManager,
 } from '../../../api/doctor/doctor.mjs';
 import {MIN_NODE_VERSION} from '../../../foundation/env/node-version.mjs';
+import {CLI_VERSION, linkThisCliAsProjectCli} from '../../../test-utils/release-fixtures.mjs';
 
 let tmpDir;
 let logCalls;
@@ -63,33 +63,6 @@ function installPkg(name, version = '1.0.0') {
   return dir;
 }
 
-/**
- * Mirror pnpm's layout: the real package lives under node_modules/.pnpm and
- * the entry in the scope directory is a symlink to it.
- */
-function installPkgPnpmStyle(name, version = '1.0.0') {
-  const realDir = path.join(
-    tmpDir,
-    'node_modules',
-    '.pnpm',
-    `${name.replace('/', '+')}@${version}`,
-    'node_modules',
-    ...name.split('/'),
-  );
-  fs.mkdirSync(realDir, {recursive: true});
-  fs.writeFileSync(
-    path.join(realDir, 'package.json'),
-    JSON.stringify({name, version, main: 'index.js'}),
-  );
-  fs.writeFileSync(path.join(realDir, 'index.js'), 'module.exports = {};');
-  const linkPath = path.join(tmpDir, 'node_modules', ...name.split('/'));
-  fs.mkdirSync(path.dirname(linkPath), {recursive: true});
-  // 'junction' keeps this working on Windows without elevated permissions;
-  // it is ignored on posix.
-  fs.symlinkSync(realDir, linkPath, 'junction');
-  return linkPath;
-}
-
 function find(checks, id) {
   return checks.find(c => c.id === id);
 }
@@ -128,29 +101,15 @@ describe('doctor — individual checks', () => {
     expect(res.status).toBe('info');
   });
 
-  it('themes: WARN when no theme packages installed', () => {
-    const res = checkThemes({cwd: tmpDir, configTheme: null});
-    expect(res.status).toBe('warn');
-  });
-
-  it('themes: WARN when theme installed but not wired', () => {
-    installPkg('@astryxdesign/theme-neutral', '0.0.14');
-    const res = checkThemes({cwd: tmpDir, configTheme: null});
-    expect(res.status).toBe('warn');
-    expect(res.message).toContain('@astryxdesign/theme-neutral');
-  });
-
-  it('themes: PASS when theme installed and wired via config', () => {
-    installPkg('@astryxdesign/theme-neutral', '0.0.14');
-    const res = checkThemes({cwd: tmpDir, configTheme: 'default'});
-    expect(res.status).toBe('pass');
-  });
-
-  it('themes: detects pnpm-style symlinked theme packages (#3530)', () => {
-    installPkgPnpmStyle('@astryxdesign/theme-neutral', '0.1.2');
-    const res = checkThemes({cwd: tmpDir, configTheme: 'default'});
-    expect(res.status).toBe('pass');
-    expect(res.message).toContain('@astryxdesign/theme-neutral');
+  it('app themes: reports unmanaged state as one INFO check', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app","dependencies":{"@astryxdesign/core":"*"}}\n');
+    const result = await runChecks({cwd: tmpDir});
+    const themeChecks = result.checks.filter(check =>
+      check.id.startsWith('theme-'),
+    );
+    expect(themeChecks).toEqual([
+      expect.objectContaining({id: 'theme-management', status: 'info'}),
+    ]);
   });
 
   it('config: INFO when no astryx.config.mjs', async () => {
@@ -210,7 +169,51 @@ describe('doctor — individual checks', () => {
   it('agent-docs: INFO when no docs present', () => {
     const res = checkAgentDocs({cwd: tmpDir});
     expect(res.status).toBe('info');
-    expect(res.fix).toContain('astryx init');
+    expect(res.fix).toContain('init --features agents');
+  });
+
+  // The npm package named `astryx` is not this CLI: a project without the
+  // `astryx` bin gets the scoped package in the fix, one with it keeps the bin.
+  it('agent-docs: the fix names the scoped package when the project has no local CLI', () => {
+    fs.writeFileSync(path.join(tmpDir, 'package-lock.json'), '{}');
+    const res = checkAgentDocs({cwd: tmpDir});
+    expect(res.fix).toContain(
+      `\`npx @astryxdesign/cli@${CLI_VERSION} init --features agents\``,
+    );
+  });
+
+  it('agent-docs: the fix keeps `npx astryx` when the project has a local CLI', () => {
+    fs.writeFileSync(path.join(tmpDir, 'package-lock.json'), '{}');
+    fs.mkdirSync(path.join(tmpDir, 'node_modules', '.bin'), {recursive: true});
+    fs.writeFileSync(path.join(tmpDir, 'node_modules', '.bin', 'astryx'), '');
+    linkThisCliAsProjectCli(tmpDir);
+    const res = checkAgentDocs({cwd: tmpDir});
+    expect(res.fix).toContain('`npx astryx init --features agents`');
+  });
+
+  it('agent-docs: at the top of a home settings folder, the fix moves the project or edits by hand, never init', () => {
+    const saved = {HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE};
+    process.env.HOME = tmpDir;
+    process.env.USERPROFILE = tmpDir;
+    try {
+      const project = path.join(tmpDir, '.dotfiles');
+      fs.mkdirSync(project);
+      fs.writeFileSync(path.join(project, 'package.json'), '{"name":"dots"}');
+      for (const content of [null, '# Agents\nno markers here\n']) {
+        if (content != null) fs.writeFileSync(path.join(project, 'AGENTS.md'), content);
+        const res = checkAgentDocs({cwd: project});
+        expect(res.fix).toContain('Agent docs are not written into the home folder');
+        expect(res.fix).toContain(
+          'Move the project into a folder of its own, or edit the Astryx block in its agent file by hand.',
+        );
+        expect(res.fix).not.toContain('init --features agents');
+      }
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
   });
 
   it('agent-docs: WARN when docs exist without XDS markers', () => {
@@ -226,6 +229,79 @@ describe('doctor — individual checks', () => {
     );
     const res = checkAgentDocs({cwd: tmpDir});
     expect(res.status).toBe('pass');
+  });
+
+  it('agent-docs: PASS from a subfolder, reading the project root', () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app"}');
+    fs.writeFileSync(
+      path.join(tmpDir, 'AGENTS.md'),
+      '<!-- ASTRYX:START -->\nstuff\n<!-- ASTRYX:END -->\n',
+    );
+    const src = path.join(tmpDir, 'src');
+    fs.mkdirSync(src);
+    const res = checkAgentDocs({cwd: src});
+    expect(res.status).toBe('pass');
+    expect(res.message).toBe(
+      `Astryx agent docs section present in ${path.join('..', 'AGENTS.md')}.`,
+    );
+  });
+
+  it('agent-docs: PASS from a nested package, reading the root that declares Astryx', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({dependencies: {'@astryxdesign/core': '0.7.0'}}),
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'AGENTS.md'),
+      '<!-- ASTRYX:START -->\nstuff\n<!-- ASTRYX:END -->\n',
+    );
+    const functions = path.join(tmpDir, 'functions');
+    fs.mkdirSync(path.join(functions, 'src'), {recursive: true});
+    fs.writeFileSync(path.join(functions, 'package.json'), '{"name":"functions"}');
+
+    expect(checkAgentDocs({cwd: path.join(functions, 'src')})).toMatchObject({
+      status: 'pass',
+      message: `Astryx agent docs section present in ${path.join('..', '..', 'AGENTS.md')}.`,
+    });
+  });
+
+  it('agent-docs: reads every file init can write, Hermes included', () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'HERMES.md'),
+      '<!-- ASTRYX:START -->\nstuff\n<!-- ASTRYX:END -->\n',
+    );
+    expect(checkAgentDocs({cwd: tmpDir})).toMatchObject({
+      status: 'pass',
+      message: 'Astryx agent docs section present in HERMES.md.',
+    });
+  });
+
+  it('agent-docs: FAIL when GEMINI.md imports an AGENTS.md that holds no block', () => {
+    const geminiImport = '<!-- ASTRYX:START -->\n@./AGENTS.md\n<!-- ASTRYX:END -->\n';
+    fs.writeFileSync(path.join(tmpDir, 'GEMINI.md'), geminiImport);
+    expect(checkAgentDocs({cwd: tmpDir})).toMatchObject({
+      status: 'fail',
+      message: expect.stringMatching(/^GEMINI\.md imports AGENTS\.md, which holds no Astryx block/),
+      fix: expect.stringMatching(/init --features agents/),
+    });
+
+    // A copy elsewhere does not mend it: Codex and Gemini CLI still get none.
+    fs.writeFileSync(path.join(tmpDir, 'CLAUDE.md'), '<!-- ASTRYX:START -->\nstuff\n<!-- ASTRYX:END -->\n');
+    fs.writeFileSync(path.join(tmpDir, 'AGENTS.md'), '# Agents\n');
+    expect(checkAgentDocs({cwd: tmpDir}).status).toBe('fail');
+
+    fs.writeFileSync(path.join(tmpDir, 'AGENTS.md'), '<!-- ASTRYX:START -->\nstuff\n<!-- ASTRYX:END -->\n');
+    expect(checkAgentDocs({cwd: tmpDir})).toMatchObject({
+      status: 'pass',
+      message: 'Astryx agent docs section present in AGENTS.md, CLAUDE.md.',
+    });
+  });
+
+  it('agent-docs: INFO names what it looked for and where', () => {
+    const res = checkAgentDocs({cwd: tmpDir});
+    expect(res.status).toBe('info');
+    expect(res.message).toContain('AGENTS.md, CLAUDE.md');
+    expect(res.message).toContain('HERMES.md');
   });
 
   it('peer-deps: INFO when core not installed', () => {
@@ -294,7 +370,8 @@ describe('doctor — runChecks / report', () => {
     expect(total).toBe(report.checks.length);
   });
 
-  it('reports a FAIL for core when run in a bare directory', async () => {
+  it('reports a FAIL for core in a project that declares Core but installs none', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app","dependencies":{"@astryxdesign/core":"*"}}\n');
     const report = await runChecks({cwd: tmpDir});
     expect(find(report.checks, 'core-installed').status).toBe('fail');
     expect(report.summary.fail).toBeGreaterThan(0);
@@ -339,7 +416,8 @@ describe('doctor — command', () => {
     process.exitCode = prevExit;
   });
 
-  it('sets exit code 1 when a check FAILs (bare dir, no @astryxdesign/core)', async () => {
+  it('sets exit code 1 when a check FAILs (Core declared, not installed)', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'package.json'), '{"name":"app","dependencies":{"@astryxdesign/core":"*"}}\n');
     const prevCwd = process.cwd();
     const prevExit = process.exitCode;
     process.exitCode = undefined;
@@ -393,6 +471,39 @@ describe('doctor — text output mirrors the JSON', () => {
     } finally {
       process.chdir(prevCwd);
       process.exitCode = prevExit;
+    }
+  }, 60_000);
+});
+
+describe('doctor — a configured integration that cannot load', () => {
+  it('sets exit code 1 and reports it in the JSON', async () => {
+    const dir = fs.mkdtempSync(path.join(process.cwd(), '.astryx-doctor-exit-'));
+    const prevCwd = process.cwd();
+    const prevExit = process.exitCode;
+    process.exitCode = undefined;
+    try {
+      fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"app"}');
+      fs.writeFileSync(
+        path.join(dir, 'astryx.config.mjs'),
+        "export default { integrations: ['@acme/missing'] };\n",
+      );
+      const coreDir = path.join(dir, 'node_modules', '@astryxdesign', 'core');
+      fs.mkdirSync(coreDir, {recursive: true});
+      fs.writeFileSync(
+        path.join(coreDir, 'package.json'),
+        JSON.stringify({name: '@astryxdesign/core', version: '0.6.3'}),
+      );
+      process.chdir(dir);
+      await createProgram().parseAsync(['node', 'astryx', '--json', 'doctor']);
+      expect(process.exitCode).toBe(1);
+      const {data} = JSON.parse(logCalls.join('\n'));
+      expect(
+        data.checks.find(c => c.id === 'configured-integrations'),
+      ).toMatchObject({status: 'fail'});
+    } finally {
+      process.chdir(prevCwd);
+      process.exitCode = prevExit;
+      fs.rmSync(dir, {recursive: true, force: true});
     }
   }, 60_000);
 });

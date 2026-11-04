@@ -4,14 +4,15 @@
 
 /**
  * @file SegmentedControlContext.ts
- * @input React createContext, use
+ * @input Layer-scoped React context, use
  * @output Exports SegmentedControlContext, useSegmentedControlContext
  * @position Context provider; consumed by SegmentedControlItem.tsx
  *
  * SYNC: When modified, update /packages/core/src/SegmentedControl/SegmentedControl.doc.mjs
  */
 
-import {createContext, use} from 'react';
+import {use} from 'react';
+import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
 
 export type SegmentedControlSize = 'sm' | 'md' | 'lg';
 export type SegmentedControlLayout = 'hug' | 'fill';
@@ -23,12 +24,17 @@ export interface SegmentedControlContextValue {
   layout: SegmentedControlLayout;
   isDisabled: boolean;
   /**
-   * True when the whole control is disabled *and* a `disabledMessage` is set.
-   * In that mode the selected segment stays focusable (via `aria-disabled`
-   * rather than being dropped from the tab order) so the group's disabled-reason
-   * tooltip is keyboard-discoverable; selection is still blocked.
+   * The id of the group's disabled-reason tooltip while the group is disabled
+   * with a `disabledMessage`. It also describes each segment, so the segment that has focus is
+   * described by the reason (spec:AST-085 FR5).
    */
-  hasDisabledMessage?: boolean;
+  disabledReasonID?: string;
+  /**
+   * True in the touch presentation (under a finger, `useTouchPresentation`):
+   * the control animates selection changes itself (the surface slides), so
+   * segments drop their CSS transitions.
+   */
+  isTouchPresentation?: boolean;
 }
 
 export const SegmentedControlContext =

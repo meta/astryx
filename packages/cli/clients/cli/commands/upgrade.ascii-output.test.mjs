@@ -84,4 +84,18 @@ describe('upgrade human output is ASCII', () => {
       'minSize: 200',
     );
   });
+
+  // Every fixture above has a real src/, so the completion line for a project
+  // whose source is somewhere else was never reached — this suite was green on
+  // that path by luck, not by coverage.
+  it('reports a source directory that does not exist', async () => {
+    fs.rmSync(path.join(tmpDir, 'src'), {recursive: true, force: true});
+    fs.mkdirSync(path.join(tmpDir, 'app'), {recursive: true});
+    write('app/panel.tsx', 'export const x = 1;\n');
+
+    expect(await nonAsciiLines(['upgrade', '--from', '0.5.0'])).toEqual([]);
+    expect(
+      await nonAsciiLines(['upgrade', '--from', '0.5.0', '--apply']),
+    ).toEqual([]);
+  });
 });

@@ -12,16 +12,23 @@ import {AstryxError} from '../../../error.mjs';
 import {
   generatePaletteSet,
   PALETTE_BLACK,
+  PALETTE_GENERATOR_VERSION,
   PALETTE_WHITE,
   serializeGenerationResult,
 } from './generator.mjs';
 import {PALETTE_PREVIEW_VERSION, renderPalettePreview} from './preview.mjs';
+
+/** Format of the TypeScript candidate module written for a `.ts` output. */
+export const PALETTE_TYPESCRIPT_FORMAT_VERSION = 'palette-typescript-v1';
+/** Format of the canonical JSON candidate the recipe fixtures pin. */
+export const PALETTE_JSON_FORMAT_VERSION = 'palette-json-v1';
 
 /** @typedef {import('../../theme.type.mjs').TonalPaletteCandidate} TonalPaletteCandidate */
 /** @typedef {import('../../theme.type.mjs').TonalPaletteGenerationInput} TonalPaletteGenerationInput */
 /** @typedef {'light' | 'dark'} PaletteMode */
 /** @typedef {ReturnType<typeof generatePaletteSet>} PaletteGenerationResult */
 /** @typedef {{path: string, next: string}} PendingFile */
+/** @typedef {{format: typeof PALETTE_TYPESCRIPT_FORMAT_VERSION | typeof PALETTE_JSON_FORMAT_VERSION, text: string}} SerializedCandidate */
 
 /** @param {PaletteGenerationResult} result @returns {TonalPaletteCandidate} */
 function paletteSnapshot(result) {
@@ -90,10 +97,28 @@ export function serializePaletteCandidate(candidate) {
   return `{\n  "schemaVersion": 1,\n  "status": "candidate",\n  "recipe": ${JSON.stringify(candidate.recipe)},\n  "black": ${JSON.stringify(candidate.black)},\n  "white": ${JSON.stringify(candidate.white)},\n  "stops": [\n${stops.join(',\n')}\n  ],\n  "palette": ${serializePalette(candidate.palette, 2)}\n}\n`;
 }
 
-/** @param {TonalPaletteCandidate} candidate @param {string} outputPath */
+/**
+ * Serialize a candidate for its destination and name the format of the exact
+ * bytes produced. Without a destination, the canonical JSON form identifies
+ * the candidate.
+ *
+ * @param {TonalPaletteCandidate} candidate
+ * @param {string | null} outputPath
+ * @returns {SerializedCandidate}
+ */
 function serializeCandidate(candidate, outputPath) {
-  if (outputPath.endsWith('.ts')) return serializePaletteModule(candidate);
-  if (outputPath.endsWith('.json')) return serializePaletteCandidate(candidate);
+  if (outputPath != null && outputPath.endsWith('.ts')) {
+    return {
+      format: PALETTE_TYPESCRIPT_FORMAT_VERSION,
+      text: serializePaletteModule(candidate),
+    };
+  }
+  if (outputPath == null || outputPath.endsWith('.json')) {
+    return {
+      format: PALETTE_JSON_FORMAT_VERSION,
+      text: serializePaletteCandidate(candidate),
+    };
+  }
   throw new AstryxError(
     'Palette output must end in .ts or .json.',
     undefined,
@@ -101,12 +126,14 @@ function serializeCandidate(candidate, outputPath) {
   );
 }
 
-/** @param {PaletteGenerationResult} result @param {string} candidateText @param {string | null} [previewText] @returns {import('../../theme.type.mjs').TonalPaletteGenerationReceipt} */
-function receiptFor(result, candidateText, previewText = null) {
+/** @param {PaletteGenerationResult} result @param {SerializedCandidate} serialized @param {string | null} [previewText] @returns {import('../../theme.type.mjs').TonalPaletteGenerationReceipt} */
+function receiptFor(result, serialized, previewText = null) {
   return {
     schemaVersion: 1,
     recipe: result.recipe,
-    candidateSha256: createHash('sha256').update(candidateText).digest('hex'),
+    generatorVersion: PALETTE_GENERATOR_VERSION,
+    candidateFormatVersion: serialized.format,
+    candidateSha256: createHash('sha256').update(serialized.text).digest('hex'),
     ...(previewText
       ? {
           preview: {
@@ -345,9 +372,9 @@ export function themePaletteGenerate(
   }
 
   const candidate = paletteSnapshot(result);
-  let candidateText = serializePaletteCandidate(candidate);
+  let serialized = serializeCandidate(candidate, null);
   const previewText = options.preview ? renderPalettePreview(candidate) : null;
-  let receipt = receiptFor(result, candidateText, previewText);
+  let receipt = receiptFor(result, serialized, previewText);
   /** @type {string | null} */
   let output = null;
   /** @type {string | null} */
@@ -363,13 +390,13 @@ export function themePaletteGenerate(
   if (options.out) {
     const resolvedOutput = resolveSafe(options.out, cwd, 'palette output path');
     const resolvedReceipt = receiptPathFor(resolvedOutput);
-    candidateText = serializeCandidate(candidate, resolvedOutput);
-    receipt = receiptFor(result, candidateText, previewText);
+    serialized = serializeCandidate(candidate, resolvedOutput);
+    receipt = receiptFor(result, serialized, previewText);
     const receiptText = serializeGenerationResult(receipt);
     output = path.relative(cwd, resolvedOutput);
     receiptOutput = path.relative(cwd, resolvedReceipt);
     files.push(
-      {path: resolvedOutput, next: candidateText},
+      {path: resolvedOutput, next: serialized.text},
       {path: resolvedReceipt, next: receiptText},
     );
   }

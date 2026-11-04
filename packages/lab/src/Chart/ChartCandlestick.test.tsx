@@ -3,10 +3,12 @@
 /**
  * @file ChartCandlestick.test.tsx
  * @input Renders ChartCandlestick inside Chart with a stubbed ResizeObserver
- * @output Render-smoke coverage for candlesticks: default and bar variants, up/down colors, band guard (#4295)
+ * @output Render-smoke coverage for candlesticks: default public data variables,
+ *   explicit up/down colors, variants, and the band guard (#4295)
  * @position Colocated test for ChartCandlestick.tsx
  */
 
+import {dataVars} from '@astryxdesign/core/theme/dataTokens.stylex';
 import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
 import {render, act} from '@testing-library/react';
 import {Chart} from './Chart';
@@ -65,6 +67,27 @@ describe('ChartCandlestick', () => {
 
     expect(container.querySelectorAll('line')).toHaveLength(6);
     expect(container.querySelectorAll(PLOT_RECTS)).toHaveLength(3);
+  });
+
+  it('uses public data variables for default up and down colors', () => {
+    const {container} = render(
+      <Chart data={ohlc} xKey="day" yKeys={['high', 'low']}>
+        <ChartCandlestick high="high" low="low" open="open" close="close" />
+      </Chart>,
+    );
+
+    reportWidth(464);
+
+    const bodies = Array.from(container.querySelectorAll(PLOT_RECTS));
+    expect(bodies.map(body => body.getAttribute('fill'))).toEqual([
+      dataVars['--color-data-categorical-green'],
+      dataVars['--color-data-categorical-red'],
+      dataVars['--color-data-categorical-green'],
+    ]);
+    expect(container.querySelector('line')).toHaveAttribute(
+      'stroke',
+      dataVars['--color-data-categorical-green'],
+    );
   });
 
   it('renders a range line and open/close ticks per datum in the bar variant', () => {

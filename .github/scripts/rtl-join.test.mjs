@@ -82,7 +82,7 @@ describe('RTL matrix join', () => {
       }),
     ).toEqual({
       ok: true,
-      message: 'No RTL-owned scope; package shards correctly skipped.',
+      message: 'No RTL-owned scope; package shards did no RTL work.',
     });
     expect(
       evaluateRtlJoin({
@@ -99,10 +99,38 @@ describe('RTL matrix join', () => {
         shouldRun: false,
       }).ok,
     ).toBe(false);
+    // Shards that decided their own scope and did nothing succeed with no
+    // manifest or report; any RTL output from them is unexpected.
     expect(
       evaluateRtlJoin({
         checkComponentsResult: 'success',
         shardResult: 'success',
+        shouldRun: false,
+      }).ok,
+    ).toBe(true);
+    expect(
+      evaluateRtlJoin({
+        checkComponentsResult: 'success',
+        shardResult: 'success',
+        shouldRun: false,
+        evidence: completeEvidence(),
+      }).ok,
+    ).toBe(false);
+    // The shard and merge jobs can land on different sides of the no-op.
+    for (const shardResult of ['skipped/success', 'success/skipped']) {
+      expect(
+        evaluateRtlJoin({
+          checkComponentsResult: 'success',
+          shardResult,
+          shouldRun: false,
+        }).ok,
+        shardResult,
+      ).toBe(true);
+    }
+    expect(
+      evaluateRtlJoin({
+        checkComponentsResult: 'success',
+        shardResult: 'skipped/failure',
         shouldRun: false,
       }).ok,
     ).toBe(false);

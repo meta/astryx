@@ -10,4 +10,12 @@
  */
 
 export {Item} from './Item';
-export type {ItemProps, ItemAlign, ItemDensity} from './Item';
+export type {
+  ItemProps,
+  ItemAlign,
+  ItemDensity,
+  ItemSwipeAction,
+  ItemSwipeActions,
+  ItemSwipeActionVariant,
+  ItemSwipeBehavior,
+} from './Item';

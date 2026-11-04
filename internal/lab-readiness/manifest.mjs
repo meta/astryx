@@ -23,15 +23,15 @@
 
 const issue = n => ({
   label: `Issue #${n}`,
-  url: `https://github.com/facebook/astryx/issues/${n}`,
+  url: `https://github.com/meta/astryx/issues/${n}`,
 });
 const pr = n => ({
   label: `PR #${n}`,
-  url: `https://github.com/facebook/astryx/pull/${n}`,
+  url: `https://github.com/meta/astryx/pull/${n}`,
 });
 const issueComment = (n, id, label) => ({
   label,
-  url: `https://github.com/facebook/astryx/issues/${n}#issuecomment-${id}`,
+  url: `https://github.com/meta/astryx/issues/${n}#issuecomment-${id}`,
 });
 
 /**

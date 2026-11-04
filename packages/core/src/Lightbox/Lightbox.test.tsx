@@ -2,6 +2,7 @@
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
+import {Profiler, StrictMode, useState} from 'react';
 import {Lightbox} from './Lightbox';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {InternationalizationProvider} from '../i18n';
@@ -50,6 +51,21 @@ describe('Lightbox', () => {
     );
     const dialog = document.querySelector('dialog');
     expect(dialog).toBeInTheDocument();
+  });
+
+  it('opens once an item arrives when opened with none', () => {
+    const {rerender} = render(
+      <Lightbox isOpen={true} onOpenChange={() => {}} media={[]} />,
+    );
+    expect(document.querySelector('dialog')).toBeNull();
+    rerender(
+      <Lightbox
+        isOpen={true}
+        onOpenChange={() => {}}
+        media={[{src: '/photo.jpg', alt: 'Photo'}]}
+      />,
+    );
+    expect(document.querySelector('dialog')).toHaveAttribute('open');
   });
 
   it('calls showModal when isOpen becomes true', () => {
@@ -114,6 +130,24 @@ describe('Lightbox', () => {
     const closeButton = screen.getByLabelText('Close');
     fireEvent.click(closeButton);
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('ignores a cancel that bubbles up from inside it', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <Lightbox
+        isOpen={true}
+        onOpenChange={onOpenChange}
+        media={{src: '/photo.jpg', alt: 'Photo'}}
+      />,
+    );
+    // Only a close request fired at the <dialog> itself dismisses; a bubbling
+    // `cancel` from a control inside (a dismissed file picker) does not.
+    const inside = document.querySelector('dialog button')!;
+    const fromInside = new Event('cancel', {bubbles: true, cancelable: true});
+    inside.dispatchEvent(fromInside);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(fromInside.defaultPrevented).toBe(false);
   });
 
   it('calls onOpenChange(false) on Escape via cancel event', () => {
@@ -320,6 +354,50 @@ describe('Lightbox', () => {
       expect(onIndexChange).toHaveBeenCalledWith(2);
       fireEvent.keyDown(dialog, {key: 'ArrowLeft'});
       expect(onIndexChange).toHaveBeenCalledWith(0);
+    });
+
+    it('follows the visual direction of the arrows in RTL', () => {
+      const onIndexChange = vi.fn();
+      render(
+        <div dir="rtl">
+          <Lightbox
+            isOpen={true}
+            onOpenChange={() => {}}
+            media={media}
+            index={1}
+            onIndexChange={onIndexChange}
+          />
+        </div>,
+      );
+      const dialog = document.querySelector('dialog')!;
+      // The component resolves direction with getComputedStyle at keydown, and
+      // jsdom does not inherit `dir` down to it, so set it on the dialog too.
+      dialog.style.direction = 'rtl';
+      // Next sits on the left in RTL: ArrowLeft moves to the next item.
+      fireEvent.keyDown(dialog, {key: 'ArrowLeft'});
+      expect(onIndexChange).toHaveBeenLastCalledWith(2);
+      fireEvent.keyDown(dialog, {key: 'ArrowRight'});
+      expect(onIndexChange).toHaveBeenLastCalledWith(0);
+      expect(onIndexChange).toHaveBeenCalledTimes(2);
+    });
+
+    it('resolves the direction at keydown, so a direction change applies at once', () => {
+      const onIndexChange = vi.fn();
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={media}
+          index={1}
+          onIndexChange={onIndexChange}
+        />,
+      );
+      const dialog = document.querySelector('dialog')!;
+      fireEvent.keyDown(dialog, {key: 'ArrowLeft'});
+      expect(onIndexChange).toHaveBeenLastCalledWith(0);
+      dialog.style.direction = 'rtl';
+      fireEvent.keyDown(dialog, {key: 'ArrowLeft'});
+      expect(onIndexChange).toHaveBeenLastCalledWith(2);
     });
   });
 
@@ -568,6 +646,30 @@ describe('Lightbox', () => {
       expect(onIndexChange).toHaveBeenCalledWith(2);
     });
 
+    it('keeps panning physical in RTL: the image is not mirrored', () => {
+      const onIndexChange = vi.fn();
+      render(
+        <Lightbox
+          isOpen={true}
+          onOpenChange={() => {}}
+          media={media}
+          index={1}
+          onIndexChange={onIndexChange}
+          hasZoom
+        />,
+      );
+      const dialog = document.querySelector('dialog')!;
+      dialog.style.direction = 'rtl';
+      fireEvent.keyDown(zoomTarget(), {key: 'Enter'});
+      const img = screen.getByAltText('Image B');
+      // ArrowRight still reveals what is to the right of the photo.
+      fireEvent.keyDown(dialog, {key: 'ArrowRight'});
+      expect(img.getAttribute('style') ?? '').toContain(
+        'translate(-25px, 0px)',
+      );
+      expect(onIndexChange).not.toHaveBeenCalled();
+    });
+
     it('announces zoom state changes politely', async () => {
       render(
         <Lightbox
@@ -674,5 +776,144 @@ describe('Lightbox', () => {
       fireEvent.click(screen.getByRole('img', {hidden: true}));
       expect(onOpenChange).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('Lightbox zoom reset timing', () => {
+  it('shows the next image unzoomed in the same commit that changes it', () => {
+    const media = [
+      {src: '/a.jpg', alt: 'Image A'},
+      {src: '/b.jpg', alt: 'Image B'},
+    ];
+    const frames: string[] = [];
+    const onRender = () =>
+      frames.push(
+        screen
+          .queryByRole('button', {name: 'Zoom'})
+          ?.getAttribute('aria-pressed') ?? '',
+      );
+    render(
+      <Profiler id="lightbox" onRender={onRender}>
+        <Lightbox isOpen={true} onOpenChange={() => {}} media={media} hasZoom />
+      </Profiler>,
+    );
+    fireEvent.keyDown(screen.getByRole('button', {name: 'Zoom'}), {
+      key: 'Enter',
+    });
+    expect(screen.getByRole('button', {name: 'Zoom'})).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    frames.length = 0;
+    fireEvent.click(screen.getByRole('button', {name: /next/i}));
+
+    expect(frames.length).toBeGreaterThan(0);
+    expect(frames).not.toContain('true');
+    expect(screen.getByRole('button', {name: 'Zoom'})).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  });
+});
+
+describe('Lightbox with an unusable controlled index', () => {
+  it('renders without looping when index is NaN', () => {
+    expect(() =>
+      render(
+        <Lightbox
+          isOpen={false}
+          onOpenChange={() => {}}
+          media={[
+            {src: '/a.jpg', alt: 'Image A'},
+            {src: '/b.jpg', alt: 'Image B'},
+          ]}
+          index={Number.NaN}
+          onIndexChange={() => {}}
+        />,
+      ),
+    ).not.toThrow();
+  });
+});
+
+// AR3: a viewer that unmounts while open (rendered only while open, or removed
+// with its view) returns focus to the element that opened it, as a close does.
+describe('Lightbox unmounting while open', () => {
+  const items = [
+    {src: 'a.jpg', alt: 'Sunrise'},
+    {src: 'b.jpg', alt: 'Sunset'},
+  ];
+  function Gallery() {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <button type="button" onClick={() => setIsOpen(true)}>
+          View photos
+        </button>
+        {isOpen ? (
+          <Lightbox isOpen onOpenChange={setIsOpen} media={items} index={0} />
+        ) : null}
+        <button type="button" onClick={() => setIsOpen(false)}>
+          Remove viewer
+        </button>
+      </>
+    );
+  }
+
+  it('returns focus to the opener when the viewer unmounts', async () => {
+    render(<Gallery />);
+    const opener = screen.getByRole('button', {name: 'View photos'});
+    opener.focus();
+    fireEvent.click(opener);
+    const next = screen.getByLabelText('Next');
+    next.focus();
+
+    fireEvent.click(
+      screen.getByRole('button', {name: 'Remove viewer', hidden: true}),
+    );
+    await Promise.resolve();
+
+    expect(document.querySelector('dialog')).toBeNull();
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it('leaves focus on a page control the user pressed to remove the viewer', async () => {
+    render(<Gallery />);
+    const opener = screen.getByRole('button', {name: 'View photos'});
+    opener.focus();
+    fireEvent.click(opener);
+    const remove = screen.getByRole('button', {
+      name: 'Remove viewer',
+      hidden: true,
+    });
+    remove.focus();
+
+    fireEvent.click(remove);
+    await Promise.resolve();
+
+    expect(document.querySelector('dialog')).toBeNull();
+    expect(document.activeElement).toBe(remove);
+  });
+
+  it('keeps focus inside through StrictMode effects, then returns it on unmount', async () => {
+    render(
+      <StrictMode>
+        <Gallery />
+      </StrictMode>,
+    );
+    const opener = screen.getByRole('button', {name: 'View photos'});
+    opener.focus();
+    fireEvent.click(opener);
+    const next = screen.getByLabelText('Next');
+    next.focus();
+    await Promise.resolve();
+    expect(document.activeElement).toBe(next);
+
+    fireEvent.click(
+      screen.getByRole('button', {name: 'Remove viewer', hidden: true}),
+    );
+    await Promise.resolve();
+
+    expect(document.activeElement).toBe(opener);
   });
 });

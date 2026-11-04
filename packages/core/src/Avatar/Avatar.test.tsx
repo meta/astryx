@@ -103,6 +103,36 @@ describe('Avatar', () => {
     expect(screen.getByTestId('avatar')).toHaveTextContent('👨‍👩‍👧‍👦A');
   });
 
+  describe('initials come from letters, digits and emoji, not punctuation', () => {
+    it.each([
+      ['Northwind Workbench (automation)', 'NA'],
+      ['Ada "The Countess" Lovelace', 'AL'],
+      ['“Ada” Lovelace', 'AL'],
+      ['Ada - Lovelace', 'AL'],
+      ['Ada Lovelace —', 'AL'],
+      ['Mary-Jane Watson', 'MW'],
+      ['(Ada)', 'A'],
+      ['Alice', 'A'],
+      ['R2 D2', 'RD'],
+      ['3M', '3'],
+      ['émile zola', 'ÉZ'],
+      ['😀 Ada', '😀A'],
+      ['Ada (😀)', 'A😀'],
+    ])('%s renders %s', (name, expected) => {
+      render(<Avatar name={name} data-testid="avatar" />);
+      expect(screen.getByTestId('avatar').textContent).toBe(expected);
+    });
+
+    it('falls through to the default icon when no word yields an initial', () => {
+      render(<Avatar name="- ()" data-testid="a" />);
+      const el = screen.getByTestId('a');
+      expect(el.querySelector('svg')).not.toBeNull();
+      expect(el).toHaveTextContent('');
+      // The name still names the avatar.
+      expect(screen.getByRole('img', {name: '- ()'})).toBeInTheDocument();
+    });
+  });
+
   it('retries a new src after a previous src failed to load', () => {
     const {rerender} = render(
       <Avatar name="Ada" src="https://example.com/broken.jpg" />,

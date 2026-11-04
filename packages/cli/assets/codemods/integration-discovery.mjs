@@ -129,7 +129,7 @@ export async function discoverIntegrationCodemods(loadedIntegrations = []) {
 
     const versionFolders = fs
       .readdirSync(root, {withFileTypes: true})
-      .filter(entry => entry.isDirectory())
+      .filter(entry => entry.isDirectory() && !SKIP_DIRS.has(entry.name))
       .map(entry => entry.name);
 
     // Track ids seen ACROSS versions within this package — duplicate id across

@@ -225,23 +225,6 @@ describe('--json shim: help shown for a failed invocation is an error envelope',
     expect(parsed.error).toMatch(/bogus/);
   });
 
-  it('astryx layout --json (group, no subcommand) emits ERR_MISSING_ARGUMENT, exit 1', async () => {
-    const {status, stdout, stderr} = await runCli(['layout', '--json']);
-    expect(status).toBe(1);
-    expect(stderr).toBe('');
-    const parsed = parseJson(stdout);
-    expect(parsed).not.toHaveProperty('type');
-    expect(parsed.code).toBe('ERR_MISSING_ARGUMENT');
-    expect(parsed.suggestions.map((s) => s.name)).toContain('layout expand');
-  });
-
-  it('astryx layout (no --json) still prints help to stderr, exit 1', async () => {
-    const {status, stdout, stderr} = await runCli(['layout']);
-    expect(status).toBe(1);
-    expect(stdout).toBe('');
-    expect(stderr).toMatch(/Usage: astryx layout/);
-  });
-
   it('the real binary emits the same envelope for help bogus --json', () => {
     // One program per process, so the root's own outputHelp patch is used here.
     const bin = fileURLToPath(new URL('../bin/astryx.mjs', import.meta.url));
@@ -282,11 +265,4 @@ describe('--json shim: help shown for a failed invocation is an error envelope',
     expect(parsed.suggestions).toEqual([{name: 'late child', reason: 'available subcommand'}]);
   });
 
-  it('astryx help layout --json still emits the help envelope, exit 0', async () => {
-    const {status, stdout} = await runCli(['help', 'layout', '--json']);
-    expect(status).toBe(0);
-    const parsed = parseJson(stdout);
-    expect(parsed.type).toBe('help');
-    expect(parsed.data.command).toBe('astryx layout');
-  });
 });

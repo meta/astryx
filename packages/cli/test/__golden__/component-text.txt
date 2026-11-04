@@ -1,3 +1,5 @@
+package: @acme/kit
+
 # AcmeCard
 
 A zorblax card that groups one topic.

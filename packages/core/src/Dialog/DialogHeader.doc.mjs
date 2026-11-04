@@ -21,13 +21,13 @@ export const docs = {
   props: [
     {
       name: 'title',
-      type: 'string',
-      description: 'Dialog title (receives focus on open and labels the dialog via aria-labelledby).',
+      type: 'ReactNode',
+      description: 'Dialog title, rendered inside the focusable h2 (receives focus on open; its text content labels the dialog via aria-labelledby unless the Dialog has an explicit aria-label/aria-labelledby). Keep it inline, non-interactive, and non-empty.',
     },
     {
       name: 'subtitle',
-      type: 'string',
-      description: 'Subtitle below the title.',
+      type: 'ReactNode',
+      description: 'Subtitle below the title. Accepts inline content such as a Link; avoid block elements.',
     },
     {
       name: 'onOpenChange',
@@ -120,6 +120,23 @@ function Header() {
 `,
     },
     {
+      label: 'With a link in the subtitle',
+      code: `
+import {DialogHeader} from '@astryxdesign/core/Dialog';
+import {Link} from '@astryxdesign/core/Link';
+
+<DialogHeader
+  title="Share conversation"
+  subtitle={
+    <>
+      Anyone with the link can view it. Review the{' '}
+      <Link href="#sharing-policy">sharing policy</Link> first.
+    </>
+  }
+/>;
+`,
+    },
+    {
       label: 'With start and end content',
       code: `
 import {DialogHeader} from '@astryxdesign/core/Dialog';
@@ -154,13 +171,13 @@ export const docsZh = {
   props: [
     {
       name: 'title',
-      type: 'string',
-      description: '对话框标题（打开时获得焦点）。',
+      type: 'ReactNode',
+      description: '对话框标题，渲染在可聚焦的 h2 中（打开时获得焦点，其文本内容通过 aria-labelledby 为对话框命名）。请使用非空、非交互的行内内容。',
     },
     {
       name: 'subtitle',
-      type: 'string',
-      description: '标题下方的副标题。',
+      type: 'ReactNode',
+      description: '标题下方的副标题，可包含链接等行内内容；避免使用块级元素。',
     },
     {
       name: 'onOpenChange',
@@ -216,8 +233,8 @@ export const docsDense = {
     ],
   },
   propDescriptions: {
-    title: 'dialog title (focused on open; labels dialog via aria-labelledby)',
-    subtitle: 'subtitle below title',
+    title: 'dialog title node inside focusable h2 (focused on open; text content labels dialog via aria-labelledby); inline, non-interactive, non-empty',
+    subtitle: 'subtitle node below title; inline content ok (e.g. Link), no block elements',
     onOpenChange: 'close button callback (omit=no button)',
     startContent: 'content before title (e.g. back button)',
     endContent: 'content after title, before close button',

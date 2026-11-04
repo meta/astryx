@@ -134,32 +134,30 @@ describe('NamespaceDoc', () => {
   });
 });
 
-describe('semantic blocks in existing docs', () => {
-  it('accepts workflow, collection, and reference in a ReferenceDoc section', () => {
-    const parsed = parseReference({
-      type: 'generic',
-      name: 'publishing',
-      title: 'Publishing',
-      description: 'Publish an integration.',
-      sections: [
-        {
-          id: 'start',
-          title: 'Start',
-          content: namespaceDoc.blocks,
-        },
-      ],
-    });
-    expect(parsed.sections[0].id).toBe('start');
-    expect(parsed.sections[0].content.map(block => block.type)).toEqual([
-      'workflow',
-      'collection',
-      'reference',
-    ]);
+describe('semantic graph blocks', () => {
+  it('keeps graph-only blocks out of the stable ReferenceDoc section union', () => {
+    expect(() =>
+      parseReference({
+        type: 'generic',
+        name: 'publishing',
+        title: 'Publishing',
+        description: 'Publish an integration.',
+        sections: [
+          {
+            id: 'start',
+            title: 'Start',
+            content: namespaceDoc.blocks,
+          },
+        ],
+      }),
+    ).toThrow(/Invalid discriminator value/u);
   });
 
-  it('rejects an unknown stamped doc kind instead of treating it as legacy', () => {
-    expect(() => parseDoc({type: 'choice', name: 'x', props: []})).toThrow(
-      /unsupported type "choice"/u,
-    );
+  it('keeps shape-sniffing an unknown stamp for 0.6.x compatibility', () => {
+    expect(parseDoc({type: 'choice', name: 'x', props: []})).toMatchObject({
+      type: 'choice',
+      name: 'x',
+      props: [],
+    });
   });
 });

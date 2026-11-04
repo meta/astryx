@@ -8,7 +8,6 @@
 
 import {describe, it, expect, vi} from 'vitest';
 import {
-  dataTokenDefaults,
   defineTheme,
   generateAdaptationCSS,
   generateThemeCSS,
@@ -16,7 +15,6 @@ import {
   generateThemeRules,
   type DefinedTheme,
 } from './index';
-import {generateDataTokenDefaultsCSS} from './generateThemeRules';
 
 function topLevelCSSBlocks(css: string): string[] {
   const blocks: string[] = [];
@@ -184,9 +182,9 @@ describe('generateThemeRules', () => {
     expect(buttonRule).toContain('light-dark(rgba(5, 54, 89, 0.1)');
   });
 
-  it('applies pseudo-class suffixes to both compat selector prefixes', () => {
+  it('applies pseudo-class suffixes to the canonical selector', () => {
     const pseudoTheme = defineTheme({
-      name: 'pseudo-compat',
+      name: 'pseudo-canonical',
       components: {
         button: {
           base: {
@@ -1115,21 +1113,21 @@ describe('derived var expansion', () => {
     const theme = defineTheme({
       name: 'test-derived-textarea',
       components: {
-        textarea: {
-          base: {paddingInline: 'var(--eps-input-padding-x)'},
+        'text-area': {
+          base: {paddingInline: 'var(--app-input-padding-x)'},
         },
       },
     });
     const rules = generateThemeRules(theme);
-    const rule = rules.find(r => r.includes('.astryx-textarea'));
+    const rule = rules.find(r => r.includes('.astryx-text-area'));
     expect(rule).toBeDefined();
     // Value flows to the inner <textarea> via the var…
     expect(rule).toContain(
-      '--_textarea-inline-padding: var(--eps-input-padding-x)',
+      '--_textarea-inline-padding: var(--app-input-padding-x)',
     );
     // …and must NOT land on the flush wrapper, which would re-inset the
     // full-bleed textarea and push the native resize grip off the corner.
-    expect(rule).not.toContain('padding-inline: var(--eps-input-padding-x)');
+    expect(rule).not.toContain('padding-inline: var(--app-input-padding-x)');
   });
 
   it('lowers onDark and onLight text-area paddingInline to the adaptation leaf', () => {
@@ -1180,13 +1178,13 @@ describe('derived var expansion', () => {
     const theme = defineTheme({
       name: 'test-derived-progressbar-mark',
       components: {
-        'progressbar-mark': {
+        'progress-bar-mark': {
           base: {width: '2px', height: '12px'},
         },
       },
     });
     const rules = generateThemeRules(theme);
-    const rule = rules.find(r => r.includes('.astryx-progressbar-mark'));
+    const rule = rules.find(r => r.includes('.astryx-progress-bar-mark'));
     expect(rule).toBeDefined();
     expect(rule).toContain('--_progressbar-mark-width: 2px');
     expect(rule).toContain('--_progressbar-mark-height: 12px');
@@ -1326,16 +1324,14 @@ describe('physical padding longhands', () => {
   });
 });
 
-describe('renamed theme targets', () => {
-  // The renamed targets emit both classes, so a rule written against either
-  // key selects the element. What is easy to miss is the derived-var half: a
-  // key the registry does not know still emits a rule, minus every var the
-  // component actually reads — the same silent nothing a misspelled key gives.
-  it('expands derived vars for a renamed key and its deprecated spelling', () => {
+describe('canonical theme targets', () => {
+  // Removed aliases still pass through the generic CSS generator, but they no
+  // longer receive canonical derived-variable expansion.
+  it('expands derived vars only for canonical target keys', () => {
     const rules = (component: string, styles: Record<string, string>) =>
       generateThemeRules(
         defineTheme({
-          name: `test-renamed-${component}`,
+          name: `test-target-${component}`,
           components: {[component]: {base: styles}},
         }),
       ).join('\n');
@@ -1343,21 +1339,21 @@ describe('renamed theme targets', () => {
     const hoverCard = rules('hover-card', {borderRadius: '9px'});
     expect(hoverCard).toContain('.astryx-hover-card');
     expect(hoverCard).toContain('--_hovercard-radius: 9px');
-    expect(rules('hovercard', {borderRadius: '9px'})).toContain(
+    expect(rules('hovercard', {borderRadius: '9px'})).not.toContain(
       '--_hovercard-radius: 9px',
     );
 
     const textArea = rules('text-area', {paddingInline: '11px'});
     expect(textArea).toContain('.astryx-text-area');
     expect(textArea).toContain('--_textarea-inline-padding: 11px');
-    expect(rules('textarea', {paddingInline: '11px'})).toContain(
+    expect(rules('textarea', {paddingInline: '11px'})).not.toContain(
       '--_textarea-inline-padding: 11px',
     );
 
     const mark = rules('progress-bar-mark', {width: '3px'});
     expect(mark).toContain('.astryx-progress-bar-mark');
     expect(mark).toContain('--_progressbar-mark-width: 3px');
-    expect(rules('progressbar-mark', {width: '3px'})).toContain(
+    expect(rules('progressbar-mark', {width: '3px'})).not.toContain(
       '--_progressbar-mark-width: 3px',
     );
   });
@@ -1367,16 +1363,7 @@ describe('data visualization tokens', () => {
   const scopeBlock = (theme: Parameters<typeof generateThemeRules>[0]) =>
     generateThemeRules(theme).find(r => r.includes(':scope'));
 
-  it('seeds the whole palette once, at :root', () => {
-    const css = generateDataTokenDefaultsCSS();
-
-    expect(css.startsWith(':root {')).toBe(true);
-    for (const [name, value] of Object.entries(dataTokenDefaults)) {
-      expect(css).toContain(`${name}: ${value};`);
-    }
-  });
-
-  it('leaves the defaults out of a theme scope block', () => {
+  it('leaves canonical defaults out of a theme scope block', () => {
     // A scope block that re-declared them would shadow a parent theme's
     // override in every nested <Theme>, which no other token family does.
     expect(scopeBlock(defineTheme({name: 'data-bare'}))).toBeUndefined();
@@ -1397,9 +1384,9 @@ describe('data visualization tokens', () => {
     expect(block).not.toContain('--color-data-categorical-orange');
   });
 
-  it('keeps the palette out of the scoped stylesheet', () => {
-    // The palette's own contents are asserted once, against
-    // `dataTokenDefaults`, in `seeds the whole palette once, at :root` above.
+  it('keeps canonical defaults out of the theme stylesheet', () => {
+    // The public StyleX dataVars group owns canonical CSS defaults; this
+    // generator serializes only values explicitly authored by the theme.
     const {component, prose} = generateThemeCSS(
       defineTheme({name: 'data-css'}),
     );
@@ -1409,9 +1396,8 @@ describe('data visualization tokens', () => {
   });
 
   it('keeps generateThemeCSS to its two scoped blocks', () => {
-    // The defaults are theme-independent, so they are not part of the theme
-    // CSS contract: `astryx theme build` formats them from the public
-    // `dataTokenDefaults` export instead.
+    // Canonical defaults come from public StyleX output, not a third theme
+    // generator block.
     expect(
       Object.keys(generateThemeCSS(defineTheme({name: 'data-shape'}))).sort(),
     ).toEqual(['component', 'prose']);

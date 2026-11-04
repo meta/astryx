@@ -12,7 +12,7 @@
  * @position api/hook/detail/params/params.mjs — dispatched from ../../hook.mjs
  */
 
-import {resolveCoreDir, resolveHookDoc} from '../../_adapter.mjs';
+import {CORE_PACKAGE, resolveCoreDir, resolveHookDoc} from '../../_adapter.mjs';
 
 /**
  * @param {string} name
@@ -22,5 +22,5 @@ import {resolveCoreDir, resolveHookDoc} from '../../_adapter.mjs';
 export async function params(name, {cwd = process.cwd(), zh = false, lang = null} = {}) {
   const coreDir = resolveCoreDir(cwd);
   const docs = await resolveHookDoc(coreDir, name, {zh, lang});
-  return {type: 'hook.detail.params', data: docs.params || []};
+  return {type: 'hook.detail.params', package: CORE_PACKAGE, data: docs.params || []};
 }

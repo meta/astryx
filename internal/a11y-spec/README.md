@@ -48,22 +48,156 @@ src/
     ├── modal-dialog.*       the native modal-dialog pattern, same four files
     ├── status-message.*     live-region and progress status mechanics
     ├── tabs.*               explicit horizontal ARIA Tabs semantics
-    └── listbox.*            listbox, group, and option semantics
+    ├── listbox.*            listbox, group, and option semantics
+    ├── spinbutton.*         numeric role, value, bounds, state, and arrow stepping
+    ├── disclosure.*         standalone disclosure state/content semantics
+    ├── menu-button.*        a control's button role and name, aria-haspopup, expanded state, controls, and keyboard opens
+    ├── menu.*               a displayed menu's role and name, item roles/names/checked/disabled state, and arrow/Home/End/Enter/Escape/Tab keys (typeahead advisory)
+    ├── toolbar.*            a toolbar's role and name, orientation, controls inside it, one Tab stop, and arrow (with wrap, RTL-mirrored, Down/Up when vertical) and Home/End keys
+    ├── tooltip.*            a tooltip's role, the trigger described by it, keyboard focus showing it, Escape dismissing it, and hover keeping it (blur, hover-show and pointer-leave advisory)
+    ├── window-splitter.*    a focusable resize separator's role, name, position/bounds, pane relationship, and arrow/Enter keys (Home/End advisory)
+    ├── grid.*               a composite grid's role, name, row/cell structure, single Tab stop, selection, and arrow/Home/End/Enter keys
+    ├── alert-dialog.*       a confirmation surface's alertdialog role, title/message references, modality, initial focus, Escape and click-beside dismissal
+    ├── carousel.*           non-rotating collection, slide, off-screen, and focus semantics
+    ├── tree-view.*          a tree's roles, names, expanded state, one Tab stop, and arrow/Home/End/Enter-or-Space/typeahead movement
+    ├── slider.*             a thumb's role, name, values, text, orientation, and arrow/Page/Home/End keys (RTL-mirrored arrows)
+    ├── progressbar.*        a progress indicator's role and name, value and range or indeterminate state, value text, and a subtree with nothing focusable
+    ├── accordion.*          a group's header role and name, panel state, single-expansion collapse, page Tab order
+    ├── breadcrumb.*         landmark, list-trail, current-page, and separator semantics
+    ├── combobox.*           control identity, state, popup, and active-descendant semantics
+    ├── landmark.*           one component-owned landmark region's role, name, and content boundary
+    ├── link.*               one available link's role, name, current state, focus, and activation
+    └── table.*              a static data table's role and name and its header and cell roles; Table modules compose their own semantics
 ```
 
 ## The patterns
 
-| Pattern          | Adopted from                                                                                 | Bound by                                                                         |
-| ---------------- | -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `radio-group`    | [APG radio group](https://www.w3.org/WAI/ARIA/apg/patterns/radio/)                           | RadioList, SegmentedControl; role/state portions of DropdownMenu radio items     |
-| `checkbox`       | [APG checkbox](https://www.w3.org/WAI/ARIA/apg/patterns/checkbox/)                           | CheckboxInput, CheckboxListItem, DropdownMenuCheckboxItem, SelectableCard        |
-| `switch`         | [APG switch](https://www.w3.org/WAI/ARIA/apg/patterns/switch/)                               | Switch                                                                           |
-| `button`         | [APG button](https://www.w3.org/WAI/ARIA/apg/patterns/button/)                               | Button, IconButton, ClickableCard, SideNavCollapseButton, ChatSendButton         |
-| `text-input`     | Native HTML controls and [WAI-ARIA textbox](https://www.w3.org/TR/wai-aria-1.2/#textbox)     | TextInput, TextArea                                                              |
-| `modal-dialog`   | [APG dialog (modal)](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/)                 | Dialog                                                                           |
-| `status-message` | [WCAG 2.2 Status Messages](https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html) | Toast, FieldStatus, Spinner, ChatSystemMessage, ChatTypingIndicator, ProgressBar |
-| `tabs`           | [APG Tabs](https://www.w3.org/WAI/ARIA/apg/patterns/tabs/)                                   | Explicit `role="tablist"` TabList, Tab, and caller-authored tabpanels            |
-| `listbox`        | [WAI-ARIA 1.2 Listbox](https://www.w3.org/TR/wai-aria-1.2/#listbox) and WCAG 2.2 semantics   | Selector and MultiSelector popup listbox, group, and option parts                |
+| Pattern          | Adopted from                                                                                                                                             | Bound by                                                                                                                                                                                                                                                                                                 |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `radio-group`    | [APG radio group](https://www.w3.org/WAI/ARIA/apg/patterns/radio/)                                                                                       | RadioList, SegmentedControl; role/state portions of DropdownMenu radio items                                                                                                                                                                                                                             |
+| `checkbox`       | [APG checkbox](https://www.w3.org/WAI/ARIA/apg/patterns/checkbox/)                                                                                       | CheckboxInput, CheckboxListItem, DropdownMenuCheckboxItem, SelectableCard                                                                                                                                                                                                                                |
+| `switch`         | [APG switch](https://www.w3.org/WAI/ARIA/apg/patterns/switch/)                                                                                           | Switch                                                                                                                                                                                                                                                                                                   |
+| `button`         | [APG button](https://www.w3.org/WAI/ARIA/apg/patterns/button/)                                                                                           | Button, IconButton, ClickableCard, SideNavCollapseButton, ChatSendButton                                                                                                                                                                                                                                 |
+| `toggle-button`  | Toggle-button semantics in the [APG button pattern](https://www.w3.org/WAI/ARIA/apg/patterns/button/)                                                    | ToggleButton, including standalone and grouped states                                                                                                                                                                                                                                                    |
+| `text-input`     | Native HTML controls and [WAI-ARIA textbox](https://www.w3.org/TR/wai-aria-1.2/#textbox)                                                                 | TextInput, TextArea                                                                                                                                                                                                                                                                                      |
+| `modal-dialog`   | [APG dialog (modal)](https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/)                                                                             | Dialog                                                                                                                                                                                                                                                                                                   |
+| `status-message` | [WCAG 2.2 Status Messages](https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html)                                                             | Toast, FieldStatus, Spinner, ChatSystemMessage, ChatTypingIndicator, ProgressBar                                                                                                                                                                                                                         |
+| `tabs`           | [APG Tabs](https://www.w3.org/WAI/ARIA/apg/patterns/tabs/)                                                                                               | Explicit `role="tablist"` TabList, Tab, and caller-authored tabpanels                                                                                                                                                                                                                                    |
+| `listbox`        | [WAI-ARIA 1.2 Listbox](https://www.w3.org/TR/wai-aria-1.2/#listbox) and WCAG 2.2 semantics                                                               | Selector and MultiSelector popup listbox, group, and option parts                                                                                                                                                                                                                                        |
+| `spinbutton`     | WCAG 2.2 semantics and [APG Spinbutton](https://www.w3.org/WAI/ARIA/apg/patterns/spinbutton/)                                                            | NumberInput                                                                                                                                                                                                                                                                                              |
+| `disclosure`     | [APG Disclosure](https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/)                                                                                   | Standalone Collapsible triggers and their controlled content                                                                                                                                                                                                                                             |
+| `menu-button`    | [APG Menu Button](https://www.w3.org/WAI/ARIA/apg/patterns/menu-button/) required parts; the optional ArrowDown/ArrowUp opens Astryx ships are advisory  | Anchored DropdownMenu and MoreMenu triggers: button role and name, `aria-haspopup="menu"`, `aria-expanded`, `aria-controls`, Enter/Space open on the first enabled item (advisory: ArrowDown on the first, ArrowUp on the last)                                                                          |
+| `menu`           | [APG Menu and Menubar](https://www.w3.org/WAI/ARIA/apg/patterns/menubar/) menu; arrows (with wrap) and Home/End per AST-020 FR15; typeahead advisory     | DropdownMenu pointer menu: named `menu`, item roles/names, `aria-checked`, `aria-disabled`, arrows with wrap, Home/End, Enter and Escape back to the trigger, Tab out (advisory: typeahead)                                                                                                              |
+| `toolbar`        | [APG Toolbar](https://www.w3.org/WAI/ARIA/apg/patterns/toolbar/); arrows (with wrap) and Home/End per AST-020 FR15                                       | Toolbar: named `toolbar`, `aria-orientation`, controls inside it, one Tab stop entering on the first enabled control, next/previous arrows (RTL-mirrored, Down/Up when vertical) with wrap, Home/End                                                                                                     |
+| `tooltip`        | [APG Tooltip](https://www.w3.org/WAI/ARIA/apg/patterns/tooltip/) role and relationship per AST-020 FR15; WCAG 1.4.13; three rows advisory                | Tooltip, useTooltip: `tooltip` role, `aria-describedby` and computed description, focus shows it (focus stays), Escape dismisses, hover keeps it over trigger and tooltip (advisory: blur hides, hover shows, pointer leaving hides)                                                                     |
+| `accordion`      | [APG Accordion](https://www.w3.org/WAI/ARIA/apg/patterns/accordion/) required parts                                                                      | CollapsibleGroup headers: button role and name, expanded state, controlled panel, Enter/Space, single-expansion sibling collapse, page Tab order, no arrow-key movement (single-expansion collapse, grouped Tab order, no arrow movement are advisory until `component:CollapsibleGroup` AR4 is current) |
+| `breadcrumb`     | WCAG 2.2 semantics; [APG Breadcrumb](https://www.w3.org/WAI/ARIA/apg/patterns/breadcrumb/) as context                                                    | Breadcrumbs landmarks, list trails, current-page state, and separators                                                                                                                                                                                                                                   |
+| `combobox`       | WCAG 2.2 + [WAI-ARIA 1.2 Combobox](https://www.w3.org/TR/wai-aria-1.2/#combobox); APG as context                                                         | Selector trigger identity, state, popup, and active-descendant relationships                                                                                                                                                                                                                             |
+| `landmark`       | WCAG 2.2 semantics; [APG Landmark Regions](https://www.w3.org/WAI/ARIA/apg/patterns/landmarks/) as context                                               | LayoutHeader, LayoutContent, LayoutFooter, and LayoutPanel caller-declared landmarks                                                                                                                                                                                                                     |
+| `slider`         | [APG Slider](https://www.w3.org/WAI/ARIA/apg/patterns/slider/) role, values, name, orientation and keys                                                  | Slider thumbs: role, name, now/min/max, value text, orientation, arrows (RTL-mirrored), Page, Home/End, disabled keeps value                                                                                                                                                                             |
+| `progressbar`    | WCAG 2.2 4.1.2 and [WAI-ARIA 1.2 progressbar](https://www.w3.org/TR/wai-aria-1.2/#progressbar); no APG pattern exists                                    | ProgressBar, Lab CircularProgress: progressbar role and name, now/min/max, indeterminate claims no value, value text, no focusable descendants (target marks sit beside the bar)                                                                                                                         |
+| `treeview`       | [APG Tree View](https://www.w3.org/WAI/ARIA/apg/patterns/treeview/) structure and keyboard model                                                         | TreeList rows: tree/treeitem/group, aria-expanded, level/position, one Tab stop, Up/Down, Right/Left (RTL-mirrored), Home/End, Enter or Space, typeahead                                                                                                                                                 |
+| `carousel`       | [APG Carousel](https://www.w3.org/WAI/ARIA/apg/patterns/carousel/) and WCAG 2.2 semantics                                                                | Carousel container, slides, scroll area, and stable navigation-control focus                                                                                                                                                                                                                             |
+| `alertdialog`    | [APG Alert Dialog](https://www.w3.org/WAI/ARIA/apg/patterns/alertdialog/) role, references, modality, focus, dismissal                                   | AlertDialog: alertdialog role and name, aria-describedby to the message, modal, Cancel first (advisory), Escape closes, click beside inert (advisory); modal mechanics stay with the modal-dialog contract through Dialog                                                                                |
+| `grid`           | [APG Grid](https://www.w3.org/WAI/ARIA/apg/patterns/grid/) role, structure, name, selection and data-grid keys                                           | Calendar month grids: grid role/name, row and gridcell/columnheader structure, one Tab stop, aria-selected/aria-multiselectable, arrows in reading order, Home/End, Enter selects (advisory)                                                                                                             |
+| `windowsplitter` | [APG Window Splitter](https://www.w3.org/WAI/ARIA/apg/patterns/windowsplitter/) role, values, name, relationship and keys                                | ResizeHandle: separator role/name, now/min/max, orientation, aria-controls to the pane, arrows, Enter collapse/restore, Home/End, disabled keeps position                                                                                                                                                |
+| `link`           | WCAG 2.2 semantics; [APG Link](https://www.w3.org/WAI/ARIA/apg/patterns/link/) role and Enter mechanics                                                  | Link, including LinkProvider and `as` router components                                                                                                                                                                                                                                                  |
+| `table`          | [APG Table](https://www.w3.org/WAI/ARIA/apg/patterns/table/) roles and name per AST-020 FR15; no keyboard (the pattern defines none); modules add theirs | Table, in data-driven and children mode: table role and name, `row`/`columnheader`/`rowheader`/`cell` roles inside the table; the sort module adds `aria-sort` on sorted headers only                                                                                                                    |
+
+The `progressbar` contract owns what one rendered progress indicator exposes in
+each state: the progressbar role and the operation's name (never a meter or a
+status), its value inside its range, no value or value text while progress is
+unknown, its formatted value text, and a subtree with nothing a keyboard can
+land on, since a progressbar's descendants are presentational. Whether that
+exposure survives progress and completion updates without moving focus stays
+with the `status-message` contract; clamping, ring geometry, and the target
+marks' own Tooltip triggers stay with the components. Spinner exposes a status,
+not a progressbar, so it binds only to `status-message`.
+
+The toggle-button contract owns the persistent-action extension of button
+semantics: the pressed state must be exposed, reversible by pointer, Enter, and
+Space, stable under an aborted press, and inert when unavailable. It also checks
+that changing state keeps focus and reports APG label stability as advisory
+because current Astryx authority does not make that APG-only detail a gate.
+ToggleButtonGroup naming, selection coordination, Action ordering, pending
+feedback, and rendered appearance keep their existing component, family, and
+visual owners.
+
+The `spinbutton` contract owns NumberInput's required role, persistent name,
+committed numeric value, optional bounds and formatted value text, disabled and
+read-only exposure, and keyboard reachability. ArrowUp and ArrowDown stepping
+are recorded as advisory APG evidence because no current Astryx authority
+adopts those mechanics as a shared requirement. Typed draft parsing,
+formatting, commit/clamp policy, callbacks, optional buttons, and date/time
+segments keep their existing owners.
+
+The disclosure contract owns only the disclosure-specific state, optional
+trigger-to-content relationship, synchronized visibility, and complete pointer,
+Enter, and Space transitions. Generic role, naming, focus navigation, and
+unavailable-button semantics remain in the existing `button` contract. This first
+migration binds standalone Collapsible states only; CollapsibleGroup coordination
+and Accordion, Table, and SideNav adoption remain outside this contract.
+
+The breadcrumb contract owns the named navigation landmark, list trail,
+optional current-page state, and decorative separator exposure. Its first
+Breadcrumbs binding covers explicit and automatic current-page selection, a
+custom landmark label, RTL/supporting presentation, and an intentional
+no-current-page opt-out. Link, action-button, and sibling-menu semantics stay
+with their own patterns; the APG Breadcrumb page remains context because no
+current Astryx record adopts it as an additional required gate.
+
+The combobox contract owns the named control, expanded/busy/read-only state,
+its relationship to a rendered popup, and a declared active descendant. Its
+first Selector binding covers closed, open, read-only, busy, and bottom-sheet
+trigger states plus the search input with an active option. While a binding's
+own modal dialog popup makes the combobox inert, the browser correctly leaves it
+out of the accessibility tree, so the identity expectation does not apply there.
+Popup contents keep the existing listbox contract. `spec:AST-020/FR15` adopts
+the APG Combobox required parts, including Tab plus Enter or Space activation,
+wherever a part plays the combobox role; each adopter's record names them and its
+interaction suites verify the keyboard and selection parts.
+
+The landmark contract owns one component-owned landmark region: the role the
+binding declares, the label it declares, and the content the region bounds. It
+reports the APG unique-label principle for same-role peers as advisory because
+no current Astryx record adopts it as a gate. Its first binding covers the four
+Layout region components with caller-supplied roles and labels, including
+repeated navigation panels under RTL and a region nested in a main landmark.
+Role-less regions, one main landmark per page, top-level placement, and whether
+all page content sits in a landmark stay with Layout's own tests, the page, and
+AppShell; an isolated region never claims page-wide landmark completeness.
+
+The link contract owns one available navigation link: the link role, the
+exact name its binding declares, `aria-current` only when the link is the
+current item, Tab entry and exit, and exactly one navigation from Enter or from
+a pointer press released on the link, with none from a press slid off it. Every
+gate is a WCAG 2.2 outcome; the APG Link page supplies the role and Enter
+mechanics those outcomes rest on. Its first binding covers Link as a native
+anchor, an icon-only labelled link, a caller-marked current page, an external
+new-tab link, and router components supplied through LinkProvider and `as`.
+Destination safety stays with `family:navigation-destinations`, disabled links
+keep their member-owned semantics, and navigation aggregates such as
+breadcrumbs, side and top navigation, citations, and clickable cards bind
+separately.
+
+The table contract owns a static data table: the table role, the label its
+binding declares, the `row`, `columnheader`, `rowheader`, and `cell` roles of
+the rows, headers, and cells the binding designates, and each header and cell's
+place in a row of the table. `spec:AST-020/FR15` adopts the APG Table pattern's
+role, name, and row and cell roles because Table already plays the table role;
+the pattern defines no keyboard interaction, so none is adopted. Each Table
+module brings its own accessibility semantics as a module contract owned beside
+the module and composed onto the base with `composeTablePattern`, only for the
+states a binding renders with that module: the sort module contract
+(`packages/core/src/Table/plugins/sortable/__tests__/useTableSortable.a11y.ts`)
+adds `aria-sort` on exactly the sorted column headers, and a later module (tree
+or grid rows, for example) brings its semantics the same way. The first binding covers a labelled data-driven table, a table sorted
+through `useTableSortable`, a composed right-to-left table named by a visible
+heading with row headers, and the default empty state. Captions, spans, row and
+column counts and indexes, and the rows and controls that selection, expansion,
+grouping, and tree modules add stay with their modules and later bindings, and
+the filter button and resize separator that sit inside header cells bind with
+their modules; the Scroll region keeps its own browser evidence.
 
 The `listbox` contract is a bounded semantic migration, not blanket APG
 interaction adoption. Its first bindings cover 21 existing scenarios across

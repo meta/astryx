@@ -81,6 +81,25 @@ describe('reflowBulletBody', () => {
 });
 
 describe('formatVersionBlock line-wrapping', () => {
+  it('groups experimental entries separately after breaking changes', () => {
+    const body = [
+      '### Patch Changes',
+      '',
+      '- [fix] Preserve the stable path. — thanks @athz',
+      '- [experimental] Rename an experimental callback. — thanks @cixzhang',
+      '- [breaking] Remove a stable callback. — thanks @joeyfarina',
+    ].join('\n');
+    const out = formatVersionBlock('0.9.9', body);
+
+    expect(out).toContain('#### Experimental APIs');
+    expect(out.indexOf('#### Breaking Changes')).toBeLessThan(
+      out.indexOf('#### Experimental APIs'),
+    );
+    expect(out.indexOf('#### Experimental APIs')).toBeLessThan(
+      out.indexOf('#### Fixes'),
+    );
+  });
+
   it('normalizes wrapping across entries so hard-wrapped and single-line prose match', () => {
     const body = [
       '### Patch Changes',

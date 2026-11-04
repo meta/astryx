@@ -10,6 +10,7 @@
  */
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import {createRef} from 'react';
 import {
   render,
   screen,
@@ -21,7 +22,9 @@ import userEvent from '@testing-library/user-event';
 import {CheckboxList} from './CheckboxList';
 import {CheckboxListItem} from './CheckboxListItem';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+import {__resetInteractionModalityForTest} from '../utils/interactionModality';
 import {List} from '../List/List';
+import {FormLayout} from '../FormLayout/FormLayout';
 
 // FieldStatus announces status messages through the persistent useAnnounce
 // singletons; remove them between tests so role/aria-live queries in this
@@ -58,6 +61,28 @@ beforeEach(() => {
 });
 
 describe('CheckboxList', () => {
+  it('forwards CheckboxListItem align to its Item row unchanged', () => {
+    render(
+      <CheckboxList label="Toppings" value={[]} onChange={() => {}}>
+        <CheckboxListItem label="Cheese" value="cheese" data-testid="cheese" />
+        <CheckboxListItem
+          label="Olives"
+          value="olives"
+          align="first-line"
+          data-testid="olives"
+        />
+      </CheckboxList>,
+    );
+    expect(screen.getByTestId('cheese')).toHaveAttribute(
+      'data-align',
+      'center',
+    );
+    expect(screen.getByTestId('olives')).toHaveAttribute(
+      'data-align',
+      'first-line',
+    );
+  });
+
   it('renders with label', () => {
     render(
       <CheckboxList label="Preferences" value={[]} onChange={() => {}}>
@@ -84,6 +109,106 @@ describe('CheckboxList', () => {
     expect(label.closest('label')).toBeNull();
     expect(label).not.toHaveAttribute('for');
     expect(group.getAttribute('aria-labelledby')).toBe(label.id);
+  });
+
+  it('shows the optional indicator after the group label with isOptional', () => {
+    const {rerender} = render(
+      <CheckboxList label="Preferences" value={[]} onChange={() => {}}>
+        <CheckboxListItem label="Option A" value="a" />
+      </CheckboxList>,
+    );
+    expect(screen.queryByText('Optional')).not.toBeInTheDocument();
+
+    rerender(
+      <CheckboxList
+        label="Preferences"
+        value={[]}
+        onChange={() => {}}
+        isOptional>
+        <CheckboxListItem label="Option A" value="a" />
+      </CheckboxList>,
+    );
+    const label = screen.getByText('Preferences');
+    expect(within(label).getByText('Optional')).toBeInTheDocument();
+    // A checkbox group has no required state to announce or validate.
+    expect(
+      screen.getByRole('group', {name: /^Preferences/}),
+    ).not.toHaveAttribute('aria-required');
+    expect(screen.getByRole('checkbox', {name: 'Option A'})).not.toBeRequired();
+  });
+
+  it('marks isOptional only where it deviates from the FormLayout default', () => {
+    const {rerender} = render(
+      <FormLayout defaultOptionality="required">
+        <CheckboxList
+          label="Preferences"
+          value={[]}
+          onChange={() => {}}
+          isOptional>
+          <CheckboxListItem label="Option A" value="a" />
+          <CheckboxListItem label="Option B" value="b" />
+        </CheckboxList>
+      </FormLayout>,
+    );
+    expect(screen.getByText('Optional')).toBeInTheDocument();
+    // The checkboxes follow the group, not the required form default.
+    for (const checkbox of screen.getAllByRole('checkbox')) {
+      expect(checkbox).not.toHaveAttribute('aria-required');
+    }
+
+    rerender(
+      <FormLayout defaultOptionality="optional">
+        <CheckboxList
+          label="Preferences"
+          value={[]}
+          onChange={() => {}}
+          isOptional>
+          <CheckboxListItem label="Option A" value="a" />
+        </CheckboxList>
+      </FormLayout>,
+    );
+    expect(screen.queryByText('Optional')).not.toBeInTheDocument();
+  });
+
+  it('gives an unmarked group no aria-required under a required FormLayout default', () => {
+    render(
+      <FormLayout defaultOptionality="required">
+        <CheckboxList label="Preferences" value={[]} onChange={() => {}}>
+          <CheckboxListItem label="Option A" value="a" />
+          <CheckboxListItem label="Option B" value="b" />
+        </CheckboxList>
+      </FormLayout>,
+    );
+    expect(screen.queryByText('Optional')).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('group', {name: 'Preferences'}),
+    ).not.toHaveAttribute('aria-required');
+    for (const checkbox of screen.getAllByRole('checkbox')) {
+      expect(checkbox).not.toHaveAttribute('aria-required');
+      expect(checkbox).not.toBeRequired();
+    }
+  });
+
+  it('keeps a focused checkbox focused when isOptional changes', () => {
+    const {rerender} = render(
+      <CheckboxList label="Preferences" value={[]} onChange={() => {}}>
+        <CheckboxListItem label="Option A" value="a" />
+      </CheckboxList>,
+    );
+    const checkbox = screen.getByRole('checkbox', {name: 'Option A'});
+    checkbox.focus();
+
+    rerender(
+      <CheckboxList
+        label="Preferences"
+        value={[]}
+        onChange={() => {}}
+        isOptional>
+        <CheckboxListItem label="Option A" value="a" />
+      </CheckboxList>,
+    );
+    expect(screen.getByRole('checkbox', {name: 'Option A'})).toBe(checkbox);
+    expect(checkbox).toHaveFocus();
   });
 
   it('renders checkbox items', () => {
@@ -265,8 +390,9 @@ describe('CheckboxList', () => {
       </CheckboxList>,
     );
     const checkboxes = screen.getAllByRole('checkbox');
-    expect(checkboxes[0]).toBeDisabled();
-    expect(checkboxes[1]).toBeDisabled();
+    expect(checkboxes[0]).toHaveAttribute('aria-disabled', 'true');
+    expect(checkboxes[1]).toHaveAttribute('aria-disabled', 'true');
+    expect(checkboxes[0]).not.toHaveAttribute('disabled');
   });
 
   it('does not call onChange when group is disabled', () => {
@@ -294,8 +420,9 @@ describe('CheckboxList', () => {
       </CheckboxList>,
     );
     const checkboxes = screen.getAllByRole('checkbox');
-    expect(checkboxes[0]).not.toBeDisabled();
-    expect(checkboxes[1]).toBeDisabled();
+    expect(checkboxes[0]).not.toHaveAttribute('aria-disabled');
+    expect(checkboxes[1]).toHaveAttribute('aria-disabled', 'true');
+    expect(checkboxes[1]).not.toHaveAttribute('disabled');
   });
 
   it('throws when item has no value prop inside collection-mode CheckboxList', () => {
@@ -450,6 +577,57 @@ describe('CheckboxList', () => {
     expect(screen.getByText('Choose your preferences')).toBeInTheDocument();
   });
 
+  it('describes the group with its description and status message', () => {
+    render(
+      <CheckboxList
+        label="Preferences"
+        description="Choose your preferences"
+        status={{type: 'error', message: 'Select at least one'}}
+        value={[]}
+        onChange={() => {}}>
+        <CheckboxListItem label="Option A" value="a" />
+      </CheckboxList>,
+    );
+    expect(
+      screen.getByRole('group', {name: 'Preferences'}),
+    ).toHaveAccessibleDescription(
+      'Choose your preferences Select at least one',
+    );
+  });
+
+  it('forwards ref to the group, container* to the field root, and item styling to the row', () => {
+    const listRef = createRef<HTMLDivElement>();
+    const itemRef = createRef<HTMLLIElement>();
+    const {container} = render(
+      <CheckboxList
+        ref={listRef}
+        label="Preferences"
+        containerClassName="consumer-list"
+        containerStyle={{marginTop: 12}}
+        value={[]}
+        onChange={() => {}}>
+        <CheckboxListItem
+          ref={itemRef}
+          label="Option A"
+          value="a"
+          className="consumer-item"
+          style={{marginTop: 4}}
+        />
+      </CheckboxList>,
+    );
+    expect(listRef.current).toBe(
+      screen.getByRole('group', {name: 'Preferences'}),
+    );
+    const fieldRoot = container.querySelector('.consumer-list');
+    expect(fieldRoot).toHaveClass('astryx-checkbox-list');
+    expect(fieldRoot).toHaveStyle({marginTop: '12px'});
+    expect(fieldRoot).toContainElement(listRef.current);
+    const row = screen.getByRole('listitem');
+    expect(itemRef.current).toBe(row);
+    expect(row).toHaveClass('consumer-item', 'astryx-list-item');
+    expect(row).toHaveStyle({marginTop: '4px'});
+  });
+
   it('supports data-testid on CheckboxList', () => {
     render(
       <CheckboxList
@@ -557,6 +735,54 @@ describe('CheckboxList', () => {
 });
 
 describe('CheckboxListItem standalone mode', () => {
+  it('ignores isChecked and onCheck when the parent CheckboxList has a value array', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const onCheck = vi.fn();
+    render(
+      <CheckboxList label="Preferences" value={[]} onChange={onChange}>
+        <CheckboxListItem
+          label="Option A"
+          value="a"
+          isChecked
+          onCheck={onCheck}
+        />
+      </CheckboxList>,
+    );
+    const checkbox = screen.getByRole('checkbox', {name: 'Option A'});
+    // The list's value array owns checked state in collection mode.
+    expect(checkbox).not.toBeChecked();
+    await user.click(checkbox);
+    expect(onChange).toHaveBeenCalledWith(['a']);
+    expect(onCheck).not.toHaveBeenCalled();
+  });
+
+  it('renders the sm checkbox at compact density and md otherwise', () => {
+    const {unmount} = render(
+      <CheckboxList
+        label="Preferences"
+        density="compact"
+        value={[]}
+        onChange={() => {}}>
+        <CheckboxListItem label="Option A" value="a" />
+      </CheckboxList>,
+    );
+    const compactField = screen
+      .getByRole('checkbox')
+      .closest('.astryx-checkbox-input');
+    expect(compactField).toHaveAttribute('data-size', 'sm');
+    unmount();
+    render(
+      <List>
+        <CheckboxListItem label="Option A" />
+      </List>,
+    );
+    const balancedField = screen
+      .getByRole('checkbox')
+      .closest('.astryx-checkbox-input');
+    expect(balancedField).toHaveAttribute('data-size', 'md');
+  });
+
   it('uses isChecked/onCheck for standalone control', async () => {
     const user = userEvent.setup();
     const handleCheck = vi.fn();
@@ -834,6 +1060,80 @@ describe('CheckboxListItem ARIA props', () => {
     expect(changeAction).toHaveBeenCalledWith(['a']);
   });
 
+  it('keeps a read-only item onClick while refusing every toggle', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const onItemClick = vi.fn();
+    render(
+      <CheckboxList label="Prefs" value={[]} onChange={onChange} isReadOnly>
+        <CheckboxListItem label="Option A" value="a" onClick={onItemClick} />
+        <CheckboxListItem label="Option B" value="b" />
+      </CheckboxList>,
+    );
+    const [itemA, itemB] = screen.getAllByRole('listitem');
+    const checkboxA = within(itemA).getByRole('checkbox');
+    const checkboxB = within(itemB).getByRole('checkbox');
+
+    // With an onClick, a row-surface click still delegates to the checkbox.
+    // The text also exists in the checkbox's visually hidden <label>; target
+    // the row's label <span> to click the row surface.
+    fireEvent.click(within(itemA).getByText('Option A', {selector: 'span'}));
+    expect(onItemClick).toHaveBeenCalledTimes(1);
+    fireEvent.click(checkboxA);
+    expect(onItemClick).toHaveBeenCalledTimes(2);
+    checkboxA.focus();
+    await user.keyboard(' ');
+    expect(onItemClick).toHaveBeenCalledTimes(3);
+    expect(checkboxA).toHaveAttribute('aria-readonly', 'true');
+    expect(checkboxA).not.toBeChecked();
+
+    // Without one, the read-only row does not delegate at all.
+    const delegated = vi.fn();
+    checkboxB.addEventListener('click', delegated);
+    fireEvent.click(within(itemB).getByText('Option B', {selector: 'span'}));
+    expect(delegated).not.toHaveBeenCalled();
+    fireEvent.click(checkboxB);
+    expect(checkboxB).not.toBeChecked();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps an earlier toggled item busy and locked while its changeAction is still pending', async () => {
+    // Never-resolving actions keep both toggles pending for the assertions.
+    const changeAction = vi.fn(async () => {
+      await new Promise<void>(() => {});
+    });
+    const onChange = vi.fn();
+    render(
+      <CheckboxList
+        label="Prefs"
+        value={[]}
+        onChange={onChange}
+        changeAction={changeAction}>
+        <CheckboxListItem label="Option A" value="a" />
+        <CheckboxListItem label="Option B" value="b" />
+      </CheckboxList>,
+    );
+
+    const [itemA, itemB] = screen.getAllByRole('listitem');
+    fireEvent.click(within(itemA).getByRole('checkbox'));
+    await waitFor(() => expect(itemA).toHaveAttribute('aria-busy', 'true'));
+
+    // Other items stay interactive, and toggling one must not clear the
+    // pending state of the item that is still saving.
+    fireEvent.click(within(itemB).getByRole('checkbox'));
+    await waitFor(() => expect(itemB).toHaveAttribute('aria-busy', 'true'));
+    expect(itemA).toHaveAttribute('aria-busy', 'true');
+    expect(
+      within(itemA).getByRole('status', {hidden: true}),
+    ).toBeInTheDocument();
+
+    // Re-toggling the still-pending item stays blocked.
+    fireEvent.click(within(itemA).getByRole('checkbox'));
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(changeAction).toHaveBeenCalledTimes(2);
+    expect(changeAction).toHaveBeenLastCalledWith(['a', 'b']);
+  });
+
   it('forwards arbitrary aria attributes to the list item, but aria-label names the checkbox', () => {
     render(
       <List>
@@ -892,6 +1192,95 @@ describe('CheckboxListItem ARIA props', () => {
       await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
     });
 
+    it('describes each checkbox with the reason', () => {
+      renderGroup();
+      const tooltip = screen.getByRole('tooltip', h);
+      for (const name of ['Email', 'SMS']) {
+        const checkbox = screen.getByRole('checkbox', {name});
+        expect(checkbox.getAttribute('aria-describedby')?.split(' ')).toContain(
+          tooltip.id,
+        );
+        expect(checkbox).toHaveAccessibleDescription(
+          'Notifications are managed by your administrator',
+        );
+      }
+    });
+
+    it("keeps a row's own description ahead of the reason", () => {
+      render(
+        <CheckboxList
+          label="Notifications"
+          value={['email']}
+          onChange={() => {}}
+          isDisabled
+          disabledMessage="Notifications are managed by your administrator">
+          <CheckboxListItem
+            label="Email"
+            value="email"
+            description="Weekly digest"
+          />
+        </CheckboxList>,
+      );
+      const tooltip = screen.getByRole('tooltip', h);
+      const checkbox = screen.getByRole('checkbox', {name: 'Email'});
+      const ids = checkbox.getAttribute('aria-describedby')!.split(' ');
+      expect(ids).toHaveLength(2);
+      expect(ids[1]).toBe(tooltip.id);
+      expect(checkbox).toHaveAccessibleDescription(
+        'Weekly digest Notifications are managed by your administrator',
+      );
+    });
+
+    // spec:AST-085 FR5: a keyboard user hears the reason on the checkbox that
+    // has focus.
+    it('describes the focused checkbox with the reason as Tab moves through the group', async () => {
+      const user = userEvent.setup();
+      renderGroup();
+      await user.tab();
+      const email = screen.getByRole('checkbox', {name: 'Email'});
+      expect(email).toHaveFocus();
+      expect(email).toHaveAccessibleDescription(
+        'Notifications are managed by your administrator',
+      );
+      await user.tab();
+      const sms = screen.getByRole('checkbox', {name: 'SMS'});
+      expect(sms).toHaveFocus();
+      expect(sms).toHaveAccessibleDescription(
+        'Notifications are managed by your administrator',
+      );
+    });
+
+    it('opens the reason on a tap and toggles nothing', async () => {
+      __resetInteractionModalityForTest();
+      const onChange = vi.fn();
+      renderGroup({onChange});
+      const tooltip = screen.getByRole('tooltip', h);
+      const sms = screen.getByRole('checkbox', {name: 'SMS'});
+      // A tap, in the order a browser dispatches it.
+      fireEvent.pointerEnter(sms, {pointerType: 'touch'});
+      fireEvent.pointerDown(sms, {pointerType: 'touch'});
+      fireEvent.pointerUp(sms, {pointerType: 'touch'});
+      fireEvent.mouseEnter(sms);
+      fireEvent.click(sms);
+      await waitFor(() => expect(tooltip).toHaveAttribute('popover-open'));
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('adds no reason to the checkboxes of a group that is not disabled', () => {
+      render(
+        <CheckboxList
+          label="Notifications"
+          value={['email']}
+          onChange={() => {}}
+          disabledMessage="Notifications are managed by your administrator">
+          <CheckboxListItem label="Email" value="email" />
+        </CheckboxList>,
+      );
+      expect(screen.getByRole('checkbox', {name: 'Email'})).not.toHaveAttribute(
+        'aria-describedby',
+      );
+    });
+
     it('does not render a tooltip when not disabled', () => {
       render(
         <CheckboxList
@@ -941,7 +1330,7 @@ describe('CheckboxListItem ARIA props', () => {
       expect(onChange).not.toHaveBeenCalled();
     });
 
-    it('keeps checkboxes natively disabled when disabled without a reason', () => {
+    it('keeps checkboxes focusable via aria-disabled when disabled without a reason', () => {
       render(
         <CheckboxList
           label="Notifications"
@@ -953,8 +1342,81 @@ describe('CheckboxListItem ARIA props', () => {
         </CheckboxList>,
       );
       for (const checkbox of screen.getAllByRole('checkbox', h)) {
-        expect(checkbox).toBeDisabled();
+        expect(checkbox).not.toHaveAttribute('disabled');
+        expect(checkbox).toHaveAttribute('aria-disabled', 'true');
       }
     });
+  });
+});
+
+describe('CheckboxList error status', () => {
+  it('makes every checkbox aria-invalid', () => {
+    render(
+      <CheckboxList
+        label="Toppings"
+        status={{type: 'error', message: 'Choose at least one topping'}}>
+        <CheckboxListItem value="cheese" label="Cheese" />
+        <CheckboxListItem value="olives" label="Olives" />
+      </CheckboxList>,
+    );
+    for (const checkbox of screen.getAllByRole('checkbox')) {
+      expect(checkbox).toHaveAttribute('aria-invalid', 'true');
+    }
+    // The message still renders once, from the list.
+    expect(screen.getAllByText('Choose at least one topping')).toHaveLength(1);
+  });
+
+  it('leaves checkboxes valid for a warning or no status', () => {
+    const {rerender} = render(
+      <CheckboxList
+        label="Toppings"
+        status={{type: 'warning', message: 'Few left'}}>
+        <CheckboxListItem value="cheese" label="Cheese" />
+      </CheckboxList>,
+    );
+    expect(screen.getByRole('checkbox')).not.toHaveAttribute('aria-invalid');
+    rerender(
+      <CheckboxList label="Toppings">
+        <CheckboxListItem value="cheese" label="Cheese" />
+      </CheckboxList>,
+    );
+    expect(screen.getByRole('checkbox')).not.toHaveAttribute('aria-invalid');
+  });
+});
+
+describe('CheckboxList group disabled state', () => {
+  it('marks a disabled group aria-disabled', () => {
+    render(
+      <CheckboxList label="Toppings" isDisabled>
+        <CheckboxListItem value="cheese" label="Cheese" />
+      </CheckboxList>,
+    );
+    expect(screen.getByRole('group', {name: 'Toppings'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+
+  it('leaves an enabled group without aria-disabled', () => {
+    render(
+      <CheckboxList label="Toppings">
+        <CheckboxListItem value="cheese" label="Cheese" />
+      </CheckboxList>,
+    );
+    expect(screen.getByRole('group', {name: 'Toppings'})).not.toHaveAttribute(
+      'aria-disabled',
+    );
+  });
+
+  it("keeps a caller's own aria-disabled on an enabled group (FR15)", () => {
+    render(
+      <CheckboxList label="Toppings" aria-disabled="true">
+        <CheckboxListItem value="cheese" label="Cheese" />
+      </CheckboxList>,
+    );
+    expect(screen.getByRole('group', {name: 'Toppings'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 });

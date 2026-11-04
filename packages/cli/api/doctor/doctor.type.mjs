@@ -19,7 +19,7 @@
  * @property {string} label - Human-readable check name.
  * @property {DoctorStatus} status
  * @property {string} message - One-line result summary.
- * @property {string} [fix] - Actionable remediation, present when status is not 'pass'.
+ * @property {string} [fix] - Actionable remediation: always present on 'warn' and 'fail'; some 'info' checks carry one too.
  */
 
 /**
@@ -44,6 +44,9 @@
  * Options for `doctor()`.
  * @typedef {object} DoctorOptions
  * @property {string} [cwd]
+ * @property {string} [built] A finished build to check for Astryx use: a
+ *   project folder, a build output folder, or one built file. Adds the
+ *   `built-astryx-usage` and `built-astryx-purity` checks.
  */
 
 export {};

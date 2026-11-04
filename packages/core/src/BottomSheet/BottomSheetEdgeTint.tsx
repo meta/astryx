@@ -4,34 +4,23 @@
 
 /**
  * @file BottomSheetEdgeTint.tsx
- * @input Uses StyleX and core color tokens
- * @output Exports BottomSheetEdgeTint, an internal decorative element
+ * @input StyleX and core color tokens
+ * @output BottomSheetEdgeTint, an internal decorative element
  * @position Private helper rendered inside every BottomSheet dialog
- *
- * iOS 26 Safari dropped `<meta name="theme-color">` and instead derives the
- * colour it paints behind its translucent toolbars by sampling the page: it
- * hit tests a point just inside each viewport edge, walks up to the nearest
- * `fixed`/`sticky` ancestor, and extends that element's declared
- * `background-color` into the browser chrome.
- *
- * WebKit may otherwise extend either the dialog backdrop or the host page into
- * the browser chrome. Which one wins varies with dialog mode and the page's
- * own fixed or sticky edge content, so relying on the backdrop makes otherwise
- * identical BottomSheets produce different toolbar colours.
- *
- * This element gives the heuristic something unambiguous to sample: fixed,
- * full width, flush with the bottom edge, taller than WebKit's 10px minimum
- * for reading a declared colour, and painted in the sheet's own surface
- * colour. It is masked out so it never renders for the user; Safari reads the
- * computed style, not the painted pixels.
- *
- * Everywhere else it is inert decoration.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/BottomSheet/BottomSheet.tsx
  * - /packages/core/src/BottomSheet/BottomSheetSwitcher.tsx
  * - /packages/core/src/BottomSheet/BottomSheetEdgeTint.test.tsx
  */
+
+// iOS Safari colors its translucent toolbars by sampling the page. It hit
+// tests a point inside each viewport edge, finds the nearest fixed or sticky
+// ancestor, and extends its `background-color`. Without this element, WebKit
+// can pick the dialog backdrop or the page, so equal sheets get different
+// toolbar colors. This element is fixed, full width, at the bottom edge,
+// taller than WebKit's 10px minimum, and in the sheet's surface color. It is
+// masked out: Safari reads the computed style, not the pixels.
 
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';

@@ -6,7 +6,9 @@
  * Integrations are PACKAGE NAMES listed in astryx.config.{ts,mjs,js}. Each
  * package declares a single conventional root manifest sibling to its
  * package.json — astryx.integration.{ts,mjs,js} — which contributes
- * components/templates/codemods/docs/themes roots and an optional issuesUrl.
+ * components/templates/codemods/docs/themes roots (and the experimental
+ * `experimental.iconSets` root), an optional issuesUrl, and an optional
+ * cliCommand.
  * Stable provider identity and package metadata come from package.json, not the
  * manifest.
  *
@@ -18,17 +20,20 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {assertWithin} from '../fs/path-safety.mjs';
+import {findNodeModulesPackage} from '../fs/paths.mjs';
 import {normalizeProviderId} from '../identity/provider-identity.mjs';
 // The key census and contribution parsers are internal to the schema module on
 // purpose: the public parser still validates the complete authored type, while
 // the loader can isolate an invalid optional contribution from valid roots.
 import {
   parseAgentDocsField,
+  parseCliCommandField,
   parseIntegrationBase,
   unknownIntegrationKeys,
 } from '../../authoring/integration/schema.mjs';
 import {importUserModule, findPresentFiles} from '../fs/module-loader.mjs';
 import {parseGapReportHandler} from '../../authoring/gap-report/parse.mjs';
+import {parseDiscoverSource} from '../../authoring/discover/parse.mjs';
 import {resolveProviders} from './provider-resolution.mjs';
 
 /**
@@ -48,11 +53,18 @@ import {resolveProviders} from './provider-resolution.mjs';
  * @property {string} [codemods]
  * @property {string} [docs]
  * @property {string} [themes]
+ * @property {string} [iconSets] the manifest's `experimental.iconSets` root
  * @property {string} [issuesUrl]
  * @property {{append?: readonly string[]}} [agentDocs]
+ * @property {string} [cliCommand] the command this package's users run the
+ *   CLI with; read by the picker in foundation/env (see cli-command.mjs)
+ * @property {string} [__cliCommandError] why a declared `cliCommand` was
+ *   ignored; the rest of the manifest still contributes
  * @property {string} [__agentDocsError] contribution-specific validation
  *   failure; other manifest contributions remain available
  * @property {string} __spec
+ * @property {string} [__declaredProviderId] the manifest's `providerId` as
+ *   written, kept by validation so it can tell whether the package has one
  * @property {string} __packageDir
  * @property {Record<string, unknown>|null} [__packageExports] the owning
  *   package's `exports` map, kept from the package.json this loader already
@@ -64,11 +76,16 @@ import {resolveProviders} from './provider-resolution.mjs';
  *   set on a package whose provider ID an earlier-loaded package already
  *   claims; it contributes nothing and is reported as a `duplicate_provider`
  *   warning
+ * @property {string[]} [__declaredKeys] the keys the manifest object itself
+ *   declares, before any is filled in (providerId from the package name)
  * @property {string[]} [__unknownKeys] manifest keys this CLI does not know —
  *   surfaced as a warning; the rest of the manifest still contributes
  * @property {boolean} [__autolinked] loaded because the project declares the
  *   package as a dependency and it ships a manifest, with no astryx.config
  *   entry naming it — see foundation/integrations/autolink.mjs
+ * @property {boolean} [__computer] loaded because it is installed beside the
+ *   running CLI and the folder is outside a project (spec AST-081 FR12) — see
+ *   foundation/integrations/computer-integrations.mjs
  * @property {boolean} [__local] loaded from the package containing the current
  *   working directory, so an author sees the exact bytes they are editing
  * @property {string} [__dependencyField] for an autolinked integration, the
@@ -80,6 +97,9 @@ import {resolveProviders} from './provider-resolution.mjs';
  *   validated package-owned handler from the `gapReport` NAMED export.
  * @property {string} [__gapReportError] isolated named-handler validation error.
  *   Named exports are not manifest keys — see {@link loadManifest}.
+ * @property {import('../../authoring/discover/type').DiscoverSource} [__discover]
+ *   validated catalog source from the `discover` NAMED export.
+ * @property {string} [__discoverError] isolated discover-source validation error.
  */
 
 /** Conventional manifest basenames, in load-precedence order. */
@@ -168,6 +188,23 @@ function parseGapReportHandlerExport(value, label) {
 }
 
 /**
+ * Parse the optional named discover source the same way: a malformed one is
+ * isolated from every other contribution and reported by `astryx discover`.
+ *
+ * @param {unknown} value
+ * @param {string} label
+ * @returns {{source?: import('../../authoring/discover/type').DiscoverSource, error?: string}}
+ */
+function parseDiscoverSourceExport(value, label) {
+  if (value === undefined) return {};
+  try {
+    return {source: parseDiscoverSource(value, `${label} named export "discover"`)};
+  } catch (error) {
+    return {error: error instanceof Error ? error.message : String(error)};
+  }
+}
+
+/**
  * Load and validate a manifest module's default export, while isolating the
  * optional `agentDocs` contribution from the manifest's other fields.
  *
@@ -183,7 +220,7 @@ function parseGapReportHandlerExport(value, label) {
  * @param {string} file absolute manifest path
  * @param {string} [label] used in error messages
  * @param {{fresh?: boolean}} [options]
- * @returns {Promise<{manifest: import('../../authoring/integration/type').AstryxIntegration, unknownKeys: string[], debug?: import('../../authoring/debug/type').DebugEventHandler, gapReport?: import('../../authoring/gap-report/type').GapReportHandler, gapReportError?: string, agentDocsError?: string}>}
+ * @returns {Promise<{manifest: import('../../authoring/integration/type').AstryxIntegration, unknownKeys: string[], declaredKeys: string[], debug?: import('../../authoring/debug/type').DebugEventHandler, gapReport?: import('../../authoring/gap-report/type').GapReportHandler, gapReportError?: string, discover?: import('../../authoring/discover/type').DiscoverSource, discoverError?: string, agentDocsError?: string, cliCommandError?: string}>}
  */
 export async function loadManifest(
   file,
@@ -192,8 +229,10 @@ export async function loadManifest(
 ) {
   const mod = await importUserModule(file, {fresh});
   const raw = mod?.default;
+  if (raw === undefined) throw new Error(noDefaultExportMessage(file, label, mod));
   const baseManifest = parseIntegrationBase(raw, label);
   const gapReport = parseGapReportHandlerExport(mod?.gapReport, label);
+  const discover = parseDiscoverSourceExport(mod?.discover, label);
   const hasAgentDocs =
     raw != null &&
     typeof raw === 'object' &&
@@ -217,9 +256,34 @@ export async function loadManifest(
     }
   }
 
+  /** @type {string | undefined} */
+  let cliCommand;
+  /** @type {string | undefined} */
+  let cliCommandError;
+  const rawCliCommand =
+    raw != null && typeof raw === 'object' && !Array.isArray(raw)
+      ? /** @type {{cliCommand?: unknown}} */ (raw).cliCommand
+      : undefined;
+  if (rawCliCommand !== undefined) {
+    try {
+      cliCommand = parseCliCommandField(
+        rawCliCommand,
+        `${label} field "cliCommand"`,
+      );
+    } catch (err) {
+      cliCommandError = err instanceof Error ? err.message : String(err);
+    }
+  }
+
   return {
-    manifest: agentDocs == null ? baseManifest : {...baseManifest, agentDocs},
+    manifest: {
+      ...baseManifest,
+      ...(agentDocs == null ? {} : {agentDocs}),
+      ...(cliCommand == null ? {} : {cliCommand}),
+    },
     unknownKeys: unknownIntegrationKeys(raw),
+    declaredKeys:
+      raw != null && typeof raw === 'object' ? Object.keys(raw) : [],
     debug:
       typeof mod?.debug === 'function'
         ? /** @type {import('../../authoring/debug/type').DebugEventHandler} */ (
@@ -228,8 +292,35 @@ export async function loadManifest(
         : undefined,
     gapReport: gapReport.handler,
     gapReportError: gapReport.error,
+    discover: discover.source,
+    discoverError: discover.error,
     agentDocsError,
+    cliCommandError,
   };
+}
+
+/**
+ * Why a manifest has no default export, said plainly instead of as a schema
+ * failure on `undefined`: the file is empty, or it exports other names.
+ * @param {string} file
+ * @param {string} label
+ * @param {Record<string, unknown> | undefined} mod
+ */
+function noDefaultExportMessage(file, label, mod) {
+  const fix = `Fix: export the manifest object as the default export: \`export default {components: './components'}\`, naming the roots the package has.`;
+  let text = '';
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch {
+    // Unreadable now: say only what is missing.
+  }
+  const names = Object.keys(mod ?? {}).filter(name => name !== 'default');
+  if (text.trim() === '') return `${label} is empty. ${fix}`;
+  const found =
+    names.length > 0
+      ? ` (it exports ${names.map(name => `\`${name}\``).join(', ')})`
+      : '';
+  return `${label} has no default export${found}. ${fix}`;
 }
 
 /**
@@ -278,6 +369,25 @@ export function resolvePackageDir(packageName, cwd = process.cwd()) {
     );
   }
   return dir;
+}
+
+/**
+ * Where an integration named in astryx.config is installed: the nearest
+ * `node_modules/<name>` at or above `cwd`, found the way an autolinked
+ * dependency is, so a package a workspace hoists to its root loads in every
+ * member. When it is installed nowhere, `cwd`'s own `node_modules/<name>`,
+ * which the caller reports as not installed.
+ * @param {string} packageName
+ * @param {string} [cwd]
+ * @returns {string}
+ */
+export function resolveInstalledIntegrationDir(
+  packageName,
+  cwd = process.cwd(),
+) {
+  // Validates the name first: it throws on a spec with path segments.
+  const ownDir = resolvePackageDir(packageName, cwd);
+  return findNodeModulesPackage(cwd, packageName)?.packageDir ?? ownDir;
 }
 
 /**
@@ -339,22 +449,34 @@ export async function loadLocalIntegration(packageDir, {fresh = false} = {}) {
   let manifest;
   /** @type {string[]} */
   let unknownKeys;
+  /** @type {string[]} */
+  let declaredKeys;
   /** @type {import('../../authoring/debug/type').DebugEventHandler | undefined} */
   let debugHandler;
   /** @type {import('../../authoring/gap-report/type').GapReportHandler | undefined} */
   let gapReportHandler;
   /** @type {string | undefined} */
   let gapReportError;
+  /** @type {import('../../authoring/discover/type').DiscoverSource | undefined} */
+  let discoverSource;
+  /** @type {string | undefined} */
+  let discoverError;
   /** @type {string | undefined} */
   let agentDocsError;
+  /** @type {string | undefined} */
+  let cliCommandError;
   try {
     ({
       manifest,
       unknownKeys,
+      declaredKeys,
       debug: debugHandler,
       gapReport: gapReportHandler,
       gapReportError,
+      discover: discoverSource,
+      discoverError,
       agentDocsError,
+      cliCommandError,
     } = await loadManifest(manifestFile, `Integration ${spec}`, {fresh}));
   } catch (err) {
     return {
@@ -390,13 +512,19 @@ export async function loadLocalIntegration(packageDir, {fresh = false} = {}) {
     codemods: resolveRoot(manifest.codemods),
     docs: resolveRoot(manifest.docs),
     themes: resolveRoot(manifest.themes),
+    iconSets: resolveRoot(manifest.experimental?.iconSets),
     issuesUrl: manifest.issuesUrl,
     agentDocs: manifest.agentDocs,
+    cliCommand: manifest.cliCommand,
+    __cliCommandError: cliCommandError,
     __agentDocsError: agentDocsError,
     __unknownKeys: unknownKeys,
+    __declaredKeys: declaredKeys,
     __debug: debugHandler,
     __gapReport: gapReportHandler,
     __gapReportError: gapReportError,
+    __discover: discoverSource,
+    __discoverError: discoverError,
     __spec: spec,
     __packageDir: packageDir,
     __packageExports: pkg.exports ?? null,
@@ -426,7 +554,7 @@ export async function loadIntegrations(
     if (!spec || seenSpecs.has(spec)) continue;
     seenSpecs.add(spec);
 
-    const packageDir = resolvePackageDir(spec, cwd);
+    const packageDir = resolveInstalledIntegrationDir(spec, cwd);
     const pkgPath = path.join(packageDir, 'package.json');
     let pkg;
     try {
@@ -442,22 +570,34 @@ export async function loadIntegrations(
     let manifest;
     /** @type {string[]} */
     let unknownKeys;
+    /** @type {string[]} */
+    let declaredKeys;
     /** @type {import('../../authoring/debug/type').DebugEventHandler | undefined} */
     let debugHandler;
     /** @type {import('../../authoring/gap-report/type').GapReportHandler | undefined} */
     let gapReportHandler;
     /** @type {string | undefined} */
     let gapReportError;
+    /** @type {import('../../authoring/discover/type').DiscoverSource | undefined} */
+    let discoverSource;
+    /** @type {string | undefined} */
+    let discoverError;
     /** @type {string | undefined} */
     let agentDocsError;
+    /** @type {string | undefined} */
+    let cliCommandError;
     try {
       ({
         manifest,
         unknownKeys,
+        declaredKeys,
         debug: debugHandler,
         gapReport: gapReportHandler,
         gapReportError,
+        discover: discoverSource,
+        discoverError,
         agentDocsError,
+        cliCommandError,
       } = await loadManifest(manifestFile, `Integration ${spec}`, {fresh}));
     } catch (err) {
       // A manifest that throws on import or fails schema validation must NOT take
@@ -500,13 +640,19 @@ export async function loadIntegrations(
       codemods: resolveRoot(manifest.codemods),
       docs: resolveRoot(manifest.docs),
       themes: resolveRoot(manifest.themes),
+      iconSets: resolveRoot(manifest.experimental?.iconSets),
       issuesUrl: manifest.issuesUrl,
       agentDocs: manifest.agentDocs,
+      cliCommand: manifest.cliCommand,
+      __cliCommandError: cliCommandError,
       __agentDocsError: agentDocsError,
       __unknownKeys: unknownKeys,
+      __declaredKeys: declaredKeys,
       __debug: debugHandler,
       __gapReport: gapReportHandler,
       __gapReportError: gapReportError,
+      __discover: discoverSource,
+      __discoverError: discoverError,
       __spec: spec,
       __packageDir: packageDir,
       __packageExports: pkg.exports ?? null,

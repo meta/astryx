@@ -1153,7 +1153,7 @@ function FilterRow({
         value={value}
         onChange={onChange}
         isWheelEnabled={false}
-        xstyle={styles.filterValue}
+        controlXstyle={styles.filterValue}
       />
     </InspectorRow>
   );
@@ -2329,7 +2329,7 @@ export default function CanvasEditor() {
                                           // enough for the longest option
                                           // ("100%") to avoid truncation.
                                           width={92}
-                                          xstyle={[
+                                          controlXstyle={[
                                             styles.toolBarControl,
                                             styles.toolBarTrailing,
                                           ]}

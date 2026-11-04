@@ -3,6 +3,9 @@
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {TimeInput} from '@astryxdesign/core/TimeInput';
+import {FormLayout} from '@astryxdesign/core/FormLayout';
+import {Text} from '@astryxdesign/core/Text';
+import {InputGroup, InputGroupText} from '@astryxdesign/core/InputGroup';
 import type {ISOTimeString} from '@astryxdesign/core';
 
 const meta: Meta<typeof TimeInput> = {
@@ -44,7 +47,7 @@ const meta: Meta<typeof TimeInput> = {
     disabledMessage: {
       control: 'text',
       description:
-        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the field focusable via aria-disabled (activation stays blocked). Use this instead of wrapping a disabled TimeInput in Tooltip.',
+        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and describes the input (activation stays blocked). Use this instead of wrapping a disabled TimeInput in Tooltip.',
     },
     size: {
       control: 'radio',
@@ -64,11 +67,24 @@ const meta: Meta<typeof TimeInput> = {
       control: 'boolean',
       description: 'Whether to show a clear button',
     },
+    presentation: {
+      control: 'select',
+      options: [
+        'text-input',
+        'popover',
+        'bottom-sheet',
+        'native',
+        'adaptive-bottom-sheet',
+        'adaptive-native',
+      ],
+      description:
+        'Which surface selects the time (spec:AST-043); nativePicker is deprecated',
+    },
     nativePicker: {
       control: 'radio',
       options: ['touch', 'always', 'never'],
       description:
-        'Native browser/OS time picker on touch by default, native wherever compatible, or Astryx typed field everywhere',
+        "Deprecated — use presentation ('touch' → 'adaptive-native', 'always' → 'native', 'never' → 'text-input'); presentation wins when both are set",
     },
     increment: {
       control: 'number',
@@ -111,25 +127,32 @@ export const NativePickerModes: Story = {
     return (
       <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
         <TimeInput
-          label="nativePicker='touch' (default)"
+          label="presentation='adaptive-native' (default)"
           description="Native picker on a coarse primary pointer; Astryx typed field on a fine pointer"
           value={value}
           onChange={setValue}
-          nativePicker="touch"
+          presentation="adaptive-native"
         />
         <TimeInput
-          label="nativePicker='always'"
+          label="presentation='native'"
           description="Native picker wherever input type=time is compatible"
           value={value}
           onChange={setValue}
-          nativePicker="always"
+          presentation="native"
         />
         <TimeInput
-          label="nativePicker='never'"
+          label="presentation='adaptive-bottom-sheet'"
+          description="Astryx bottom sheet on a coarse primary pointer; Astryx typed field on a fine pointer"
+          value={value}
+          onChange={setValue}
+          presentation="adaptive-bottom-sheet"
+        />
+        <TimeInput
+          label="presentation='text-input'"
           description="Astryx typed field on every pointer type"
           value={value}
           onChange={setValue}
-          nativePicker="never"
+          presentation="text-input"
         />
       </div>
     );
@@ -201,6 +224,27 @@ export const WithMinMax: Story = {
   },
 };
 
+/**
+ * The bottom-sheet wheels with bounds: hours outside 9 AM - 5 PM stay on the
+ * wheel, greyed out, and a wheel that stops on one goes on to the nearest
+ * hour inside the bounds.
+ */
+export const BottomSheetWithMinMax: Story = {
+  render: args => {
+    const [value, setValue] = useState<ISOTimeString | undefined>(
+      '10:00' as ISOTimeString,
+    );
+    return <TimeInput {...args} value={value} onChange={setValue} />;
+  },
+  args: {
+    label: 'Appointment time',
+    presentation: 'bottom-sheet',
+    min: '09:00' as ISOTimeString,
+    max: '17:00' as ISOTimeString,
+    description: 'Business hours: 9 AM - 5 PM',
+  },
+};
+
 export const WithIncrement: Story = {
   render: args => {
     const [value, setValue] = useState<ISOTimeString | undefined>(
@@ -254,9 +298,9 @@ export const Disabled: Story = {
 
 // Disabled with an explanation tooltip. Hover or keyboard-focus the field to
 // see why it's disabled — the reason is announced to assistive tech via
-// aria-describedby, and the field stays focusable (activation is still
-// blocked). Use disabledMessage instead of wrapping a disabled TimeInput in Tooltip:
-// disabled controls swallow the pointer events a Tooltip wrapper needs.
+// aria-describedby (activation is still blocked). Use disabledMessage instead
+// of wrapping a disabled TimeInput in Tooltip, so the reason is tied to the
+// field.
 export const DisabledWithMessage: Story = {
   render: args => {
     const [value, setValue] = useState<ISOTimeString | undefined>(undefined);
@@ -434,4 +478,117 @@ export const StatusVariantComparison: Story = {
       </div>
     );
   },
+};
+
+const CONTROL_STYLE = {outline: '2px dashed #c800ff', outlineOffset: 3};
+const CONTAINER_STYLE = {
+  backgroundColor: 'rgba(0, 150, 255, 0.16)',
+  padding: 8,
+  borderRadius: 8,
+};
+
+/**
+ * Where each styling part lands (family:input-fields FR10). The dashed outline
+ * is `controlStyle` on the visual control box. The blue tint is
+ * `containerStyle` on the Field box; in a `horizontal-labels` FormLayout and
+ * inside InputGroup no Field box renders, so there it has no effect (and warns
+ * in development).
+ */
+export const StylingParts: Story = {
+  render: () => (
+    <div style={{display: 'grid', gap: 24, maxWidth: 360}}>
+      <div style={{display: 'grid', gap: 12}}>
+        <Text type="label">controlStyle</Text>
+        <div
+          data-parts-row="control-text-input"
+          style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">presentation="text-input"</Text>
+          <TimeInput
+            label="Start time"
+            presentation="text-input"
+            controlStyle={CONTROL_STYLE}
+          />
+        </div>
+        <div data-parts-row="control-native" style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">presentation="native"</Text>
+          <TimeInput
+            label="Start time"
+            presentation="native"
+            controlStyle={CONTROL_STYLE}
+          />
+        </div>
+        <div
+          data-parts-row="control-bottom-sheet"
+          style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">presentation="bottom-sheet"</Text>
+          <TimeInput
+            label="Start time"
+            presentation="bottom-sheet"
+            controlStyle={CONTROL_STYLE}
+          />
+        </div>
+        <div
+          data-parts-row="control-form-layout"
+          style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">horizontal-labels FormLayout</Text>
+          <FormLayout direction="horizontal-labels">
+            <TimeInput label="Start time" controlStyle={CONTROL_STYLE} />
+          </FormLayout>
+        </div>
+        <div
+          data-parts-row="control-input-group"
+          style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">InputGroup</Text>
+          <InputGroup label="Start time group">
+            <InputGroupText>At</InputGroupText>
+            <TimeInput
+              label="Start time"
+              isLabelHidden
+              controlStyle={CONTROL_STYLE}
+            />
+          </InputGroup>
+        </div>
+      </div>
+      <div style={{display: 'grid', gap: 12}}>
+        <Text type="label">containerStyle and controlStyle</Text>
+        <div
+          data-parts-row="container-text-input"
+          style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">presentation="text-input"</Text>
+          <TimeInput
+            label="Start time"
+            presentation="text-input"
+            containerStyle={CONTAINER_STYLE}
+            controlStyle={CONTROL_STYLE}
+          />
+        </div>
+        <div
+          data-parts-row="container-form-layout"
+          style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">horizontal-labels FormLayout</Text>
+          <FormLayout direction="horizontal-labels">
+            <TimeInput
+              label="Start time"
+              containerStyle={CONTAINER_STYLE}
+              controlStyle={CONTROL_STYLE}
+            />
+          </FormLayout>
+        </div>
+        <div
+          data-parts-row="container-input-group"
+          style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">InputGroup</Text>
+          <InputGroup label="Start time group">
+            <InputGroupText>At</InputGroupText>
+            <TimeInput
+              label="Start time"
+              isLabelHidden
+              containerStyle={CONTAINER_STYLE}
+              controlStyle={CONTROL_STYLE}
+            />
+          </InputGroup>
+        </div>
+      </div>
+    </div>
+  ),
 };

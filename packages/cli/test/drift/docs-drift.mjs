@@ -5,9 +5,11 @@
  * the hand-authored docs honest against their sources of truth:
  *   - every `*.doc.mjs` under a production doc root parses via `parseDoc`;
  *   - each CommandDoc's `fn` resolves to a FunctionDoc, its arg/option `param`s
- *     exist on that function, and its `name` is a real manifest command;
+ *     exist on that function, and its `name` is a real manifest command (or a
+ *     hidden one, which the manifest leaves out);
  *   - the error-codes EnumDoc == ERROR_CODES exactly;
- *   - the response-types EnumDoc == the manifest's response discriminants.
+ *   - the response-types EnumDoc == the manifest's response discriminants plus
+ *     the root types (help, version) no single command owns.
  *
  * @position packages/cli/test/drift — colocated-docs drift harness
  */
@@ -18,6 +20,7 @@ import * as path from 'node:path';
 import {fileURLToPath, pathToFileURL} from 'node:url';
 import {parseDoc} from '../../authoring/index.mjs';
 import {allErrorCodes} from '../../foundation/response/error-codes.mjs';
+import {ROOT_RESPONSE_TYPES} from '../../clients/cli/lib/manifest.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CLI_ROOT = path.resolve(HERE, '../..');
@@ -108,9 +111,17 @@ export async function runDrift() {
     (c.subcommands || []).forEach(walkCmd);
   };
   manifest.commands.forEach(walkCmd);
+  // Hidden commands (a package-script hook) have a CommandDoc but no manifest
+  // entry, by design.
+  const {program} = await import('../../clients/cli/index.mjs');
+  const hiddenNames = new Set(
+    program.commands
+      .filter(c => /** @type {any} */ (c)._hidden)
+      .map(c => c.name()),
+  );
 
   for (const {file, doc} of of('command')) {
-    if (doc.name && !manifestNames.has(doc.name)) {
+    if (doc.name && !manifestNames.has(doc.name) && !hiddenNames.has(doc.name)) {
       errors.push(`${file}: command "${doc.name}" is not in the manifest`);
     }
     if (doc.fn) {
@@ -177,13 +188,14 @@ export async function runDrift() {
         errors.push(`${file}: subcommand "${s}" is in the doc but not the CLI`);
   }
 
-  // Enum drift: error-codes == ERROR_CODES; response-types == manifest set.
+  // Enum drift: error-codes == ERROR_CODES; response-types == the manifest's
+  // per-command set plus the root types (help, version) no command owns.
   checkEnumSet(errors, docs, 'error-codes', new Set(allErrorCodes()));
   checkEnumSet(
     errors,
     docs,
     'response-types',
-    new Set(Object.values(manifest.responseTypes).flat()),
+    new Set([...Object.values(manifest.responseTypes).flat(), ...ROOT_RESPONSE_TYPES]),
   );
 
   return {count: docs.length, errors};

@@ -16,6 +16,7 @@ import {fileURLToPath} from 'node:url';
 import {
   CORE_PACKAGE,
   discoverComponents,
+  familyMember,
   findComponentReadme,
   findComponentSource,
   resolveImportPath,
@@ -121,6 +122,91 @@ describe('discoverComponents (real core)', () => {
     expect(discoverComponents(core)).toEqual({});
   });
 
+  it('lists HStack, VStack and Heading, whose docs live in their family folders', () => {
+    // Each has its own folder and import path; Stack's doc documents HStack and
+    // VStack as members, and Heading's own doc sits in the Text folder.
+    const comps = discoverComponents(CORE);
+    expect(comps.Layout).toEqual(expect.arrayContaining(['HStack', 'Stack', 'VStack']));
+    expect(comps.Heading).toEqual(['Heading']);
+    expect(findComponentReadme(CORE, 'VStack')).toMatch(/[\\/]Stack[\\/]Stack\.doc\.mjs$/);
+    expect(findComponentReadme(CORE, 'HStack')).toMatch(/[\\/]Stack[\\/]Stack\.doc\.mjs$/);
+    expect(findComponentReadme(CORE, 'Heading')).toMatch(/[\\/]Text[\\/]Heading\.doc\.mjs$/);
+    expect(resolveImportPath(CORE, 'VStack')).toBe('@astryxdesign/core/VStack');
+    expect(resolveImportPath(CORE, 'Heading')).toBe('@astryxdesign/core/Heading');
+  }, SLOW);
+
+  it('lists a component folder with no doc when its family doc lists it as a member', () => {
+    const core = mkTmp('as-cd-family-');
+    const write = (rel, text) => {
+      fs.mkdirSync(path.dirname(path.join(core, 'src', rel)), {recursive: true});
+      fs.writeFileSync(path.join(core, 'src', rel), text);
+    };
+    write('Stack/Stack.tsx', 'x');
+    write('VStack/VStack.tsx', "import {Stack} from '../Stack/Stack';\n");
+    write('Prose/Prose.tsx', "import {Stack} from '../Stack/Stack';\n");
+    // Listed by Stack's doc, but builds on nothing in Stack's folder.
+    write('Orphan/Orphan.tsx', "import {x} from '../utils';\n");
+    write(
+      'Stack/Stack.doc.mjs',
+      'export const docs = {\n' +
+        "  name: 'Stack',\n" +
+        "  group: 'Layout',\n" +
+        "  relatedComponents: ['Prose'],\n" +
+        "  usage: {description: 'Pair with Prose.', examples: [{code: \"<Prose label='Prose' />\"}]},\n" +
+        "  components: [{name: 'Stack'}, {name: 'VStack', description: 'Vertical.'}, {name: 'Orphan'}],\n" +
+        '};\n',
+    );
+    expect(discoverComponents(core)).toEqual({Layout: ['Stack', 'VStack']});
+    expect(findComponentReadme(core, 'VStack')).toBe(
+      path.join(core, 'src', 'Stack', 'Stack.doc.mjs'),
+    );
+    // Named only in relatedComponents, prose, and an example: not documented.
+    expect(findComponentReadme(core, 'Prose')).toBeNull();
+    // A family doc is read only from the folders the component imports.
+    expect(findComponentReadme(core, 'Orphan')).toBeNull();
+  });
+
+  it('lists a component folder with no doc when its own doc sits in a family folder', () => {
+    const core = mkTmp('as-cd-sibling-');
+    for (const dir of ['Text', 'Heading']) {
+      fs.mkdirSync(path.join(core, 'src', dir), {recursive: true});
+    }
+    fs.writeFileSync(path.join(core, 'src', 'Text', 'Text.tsx'), 'x');
+    fs.writeFileSync(path.join(core, 'src', 'Heading', 'Heading.tsx'), 'x');
+    fs.writeFileSync(
+      path.join(core, 'src', 'Text', 'Text.doc.mjs'),
+      "export const docs = {name: 'Text', components: [{name: 'Heading'}]};\n",
+    );
+    fs.writeFileSync(
+      path.join(core, 'src', 'Text', 'Heading.doc.mjs'),
+      "export const docs = {name: 'Heading'};\n",
+    );
+    expect(discoverComponents(core)).toEqual({Heading: ['Heading'], Text: ['Text']});
+    expect(findComponentReadme(core, 'Heading')).toBe(
+      path.join(core, 'src', 'Text', 'Heading.doc.mjs'),
+    );
+  });
+
+  it('keeps a member its family hides, and a context folder, unlisted', () => {
+    const core = mkTmp('as-cd-family-hidden-');
+    for (const dir of ['Stack', 'VStack', 'SizeContext']) {
+      fs.mkdirSync(path.join(core, 'src', dir), {recursive: true});
+      fs.writeFileSync(
+        path.join(core, 'src', dir, `${dir}.tsx`),
+        "import {Stack} from '../Stack/Stack';\n",
+      );
+    }
+    fs.writeFileSync(
+      path.join(core, 'src', 'Stack', 'Stack.doc.mjs'),
+      'export const docs = {\n' +
+        "  name: 'Stack',\n" +
+        "  hiddenComponents: ['VStack'],\n" +
+        "  components: [{name: 'Stack'}, {name: 'VStack'}, {name: 'SizeContext'}],\n" +
+        '};\n',
+    );
+    expect(discoverComponents(core)).toEqual({Stack: ['Stack']});
+  });
+
   it('returns {} for an empty src/ dir', () => {
     const core = mkTmp('as-cd-emptysrc-');
     fs.mkdirSync(path.join(core, 'src'));
@@ -130,6 +216,99 @@ describe('discoverComponents (real core)', () => {
   it('throws when src/ is missing (no existsSync guard on the top readdir)', () => {
     const core = mkTmp('as-cd-nosrc-');
     expect(() => discoverComponents(core)).toThrow(/ENOENT/);
+  });
+});
+
+describe('familyMember', () => {
+  it("returns a family doc's entry for a member, and null for a component's own doc", () => {
+    const stack = {name: 'Stack', components: [{name: 'Stack'}, {name: 'VStack', description: 'v'}]};
+    expect(familyMember(stack, 'VStack')).toEqual({name: 'VStack', description: 'v'});
+    expect(familyMember(stack, 'Stack')).toBeNull();
+    expect(familyMember({name: 'Button'}, 'Button')).toBeNull();
+    expect(familyMember(stack, 'HStack')).toBeNull();
+  });
+});
+
+describe('a component name in another case is that component (spec:AST-083 FR7)', () => {
+  /**
+   * @param {string} core
+   * @returns {(rel: string, text: string) => void}
+   */
+  const writer = core => (rel, text) => {
+    const file = path.join(core, 'src', rel);
+    fs.mkdirSync(path.dirname(file), {recursive: true});
+    fs.writeFileSync(file, text);
+  };
+
+  it('never resolves through a module that only shares the spelling', () => {
+    const core = mkTmp('as-cd-case-');
+    const write = writer(core);
+    write('Button/Button.tsx', 'export function Button() {}\n');
+    write('Button/Button.doc.mjs', "export const docs = {name: 'Button'};\n");
+    write('Tokenizer/Tokenizer.tsx', 'export function Tokenizer() {}\n');
+    write(
+      'Tokenizer/Tokenizer.doc.mjs',
+      "export const docs = {name: 'Tokenizer'};\n",
+    );
+    // A motion table below a hook's doc.
+    write('motion/useAnimator.ts', 'export function useAnimator() {}\n');
+    write(
+      'motion/useAnimator.doc.mjs',
+      "export const docs = {name: 'useAnimator'};\n",
+    );
+    write('motion/uikit/button.ts', 'export const button = {};\n');
+    // A helper module in another component's folder.
+    write('CodeBlock/CodeBlock.tsx', 'export function CodeBlock() {}\n');
+    write(
+      'CodeBlock/CodeBlock.doc.mjs',
+      "export const docs = {name: 'CodeBlock'};\n",
+    );
+    write('CodeBlock/tokenizer.ts', 'export function tokenize() {}\n');
+    write('CodeBlock/grammar.ts', 'export const grammar = {};\n');
+    for (const name of ['button', 'tokenizer']) {
+      expect(findComponentReadme(core, name), name).toBeNull();
+      expect(findComponentSource(core, name), name).toBeNull();
+    }
+    // A module's own name keeps resolving through the nearest doc.
+    expect(findComponentReadme(core, 'grammar')).toBe(
+      path.join(core, 'src', 'CodeBlock', 'CodeBlock.doc.mjs'),
+    );
+    expect(findComponentSource(core, 'Button')).toBe(
+      path.join(core, 'src', 'Button', 'Button.tsx'),
+    );
+  });
+
+  it('protects a sub-component too: a module spelled like Tab in another case never resolves for it', () => {
+    const core = mkTmp('as-cd-sub-case-');
+    const write = writer(core);
+    write('TabList/TabList.tsx', 'export function TabList() {}\n');
+    write('TabList/Tab.tsx', 'export function Tab() {}\n');
+    write(
+      'TabList/TabList.doc.mjs',
+      "export const docs = {name: 'TabList'};\n",
+    );
+    write('motion/useAnimator.ts', 'export function useAnimator() {}\n');
+    write(
+      'motion/useAnimator.doc.mjs',
+      "export const docs = {name: 'useAnimator'};\n",
+    );
+    write('motion/uikit/tab.ts', 'export const tab = {};\n');
+    expect(findComponentSource(core, 'tab')).toBeNull();
+    expect(findComponentReadme(core, 'tab')).toBeNull();
+    expect(findComponentSource(core, 'Tab')).toBe(
+      path.join(core, 'src', 'TabList', 'Tab.tsx'),
+    );
+  });
+
+  it('takes a folder in another case for a component only when a file there exports its name', () => {
+    const core = mkTmp('as-cd-folder-case-');
+    const write = writer(core);
+    write('animator/animator.ts', 'export function createAnimator() {}\n');
+    write('hooks/Animator.ts', 'export function Animator() {}\n');
+    write('hooks/hooks.doc.mjs', "export const docs = {name: 'hooks'};\n");
+    expect(findComponentSource(core, 'Animator')).toBe(
+      path.join(core, 'src', 'hooks', 'Animator.ts'),
+    );
   });
 });
 
@@ -237,4 +416,52 @@ describe('integration component discovery (ownership-aware)', () => {
     expect(button.sourcePath).toMatch(/\.tsx$/);
     expect(recs.find(r => r.name === 'MetaAppShell').package).toBe('@acme/astryx-meta');
   }, SLOW);
+});
+
+describe('findComponentSource reads names from the folders it lists', () => {
+  /** A Core folder with these files; a value of `{link}` is a symbolic link. */
+  function core(files) {
+    const dir = mkTmp('astryx-core-source-');
+    for (const [rel, contents] of Object.entries(files)) {
+      const file = path.join(dir, 'src', rel);
+      fs.mkdirSync(path.dirname(file), {recursive: true});
+      if (typeof contents === 'object') {
+        fs.symlinkSync(path.join(dir, 'src', contents.link), file);
+      } else {
+        fs.writeFileSync(file, contents);
+      }
+    }
+    return dir;
+  }
+
+  it('finds the prefixed source before the bare one, in a nested folder', () => {
+    const dir = core({
+      'Layout/Card/Card.tsx': '',
+      'Layout/Card/XDSCard.tsx': '',
+    });
+    expect(findComponentSource(dir, 'Card')).toBe(
+      path.join(dir, 'src', 'Layout', 'Card', 'XDSCard.tsx'),
+    );
+  });
+
+  it('passes over a case variant and a link to a missing file', () => {
+    const dir = core({
+      'Card/card.tsx': '',
+      'Card/XDSCard.tsx': {link: 'Card/Gone.tsx'},
+      'Card/inner/Card.tsx': '',
+    });
+    expect(findComponentSource(dir, 'Card')).toBe(
+      path.join(dir, 'src', 'Card', 'inner', 'Card.tsx'),
+    );
+  });
+
+  it('follows a link to a file that is there', () => {
+    const dir = core({
+      'shared/Card.tsx': '',
+      'Card/Card.tsx': {link: 'shared/Card.tsx'},
+    });
+    expect(findComponentSource(dir, 'Card')).toBe(
+      path.join(dir, 'src', 'Card', 'Card.tsx'),
+    );
+  });
 });

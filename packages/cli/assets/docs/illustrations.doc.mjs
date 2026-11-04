@@ -7,6 +7,7 @@ export const docs = {
   category: 'foundations',
   description:
     'Illustration guidelines for empty states, onboarding flows, and feature highlights.',
+  keywords: ['empty state'],
 
   sections: [
     {
@@ -59,26 +60,17 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Place illustrations inside Center with supporting text stacked below. Typical illustration sizes range from 120px for inline empty states to 240px for full-page onboarding screens. Always pair the illustration with a heading and optional body text to explain what the user should do next.',
+          text: 'For an empty state, pass the illustration to the `icon` slot of `EmptyState`, which centers it above the title and description. Typical illustration sizes range from 120px for inline empty states to 240px for full-page onboarding screens. Always pair the illustration with a title and a description that says what to do next.',
         },
         {
           type: 'code',
           lang: 'tsx',
           label: 'Empty state with illustration',
-          code: `<Center>
-  <Stack direction="vertical" gap={3} hAlign="center">
-    <img
-      src="/illustrations/empty-search.svg"
-      alt="No results"
-      style={{ width: 200, height: 200 }}
-    />
-    <Heading level={3}>No results found</Heading>
-    <Text type="body" color="secondary">
-      Try adjusting your search or filters to find what you\u2019re
-      looking for.
-    </Text>
-  </Stack>
-</Center>`,
+          code: `<EmptyState
+  icon={<img src="/illustrations/empty-search.svg" alt="" width={200} height={200} />}
+  title="No results found"
+  description="Try adjusting your search or filters."
+/>`,
         },
       ],
     },

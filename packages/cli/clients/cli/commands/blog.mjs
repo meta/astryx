@@ -14,7 +14,7 @@
  *   astryx blog --json             Structured list/detail envelope
  */
 
-import {getRunPrefix} from '../../../foundation/env/package-manager.mjs';
+import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 import {jsonOut} from '../../../foundation/response/json.mjs';
 import {emit, section, text, record, records, code} from '../formatters/index.mjs';
 import {cliError} from '../lib/cli-error.mjs';
@@ -43,7 +43,7 @@ export function registerBlog(program) {
   defineCommand(program, blogCommand, {
     fn: blogFn,
     action: async (/** @type {string | undefined} */ slug) => {
-      const run = getRunPrefix();
+      const run = getCliInvocation();
       /** @type {import('../../../api/blog/blog.type.mjs').BlogListResponse | import('../../../api/blog/blog.type.mjs').BlogDetailResponse} */
       let result;
       try {
@@ -84,7 +84,7 @@ export function registerBlog(program) {
           section('Astryx blog'),
           record({feedUrl}),
           records(posts, {fields: POST_FIELDS}),
-          text(`Read one: ${run} astryx blog <slug>`),
+          text(`Read one: ${run} blog <slug>`),
         );
       } else {
         // blog.detail — the post's fields and the feed URL, then the body

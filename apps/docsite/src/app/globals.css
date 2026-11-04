@@ -34,13 +34,14 @@
    override real Astryx semantic tokens). Each is a light-dark() pair so dark
    mode is handled by the value itself, no consumer logic required. */
 :root {
-  /* AppShell measures its header post-hydration and sets
-     --appshell-header-height on the shell element. Until that runs, every
-     consumer (the hero's fixed `top`, the nav backdrop, the docs content
-     padding) falls back to mismatched literals, so the top spacing visibly
-     pops in on load (#2713). Seed the auto-mode header height (--spacing-12 =
-     48px) here so the very first paint already reserves the right offset; the
-     AppShell then overwrites it with the measured value (identical, no jump). */
+  /* SharedTopNav measures the AppShell header (banner included) after
+     hydration and sets --appshell-header-height on the root element. Until
+     that runs, every consumer (the hero's fixed `top`, the nav backdrop, the
+     docs table of contents) falls back to mismatched literals, so the top
+     spacing visibly pops in on load (#2713). Seed the auto-mode header height
+     (--spacing-12 = 48px) here so the very first paint already reserves the
+     right offset; the measured value then overwrites it (identical, no jump,
+     unless a banner is showing). */
   --appshell-header-height: var(--spacing-12, 48px);
 
   /* Feature card backdrop. Soft pastel blue in light mode, deep navy in
@@ -71,11 +72,15 @@
    element so the first paint already has the offset in place.
 
    The --appshell-header-height variable is seeded at :root (above) and then
-   re-set by the AppShell once it measures the rendered header. The literal
-   fallbacks below only apply if the :root seed is ever missing. */
+   re-set by SharedTopNav once it measures the rendered header. The literal
+   fallback below only applies if the :root seed is ever missing.
+
+   The padding is the nav's own height (--spacing-12 = 48px) rather than the
+   measured header height, so the canary banner, which also lives in the
+   header, does not push every page's content down by its own height. */
 body:not(:has([data-playground-page])) #astryx-app-shell-main {
   scroll-padding-top: var(--appshell-header-height, 64px);
-  padding-top: var(--appshell-header-height, 64px);
+  padding-top: var(--spacing-12, 48px);
 }
 
 /* The home page is excluded from the padding rule above — its sticky hero
@@ -87,12 +92,22 @@ body:has([data-home-page]) #astryx-app-shell-main {
   padding-top: 0;
 }
 
+/* The docs sidebar must clear the whole header even before hydration, including
+   on a reload with restored scroll. DocsShell seeds this docsite-owned variable
+   before paint; the existing header observer keeps it current afterwards. Do not
+   read or write AppShell's private measurement property, or affect preview shells. */
+.astryx-docs-shell :has(> .astryx-app-shell-sidenav):where(:not(.astryx-app-shell .astryx-app-shell *)) {
+  top: var(--appshell-header-height);
+  height: calc(100dvh - var(--appshell-header-height));
+}
+
 /* The docs/components sidebar is a desktop affordance. AppShell renders it
    server-side (desktop HTML), so below the mobile breakpoint we hide it with
    pure CSS — it never paints on a phone, no JS flip. The :where(:not(...))
    guard scopes this to the OUTERMOST AppShell so sidenavs inside nested
-   AppShell examples/previews keep their own responsive behavior. */
-@media (max-width: 768px) {
+   AppShell examples/previews keep their own responsive behavior. Match
+   AppShell's default md breakpoint: equality belongs to the desktop layout. */
+@media (width < 768px) {
   .astryx-app-shell-sidenav:where(:not(.astryx-app-shell .astryx-app-shell *)) {
     display: none;
   }

@@ -500,7 +500,7 @@ function StorePreview({
                             max={99}
                             size="sm"
                             width={72}
-                            style={styles.quantityInput}
+                            controlStyle={styles.quantityInput}
                           />
                           <Button
                             label="Add to cart"
@@ -1143,7 +1143,7 @@ function InventoryCard({
             value=""
             onChange={() => {}}
             startIcon={<Search size={16} />}
-            style={styles.searchInput}
+            controlStyle={styles.searchInput}
           />
           <OverflowList
             gap={2}

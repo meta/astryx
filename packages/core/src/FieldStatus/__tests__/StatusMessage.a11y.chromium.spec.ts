@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /**
  * @file StatusMessage.a11y.chromium.spec.ts
@@ -168,26 +169,18 @@ async function runState(
   });
 }
 
-test('every expectation is exercised by at least one Core binding state', async ({
-  page,
-}) => {
-  test.setTimeout(4 * 60 * 1000);
-  const cdp = await page.context().newCDPSession(page);
-  const results: BindingResult[] = [];
-  for (const state of CORE_STATUS_MESSAGE_BINDING_STATES) {
-    results.push(await runState(page, cdp, state));
-  }
-  expect(neverExercised(results)).toEqual([]);
-  expect(
-    unmatchedKnownFailures(CORE_STATUS_MESSAGE_KNOWN_FAILURES, results),
-  ).toEqual([]);
-});
+// Each state's result, recorded by its own test below so the whole-suite check
+// at the end reads it instead of measuring every state a second time. A state
+// whose test did not run in this worker (a filtered run, or a worker restarted
+// after a failure) is measured by the whole-suite check itself.
+const recorded = new Map<string, BindingResult>();
 
 for (const state of CORE_STATUS_MESSAGE_BINDING_STATES) {
   test(`${state.binding} [${state.id}] — ${state.summary}`, async ({page}) => {
     test.setTimeout(2 * 60 * 1000);
     const cdp = await page.context().newCDPSession(page);
     const result = await runState(page, cdp, state);
+    recorded.set(state.id, result);
     const report = summarize(STATUS_MESSAGE_PATTERN, [result]);
     // eslint-disable-next-line no-console -- the report is this run's artifact
     console.log(formatReport(report));
@@ -196,3 +189,18 @@ for (const state of CORE_STATUS_MESSAGE_BINDING_STATES) {
     expect(report.counts.unexpectedPass).toBe(0);
   });
 }
+
+test('every expectation is exercised by at least one Core binding state', async ({
+  page,
+}) => {
+  test.setTimeout(4 * 60 * 1000);
+  const cdp = await page.context().newCDPSession(page);
+  const results: BindingResult[] = [];
+  for (const state of CORE_STATUS_MESSAGE_BINDING_STATES) {
+    results.push(recorded.get(state.id) ?? (await runState(page, cdp, state)));
+  }
+  expect(neverExercised(results)).toEqual([]);
+  expect(
+    unmatchedKnownFailures(CORE_STATUS_MESSAGE_KNOWN_FAILURES, results),
+  ).toEqual([]);
+});

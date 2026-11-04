@@ -43,7 +43,7 @@ export async function hook(name, options = {}) {
     zh = false,
   } = options;
 
-  // Default detail level mirrors the CLI (see commands/hook/index.mjs):
+  // Default detail level mirrors the CLI (see commands/hook.mjs):
   // single-hook views default to 'full', list-style views (--list,
   // --category, or no name) default to 'brief' (scannable name lists).
   // Keeping this in sync with the CLI is what the API↔CLI parity test checks.

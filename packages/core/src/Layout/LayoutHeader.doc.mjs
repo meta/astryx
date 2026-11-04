@@ -6,6 +6,11 @@ export const docs = {
   name: 'LayoutHeader',
   subComponentOf: 'Layout',
   displayName: 'Layout Header',
+  keywords: [
+    'pageheader',
+    'appheader',
+    'header',
+  ],
   isHiddenFromOverview: true,
   description: 'Top bar for page titles, app bars, and toolbars.',
   playground: {

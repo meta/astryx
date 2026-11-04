@@ -224,7 +224,7 @@ export const docs = {
     },
     {
       name: 'statusVariant',
-      type: 'FieldStatusVariant',
+      type: "'attached' | 'detached' | 'tooltip'",
       description: 'Placement treatment for the status message.',
     },
     {
@@ -239,24 +239,26 @@ export const docs = {
         'Optional async action run after each immediate commit or a changed staged Apply; drives optimistic and busy state.',
     },
     {
-      name: 'xstyle',
+      name: 'controlXstyle',
       type: 'StyleXStyles',
-      description: 'StyleX styles for the external selector field.',
+      description:
+        "StyleX styles for the external selector's bordered control box.",
     },
     {
-      name: 'className',
+      name: 'controlClassName',
       type: 'string',
-      description: 'Class name applied to the external selector field.',
+      description: "Class name applied to the external selector's control box.",
     },
     {
-      name: 'style',
+      name: 'controlStyle',
       type: 'CSSProperties',
-      description: 'Inline styles applied to the external selector field.',
+      description:
+        "Inline styles applied to the external selector's control box.",
     },
     {
       name: 'data-testid',
       type: 'string',
-      description: 'Test ID for the selector trigger container.',
+      description: 'Test ID for the selector trigger button.',
     },
   ],
   components: [

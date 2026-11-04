@@ -1,6 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect} from 'vitest';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {rewriteImports, swizzle} from './swizzle.mjs';
@@ -76,12 +77,26 @@ describe('rewriteImports', () => {
     );
   });
 
-  it('keeps the barrel collapse for a component-local .stylex (not a subpath export)', () => {
-    // Only theme/tokens.stylex is a dedicated deep export; component-local
-    // .stylex files are re-exported through the directory barrel.
-    const input = `import { s } from '../Layer/layerAnimations.stylex';`;
+  it('rewrites ANY non-theme .stylex import to a deep path (not the barrel)', () => {
+    // Every .stylex module needs the deep path so the StyleX compiler can
+    // resolve styles at compile time. The barrel re-export loses identity.
+    const input = `import { interactionOverlayStyles } from '../utils/interactionOverlay.stylex';`;
     expect(rewriteImports(input)).toBe(
-      `import { s } from '@astryxdesign/core/Layer';`,
+      `import { interactionOverlayStyles } from '@astryxdesign/core/utils/interactionOverlay.stylex';`,
+    );
+  });
+
+  it('rewrites a Layout .stylex import to a deep path', () => {
+    const input = `import { container } from '../Layout/container.stylex';`;
+    expect(rewriteImports(input)).toBe(
+      `import { container } from '@astryxdesign/core/Layout/container.stylex';`,
+    );
+  });
+
+  it('rewrites a two-levels-up .stylex import to a deep path', () => {
+    const input = `import { focusOutlineProps } from '../../utils/focusOutline.stylex';`;
+    expect(rewriteImports(input)).toBe(
+      `import { focusOutlineProps } from '@astryxdesign/core/utils/focusOutline.stylex';`,
     );
   });
 });
@@ -103,5 +118,40 @@ describe('swizzle() API', () => {
     await expect(swizzle('NotARealComponent99', {cwd: REPO})).rejects.toMatchObject({
       code: 'ERR_UNKNOWN_COMPONENT',
     });
+  });
+});
+
+describe('swizzle rewriteImports compiles for components with .stylex imports', () => {
+  it('Button: every rewritten import resolves in the core exports map', async () => {
+    const corePkg = JSON.parse(
+      fs.readFileSync(
+        path.join(REPO, 'packages/core/package.json'),
+        'utf-8',
+      ),
+    );
+    const exportKeys = new Set(Object.keys(corePkg.exports));
+
+    const buttonDir = path.join(REPO, 'packages/core/src/Button');
+    const files = fs.readdirSync(buttonDir).filter(
+      f => (f.endsWith('.ts') || f.endsWith('.tsx')) && !f.includes('.test.') && !f.includes('.doc.'),
+    );
+
+    for (const file of files) {
+      const content = fs.readFileSync(path.join(buttonDir, file), 'utf-8');
+      const rewritten = rewriteImports(content);
+
+      // Extract all rewritten @astryxdesign/core/* imports
+      const importRe = /from ['"](@astryxdesign\/core\/[^'"]+)['"]/g;
+      let m;
+      while ((m = importRe.exec(rewritten)) !== null) {
+        const specifier = m[1];
+        const subpath = './' + specifier.replace('@astryxdesign/core/', '');
+
+        expect(
+          exportKeys.has(subpath),
+          `${specifier} (subpath ${subpath}) must resolve in core exports`,
+        ).toBe(true);
+      }
+    }
   });
 });

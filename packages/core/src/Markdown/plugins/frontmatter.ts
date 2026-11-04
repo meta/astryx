@@ -104,18 +104,22 @@ function readFrontmatter(source: string):
   if (close == null) {
     return {status: 'defer'};
   }
-  const fields: Record<string, string> = Object.create(null);
+  const entries = new Map<string, string>();
   for (const line of body.slice(0, close.index).split(/\r?\n/)) {
     if (line.trim() === '') {
       continue;
     }
     const separator = line.indexOf(':');
     const key = line.slice(0, separator).trim();
-    if (separator <= 0 || key === '' || Object.hasOwn(fields, key)) {
+    if (separator <= 0 || key === '' || entries.has(key)) {
       return {status: 'none'};
     }
-    fields[key] = line.slice(separator + 1).trim();
+    entries.set(key, line.slice(separator + 1).trim());
   }
+  // A plain object, so a parser that returns the record unchanged passes the
+  // JSON-like metadata check. `fromEntries` defines every key as an own data
+  // property, so a field named `__proto__` stays a field.
+  const fields: Record<string, string> = Object.fromEntries(entries);
   let end = openingLength + close.index + close[0].length;
   if (source.startsWith('\r\n', end)) {
     end += 2;

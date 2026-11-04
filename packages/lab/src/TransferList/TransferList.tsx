@@ -994,6 +994,30 @@ export function TransferList<T extends string = string>({
     [finishReorder],
   );
 
+  // A second pointer that lands anywhere during a pointer reorder (the second
+  // finger of a pinch) cancels the reorder. A pinch whose first finger slid
+  // first zooms without a pointercancel, so the drag would otherwise commit on
+  // release and drop the row at the end of the list.
+  const isPointerReorderActive = previewCloneValue != null;
+  useEffect(() => {
+    if (!isPointerReorderActive) {
+      return;
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      const session = reorderSessionRef.current;
+      if (
+        session?.mode === 'pointer' &&
+        session.pointerId !== event.pointerId
+      ) {
+        suppressClickRef.current = false;
+        finishReorder(true);
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () =>
+      document.removeEventListener('pointerdown', onPointerDown, true);
+  }, [isPointerReorderActive, finishReorder]);
+
   const handleSearch = useCallback(
     (nextQuery: string) => {
       setQuery(nextQuery);
@@ -1216,7 +1240,7 @@ export function TransferList<T extends string = string>({
             startIcon={<Icon icon="search" size="sm" color="secondary" />}
             hasClear
             width="100%"
-            xstyle={styles.search}
+            controlXstyle={styles.search}
             onChange={handleSearch}
           />
         </div>

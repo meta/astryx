@@ -3,7 +3,8 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * @file Guards doc prop types against opaque named unions (#1645).
- * @input Every {Name}.doc.mjs plus the TypeScript sources they describe.
+ * @input Every {Name}.doc.mjs plus the TypeScript sources they describe,
+ *   including same-file private aliases used by exported literal unions.
  * @output Fails when a documented prop type hides its legal literal values.
  * @position Repo-wide doc-shape guard, sibling of docPropReferences.test.ts.
  *
@@ -188,18 +189,34 @@ for (const file of findFiles(SRC_DIR, ['.ts', '.tsx'])) {
   // markers the comment-stripped `src` has already removed.
   const rawTypeRhs = new Map<string, string>();
   for (const m of raw.matchAll(
-    /export type ([A-Z][A-Za-z0-9]*)(?:<[^>]*>)?\s*=\s*([^;]+);/g,
+    /\btype ([A-Z][A-Za-z0-9]*)(?:<[^>]*>)?\s*=\s*([^;]+);/g,
   )) {
     rawTypeRhs.set(m[1], m[2]);
   }
-  for (const m of src.matchAll(
-    /export type ([A-Z][A-Za-z0-9]*)(?:<[^>]*>)?\s*=\s*([^;]+);/g,
-  )) {
-    const [, name, rhsRaw] = m;
-    const rhs = rhsRaw.replace(/\s+/g, ' ').trim();
-    if (LITERAL_UNION.test(rhs)) {
+  const declarations = [
+    ...src.matchAll(
+      /\b(export )?type ([A-Z][A-Za-z0-9]*)(?:<[^>]*>)?\s*=\s*([^;]+);/g,
+    ),
+  ];
+  // Resolve same-file literal aliases before registering exported types.
+  // Repeat until no new literal unions are found.
+  const fileLiterals = new Map<string, string>();
+  let previousSize: number;
+  do {
+    previousSize = fileLiterals.size;
+    for (const [, , name, rhsRaw] of declarations) {
+      const rhs = rhsRaw
+        .replace(/\s+/g, ' ')
+        .trim()
+        .split('|')
+        .map(part => fileLiterals.get(part.trim()) ?? part.trim())
+        .join(' | ');
+
+      if (!LITERAL_UNION.test(rhs)) {
+        continue;
+      }
       const deprecated = deprecatedLiteralMembers(rawTypeRhs.get(name) ?? '');
-      literalUnions.set(
+      fileLiterals.set(
         name,
         rhs
           .replace(/^\|\s*/, '')
@@ -209,8 +226,17 @@ for (const file of findFiles(SRC_DIR, ['.ts', '.tsx'])) {
           .filter(member => !deprecated.has(member))
           .join(' | '),
       );
+    }
+  } while (fileLiterals.size !== previousSize);
+  for (const [, exported, name, rhsRaw] of declarations) {
+    if (!exported) {
+      continue;
+    }
+    const literals = fileLiterals.get(name);
+    if (literals !== undefined) {
+      literalUnions.set(name, literals);
     } else {
-      namedBodies.set(name, rhs);
+      namedBodies.set(name, rhsRaw.replace(/\s+/g, ' ').trim());
     }
   }
   for (const m of src.matchAll(

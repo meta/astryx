@@ -4,7 +4,7 @@
 
 /**
  * @file SelectorRowLayoutContext.ts
- * @input React createContext/use
+ * @input Layer-scoped React context/use
  * @output Exports the row-layout context and useSelectorRowLayout hook
  * @position Internal to the Selector module; read by SelectorOption
  *
@@ -15,7 +15,8 @@
  * depend on it — a node that ignores this context still cannot grow the row.
  */
 
-import {createContext, use} from 'react';
+import {use} from 'react';
+import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
 
 export type SelectorRowLayout = 'stacked' | 'inline';
 

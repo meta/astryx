@@ -42,7 +42,9 @@ const sx = stylex.create({
     width: '100%',
     boxSizing: 'border-box',
     padding: '8px 16px',
-    borderBlockEnd: '1px solid var(--color-border)',
+    borderBlockEndWidth: '1px',
+    borderBlockEndStyle: 'solid',
+    borderBlockEndColor: 'var(--color-border)',
     backgroundColor: 'var(--color-background-surface)',
   },
   speed: {width: '132px'},
@@ -72,7 +74,7 @@ export function MotionControlRail() {
 
   return (
     <HStack gap={3} vAlign="center" wrap="wrap" {...stylex.props(sx.rail)}>
-      <HStack gap={1.5} vAlign="center">
+      <HStack gap={1.5} vAlign="center" wrap="wrap">
         <Text type="supporting" color="secondary">
           Speed
         </Text>

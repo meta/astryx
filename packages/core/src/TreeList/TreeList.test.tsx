@@ -11,6 +11,7 @@
 
 import {describe, it, expect, vi} from 'vitest';
 import {act, render, screen, fireEvent} from '@testing-library/react';
+import type {ReactNode} from 'react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {TreeList} from './TreeList';
@@ -168,6 +169,78 @@ describe('TreeList', () => {
     ];
     render(<TreeList items={items} />);
     expect(screen.getByText('Description text')).toBeInTheDocument();
+  });
+
+  // ===========================================================================
+  // Row accessible name and description (APG tree view: named by the label)
+  // ===========================================================================
+
+  it('names a parent row by its label alone, not the chevron toggle', () => {
+    const items: TreeListItemData[] = [
+      {id: 'docs', label: 'Documents', children: [{id: 'a', label: 'Annual'}]},
+    ];
+    render(<TreeList items={items} />);
+    const row = screen.getByText('Documents').closest('li')!;
+    expect(row).toHaveAccessibleName('Documents');
+  });
+
+  it('names a plain row by its label and describes it with its description', () => {
+    const items: TreeListItemData[] = [
+      {id: 'a', label: 'Budget', description: 'Updated yesterday'},
+    ];
+    render(<TreeList items={items} />);
+    const row = screen.getByText('Budget').closest('li')!;
+    expect(row).toHaveAccessibleName('Budget');
+    expect(row).toHaveAccessibleDescription('Updated yesterday');
+  });
+
+  it('names and describes link and action rows themselves, not only their inner control', () => {
+    const items: TreeListItemData[] = [
+      {id: 'l', label: 'Report', description: 'Opens the report', href: '#'},
+      {
+        id: 'b',
+        label: 'Export',
+        description: 'Downloads a file',
+        onClick: () => {},
+      },
+    ];
+    render(<TreeList items={items} />);
+    const link = screen.getByText('Report').closest('li')!;
+    expect(link).toHaveAccessibleName('Report');
+    expect(link).toHaveAccessibleDescription('Opens the report');
+    const action = screen.getByText('Export').closest('li')!;
+    expect(action).toHaveAccessibleName('Export');
+    expect(action).toHaveAccessibleDescription('Downloads a file');
+  });
+
+  it('keeps start and end content, including controls, out of the row name', () => {
+    const items: TreeListItemData[] = [
+      {
+        id: 'a',
+        label: 'Invoices',
+        startContent: <span>12</span>,
+        endContent: <button type="button">Pin folder</button>,
+      },
+    ];
+    render(<TreeList items={items} />);
+    const row = screen.getByText('Invoices').closest('li')!;
+    expect(row).toHaveAccessibleName('Invoices');
+  });
+
+  it('typeahead matches the label, not the description or start content', async () => {
+    const user = userEvent.setup();
+    const items: TreeListItemData[] = [
+      {id: 'a', label: 'Apple', description: 'Cherry-red fruit'},
+      {id: 'b', label: 'Banana', startContent: <span>Curved</span>},
+      {id: 'c', label: 'Cherry'},
+    ];
+    render(<TreeList items={items} />);
+    const apple = screen.getByText('Apple').closest('li')!;
+    apple.focus();
+    await user.keyboard('c');
+    expect(document.activeElement).toBe(
+      screen.getByText('Cherry').closest('li'),
+    );
   });
 
   // ===========================================================================
@@ -537,12 +610,12 @@ describe('TreeList', () => {
     });
 
     it("variant='noGuides' preserves per-level indentation on the rows", () => {
-      // Indentation lives on the row's margin-inline-start (not the guide
-      // element), so it must survive when the connectors are suppressed. The
-      // per-row distance is published as the `--_tree-indent` custom property
-      // (not an inline longhand — see #4308), so the theme layer can override
-      // the `margin-inline-start` declaration. A deeper row is indented more
-      // than a shallower one.
+      // Indentation lives inside the row's padding-inline-start (not the
+      // guide element), so it must survive when the connectors are
+      // suppressed. The per-row distance is published as the `--_tree-indent`
+      // custom property (not an inline longhand — see #4308), so the theme
+      // layer can override the `padding-inline-start` declaration. A deeper
+      // row is indented more than a shallower one.
       const {container} = render(
         <TreeList items={deepItems} variant="noGuides" />,
       );
@@ -647,6 +720,380 @@ describe('TreeList', () => {
       };
       expect(indentOf('Mid')).toContain('var(--tree-list-indent)');
       expect(indentOf('Leaf')).toContain('var(--tree-list-indent)');
+    });
+
+    it('indents inside the row so nested rows keep the full list width', () => {
+      // The row box keeps its own inline padding and stays full width; the
+      // indent is padding on a child inside it. A nested row's hover and
+      // selected fill therefore spans the list like a root row's, while its
+      // content lands where a margin indent would have put it.
+      render(<TreeList items={deepItems} />);
+      const rules = collectCssText();
+      expect(rules).toMatch(
+        /padding-inline-start:\s*var\(--_tree-indent,\s*0px\)/,
+      );
+      expect(rules).not.toMatch(/margin-inline-start:\s*var\(--_tree-indent/);
+
+      const row = screen
+        .getByText('Leaf')
+        .closest<HTMLElement>('.astryx-tree-list-item')!;
+      const indented = row.firstElementChild as HTMLElement;
+      expect(indented.className).toContain('indentedContent');
+      expect(row.className).not.toContain('indentedContent');
+    });
+
+    it("keeps the indent when a caller sets the row's padding", () => {
+      // Caller padding lands on the row box; the indent is on a separate
+      // element inside it, so the two compose instead of one replacing the
+      // other.
+      const items = [
+        {
+          id: 'root',
+          label: 'Root',
+          isExpanded: true,
+          children: [
+            {id: 'leaf', label: 'Leaf', style: {paddingInlineStart: '20px'}},
+          ],
+        },
+      ];
+      render(<TreeList items={items} />);
+      const row = screen
+        .getByText('Leaf')
+        .closest<HTMLElement>('.astryx-tree-list-item')!;
+      expect(row.style.paddingInlineStart).toBe('20px');
+      expect(row.getAttribute('style')).toContain('--_tree-indent');
+      expect((row.firstElementChild as HTMLElement).className).toContain(
+        'indentedContent',
+      );
+    });
+
+    describe('link rows', () => {
+      const linkItems = (endContent?: ReactNode): TreeListItemData[] => [
+        {
+          id: 'docs',
+          label: 'Docs',
+          isExpanded: true,
+          children: [
+            {id: 'report', label: 'Report', href: '/report', endContent},
+          ],
+        },
+      ];
+      const rowSurfaceOf = (link: HTMLElement) =>
+        link.closest<HTMLElement>('.astryx-tree-list-item')!
+          .firstElementChild as HTMLElement;
+
+      it('follows the link when the row is clicked outside its label', () => {
+        // The indent is part of the row now, so a click there must do what
+        // the row does. The click is delegated to the anchor through the
+        // shared enlarged-surface hook, modifier keys included.
+        render(<TreeList items={linkItems()} />);
+        const link = screen.getByRole('link', {name: 'Report'});
+        const clicks: MouseEvent[] = [];
+        link.addEventListener('click', e => {
+          clicks.push(e);
+          e.preventDefault();
+        });
+
+        fireEvent.click(rowSurfaceOf(link), {metaKey: true});
+        expect(clicks).toHaveLength(1);
+        expect(clicks[0].metaKey).toBe(true);
+
+        // The row box's own padding follows the link too.
+        fireEvent.click(rowSurfaceOf(link).parentElement!);
+        expect(clicks).toHaveLength(2);
+
+        // Clicking the label itself reaches the anchor once, not twice.
+        fireEvent.click(link);
+        expect(clicks).toHaveLength(3);
+      });
+
+      it('reports one click to ancestors per press', () => {
+        // The delegated click bubbles from the anchor; the original stops,
+        // so a listener above the tree sees exactly one click.
+        const onTreeClick = vi.fn();
+        render(<TreeList items={linkItems()} onClick={onTreeClick} />);
+        const link = screen.getByRole('link', {name: 'Report'});
+        link.addEventListener('click', e => e.preventDefault());
+
+        fireEvent.click(rowSurfaceOf(link));
+        expect(onTreeClick).toHaveBeenCalledTimes(1);
+        expect(onTreeClick.mock.calls[0][0].target).toBe(link);
+      });
+
+      it('leaves a role-based control in the row to itself', () => {
+        const onSwitch = vi.fn();
+        render(
+          <TreeList
+            items={linkItems(
+              <span
+                role="switch"
+                aria-checked="false"
+                aria-label="Pin"
+                tabIndex={0}
+                onClick={onSwitch}>
+                Pin
+              </span>,
+            )}
+          />,
+        );
+        const link = screen.getByRole('link', {name: 'Report'});
+        const onLinkClick = vi.fn((e: Event) => e.preventDefault());
+        link.addEventListener('click', onLinkClick);
+
+        fireEvent.click(screen.getByRole('switch', {name: 'Pin'}));
+        expect(onSwitch).toHaveBeenCalledTimes(1);
+        expect(onLinkClick).not.toHaveBeenCalled();
+      });
+
+      it('opens the link in a new tab on a middle-click in the row', () => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        render(<TreeList items={linkItems()} />);
+        const link = screen.getByRole('link', {name: 'Report'});
+
+        fireEvent.mouseUp(rowSurfaceOf(link), {button: 1});
+        expect(open).toHaveBeenCalledWith('/report', '_blank', 'noopener');
+
+        // A middle-click on the label is the browser's own.
+        open.mockClear();
+        fireEvent.mouseUp(link, {button: 1});
+        expect(open).not.toHaveBeenCalled();
+        open.mockRestore();
+      });
+    });
+
+    it("keeps focus on an item's inner link when the item becomes disabled (spec:AST-085 FR4)", () => {
+      const tree = (isDisabled: boolean) => [
+        {
+          id: 'docs',
+          label: 'Docs',
+          isExpanded: true,
+          children: [
+            {id: 'report', label: 'Report', href: '/report', isDisabled},
+          ],
+        },
+      ];
+      const {rerender} = render(<TreeList items={tree(false)} />);
+      // A pointer click leaves focus on the inner link.
+      screen.getByRole('link', {name: 'Report', hidden: true}).focus();
+      rerender(<TreeList items={tree(true)} />);
+      const disabled = screen.getByRole('link', {name: 'Report', hidden: true});
+      expect(disabled).not.toHaveAttribute('href');
+      expect(disabled).toHaveFocus();
+    });
+
+    it('does not follow a disabled link row', () => {
+      const items = [
+        {
+          id: 'docs',
+          label: 'Docs',
+          isExpanded: true,
+          children: [
+            {id: 'report', label: 'Report', href: '/report', isDisabled: true},
+          ],
+        },
+      ];
+      render(<TreeList items={items} />);
+      const link = screen.getByRole('link', {name: 'Report', hidden: true});
+      const onLinkClick = vi.fn((e: Event) => e.preventDefault());
+      link.addEventListener('click', onLinkClick);
+      const row = link.closest<HTMLElement>('.astryx-tree-list-item')!;
+      fireEvent.click(row.firstElementChild!);
+      expect(onLinkClick).not.toHaveBeenCalled();
+      // No destination, so a screen reader's click or a link menu cannot
+      // navigate either (spec:AST-085 FR2).
+      expect(link).toHaveAttribute('aria-disabled', 'true');
+      for (const attribute of ['href', 'target']) {
+        expect(link).not.toHaveAttribute(attribute);
+      }
+    });
+
+    describe('row clicks outside the label (FR7)', () => {
+      // Each row sits under an expanded root, so it has an indent; the click
+      // lands on the row surface (indent, reserved chevron column, padding),
+      // not on the label.
+      const underRoot = (children: TreeListItemData[]): TreeListItemData[] => [
+        {id: 'root', label: 'Root', isExpanded: true, children},
+      ];
+      // The row box itself (its own padding) and the indented content inside
+      // it: FR7 covers clicks on both.
+      const rowOf = (label: string) =>
+        screen.getByText(label).closest<HTMLElement>('.astryx-tree-list-item')!;
+      const rowSurfaceOf = (label: string) =>
+        rowOf(label).firstElementChild as HTMLElement;
+      const folder: TreeListItemData = {
+        id: 'folder',
+        label: 'Folder',
+        children: [{id: 'file', label: 'File'}],
+      };
+
+      it("runs an action row's onClick once", () => {
+        const onClick = vi.fn();
+        render(
+          <TreeList items={underRoot([{id: 'run', label: 'Run', onClick}])} />,
+        );
+        fireEvent.click(rowSurfaceOf('Run'));
+        expect(onClick).toHaveBeenCalledTimes(1);
+        fireEvent.click(rowOf('Run'));
+        expect(onClick).toHaveBeenCalledTimes(2);
+
+        // The label's own button still runs it once per press, not twice.
+        fireEvent.click(screen.getByRole('button', {name: 'Run'}));
+        expect(onClick).toHaveBeenCalledTimes(3);
+      });
+
+      it('toggles a parent row', () => {
+        render(<TreeList items={underRoot([folder])} />);
+        expect(screen.queryByText('File')).not.toBeInTheDocument();
+        fireEvent.click(rowSurfaceOf('Folder'));
+        expect(screen.getByText('File')).toBeInTheDocument();
+        fireEvent.click(rowOf('Folder'));
+        expect(screen.queryByText('File')).not.toBeInTheDocument();
+      });
+
+      it('does nothing on a disabled action or parent row', () => {
+        const onClick = vi.fn();
+        render(
+          <TreeList
+            items={underRoot([
+              {id: 'run', label: 'Run', onClick, isDisabled: true},
+              {...folder, isDisabled: true},
+            ])}
+          />,
+        );
+        fireEvent.click(rowSurfaceOf('Run'));
+        fireEvent.click(rowOf('Run'));
+        expect(onClick).not.toHaveBeenCalled();
+        fireEvent.click(rowSurfaceOf('Folder'));
+        fireEvent.click(rowOf('Folder'));
+        expect(screen.queryByText('File')).not.toBeInTheDocument();
+      });
+
+      it("exposes a disabled row's toggle and action as aria-disabled and keeps them inert", () => {
+        const onClick = vi.fn();
+        const {container} = render(
+          <TreeList
+            items={underRoot([
+              {id: 'run', label: 'Run', onClick, isDisabled: true},
+              {...folder, isDisabled: true},
+            ])}
+          />,
+        );
+        // spec:AST-085 FR1/FR2: no native disabled anywhere, and a click
+        // dispatched straight on the inner controls does nothing.
+        expect(container.querySelector('[disabled]')).toBeNull();
+        const toggle = container.querySelector<HTMLElement>(
+          '[data-tree-toggle][aria-disabled="true"]',
+        )!;
+        expect(toggle).not.toBeNull();
+        toggle.click();
+        fireEvent.keyDown(toggle, {key: 'Enter'});
+        expect(screen.queryByText('File')).not.toBeInTheDocument();
+        const action = Array.from(container.querySelectorAll('button')).find(
+          button => button.textContent?.includes('Run'),
+        )!;
+        expect(action).toHaveAttribute('aria-disabled', 'true');
+        action.click();
+        expect(onClick).not.toHaveBeenCalled();
+      });
+
+      it('leaves a role-based control in start or end content to itself', () => {
+        // Native and role-based controls alike keep their own activation,
+        // the same rule link rows get from the shared enlarged-surface hook.
+        const onClick = vi.fn();
+        const onSwitch = vi.fn();
+        const pin = (name: string) => (
+          <span
+            role="switch"
+            aria-checked="false"
+            aria-label={name}
+            tabIndex={0}
+            onClick={onSwitch}>
+            {name}
+          </span>
+        );
+        render(
+          <TreeList
+            items={underRoot([
+              {
+                id: 'run',
+                label: 'Run',
+                onClick,
+                startContent: pin('Pin run start'),
+                endContent: pin('Pin run end'),
+              },
+              {
+                ...folder,
+                startContent: pin('Pin folder start'),
+                endContent: pin('Pin folder end'),
+              },
+            ])}
+          />,
+        );
+        for (const name of [
+          'Pin run start',
+          'Pin run end',
+          'Pin folder start',
+          'Pin folder end',
+        ]) {
+          fireEvent.click(screen.getByRole('switch', {name}));
+        }
+        expect(onSwitch).toHaveBeenCalledTimes(4);
+        expect(onClick).not.toHaveBeenCalled();
+        expect(screen.queryByText('File')).not.toBeInTheDocument();
+      });
+    });
+
+    it('draws guides above full-width rows without taking pointer input', () => {
+      // Guide columns now sit inside deeper rows' boxes. They paint above the
+      // rows so a row fill never breaks the line, and let clicks fall through
+      // to the row underneath.
+      const {container} = render(<TreeList items={deepItems} />);
+      const guide = container.querySelector('.astryx-tree-list-guide');
+      expect(guide).not.toBeNull();
+      const column = guide!.parentElement!;
+      expect(getComputedStyle(column).pointerEvents).toBe('none');
+      expect(getComputedStyle(column).zIndex).toBe('1');
+      // The tree contains that stacking so a guide cannot climb over
+      // positioned content outside the list.
+      const treeRoot = screen.getByRole('tree').parentElement!;
+      expect(treeRoot.className).toContain('astryx-tree-list');
+      expect(getComputedStyle(treeRoot).isolation).toBe('isolate');
+    });
+
+    it('lifts only rows that draw a focus ring above the guides', () => {
+      // A plain row (no onClick, href or children) draws no focus ring, so it
+      // stays under the guides: a focused selected plain row must not hide
+      // them with its fill (DD3). Rows that draw the ring take the lift.
+      render(
+        <TreeList
+          items={[
+            {
+              id: 'root',
+              label: 'Root',
+              isExpanded: true,
+              children: [
+                {id: 'plain', label: 'Plain', isSelected: true},
+                {id: 'run', label: 'Run', onClick: () => {}},
+              ],
+            },
+          ]}
+        />,
+      );
+      const rowOf = (label: string) =>
+        screen.getByText(label).closest<HTMLElement>('.astryx-tree-list-item')!;
+      expect(rowOf('Plain').className).not.toContain('focusLift');
+      expect(rowOf('Run').className).toContain('focusLift');
+      expect(rowOf('Root').className).toContain('focusLift');
+    });
+
+    it('lifts the focused row above the guides so they never cut its ring', () => {
+      // Each treeitem publishes its own focus as `--_tree-focus-z`, and the
+      // row reads it as its z-index, so the focused row paints above the
+      // guide columns (z-index 1). Nested treeitems redeclare the default.
+      render(<TreeList items={deepItems} />);
+      const rules = collectCssText();
+      expect(rules).toMatch(/--_tree-focus-z:\s*2/);
+      expect(rules).toMatch(/z-index:\s*var\(--_tree-focus-z,\s*auto\)/);
     });
   });
 
@@ -1207,6 +1654,38 @@ describe('TreeList', () => {
     );
   });
 
+  it('typeahead reaches an accented label with a plain letter (INV17)', async () => {
+    const user = userEvent.setup();
+    render(
+      <TreeList
+        items={[
+          {id: 'dung', label: 'Dung', description: 'Đà Lạt'},
+          {id: 'dao', label: 'Đào', description: 'Hà Nội'},
+          {id: 'lodz', label: 'Łódź'},
+        ]}
+      />,
+    );
+    screen.getByText('Dung').closest('li')!.focus();
+    await user.keyboard('l');
+    expect(document.activeElement).toBe(screen.getByText('Łódź').closest('li'));
+  });
+
+  it('typeahead puts the exact match first for a typed mark (INV17)', async () => {
+    const user = userEvent.setup();
+    render(
+      <TreeList
+        items={[
+          {id: 'lodz', label: 'Łódź'},
+          {id: 'dung', label: 'Dung'},
+          {id: 'dao', label: 'Đào'},
+        ]}
+      />,
+    );
+    screen.getByText('Łódź').closest('li')!.focus();
+    await user.keyboard('đ');
+    expect(document.activeElement).toBe(screen.getByText('Đào').closest('li'));
+  });
+
   it('lets a consumer prevent built-in TreeList keyboard navigation while receiving root div as event.currentTarget', () => {
     let capturedCurrentTarget: Element | null = null;
     const ref = {current: null as HTMLDivElement | null};
@@ -1299,5 +1778,198 @@ describe('TreeList', () => {
     expect(document.activeElement).toBe(headerButton);
     const items = screen.getAllByRole('treeitem');
     expect(items[0]).toHaveAttribute('tabindex', '0');
+  });
+});
+
+// A slot is empty for exactly the values React renders as nothing.
+describe('TreeList empty slots', () => {
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])(
+    'a header of %s names nothing; the tree keeps its own label',
+    (_name, header) => {
+      render(
+        <TreeList
+          items={simpleItems}
+          header={header as ReactNode}
+          aria-label="Files"
+        />,
+      );
+      const tree = screen.getByRole('tree');
+      expect(tree).not.toHaveAttribute('aria-labelledby');
+      expect(tree).toHaveAccessibleName('Files');
+    },
+  );
+
+  it.each([
+    ['an empty string', ''],
+    ['false', false],
+    ['true', true],
+    ['null', null],
+  ])('renders no start or end wrapper for %s', (_name, value) => {
+    const html = (element: HTMLElement) =>
+      element.innerHTML.replace(/(id|aria-[a-z]+)="[^"]*"/g, '$1');
+    const {container: withSlots} = render(
+      <TreeList
+        items={[
+          {
+            id: 'a',
+            label: 'Item A',
+            startContent: value as ReactNode,
+            endContent: value as ReactNode,
+          },
+        ]}
+      />,
+    );
+    const {container: without} = render(
+      <TreeList items={[{id: 'a', label: 'Item A'}]} />,
+    );
+    expect(html(withSlots)).toBe(html(without));
+  });
+
+  it('renders 0 as a header and in the start and end slots, as React does', () => {
+    render(
+      <TreeList
+        header={0}
+        items={[{id: 'a', label: 'Item A', startContent: 0, endContent: 0}]}
+      />,
+    );
+    expect(screen.getAllByText('0')).toHaveLength(3);
+    expect(screen.getByRole('tree')).toHaveAttribute('aria-labelledby');
+  });
+});
+
+describe('TreeList collapse focus (AR2)', () => {
+  function Example({isExpanded}: {isExpanded: boolean}) {
+    return (
+      <>
+        <TreeList
+          aria-label="Files"
+          items={[
+            {id: 'readme', label: 'README.md'},
+            {
+              id: 'src',
+              label: 'src',
+              isExpanded,
+              children: [{id: 'index', label: 'index.ts'}],
+            },
+          ]}
+        />
+        <button type="button">Elsewhere</button>
+      </>
+    );
+  }
+  const row = (id: string) =>
+    document.querySelector<HTMLElement>(`[data-tree-id="${id}"]`);
+
+  it('moves focus inside a collapsing branch to its row', () => {
+    const {rerender} = render(<Example isExpanded />);
+    expect(row('readme')).toHaveAttribute('tabindex', '0');
+    row('index')?.focus();
+    expect(row('index')).toHaveFocus();
+    rerender(<Example isExpanded={false} />);
+    expect(row('index')).toBeNull();
+    expect(row('src')).toHaveFocus();
+    // It holds the one Tab stop, which was on README.md.
+    expect(row('src')).toHaveAttribute('tabindex', '0');
+    expect(row('readme')).toHaveAttribute('tabindex', '-1');
+  });
+
+  it('moves focus in a nested group to the outermost row that collapsed, and to the inner row when only it collapses', () => {
+    const Nested = ({outer, inner}: {outer: boolean; inner: boolean}) => (
+      <TreeList
+        aria-label="Files"
+        items={[
+          {
+            id: 'src',
+            label: 'src',
+            isExpanded: outer,
+            children: [
+              {
+                id: 'lib',
+                label: 'lib',
+                isExpanded: inner,
+                children: [{id: 'util', label: 'util.ts'}],
+              },
+            ],
+          },
+        ]}
+      />
+    );
+    const {rerender} = render(<Nested outer inner />);
+    row('util')?.focus();
+    rerender(<Nested outer={false} inner />);
+    expect(row('src')).toHaveFocus();
+    rerender(<Nested outer inner />);
+    row('util')?.focus();
+    rerender(<Nested outer inner={false} />);
+    expect(row('lib')).toHaveFocus();
+  });
+
+  it('moves focus to a disabled collapsing row, which leaves the Tab stop where it is', () => {
+    const Disabled = ({isExpanded}: {isExpanded: boolean}) => (
+      <TreeList
+        aria-label="Files"
+        items={[
+          {id: 'readme', label: 'README.md'},
+          {
+            id: 'src',
+            label: 'src',
+            isDisabled: true,
+            isExpanded,
+            children: [{id: 'index', label: 'index.ts'}],
+          },
+        ]}
+      />
+    );
+    const {rerender} = render(<Disabled isExpanded />);
+    row('index')?.focus();
+    rerender(<Disabled isExpanded={false} />);
+    expect(row('src')).toHaveFocus();
+    expect(row('src')).toHaveAttribute('tabindex', '-1');
+    expect(row('readme')).toHaveAttribute('tabindex', '0');
+  });
+
+  it('hands the Tab stop to the first enabled row when a disabled row collapses away the child that held it', () => {
+    const Disabled = ({isExpanded}: {isExpanded: boolean}) => (
+      <TreeList
+        aria-label="Files"
+        items={[
+          {id: 'readme', label: 'README.md'},
+          {
+            id: 'src',
+            label: 'src',
+            isDisabled: true,
+            isExpanded,
+            children: [{id: 'index', label: 'index.ts'}],
+          },
+        ]}
+      />
+    );
+    const {rerender} = render(<Disabled isExpanded />);
+    // The keyboard path: arrowing past the disabled row onto its child gives
+    // the child the stop.
+    row('readme')?.focus();
+    fireEvent.keyDown(row('readme') as HTMLElement, {key: 'ArrowDown'});
+    expect(row('index')).toHaveFocus();
+    expect(row('index')).toHaveAttribute('tabindex', '0');
+    rerender(<Disabled isExpanded={false} />);
+    expect(row('src')).toHaveFocus();
+    expect(row('src')).toHaveAttribute('tabindex', '-1');
+    expect(row('readme')).toHaveAttribute('tabindex', '0');
+  });
+
+  it('moves no focus that is outside the collapsing branch', () => {
+    const {rerender} = render(<Example isExpanded />);
+    row('readme')?.focus();
+    rerender(<Example isExpanded={false} />);
+    expect(row('readme')).toHaveFocus();
+    screen.getByRole('button', {name: 'Elsewhere'}).focus();
+    rerender(<Example isExpanded />);
+    rerender(<Example isExpanded={false} />);
+    expect(screen.getByRole('button', {name: 'Elsewhere'})).toHaveFocus();
   });
 });

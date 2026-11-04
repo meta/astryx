@@ -1,9 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /**
  * @file RadioGroup.a11y.chromium.spec.ts
  * @input Uses the shared radio-group contract, Chromium harness, checked-in stories, inventory, and exact known failures
- * @output Real-browser and accessibility-tree evidence for every current bound radio-group part
+ * @output Real-browser and accessibility-tree evidence for every current bound
+ *   radio-group part, including state restored after a menu's expected pointer
+ *   dismissal
  * @position Browser lane required by AST-013; it makes no real-AT claim.
  */
 
@@ -113,13 +116,29 @@ async function runState(
         await mountState(page, state);
         mounted = true;
       }
-      return createChromiumHarness({
+      const harness = createChromiumHarness({
         page,
         subject: subjectFor(page, state),
         cdp,
         visibleLabel: state.facts.visibleLabel ? undefined : null,
         related: relatedFor(page, state),
       });
+      if ((state as RadioGroupBindingState).opensMenu !== true) {
+        return harness;
+      }
+      return {
+        ...harness,
+        abortedPress: async subject => {
+          await harness.abortedPress(subject);
+          const option = subjectFor(page, state);
+          await option.waitFor({state: 'hidden'});
+          await page
+            .locator('#storybook-root')
+            .getByRole('button', {name: 'Sort options'})
+            .click();
+          await option.waitFor({state: 'visible'});
+        },
+      };
     },
   });
 }

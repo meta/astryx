@@ -2,7 +2,7 @@
 
 /**
  * @file layerDismissalInvariants.test.tsx
- * @input Uses vitest, @testing-library/react, Dialog, Lightbox
+ * @input Uses vitest, @testing-library/react, BottomSheet, Dialog, Lightbox
  * @output Tests the one invariant the shared stack exists to hold
  * @position Colocated with layerStack. `useLayerDismissal.test.tsx` covers the
  *   hook's mechanics against synthetic layers; this file asks the user's
@@ -21,9 +21,10 @@
  */
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {render, screen, act} from '@testing-library/react';
+import {render, screen, act, fireEvent} from '@testing-library/react';
 import {useState} from 'react';
 
+import {BottomSheet} from '../BottomSheet/BottomSheet';
 import {Dialog} from '../Dialog/Dialog';
 import {Lightbox} from '../Lightbox/Lightbox';
 import {resetLayerStackForTests} from './layerStack';
@@ -412,6 +413,89 @@ describe('presence is asked at press time', () => {
 
     isTipShowing = false;
     pressEscape();
+    expect(onScreen()).toEqual([]);
+  });
+});
+
+describe('a standalone BottomSheet is one more layer', () => {
+  function Sheet({children}: {children?: React.ReactNode}) {
+    const [isOpen, setIsOpen] = useState(true);
+    return (
+      <BottomSheet
+        isOpen={isOpen}
+        onOpenChange={setIsOpen}
+        hasScrim={false}
+        label="Sheet">
+        {children}
+      </BottomSheet>
+    );
+  }
+
+  // The sheet keeps its <dialog> open through the exit animation; jsdom never
+  // runs it, so end it the way the panel's transition would.
+  function finishSheetExit() {
+    fireEvent.transitionEnd(document.querySelector('.astryx-bottom-sheet')!, {
+      propertyName: 'transform',
+    });
+  }
+
+  beforeEach(() => {
+    // A non-modal sheet is a manual popover in the top layer (show() below
+    // the Popover API floor); jsdom's stand-ins keep the `open` marker the
+    // census reads.
+    HTMLDialogElement.prototype.show = vi.fn(function (
+      this: HTMLDialogElement,
+    ) {
+      this.setAttribute('open', '');
+    });
+    HTMLElement.prototype.showPopover = vi.fn(function (this: HTMLElement) {
+      this.setAttribute('open', '');
+    });
+    HTMLElement.prototype.hidePopover = vi.fn(function (this: HTMLElement) {
+      this.removeAttribute('open');
+    });
+  });
+
+  it('peels a Dialog opened inside the sheet before the sheet', () => {
+    render(
+      <Sheet>
+        <Modal label="Inner" />
+      </Sheet>,
+    );
+
+    pressEscape();
+    expect(onScreen()).toEqual(['Sheet']);
+
+    pressEscape();
+    finishSheetExit();
+    expect(onScreen()).toEqual([]);
+  });
+
+  it('declines a close request while an IME composition is running', () => {
+    render(
+      <Sheet>
+        <input aria-label="field" />
+      </Sheet>,
+    );
+    const field = screen.getByLabelText('field');
+
+    act(() => {
+      field.dispatchEvent(
+        new CompositionEvent('compositionstart', {bubbles: true}),
+      );
+    });
+    const composingRequest = fireCancel('Sheet');
+    expect(composingRequest.defaultPrevented).toBe(true);
+    finishSheetExit();
+    expect(onScreen()).toEqual(['Sheet']);
+
+    act(() => {
+      field.dispatchEvent(
+        new CompositionEvent('compositionend', {bubbles: true}),
+      );
+    });
+    fireCancel('Sheet');
+    finishSheetExit();
     expect(onScreen()).toEqual([]);
   });
 });

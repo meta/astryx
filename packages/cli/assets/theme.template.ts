@@ -18,7 +18,7 @@
  *
  * 1. WRAP THE APP. A theme does nothing until it is provided.
  *
- *      import {Theme} from '@astryxdesign/core';
+ *      import {Theme} from '@astryxdesign/core/theme';
  *      import {myTheme} from './theme';
  *
  *      <Theme theme={myTheme} mode="system">   // 'system' | 'light' | 'dark'
@@ -81,6 +81,7 @@
  */
 
 import {defineTheme} from '@astryxdesign/core/theme';
+// import {palette} from './palette.generated';
 // import {dracula} from '@astryxdesign/core/theme/syntax';
 // import {neutralTheme} from '@astryxdesign/theme-neutral';
 
@@ -90,24 +91,36 @@ export const myTheme = defineTheme({
 
   /**
    * Start from another theme instead of the defaults. Tokens are copied then
-   * overridden, `components` deep-merge, `icons` shallow-merge — but the scale
-   * configs below REPLACE the base's rather than merging, because they are
-   * inputs to a generator, not values.
+   * overridden, `components` deep-merge, `icons` shallow-merge — but the
+   * typography, radius and color scale configs below REPLACE the base's rather
+   * than merging, because they are inputs to a generator, not values. `motion`
+   * inherits field by field: `fast`, `medium` and `ratio` regenerate the fast
+   * and medium durations, and a `slow` or `easing` left unset keeps the base's.
    *
    * Reference: `astryx theme list` (themes you can install and extend).
    */
   // extends: neutralTheme,
 
   // ───────────────────────────────────────────────────────────────────────
-  // Scale configs — a few parameters generate a whole family of tokens.
-  // Reach for these first. They keep a theme internally consistent and cover
-  // far more ground than you would hand-write.
+  // Scale configs — concise inputs for typography, radius, and motion.
+  // The color scale remains supported for existing themes, but it is not the
+  // recommended starting point for a new palette; see its note below.
   // ───────────────────────────────────────────────────────────────────────
 
   /**
-   * Generates the neutral ramp and the accent tokens from a seed colour
-   * using the HCT perceptual model: surfaces, text, icons, borders, muted
-   * fills, hover and pressed overlays — light and dark both.
+   * Supported compatibility path for existing themes. This expands one accent
+   * seed into the neutral ramp, surfaces, text, icons, borders, muted fills,
+   * hover and pressed overlays — light and dark both. It is not an accent-only
+   * edit.
+   *
+   * For a new complete palette, run:
+   *
+   *   astryx theme palette generate palette.config.json --out palette.generated.ts
+   *
+   * Review the generated candidate, then commit the palette module and receipt.
+   * Uncomment the `palette` import above and reference its stops from semantic
+   * tokens below. Regenerating an accepted palette then updates every mapped
+   * token that keeps those references. Generation does not rewrite the theme.
    *
    *   accent        seed hex, or a [light, dark] pair to seed each scheme's
    *                 palette from its own colour; omit to keep the default
@@ -131,9 +144,10 @@ export const myTheme = defineTheme({
    * values, and the rendered DOM is the final word.
    *
    * Reference: `astryx docs color` for what each semantic role means,
-   * `astryx docs tokens` for every colour token and its light/dark default.
+   * `astryx docs tokens/tokens-color` for every colour token and its light/dark
+   * default.
    */
-  color: {accent: '#0064E0', neutralStyle: 'cool', contrast: 'standard'},
+  // color: {accent: '#0064E0', neutralStyle: 'cool', contrast: 'standard'},
 
   /**
    * Type scale and the three font roles.
@@ -167,12 +181,26 @@ export const myTheme = defineTheme({
   radius: {base: 4, multiplier: 1},
 
   /**
-   * Duration scale in ms. Each of fast/medium/slow also gets a -min and -max
-   * sibling computed with `ratio` (min = base × ratio, max = base ÷ ratio), so
-   * a component can pick a longer or shorter variant of the same tempo.
+   * Motion. Two knobs set how its CSS feels (touch springs don't read them
+   * yet):
+   *   tempo — 1 is Astryx's own; 0.75 the quickest, 1.5 the slowest.
+   *   character — 'crisp' | 'standard' | 'expressive': the entrance and move
+   *     curves (--ease-entrance, --ease-move). --ease-exit, the curve for
+   *     something leaving, is the same at every character; exits and fades
+   *     never overshoot.
+   *   e.g. motion: {tempo: 0.85, character: 'crisp'}
+   * Finger tracking, momentum, the rubber band, the on-screen keyboard,
+   * hover-intent delays, gesture thresholds, the press's onset delay, cancel
+   * distance and tap flash, and busy loops never follow them; the press
+   * release fade follows tempo, up to the 200 ms Reduce Motion cap.
+   *
+   * A duration scale in ms wins over tempo for the durations it sets. Each of
+   * fast/medium/slow also gets a -min and -max sibling computed with `ratio`
+   * (min = base × ratio, max = base ÷ ratio), so a component can pick a longer
+   * or shorter variant of the same tempo.
    *   Snappy {fast: 100, medium: 250} · Default {fast: 175, medium: 410, slow: 975}
    *   Cinematic {fast: 200, medium: 500, slow: 1200}
-   * `easing` overrides --ease-standard.
+   * `easing` overrides --ease-standard. Explicit `tokens` win over both.
    *
    * Reference: `astryx docs motion`.
    */
@@ -183,8 +211,8 @@ export const myTheme = defineTheme({
   // A string applies to both colour modes; a [light, dark] tuple compiles to
   // CSS light-dark(). List only what you want to change.
   //
-  // `astryx docs tokens` PRINTS THE WHOLE TABLE — every token with its light
-  // and dark default. Read it before hand-writing colours: most of what you
+  // `astryx docs tokens/tokens-color` PRINTS THE WHOLE TABLE — every colour token
+  // with its light and dark default (`astryx docs tokens` lists every category). Read it before hand-writing colours: most of what you
   // want already has a semantic name, and the defaults tell you what you are
   // moving away from.
   //
@@ -202,8 +230,10 @@ export const myTheme = defineTheme({
   //   --border-width   hairline thickness shared by bordered surfaces
   //   --radius-*       none · inner · element · container · page · chat · full
   //   --shadow-*       low/med/high + inset-{hover,selected,success,warning,error}
-  //   --duration-*     {fast,medium,slow} × {-min, base, -max}
-  //   --ease-standard
+  //   --duration-*     {fast,medium,slow} × {-min, base, -max} · exit
+  //                    (dismissal; defaults to fast)
+  //   --ease-*         standard (state) · entrance (arriving) · move (on
+  //                    screen) · exit (leaving)
   //   --font-family-*  body · heading · code
   //   --font-size-*    4xs … 5xl
   //   --font-weight-*  normal · medium · semibold · bold
@@ -212,12 +242,17 @@ export const myTheme = defineTheme({
   //   --color-syntax-* code highlighting · --color-data-* charts
   // ───────────────────────────────────────────────────────────────────────
   tokens: {
+    // Keep generated roles connected to the accepted palette. Uncomment the
+    // import above, then map each reviewed semantic role this way.
+    // '--color-background-surface': [
+    //   palette.neutral.light[100],
+    //   palette.neutral.dark[15],
+    // ],
     '--color-accent': ['#0064E0', '#2694FE'],
     // Changing an accent means owning its on-colour: this is the label that
     // sits on top of the fill above, in each mode.
     '--color-on-accent': ['#FFFFFF', '#FFFFFF'],
     '--color-background-body': ['#F1F4F7', '#111112'],
-    '--color-background-surface': ['#FFFFFF', '#1F1F22'],
     '--focus-outline-color': 'var(--color-accent)',
     '--shadow-low': '0 1px 2px light-dark(#0000001A, #00000066)',
   },
@@ -295,10 +330,21 @@ export const myTheme = defineTheme({
 
   /**
    * Swap the artwork behind semantic icon names — every component that asks
-   * for `check`, `close`, `chevron-down` gets yours.
+   * for `check`, `close`, `chevron-down` gets yours. An entry may also be a
+   * pure function of `{size, variant}` that picks artwork for the size Icon
+   * renders at.
    * Reference: `astryx docs icons` lists the names.
    */
-  // icons: {check: <MyCheck />, close: <MyClose />},
+  // icons: {check: <MyCheck />, info: ({size}) => <MyInfo bold={size === 'sm'} />},
+
+  /**
+   * The icon variant names this theme supports, listed once for the whole
+   * theme. An icon entry function receives `variant` typed as these names.
+   * A theme that sets the list replaces the one it would inherit; omit it to
+   * inherit the base's list.
+   * Reference: `astryx docs icons`.
+   */
+  // iconVariants: ['outline', 'filled'],
 
   /**
    * Replace the small components that DRAW control state — the checkbox box,
@@ -356,7 +402,7 @@ export const myTheme = defineTheme({
   //     {
   //       // Narrow at every pointer precision.
   //       when: {width: {below: 'md'}},
-  //       value: {tokens: {'--spacing-4': '12px'}},
+  //       value: {tokens: {'--spacing-4': '0.75rem'}},
   //     },
   //     {
   //       // Taller controls under a finger or stylus at every width.

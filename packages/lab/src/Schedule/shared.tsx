@@ -11,10 +11,12 @@
 
 import {type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import type {Locale} from '@astryxdesign/core/i18n';
+import {useScrollableArea} from '@astryxdesign/core/hooks';
+import {getLocaleDirection, type Locale} from '@astryxdesign/core/i18n';
 import {
   borderVars,
   colorVars,
+  focusVars,
   fontWeightVars,
   radiusVars,
   spacingVars,
@@ -26,13 +28,13 @@ import {HStack} from '@astryxdesign/core/Stack';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {
   plainDateFromInstant,
-  plainDateIsAfter,
   plainDateIsBefore,
   plainDateToInstant,
   type PlainDate,
 } from '@astryxdesign/core/utils';
 import {isDayEvent} from './dateMath';
 import {useScheduleContext} from './context';
+import {timeGridViewportScope} from './schedule.stylex';
 import type {
   CalendarEvent,
   CalendarInstantEvent,
@@ -46,6 +48,12 @@ const DEFAULT_EVENT_CATEGORY: ScheduleCategory = {
   label: 'Event',
   color: 'blue',
 };
+
+// Month week rows are 128px. A chip level starts below the day number and the
+// next one a chip's height plus a gap further down, so three levels fit in a
+// row in every shipped theme.
+const MONTH_CHIP_TOP = 30;
+const MONTH_LEVEL_PITCH = 29;
 
 export function ScheduleFrame({
   title,
@@ -187,6 +195,44 @@ export function ScheduleRangeMonthTitle({
   );
 }
 
+/**
+ * A painted time or time range, isolated in the locale's direction: it lays
+ * out as one unit whatever the layout direction, so "9:00 AM" never paints as
+ * "AM 9:00" and a right-to-left locale's range still reads start first.
+ */
+export function ScheduleTime({children}: {children: ReactNode}) {
+  const {locale} = useScheduleContext();
+  return <bdi dir={getLocaleDirection(locale)}>{children}</bdi>;
+}
+
+/**
+ * The content of a Schedule view's popover. Only the content scrolls, inside
+ * the surface: the popover's hidden fallback close sits one pixel below the
+ * surface, so a scroller around the whole popover would count that pixel as
+ * overflow and paint a scrollbar on content that fits, and would clip the
+ * surface's shadow. Taller content scrolls in a named group that joins the
+ * tab order only while it overflows, so the keyboard reaches all of it; a
+ * group, not a region, so no popover adds a landmark.
+ */
+export function SchedulePopoverBody({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
+  const {getViewportProps, getContentProps} = useScrollableArea({
+    axis: 'block',
+    keyboardAccess: {owner: 'viewport', label},
+  });
+  return (
+    <div
+      {...getViewportProps<HTMLDivElement>({xstyle: styles.eventPopoverBody})}>
+      <div {...getContentProps<HTMLDivElement>()}>{children}</div>
+    </div>
+  );
+}
+
 export function EventPill({
   event,
   day,
@@ -214,7 +260,7 @@ export function EventPill({
       )}>
       {timeLabel != null && (
         <Text type="supporting" color="inherit" xstyle={styles.eventTime}>
-          {timeLabel}
+          <ScheduleTime>{timeLabel}</ScheduleTime>
         </Text>
       )}
       <Text
@@ -237,11 +283,38 @@ export function MonthEventPill({
   timezoneID: string;
   isPast?: boolean;
 }) {
-  const {categories, locale} = useScheduleContext();
+  const {locale} = useScheduleContext();
+  // A month chip shows its start time after the title (component:Schedule
+  // FR18).
+  return (
+    <TitleFirstPill
+      event={event}
+      timeLabel={
+        isDayEvent(event)
+          ? null
+          : formatEventStartTime(event, timezoneID, locale)
+      }
+      isPast={isPast}
+    />
+  );
+}
+
+/**
+ * A pill that leads with the event's title; its time follows on the same
+ * line only when the whole title and the time fit, and otherwise the title
+ * shows alone, ellipsized.
+ */
+export function TitleFirstPill({
+  event,
+  timeLabel,
+  isPast = false,
+}: {
+  event: CalendarEvent;
+  timeLabel: string | null;
+  isPast?: boolean;
+}) {
+  const {categories} = useScheduleContext();
   const category = getEventCategory(event, categories);
-  const timeLabel = isDayEvent(event)
-    ? null
-    : formatEventStartTime(event, timezoneID, locale);
   return (
     <span
       {...stylex.props(
@@ -250,18 +323,23 @@ export function MonthEventPill({
           ? eventPastSurfaceColorStyle(category.color)
           : eventSurfaceColorStyle(category.color),
       )}>
-      {timeLabel != null && (
-        <Text type="supporting" color="inherit" xstyle={styles.eventTime}>
-          {timeLabel}
+      <span {...stylex.props(styles.titleFirstLine)}>
+        <Text
+          type="supporting"
+          color="inherit"
+          weight="bold"
+          xstyle={styles.titleFirstTitle}>
+          {event.title}
         </Text>
-      )}
-      <Text
-        type="supporting"
-        color="inherit"
-        weight="bold"
-        xstyle={styles.eventTitle}>
-        {event.title}
-      </Text>
+        {timeLabel != null && (
+          <Text
+            type="supporting"
+            color="inherit"
+            xstyle={styles.titleFirstTime}>
+            <ScheduleTime>{timeLabel}</ScheduleTime>
+          </Text>
+        )}
+      </span>
     </span>
   );
 }
@@ -288,9 +366,11 @@ export function ListEventRow({
         )}
       />
       <span {...stylex.props(styles.listEventTime)}>
-        {isDayEvent(event)
-          ? 'All day'
-          : formatEventTimeRange(event, timezoneID, locale)}
+        <ScheduleTime>
+          {isDayEvent(event)
+            ? 'All day'
+            : formatEventTimeRange(event, timezoneID, locale)}
+        </ScheduleTime>
       </span>
       <span
         {...stylex.props(
@@ -463,6 +543,25 @@ export function formatFullDate(
   );
 }
 
+/** A week row's dates, such as "May 10 – 16, 2026", for its row header. */
+export function formatWeekRange(
+  start: PlainDate,
+  end: PlainDate,
+  timezoneID: string,
+  locale: Locale,
+): string {
+  return new Intl.DateTimeFormat(locale, {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: timezoneID,
+    calendar: 'gregory',
+  }).formatRange(
+    new Date(plainDateToInstant(start, timezoneID, 12)),
+    new Date(plainDateToInstant(end, timezoneID, 12)),
+  );
+}
+
 export function formatWeekday(
   date: PlainDate,
   timezoneID: string,
@@ -532,6 +631,25 @@ export function formatEventTimeRange(
   )}`;
 }
 
+/**
+ * An event's start and end with their dates, such as "May 11 at 9:00 AM – May
+ * 13 at 9:00 AM" in en-US, for a timed span of a day or more
+ * (component:Schedule AR2).
+ */
+export function formatEventDateTimeRange(
+  event: CalendarInstantEvent,
+  timezoneID: string,
+  locale: Locale,
+): string {
+  return new Intl.DateTimeFormat(locale, {
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: timezoneID,
+  }).formatRange(new Date(event.start), new Date(event.end));
+}
+
 export function formatEventStartTime(
   event: CalendarInstantEvent,
   timezoneID: string,
@@ -578,17 +696,6 @@ export function getMinutesSinceStartOfDay(
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
-}
-
-export function eventSpansPastDay(
-  event: CalendarInstantEvent,
-  day: PlainDate,
-  timezoneID: string,
-): boolean {
-  return plainDateIsAfter(
-    plainDateFromInstant(Math.max(event.end - 1, event.start), timezoneID),
-    day,
-  );
 }
 
 export function isEventInPast(
@@ -696,10 +803,14 @@ export const styles = stylex.create({
   monthGrid: {
     overflowX: 'auto',
   },
+  // The month surface isolates its paint order: chips rise above the cells
+  // and a focused "+N more" above the chips, and nothing outside the surface
+  // can see either value.
   monthGridSurface: {
     position: 'relative',
     width: '100%',
     minWidth: '784px',
+    isolation: 'isolate',
   },
   monthCellGrid: {
     display: 'grid',
@@ -709,15 +820,8 @@ export const styles = stylex.create({
   monthGridRow: {
     display: 'contents',
   },
-  monthEventOverlay: {
-    position: 'absolute',
-    inset: 0,
-    display: 'grid',
-    gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
-    gridAutoRows: '128px',
-    pointerEvents: 'none',
-  },
   monthCell: {
+    position: 'relative',
     display: 'flex',
     flexDirection: 'column',
     gap: spacingVars['--spacing-1'],
@@ -730,6 +834,15 @@ export const styles = stylex.create({
     borderBlockEndStyle: 'solid',
     borderBlockEndColor: colorVars['--color-border'],
     backgroundColor: colorVars['--color-background-card'],
+  },
+  // A day cell takes focus only when its "+N more" goes away while its
+  // popover is open. The shared ring sits inset, so the table's scroll edge
+  // never clips it, and the cell stays under the chips it holds.
+  monthCellFocus: {
+    outlineOffset: {
+      default: null,
+      ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
+    },
   },
   monthCellLastColumn: {
     borderInlineEndWidth: 0,
@@ -763,22 +876,100 @@ export const styles = stylex.create({
     gap: spacingVars['--spacing-0-5'],
     minWidth: 0,
   },
-  monthEventSpan: (
-    week: number,
-    columnStart: number,
-    columnEnd: number,
-    level: number,
-  ) => ({
-    gridRow: `${week + 1}`,
-    gridColumn: `${columnStart + 1} / ${columnEnd + 2}`,
-    alignSelf: 'start',
+  // A chip lives in the cell of its first day in the week and paints across
+  // its days from there, on its level: it starts a chip inset into that cell
+  // and ends a chip inset plus one border short of its last day's edge, so
+  // it clears each day's end border the way the cells do. It rises above the
+  // cells it crosses inside the isolated surface (component:Schedule FR15,
+  // FR19).
+  monthChip: (span: number, level: number) => ({
+    position: 'absolute',
+    insetInlineStart: spacingVars['--spacing-0-5'],
+    insetBlockStart: `${MONTH_CHIP_TOP + level * MONTH_LEVEL_PITCH}px`,
+    inlineSize: `calc(${span} * 100% + ${span - 1} * ${borderVars['--border-width']} - 2 * ${spacingVars['--spacing-0-5']})`,
     minWidth: 0,
-    marginInlineStart: spacingVars['--spacing-0-5'],
-    marginInlineEnd: `calc(${spacingVars['--spacing-0-5']} + ${borderVars['--border-width']})`,
-    marginBlockStart: `${30 + level * 29}px`,
-    pointerEvents: 'auto',
     zIndex: 1,
   }),
+  // The last column's cell has no end border, so the same chip is one border
+  // narrower than its padding box.
+  monthChipInLastColumn: {
+    inlineSize: `calc(100% - 2 * ${spacingVars['--spacing-0-5']} - ${borderVars['--border-width']})`,
+  },
+  // A chip button stays above the cells it crosses, like any chip, and a
+  // focused one keeps its whole ring above the chips around it.
+  monthChipFocus: {
+    zIndex: {
+      default: 1,
+      ':focus-visible': 2,
+    },
+  },
+  // A busy day's "+N more" takes the slot of the level it stands in for, with
+  // a chip's insets and height, and keeps its focus ring above the chips.
+  monthMoreButton: {
+    position: 'absolute',
+    insetInlineStart: spacingVars['--spacing-0-5'],
+    insetInlineEnd: `calc(${spacingVars['--spacing-0-5']} + ${borderVars['--border-width']})`,
+    display: 'flex',
+    alignItems: 'center',
+    minWidth: 0,
+    overflow: 'hidden',
+    borderWidth: borderVars['--border-width'],
+    borderStyle: 'solid',
+    borderColor: 'transparent',
+    borderRadius: radiusVars['--radius-inner'],
+    paddingBlock: spacingVars['--spacing-0-5'],
+    paddingInline: spacingVars['--spacing-1-5'],
+    fontFamily: typographyVars['--font-family-body'],
+    fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
+    fontWeight: fontWeightVars['--font-weight-medium'],
+    color: colorVars['--color-text-secondary'],
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    backgroundColor: {
+      default: 'transparent',
+      ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
+        default: null,
+        '@media (hover: hover)': colorVars['--color-overlay-hover'],
+      },
+    },
+    zIndex: {
+      default: null,
+      ':focus-visible': 2,
+    },
+  },
+  monthMoreButtonPosition: (level: number) => ({
+    insetBlockStart: `${MONTH_CHIP_TOP + level * MONTH_LEVEL_PITCH}px`,
+  }),
+  // The day popover lists rows that ellipsize their titles, so its content
+  // has a cap for the titles to fit within.
+  monthDayEvents: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: spacingVars['--spacing-2'],
+    maxInlineSize: '360px',
+  },
+  // A row of a day's list that opens its event: the whole row is the
+  // button, with the list row's look and the shared focus ring.
+  monthDayEventButton: {
+    inlineSize: '100%',
+    borderRadius: radiusVars['--radius-inner'],
+    backgroundColor: {
+      default: 'transparent',
+      ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
+        default: null,
+        '@media (hover: hover)': colorVars['--color-overlay-hover'],
+      },
+    },
+  },
+  monthDayEventList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: spacingVars['--spacing-2'],
+    margin: 0,
+    padding: 0,
+    listStyle: 'none',
+  },
   eventPill: {
     ...baseText,
     display: 'flex',
@@ -801,10 +992,41 @@ export const styles = stylex.create({
     minWidth: 0,
   },
   eventTime: {
+    display: {
+      default: 'block',
+      '@container (max-width: 72px)': 'none',
+    },
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
     flexShrink: 0,
+    opacity: 0.8,
+  },
+  // A chip that leads with its title is one line tall. Its title and time
+  // wrap as a flex row, so the time drops to a second, clipped line whenever
+  // the whole title and the time do not fit side by side: layout, not
+  // script, decides whether the time shows (component:Schedule FR18, PR5).
+  titleFirstLine: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'baseline',
+    columnGap: spacingVars['--spacing-1'],
+    flexGrow: 1,
+    minWidth: 0,
+    blockSize: `calc(${typeScaleVars['--text-supporting-size']} * ${typeScaleVars['--text-supporting-leading']})`,
+    overflow: 'hidden',
+  },
+  // Alone on the line, a long title shrinks and ellipsizes.
+  titleFirstTitle: {
+    minWidth: 0,
+    maxWidth: '100%',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  titleFirstTime: {
+    flexShrink: 0,
+    whiteSpace: 'nowrap',
     opacity: 0.8,
   },
   moreEvents: {
@@ -813,44 +1035,110 @@ export const styles = stylex.create({
     fontSize: typeScaleVars['--text-supporting-size'],
     lineHeight: typeScaleVars['--text-supporting-leading'],
   },
-  timeGrid: {
-    flex: 1,
-    display: 'grid',
-    gridTemplateColumns: '60px minmax(0, 1fr)',
-    gridTemplateRows: '56px auto 1fr',
-    height: '640px',
+  // The time grid is one scroll viewport. Its day header, all-day row, hour
+  // gutter, and day columns are items of a single grid inside it, pinned with
+  // position: sticky, so a scrollbar, a zoom level, or an inline scroll cannot
+  // separate header tracks from body tracks. Local z-index values order the
+  // pinned parts inside the isolated viewport only.
+  // A 640px flex basis, not a height: inside the frame's indefinite-height
+  // column a `height` with `flex: 1` resolves to content size, so the grid
+  // would grow to its full hours and the page, not the viewport, would scroll.
+  // The basis gives a 640px scrolling viewport by default and still fills or
+  // shrinks to a root the caller sizes.
+  timeGridFrame: {
+    position: 'relative',
+    display: 'flex',
+    flexDirection: 'column',
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: '640px',
     minHeight: 0,
-    overflow: 'hidden',
+    minWidth: 0,
   },
+  // The viewport paints no focus outline of its own: the frame clips outside
+  // its border box, and an inset outline is painted under the viewport's
+  // pinned header and gutter. The ring is the overlay below instead.
+  timeGridViewport: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minHeight: 0,
+    minWidth: 0,
+    scrollbarGutter: 'stable',
+    isolation: 'isolate',
+    outlineStyle: 'none',
+  },
+  // The keyboard focus ring of the viewport: a pointer-transparent overlay
+  // laid over the whole viewport (scrollbar included) and painted after the
+  // viewport's stacking context, so every edge of the ring is visible above
+  // the pinned parts. It shows while the viewport before it has keyboard
+  // focus, drawn just inside the edge the frame clips at.
+  timeGridFocusRing: {
+    position: 'absolute',
+    inset: 0,
+    pointerEvents: 'none',
+    outlineWidth: {
+      default: 0,
+      [stylex.when.siblingBefore(':focus-visible', timeGridViewportScope)]:
+        focusVars['--focus-outline-width'],
+    },
+    outlineStyle: {
+      default: 'none',
+      [stylex.when.siblingBefore(':focus-visible', timeGridViewportScope)]:
+        focusVars['--focus-outline-style'],
+    },
+    outlineColor: {
+      default: 'transparent',
+      [stylex.when.siblingBefore(':focus-visible', timeGridViewportScope)]:
+        focusVars['--focus-outline-color'],
+    },
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
+  },
+  // The minimum width keeps the grid box as wide as its tracks when the
+  // viewport is narrower, so the pinned gutter has the whole scrolled extent as
+  // its sticky containing block instead of only the first viewport width.
+  timeGridContent: (columnCount: number) => ({
+    display: 'grid',
+    gridTemplateColumns: `60px repeat(${Math.max(1, columnCount)}, minmax(140px, 1fr))`,
+    gridTemplateRows: '56px auto auto',
+    minWidth: `${60 + Math.max(1, columnCount) * 140}px`,
+  }),
+  dayColumnPlacement: (index: number) => ({
+    gridColumn: `${index + 2}`,
+  }),
   timeGridCorner: {
     gridColumn: 1,
     gridRow: 1,
+    position: 'sticky',
+    insetBlockStart: 0,
+    insetInlineStart: 0,
+    zIndex: 3,
+    backgroundColor: colorVars['--color-background-card'],
     borderInlineEndWidth: borderVars['--border-width'],
     borderInlineEndStyle: 'solid',
     borderInlineEndColor: colorVars['--color-border'],
-    borderBottomWidth: borderVars['--border-width'],
-    borderBottomStyle: 'solid',
-    borderBottomColor: colorVars['--color-border'],
-  },
-  timeGridHeader: {
-    gridColumn: 2,
-    gridRow: 1,
-    display: 'grid',
-    gridAutoFlow: 'column',
-    gridAutoColumns: 'minmax(140px, 1fr)',
     borderBottomWidth: borderVars['--border-width'],
     borderBottomStyle: 'solid',
     borderBottomColor: colorVars['--color-border'],
   },
   timeGridHeaderCell: {
+    gridRow: 1,
+    position: 'sticky',
+    insetBlockStart: 0,
+    zIndex: 2,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacingVars['--spacing-0-5'],
+    minWidth: 0,
+    backgroundColor: colorVars['--color-background-card'],
     borderInlineEndWidth: borderVars['--border-width'],
     borderInlineEndStyle: 'solid',
     borderInlineEndColor: colorVars['--color-border'],
+    borderBottomWidth: borderVars['--border-width'],
+    borderBottomStyle: 'solid',
+    borderBottomColor: colorVars['--color-border'],
   },
   timeGridHeaderCellLast: {
     borderInlineEndWidth: 0,
@@ -880,11 +1168,16 @@ export const styles = stylex.create({
   allDayLabel: {
     gridColumn: 1,
     gridRow: 2,
+    position: 'sticky',
+    insetBlockStart: '56px',
+    insetInlineStart: 0,
+    zIndex: 3,
     paddingBlock: spacingVars['--spacing-1'],
     paddingInline: spacingVars['--spacing-2'],
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'flex-end',
+    backgroundColor: colorVars['--color-background-card'],
     borderInlineEndWidth: borderVars['--border-width'],
     borderInlineEndStyle: 'solid',
     borderInlineEndColor: colorVars['--color-border'],
@@ -892,35 +1185,28 @@ export const styles = stylex.create({
     borderBottomStyle: 'solid',
     borderBottomColor: colorVars['--color-border'],
   },
-  allDayRow: {
-    gridColumn: 2,
+  // A subgrid, so all-day cells and spans sit on the day columns' own tracks.
+  allDayRow: (levelCount: number) => ({
+    gridColumn: '2 / -1',
     gridRow: 2,
-    overflowX: 'auto',
-    minHeight: 0,
+    display: 'grid',
+    gridTemplateColumns: 'subgrid',
+    position: 'sticky',
+    insetBlockStart: '56px',
+    zIndex: 2,
+    isolation: 'isolate',
+    minHeight: levelCount > 0 ? `${3 + levelCount * 27}px` : '26px',
+    minWidth: 0,
+    backgroundColor: colorVars['--color-background-card'],
     borderBottomWidth: borderVars['--border-width'],
     borderBottomStyle: 'solid',
     borderBottomColor: colorVars['--color-border'],
-  },
-  allDayRowSurface: (columnCount: number, levelCount: number) => ({
-    position: 'relative',
-    width: '100%',
-    minWidth: `${Math.max(1, columnCount) * 140}px`,
-    minHeight: levelCount > 0 ? `${3 + levelCount * 27}px` : '26px',
   }),
-  allDayCellGrid: (columnCount: number) => ({
-    position: 'absolute',
-    inset: 0,
-    display: 'grid',
-    gridTemplateColumns: `repeat(${Math.max(1, columnCount)}, minmax(0, 1fr))`,
-  }),
-  allDayEventOverlay: (columnCount: number) => ({
-    position: 'absolute',
-    inset: 0,
-    display: 'grid',
-    gridTemplateColumns: `repeat(${Math.max(1, columnCount)}, minmax(0, 1fr))`,
-    pointerEvents: 'none',
+  allDaySubgridPlacement: (index: number) => ({
+    gridColumn: `${index + 1}`,
   }),
   allDayCell: {
+    gridRow: 1,
     minWidth: 0,
     borderInlineEndWidth: borderVars['--border-width'],
     borderInlineEndStyle: 'solid',
@@ -930,25 +1216,21 @@ export const styles = stylex.create({
     borderInlineEndWidth: 0,
   },
   allDayEventSpan: (columnStart: number, columnEnd: number, level: number) => ({
+    gridRow: 1,
     gridColumn: `${columnStart + 1} / ${columnEnd + 2}`,
     alignSelf: 'start',
     minWidth: 0,
     marginInlineStart: spacingVars['--spacing-0-5'],
     marginInlineEnd: `calc(${spacingVars['--spacing-0-5']} + ${borderVars['--border-width']})`,
     marginBlockStart: `${2 + level * 27}px`,
-    pointerEvents: 'auto',
   }),
-  timeGridBody: {
-    gridColumn: '1 / -1',
-    gridRow: 3,
-    display: 'grid',
-    gridTemplateColumns: '60px minmax(0, 1fr)',
-    overflow: 'auto',
-    minHeight: 0,
-  },
   timeLabels: {
     gridColumn: 1,
-    position: 'relative',
+    gridRow: 3,
+    position: 'sticky',
+    insetInlineStart: 0,
+    zIndex: 2,
+    backgroundColor: colorVars['--color-background-card'],
     borderInlineEndWidth: borderVars['--border-width'],
     borderInlineEndStyle: 'solid',
     borderInlineEndColor: colorVars['--color-border'],
@@ -968,15 +1250,12 @@ export const styles = stylex.create({
   timeLabelPosition: (index: number, hourHeight: number) => ({
     top: `${index * hourHeight - 1}px`,
   }),
-  timeColumns: {
-    gridColumn: 2,
-    display: 'grid',
-    gridAutoFlow: 'column',
-    gridAutoColumns: 'minmax(140px, 1fr)',
-    minWidth: 0,
-  },
+  // Each day column isolates its own paint order: blocks, the now-line, and a
+  // raised focused block never rank against anything outside the column.
   timeColumn: {
+    gridRow: 3,
     position: 'relative',
+    isolation: 'isolate',
     display: 'grid',
     minWidth: 0,
     borderInlineEndWidth: borderVars['--border-width'],
@@ -1006,6 +1285,9 @@ export const styles = stylex.create({
     minHeight: '24px',
     minWidth: 0,
     overflow: 'hidden',
+    // The block is a container so a narrow track can drop its time line
+    // (eventTime below) while the title keeps its single ellipsized line.
+    containerType: 'inline-size',
     borderWidth: borderVars['--border-width'],
     borderStyle: 'solid',
     borderRadius: radiusVars['--radius-inner'],
@@ -1016,15 +1298,58 @@ export const styles = stylex.create({
     lineHeight: typeScaleVars['--text-supporting-leading'],
     fontWeight: fontWeightVars['--font-weight-medium'],
   },
-  timedEventPosition: (top: number, height: number, level: number) => ({
+  // An event that opens the popover is a native button that keeps the block's
+  // own paint: the reset removes only what the user agent adds to a button.
+  // Block display lets an all-day pill fill the days its button spans; a
+  // timed block's own flex display wins over it.
+  eventButtonReset: {
+    appearance: 'none',
+    display: 'block',
+    // A button grid item would otherwise size to its content.
+    justifySelf: 'stretch',
+    margin: 0,
+    padding: 0,
+    borderWidth: 0,
+    borderStyle: 'none',
+    backgroundColor: 'transparent',
+    color: 'inherit',
+    font: 'inherit',
+    textAlign: 'start',
+    cursor: {
+      default: 'pointer',
+      ':is(:disabled,[aria-disabled="true"])': 'default',
+    },
+  },
+  // A focused block rises above its neighbours inside the isolated column so
+  // its ring is never clipped by a later sibling; nothing outside the column
+  // can see the value.
+  eventButtonFocus: {
+    zIndex: {
+      default: null,
+      ':focus-visible': 1,
+    },
+  },
+  // The popover keeps to the viewport the way the Popover component does: it
+  // never grows past the visible block size, minus the surface padding.
+  eventPopoverBody: {
+    maxBlockSize: stylex.firstThatWorks(
+      `calc(100dvb - 2 * ${spacingVars['--spacing-4']} - 2 * ${spacingVars['--spacing-3']})`,
+      `calc(100vh - 2 * ${spacingVars['--spacing-4']} - 2 * ${spacingVars['--spacing-3']})`,
+    ),
+  },
+  // Blocks in one overlap cluster split the column into equal tracks and never
+  // overlap, so they carry no z-index of their own; the 2px insets keep the
+  // same gutter a lone block has at the column's edges.
+  timedEventPosition: (
+    top: number,
+    height: number,
+    inlineStart: number,
+    inlineSize: number,
+  ) => ({
     top: `calc(${top}% + 2px)`,
     height: `calc(${height}% - 5px)`,
-    insetInlineStart:
-      level === 0
-        ? spacingVars['--spacing-0-5']
-        : `calc(${spacingVars['--spacing-0-5']} + ${level * 8}%)`,
-    insetInlineEnd: spacingVars['--spacing-0-5'],
-    zIndex: level + 1,
+    insetInlineStart: `calc(${inlineStart}% + ${spacingVars['--spacing-0-5']})`,
+    inlineSize: `calc(${inlineSize}% - ${spacingVars['--spacing-0-5']} * 2)`,
   }),
   currentTimeLine: (top: number) => ({
     position: 'absolute',
@@ -1033,7 +1358,8 @@ export const styles = stylex.create({
     borderTopWidth: '2px',
     borderTopStyle: 'solid',
     borderTopColor: colorVars['--color-border-orange'],
-    zIndex: 20,
+    // Local to the isolated day column: above its blocks, nothing else.
+    zIndex: 1,
     pointerEvents: 'none',
     '::before': {
       content: '""',

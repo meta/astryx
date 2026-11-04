@@ -31,8 +31,18 @@ import path from 'node:path';
  */
 export function readWorkspaceGlobs(root) {
   const file = path.join(root, 'pnpm-workspace.yaml');
-  const src = fs.readFileSync(file, 'utf8');
+  return parseWorkspaceGlobs(fs.readFileSync(file, 'utf8'), file);
+}
 
+/**
+ * Parse the `packages:` block from pnpm-workspace.yaml source text, for
+ * callers that read the file at a git revision rather than from disk.
+ *
+ * @param {string} src pnpm-workspace.yaml contents.
+ * @param {string} [file] Display name for the error message.
+ * @returns {string[]} Globs exactly as authored, e.g. ['apps/*', 'packages/*'].
+ */
+export function parseWorkspaceGlobs(src, file = 'pnpm-workspace.yaml') {
   const globs = [];
   let inPackages = false;
 

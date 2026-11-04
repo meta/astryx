@@ -15,6 +15,8 @@ import {z} from 'zod';
 /** @typedef {import('./base/type.js').AuthoredDocKind} AuthoredDocKind */
 /** @typedef {import('./namespace/type.js').NamespaceDoc} NamespaceDoc */
 /** @typedef {import('./reference/type.js').ReferenceContentBlock} ReferenceContentBlock */
+/** @typedef {import('./reference/type.js').GraphContentBlock} GraphContentBlock */
+/** @typedef {import('./reference/type.js').ReferenceSection} ReferenceSection */
 /** @typedef {import('./reference/type.js').ReferenceDoc} ReferenceDoc */
 /** @typedef {import('./component/type.js').SingleComponentDoc} SingleComponentDoc */
 /** @typedef {import('./base/type.js').ComponentPropDoc} ComponentPropDoc */
@@ -37,6 +39,7 @@ export const AuthoredDocKindSchema = z.enum([
   'command',
   'enum',
   'namespace',
+  'icon-definition',
 ]);
 
 /**
@@ -57,6 +60,7 @@ export const AuthoredDocGraphFields = {
     .optional(),
   aliases: z.array(nonEmptyString).optional(),
   audience: z.enum(['public', 'internal']).optional(),
+  stability: z.literal('experimental').optional(),
 };
 
 const _AuthoredDocGraphSchema = z.object(AuthoredDocGraphFields).strict();
@@ -161,8 +165,39 @@ const ReferenceBlockSchema = z
   })
   .strict();
 
-/** Runtime schema for every existing and V1 semantic content block. */
+/** Runtime schema for the stable content-block union published in 0.6.x. */
 export const ReferenceContentBlockSchema = z.discriminatedUnion('type', [
+  ProseBlockSchema,
+  HeadingBlockSchema,
+  CodeBlockSchema,
+  TableBlockSchema,
+  ListBlockSchema,
+  TokenReferenceBlockSchema,
+]);
+
+/** Runtime schema for graph-only blocks used by NamespaceDoc. */
+export const GraphContentBlockSchema = z.discriminatedUnion('type', [
+  WorkflowBlockSchema,
+  CollectionBlockSchema,
+  ReferenceBlockSchema,
+]);
+
+/**
+ * A topic section's blocks: the stable union, plus a reference block, which a
+ * read inlines as the doc it includes.
+ */
+export const SectionContentBlockSchema = z.discriminatedUnion('type', [
+  ProseBlockSchema,
+  HeadingBlockSchema,
+  CodeBlockSchema,
+  TableBlockSchema,
+  ListBlockSchema,
+  TokenReferenceBlockSchema,
+  ReferenceBlockSchema,
+]);
+
+/** Namespace content accepts both stable reference blocks and graph-only blocks. */
+export const NamespaceContentBlockSchema = z.discriminatedUnion('type', [
   ProseBlockSchema,
   HeadingBlockSchema,
   CodeBlockSchema,
@@ -183,12 +218,34 @@ export const ReferenceContentBlockSchema = z.discriminatedUnion('type', [
  * >} _ReferenceContentBlockDriftLock
  */
 
+/**
+ * @typedef {import('../_shared/contract.js').Expect<
+ *   import('../_shared/contract.js').Equal<
+ *     z.infer<typeof GraphContentBlockSchema>,
+ *     GraphContentBlock
+ *   >
+ * >} _GraphContentBlockDriftLock
+ */
+
+/**
+ * @typedef {import('../_shared/contract.js').Expect<
+ *   import('../_shared/contract.js').Equal<
+ *     z.infer<typeof SectionContentBlockSchema>,
+ *     ReferenceSection['content'][number]
+ *   >
+ * >} _SectionContentBlockDriftLock
+ */
+
 const ReferenceSectionSchema = z
   .object({
     id: nonEmptyString.optional(),
     title: nonEmptyString,
     category: z.string().optional(),
-    content: z.array(ReferenceContentBlockSchema),
+    content: z.array(SectionContentBlockSchema),
+    // Where an extension adds this section to the topic it extends: before
+    // or after the section with this key. Ignored on any other section.
+    before: nonEmptyString.optional(),
+    after: nonEmptyString.optional(),
     previewType: z
       .enum([
         'swatch',
@@ -256,6 +313,7 @@ const ComponentBaseSchema = z
     theming: z.unknown().optional(),
     playground: z.unknown().optional(),
     examples: z.array(z.unknown()).optional(),
+    replaces: z.string().min(1).optional(),
   })
   .passthrough();
 
@@ -363,6 +421,9 @@ export const GenericDocKindSchema = z
     ...BaseDocFields,
     type: z.literal('generic'),
     title: nonEmptyString.optional(),
+    // Search terms the title and sections do not use; `astryx search` matches
+    // them as keywords of the whole topic (ReferenceDoc `keywords`).
+    keywords: z.array(z.string()).optional(),
     sections: z.array(ReferenceSectionSchema).min(1).optional(),
     replaces: nonEmptyString.optional(),
     extends: nonEmptyString.optional(),
@@ -427,6 +488,7 @@ const SchemaFieldSchema =
           default: z.string().optional(),
           example: z.string().optional(),
           deprecated: z.string().optional(),
+          stability: z.literal('experimental').optional(),
           fields: z.array(SchemaFieldSchema).optional(),
         })
         .passthrough(),
@@ -519,6 +581,7 @@ export const CommandDocKindSchema = z
     exitCodes: z
       .array(z.object({code: z.number(), when: z.string()}).passthrough())
       .optional(),
+    outsideProject: z.enum(['same', 'refuse', 'own']).optional(),
     related: z.array(z.string()).optional(),
     notes: z.array(ReferenceContentBlockSchema).optional(),
   })
@@ -548,6 +611,7 @@ export const EnumDocKindSchema = z
           value: z.string().min(1, 'member value is required'),
           description: z.string(),
           deprecated: z.string().optional(),
+          stability: z.literal('experimental').optional(),
         })
         .passthrough(),
     ),
@@ -597,6 +661,7 @@ export const NamespaceDocKindSchema = z
               .object({
                 group: nonEmptyString,
                 kinds: z.array(AuthoredDocKindSchema).min(1).optional(),
+                packages: z.literal('all').optional(),
               })
               .strict(),
             into: nonEmptyString,
@@ -605,7 +670,7 @@ export const NamespaceDocKindSchema = z
           .strict(),
       )
       .optional(),
-    blocks: z.array(ReferenceContentBlockSchema).optional(),
+    blocks: z.array(NamespaceContentBlockSchema).optional(),
   })
   .strict()
   .superRefine((doc, context) => {
@@ -679,6 +744,8 @@ const LegacyBaseDocSchema = z.object({
 const LegacyReferenceDocSchema = LegacyBaseDocSchema.extend({
   title: nonEmptyString,
   description: z.string(),
+  // As on the stamped schema: search terms for the whole topic.
+  keywords: z.array(z.string()).optional(),
   sections: z.array(ReferenceSectionSchema).min(1),
   replaces: nonEmptyString.optional(),
   extends: nonEmptyString.optional(),

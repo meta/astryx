@@ -15,7 +15,11 @@ export {hasActiveFocusTrapEscape, useFocusTrap} from './useFocusTrap';
 export type {UseFocusTrapOptions, UseFocusTrapReturn} from './useFocusTrap';
 
 export {useAnnounce} from './useAnnounce';
-export type {AnnounceFn, AnnouncePoliteness} from './useAnnounce';
+export type {
+  AnnounceFn,
+  AnnouncePoliteness,
+  UseAnnounceOptions,
+} from './useAnnounce';
 
 export {useClipboard} from './useClipboard';
 export type {UseClipboardOptions, UseClipboardReturn} from './useClipboard';
@@ -37,6 +41,21 @@ export {useHotkeys} from './useHotkeys';
 export type {Hotkey} from './useHotkeys';
 
 export {useTypeahead} from './useTypeahead';
+
+export {
+  useMenuPress,
+  MENU_PRESS_MARKER,
+  isMenuPressActivation,
+} from './useMenuPress';
+export type {UseMenuPressOptions, UseMenuPressReturn} from './useMenuPress';
+export {menuPressStep, MENU_PRESS_SETTLE_MS} from './menuPressGesture';
+export type {
+  MenuPressEffect,
+  MenuPressEvent,
+  MenuPressGesture,
+  MenuPressPointerType,
+  MenuPressStep,
+} from './menuPressGesture';
 
 export {useKeyboardHint} from './useKeyboardHint';
 export type {
@@ -71,6 +90,12 @@ export type {
 
 export {useScrollLock} from './useScrollLock';
 
+export {useAnimatedLayout} from './useAnimatedLayout';
+export type {
+  AnimatedLayout,
+  UseAnimatedLayoutOptions,
+} from './useAnimatedLayout';
+
 export {useEntryAnimation} from './useEntryAnimation';
 export type {EntryAnimationPreset} from './useEntryAnimation';
 
@@ -85,6 +110,8 @@ export type {ImageSampleRegion, UseImageModeOptions} from './useImageMode';
 export {
   useClickableContainer,
   INTERACTIVE_SELECTORS,
+  hasInteractiveAncestor,
+  hasTextSelection,
 } from './useClickableContainer';
 export type {
   UseClickableContainerOptions,
@@ -106,8 +133,12 @@ export type {
   UseInteractiveRoleOptions,
 } from './useInteractiveRole';
 
+export {useAnimator} from './useAnimator';
+
 export {useLongPress} from './useLongPress';
 export type {UseLongPressOptions, UseLongPressHandlers} from './useLongPress';
+
+export {usePressFeedback} from './usePressFeedback';
 
 export {useDevWarning} from './useDevWarning';
 export {useIndicatorFocusRing} from './useIndicatorFocusRing';

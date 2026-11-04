@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /**
  * @file Switch.a11y.chromium.spec.ts
@@ -166,29 +167,17 @@ test('the state inventory describes the labels the page actually renders', async
   expect(wrong).toEqual([]);
 });
 
-test('every expectation is exercised by at least one bound state', async ({
-  page,
-}) => {
-  // A whole-binding sweep: every state, every expectation, a fresh mount each
-  // time. That is minutes of real browser work, not the seconds a single-state
-  // test takes.
-  test.setTimeout(5 * 60 * 1000);
-  const cdp = await page.context().newCDPSession(page);
-  const results: BindingResult[] = [];
-  for (const state of SWITCH_BINDING_STATES) {
-    results.push(await runState(page, cdp, state));
-  }
-  // An expectation that applies to nothing is not coverage, however green it
-  // looks. This is the only place that can notice: the contract never sees the
-  // states, so whether a condition matches a real one is a binding-side fact.
-  expect(neverExercised(results)).toEqual([]);
-  expect(unmatchedKnownFailures(SWITCH_KNOWN_FAILURES, results)).toEqual([]);
-});
+// Each state's result, recorded by its own test below so the whole-suite check
+// at the end reads it instead of measuring every state a second time. A state
+// whose test did not run in this worker (a filtered run, or a worker restarted
+// after a failure) is measured by the whole-suite check itself.
+const recorded = new Map<string, BindingResult>();
 
 for (const state of SWITCH_BINDING_STATES) {
   test(`Switch [${state.id}] — ${state.summary}`, async ({page}) => {
     const cdp = await page.context().newCDPSession(page);
     const result = await runState(page, cdp, state);
+    recorded.set(state.id, result);
     const report = summarize(SWITCH_PATTERN, [result]);
     // eslint-disable-next-line no-console -- the report is this run's artifact
     console.log(formatReport(report));
@@ -201,3 +190,22 @@ for (const state of SWITCH_BINDING_STATES) {
     expect(report.counts.unexpectedPass).toBe(0);
   });
 }
+
+test('every expectation is exercised by at least one bound state', async ({
+  page,
+}) => {
+  // A whole-binding sweep: every state's result, read from its own test or,
+  // when that test did not run in this worker, measured here (minutes of real
+  // browser work in that case, so the budget stays).
+  test.setTimeout(5 * 60 * 1000);
+  const cdp = await page.context().newCDPSession(page);
+  const results: BindingResult[] = [];
+  for (const state of SWITCH_BINDING_STATES) {
+    results.push(recorded.get(state.id) ?? (await runState(page, cdp, state)));
+  }
+  // An expectation that applies to nothing is not coverage, however green it
+  // looks. This is the only place that can notice: the contract never sees the
+  // states, so whether a condition matches a real one is a binding-side fact.
+  expect(neverExercised(results)).toEqual([]);
+  expect(unmatchedKnownFailures(SWITCH_KNOWN_FAILURES, results)).toEqual([]);
+});

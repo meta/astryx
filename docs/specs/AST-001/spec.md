@@ -74,8 +74,9 @@ actionable-looking selector.
 - Unsupported behavior: input `isLoading` MUST NOT be used as a fallback
   option-source signal.
 - Browser evidence: the loading, read-only, and completed-empty states require
-  real-browser keyboard, accessibility-tree, and screen-reader verification;
-  DOM assertions alone are not sufficient.
+  real-browser keyboard and accessibility-tree verification; DOM assertions alone
+  are not sufficient. Screen-reader observation is recommended follow-up under
+  `spec:AST-009`, not a merge or release requirement.
 
 ## Current-state impact
 
@@ -103,12 +104,12 @@ actionable-looking selector.
 
 ## Verification
 
-| Contract      | Verification                                                        | Representative states                                                                                  | Mutation or failure expectation                                                                                                |
-| ------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| FR1, FR2      | Selector and MultiSelector interaction tests                        | populated options with input `isLoading`; searched and unsearched; pointer and keyboard                | A provided option disappears, becomes unreachable, or cannot be selected because the field value is busy                       |
-| FR3, FR5, FR6 | State-transition and activation tests                               | zero options while initial pending; pending to completed empty; zero options without pending           | The control offers a nonexistent choice, claims completed empty while pending, or keeps presenting loading after completion    |
-| FR7           | Real-browser keyboard, accessibility-tree, and screen-reader matrix | initial pending, completed empty/read-only, populated while input `isLoading`, existing selected value | Visible and announced states disagree, focus is lost, name/value disappears, or a transition is silent or announced repeatedly |
-| Public API    | Type-level and consumer-example tests after OQ1 is resolved         | omitted/default state, explicit initial pending, dynamic completion                                    | Zero options or input `isLoading` silently substitutes for the explicit source state                                           |
+| Contract      | Verification                                                                            | Representative states                                                                                  | Mutation or failure expectation                                                                                                |
+| ------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| FR1, FR2      | Selector and MultiSelector interaction tests                                            | populated options with input `isLoading`; searched and unsearched; pointer and keyboard                | A provided option disappears, becomes unreachable, or cannot be selected because the field value is busy                       |
+| FR3, FR5, FR6 | State-transition and activation tests                                                   | zero options while initial pending; pending to completed empty; zero options without pending           | The control offers a nonexistent choice, claims completed empty while pending, or keeps presenting loading after completion    |
+| FR7           | Real-browser keyboard and accessibility-tree tests; screen-reader follow-up recommended | initial pending, completed empty/read-only, populated while input `isLoading`, existing selected value | Visible and announced states disagree, focus is lost, name/value disappears, or a transition is silent or announced repeatedly |
+| Public API    | Type-level and consumer-example tests after OQ1 is resolved                             | omitted/default state, explicit initial pending, dynamic completion                                    | Zero options or input `isLoading` silently substitutes for the explicit source state                                           |
 
 ## Decision log
 

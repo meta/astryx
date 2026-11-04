@@ -5,7 +5,9 @@
  * Integration test for build-css.mjs
  *
  * Validates that astryx.css contains expected @media wrappers and
- * prefers-reduced-motion rules.
+ * prefers-reduced-motion rules, and that the touch press's release ships as a
+ * real fade: the press strength is a registered `<number>` the fading arm
+ * animates on the machine's own clock (utils/interactionOverlay.stylex.ts).
  */
 
 import {describe, it, expect, beforeAll} from 'vitest';
@@ -13,6 +15,29 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {ensureCoreBuilt} from '../packages/cli/clients/cli/commands/ensure-core-built.mjs';
+
+/**
+ * The release clock, read off its one source: `pressConsts.releaseMs` in
+ * utils/interactionOverlay.stylex.ts, which both the stylesheet (at build
+ * time) and the controller (at run time) take it from. The module itself
+ * cannot be imported here, since a StyleX source file only runs compiled.
+ */
+async function readReleaseMs() {
+  const source = await fs.readFile(
+    path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      '../packages/core/src/utils/interactionOverlay.stylex.ts',
+    ),
+    'utf8',
+  );
+  const match = source.match(/releaseMs:\s*(\d+)/);
+  if (match == null) {
+    throw new Error(
+      'pressConsts.releaseMs not found in interactionOverlay.stylex.ts',
+    );
+  }
+  return Number(match[1]);
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -212,5 +237,120 @@ describe('build-css astryx.css', () => {
         () => false,
       ),
     ).resolves.toBe(false);
+  });
+
+  describe('the touch press release (utils/interactionOverlay.stylex.ts)', () => {
+    /** `.2s`, `200ms`, `0.2s` → 200. */
+    const toMs = value => {
+      // The release scales its base clock by the theme's tempo, capped under
+      // Reduce Motion (`calc(<ms> * …)`, `min(<ms>, …)`); it reads at tempo 1.
+      const match = value
+        .trim()
+        .match(/^(?:(?:calc|min)\(\s*)?([\d.]+)(ms|s)\b/);
+      return match == null
+        ? Number.NaN
+        : Number(match[1]) * (match[2] === 's' ? 1000 : 1);
+    };
+    const lines = () => astryxCss.split('\n');
+
+    it('registers the press strength as an interpolable number, once', () => {
+      // The pressed overlay is a gradient layer, and gradients do not
+      // interpolate; the registered number the layer reads does. This is the
+      // declaration that makes the release a fade rather than a step.
+      const registrations =
+        astryxCss.match(/@property --astryx-press-alpha \{[^}]*\}/g) ?? [];
+      expect(registrations).toHaveLength(1);
+      expect(registrations[0]).toContain('syntax: "<number>"');
+      expect(registrations[0]).toContain('initial-value: 0');
+      expect(astryxCss).toMatch(/:root[^{]*\{--astryx-press-alpha:0;?\}/);
+    });
+
+    it("animates the strength 1 → 0 on the fading arm, on the machine's own clock", async () => {
+      const keyframes = astryxCss.match(
+        /@keyframes ([\w-]+)\{from\{--astryx-press-alpha:1;?\}to\{--astryx-press-alpha:0;?\}\}/,
+      );
+      expect(keyframes).not.toBeNull();
+      const fading = lines().filter(line =>
+        line.includes('[data-astryx-press="fading"]'),
+      );
+      expect(
+        fading.some(line => line.includes(`animation-name:${keyframes[1]}`)),
+      ).toBe(true);
+      const durationsOf = reduced =>
+        fading
+          .filter(line => line.includes('prefers-reduced-motion') === reduced)
+          .map(line => line.match(/animation-duration:\s*([^;}]+)/)?.[1])
+          .filter(Boolean);
+      // One clock, the one the controller removes the attribute on, and its
+      // Reduce Motion arm, which a tempo never lengthens past it (FR4). A
+      // press layer that fades on the compositor (Switch's) runs on it too.
+      const releaseMs = await readReleaseMs();
+      for (const reduced of [false, true]) {
+        const durations = durationsOf(reduced);
+        expect(durations.length).toBeGreaterThan(0);
+        expect(durations.map(toMs), durations.join(' | ')).toEqual(
+          durations.map(() => releaseMs),
+        );
+      }
+      expect(durationsOf(true).every(value => /^min\(/.test(value))).toBe(true);
+      // The onset is instant: nothing animates on the on arm.
+      const on = lines().filter(line =>
+        line.includes('[data-astryx-press="on"]'),
+      );
+      expect(on.length).toBeGreaterThan(0);
+      expect(on.some(line => line.includes('animation'))).toBe(false);
+    });
+
+    it('declares the press paint once, as the pressed token at the strength, and paints every touch arm through it', () => {
+      // The one source: `--_press-paint`, the pressed token mixed at the
+      // press's strength, declared by the shared overlay styles on the element
+      // the controller writes to. StyleX deduplicates the identical
+      // declaration across the variants, so the shipped sheet carries it once.
+      const declarations = lines().filter(line =>
+        /\{--_press-paint:/.test(line),
+      );
+      expect(declarations).toHaveLength(1);
+      expect(declarations[0]).toContain('var(--color-overlay-pressed)');
+      expect(declarations[0]).toContain('var(--astryx-press-alpha)');
+      expect(declarations[0]).not.toContain('--color-overlay-hover');
+      // No second copy of the formula anywhere in the sheet.
+      const formulas = astryxCss.match(
+        /color-mix\(in srgb,\s*var\(--color-overlay-pressed\)\s*calc\(/g,
+      );
+      expect(formulas).toHaveLength(1);
+      // Every overlay variant, the cards' `--_press-overlay`, and the
+      // ancestor-scoped paints (switch, the checkbox and radio overlays, tab)
+      // read it back: twelve lines today, fewer than the arms because StyleX
+      // deduplicates identical rules. A regex that stopped matching would
+      // fall well below this floor.
+      const paints = lines().filter(
+        line =>
+          /\[data-astryx-press="(?:on|fading)"\]/.test(line) &&
+          line.includes('var(--_press-paint'),
+      );
+      expect(paints.length).toBeGreaterThanOrEqual(10);
+      // Not the hover strength: under a finger there is no hover to land on,
+      // and a paint that stepped there would still have to step off.
+      const arms = lines().filter(line =>
+        /\[data-astryx-press="(?:on|fading)"\]/.test(line),
+      );
+      expect(arms.some(line => line.includes('--color-overlay-hover'))).toBe(
+        false,
+      );
+    });
+  });
+
+  describe('Layout header/footer padding collapse (Layout/layoutEdges.stylex.ts)', () => {
+    it('ships no :has() on the layout followed by a descendant * for the header or footer', () => {
+      // `.anchor:has(…) *` makes engines restyle everything inside the layout
+      // on any change in it; the collapse uses sibling markers instead.
+      const costly = astryxCss
+        .split('\n')
+        .filter(
+          line =>
+            /astryx-layout-(header|footer)/.test(line) && /:has\(/.test(line),
+        );
+      expect(costly).toEqual([]);
+    });
   });
 });

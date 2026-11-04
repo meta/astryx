@@ -172,6 +172,69 @@ export default {};\n`,
     }
   });
 
+  it('exits nonzero and names the integration on stderr when one fails to load', async () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-gap-broken-'));
+    try {
+      fs.writeFileSync(
+        path.join(cwd, 'package.json'),
+        JSON.stringify({name: 'fixture-app'}),
+      );
+      fs.writeFileSync(
+        path.join(cwd, 'astryx.config.mjs'),
+        "export default {integrations: ['@test/broken']};\n",
+      );
+      const integrationDir = path.join(cwd, 'node_modules', '@test', 'broken');
+      fs.mkdirSync(integrationDir, {recursive: true});
+      fs.writeFileSync(
+        path.join(integrationDir, 'package.json'),
+        JSON.stringify({
+          name: '@test/broken',
+          version: '1.0.0',
+          type: 'module',
+        }),
+      );
+      fs.writeFileSync(
+        path.join(integrationDir, 'astryx.integration.mjs'),
+        "throw new Error('intentional integration load failure');\n",
+      );
+
+      const cli = await runCli(
+        [
+          'gap-report',
+          'General',
+          '--category',
+          'docs_gap',
+          '--reason',
+          'Need a keyboard example',
+          '--json',
+        ],
+        {cwd},
+      );
+
+      expect(cli.status).toBe(1);
+      expect(JSON.parse(cli.stdout)).toMatchObject({
+        type: 'gap-report.file',
+        data: {
+          status: 'failed',
+          filedCount: 0,
+          deliveries: [
+            {
+              handlerType: 'integration',
+              handler: '@test/broken',
+              status: 'failed',
+            },
+          ],
+        },
+      });
+      expect(cli.stderr).toContain(
+        'gap-report: delivery to @test/broken failed:',
+      );
+      expect(cli.stderr).toContain('intentional integration load failure');
+    } finally {
+      fs.rmSync(cwd, {recursive: true, force: true});
+    }
+  });
+
   it('reports missing required fields through the JSON error contract', async () => {
     const cli = await runCli(['gap-report', 'Button', '--json']);
     expect(cli.status).toBe(1);
@@ -219,7 +282,7 @@ describe('gap-report control docs', () => {
       expect(help.stdout).toContain(text);
     }
     expect(option('--list-categories')).toContain(
-      'the component and the other gap-report options are ignored',
+      'the component and the other gap-report options are refused with ERR_INVALID_ARGUMENT',
     );
 
     const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-gap-limits-'));
@@ -265,6 +328,85 @@ describe('gap-report control docs', () => {
     }
     await expect(
       gapReport(undefined, {listCategories: true, category: 'not_real', package: 'nope'}),
-    ).resolves.toMatchObject({type: 'gap-report.categories'});
+    ).rejects.toMatchObject({code: 'ERR_INVALID_ARGUMENT'});
+  });
+});
+
+describe('gap-report destinations in text', () => {
+  it('lists the destinations and tells the agent to ask the person', async () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-gap-dest-'));
+    try {
+      fs.writeFileSync(
+        path.join(cwd, 'package.json'),
+        JSON.stringify({name: 'fixture-app'}),
+      );
+      const pkg = path.join(cwd, 'node_modules', '@test', 'widgets');
+      fs.mkdirSync(pkg, {recursive: true});
+      fs.writeFileSync(
+        path.join(pkg, 'package.json'),
+        JSON.stringify({name: '@test/widgets', version: '1.0.0'}),
+      );
+      fs.writeFileSync(
+        path.join(pkg, 'astryx.integration.mjs'),
+        "export default {issuesUrl: 'https://tracker.example/widgets'};\n",
+      );
+      fs.writeFileSync(
+        path.join(cwd, 'astryx.config.mjs'),
+        `export default {
+  integrations: ['@test/widgets'],
+  gapReport: {audience: 'internal', handle: () => ({status: 'filed', message: 'shared'})},
+};\n`,
+      );
+
+      const listed = await runCli(['gap-report', '--list-categories'], {cwd});
+      expect(listed.status).toBe(0);
+      expect(listed.stdout).toContain('Destinations');
+      expect(listed.stdout).toMatch(/^default:\s+true$/m);
+      expect(listed.stdout).toMatch(/^to:\s+@test\/widgets$/m);
+      expect(listed.stdout).toMatch(
+        /^issuesUrl:\s+https:\/\/tracker\.example\/widgets$/m,
+      );
+      expect(listed.stdout).toMatch(/ask the person/i);
+
+      const filed = await runCli(
+        [
+          'gap-report',
+          'Button',
+          '--category',
+          'docs_gap',
+          '--reason',
+          'Need a keyboard example',
+        ],
+        {cwd},
+      );
+      expect(filed.status).toBe(0);
+      expect(filed.stdout).toContain('Destinations');
+      expect(filed.stdout).toMatch(/ask the person/i);
+
+      const chosen = await runCli(
+        [
+          'gap-report',
+          'Button',
+          '--category',
+          'docs_gap',
+          '--reason',
+          'Need a keyboard example',
+          '--to',
+          '@test/widgets',
+          '--json',
+        ],
+        {cwd},
+      );
+      expect(chosen.status).toBe(0);
+      expect(JSON.parse(chosen.stdout).data.deliveries).toEqual([
+        expect.objectContaining({
+          handler: 'issuesUrl',
+          status: 'routed_only',
+          url: 'https://tracker.example/widgets',
+        }),
+      ]);
+    } finally {
+      fs.rmSync(cwd, {recursive: true, force: true});
+    }
   });
 });

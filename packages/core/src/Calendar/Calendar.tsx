@@ -51,17 +51,26 @@ import {
   plainDateSetFirstOfMonth,
   plainDateAddMonths,
   plainDateAddDays,
+  plainDateDiffDays,
+  getDaysInMonth,
+  plainDateIsAfter,
   plainDateIsBefore,
   plainDateIsEqual,
   plainDateGetWeekNumber,
   plainDateFormat,
+  plainDateWeekFieldName,
   DATE_FORMAT_WITH_WEEKDAY,
-  DATE_FORMAT_MONTH_YEAR,
+} from '../utils/plainDate';
+import {
+  plainDateFormatDayNumber,
+  plainDateFormatStandaloneMonthYear,
 } from '../utils/plainDate';
 import {mergeProps, composeEventHandlers, rtlStyles} from '../utils';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {usePressFeedback} from '../hooks/usePressFeedback';
 import {getInitialFocusDate} from './getInitialFocusDate';
+import {getWeekdayHeaders} from './getWeekdayHeaderNames';
 import {
   computeDayCellState,
   computeRangeRounding,
@@ -89,10 +98,20 @@ import type {
 } from '../utils/dateTypes';
 import {normalizeDayOfWeek} from '../utils/dateTypes';
 import {themeProps} from '../utils/themeProps';
-import {useLocale, useTranslator} from '../i18n';
+import {useLocale} from '../i18n';
+import {VisuallyHidden} from '../VisuallyHidden';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Calendar/Calendar.generated';
+
+registerEnglishFallback(english);
+
+/** How a month navigation moves the focused day: by its row offset in days, or by whole months or years. */
+type NavigationUnit = 'days' | 'months' | 'years';
 
 /** Imperative handle for Calendar handleRef */
-
 export interface CalendarHandle {
   /** Navigate the calendar to show the month containing the given date */
   navigateTo: (date: ISODateString) => void;
@@ -187,8 +206,8 @@ interface CalendarSingleProps extends CalendarBaseProps {
   /** Selection mode */
   mode?: 'single';
 
-  /** Selected date in ISO format (YYYY-MM-DD) */
-  value?: ISODateString;
+  /** Selected date in ISO format (YYYY-MM-DD), or null for controlled empty state */
+  value?: ISODateString | null;
 
   /** Default value for uncontrolled mode */
   defaultValue?: ISODateString;
@@ -201,8 +220,8 @@ interface CalendarRangeProps extends CalendarBaseProps {
   /** Selection mode */
   mode: 'range';
 
-  /** Selected date range */
-  value?: DateRange;
+  /** Selected date range, or null for controlled empty state */
+  value?: DateRange | null;
 
   /** Default value for uncontrolled mode */
   defaultValue?: DateRange;
@@ -212,6 +231,21 @@ interface CalendarRangeProps extends CalendarBaseProps {
 }
 
 export type CalendarProps = CalendarSingleProps | CalendarRangeProps;
+
+/** The first day of `month`'s month that `isDisabled` allows, or null. */
+function firstEnabledDayOfMonth(
+  month: PlainDate,
+  isDisabled: (pd: PlainDate) => boolean,
+): PlainDate | null {
+  const days = getDaysInMonth(month.year, month.month);
+  for (let day = 1; day <= days; day += 1) {
+    const pd = {year: month.year, month: month.month, day};
+    if (!isDisabled(pd)) {
+      return pd;
+    }
+  }
+  return null;
+}
 
 // =============================================================================
 // Main Component
@@ -226,7 +260,7 @@ export type CalendarProps = CalendarSingleProps | CalendarRangeProps;
  * ```
  */
 export function Calendar({ref, ...props}: CalendarProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const {
     handleRef,
@@ -281,7 +315,8 @@ export function Calendar({ref, ...props}: CalendarProps) {
   const [pendingFocus, setPendingFocus] = useState<ISODateString | null>(null);
 
   // Determine effective value
-  const effectiveValue = value !== undefined ? value : internalValue;
+  const effectiveValue =
+    (value !== undefined ? value : internalValue) ?? undefined;
 
   // Focus date state (which month is visible). Falls back to today, clamped
   // into the min/max window so a window that doesn't contain today doesn't
@@ -331,15 +366,49 @@ export function Calendar({ref, ...props}: CalendarProps) {
     });
   }, [baseMonth, numberOfMonths]);
 
-  // Format month header
-  const monthYearLabel = useMemo(() => {
-    if (numberOfMonths === 1) {
-      return plainDateFormat(visibleMonths[0], DATE_FORMAT_MONTH_YEAR, locale);
+  // A pending target is claimed by the grid that shows its month, or dropped
+  // by the next focus move that is not onto the target day: when a controlled
+  // owner refuses the month change, no grid shows the target's month, and a
+  // stale target would later steal focus (and Enter) when that month does
+  // appear. Only a grid showing the target's month receives it; any other
+  // focus change (an arrow to another day, the month header's buttons, or out
+  // of the calendar) drops it (see onBlur below).
+  const claimablePendingFocus = useMemo(() => {
+    if (pendingFocus == null) {
+      return null;
     }
-    return visibleMonths
-      .map(m => plainDateFormat(m, DATE_FORMAT_MONTH_YEAR, locale))
-      .join(' – ');
-  }, [visibleMonths, numberOfMonths, locale]);
+    const target = plainDateFromISO(pendingFocus);
+    return visibleMonths.some(
+      pd => pd.year === target.year && pd.month === target.month,
+    )
+      ? pendingFocus
+      : null;
+  }, [pendingFocus, visibleMonths]);
+  const handleRootBlur = useCallback(
+    (e: React.FocusEvent<HTMLDivElement>) => {
+      // Only the move onto the target day itself keeps the target: an arrow
+      // to any other day, a move to the header buttons, or focus leaving the
+      // calendar all drop it.
+      const movesToTarget =
+        e.relatedTarget instanceof Element &&
+        e.relatedTarget.getAttribute('data-date') === pendingFocus;
+      if (pendingFocus != null && !movesToTarget) {
+        setPendingFocus(null);
+      }
+    },
+    [pendingFocus],
+  );
+
+  // Format month header
+  // Each month is its own stand-alone label, so each starts with a capital
+  // where the locale capitalizes one (FR1).
+  const monthYearLabel = useMemo(
+    () =>
+      visibleMonths
+        .map(m => plainDateFormatStandaloneMonthYear(m, locale))
+        .join(' – '),
+    [visibleMonths, locale],
+  );
 
   // Announce the newly visible month to screen readers whenever it changes.
   // The visible month label (`<span>`) carries no live semantics, so paging the
@@ -361,6 +430,15 @@ export function Calendar({ref, ...props}: CalendarProps) {
   }, [monthYearLabel, announce]);
 
   // Determine if prev/next navigation is possible based on min/max
+  const minDateForKeys = useMemo(
+    () => (min ? plainDateFromISO(min) : null),
+    [min],
+  );
+  const maxDateForKeys = useMemo(
+    () => (max ? plainDateFromISO(max) : null),
+    [max],
+  );
+
   const canNavigatePrevious = useMemo(() => {
     if (!min) {
       return true;
@@ -388,26 +466,138 @@ export function Calendar({ref, ...props}: CalendarProps) {
   }, [max, baseMonth, numberOfMonths]);
 
   // Navigation handlers
-  const navigateMonth = useCallback(
-    (delta: number, focusedDate?: ISODateString, offset?: number) => {
-      const newPd = plainDateAddMonths(baseMonth, delta);
-      const newISO = plainDateToISO(newPd);
+  // The same constraint view the grids use, so a key can resolve its target
+  // before the month changes.
+  const rootRangeAnchor = useMemo(
+    () =>
+      mode === 'range' && rangeSelectionStart
+        ? plainDateFromISO(rangeSelectionStart)
+        : null,
+    [mode, rangeSelectionStart],
+  );
+  const {isDateDisabled: isRootDateDisabled} = useCalendarConstraints({
+    min,
+    max,
+    dateConstraints,
+    maxRangeSpan,
+    minRangeSpan,
+    rangeAnchor: rootRangeAnchor,
+  });
 
-      // Calculate target focus date if a focused date was provided
-      if (focusedDate) {
-        const currentPd = plainDateFromISO(focusedDate);
-        const daysToMove = offset ?? 7;
-        const targetPd = plainDateAddDays(currentPd, delta * daysToMove);
-        setPendingFocus(plainDateToISO(targetPd));
+  const navigateMonth = useCallback(
+    (
+      delta: number,
+      focusedDate?: ISODateString,
+      offset?: number,
+      unit: NavigationUnit = 'days',
+    ) => {
+      const monthIndex = (pd: PlainDate) => pd.year * 12 + pd.month;
+      const firstShown = monthIndex(baseMonth);
+      const lastShown = firstShown + numberOfMonths - 1;
+
+      // The Previous/Next buttons move the month with no focused day.
+      if (!focusedDate) {
+        if (
+          (delta < 0 && !canNavigatePrevious) ||
+          (delta > 0 && !canNavigateNext)
+        ) {
+          return;
+        }
+        const newPd = plainDateAddMonths(baseMonth, delta);
+        if (onFocusDateChange) {
+          onFocusDateChange(plainDateToISO(newPd));
+        } else {
+          setInternalFocusDate(newPd);
+        }
+        return;
       }
 
+      // A key resolves its TARGET day first and decides by that, so a
+      // boundary blocks only out-of-range targets, never the month movement
+      // itself (ArrowUp from February 3 reaches January 27 at a January
+      // minimum), and a direction with no enabled day left changes nothing
+      // rather than dropping focus.
+      const currentPd = plainDateFromISO(focusedDate);
+      const inRange = (pd: PlainDate) =>
+        !(minDateForKeys && plainDateIsBefore(pd, minDateForKeys)) &&
+        !(maxDateForKeys && plainDateIsAfter(pd, maxDateForKeys));
+      let targetPd: PlainDate;
+      if (unit === 'months' || unit === 'years') {
+        // A page or a year step keeps the day of the month and clamps it to the
+        // target month's length. A month with no enabled day is no target, the
+        // same as for an arrow.
+        const candidate = plainDateAddMonths(
+          currentPd,
+          unit === 'years' ? delta * 12 : delta,
+        );
+        if (!inRange(candidate)) {
+          return;
+        }
+        if (isRootDateDisabled(candidate)) {
+          const firstEnabled = firstEnabledDayOfMonth(
+            candidate,
+            isRootDateDisabled,
+          );
+          if (firstEnabled == null) {
+            return;
+          }
+          targetPd = firstEnabled;
+        } else {
+          targetPd = candidate;
+        }
+      } else {
+        // Walk the arrow's direction to the first enabled day, up to a year
+        // away; past `min`/`max` or with every day disabled, nothing moves.
+        const step = delta * (offset ?? 7);
+        let candidate = plainDateAddDays(currentPd, step);
+        let found: PlainDate | null = null;
+        while (Math.abs(plainDateDiffDays(currentPd, candidate)) <= 366) {
+          if (!inRange(candidate)) {
+            return;
+          }
+          if (!isRootDateDisabled(candidate)) {
+            found = candidate;
+            break;
+          }
+          candidate = plainDateAddDays(candidate, step);
+        }
+        if (found == null) {
+          return;
+        }
+        targetPd = found;
+      }
+
+      // Focus moves to the target; the months change only when the target's
+      // month is not already shown. The view shifts the least it can in the
+      // key's direction, so the target month becomes the first (backwards)
+      // or last (forwards) month shown.
+      const resolved: PlainDate = targetPd;
+      const targetMonth = monthIndex(resolved);
+      setPendingFocus(plainDateToISO(resolved));
+      if (targetMonth >= firstShown && targetMonth <= lastShown) {
+        return;
+      }
+      const targetFirst = {year: resolved.year, month: resolved.month, day: 1};
+      const newPd =
+        targetMonth < firstShown
+          ? targetFirst
+          : plainDateAddMonths(targetFirst, -(numberOfMonths - 1));
       if (onFocusDateChange) {
-        onFocusDateChange(newISO);
+        onFocusDateChange(plainDateToISO(newPd));
       } else {
         setInternalFocusDate(newPd);
       }
     },
-    [baseMonth, onFocusDateChange],
+    [
+      baseMonth,
+      canNavigateNext,
+      canNavigatePrevious,
+      isRootDateDisabled,
+      maxDateForKeys,
+      minDateForKeys,
+      numberOfMonths,
+      onFocusDateChange,
+    ],
   );
 
   // Escape key handler to cancel range selection
@@ -511,6 +701,7 @@ export function Calendar({ref, ...props}: CalendarProps) {
     <div
       ref={ref}
       {...rest}
+      onBlur={composeEventHandlers(rest.onBlur, handleRootBlur)}
       {...mergeProps(
         themeProps('calendar', {mode}),
         stylex.props(calendarStyles.calendar, xstyle),
@@ -585,13 +776,13 @@ export function Calendar({ref, ...props}: CalendarProps) {
               setHoveredDate(date ? plainDateToISO(date) : null)
             }
             today={today}
-            onNavigatePrevious={(focusedDate, offset) =>
-              navigateMonth(-1, focusedDate, offset)
+            onNavigatePrevious={(focusedDate, offset, unit) =>
+              navigateMonth(-1, focusedDate, offset, unit)
             }
-            onNavigateNext={(focusedDate, offset) =>
-              navigateMonth(1, focusedDate, offset)
+            onNavigateNext={(focusedDate, offset, unit) =>
+              navigateMonth(1, focusedDate, offset, unit)
             }
-            pendingFocus={pendingFocus}
+            pendingFocus={claimablePendingFocus}
             onPendingFocusHandled={() => setPendingFocus(null)}
           />
         ))}
@@ -624,8 +815,16 @@ interface MonthGridProps {
   onDayClick: (date: PlainDate) => void;
   onDayHover: (date: PlainDate | null) => void;
   today: PlainDate;
-  onNavigatePrevious?: (focusedDate: ISODateString, offset: number) => void;
-  onNavigateNext?: (focusedDate: ISODateString, offset: number) => void;
+  onNavigatePrevious?: (
+    focusedDate: ISODateString,
+    offset: number,
+    unit?: NavigationUnit,
+  ) => void;
+  onNavigateNext?: (
+    focusedDate: ISODateString,
+    offset: number,
+    unit?: NavigationUnit,
+  ) => void;
   pendingFocus?: ISODateString | null;
   onPendingFocusHandled?: () => void;
 }
@@ -657,19 +856,15 @@ function MonthGrid({
   const year = month.year;
 
   // Use hooks for days generation and constraints
-  const {days, weeks, dayNames} = useCalendarDays({
+  const {days, weeks} = useCalendarDays({
     year,
     month: month.month,
     weekStartsOn,
     hasVariableRowCount,
   });
   const dayNameHeaders = useMemo(
-    () =>
-      dayNames.map((name, offset) => ({
-        dayOfWeek: ((weekStartsOn + offset) % 7) as DayOfWeek,
-        name,
-      })),
-    [dayNames, weekStartsOn],
+    () => getWeekdayHeaders(locale, weekStartsOn),
+    [locale, weekStartsOn],
   );
 
   const rangeAnchor = useMemo(
@@ -767,20 +962,27 @@ function MonthGrid({
     [getFocusedDate, onNavigateNext],
   );
 
-  // Handle PageUp/PageDown
-  const handlePageUp = useCallback(() => {
-    const focusedDate = getFocusedDate();
-    if (focusedDate) {
-      onNavigatePrevious?.(focusedDate, 7);
-    }
-  }, [getFocusedDate, onNavigatePrevious]);
+  // PageUp/PageDown move by a month, and with Shift by a year (APG date
+  // picker dialog).
+  const handlePageUp = useCallback(
+    (e: React.KeyboardEvent) => {
+      const focusedDate = getFocusedDate();
+      if (focusedDate) {
+        onNavigatePrevious?.(focusedDate, 1, e.shiftKey ? 'years' : 'months');
+      }
+    },
+    [getFocusedDate, onNavigatePrevious],
+  );
 
-  const handlePageDown = useCallback(() => {
-    const focusedDate = getFocusedDate();
-    if (focusedDate) {
-      onNavigateNext?.(focusedDate, 7);
-    }
-  }, [getFocusedDate, onNavigateNext]);
+  const handlePageDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      const focusedDate = getFocusedDate();
+      if (focusedDate) {
+        onNavigateNext?.(focusedDate, 1, e.shiftKey ? 'years' : 'months');
+      }
+    },
+    [getFocusedDate, onNavigateNext],
+  );
 
   // Grid focus navigation.
   //
@@ -798,8 +1000,15 @@ function MonthGrid({
   } = useGridFocus<HTMLDivElement>({
     columns: 7,
     cellSelector: '[role="gridcell"]',
+    // A borrowed adjacent-month day is exposed aria-disabled (its click does
+    // nothing, but it can still take pointer focus) and may also be natively
+    // disabled by bounds or a constraint; the keyboard skips it either way
+    // and crosses into that month through the grid edge instead, so focus
+    // lands on the real day in the month now shown (FR5).
     isCellFocusable: cell =>
-      cell.querySelector('button:not([disabled])') !== null,
+      cell.querySelector(
+        'button:not([disabled]):not([aria-disabled="true"])',
+      ) !== null,
     getFocusTarget: cell => cell.querySelector<HTMLElement>('button'),
     hasRovingTabIndex: true,
     onNavigateBefore: handleNavigatePrevious,
@@ -808,34 +1017,53 @@ function MonthGrid({
     onPageDown: handlePageDown,
   });
 
-  // Handle pending focus after month navigation
+  // Handle pending focus after month navigation. Every mounted month grid
+  // sees the same pending date; only the grid showing that date's month acts,
+  // so a neighbouring grid's fallback never overrides the right target. The
+  // target is the real day in this month, never an outside-day copy; when it
+  // is disabled, the month's first enabled day takes focus instead.
   useEffect(() => {
     if (!pendingFocus || !gridRef.current) {
       return;
     }
 
-    const buttons = gridRef.current.querySelectorAll<HTMLElement>(
-      'button:not([disabled])',
-    );
-
     const targetPd = plainDateFromISO(pendingFocus);
+    if (targetPd.year !== year || targetPd.month !== month.month) {
+      return;
+    }
     const targetIso = plainDateToISO(targetPd);
 
-    let targetButton: HTMLElement | null = null;
-    for (const button of buttons) {
-      if (button.getAttribute('data-date') === targetIso) {
-        targetButton = button;
-        break;
+    const buttons = Array.from(
+      gridRef.current.querySelectorAll<HTMLElement>(
+        'button[data-date]:not([disabled]):not([aria-disabled="true"])',
+      ),
+    );
+
+    // The real target day, else the month's first enabled day, else — in a
+    // month with no enabled day — the first day button that can still take
+    // focus (a borrowed adjacent-month day), so focus stays in the grid
+    // rather than dropping to the page.
+    const targetButton =
+      buttons.find(button => button.getAttribute('data-date') === targetIso) ??
+      buttons[0] ??
+      gridRef.current.querySelector<HTMLElement>(
+        'button[data-date]:not([disabled])',
+      ) ??
+      null;
+
+    if (targetButton != null) {
+      // The target becomes this grid's one Tab stop before it takes focus,
+      // the way the hook's own arrow moves do (FR2): a programmatic focus
+      // alone would leave the stop on the day the grid mounted with.
+      for (const button of gridRef.current.querySelectorAll<HTMLElement>(
+        'button[data-date]',
+      )) {
+        button.tabIndex = button === targetButton ? 0 : -1;
       }
+      targetButton.focus();
     }
-
-    if (!targetButton && buttons.length > 0) {
-      targetButton = buttons[0];
-    }
-
-    targetButton?.focus();
     onPendingFocusHandled?.();
-  }, [pendingFocus, gridRef, onPendingFocusHandled]);
+  }, [pendingFocus, gridRef, month.month, onPendingFocusHandled, year]);
 
   // Parse selection
   let selectedDate: PlainDate | null = null;
@@ -875,7 +1103,7 @@ function MonthGrid({
 
   // Month label for announcements
   const monthLabel = useMemo(() => {
-    return plainDateFormat(month, DATE_FORMAT_MONTH_YEAR, locale);
+    return plainDateFormatStandaloneMonthYear(month, locale);
   }, [month, locale]);
 
   return (
@@ -898,12 +1126,19 @@ function MonthGrid({
             same display:contents row so its cells align to the grid columns. */}
         <div role="row" {...stylex.props(monthGridStyles.weekRow)}>
           {hasWeekNumbers && (
+            // The corner above the week-number column is a header cell like
+            // the weekday names beside it (APG grid: every cell in a row is a
+            // gridcell, columnheader or rowheader). Its name is the locale's
+            // own word for the week field, as visually hidden text so the
+            // column stays blank and the header is not empty to axe.
             <div
+              role="columnheader"
               {...stylex.props(
                 monthGridStyles.dayName,
                 monthGridStyles.weekNumberHeader,
-              )}
-            />
+              )}>
+              <VisuallyHidden>{plainDateWeekFieldName(locale)}</VisuallyHidden>
+            </div>
           )}
           {dayNameHeaders.map(({dayOfWeek, name}) => (
             <div
@@ -928,7 +1163,7 @@ function MonthGrid({
                 <div
                   role="rowheader"
                   {...stylex.props(monthGridStyles.weekNumber)}>
-                  {weekNum}
+                  {plainDateFormatDayNumber(weekNum, locale)}
                 </div>
               )}
               {week.map((day, dayIndex) => {
@@ -1033,8 +1268,9 @@ function DayCell({
   onDayClick,
   onDayHover,
 }: DayCellProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
+  const pressable = usePressFeedback();
   const {date, isOutside, dayNumber} = day;
 
   if (isOutside && !hasOutsideDays) {
@@ -1152,12 +1388,14 @@ function DayCell({
         // Mark today's cell programmatically (APG date-picker pattern), not just
         // visually, so screen-reader users can identify the current date.
         aria-current={state.isToday ? 'date' : undefined}
-        disabled={isDisabled}
+        // A disabled day stays focusable through aria-disabled (spec:AST-085
+        // FR1); arrows still skip it and its click and hover are guarded.
         // Initial roving tab-stop seed; useGridFocus owns it after mount.
         tabIndex={isTabbableDay ? 0 : -1}
         onClick={() => !state.effectivelyDisabled && onDayClick(date)}
         onMouseEnter={() => !state.effectivelyDisabled && onDayHover(date)}
         onMouseLeave={() => onDayHover(null)}
+        {...pressable}
         {...mergeProps(
           themeProps('calendar-day', {
             selected: endpoint ? 'selected' : null,
@@ -1192,7 +1430,7 @@ function DayCell({
             state.effectivelyDisabled && dayCellTheme.dayDisabled,
           ),
         )}>
-        {dayNumber}
+        {plainDateFormatDayNumber(dayNumber, locale)}
       </button>
     </div>
   );

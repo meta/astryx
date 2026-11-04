@@ -19,7 +19,6 @@
 import {
   useId,
   useCallback,
-  use,
   useOptimistic,
   useRef,
   useTransition,
@@ -42,17 +41,39 @@ import {FieldLabel} from '../Field/FieldLabel';
 import {FieldStatus} from '../FieldStatus/FieldStatus';
 import type {IconType} from '../Icon';
 import type {InputStatus} from '../Field/types';
-import {Spinner} from '../Spinner';
-import {useTooltip} from '../Tooltip';
-import {mergeProps, rtlStyles} from '../utils';
+import {Spinner} from '../Spinner/Spinner';
+import {useTooltip} from '../Tooltip/useTooltip';
+import {mergeProps} from '../utils/mergeProps';
+import {rtlStyles} from '../utils/rtlStyles';
 import {indicatorScope} from '../Indicator/indicator.markers.stylex';
+import {indicatorPressScope} from '../internal/indicatorPress.stylex';
+import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {useIndicatorFocusRing} from '../hooks/useIndicatorFocusRing';
-import {useResolvedRequired} from '../hooks/useResolvedRequired';
-import {useIndicator} from '../Indicator';
+import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
+import {usePressFeedback} from '../hooks/usePressFeedback';
+import {useIndicator} from '../Indicator/useIndicator';
 import {themeProps} from '../utils/themeProps';
-import {CheckboxListContext} from '../CheckboxList/CheckboxListContext';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/CheckboxInput/CheckboxInput.generated';
+
+registerEnglishFallback(english);
+
+/** Written by the touch press controller while the row is pressed. */
+const PRESSED_ON = '[data-astryx-press="on"]';
+/** Written by the touch press controller for the press's release. */
+const PRESSED_FADING = '[data-astryx-press="fading"]';
+
+// The touch press's paint, declared by the shared overlay styles on the
+// element the controller writes to (`pressedAlpha`) at the press's strength,
+// 1 while on and 1 → 0 over the release, and inherited resolved by the layer
+// that paints it. See interactionOverlay.stylex.ts.
+const pressedOverlayImage = 'var(--_press-paint-image)';
+
 const styles = stylex.create({
   container: {
     display: 'flex',
@@ -62,6 +83,20 @@ const styles = stylex.create({
   containerLabelHidden: {
     gap: 0,
   },
+  // An indicator in another package may not name this row's private press
+  // attribute. So the row hands its touch press image down to an indicator
+  // that paints its own press, but only in its own press states. A pressed
+  // ancestor row reaches it no more than it reaches the built-in box. The
+  // property has no default: a layered stylesheet ranks a default above the
+  // arms. Only this row declares it. A menu item paints its own press, so a
+  // mapped indicator there paints none.
+  indicatorPressImage: {
+    '--_indicator-press-image': {
+      default: null,
+      [PRESSED_ON]: 'var(--_press-paint-image)',
+      [PRESSED_FADING]: 'var(--_press-paint-image)',
+    },
+  },
   checkboxWrapper: {
     position: 'relative',
     display: 'flex',
@@ -70,19 +105,47 @@ const styles = stylex.create({
     flexShrink: 0,
     isolation: 'isolate',
   },
-  // The owner paints this layer over the resolved indicator, so a theme
-  // replacement cannot accidentally drop the component's pressed contract.
+  // The owner paints this layer over the resolved indicator, so a plain theme
+  // replacement keeps the pressed feedback. An indicator with
+  // `indicatorPressScope` paints its own press from what the row hands down,
+  // so this layer stays off over it.
+  // Two pointers, two press models (see interactionOverlay.stylex.ts): a
+  // mouse keeps `:active`; under a coarse pointer that arm is dropped and the
+  // touch press controller writes `data-astryx-press` on the row, which this layer
+  // reads off the same scope marker as the hover tint.
   indicatorPressOverlay: {
     '::after': {
-      content: '""',
+      // `when.descendant` takes a pseudo-class; `:is(*)` matches any marked
+      // indicator.
+      content: {
+        default: '""',
+        [stylex.when.descendant(':is(*)', indicatorPressScope)]: 'none',
+      },
       position: 'absolute',
       inset: 0,
       borderRadius: radiusVars['--radius-inner'],
       pointerEvents: 'none',
       backgroundColor: {
         default: 'transparent',
-        [stylex.when.ancestor(':active', indicatorScope)]:
-          colorVars['--color-overlay-pressed'],
+        [stylex.when.ancestor(':active', indicatorScope)]: {
+          default: colorVars['--color-overlay-pressed'],
+          '@media (pointer: coarse)': 'transparent',
+        },
+      },
+      // The touch press, as an image layer over the colour: an image change is
+      // discrete, so no transition can delay the onset, and the strength the
+      // row's `pressedAlpha` arms own (1 while on, 1 → 0 over the release) is
+      // what moves. Coarse pointers only, like the drop above.
+      backgroundImage: {
+        default: null,
+        [stylex.when.ancestor(PRESSED_ON, indicatorScope)]: {
+          default: null,
+          '@media (pointer: coarse)': pressedOverlayImage,
+        },
+        [stylex.when.ancestor(PRESSED_FADING, indicatorScope)]: {
+          default: null,
+          '@media (pointer: coarse)': pressedOverlayImage,
+        },
       },
     },
   },
@@ -280,6 +343,7 @@ const dynamicWidthStyles = stylex.create({
  * ```
  */
 export function CheckboxInput({
+  id: idProp,
   label,
   isLabelHidden = false,
   description,
@@ -306,33 +370,22 @@ export function CheckboxInput({
   'aria-describedby': ariaDescribedByProp,
   ...rest
 }: CheckboxInputProps) {
-  const id = useId();
+  // The row is the pressable: the overlay's pressed arm reads the row's
+  // scope marker, the way the indicator's hover tint does.
+  const pressable = usePressFeedback();
+  const generatedId = useId();
+  const id = idProp || generatedId;
   const descriptionID = useId();
   const statusMessageID = useId();
-  // Announce the effective required state (form default included) while the
-  // native `required` stays bound to the explicit `isRequired` so a layout
-  // default never switches on browser validation.
-  const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
 
   const [, startTransition] = useTransition();
   const [optimisticValue, setOptimisticValue] = useOptimistic(value);
   const isBusy = isLoading || optimisticValue !== value;
 
-  // Disabled-reason tooltip. Disabled controls swallow pointer events, so the
-  // tooltip listeners attach to the checkbox row (which already exists) and the
-  // native checkbox stays perceivable via aria-disabled instead of the disabled
-  // attribute. Value mutation is blocked by the isDisabled guard in onChange.
+  // A disabled checkbox stays focusable via aria-disabled instead of the
+  // native disabled attribute (spec:AST-085 FR1). Value mutation is blocked by
+  // the click and onChange guards on the input.
   const showsDisabledMessage = isDisabled && !!disabledMessage;
-  // Keep the native checkbox focusable via aria-disabled either when it renders
-  // its own reason tooltip, or when it sits in a CheckboxList whose whole-group
-  // `disabledMessage` (shown on the group container) needs each checkbox to
-  // stay keyboard-perceivable. The group signals this through context rather
-  // than a public prop.
-  const checkboxListContext = use(CheckboxListContext);
-  const isFocusableDisabled =
-    isDisabled &&
-    (showsDisabledMessage ||
-      (checkboxListContext?.hasDisabledMessage ?? false));
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
     // The container row is not naturally focusable; focusin bubbles up from the
@@ -342,13 +395,17 @@ export function CheckboxInput({
   });
 
   // The checkbox visual is an indicator: a theme can restyle it through the
-  // `checkbox` target or replace the component outright.
+  // canonical `checkbox-indicator` target or replace the component outright.
   const CheckboxControl = useIndicator('checkbox');
   // The ring is drawn on the indicator itself: the native input is
   // `opacity: 0`, and only the indicator's own element can shape the outline
   // to match it. See useIndicatorFocusRing.
   const indicatorRef = useRef<HTMLSpanElement>(null);
-  const {focusProps} = useIndicatorFocusRing(indicatorRef, isDisabled);
+  const t = useComponentTranslator();
+  // The busy Spinner sits in the decorative, aria-hidden indicator, so this
+  // control announces its busy start itself (spec:AST-086 FR8).
+  useBusyAnnouncement(isBusy, t('@astryx.spinner.loading'), indicatorRef);
+  const {focusProps} = useIndicatorFocusRing(indicatorRef);
 
   const isIndeterminate = optimisticValue === 'indeterminate';
   const isChecked = optimisticValue === true;
@@ -407,12 +464,18 @@ export function CheckboxInput({
           // unconditionally is safe.
           disabledMessageTooltip.interactionRef(el);
         }}
+        {...(isDisabled ? undefined : pressable)}
         {...stylex.props(
           styles.container,
           isLabelHidden && styles.containerLabelHidden,
           // Hover and focus reach the checkbox visual through this ancestor
           // marker rather than props, so the whole row drives it.
           !isDisabled && indicatorScope,
+          !isDisabled && styles.indicatorPressImage,
+          // The touch press's strength and release live on the row the
+          // controller writes to; the layer over the checkbox box inherits
+          // and paints it.
+          !isDisabled && interactionOverlayStyles.pressedAlpha,
         )}>
         <div
           {...stylex.props(
@@ -430,22 +493,26 @@ export function CheckboxInput({
             )}
             id={id}
             type="checkbox"
-            // Withhold the name while disabled: with a disabledMessage the
-            // input stays focusable (not natively disabled), and a disabled
-            // control must not submit.
+            // Withhold the name while disabled: the input stays focusable (not
+            // natively disabled), and a disabled control must not submit.
             name={isDisabled ? undefined : htmlName}
             checked={isChecked}
-            // With a disabledMessage the checkbox keeps focusability via
-            // aria-disabled so the reason is focus-discoverable; toggling is
-            // still blocked by the isDisabled guard in onChange below.
-            disabled={isDisabled && !isFocusableDisabled}
-            aria-disabled={isFocusableDisabled ? 'true' : undefined}
-            form={isFocusableDisabled ? '' : undefined}
+            aria-disabled={isDisabled ? 'true' : undefined}
+            // Detached from its form while disabled, so it neither submits nor
+            // blocks submission through `required` (spec:AST-085 FR3).
+            form={isDisabled ? '' : undefined}
+            // Native `disabled` suppressed onClick (FR2); preventDefault here
+            // would desync React's controlled checked state.
+            onClick={isDisabled ? undefined : rest.onClick}
             readOnly={isReadOnly}
             required={isRequired}
-            aria-required={isEffectivelyRequired ? 'true' : undefined}
+            // A form's required default sets nothing here: an unchecked box is an answer.
+            aria-required={isRequired ? 'true' : undefined}
             onChange={e => {
               if (isDisabled || isBusy || isReadOnly) {
+                // Activation clears the native mixed state; React restores
+                // only `checked`, so restore `indeterminate` too.
+                e.target.indeterminate = isIndeterminate;
                 return;
               }
               const checked = e.target.checked;

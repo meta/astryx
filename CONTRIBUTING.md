@@ -1,18 +1,18 @@
 # Contributing to Astryx
 
-For the full contribution process — what we accept, how to propose new components, and how API decisions are made — read the **[Contributing wiki](https://github.com/facebook/astryx/wiki/Contributing)**.
+For the full contribution process — what we accept, how to propose new components, and how API decisions are made — read the **[Contributing wiki](https://github.com/meta/astryx/wiki/Contributing)**.
 
 Key pages:
 
 - **[Pull request intents](docs/contributing/pull-requests.md)** — choose one primary intent, its evidence bar, and the matching PR template
 - **[API conventions guide](docs/contributing/api-conventions.md)** — practical naming, composition, styling, proposal, and review guidance linked to current owner records
-- **[Design Conventions](https://github.com/facebook/astryx/wiki/Design-Conventions)** — the design-side bar: tokens, spacing, radius, elevation, type, color, motion, and state representations
-- **[Specification Protocol](https://github.com/facebook/astryx/wiki/Component-Specification-Protocol)** — the 9-phase process for new components
-- **[Component Lifecycle](https://github.com/facebook/astryx/wiki/Component-Lifecycle)** — how components move from lab → core and templates from hidden → visible
-- **[API Arbitration](https://github.com/facebook/astryx/wiki/API-Arbitration)** — how we resolve API design questions
-- **[Contributing Templates](https://github.com/facebook/astryx/wiki/Contributing-Templates)** — building templates/blocks and the template grading rubric
-- **[Blog Review Rubric](https://github.com/facebook/astryx/wiki/Blog-Review-Rubric)** — how docsite blog posts are reviewed
-- **[Contributing with AI](https://github.com/facebook/astryx/wiki/Contributing-with-AI-Assistants)** — safe zones, spec protocol, and working with AI tools
+- **[Design Conventions](https://github.com/meta/astryx/wiki/Design-Conventions)** — the design-side bar: tokens, spacing, radius, elevation, type, color, motion, and state representations
+- **[Specification Protocol](https://github.com/meta/astryx/wiki/Component-Specification-Protocol)** — the 9-phase process for new components
+- **[Component Lifecycle](https://github.com/meta/astryx/wiki/Component-Lifecycle)** — how components move from lab → core and templates from hidden → visible
+- **[API Arbitration](https://github.com/meta/astryx/wiki/API-Arbitration)** — how we resolve API design questions
+- **[Contributing Templates](https://github.com/meta/astryx/wiki/Contributing-Templates)** — building templates/blocks and the template grading rubric
+- **[Blog Review Rubric](https://github.com/meta/astryx/wiki/Blog-Review-Rubric#three-required-scored-criteria)** — how docsite blog posts are reviewed
+- **[Contributing with AI](https://github.com/meta/astryx/wiki/Contributing-with-AI-Assistants)** — safe zones, spec protocol, and working with AI tools
 
 This file covers local development setup.
 
@@ -87,7 +87,7 @@ pnpm --version   # 11.x.x
 
 ```bash
 # Clone without downloading historical file contents up front
-git clone --filter=blob:none https://github.com/facebook/astryx.git
+git clone --filter=blob:none https://github.com/meta/astryx.git
 cd astryx
 
 # Install dependencies
@@ -115,8 +115,10 @@ Storybook will open at http://localhost:6006 with:
 - **Mode switcher** - Toggle between Light and Dark modes
 - **Component stories** - Interactive component examples
 
-**If you make changes to `@astryxdesign/core`:** nothing extra. The dev server
-serves the edited source, so the story updates on save — no rebuild, no restart.
+**If you make changes to `@astryxdesign/core`:** source changes update without a
+rebuild or restart. Storybook and the docsite also watch
+`packages/core/locales/*.json`, regenerate the compact runtime catalogs, and
+reload imported messages after a locale edit.
 
 ### Running the Doc Site
 
@@ -169,6 +171,7 @@ astryx/
 | `pnpm build`      | Build all packages                           |
 | `pnpm test`       | Run all tests                                |
 | `pnpm test:watch` | Run tests in watch mode                      |
+| `pnpm typecheck`  | Typecheck every package (after `pnpm build`) |
 | `pnpm storybook`  | Start Storybook at localhost:6006            |
 | `pnpm lint`       | Lint all packages                            |
 
@@ -287,13 +290,90 @@ export * from './MyComponent';
 > committed automatically when changes land on `main`. If you need to verify your
 > component will be included, run `pnpm sync:exports:check`.
 
+### User-facing strings and text direction
+
+Components read user-facing strings with `useTranslator()` rather than
+hardcoding them:
+
+```tsx
+import {useTranslator} from '@astryxdesign/core/i18n';
+
+function SaveButton() {
+  const t = useTranslator();
+  return <button>{t('@astryx.actions.save')}</button>;
+}
+```
+
+Astryx's own strings live in `packages/core/locales/en.json`. The
+`@astryx/no-hardcoded-i18n-string` ESLint rule rejects a hardcoded one. For a
+prop whose default is a translated string, alias the prop and resolve it in the
+body: destructure `label: labelFromProps`, then
+`const label = labelFromProps ?? t('@astryx.<component>.<key>')`.
+
+A component that responds to text direction resolves it from the DOM, not from
+a render-time JavaScript read. Reach for the lightest tool that works, in this
+order:
+
+1. **CSS logical properties.** Use `insetInlineStart`, `paddingInlineEnd`,
+   `marginInline`, and friends instead of physical `left`/`right`. Most
+   mirroring needs nothing more: the browser flips it from the ambient `dir`.
+   The `@astryx/no-physical-properties` ESLint rule enforces this.
+2. **Directional icons: mirror with CSS, not a name swap.** Render one fixed
+   glyph and wrap it in the shared `rtlStyles.mirror` (a `scaleX(-1)` that only
+   applies under `[dir="rtl"]`). It flips from the ancestor `dir` through the
+   cascade, so it works on the server with no hydration flash. Do not pick
+   `chevronLeft` or `chevronRight` in JavaScript. Pagination, Calendar, and
+   Carousel handle their chevrons this way.
+
+   ```tsx
+   import * as stylex from '@stylexjs/stylex';
+   import {rtlStyles} from '@astryxdesign/core';
+
+   function NextButton() {
+     // One glyph; CSS flips it under RTL. No direction read.
+     return (
+       <span {...stylex.props(rtlStyles.mirror)}>
+         <Icon icon="chevronRight" />
+       </span>
+     );
+   }
+   ```
+
+3. **Behavior: read the DOM lazily, on the event.** For what CSS can't express
+   (arrow-key mapping, drag and scroll math), read direction at interaction
+   time with `isRtlElement(el)` (a `getComputedStyle().direction` check), never
+   during render. The focus hooks (`useListFocus`, `useGridFocus`,
+   `useTreeFocus`) already detect direction from their container, so arrow keys
+   flip for free; don't pass them a direction flag.
+4. **`useDirection()` context, as a last resort.** Use it only when you need
+   the direction value during render and nothing above fits. It is SSR-safe
+   and returns `'ltr'` outside a provider (like `useTranslator`'s silent
+   fallback), but it is the one path that can mismatch on hydration when the
+   provider's direction disagrees with `<html dir>`. No Astryx component reads
+   direction from context at render time.
+
+### Adding a semantic icon
+
+Add a semantic icon name only for a glyph the whole system shares:
+
+1. Add the name to the `IconName` type in
+   `packages/core/src/Icon/globalIconRegistry.tsx`.
+2. Add the default SVG to `packages/core/src/Icon/defaultIcons.tsx`.
+3. Add a row to the Available Names table in
+   `packages/cli/assets/docs/icons.doc.mjs`.
+
+A glyph that belongs to one component takes a namespaced key instead
+(`numberInput:stepperDown`), so the shared `IconName` list does not grow. Ship
+its fallback in `defaultIcons` under the same key so the glyph still renders
+with no theme.
+
 ## Accessibility Checklist
 
 Every new component — and any change to an interactive one — must clear the
-**[Accessibility Checklist](https://github.com/facebook/astryx/wiki/Accessibility-Checklist)**
+**[Accessibility Checklist](https://github.com/meta/astryx/wiki/Accessibility-Checklist)**
 (wiki) before review. The checklist lives on the wiki so accessibility
 experts can refine it without a code PR; reviewers block on it (it is `A1`–`A16`
-on the [Component Audit Rubric](https://github.com/facebook/astryx/wiki/Component-Audit-Rubric)),
+on the [Component Audit Rubric](https://github.com/meta/astryx/wiki/Component-Audit-Rubric)),
 and it is a hard requirement for a lab → core promotion (see
 `packages/lab/README.md`).
 
@@ -305,9 +385,10 @@ Two repo-side rules worth restating here:
   WAI-ARIA APG patterns and are tested once; a bespoke reimplementation of
   one is a review reject.
 - CI is the enforcement layer, not a replacement for the checklist: the
-  `pr-a11y` job in `ci.yml` runs an axe audit on every PR that touches
-  components, a weekly workflow scans the full component surface, and the
-  `useAnnounce` lint rule rejects hand-wired `aria-live` regions. axe only
+  `pr-a11y` job in `ci.yml` runs an axe audit after merges to `main` and
+  before each release (and on a pull request labelled `ci:run-a11y`), at
+  full scope across the component surface, and the `useAnnounce` lint rule
+  rejects hand-wired `aria-live` regions. axe only
   catches static, DOM-level issues — keyboard behavior, focus management, and
   announcement timing are exactly what the checklist and the component's unit
   tests cover.
@@ -339,14 +420,19 @@ These are not free-form. `parseDoc` validates each at load, and a **drift harnes
 
 Most of the conventions above are mechanical, so they're checked rather than reviewed:
 
-| Rule                                                                                                                                              | Enforced by                      |
-| ------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
-| the layer directions hold: `authoring/` imports no other layer, `foundation/` never imports `api/` or `clients/`, `api/` never imports `clients/` | ESLint (`no-restricted-imports`) |
-| zod stays sealed behind the `authoring/` parsers                                                                                                  | ESLint (`no-restricted-imports`) |
-| commands register via `defineCommand`, never straight onto Commander                                                                              | ESLint (`no-restricted-syntax`)  |
-| each doc-type ships `type.ts` + `parse.mjs` + `<kind>.doc.mjs`, re-exports its parser, and appears in `parseDoc`'s `@returns`                     | `pnpm check:cli-structure`       |
-| each `api/<name>/` ships its typedefs, a `FunctionDoc`, and a test                                                                                | `pnpm check:cli-structure`       |
-| every `CommandDoc`/`EnumDoc` matches the live CLI                                                                                                 | the drift harness                |
+| Rule                                                                                                                                              | Enforced by                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| the layer directions hold: `authoring/` imports no other layer, `foundation/` never imports `api/` or `clients/`, `api/` never imports `clients/` | ESLint (`no-restricted-imports`)                             |
+| zod stays sealed behind the `authoring/` parsers                                                                                                  | ESLint (`no-restricted-imports`)                             |
+| commands register via `defineCommand`, never straight onto Commander                                                                              | ESLint (`no-restricted-syntax`)                              |
+| a command handler must not access the environment: no filesystem, network, subprocess, Project, or discovery imports (INV22)                      | `pnpm check:cli-structure`                                   |
+| an API module (other than an adapter or helper imported only by adapters) must not access the environment (INV21)                                 | `pnpm check:cli-structure`                                   |
+| a command handler must not build text with `.padEnd()`, `.padStart()`, `.repeat()`, or `new Block()` (INV23, FR3)                                 | ESLint (`no-restricted-syntax`) + `pnpm check:cli-structure` |
+| every executable `CommandDoc` `fn` must name a function exported from `api/index.mjs` (FR1)                                                       | `pnpm check:cli-structure`                                   |
+| every function exported from `api/index.mjs` must have a `FunctionDoc` whose `name` matches (FR2)                                                 | `pnpm check:cli-structure`                                   |
+| each doc-type ships `type.ts` + `parse.mjs` + `<kind>.doc.mjs`, re-exports its parser, and appears in `parseDoc`'s `@returns`                     | `pnpm check:cli-structure`                                   |
+| each `api/<name>/` ships its typedefs, a `FunctionDoc`, and a test                                                                                | `pnpm check:cli-structure`                                   |
+| every `CommandDoc`/`EnumDoc` matches the live CLI                                                                                                 | the drift harness                                            |
 
 You never hand-write the `.d.mts` declarations. `packages/cli/scripts/sync-api-types.mjs` emits them for both `api/` and `authoring/` from the `.mjs` JSDoc — gitignored, regenerated at `prepack`, and stamped `@generated`. Edit the JSDoc and run `pnpm -F @astryxdesign/cli sync:api-types`.
 
@@ -395,6 +481,11 @@ pnpm test:watch
 # Specific package
 pnpm -F @astryxdesign/core test
 
+# One Vitest project, as CI runs it (CI shards each across legs)
+pnpm test:ui            # the ui project, without the FR23 benchmark
+pnpm test:ui:isolated   # the FR23 benchmark alone, as test-ui leg 1 runs it
+pnpm test:node
+
 # With coverage
 pnpm test:coverage
 
@@ -413,10 +504,55 @@ src/Button/
 └── Button.test.tsx   # Tests live here
 ```
 
+### Where tests go, and how CI finds them
+
+CI collects tests by file name, never from a list of test files, so a new test
+needs no edit to `.github/workflows/`. Put the test where its kind is collected
+and CI picks it up:
+
+| Kind                                     | Put it                                                                                                             | Collected by                                                              | CI job                                                                                                                                            |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit and integration (jsdom or Node)     | `*.test.ts(x)` / `*.test.mjs` beside the code, in a path the `ui` or `node` project of `vitest.config.ts` includes | the `ui` and `node` Vitest projects                                       | `test-ui`, `test-node` (sharded)                                                                                                                  |
+| Browser accessibility or engine behavior | `*.a11y.chromium.spec.ts` (Chromium) or `*.a11y.browser.spec.ts` (Chromium and WebKit) under `packages/*/src/`     | `pnpm test:a11y-contract`; pull requests run `pnpm test:a11y-contract:pr` | `pr-a11y` (with `ci:run-a11y`); up to four changed spec files in the touched-components check; every spec in the release check's `a11y-contracts` |
+| Visual regression                        | a Storybook story                                                                                                  | the visual plan                                                           | `pr-visual`                                                                                                                                       |
+
+A browser spec runs on a pull request when the PR changes the spec, its
+component folder, or the component it is named after (`ChatSendButton.a11y.chromium.spec.ts`
+belongs to `core/ChatSendButton`). A changed knowledge record (`<Name>.spec.md`)
+counts toward neither the folder nor a path token, since no browser renders it.
+Routing lines in the spec's header comment change that, and the runner rejects
+any other value:
+
+```ts
+// @pr-a11y always                 every PR that changes components
+// @pr-a11y scope core/Selector ^apps/storybook/stories/ComboboxA11y
+//                                 also when one token matches: a component, or
+//                                 a regular expression over changed paths
+// @pr-a11y audit DateInput        only on a "[Component Audit] DateInput:" PR
+// @pr-a11y release-only           never on a PR; the release check runs it
+```
+
+These routes apply when a pull request runs the accessibility owner, which it
+does only with the `ci:run-a11y` label; `main` and release checks run every
+spec. Without the label, the touched-components check still runs up to four
+spec files the pull request adds or modifies, by these same routes, so a
+changed `audit` or `release-only` spec waits. `pnpm test:a11y-contract:pr origin/main --dry-run` prints what a pull request
+from your branch would run (component tokens need CI's `analysis.json`; without
+it the runner says so and leaves those specs out). A spec writes its receipts under
+`test-results/<name>/` or, for a component audit, a top-level
+`<name>-audit-evidence/` folder; CI uploads them, with the selection and the
+reports, in one `pr-a11y-evidence-<sha>` artifact. A component-audit pull
+request whose component has an audit spec also runs that component's own axe
+pass; an audit that must wait for an open dialog or menu, grades a different
+component set, or has no audit spec has an entry in
+`.github/a11y-audit-axe.json`.
+
 ### Accessibility audits
 
-PRs that touch components run an axe-core audit (the `pr-a11y` CI job) over
-the Storybook stories of the changed components. The job **fails** when it
+Merges to `main` (checked at the newest commit of a burst), every release
+check, and a PR labelled `ci:run-a11y`
+that touches components run an axe-core audit (the `pr-a11y` CI job); on a PR
+it covers the Storybook stories of the changed components. The job **fails** when it
 finds a violation that is not listed in the checked-in baseline,
 `.github/a11y-baseline.json`. Violations are keyed
 `Component::Story::rule-id`, so unrelated markup churn does not invalidate
@@ -467,7 +603,8 @@ focus, or real activation is reported `unrun` there and proven in Chromium.
 pnpm storybook:build
 npx playwright install chromium
 
-pnpm test:a11y-contract      # the Chromium lane (also runs inside pr-a11y)
+pnpm test:a11y-contract      # the Chromium lane, every spec (the release check)
+pnpm test:a11y-contract:pr origin/main --dry-run   # what a PR from this branch runs (drop --dry-run to run it)
 ```
 
 Adopting the pattern in a new component means binding to the existing contract,
@@ -477,14 +614,14 @@ not copying its assertions — see the package README and
 
 ### RTL audits
 
-PRs that touch components also run an RTL audit (`pr-rtl`), scoped to the
-changed components like `pr-a11y`. It is soft-gated — findings show in the job
+The same events run an RTL audit (`pr-rtl`); on a labelled PR it is scoped to
+the changed components like `pr-a11y`. It is soft-gated — findings show in the job
 summary but don't block. Repro locally with `pnpm rtl:audit -- --filter Avatar`
 (the `--` matters: `pnpm -F` is itself `--filter`). The report classifies every
 scoped component as **measured**, **verified N-A**, or a **coverage gap**; an
-unexplained all-N-A result is not a clean RTL result. The weekly unfiltered run
-applies the same contract to the full existing roster, while PR CI applies it
-to new and changed components. See `apps/storybook/rtl-audit/README.md`.
+unexplained all-N-A result is not a clean RTL result. The release-check's unfiltered run
+applies the same contract to the full existing roster, while a labelled PR
+applies it to new and changed components. See `apps/storybook/rtl-audit/README.md`.
 
 ### Modal close visibility guard
 
@@ -531,9 +668,9 @@ Chromium and fails on any other cursor.
 
 The docsite playground runs user-authored code in a sandboxed iframe with an
 opaque origin, tied to the page only by a nonce-attested MessagePort handshake
-(`apps/docsite/src/app/playground/previewChannel.ts`). The `docsite-browser`
-job feeds the existing required `docsite-test` check and proves that boundary
-in Chromium against a production build: a reloaded
+(`apps/docsite/src/app/playground/previewChannel.ts`). The required
+`docsite-test` check's browser-contract step proves that boundary in
+Chromium against a production build: a reloaded
 preview document recovers with the current code and theme, and a document that
 previewed code navigated the frame to receives nothing. The sandbox only exists
 in production builds (`next dev` cannot serve its assets to an opaque origin),
@@ -562,9 +699,16 @@ pnpm changeset:new
 This wrapper:
 
 1. **Detects which packages you changed** from your git diff and pre-selects them — no hand-enumerating the frontmatter.
-2. **Asks for a category** (`breaking`, `component`, `feat`, `fix`, `perf`, `docs`, `chore`) — this drives changelog grouping, _not_ the semver bump.
+2. **Asks for a category** (`breaking`, `experimental`, `component`, `feat`, `fix`, `perf`, `docs`, `chore`) — this drives changelog grouping and the pre-1.0 semver bump.
 3. **Captures the contributor(s)** — defaults to your `gh`/git identity, so credit is recorded at authoring time (not reconstructed from the release bot's commit).
-4. **Derives the semver bump from the category** — a `[breaking]` change bumps the minor; everything else bumps the patch (see below).
+4. **Derives the semver bump from the category** — a `[breaking]` change bumps the minor; `[experimental]` and every other category bump the patch (see below).
+
+Choose `[breaking]` only when a valid consumer of the latest stable release must
+change source or configuration to keep a supported functional contract working,
+or loses a stable public surface. A change only to existing content's appearance,
+spacing, typography, layout styling, or visual default uses `[fix]` or `[feat]`
+even when its pixels change. Its release note names the old and new appearance
+and how to keep the old look when a supported escape exists.
 
 It writes a normal `.changeset/<id>.md` — commit it with your PR. The body looks like:
 
@@ -587,20 +731,105 @@ pnpm changeset:new --category fix --summary "…" --pr 2717 --contributor yourha
 > convention by hand (`[category]` first line + `@handle` line). CI
 > (`pnpm check:changesets`) rejects changesets missing a category or
 > contributor, or whose bump doesn't match the category (`[breaking]` must be
-> `minor`, everything else `patch`), or declaring a `major` bump while 0.x.
+> `minor`; `[experimental]` and every other category must be `patch`), or
+> declaring a `major` bump while 0.x.
 
-### Version Bumps
+#### When CI requires one
 
-- **0.x (current): bump follows the category.** We track standard semver for the `0.x.y` range, where a minor bump is the breaking tier (under a caret range like `^0.1.8`, npm resolves `<0.2.0`, so `0.1.x → 0.2.0` is what signals "may break you"). A `[breaking]` change bumps the **minor** (`0.x.y → 0.(x+1).0`); every other category (`feat`, `fix`, `component`, `perf`, `docs`, `chore`) bumps the **patch**. `major` is never used while 0.x — it would jump to `1.0.0`. `pnpm changeset:new` writes the right bump from the category you pick; `pnpm check:changesets` is the CI backstop that enforces the coupling both ways.
-- All publishable packages are a `fixed` group, so a single change co-bumps them to the same version. Only genuinely-affected packages get a changelog entry — the rest get a clean version-only bump.
+Every pull request runs `scripts/release/changeset-coverage.mjs`, the same
+classifier the release coverage audit runs over a release's commits. It fails
+when the pull request changes something a published package ships and no
+Changeset it adds or edits names that package:
+
+- package source, such as `packages/*/src` of a published package;
+- CLI behavior and output under `packages/cli` (`api`, `clients`,
+  `foundation`, `authoring`, `assets`);
+- shipped documentation: `packages/cli/assets/docs`, `*.doc.mjs`, and a
+  package README;
+- consumer-facing `package.json` fields such as `exports`, `bin`, and
+  dependency or peer ranges.
+
+Stories, the sandbox, tests, fixtures, snapshots, spec records, generated
+CHANGELOGs, private and canary-only packages (`lab`, `charts`, `vega`), the
+docsite app, CI, and repository tooling never reach a consumer and
+need no Changeset. The failure names the package and the command to run, for
+example `pnpm changeset:new --packages @astryxdesign/cli --category docs`. Run
+the check locally with
+`node scripts/release/changeset-coverage.mjs pr --base origin/main --explain`.
+
+Translation updates and new languages need no Changeset; changes to English
+source messages or keys still do. Removing a released language import path
+follows the [breaking-change policy](docs/specs/AST-017/spec.md).
+
+The same check compares the CLI's machine-readable ids with the latest
+release: response `type` values, response fields, golden JSON fields, and
+`astryx doctor` check ids. Removing or renaming a released one breaks scripts
+that read it. Restore it, or classify the removal in a `@astryxdesign/cli`
+Changeset: a `[breaking]` entry that names the id, or a paragraph beginning
+`Compatibility:` that names the id and says why consumers of the latest
+release keep working. Name an id the way the failure prints it, such as
+`themes` or `DoctorCheck.fix`. Catalog values inside those responses, such as template
+slugs and docs routes, are data and may change.
+
+### Release versions
+
+- **Main declares the next version.** The fixed group's version in main's
+  `package.json` files is the next planned release. Before a cut, an owner may
+  raise or lower it while it stays strictly above newest stable. Required
+  pull-request lint does not compare that declaration with stable or an active
+  cut. The canary publisher publishes only while one plain fixed-group
+  declaration is above newest stable, skips equality, and fails below-stable or
+  split declarations. Trusted merge-back leaves main's declaration untouched;
+  a separate owner change declares the next plan after the release.
+- **0.x: the category states the tier a change needs.** A `[breaking]`
+  Changeset declares `minor` and is admitted only while main already declares
+  the next minor. `[experimental]` and every other category declare `patch`.
+  A Changeset never chooses the plan. CI refuses `[breaking]` on a patch plan
+  and refuses a minor-to-patch lowering PR that would strand pending breaking
+  work. The routes are to keep the old usage compatible through deprecation, or
+  have an owner explicitly plan the minor.
+- All publishable packages are a `fixed` group, so they release together at one
+  version. Only genuinely affected packages get a changelog entry.
+- As a contributor you never change the declared version. State compatibility
+  intent and add the right Changeset; a maintainer owns release planning. The
+  governing contract is `spec:AST-017` FR46–FR51.
 
 ### How a release is cut
 
+First, the canonical full-scope `release-check` and a full unit run of the Main
+workflow must both pass on an exact commit from current `main`. Main's scheduler
+dispatches the unit run with every release-check of main's tip, a person's included,
+while that commit is still the tip. The release branch is cut only from a SHA with
+both while it remains in current main history; the stable publish refuses one
+without them. A minor cut also requires Cindy, the release owner, to
+explicitly sign off on the exact `vX.Y.0` immediately before the branch is created.
+Scheduled or standing authority does not cover a minor.
+
+A release branch `release/vX.Y.Z` is then cut from that commit, where `X.Y.Z` is the
+version main declares. On that branch only:
+
 ```bash
-pnpm version-packages   # changeset version + scripts/format-changelogs.mjs
+pnpm version-packages   # changelogs at the declared version + codemod promotion + formatting
 ```
 
-`format-changelogs.mjs` rewrites each just-bumped package CHANGELOG into the doc-site format (h1 version, `#### <Category>` sections in canonical order, and a `#### Contributors` section aggregated from the changeset `@handle`s). It's idempotent and has a `--check` mode for CI drift detection.
+`scripts/release/version-packages.mjs` admits the frozen Changesets against the
+declared version, writes their changelog entries under it, and deletes them; it
+never changes a package version. The command then promotes staged codemods,
+refreshes exact internal pins, and formats changelogs with contributor credit.
+Refresh and verify `pnpm-lock.yaml` before the Version Packages PR merges. After tag and publication, one trusted
+`chore/merge-vX.Y.Z-to-main` PR squashes the exact branch-owned outputs and
+frozen deletions onto current main while preserving every post-cut change and
+main's declaration. A separate owner PR then declares the next plan across the
+fixed group, exact internal pins, and lockfile—patch successor by default,
+minor only when the owner explicitly names it.
+
+Before the Version Packages PR merges, a patch release self-grades its complete
+generated changelogs and draft GitHub Release notes against the public [Blog Review
+Rubric](https://github.com/meta/astryx/wiki/Blog-Review-Rubric#three-required-scored-criteria)
+under the `update` profile and records the result on that PR. Every criterion
+must pass; failures are fixed on the PR and the complete text is re-graded. A
+minor release instead requires Cindy's explicit human editorial approval of the
+changelogs, release notes, and public blog, recorded the same way.
 
 ## Finding Something to Work On
 
@@ -617,7 +846,7 @@ yet" — open the PR as a draft and mark it ready for review when it's done.
 ## What's expected of a change
 
 The bar — what a change has to carry, and what blocks — lives on the
-**[Component Audit Rubric](https://github.com/facebook/astryx/wiki/Component-Audit-Rubric)**.
+**[Component Audit Rubric](https://github.com/meta/astryx/wiki/Component-Audit-Rubric)**.
 It is stated there once, so it cannot drift between this file, the reviewer
 instructions, and the wiki. Read it before you open a PR: it is the same page
 the reviewer applies to your change, and every check carries an id
@@ -625,7 +854,7 @@ the reviewer applies to your change, and every check carries an id
 
 What you will find there:
 
-- **[The bright lines that block](https://github.com/facebook/astryx/wiki/Component-Audit-Rubric#the-checks)** —
+- **[The bright lines that block](https://github.com/meta/astryx/wiki/Component-Audit-Rubric#the-checks)** —
   hardcoded colors (`T1`, `T3`) · removing a themeable surface (`T2`) · raw CSS
   where StyleX suffices (`T8`) or raw HTML where a primitive exists (`T29`) · a
   broken accessible path (`A8`) and the accessibility bright lines (`A1`, `A3`,
@@ -635,15 +864,15 @@ What you will find there:
   changeset (`X20`). Severity is set by **what breaks if it ships**, not by how
   likely the trigger is — the rubric states each rule, its exceptions, and how
   it is judged.
-- **[The bar for your kind of change](https://github.com/facebook/astryx/wiki/Component-Audit-Rubric#reviewing-a-change)** —
+- **[The bar for your kind of change](https://github.com/meta/astryx/wiki/Component-Audit-Rubric#reviewing-a-change)** —
   a bug fix owes evidence it was broken before and is fixed now; a new feature
   runs the automatable checks plus whatever the diff touches; a new component in
   `core` gets a full audit; a new component in `lab` is deliberately lax, with
   the audit as the **promotion gate** rather than an entry fee.
-- **[Which checks your diff earns](https://github.com/facebook/astryx/wiki/Component-Audit-Rubric#reviewing-a-change)** —
+- **[Which checks your diff earns](https://github.com/meta/astryx/wiki/Component-Audit-Rubric#reviewing-a-change)** —
   a trigger table from what you touched to the checks that fire, so a two-line
   fix is not reviewed like a new component.
-- **[Recorded component grades](https://github.com/facebook/astryx/wiki/Component-Audit-Rubric#recording-an-audit)** —
+- **[Recorded component grades](https://github.com/meta/astryx/wiki/Component-Audit-Rubric#recording-an-audit)** —
   audited components have a score and an open-blocker count in the wiki's
   `component-scores.json` ledger, which is useful context on what shape a
   component is in before you change it. Most components are unaudited, which
@@ -690,11 +919,63 @@ Storybook story for anything you added or altered.
 > `.github/workflows/**` can't be pushed on your behalf — GitHub requires the
 > author to update those; we'll ping you if so.)
 
+### When CI runs on your pull request
+
+- **Drafts run no CI.** Marking the pull request ready for review starts
+  CI, which runs the checks your change reaches.
+- **A pull request from a fork runs CI once a maintainer labels it
+  `ci:run`.** Only maintainers can apply labels, so you don't need to ask: a
+  maintainer adds it after a first look. The label takes effect on your next
+  push, or when the maintainer closes and reopens the pull request; CI then
+  runs on each push while the label stays. Until then the required checks fail
+  with "Waiting for a maintainer's ci:run label".
+- **`ci:run-visual`, `ci:run-a11y` and `ci:run-rtl` each opt a pull request
+  into one heavy suite** (visual regression, accessibility, RTL), which
+  otherwise runs on `main` after the pull request merges. Someone with write
+  access applies the label for the evidence a change needs before merging; a
+  label applied without write access runs nothing. Like `ci:run`, a label
+  takes effect on the next push or a close and reopen, and removing it stops
+  that suite from the next run. When the accessibility audit did not run, the
+  pull-request comment names `ci:run-a11y`.
+- **Every pull request runs a touched-components check** (visual,
+  accessibility and RTL for only the components it changes): its visual part
+  runs in the visual job, and accessibility and RTL in one job on a standard
+  runner. It also runs up to four browser accessibility spec files the change
+  adds or modifies, by themselves, so a new spec is checked on its own pull
+  request (an `audit` or `release-only` spec still waits for its audit pull
+  request or the release check), wide changes included. Its component audits
+  skip a wide change, one that touches more than five components or changes
+  shared styles (themes, tokens, shared `.stylex.ts` files); add the
+  `ci:run-*` labels for those. It is advisory: no required check waits for it.
+- **A pull request that changes CI states its CI impact.** When it changes a
+  workflow, a composite action or a CI script, its description carries a
+  `CI impact:` line: each changed job's runner class (standard or
+  non-standard), job-minutes per update and runner-pool usage before and
+  after, and time to green. The pull-request comment's CI impact section
+  measures these for `ci.yml` from recent runs, names other changed workflows,
+  composite actions and CI scripts as not measured, and flags a job moving onto
+  a non-standard runner, more than 10% added runner-pool usage, or more than two minutes
+  added to time to green.
+- **Pull requests from a branch in this repository run CI without the label**,
+  since pushing a branch here needs write access. Maintainers who work from a
+  fork either push their branches here or apply `ci:run` themselves.
+- **Heavy browser suites are shared per author.** They run for an author's
+  fifteen oldest open pull requests, up to a hundred such runs a day. A pull
+  request past either limit shows a failing check that says why, and runs in
+  full at its pre-merge re-run. Engineering owners listed in `.github/ENGOWNERS`
+  are not limited.
+- **Pull requests from the shared agent login run the heavy suites when ready
+  and before merge.** A push to a ready agent pull request runs lint and, in
+  the CI workflow, only typecheck (path-filtered workflows run as usual);
+  `test`, `build` and `docsite-test` fail with "Heavy CI deferred" (unless the
+  change is spec-only, which runs everything) until the pull request is marked ready or reopened, or its latest run is
+  re-run with **Re-run all jobs**, which runs everything at that head.
+
 ## Code Style
 
 The design-system rules — StyleX usage, semantic tokens, theming, API
 conventions, accessibility — are on the wiki and indexed from the
-[Component Audit Rubric](https://github.com/facebook/astryx/wiki/Component-Audit-Rubric).
+[Component Audit Rubric](https://github.com/meta/astryx/wiki/Component-Audit-Rubric).
 What this repo enforces mechanically:
 
 - TypeScript strict mode
@@ -809,7 +1090,8 @@ and doesn't need network to use.
 Astryx accepts community translations via Crowdin. To help translate astryx
 into your language, visit <https://crowdin.com/project/astryx>. New locales are
 picked up automatically after a maintainer reviews the auto-generated
-translations PR.
+translations PR. Direct PRs against `packages/core/locales/*.json` also work if
+you prefer that flow.
 
 Calendar’s compact weekday labels, such as `Su` and `Mo`, are generated from
 Unicode CLDR data because browsers do not provide that format.

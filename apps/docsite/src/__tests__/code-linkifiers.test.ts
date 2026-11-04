@@ -8,7 +8,7 @@
 
 import {describe, it, expect} from 'vitest';
 import {linkifyCode} from '../components/codeLinkifiers';
-import {docTopics} from '../generated/docsRegistry';
+import {docTopics, docsTreeRoutes} from '../generated/docsRegistry';
 import {components} from '../generated/componentRegistry';
 
 describe('doc topic linkifier', () => {
@@ -16,6 +16,8 @@ describe('doc topic linkifier', () => {
     ['astryx docs tokens', '/docs/tokens'],
     ['astryx docs styling-libraries', '/docs/styling-libraries'],
     ['npx astryx docs icons', '/docs/icons'],
+    ['npx @astryxdesign/cli docs icons', '/docs/icons'],
+    ['npx @astryxdesign/cli@0.7.2 docs global', '/docs/global'],
     ['  astryx docs theme  ', '/docs/theme'],
     // The docs index, for a bare command.
     ['astryx docs', '/docs'],
@@ -122,7 +124,16 @@ describe('doc references in shipped content', () => {
   });
 
   it('links every reference to a page the site serves', () => {
+    // A docs-tree route the site has no page for yet (a namespace, a command
+    // or API doc) stays plain code, and still opens in `astryx docs`; any
+    // other unlinked reference is stale.
+    const treeRoutes = new Set(docsTreeRoutes);
+    const inTree = (ref: string) =>
+      treeRoutes.has(ref.replace(/^(?:npx )?astryx docs /, '').split(' ')[0]);
     const all = Object.values(corpora).flatMap(docReferences);
-    expect(all.filter(ref => linkifyCode(ref) == null)).toEqual([]);
+    expect(all.filter(ref => linkifyCode(ref) == null && !inTree(ref))).toEqual(
+      [],
+    );
+    expect(treeRoutes.has('cli/commands/upgrade')).toBe(true);
   });
 });

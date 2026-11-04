@@ -21,6 +21,14 @@ export const docs = {
   usage: {
     description:
       'Wraps your app to set the active locale and (optionally) merge additional translation catalogs + per-locale overrides. Astryx components inside the subtree resolve their strings against this context. If no provider is present, components fall back to the shipped English defaults.',
+    anatomy: [
+      {
+        name: 'Provider boundary',
+        required: true,
+        description:
+          'A nonvisual context boundary that supplies locale, message catalogs, overrides, and direction to descendant Astryx components. It renders no DOM element.',
+      },
+    ],
     bestPractices: [
       {
         guidance: true,
@@ -35,17 +43,17 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Use real BCP 47 tags such as `fr`, `pt-BR`, or `ar`; regional locales fall back to their base language before English.',
+          'Use real BCP 47 tags such as `fr-FR`, `pt-BR`, or `ar-SA`; regional locales fall back to their base language before English.',
       },
       {
         guidance: true,
         description:
-          'Set the `dir` attribute on `<html>` (or a wrapping element) yourself; the provider does not set it. Astryx components mirror layout and directional icons from the DOM `dir`, so an RTL locale won\'t visually mirror without it. Use `getLocaleDirection(locale)` to derive the value for both the provider and the DOM.',
+          "Set the `dir` attribute on `<html>` (or a wrapping element) yourself; the provider does not set it. Astryx components mirror layout and directional icons from the DOM `dir`, so an RTL locale won't visually mirror without it. Use `getLocaleDirection(locale)` to derive the value for both the provider and the DOM.",
       },
       {
         guidance: false,
         description:
-          'Cast custom catalog maps to `any`; the i18n package exports `MessagesByLocale` and `Catalog` for local catalog typing.',
+          'Cast custom catalog maps to `any`; the i18n package exports `ProviderMessagesByLocale`, `MessagesByLocale`, `Catalog`, and `RuntimeCatalog` for local catalog typing.',
       },
     ],
   },
@@ -59,10 +67,10 @@ export const docs = {
     },
     {
       name: 'messages',
-      type: 'MessagesByLocale',
+      type: 'ProviderMessagesByLocale',
       required: false,
       description:
-        'Optional map of BCP 47 tag to translation catalog. Import shipped catalogs from `@astryxdesign/core/locales/*`; the shipped "en" catalog is always available and does not need to be listed here.',
+        'Optional map of BCP 47 tag to a rich or generated runtime catalog. Import compact shipped catalogs from `@astryxdesign/core/locales/*.generated.js`; the shipped "en" catalog is always available and does not need to be listed here.',
     },
     {
       name: 'overrides',
@@ -90,7 +98,7 @@ export const docs = {
       label: 'Load a shipped Astryx locale catalog',
       code: `import type {ReactNode} from 'react';
 import {InternationalizationProvider} from '@astryxdesign/core/i18n';
-import frFR from '@astryxdesign/core/locales/fr-FR.json';
+import frFR from '@astryxdesign/core/locales/fr-FR.generated.js';
 
 export function AppI18n({children}: {children: ReactNode}) {
   return (
@@ -151,17 +159,17 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Use shipped Astryx locale catalogs from `@astryxdesign/core/locales/*` when one exists for the target locale.',
+          'Use compact shipped Astryx catalogs from `@astryxdesign/core/locales/*.generated.js` when one exists for the target locale.',
       },
       {
         guidance: true,
         description:
-          'Use a same-shape local catalog only when Astryx has not shipped that locale yet or when testing in-progress translations.',
+          'Use a rich `Catalog` or compact `RuntimeCatalog` when Astryx has not shipped the target locale or when testing in-progress translations.',
       },
       {
         guidance: true,
         description:
-          'Use real BCP 47 tags like `fr`, `pt-BR`, or `ar`; regional locales fall back to base language before English.',
+          'Use real BCP 47 tags like `fr-FR`, `pt-BR`, or `ar-SA`; regional locales fall back to base language before English.',
       },
       {
         guidance: true,
@@ -171,7 +179,7 @@ export const docsDense = {
       {
         guidance: false,
         description:
-          'Cast custom catalog maps to `any`; the i18n package exports `MessagesByLocale` and `Catalog` for local catalog typing.',
+          'Cast custom catalog maps to `any`; the i18n package exports `ProviderMessagesByLocale`, `MessagesByLocale`, `Catalog`, and `RuntimeCatalog` for local catalog typing.',
       },
     ],
   },
@@ -179,7 +187,7 @@ export const docsDense = {
     locale:
       'BCP 47 language tag (e.g. "en", "pt-BR"); regional tags fall back to base language then "en"',
     messages:
-      'map of BCP 47 tag to translation catalog; "en" is always available',
+      'map of BCP 47 tag to a rich Catalog or generated RuntimeCatalog; "en" is always available',
     overrides:
       'sparse per-locale key overrides applied on top of shipped defaults',
   },

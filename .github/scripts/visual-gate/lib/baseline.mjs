@@ -108,6 +108,40 @@ export function readBaseline(baselineDir) {
   };
 }
 
+const BASELINE_SHOT_FIELDS = [
+  'sha256',
+  'storyId',
+  'theme',
+  'mode',
+  // These two preserve ownership when a story or theme leaves the current build.
+  'packageName',
+  'themePackageName',
+];
+
+/** Keep the baseline index reviewable; all other shot facts are derived per run. */
+export function compactBaselineManifest(manifest) {
+  const shots = Object.fromEntries(
+    Object.entries(manifest.shots ?? {}).map(([key, shot]) => [
+      key,
+      Object.fromEntries(
+        BASELINE_SHOT_FIELDS.flatMap(field =>
+          shot[field] === undefined ? [] : [[field, shot[field]]],
+        ),
+      ),
+    ]),
+  );
+  return {
+    version: manifest.version ?? 1,
+    shots,
+    decisions: manifest.decisions ?? [],
+    ...(manifest.platform ? {platform: manifest.platform} : {}),
+    ...(manifest.browser ? {browser: manifest.browser} : {}),
+    ...(manifest.viewport ? {viewport: manifest.viewport} : {}),
+    ...(manifest.capturedAt ? {capturedAt: manifest.capturedAt} : {}),
+    ...(manifest.context ? {context: manifest.context} : {}),
+  };
+}
+
 /**
  * @param {string} baselineDir
  * @param {object} manifest
@@ -116,7 +150,7 @@ export function writeBaseline(baselineDir, manifest) {
   fs.mkdirSync(path.join(baselineDir, 'shots'), {recursive: true});
   fs.writeFileSync(
     path.join(baselineDir, 'manifest.json'),
-    `${JSON.stringify(manifest, null, 2)}\n`,
+    `${JSON.stringify(compactBaselineManifest(manifest))}\n`,
   );
 }
 

@@ -255,6 +255,126 @@
     "defaultMessage": "{count, number} {count, plural, one {result} other {results}}",
     "description": "Live result-count text next to the PowerSearch input, announced to screen readers on change. Example: `12 results`, `1 result`; keep compact."
   },
+  "@astryx.powersearch.sheet.filtersTitle": {
+    "defaultMessage": "Filters",
+    "description": "Heading and accessible name of the PowerSearch touch sheet that lists the active filters (experimental bottom-sheet presentation). Plural noun."
+  },
+  "@astryx.powersearch.sheet.addFilter": {
+    "defaultMessage": "Add filter",
+    "description": "Button label in the PowerSearch touch flow: in the Filters sheet header it opens the field list; in the value step it confirms a new filter. Imperative verb; no leading plus sign."
+  },
+  "@astryx.powersearch.sheet.noFilters": {
+    "defaultMessage": "No filters applied",
+    "description": "Heading of the PowerSearch Filters sheet empty state when no filter is active (experimental bottom-sheet presentation). Neutral tone."
+  },
+  "@astryx.powersearch.sheet.noFiltersDescription": {
+    "defaultMessage": "Add a filter to narrow your results and find what you need faster.",
+    "description": "Guidance line under the PowerSearch Filters sheet empty state, above its Add filter action. One short sentence."
+  },
+  "@astryx.powersearch.sheet.clearAll": {
+    "defaultMessage": "Clear all",
+    "description": "Button label in the PowerSearch Filters sheet footer that asks to remove every editable filter. Imperative verb + determiner."
+  },
+  "@astryx.powersearch.sheet.clearAllTitle": {
+    "defaultMessage": "Clear all filters?",
+    "description": "Title and accessible name of the confirmation dialog that Clear all opens in the PowerSearch touch flow. A short question."
+  },
+  "@astryx.powersearch.sheet.clearAllDescription": {
+    "defaultMessage": "This removes all editable filters from this search.",
+    "description": "Body text of the PowerSearch Clear all confirmation dialog. Read-only filters stay, so it names editable filters."
+  },
+  "@astryx.powersearch.sheet.clearAllConfirm": {
+    "defaultMessage": "Clear filters",
+    "description": "Destructive action of the PowerSearch Clear all confirmation dialog: removes the editable filters. Imperative verb + plural noun."
+  },
+  "@astryx.powersearch.sheet.clearAllCancel": {
+    "defaultMessage": "Keep filters",
+    "description": "Safe action of the PowerSearch Clear all confirmation dialog: closes it and changes nothing. Imperative verb + plural noun."
+  },
+  "@astryx.powersearch.sheet.done": {
+    "defaultMessage": "Done",
+    "description": "Primary button label in the PowerSearch Filters sheet footer that closes the sheet. Short; marks the end of the filtering task."
+  },
+  "@astryx.powersearch.sheet.search": {
+    "defaultMessage": "Search",
+    "description": "Screen-reader-only label of the content-search box at the top of the PowerSearch Add filter sheet; its suggestions list inline below it. Noun or verb as reads best."
+  },
+  "@astryx.powersearch.sheet.searchResults": {
+    "defaultMessage": "Search results",
+    "description": "Screen-reader-only name of the inline suggestion list under the PowerSearch Add filter sheet's content search. Plural noun."
+  },
+  "@astryx.powersearch.sheet.searchFields": {
+    "defaultMessage": "Search filters",
+    "description": "Screen-reader-only label of the field-list filter box in the PowerSearch Add filter sheet, shown once the config has eight or more fields. Imperative verb + plural noun."
+  },
+  "@astryx.powersearch.sheet.searchFieldsPlaceholder": {
+    "defaultMessage": "Search filters…",
+    "description": "Placeholder inside the field-list filter box in the PowerSearch Add filter sheet. Imperative verb; trailing `…` is one character."
+  },
+  "@astryx.powersearch.sheet.ungroupedFields": {
+    "defaultMessage": "General",
+    "description": "Heading of the PowerSearch Add filter sheet's list of fields that belong to no group, shown before the named groups. A short noun."
+  },
+  "@astryx.powersearch.sheet.noMatchingFields": {
+    "defaultMessage": "No filters match your search",
+    "description": "Empty-state text in the PowerSearch Add filter sheet when the field-list filter matches no field. Neutral tone."
+  },
+  "@astryx.powersearch.sheet.tryDifferentSearch": {
+    "defaultMessage": "Try a different search.",
+    "description": "Guidance line under the PowerSearch Add filter sheet's empty search result (\"No results found\", \"No filters match your search\"). One short sentence."
+  },
+  "@astryx.powersearch.sheet.noResults": {
+    "defaultMessage": "No results found",
+    "description": "Empty-state text in the PowerSearch Add filter sheet when the content search has no suggestion for the typed query. Neutral tone (not error-y)."
+  },
+  "@astryx.powersearch.sheet.filterUnavailable": {
+    "defaultMessage": "This filter is no longer available",
+    "description": "Message in the PowerSearch value step when a config update removed the field or operator being edited; Cancel remains as the way out, and the Filters row keeps its remove action."
+  },
+  "@astryx.powersearch.sheet.removeFilter": {
+    "defaultMessage": "Remove {field} filter",
+    "description": "Accessible name and tooltip of the trailing remove button on a PowerSearch Filters sheet row; field is the filter's field label (for example \"Remove Status filter\")."
+  },
+  "@astryx.powersearch.sheet.relativeDaysAgo": {
+    "defaultMessage": "{count, number} {count, plural, one {day} other {days}} ago",
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the past (for example \"3 days ago\"). The popover editor lists the same choices."
+  },
+  "@astryx.powersearch.sheet.relativeDaysFromNow": {
+    "defaultMessage": "{count, number} {count, plural, one {day} other {days}} from now",
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the future (for example \"3 days from now\"). The popover editor lists the same choices."
+  },
+  "@astryx.powersearch.sheet.relativeWeeksAgo": {
+    "defaultMessage": "{count, number} {count, plural, one {week} other {weeks}} ago",
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the past (for example \"3 weeks ago\"). The popover editor lists the same choices."
+  },
+  "@astryx.powersearch.sheet.relativeWeeksFromNow": {
+    "defaultMessage": "{count, number} {count, plural, one {week} other {weeks}} from now",
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the future (for example \"3 weeks from now\"). The popover editor lists the same choices."
+  },
+  "@astryx.powersearch.sheet.relativeMonthsAgo": {
+    "defaultMessage": "{count, number} {count, plural, one {month} other {months}} ago",
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the past (for example \"3 months ago\"). The popover editor lists the same choices."
+  },
+  "@astryx.powersearch.sheet.relativeMonthsFromNow": {
+    "defaultMessage": "{count, number} {count, plural, one {month} other {months}} from now",
+    "description": "A relative-date choice row in the PowerSearch touch sheet, in the future (for example \"3 months from now\"). The popover editor lists the same choices."
+  },
+  "@astryx.powersearch.sheet.fieldOperator": {
+    "defaultMessage": "{field} {operator}",
+    "description": "A field label joined with an operator label in the PowerSearch touch sheet: the value step's title, an operator radio's name, and the first part of a Filters row (for example \"Status is\"). Translators may reorder the two parts."
+  },
+  "@astryx.powersearch.sheet.labelValue": {
+    "defaultMessage": "{label} {value}",
+    "description": "A Filters row's \"field operator\" text joined with its value, as the removal announcement reads it (for example \"Status is Open\"). Translators may reorder the two parts."
+  },
+  "@astryx.powersearch.sheet.filtersClearedWithCount": {
+    "defaultMessage": "All filters removed. {resultCount}",
+    "description": "Polite screen-reader announcement after Clear all in the PowerSearch touch sheet when the result count changed with it; resultCount is the field's already formatted result count (for example \"240 results\"). Live-region text, never shown on screen."
+  },
+  "@astryx.powersearch.sheet.editableFiltersClearedWithCount": {
+    "defaultMessage": "Editable filters removed. {resultCount}",
+    "description": "Polite screen-reader announcement after Clear all in the PowerSearch touch sheet removes the editable filters, keeps read-only ones, and the result count changed with it; resultCount is the field's already formatted result count (for example \"240 results\"). Live-region text, never shown on screen."
+  },
   "@astryx.alertDialog.cancel": {
     "defaultMessage": "Cancel",
     "description": "Button label on the secondary/dismiss button of an AlertDialog (modal confirmation). Imperative verb; consumers usually override with task-specific text."
@@ -391,6 +511,10 @@
     "defaultMessage": "Expand",
     "description": "Button label on a chip in the chat composer representing a long pasted text block; clicking reveals full content. \"Expand\" here means reveal more, not grow physically."
   },
+  "@astryx.chat.pastedText.label": {
+    "defaultMessage": "{lines, plural, =1 {{chars, plural, other {{chars} chars}}} other {{lines} lines, {chars, plural, other {{chars} chars}}}}",
+    "description": "Count label on a pasted-text chip and its hover preview in the chat composer. {lines} is the number of text lines and {chars} is the character count. The single-line branch omits the line count. Translators may reorder the counts and localize the abbreviated units."
+  },
   "@astryx.checkboxList.item.checkbox": {
     "defaultMessage": "Checkbox",
     "description": "Localized hidden text used internally when a rich visible label names the checkbox through aria-labelledby. It does not become the computed name; callers must provide aria-label when rich content has no text."
@@ -409,7 +533,7 @@
   },
   "@astryx.commandPalette.noResultsFor": {
     "defaultMessage": "No results for {query}",
-    "description": "Screen-reader-only announcement when a CommandPalette query matches nothing. `{query}` is the user's verbatim search text; keep it last if your language allows so truncation-by-AT still conveys the outcome."
+    "description": "Not read by any component: CommandPalette announces its rendered empty-search message (`emptySearchText`) instead. Formerly the screen-reader-only announcement when a query matched nothing; `{query}` was the user's verbatim search text."
   },
   "@astryx.commandPalette.loading": {
     "defaultMessage": "Loading",
@@ -434,6 +558,10 @@
   "@astryx.dropdownMenu.back": {
     "defaultMessage": "Back",
     "description": "Button label that returns from a nested action list to its parent inside a DropdownMenu bottom sheet. Imperative navigation action."
+  },
+  "@astryx.dropdownMenu.backTo": {
+    "defaultMessage": "Back to {parent}",
+    "description": "Menu row that returns from a drilled-in sub-menu to the menu it came from. {parent} is that menu's name (e.g. \"Back to Actions\"). Imperative navigation action."
   },
   "@astryx.lightbox.close": {
     "defaultMessage": "Close",
@@ -523,6 +651,218 @@
     "defaultMessage": "This {itemName} is already {boundary, select, first {first} last {last} other {}}.",
     "description": "Screen-reader-only live announcement when an arrow-key reorder attempt has no effect because the record is already at that end of the list. `{itemName}` is the consumer's singular noun for one record; `{boundary}` is always exactly \"first\" or \"last\"."
   },
+  "@astryx.diffViewer.label": {
+    "defaultMessage": "Diff",
+    "description": "Accessible name of a lab DiffViewer's scrollable code area when the file has no path to name it."
+  },
+  "@astryx.diffViewer.renamedPath": {
+    "defaultMessage": "{oldPath} → {newPath}",
+    "description": "File path shown in a lab DiffViewer header when the file was renamed. `{oldPath}` and `{newPath}` are file paths and must stay untranslated; keep the arrow pointing from the old path to the new one."
+  },
+  "@astryx.diffViewer.statusAdded": {
+    "defaultMessage": "Added",
+    "description": "Badge in a lab DiffViewer file header marking a file that the change creates."
+  },
+  "@astryx.diffViewer.statusDeleted": {
+    "defaultMessage": "Deleted",
+    "description": "Badge in a lab DiffViewer file header marking a file that the change removes."
+  },
+  "@astryx.diffViewer.statusRenamed": {
+    "defaultMessage": "Renamed",
+    "description": "Badge in a lab DiffViewer file header marking a file that the change moves to a new path."
+  },
+  "@astryx.diffViewer.addedCount": {
+    "defaultMessage": "+{count, number}",
+    "description": "Compact count of added lines shown in a lab DiffViewer file header, e.g. \"+12\". Hidden from screen readers, which hear `@astryx.diffViewer.stats` instead."
+  },
+  "@astryx.diffViewer.removedCount": {
+    "defaultMessage": "−{count, number}",
+    "description": "Compact count of removed lines shown in a lab DiffViewer file header, e.g. \"−3\" (a minus sign). Hidden from screen readers, which hear `@astryx.diffViewer.stats` instead."
+  },
+  "@astryx.diffViewer.stats": {
+    "defaultMessage": "{added, plural, one {# line added} other {# lines added}}, {removed, plural, one {# line removed} other {# lines removed}}",
+    "description": "Screen-reader text for the line counts in a lab DiffViewer file header, e.g. \"12 lines added, 3 lines removed\"."
+  },
+  "@astryx.diffViewer.added": {
+    "defaultMessage": "Added",
+    "description": "Screen-reader text marking one line of a lab DiffViewer as added by the change; sighted readers see a + sign and a tinted row."
+  },
+  "@astryx.diffViewer.removed": {
+    "defaultMessage": "Removed",
+    "description": "Screen-reader text marking one line of a lab DiffViewer as removed by the change; sighted readers see a - sign and a tinted row."
+  },
+  "@astryx.diffViewer.lineNumberButton": {
+    "defaultMessage": "{side, select, old {Original line {line, number}} other {Changed line {line, number}}}",
+    "description": "Accessible label of a clickable line number in a lab DiffViewer (callers use it, for example, to start a comment on that line). `side` is `old` for the file before the change and `new` for the file after it; `line` is the line number in that version."
+  },
+  "@astryx.diffViewer.columnOldLine": {
+    "defaultMessage": "Original line number",
+    "description": "Screen-reader-only header of a lab DiffViewer column holding line numbers in the file before the change. Pairs with `@astryx.diffViewer.lineNumberButton` (\"Original line …\")."
+  },
+  "@astryx.diffViewer.columnNewLine": {
+    "defaultMessage": "Changed line number",
+    "description": "Screen-reader-only header of a lab DiffViewer column holding line numbers in the file after the change. Pairs with `@astryx.diffViewer.lineNumberButton` (\"Changed line …\")."
+  },
+  "@astryx.diffViewer.columnChange": {
+    "defaultMessage": "Change",
+    "description": "Screen-reader-only header of a lab DiffViewer column that marks each line as added or removed (noun: the kind of change)."
+  },
+  "@astryx.diffViewer.columnCode": {
+    "defaultMessage": "Code",
+    "description": "Screen-reader-only header of the source-code column in a lab DiffViewer's single-column (unified) view."
+  },
+  "@astryx.diffViewer.columnOldCode": {
+    "defaultMessage": "Original code",
+    "description": "Screen-reader-only header of the source-code column for the file before the change, in a lab DiffViewer's side-by-side (split) view."
+  },
+  "@astryx.diffViewer.columnNewCode": {
+    "defaultMessage": "Changed code",
+    "description": "Screen-reader-only header of the source-code column for the file after the change, in a lab DiffViewer's side-by-side (split) view."
+  },
+  "@astryx.diffViewer.binary": {
+    "defaultMessage": "Binary file not shown",
+    "description": "Message in place of line changes in a lab DiffViewer when the file is binary and has no text diff."
+  },
+  "@astryx.diffViewer.noChanges": {
+    "defaultMessage": "No content changes",
+    "description": "Message in a lab DiffViewer when a file changed only its path or mode, so there are no line changes to show."
+  },
+  "@astryx.diffViewer.largeChange": {
+    "defaultMessage": "Large change: {count, plural, one {# line} other {# lines}}",
+    "description": "Label of a folded block in a lab DiffViewer. The change was too large to compare line by line, so the block shows its old lines as removed and its new lines as added, folded until the reader opens it. `{count}` is the number of removed plus added lines in the block; some can be the same on both sides, because the block was not compared. Keep it short: it shares one row with the Show full diff button."
+  },
+  "@astryx.diffViewer.showFullDiff": {
+    "defaultMessage": "Show full diff",
+    "description": "Button beside `@astryx.diffViewer.largeChange` in a lab DiffViewer that shows the folded lines of a large change. Pairs with `@astryx.diffViewer.hideFullDiff`."
+  },
+  "@astryx.diffViewer.hideFullDiff": {
+    "defaultMessage": "Hide full diff",
+    "description": "Button beside `@astryx.diffViewer.largeChange` in a lab DiffViewer that folds the lines of a large change again after `@astryx.diffViewer.showFullDiff` showed them."
+  },
+  "@astryx.markdownHeadingLinks.copied": {
+    "defaultMessage": "Link copied",
+    "description": "Accessible name on the Markdown heading copy button and text announced to a polite live region for ~1.5s after a successful copy. Sentence meaning \"Link copied\"; pairs with `markdownHeadingLinks.copy`."
+  },
+  "@astryx.markdownHeadingLinks.copy": {
+    "defaultMessage": "Copy link to {heading}",
+    "description": "Accessible name on the Markdown heading copy button in its default state. `{heading}` is the heading's plain text, or its generated id when the text is empty; pairs with `markdownHeadingLinks.copied`."
+  },
+  "@astryx.richTextEditor.tabEscapeHint": {
+    "defaultMessage": "Press Escape then Tab to move focus out of the editor.",
+    "description": "Screen-reader-only hint attached to the RichTextEditor text area. Tab indents text inside the editor, so this tells keyboard users the two-key sequence that moves focus out of it."
+  },
+  "@astryx.richTextEditor.toolbar.label": {
+    "defaultMessage": "Text formatting",
+    "description": "Accessible name of the formatting toolbar above a RichTextEditor."
+  },
+  "@astryx.richTextEditor.toolbar.actions": {
+    "defaultMessage": "Formatting actions",
+    "description": "Accessible name of the group that holds every formatting control in the RichTextEditor toolbar."
+  },
+  "@astryx.richTextEditor.toolbar.undo": {
+    "defaultMessage": "Undo",
+    "description": "Label and tooltip of the toolbar button that undoes the last edit in a RichTextEditor."
+  },
+  "@astryx.richTextEditor.toolbar.redo": {
+    "defaultMessage": "Redo",
+    "description": "Label and tooltip of the toolbar button that redoes the last undone edit in a RichTextEditor."
+  },
+  "@astryx.richTextEditor.toolbar.historyDivider": {
+    "defaultMessage": "History and block formats",
+    "description": "Screen-reader name of the divider between the undo/redo buttons and the block-format menu in the RichTextEditor toolbar."
+  },
+  "@astryx.richTextEditor.toolbar.blockFormat": {
+    "defaultMessage": "Block format",
+    "description": "Visually hidden label of the RichTextEditor toolbar menu that turns the current block into a paragraph, heading, list, or quote."
+  },
+  "@astryx.richTextEditor.toolbar.formatDivider": {
+    "defaultMessage": "Block and inline formats",
+    "description": "Screen-reader name of the divider between the block-format menu and the bold/italic/etc. buttons in the RichTextEditor toolbar."
+  },
+  "@astryx.richTextEditor.toolbar.paragraph": {
+    "defaultMessage": "Paragraph",
+    "description": "Block-format menu option: plain body text."
+  },
+  "@astryx.richTextEditor.toolbar.heading1": {
+    "defaultMessage": "Heading 1",
+    "description": "Block-format menu option: top-level heading."
+  },
+  "@astryx.richTextEditor.toolbar.heading2": {
+    "defaultMessage": "Heading 2",
+    "description": "Block-format menu option: second-level heading."
+  },
+  "@astryx.richTextEditor.toolbar.heading3": {
+    "defaultMessage": "Heading 3",
+    "description": "Block-format menu option: third-level heading."
+  },
+  "@astryx.richTextEditor.toolbar.bulletedList": {
+    "defaultMessage": "Bulleted list",
+    "description": "Block-format menu option: a list whose items start with bullet markers."
+  },
+  "@astryx.richTextEditor.toolbar.numberedList": {
+    "defaultMessage": "Numbered list",
+    "description": "Block-format menu option: a list whose items are numbered."
+  },
+  "@astryx.richTextEditor.toolbar.blockQuote": {
+    "defaultMessage": "Block quote",
+    "description": "Block-format menu option: an indented quotation block."
+  },
+  "@astryx.richTextEditor.toolbar.bold": {
+    "defaultMessage": "Bold",
+    "description": "Label of the toolbar toggle that makes selected text bold."
+  },
+  "@astryx.richTextEditor.toolbar.italic": {
+    "defaultMessage": "Italic",
+    "description": "Label of the toolbar toggle that makes selected text italic."
+  },
+  "@astryx.richTextEditor.toolbar.underline": {
+    "defaultMessage": "Underline",
+    "description": "Label of the toolbar toggle that underlines selected text."
+  },
+  "@astryx.richTextEditor.toolbar.strikethrough": {
+    "defaultMessage": "Strikethrough",
+    "description": "Label of the toolbar toggle that strikes a line through selected text."
+  },
+  "@astryx.richTextEditor.toolbar.inlineCode": {
+    "defaultMessage": "Inline code",
+    "description": "Label of the toolbar toggle that formats selected text as source code inside a sentence."
+  },
+  "@astryx.richTextEditor.toolbar.link": {
+    "defaultMessage": "Link",
+    "description": "Label of the toolbar toggle that opens the dialog to add or edit a link on selected text."
+  },
+  "@astryx.richTextEditor.link.insertTitle": {
+    "defaultMessage": "Insert link",
+    "description": "Title of the RichTextEditor dialog that adds a new link."
+  },
+  "@astryx.richTextEditor.link.editTitle": {
+    "defaultMessage": "Edit link",
+    "description": "Title of the RichTextEditor dialog that changes or removes an existing link."
+  },
+  "@astryx.richTextEditor.link.url": {
+    "defaultMessage": "URL",
+    "description": "Label of the web address field in the RichTextEditor link dialog."
+  },
+  "@astryx.richTextEditor.link.invalidUrl": {
+    "defaultMessage": "Enter a valid http, https, mailto, or tel URL.",
+    "description": "Error under the link dialog address field when the entered address is not allowed. Keep the scheme names http, https, mailto, and tel untranslated."
+  },
+  "@astryx.richTextEditor.link.remove": {
+    "defaultMessage": "Remove link",
+    "description": "Button in the RichTextEditor link dialog that removes the link from the selected text and keeps the text."
+  },
+  "@astryx.richTextEditor.link.cancel": {
+    "defaultMessage": "Cancel",
+    "description": "Button that closes the RichTextEditor link dialog without changing anything."
+  },
+  "@astryx.richTextEditor.link.add": {
+    "defaultMessage": "Add link",
+    "description": "Submit button of the RichTextEditor link dialog when adding a new link."
+  },
+  "@astryx.richTextEditor.link.update": {
+    "defaultMessage": "Update link",
+    "description": "Submit button of the RichTextEditor link dialog when changing an existing link address."
+  },
   "@astryx.markdown.taskList": {
     "defaultMessage": "Task list",
     "description": "Screen-reader-only accessible name for a GitHub-flavored Markdown task list (rendered from `- [ ] item` / `- [x] done` syntax)."
@@ -580,8 +920,16 @@
     "description": "Screen-reader-only label on the vertical drag handle at the right edge of the SideNav that lets the user resize the sidebar's width."
   },
   "@astryx.sideNav.heading.openMenu": {
-    "defaultMessage": "Open menu",
-    "description": "Screen-reader-only label on the `⋯` overflow-menu button embedded in a SideNav section heading. Same string as `topNav.heading.openMenu` — translations may share."
+    "defaultMessage": "{heading}, Open menu",
+    "description": "Accessible name of the chevron menu button in SideNavHeading. `{heading}` is the visible product or workspace name and must be included unchanged."
+  },
+  "@astryx.slider.minimumThumb": {
+    "defaultMessage": "Minimum value",
+    "description": "Accessible name of the lower thumb of a range Slider (two thumbs), announced together with the Slider's own label, for example \"Price range, Minimum value, 20\". Never shown on screen."
+  },
+  "@astryx.slider.maximumThumb": {
+    "defaultMessage": "Maximum value",
+    "description": "Accessible name of the upper thumb of a range Slider (two thumbs), announced together with the Slider's own label, for example \"Price range, Maximum value, 80\". Never shown on screen."
   },
   "@astryx.tabList.label": {
     "defaultMessage": "Tabs",
@@ -594,6 +942,10 @@
   "@astryx.table.noData": {
     "defaultMessage": "No data",
     "description": "Fallback empty-state text in the table body when there are zero rows. Neutral tone (not error-y); consumers commonly override with something specific like \"No results\"."
+  },
+  "@astryx.table.columnResize.resizeColumn": {
+    "defaultMessage": "Resize column {label}",
+    "description": "Accessible name for a Table column-resize handle (a vertical separator between header cells). `label` is the column header's visible text, or the column key when the header has no text."
   },
   "@astryx.table.filter.allPlaceholder": {
     "defaultMessage": "All",
@@ -610,6 +962,18 @@
   "@astryx.table.rowStatus.columnHeader": {
     "defaultMessage": "Row status",
     "description": "Screen-reader-only column header for the narrow status-indicator gutter a Table gains from useTableRowStatus. Sighted users see a blank gutter; assistive tech announces this as the column name."
+  },
+  "@astryx.table.selection.bulkActionsLabel": {
+    "defaultMessage": "Bulk actions",
+    "description": "Accessible name for the contextual Toolbar shown while Table rows are selected."
+  },
+  "@astryx.table.selection.clearAll": {
+    "defaultMessage": "Unselect All",
+    "description": "Visible button label that clears the complete controlled Table row selection, including keys outside the current view."
+  },
+  "@astryx.table.selection.selectedCount": {
+    "defaultMessage": "{count, number} selected",
+    "description": "Visible status in TableSelectionToolbar showing the number of selected rows."
   },
   "@astryx.table.selection.selectAllRows": {
     "defaultMessage": "Select all rows",
@@ -635,25 +999,9 @@
     "defaultMessage": "Clear sort",
     "description": "Screen-reader-only label on a column header button that will remove the current sort. \"Clear\" here means remove, not transparent. Part of the sort set."
   },
-  "@astryx.table.sort.direction.ascending": {
-    "defaultMessage": "ascending",
-    "description": "Localized direction word interpolated as `direction` into @astryx.table.sort.sortedBy and @astryx.table.sort.sortedByWithPriority."
-  },
-  "@astryx.table.sort.direction.descending": {
-    "defaultMessage": "descending",
-    "description": "Localized direction word interpolated as `direction` into @astryx.table.sort.sortedBy and @astryx.table.sort.sortedByWithPriority."
-  },
-  "@astryx.table.sort.sortBy": {
-    "defaultMessage": "Sort by {label}",
-    "description": "Aria label for a sortable Table header button when the column is unsorted. `label` is the column header text."
-  },
-  "@astryx.table.sort.sortedBy": {
-    "defaultMessage": "Sort by {label}, sorted {direction}",
-    "description": "Aria label for a sorted Table header button. `direction` is the localized direction word from @astryx.table.sort.direction.*."
-  },
-  "@astryx.table.sort.sortedByWithPriority": {
-    "defaultMessage": "Sort by {label}, sorted {direction}, priority {rank, number} of {total, number}",
-    "description": "Aria label for a sorted Table header button in multi-sort. `rank` is the 1-based position of this column in the sort order; `total` is the number of sorted columns."
+  "@astryx.table.sort.priority": {
+    "defaultMessage": "Priority {rank, number} of {total, number}",
+    "description": "Screen-reader description of a sortable Table column header button while several columns are sorted: this column's place in the sort order. The button's name is the column header text and its direction is announced from aria-sort."
   },
   "@astryx.toast.dismiss": {
     "defaultMessage": "Dismiss notification",
@@ -668,8 +1016,8 @@
     "description": "Label on the \"×\" button that removes every token/chip from a Tokenizer input. Imperative verb + determiner \"all\"; short."
   },
   "@astryx.topNav.heading.openMenu": {
-    "defaultMessage": "Open menu",
-    "description": "Screen-reader-only label on the `⋯` overflow button in a TopNav section heading. Kept separate from `sideNav.heading.openMenu` so translations may diverge."
+    "defaultMessage": "{hasHeading, select, true {{heading}, } other {}}Open menu",
+    "description": "Accessible name of the chevron menu button in TopNavHeading. When `hasHeading` is `true`, include the visible product or workspace name `{heading}` unchanged; otherwise use the generic menu action without a separator."
   },
   "@astryx.topNav.landmarkLabel": {
     "defaultMessage": "Top navigation",
@@ -685,7 +1033,7 @@
   },
   "@astryx.typeahead.loading": {
     "defaultMessage": "Loading",
-    "description": "Screen-reader-only name for a spinner shown inside a Typeahead dropdown while suggestions are being fetched. Present-progressive form."
+    "description": "Screen-reader-only name for the spinner a Typeahead, Tokenizer or directly used BaseTypeahead shows while suggestions are being fetched; also announced once through the shared announcement channel when each search starts. Present-progressive form."
   },
   "@astryx.typeahead.searchResults": {
     "defaultMessage": "Search results",
@@ -722,6 +1070,10 @@
   "@astryx.commandPalette.input.placeholder": {
     "defaultMessage": "Search…",
     "description": "Grey placeholder inside the CommandPalette's search input. Imperative verb; trailing `…` is one character."
+  },
+  "@astryx.commandPalette.input.label": {
+    "defaultMessage": "Search commands",
+    "description": "Screen-reader-only accessible name for the CommandPalette query input. Distinguish it from the visible placeholder; verb followed by the app actions being searched."
   },
   "@astryx.commandPalette.list.label": {
     "defaultMessage": "Commands",
@@ -785,11 +1137,11 @@
   },
   "@astryx.dateTimeInput.timeHint12h": {
     "defaultMessage": "e.g., 2:30 PM",
-    "description": "Placeholder hint shown in the DateTimeInput time field when focused and empty with 12-hour format. Gives an example of expected input format."
+    "description": "Placeholder hint shown in the TimeInput and DateTimeInput time fields when focused and empty with 12-hour format. Gives an example of expected input format; write the example time as your locale writes 12-hour time."
   },
   "@astryx.dateTimeInput.timeHint24h": {
     "defaultMessage": "e.g., 14:30",
-    "description": "Placeholder hint shown in the DateTimeInput time field when focused and empty with 24-hour format. Gives an example of expected input format."
+    "description": "Placeholder hint shown in the TimeInput and DateTimeInput time fields when focused and empty with 24-hour format. Gives an example of expected input format; write the example time as your locale writes 24-hour time."
   },
   "@astryx.dateTimeInput.timeSuffix": {
     "defaultMessage": "{label} time",
@@ -887,6 +1239,14 @@
     "defaultMessage": "Search…",
     "description": "Grey placeholder text inside the empty PowerSearch input. Imperative verb; trailing `…` is one character."
   },
+  "@astryx.powersearch.allFiltersRemoved": {
+    "defaultMessage": "All filters removed",
+    "description": "Screen-reader announcement after a PowerSearch field's Clear all removes every filter. Distinct from @astryx.tokenizer.allRemoved: PowerSearch words its items as filters."
+  },
+  "@astryx.powersearch.editableFiltersRemoved": {
+    "defaultMessage": "Editable filters removed",
+    "description": "Screen-reader announcement after a PowerSearch field's Clear all removes the filters the user can edit and keeps its read-only filters. Used instead of @astryx.powersearch.allFiltersRemoved while a read-only filter remains."
+  },
   "@astryx.resizable.collapsed": {
     "defaultMessage": "Collapsed",
     "description": "aria-valuetext for the Resizable drag handle (role=separator) while its panel is collapsed to zero size. Replaces the numeric value announcement, since the numeric value is clamped to the minimum while collapsed. Adjective describing the panel state, not a verb/command."
@@ -949,7 +1309,7 @@
   },
   "@astryx.spinner.loading": {
     "defaultMessage": "Loading",
-    "description": "Screen-reader-only default name for a standalone Spinner's role=\"status\" element, used when the consumer supplies neither `aria-label` nor a visible string label. Present-progressive form. Kept separate from `button.loading` and `typeahead.loading` — translations may diverge."
+    "description": "Screen-reader-only default name for a standalone Spinner's role=\"status\" element, used when the consumer supplies neither `aria-label` nor a visible string label; also announced once when a busy input or selector starts loading, in place of its decorative Spinner. Present-progressive form. Kept separate from `button.loading` and `typeahead.loading` — translations may diverge."
   },
   "@astryx.chatComposerDrawer.expand": {
     "defaultMessage": "Expand {label}",
@@ -1011,6 +1371,10 @@
     "defaultMessage": "{count} tool calls",
     "description": "Summary label shown in the group header when multiple tool calls are expanded. {count} is the number of calls."
   },
+  "@astryx.chatTriggerMenu.searching": {
+    "defaultMessage": "Searching…",
+    "description": "Shown, and announced politely to screen readers, while a chat composer's @-mention or slash-command menu waits for async search results. Present participle; trailing `…` is one character."
+  },
   "@astryx.chatTriggerMenu.suggestions": {
     "defaultMessage": "Suggestions",
     "description": "Screen-reader-only fallback label for the popover listbox opened by a trigger character (`@`, `/`) in the chat composer when the trigger provides no specific label."
@@ -1063,6 +1427,18 @@
     "defaultMessage": "1 file selected: {fileName}",
     "description": "Live-region announcement when a single file is successfully selected."
   },
+  "@astryx.fileInput.fileSize.bytes": {
+    "defaultMessage": "{size, number, ::group-off} B",
+    "description": "File-size limit below 1024 bytes in FileInput validation feedback. {size} is a number of bytes. Localize the unit abbreviation; do not add digit grouping."
+  },
+  "@astryx.fileInput.fileSize.kilobytes": {
+    "defaultMessage": "{size, number, :: .0 group-off} KB",
+    "description": "File-size limit from 1024 bytes up to one megabyte in FileInput validation feedback. {size} is bytes divided by 1024, displayed to one decimal place without digit grouping. Localize the unit abbreviation."
+  },
+  "@astryx.fileInput.fileSize.megabytes": {
+    "defaultMessage": "{size, number, :: .0 group-off} MB",
+    "description": "File-size limit of at least one megabyte in FileInput validation feedback. {size} is bytes divided by 1048576, displayed to one decimal place without digit grouping. Localize the unit abbreviation."
+  },
   "@astryx.fileInput.filesSelected": {
     "defaultMessage": "{count} files selected",
     "description": "Live-region announcement when multiple files are successfully selected."
@@ -1082,6 +1458,70 @@
   "@astryx.fileInput.triggerWithFiles": {
     "defaultMessage": "{label}, {fileNames}",
     "description": "Accessible name for a FileInput trigger that has files attached, composing the field label with the selected filenames. Example: `Attachments, report.pdf, notes.txt`."
+  },
+  "@astryx.kbd.key.alt": {
+    "defaultMessage": "Alt",
+    "description": "Spoken name of the Alt modifier key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.backspace": {
+    "defaultMessage": "Backspace",
+    "description": "Spoken name of the Backspace key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.command": {
+    "defaultMessage": "Command",
+    "description": "Spoken name of the Command modifier key on Apple platforms in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.control": {
+    "defaultMessage": "Control",
+    "description": "Spoken name of the Control modifier key in a keyboard shortcut's accessible name. Also resolves the mod key on non-Apple platforms."
+  },
+  "@astryx.kbd.key.controlShort": {
+    "defaultMessage": "Ctrl",
+    "description": "Abbreviated visible label of the Control keycap used for mod on non-Apple platforms. Localize to the keyboard's conventional short label."
+  },
+  "@astryx.kbd.key.down": {
+    "defaultMessage": "Down arrow",
+    "description": "Spoken name of the down arrow key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.enter": {
+    "defaultMessage": "Enter",
+    "description": "Spoken name of the Enter or Return key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.escape": {
+    "defaultMessage": "Escape",
+    "description": "Spoken name of the Escape key in a keyboard shortcut's accessible name. Also used for the esc alias."
+  },
+  "@astryx.kbd.key.escapeShort": {
+    "defaultMessage": "Esc",
+    "description": "Abbreviated visible label of the Escape keycap. Also used for the esc alias."
+  },
+  "@astryx.kbd.key.left": {
+    "defaultMessage": "Left arrow",
+    "description": "Spoken name of the left arrow key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.plus": {
+    "defaultMessage": "Plus",
+    "description": "Spoken name of the literal plus key in a keyboard shortcut's accessible name, distinct from the separator between keys."
+  },
+  "@astryx.kbd.key.right": {
+    "defaultMessage": "Right arrow",
+    "description": "Spoken name of the right arrow key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.shift": {
+    "defaultMessage": "Shift",
+    "description": "Spoken name of the Shift modifier key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.tab": {
+    "defaultMessage": "Tab",
+    "description": "Spoken name of the Tab key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.key.up": {
+    "defaultMessage": "Up arrow",
+    "description": "Spoken name of the up arrow key in a keyboard shortcut's accessible name."
+  },
+  "@astryx.kbd.shortcut": {
+    "defaultMessage": "{shortcut} + {key}",
+    "description": "Combines spoken key names into one keyboard shortcut's accessible name. {shortcut} is the preceding keys and {key} is the next key's localized spoken name. Applied once for each key after the first; translators may change the separator or order."
   },
   "@astryx.keyboardHint.toNavigate": {
     "defaultMessage": "to navigate",
@@ -1146,6 +1586,10 @@
   "@astryx.numberInput.incrementLabel": {
     "defaultMessage": "Increment {label}",
     "description": "Accessible label for the NumberInput button that increases the value by one configured step. Example: `Increment Quantity`."
+  },
+  "@astryx.numberInput.invalidNumber": {
+    "defaultMessage": "Invalid number",
+    "description": "Screen-reader-only live-region alert in NumberInput when the typed text is not a valid number for the field. The field silently reverts on blur, so this is the only rejection feedback a screen-reader user gets."
   },
   "@astryx.selector.clearLabel": {
     "defaultMessage": "Clear {label}",
@@ -1239,6 +1683,10 @@
     "defaultMessage": "error",
     "description": "Screen-reader-only status word rendered next to a Stepper step label when status=error. Lowercase noun; read mid-sentence after the step label."
   },
+  "@astryx.switch.loading": {
+    "defaultMessage": "Loading",
+    "description": "Screen-reader-only live-region announcement while a Switch is in its busy state (spinner shown, action in flight)."
+  },
   "@astryx.tableTree.collapseRow": {
     "defaultMessage": "Collapse row",
     "description": "Aria label for the Table tree-data expander chevron when the row is currently expanded."
@@ -1255,6 +1703,10 @@
     "defaultMessage": "Expand all rows",
     "description": "Aria label for the Table tree-data header toggle when rows are collapsed and clicking it expands them."
   },
+  "@astryx.textArea.counter": {
+    "defaultMessage": "{count, number}/{limit, number}",
+    "description": "Visible character counter at the bottom of a TextArea that has a character limit, for example `62/2,000`. `{count}` is the characters typed so far and `{limit}` the limit; keep both numbers and reorder or change the separator if your language needs to."
+  },
   "@astryx.textArea.charactersRemaining": {
     "defaultMessage": "{count, number} {count, plural, one {character} other {characters}} remaining",
     "description": "Screen-reader-only announcement of how many characters the user can still type before hitting a TextArea's maxLength. Announced politely as the count nears the limit. `{count}` is the number remaining — example: `12 characters remaining`."
@@ -1262,6 +1714,10 @@
   "@astryx.textArea.charactersOverLimit": {
     "defaultMessage": "{count, number} {count, plural, one {character} other {characters}} over the limit",
     "description": "Screen-reader-only assertive announcement when the user has typed past a TextArea's maxLength. `{count}` is how many characters over — example: `3 characters over the limit`."
+  },
+  "@astryx.inputClearButton.tooltip": {
+    "defaultMessage": "Clear",
+    "description": "Tooltip shown on hover or keyboard focus over the X button inside an input that clears its value. Verb, imperative. Shown alone beside the field, so it names only the action; the screen-reader label names the field separately."
   },
   "@astryx.textInput.clearLabel": {
     "defaultMessage": "Clear {label}",
@@ -1327,6 +1783,18 @@
     "defaultMessage": "{count, number} of {total, number} selected",
     "description": "Polite screen-reader announcement of how many MultiSelector options are selected out of the total, spoken after each toggle. Live-region text, never shown on screen; example: `3 of 12 selected`."
   },
+  "@astryx.multiSelector.selectedCount": {
+    "defaultMessage": "{count, plural, one {# selected} other {# selected}}",
+    "description": "Visible text on a closed MultiSelector's trigger when it shows a count of the chosen options (`triggerDisplay=\"count\"`), for example `2 selected`. `{count}` is the number of chosen options; use a plural form if your language needs one."
+  },
+  "@astryx.multiSelector.createOption": {
+    "defaultMessage": "Create \"{query}\"",
+    "description": "Label of the first row in a MultiSelector's search panel when `hasCreate` is set and the typed text matches no option. Picking it reports a creation to the caller. `{query}` is the trimmed text the person typed, shown in quotes."
+  },
+  "@astryx.multiSelector.optionCreated": {
+    "defaultMessage": "{label} created",
+    "description": "Polite screen-reader announcement after the create row of a MultiSelector is picked. Live-region text, never shown on screen; `{label}` is the text the person typed."
+  },
   "@astryx.multiSelector.emptySearchResults": {
     "defaultMessage": "No results found",
     "description": "Shown in a MultiSelector's dropdown panel when the search query matches no options, and announced in a polite live region at the same time. Short; neutral tone (not error-y)."
@@ -1354,6 +1822,82 @@
   "@astryx.tokenizer.tokenRemoved": {
     "defaultMessage": "Removed {label}",
     "description": "Polite screen-reader announcement after a token is removed from a Tokenizer, by its × button or by Backspace. Live-region text, never shown on screen; `{label}` is the token's visible text."
+  },
+  "@astryx.tokenizer.search": {
+    "defaultMessage": "Search {label}",
+    "description": "Accessible name of the search field at the top of a Tokenizer's bottom sheet (the touch presentation). `{label}` is the field's own label, e.g. `Search Tags`. Not shown on screen."
+  },
+  "@astryx.tokenizer.searchPlaceholder": {
+    "defaultMessage": "Search…",
+    "description": "Placeholder inside the search field at the top of a Tokenizer's bottom sheet, shown while the query is empty. Single word plus ellipsis."
+  },
+  "@astryx.tokenizer.noResultsDescription": {
+    "defaultMessage": "Try a different search.",
+    "description": "Supporting sentence under the no-results empty-state title inside a Tokenizer's bottom sheet, suggesting the person change the query."
+  },
+  "@astryx.tokenizer.create": {
+    "defaultMessage": "Create \"{value}\"",
+    "description": "Label of a Tokenizer's create row, in the inline menu and the bottom sheet, when `hasCreate` is set and the typed text matches no existing item. `{value}` is the typed text, e.g. `Create \"Marketing\"`."
+  },
+  "@astryx.tokenizer.add": {
+    "defaultMessage": "Add",
+    "description": "Visible label of the button at the end of the create row inside a Tokenizer's bottom sheet; pressing it adds the typed text as a new token. Imperative verb; short."
+  },
+  "@astryx.tokenizer.addValue": {
+    "defaultMessage": "Add {value}",
+    "description": "Screen-reader-only name of the create row's Add button inside a Tokenizer's bottom sheet. `{value}` is the typed text, e.g. `Add Marketing`."
+  },
+  "@astryx.tokenizer.done": {
+    "defaultMessage": "Done",
+    "description": "Label for immediate-apply Tokenizer bottom-sheet flows. Draft selection flows use tokenizer.save."
+  },
+  "@astryx.tokenizer.save": {
+    "defaultMessage": "Save",
+    "description": "Label of the primary footer button inside a Tokenizer's bottom sheet; pressing it commits the current selection draft and closes the sheet. Imperative verb; short."
+  },
+  "@astryx.tokenizer.selectionLimit": {
+    "defaultMessage": "Select up to {count, plural, one {# item} other {# items}}",
+    "description": "Tooltip on the disabled Save action when a Tokenizer selection draft exceeds a maxEntries limit that changed while the sheet was open. `{count}` is the current maximum."
+  },
+  "@astryx.tokenizer.discardChangesTitle": {
+    "defaultMessage": "Discard changes?",
+    "description": "Title of the confirmation dialog shown when someone tries to dismiss a Tokenizer bottom sheet after changing its selection draft. A question."
+  },
+  "@astryx.tokenizer.discardChangesDescription": {
+    "defaultMessage": "Your changes to {label} haven't been saved.",
+    "description": "Body of the dirty-dismiss confirmation inside a Tokenizer bottom sheet. `{label}` is the field label, e.g. `Your changes to Tags haven't been saved.`"
+  },
+  "@astryx.tokenizer.keepEditing": {
+    "defaultMessage": "Keep editing",
+    "description": "Label of the safe cancel action in the Tokenizer dirty-dismiss confirmation. It closes the confirmation and returns to the unchanged draft."
+  },
+  "@astryx.tokenizer.discardChanges": {
+    "defaultMessage": "Discard changes",
+    "description": "Label of the destructive action in the Tokenizer dirty-dismiss confirmation. It closes the sheet without committing its selection draft."
+  },
+  "@astryx.tokenizer.clearAllTitle": {
+    "defaultMessage": "Clear all selected items?",
+    "description": "Title of the confirmation dialog shown when the person presses Clear all inside a Tokenizer's bottom sheet. A question."
+  },
+  "@astryx.tokenizer.clearAllDescription": {
+    "defaultMessage": "This removes all selected items from {label}.",
+    "description": "Body of the Clear all confirmation dialog inside a Tokenizer's bottom sheet. `{label}` is the field's own label, e.g. `This removes all selected items from Tags.`"
+  },
+  "@astryx.tokenizer.nothingToClear": {
+    "defaultMessage": "Nothing selected",
+    "description": "Tooltip on the disabled Clear all action in a Tokenizer's bottom sheet while no item is selected; keeps the action focusable and says why it does nothing."
+  },
+  "@astryx.tokenizer.allRemoved": {
+    "defaultMessage": "All items removed",
+    "description": "Polite screen-reader announcement after a Tokenizer's Clear all has removed every selected item: the inline Clear all button, or a confirmed Clear all in the bottom sheet. Live-region text, never shown on screen."
+  },
+  "@astryx.tokenizer.selectedCount": {
+    "defaultMessage": "{count, number} selected",
+    "description": "Screen-reader-only lead-in of the description on a Tokenizer's bottom-sheet trigger (the touch presentation), followed by the selected token labels. `{count}` is how many tokens are selected, e.g. `2 selected`. Not shown on screen."
+  },
+  "@astryx.tokenizer.clearSelection": {
+    "defaultMessage": "Clear selection",
+    "description": "Label of the destructive action button in the Clear all confirmation dialog inside a Tokenizer's bottom sheet. Imperative verb phrase; confirms removing every token."
   },
   "@astryx.lightbox.imagePosition": {
     "defaultMessage": "Image {index, number} of {total, number}",
@@ -1478,5 +2022,381 @@
   "@astryx.transferListSelector.triggerLabel": {
     "defaultMessage": "{count, number} selected",
     "description": "Default summary on the closed trigger of a lab TransferListSelector, stating how many options are currently chosen. Consumers usually override this with a domain phrase (e.g. \"7 columns\")."
+  },
+  "@astryx.emojiPicker.label": {
+    "defaultMessage": "Emoji",
+    "description": "Default accessible name of the scrolling list of emoji in a lab EmojiPicker, and the footer text when no emoji is hovered or focused."
+  },
+  "@astryx.emojiPicker.searchLabel": {
+    "defaultMessage": "Search emoji",
+    "description": "Default placeholder and hidden label of the search field of a lab EmojiPicker."
+  },
+  "@astryx.emojiPicker.frequentlyUsed": {
+    "defaultMessage": "Frequently used",
+    "description": "Heading of the first group in a lab EmojiPicker, the host's frequent or recent emoji."
+  },
+  "@astryx.emojiPicker.searchResults": {
+    "defaultMessage": "Search results",
+    "description": "Heading of the single group a lab EmojiPicker shows while its search field has text."
+  },
+  "@astryx.emojiPicker.noResults": {
+    "defaultMessage": "No emoji match “{query}”",
+    "description": "Shown in a lab EmojiPicker when no emoji name or keyword matches the search. `query` is the search text."
+  },
+  "@astryx.emojiPicker.loading": {
+    "defaultMessage": "Loading emoji",
+    "description": "Accessible name of the spinner a lab EmojiPicker shows while its bundled emoji set loads."
+  },
+  "@astryx.emojiPicker.loadFailed": {
+    "defaultMessage": "More emoji couldn't be loaded.",
+    "description": "Shown in a lab EmojiPicker when its bundled emoji set failed to load; the frequent emoji still show."
+  },
+  "@astryx.emojiPicker.groupSmileysEmotion": {
+    "defaultMessage": "Smileys & emotion",
+    "description": "Heading of the Unicode CLDR emoji group of faces and emotions in a lab EmojiPicker."
+  },
+  "@astryx.emojiPicker.groupPeopleBody": {
+    "defaultMessage": "People & body",
+    "description": "Heading of the Unicode CLDR emoji group of people, gestures, and body parts in a lab EmojiPicker."
+  },
+  "@astryx.emojiPicker.groupAnimalsNature": {
+    "defaultMessage": "Animals & nature",
+    "description": "Heading of the Unicode CLDR emoji group of animals and plants in a lab EmojiPicker."
+  },
+  "@astryx.emojiPicker.groupFoodDrink": {
+    "defaultMessage": "Food & drink",
+    "description": "Heading of the Unicode CLDR emoji group of food and drink in a lab EmojiPicker."
+  },
+  "@astryx.emojiPicker.groupTravelPlaces": {
+    "defaultMessage": "Travel & places",
+    "description": "Heading of the Unicode CLDR emoji group of places, vehicles, and weather in a lab EmojiPicker."
+  },
+  "@astryx.emojiPicker.groupActivities": {
+    "defaultMessage": "Activities",
+    "description": "Heading of the Unicode CLDR emoji group of sports, games, and events in a lab EmojiPicker."
+  },
+  "@astryx.emojiPicker.groupObjects": {
+    "defaultMessage": "Objects",
+    "description": "Heading of the Unicode CLDR emoji group of everyday objects in a lab EmojiPicker."
+  },
+  "@astryx.emojiPicker.groupSymbols": {
+    "defaultMessage": "Symbols",
+    "description": "Heading of the Unicode CLDR emoji group of signs and symbols in a lab EmojiPicker."
+  },
+  "@astryx.emojiPicker.groupFlags": {
+    "defaultMessage": "Flags",
+    "description": "Heading of the Unicode CLDR emoji group of flags in a lab EmojiPicker."
+  },
+  "@astryx.comments.retry": {
+    "defaultMessage": "Retry",
+    "description": "Action on an error Banner in a lab Comments panel or comment composer that repeats the action that failed."
+  },
+  "@astryx.commentComposer.placeholder": {
+    "defaultMessage": "Write a comment…",
+    "description": "Default placeholder of a lab CommentComposer, the input for a new comment in a discussion."
+  },
+  "@astryx.commentComposer.noAgents": {
+    "defaultMessage": "No agents",
+    "description": "Shown in a lab CommentComposer's slash-command menu when no AI agent matches what was typed after `/`."
+  },
+  "@astryx.commentComposer.agents": {
+    "defaultMessage": "Agents",
+    "description": "Accessible name of a lab CommentComposer's slash-command menu, which lists the AI agents a comment can address."
+  },
+  "@astryx.commentComposer.uploadFailed": {
+    "defaultMessage": "Images couldn't be added",
+    "description": "Error Banner title in a lab CommentComposer when uploading attached images failed; a Retry action follows."
+  },
+  "@astryx.commentComposer.imagesOnly": {
+    "defaultMessage": "Only image files can be added",
+    "description": "Error Banner title in a lab CommentComposer when a non-image file was attached, pasted, or dropped."
+  },
+  "@astryx.commentComposer.chooseImages": {
+    "defaultMessage": "Choose images",
+    "description": "Action on a lab CommentComposer's error Banner that opens the file chooser for images."
+  },
+  "@astryx.commentComposer.imageAlt": {
+    "defaultMessage": "Image attachment",
+    "description": "Alt text a lab CommentComposer writes into the comment for an uploaded image that came with none."
+  },
+  "@astryx.commentComposer.removeQuote": {
+    "defaultMessage": "Remove quoted text",
+    "description": "Button beside the quoted passage in a lab CommentComposer that drops the quote from the new inline comment."
+  },
+  "@astryx.commentComposer.attachImages": {
+    "defaultMessage": "Attach images",
+    "description": "Button in a lab CommentComposer that opens the file chooser to add images to the comment."
+  },
+  "@astryx.commentComposer.addEmoji": {
+    "defaultMessage": "Add emoji",
+    "description": "Button in a lab CommentComposer that opens the emoji picker, and the accessible name of that picker's popover."
+  },
+  "@astryx.commentComposer.cancel": {
+    "defaultMessage": "Cancel",
+    "description": "Text button beside the label of a lab CommentComposer that is editing an existing comment; it discards the edit."
+  },
+  "@astryx.comments.actionsLabel": {
+    "defaultMessage": "Actions for {name}'s comment",
+    "description": "Accessible name of a comment's actions menu button in a lab Comments panel. `name` is the comment author's name."
+  },
+  "@astryx.comments.addReaction": {
+    "defaultMessage": "Add reaction",
+    "description": "Button on a comment in a lab Comments panel that opens the set of reactions to choose from."
+  },
+  "@astryx.comments.agentBadge": {
+    "defaultMessage": "Agent",
+    "description": "Badge beside the name of a comment author in a lab Comments panel that is an AI agent rather than a person."
+  },
+  "@astryx.comments.agentLogo": {
+    "defaultMessage": "{name} logo",
+    "description": "Alt text of an AI agent's logo used as its avatar in a lab Comments panel. `name` is the agent's name."
+  },
+  "@astryx.comments.chooseReaction": {
+    "defaultMessage": "Choose a reaction",
+    "description": "Accessible name of the popover listing the reactions a comment can take in a lab Comments panel."
+  },
+  "@astryx.comments.copyLink": {
+    "defaultMessage": "Copy comment link",
+    "description": "Button on a comment in a lab Comments panel that copies a link to the comment."
+  },
+  "@astryx.comments.currentVersion": {
+    "defaultMessage": "Current version",
+    "description": "Marks the version shown now in the edit history dialog of a lab Comments panel."
+  },
+  "@astryx.comments.delete": {
+    "defaultMessage": "Delete",
+    "description": "Item in a comment's actions menu, and the confirming action of the delete dialog, in a lab Comments panel."
+  },
+  "@astryx.comments.deleteDescription": {
+    "defaultMessage": "Delete {name}'s comment? This action cannot be undone.",
+    "description": "Body of the dialog that confirms deleting a comment in a lab Comments panel. `name` is the comment's author."
+  },
+  "@astryx.comments.deleteFailed": {
+    "defaultMessage": "This comment couldn't be deleted.",
+    "description": "Error shown on a comment in a lab Comments panel when deleting it failed."
+  },
+  "@astryx.comments.deleteFailedRetry": {
+    "defaultMessage": "This comment couldn't be deleted. Try again.",
+    "description": "Text the delete confirmation dialog of a lab Comments panel shows, and announces, after deleting failed."
+  },
+  "@astryx.comments.deleteTitle": {
+    "defaultMessage": "Delete comment?",
+    "description": "Title of the dialog that confirms deleting a comment in a lab Comments panel."
+  },
+  "@astryx.comments.edit": {
+    "defaultMessage": "Edit",
+    "description": "Item in a comment's actions menu in a lab Comments panel that edits the viewer's own comment."
+  },
+  "@astryx.comments.editFailed": {
+    "defaultMessage": "Your edit couldn't be saved.",
+    "description": "Error shown on a comment in a lab Comments panel when saving an edit failed; a Retry action follows."
+  },
+  "@astryx.comments.editPlaceholder": {
+    "defaultMessage": "Edit comment",
+    "description": "Placeholder of the composer that edits an existing comment in a lab Comments panel."
+  },
+  "@astryx.comments.edited": {
+    "defaultMessage": "Edited",
+    "description": "Text beside a comment's time in a lab Comments panel marking that it was changed after posting; it opens the edit history when one exists."
+  },
+  "@astryx.comments.editingContext": {
+    "defaultMessage": "Editing comment",
+    "description": "Label above the composer that edits an existing comment in a lab Comments panel; a Cancel action follows it."
+  },
+  "@astryx.comments.hideReplies": {
+    "defaultMessage": "Hide replies",
+    "description": "Text button under an open comment thread in a lab Comments panel that collapses its replies."
+  },
+  "@astryx.comments.historyEmptyDescription": {
+    "defaultMessage": "This comment has no earlier versions.",
+    "description": "Empty-state description of the edit history dialog of a lab Comments panel."
+  },
+  "@astryx.comments.historyEmptyTitle": {
+    "defaultMessage": "No edit history",
+    "description": "Empty-state title of the edit history dialog of a lab Comments panel for a comment with no earlier versions."
+  },
+  "@astryx.comments.historyFailed": {
+    "defaultMessage": "Edit history couldn't load",
+    "description": "Error Banner title in the edit history dialog of a lab Comments panel."
+  },
+  "@astryx.comments.historyLoadFailed": {
+    "defaultMessage": "The comment's edit history couldn't be loaded. Try again.",
+    "description": "Error description in the edit history dialog of a lab Comments panel when loading the versions failed."
+  },
+  "@astryx.comments.historyLoading": {
+    "defaultMessage": "Loading edit history",
+    "description": "Accessible name of the spinner shown while a comment's earlier versions load in a lab Comments panel."
+  },
+  "@astryx.comments.historySubtitle": {
+    "defaultMessage": "Comment by {name}",
+    "description": "Subtitle of the edit history dialog in a lab Comments panel. `name` is the comment's author."
+  },
+  "@astryx.comments.historyTitle": {
+    "defaultMessage": "Edit history",
+    "description": "Title of the dialog listing a comment's earlier versions in a lab Comments panel."
+  },
+  "@astryx.comments.linkCopied": {
+    "defaultMessage": "Comment link copied",
+    "description": "Label the Copy comment link button takes for two seconds after copying, in a lab Comments panel."
+  },
+  "@astryx.comments.otherReactors": {
+    "defaultMessage": "{count, plural, one {# other} other {# others}}",
+    "description": "Last item of the list of people who reacted to a comment in a lab Comments panel, for those not named. `count` is how many."
+  },
+  "@astryx.comments.outdated": {
+    "defaultMessage": "Outdated",
+    "description": "Badge beside the quoted passage of an inline comment in a lab Comments panel when that passage was edited away."
+  },
+  "@astryx.comments.reactionCelebrate": {
+    "defaultMessage": "Celebrate",
+    "description": "Name of the party-popper reaction offered by default on comments in a lab Comments panel."
+  },
+  "@astryx.comments.reactionCount": {
+    "defaultMessage": "{reaction}: {count, number}",
+    "description": "Accessible name of a reaction toggle on a comment in a lab Comments panel. `reaction` is the reaction's name, e.g. \"Like\"; `count` is how many people reacted."
+  },
+  "@astryx.comments.reactionFailed": {
+    "defaultMessage": "Your reaction couldn't be saved.",
+    "description": "Error shown on a comment in a lab Comments panel when adding or removing a reaction failed."
+  },
+  "@astryx.comments.reactionLaugh": {
+    "defaultMessage": "Haha",
+    "description": "Name of the laughing reaction offered by default on comments in a lab Comments panel."
+  },
+  "@astryx.comments.reactionLike": {
+    "defaultMessage": "Like",
+    "description": "Name of the thumbs-up reaction offered by default on comments in a lab Comments panel."
+  },
+  "@astryx.comments.reactionLove": {
+    "defaultMessage": "Love",
+    "description": "Name of the red-heart reaction offered by default on comments in a lab Comments panel."
+  },
+  "@astryx.comments.reactionSad": {
+    "defaultMessage": "Sad",
+    "description": "Name of the crying reaction offered by default on comments in a lab Comments panel."
+  },
+  "@astryx.comments.reactionWow": {
+    "defaultMessage": "Wow",
+    "description": "Name of the surprised reaction offered by default on comments in a lab Comments panel."
+  },
+  "@astryx.comments.reopen": {
+    "defaultMessage": "Reopen",
+    "description": "Button on a resolved comment thread in a lab Comments panel that reopens it."
+  },
+  "@astryx.comments.reopenFailed": {
+    "defaultMessage": "This thread couldn't be reopened.",
+    "description": "Error shown on a comment thread in a lab Comments panel when reopening it failed."
+  },
+  "@astryx.comments.reply": {
+    "defaultMessage": "Reply",
+    "description": "Button on a comment in a lab Comments panel that opens a reply to it."
+  },
+  "@astryx.comments.replyFailed": {
+    "defaultMessage": "Your reply couldn't be posted.",
+    "description": "Error shown above a reply composer in a lab Comments panel when posting failed; the draft is kept."
+  },
+  "@astryx.comments.replyPlaceholder": {
+    "defaultMessage": "Reply to {name}…",
+    "description": "Placeholder of the reply composer in a lab Comments panel comment thread. `name` is the author of the comment being answered."
+  },
+  "@astryx.comments.replyingContext": {
+    "defaultMessage": "Replying to {name}",
+    "description": "Accessible context for the reply composer in a lab Comments panel comment thread. `name` is the author of the comment being answered."
+  },
+  "@astryx.comments.resolve": {
+    "defaultMessage": "Mark as resolved",
+    "description": "Button on a comment thread in a lab Comments panel that marks the thread resolved."
+  },
+  "@astryx.comments.resolveFailed": {
+    "defaultMessage": "This thread couldn't be resolved.",
+    "description": "Error shown on a comment thread in a lab Comments panel when marking it resolved failed."
+  },
+  "@astryx.comments.resolved": {
+    "defaultMessage": "Resolved",
+    "description": "Text beside a comment thread's time in a lab Comments panel marking the thread resolved."
+  },
+  "@astryx.comments.resolvedBy": {
+    "defaultMessage": "Resolved by {name}",
+    "description": "Tooltip of the Resolved text on a comment thread in a lab Comments panel. `name` is the person who resolved it."
+  },
+  "@astryx.comments.errorAnnouncement": {
+    "defaultMessage": "{title} {description}",
+    "description": "Screen-reader announcement for an error Banner in a lab Comments panel that has a title and a description, read once when the Banner appears. `title` is the Banner's title (for example `Couldn't send this comment.`) and `description` its description (for example `Retrying didn't work.`). Reorder or punctuate as the language needs."
+  },
+  "@astryx.comments.retryFailed": {
+    "defaultMessage": "Retrying didn't work.",
+    "description": "Error shown on a comment in a lab Comments panel that failed to post when retrying it failed too."
+  },
+  "@astryx.comments.sendFailed": {
+    "defaultMessage": "Couldn't send this comment.",
+    "description": "Error Banner title on a comment in a lab Comments panel that failed to post, when the host gave no message of its own."
+  },
+  "@astryx.comments.threadLabel": {
+    "defaultMessage": "Thread by {name}",
+    "description": "Accessible name of the toggle that opens or closes a comment thread in a lab Comments panel. `name` is the author of the thread's first comment."
+  },
+  "@astryx.comments.unread": {
+    "defaultMessage": "New",
+    "description": "Badge on a comment in a lab Comments panel the viewer hasn't read yet."
+  },
+  "@astryx.comments.unsavedDraft": {
+    "defaultMessage": "Unsaved draft. Dismiss again to discard it.",
+    "description": "Announced to screen readers when a lab CommentThread refuses its first dismissal because a reply or edit holds unsaved text; a second press outside the thread or a second Escape discards the draft."
+  },
+  "@astryx.comments.versionAuthor": {
+    "defaultMessage": "by {name}",
+    "description": "Byline beside the time of one version in the edit history dialog of a lab Comments panel. `name` is who saved that version."
+  },
+  "@astryx.comments.viewHistory": {
+    "defaultMessage": "View edit history",
+    "description": "Accessible name of the Edited text button on a comment in a lab Comments panel, which opens the comment's earlier versions."
+  },
+  "@astryx.comments.viewReplies": {
+    "defaultMessage": "View {count, plural, one {# reply} other {# replies}}",
+    "description": "Text button under a collapsed comment thread in a lab Comments panel that opens it. `count` is the number of replies."
+  },
+  "@astryx.comments.commentsLabel": {
+    "defaultMessage": "Threads in {label}",
+    "description": "Accessible name of the scrolling list of comment threads in a lab Comments panel. `label` is the panel's own accessible name, e.g. \"Comments\" or \"Launch plan\"."
+  },
+  "@astryx.comments.emptyDescription": {
+    "defaultMessage": "Start the discussion with a comment.",
+    "description": "Description under the empty-state title of a lab Comments panel when the viewer can comment."
+  },
+  "@astryx.comments.emptyReadOnlyDescription": {
+    "defaultMessage": "There is no discussion on this item.",
+    "description": "Description under the empty-state title of a lab Comments panel the viewer can only read."
+  },
+  "@astryx.comments.emptyTitle": {
+    "defaultMessage": "No comments yet",
+    "description": "Title of the empty state of a lab Comments panel with no comments or activity."
+  },
+  "@astryx.comments.label": {
+    "defaultMessage": "Comments",
+    "description": "Default accessible name of the lab Comments region, which holds the comment threads about one item. Hosts usually override it with the item's own noun."
+  },
+  "@astryx.comments.loadFailed": {
+    "defaultMessage": "Comments couldn't load",
+    "description": "Error Banner title in a lab Comments panel when its comments failed to load."
+  },
+  "@astryx.comments.loadOlder": {
+    "defaultMessage": "Load earlier comments",
+    "description": "Button above the threads of a lab Comments panel that loads the previous page of comments."
+  },
+  "@astryx.comments.loading": {
+    "defaultMessage": "Loading comments",
+    "description": "Visually hidden text read by screen readers while a lab Comments panel shows comment-shaped loading placeholders."
+  },
+  "@astryx.comments.olderFailed": {
+    "defaultMessage": "Earlier comments couldn't load",
+    "description": "Error Banner title in a lab Comments panel when the page of earlier comments failed to load; a Retry action follows."
+  },
+  "@astryx.comments.postFailed": {
+    "defaultMessage": "Your comment couldn't be posted.",
+    "description": "Error shown above the new-comment composer of a lab Comments panel when posting failed; the draft is kept and a Retry action follows."
+  },
+  "@astryx.infoTip.label": {
+    "defaultMessage": "More information",
+    "description": "Default accessible name of an InfoTip, the small info-icon button whose press reveals help about the label, value, or metric beside it."
   }
 }

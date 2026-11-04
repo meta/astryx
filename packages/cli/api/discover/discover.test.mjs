@@ -68,10 +68,19 @@ describe('discover() dispatcher routing', () => {
   it('free-text query with multiple matches -> discover.search envelope', async () => {
     // 'a' is a substring of both Alpha and Beta (no exact match), so the search
     // leaf returns the multi-match discover.search envelope. Proves free-text
-    // routing reaches the search leaf and projects its envelope.
+    // routing reaches the search leaf and projects its envelope. Search also
+    // matches package names, so the package itself is listed after them.
     const r = await discover('a');
     expect(r.type).toBe('discover.search');
-    expect(r.data.matches.map(m => m.component).sort()).toEqual(['Alpha', 'Beta']);
+    expect(
+      r.data.matches.filter(m => m.kind === 'component').map(m => m.component),
+    ).toEqual(['Alpha', 'Beta']);
+    expect(r.data.matches).toContainEqual({
+      package: '@acme/widgets',
+      component: '@acme/widgets',
+      kind: 'package',
+      installed: true,
+    });
   });
 
   it('free-text query with no match still routes to the search leaf (coded not-found)', async () => {

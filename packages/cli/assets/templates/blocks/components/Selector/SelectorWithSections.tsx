@@ -9,7 +9,7 @@ export default function SelectorWithSections() {
   const [value, setValue] = useState<string | undefined>();
   return (
     <Selector
-      style={{width: 300}}
+      controlStyle={{width: 300}}
       label="Office"
       options={[
         {
