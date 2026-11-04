@@ -15,7 +15,6 @@ import {
   calendarShiftYears,
   formatCalendarDate,
   formatCalendarMonthLabel,
-  formatDayNumber,
   isCalendarSystemAvailable,
   isGregorianAligned,
   isInCalendarMonth,
@@ -232,16 +231,11 @@ describe('calendar month and year steps', () => {
   });
 });
 
-describe('calendar availability and digits', () => {
+describe('calendar availability', () => {
   it('every calendar is available with the full polyfill', () => {
     for (const calendar of CALENDAR_SYSTEMS) {
       expect(isCalendarSystemAvailable(calendar)).toBe(true);
     }
-  });
-
-  it('writes day numbers in the locale digits', () => {
-    expect(formatDayNumber(8, 'fa-IR')).toBe('۸');
-    expect(formatDayNumber(28, 'en')).toBe('28');
   });
 });
 

@@ -18,6 +18,7 @@ import {
   plainDateAddDays,
   plainDateAddMonths,
   plainDateFormat,
+  plainDateFormatDayNumber,
   plainDateFormatStandaloneMonthYear,
   plainDateFormatToParts,
   plainDateIsAfter,
@@ -89,8 +90,8 @@ export function isCalendarSystem(value: string): value is CalendarSystem {
   return Object.hasOwn(KNOWN_CALENDARS, value);
 }
 
-// The subset of the Temporal API that this module reads. It is declared here
-// so that the published types do not need the `esnext.temporal` library.
+// The published types must not need the `esnext.temporal` library.
+// This module declares only the Temporal members it reads.
 interface TemporalPlainDate {
   readonly year: number;
   readonly month: number;
@@ -127,7 +128,8 @@ function getTemporal(): TemporalNamespace | undefined {
     : undefined;
 }
 
-// Keyed by the Temporal object, so a polyfill loaded later is probed again.
+// The key is the Temporal object, so a polyfill that loads later gets its
+// own probe.
 const supportedCalendars = new WeakMap<object, Map<CalendarSystem, boolean>>();
 
 /**
@@ -369,35 +371,12 @@ export function formatCalendarDate(
   return middleParts
     .map(part =>
       part.type === 'day'
-        ? formatDayNumber(date.day, locale, numberingSystem)
+        ? plainDateFormatDayNumber(date.day, locale, numberingSystem)
         : part.type === 'weekday' && weekday != null
           ? weekday
           : part.value,
     )
     .join('');
-}
-
-const dayNumberFormats = new Map<string, Intl.NumberFormat>();
-
-/**
- * A day of the month written in the locale's digits, such as ۸ in `fa`, or in
- * the given numbering system.
- */
-export function formatDayNumber(
-  day: number,
-  locale: Locale,
-  numberingSystem?: string,
-): string {
-  const key = `${locale}|${numberingSystem ?? ''}`;
-  let format = dayNumberFormats.get(key);
-  if (format == null) {
-    format = new Intl.NumberFormat(locale, {
-      useGrouping: false,
-      numberingSystem,
-    });
-    dayNumberFormats.set(key, format);
-  }
-  return format.format(day);
 }
 
 /**

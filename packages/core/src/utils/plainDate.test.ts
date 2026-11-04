@@ -999,6 +999,12 @@ describe('plainDateFormatDayNumber', () => {
   it('adds no grouping separator', () => {
     expect(plainDateFormatDayNumber(1234, 'en')).toBe('1234');
   });
+
+  it('writes the digits of a given numbering system', () => {
+    expect(plainDateFormatDayNumber(8, 'fa-IR', 'latn')).toBe('8');
+    expect(plainDateFormatDayNumber(8, 'en', 'arabext')).toBe('۸');
+    expect(plainDateFormatDayNumber(8, 'fa-IR')).toBe('۸');
+  });
 });
 
 describe('plainDateWeekdayNames', () => {
