@@ -4,11 +4,10 @@
  * @file ListRowPress.interaction.browser.spec.ts
  * @input The built List, TreeList and press feedback stories, real touch input
  *   (Chromium CDP / WebKit's input command), the interaction harness, and the
- *   cell release clock and curve from the UIKit constants table
- *   (motion/uikit/timing.ts)
+ *   default theme's exit motion tokens, which the release plays
  * @output Interaction and animation proofs for a list row's touch press
  *   release: a held row paints the pressed token at full strength, and the
- *   release follows the cell release curve sampled frame by frame (both
+ *   release follows the exit easing sampled frame by frame (both
  *   engines); the release keeps fading on every frame while the main thread
  *   is blocked (Chromium screencast, WebKit video); the release does no
  *   Layout or Paint; storyboards of the release and of the blocked window
@@ -59,15 +58,36 @@ import {
   type CastFrame,
   type TouchDriver,
 } from '@astryxdesign/interaction-harness';
-import {timing} from '../../motion/uikit/timing';
 
 const storybook = withStorybook(test);
 
-const RELEASE_MS = timing.press.highlightOutMs;
-const releaseEase = cubicBezier(...timing.press.highlightOutCurve);
+/** The release's clock and curve: the theme's exit motion tokens. */
+interface Exit {
+  readonly ms: number;
+  readonly curve: readonly [number, number, number, number];
+  readonly ease: (t: number) => number;
+}
+
+/** Reads `--duration-exit` and `--ease-exit` where the press paints. */
+async function exitOf(surface: Locator): Promise<Exit> {
+  const {ms, curve} = await surface.evaluate(el => {
+    const style = getComputedStyle(el);
+    const time = style.getPropertyValue('--duration-exit').trim();
+    const points = (
+      style.getPropertyValue('--ease-exit').match(/-?\d*\.?\d+/g) ?? []
+    ).map(Number);
+    return {
+      ms: time.endsWith('ms') ? parseFloat(time) : parseFloat(time) * 1000,
+      curve: points,
+    };
+  });
+  const points = curve as unknown as Exit['curve'];
+  return {ms, curve: points, ease: cubicBezier(...points)};
+}
+
 /** The layer's opacity t ms into the release: the strength, 1 → 0. */
-const expectedStrength = (t: number) =>
-  1 - releaseEase(Math.min(1, Math.max(0, t / RELEASE_MS)));
+const strengthAt = (exit: Exit, t: number) =>
+  1 - exit.ease(Math.min(1, Math.max(0, t / exit.ms)));
 
 /** Long enough that the press is believed (scroll.delaysContentTouchesMs). */
 const HOLD_MS = 400;
@@ -217,10 +237,11 @@ async function samplePixel(
   }
 }
 
-test('a held row paints the pressed token and its release follows the cell release curve, sampled frame by frame', async ({
+test('a held row paints the pressed token and its release follows the exit easing, sampled frame by frame', async ({
   page,
 }, testInfo) => {
   const {driver, row, center} = await openRow(page, LIST_ROW);
+  const exit = await exitOf(row);
   expect(await layerOpacity(row)).toBe(0);
   // Gate the page's timers before the press, so the controller's check at
   // the release clock (after which the release ends with its animation) can
@@ -234,22 +255,22 @@ test('a held row paints the pressed token and its release follows the cell relea
     a => a.target?.startsWith('li') && a.kind === 'CSSAnimation',
   );
   expect(release, JSON.stringify(held)).toBeDefined();
-  expect(release?.durationMs).toBe(RELEASE_MS);
+  expect(release?.durationMs).toBe(exit.ms);
   const samples: {t: number; value: number}[] = [];
-  for (const t of timeline(RELEASE_MS)) {
+  for (const t of timeline(exit.ms)) {
     await seekAnimations(page, t);
     samples.push({t, value: await layerOpacity(row)});
   }
   await releaseAnimations(page, {finish: true});
   await thawTimers(page);
-  const comparison = compareCurve(samples, expectedStrength, 0.005);
+  const comparison = compareCurve(samples, t => strengthAt(exit, t), 0.005);
   await writeEvidence(
     'curves/list-row-press-release',
     {
       [`${testInfo.project.name}.json`]: JSON.stringify(
         {
-          releaseMs: RELEASE_MS,
-          curve: timing.press.highlightOutCurve,
+          releaseMs: exit.ms,
+          curve: exit.curve,
           held,
           samples,
           comparison,
@@ -406,6 +427,7 @@ test('a busy first frame after the lift still plays the whole release before the
   browserName,
 }) => {
   const {driver, row, center} = await openRow(page, LIST_ROW);
+  const exit = await exitOf(row);
   // When the press controller writes the release, 150 ms of script hold the
   // main thread before the first frame, so the release starts after the
   // block. Every frame after it is read until the attribute goes: the layer
@@ -457,7 +479,10 @@ test('a busy first frame after the lift still plays the whole release before the
   }
   // The last frame still fading is at rest or within one frame of it: the
   // attribute goes once the release has played, however late it started.
-  expect(fading.at(-1)?.[1], JSON.stringify(frames)).toBeLessThanOrEqual(0.05);
+  const oneFrameFromRest = strengthAt(exit, exit.ms - 17) + 0.01;
+  expect(fading.at(-1)?.[1], JSON.stringify(frames)).toBeLessThanOrEqual(
+    oneFrameFromRest,
+  );
   // And the release played on the way there, frame by frame.
   for (let i = 1; i < fading.length; i++) {
     expect(fading[i][1], JSON.stringify(frames)).toBeLessThanOrEqual(
@@ -472,12 +497,13 @@ test('the release does no Layout or Paint per frame', async ({
 }) => {
   test.skip(browserName !== 'chromium', 'rendering traces are Chromium-only');
   const {driver, row, center} = await openRow(page, LIST_ROW);
+  const exit = await exitOf(row);
   let release = {from: 0, to: 0};
   const started = Date.now();
   const trace = await traceRendering(page, async () => {
     await driver.play(tap(center, {holdMs: HOLD_MS}));
     [release] = await waitForAnimation(row);
-    await page.waitForTimeout(RELEASE_MS + 100);
+    await page.waitForTimeout(exit.ms + 100);
   });
   // The steady part of the release: its first and last frames may commit.
   const during = countBetween(trace, release.from + 30, release.to - 30);
@@ -666,6 +692,7 @@ test(
   {tag: '@storyboard'},
   async ({page}, testInfo) => {
     const {driver, row, center} = await openRow(page, LIST_ROW);
+    const exit = await exitOf(row);
     await installTimerGate(page);
     const box = await row.boundingBox();
     if (box == null) {
@@ -701,7 +728,7 @@ test(
       expect(opacities[i]).toBeLessThanOrEqual(opacities[i - 1] + 1e-6);
     }
     storyboard.frames.forEach(f =>
-      expect(f.data.opacity as number).toBeCloseTo(expectedStrength(f.t), 2),
+      expect(f.data.opacity as number).toBeCloseTo(strengthAt(exit, f.t), 2),
     );
   },
 );

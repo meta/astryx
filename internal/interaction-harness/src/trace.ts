@@ -22,6 +22,7 @@
  */
 
 import type {CDPSession, Page} from '@playwright/test';
+import {frames} from './story';
 
 /**
  * The mark a harness function puts on its own page-side work
@@ -184,6 +185,10 @@ export async function traceRendering(
       }
     }, on);
   await standDown(true);
+  // The frame the recorder requested before it stood down runs now, before the
+  // start mark. A frame callback makes its frame a main-thread one, in which an
+  // anchored layer that animates lays out.
+  await frames(page, 1);
   let fromEpoch: number;
   let toEpoch: number;
   try {
