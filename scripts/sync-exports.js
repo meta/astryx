@@ -43,7 +43,7 @@ const UTILITY_DIRS = new Set(['hooks', 'theme', 'utils']);
  * publicly exported. These are shared implementation details
  * consumed by other components via relative imports.
  */
-const INTERNAL_DIRS = new Set(['NavItem', 'gestures']);
+const INTERNAL_DIRS = new Set(['NavItem', 'gestures', 'keyboard']);
 
 /**
  * Additional exports that can't be auto-discovered from directory structure.

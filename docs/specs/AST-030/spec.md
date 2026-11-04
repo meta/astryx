@@ -43,7 +43,9 @@ affects_consumer_docs: []
     ".github/scripts/ci-pr-gate.*",
     ".github/scripts/perf-*",
     "apps/sandbox/perf/**",
-    "playwright.perf.config.ts"
+    "playwright.perf.config.ts",
+    ".github/scripts/check-public-text.*",
+    ".github/public-text-hashes.json"
   ]
 }
 ```
@@ -538,6 +540,20 @@ they are separately named.
   classifier has no Lab-only lane. An outside
   contributor's pull request still needs `ci:run` (FR17), and `main` and the
   release-check cover Lab as before (DEC-21).
+- **FR27 — Lint fails a pull request whose public text carries an internal
+  reference.** Public text is each commit message and added line from the merge
+  base to the pull request head, and the pull request's title and description
+  as they read when the check runs. Generated text that no person writes, the
+  lockfile and the digest list, is not read.
+  The required Lint job runs the base branch's copy of the check, so a pull
+  request cannot change the check that judges it. The check matches generic
+  shapes of internal identifiers and hosts, and salted digests of internal
+  names; the repository holds no internal name in plain text. A failure names
+  the location and the kind of reference, never the matched text, and tells
+  the contributor to remove the reference at that location, with a maintainer's
+  help when the reference is unclear. A range it cannot read fails the check. A
+  maintainer handles a false positive through the normal fix-forward route,
+  with no bypass.
 
 ### Platform support
 
@@ -601,6 +617,7 @@ The nightly perf lane is the one scheduled measurement outside them (FR18).
 | FR23     | `release-check-shape.test.mjs`, `a11y-contract-shard.test.mjs` and the release-check workflow contract                                             | release-check and pull-request legs; a contract file longer than a leg's share, one it cannot name exactly, and a serial one; the recorded suite; a re-check from an admin, a maintainer and a writer, from another branch, with a short SHA and with an older commit; failed-only beside a passed, a running and a missing run                                                                                                                                                                                                                                                                                              | a narrower release-check, a held or over-budget leg, a test selected by no leg or by two, a re-check that a writer can start, that waits for main's running check, or that re-runs jobs of another commit fails                                                                                                                                                                                           |
 | FR24     | `ci-heavy-lanes.test.mjs` cadence cases                                                                                                            | release-check 170 and 176 minutes old; the unit lane hourly beside it; weekday 06:37 Pacific inside the window in standard and daylight time; the pre-cut check already started; the tip already checked; a weekend morning; before 06:30 and after 07:30                                                                                                                                                                                                                                                                                                                                                                    | a release-check starts inside the 175-minute window, the pre-cut check is skipped or starts twice, or it runs on a weekend                                                                                                                                                                                                                                                                                |
 | FR26     | `ci-lab-only-routing.test.mjs`, `change-scope.test.mjs` and `test-scope-action.test.mjs` Lab-only cases                                            | a Lab-only change, with and without a Changeset; Lab beside core, charts, a Storybook story, the docsite, the Sandbox, a workflow, the lockfile, root configuration, internal tooling or a spec record; a rename into or out of Lab; an incomplete list; a base classifier without the lane; each required context, its owners, the UI legs' Lab tests, the UI and Node guard tests, the repository guards, the Storybook build and Lab typecheck, the heavy suites with and without a label, lint and an agent push                                                                                                         | a mixed change takes the Lab-only lane; a required context skips or fails, or passes without its notice; a Lab test, a guard test, a repository guard, the Lab typecheck or the Storybook build does not run; an unlabelled heavy suite, the docsite or the full typecheck runs, or a label's suite cannot audit Lab; lint is skipped                                                                     |
+| FR27     | `check-public-text.test.mjs` over the check and the Lint workflow step                                                                             | each identifier shape; a hashed name and host made up in the test; ordinary text; a finding in a commit message, an added line and the description; a match before the merge base; an empty range, a bad sha, a missing commit and a missing digest file                                                                                                                                                                                                                                                                                                                                                                     | a reference passes; the output holds the matched text; a match on the base branch fails a later pull request; an unreadable range passes; the step runs the pull request's own copy                                                                                                                                                                                                                       |
 
 ## Decision log
 
