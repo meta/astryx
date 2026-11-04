@@ -41,6 +41,7 @@ export default function TokenizerOverflow() {
             value={inlineValue}
             onChange={items => setInlineValue(items)}
             tokenOverflowBehavior="unfocusedInline"
+            presentation="popover"
           />
         </Stack>
         <Stack direction="vertical" gap={1}>
@@ -54,6 +55,7 @@ export default function TokenizerOverflow() {
             value={layerValue}
             onChange={items => setLayerValue(items)}
             tokenOverflowBehavior="unfocusedLayer"
+            presentation="popover"
           />
         </Stack>
       </Stack>

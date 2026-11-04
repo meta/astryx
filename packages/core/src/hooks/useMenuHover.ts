@@ -297,6 +297,7 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
     };
   }, [clearTimeouts, hideAndRestoreFocus]);
 
+  // Releases the hover timers on unmount.
   useEffect(() => {
     return () => clearTimeouts();
   }, [clearTimeouts]);

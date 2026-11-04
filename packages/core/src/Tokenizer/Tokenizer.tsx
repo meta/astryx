@@ -8,8 +8,8 @@
  *   useAdaptivePresentation, and TokenizerBottomSheet (lazy)
  * @output Exports Tokenizer multi-select typeahead component
  * @position Composed component; forwards DOM ref and exposes focus control via
- *   handleRef. The experimental `presentation` option swaps the inline
- *   combobox for a trigger that opens TokenizerBottomSheet.
+ *   handleRef. The `presentation` prop swaps the inline combobox for a
+ *   trigger that opens TokenizerBottomSheet.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Tokenizer/index.ts
@@ -51,9 +51,13 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {TokenizerClearAllMessageContext} from './TokenizerClearAllMessageContext';
 import {TokenizerItemRemovableContext} from './TokenizerItemRemovableContext';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
-import {useAdaptivePresentation} from '../hooks/useAdaptivePresentation';
+import {
+  type AdaptivePresentation,
+  useAdaptivePresentation,
+} from '../hooks/useAdaptivePresentation';
 import {useIsHydrating} from '../hooks/useIsHydrating';
 import {VisuallyHidden} from '../VisuallyHidden';
+import {useDevWarning} from '../hooks/useDevWarning';
 import {warnOnce} from '../utils/devWarning';
 import type {SizeValue} from '../utils/types';
 import {BaseTypeahead} from '../Typeahead/BaseTypeahead';
@@ -296,62 +300,74 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
   onFocus?: (e: React.FocusEvent) => void;
   /** Fires when focus leaves the tokenizer entirely. */
   onBlur?: (e: React.FocusEvent) => void;
-  /** Ref forwarded to the combobox input. */
+  /**
+   * How the field presents its choices.
+   * - `'popover'`: the inline combobox with its anchored suggestion menu, on
+   *   every device.
+   * - `'bottom-sheet'`: a trigger showing the selected tokens that opens one
+   *   tall modal sheet: a search row on top, full-width checkbox rows that
+   *   keep their place while the sheet is open, a create row with
+   *   `hasCreate`, and a footer pinned in every state with a confirmed Clear
+   *   all and Save. The sheet edits a draft: `onChange` fires once, when Save
+   *   commits it, and a swipe, scrim or Escape close of a changed draft asks
+   *   before discarding. Suited to compact touch screens, where the inline
+   *   combobox competes with the software keyboard.
+   * - `'adaptive'`: the bottom sheet on compact coarse-pointer screens,
+   *   otherwise the popover — the same resolution Selector uses. The server
+   *   render and the hydrating render are the popover.
+   *
+   * In the sheet presentation the trigger is the control: `ref`, `id`,
+   * `aria-*`, and `data-*` reach it. `renderItem`, `renderToken`,
+   * `endContent`, `hasClear`, `hasEntriesOnFocus`, `menuWidth`,
+   * `tokenOverflowBehavior`, and `hasAutoFocus` have no surface to act on
+   * and warn once in development. Pass `'popover'` to keep the inline field
+   * and those props on every device.
+   * @default 'adaptive'
+   */
+  presentation?: TokenizerPresentation;
+  /**
+   * Ref forwarded to the control: the combobox input in the popover
+   * presentation, the trigger button in the sheet presentation. This type
+   * keeps its released input element; the component itself also accepts a
+   * `Ref<HTMLInputElement | HTMLButtonElement>`, the type to use where the
+   * sheet can present.
+   */
   ref?: React.Ref<HTMLInputElement>;
   /** Imperative handle ref for focus/blur control. */
   handleRef?: React.Ref<TokenizerHandle>;
   /**
    * Experimental options, outside the stable compatibility promise: anything
-   * in this object may change or be removed in a patch release. Omit it for
-   * the stable behavior.
+   * in this object may change or be removed in a patch release.
    * @experimental
    */
   experimental?: {
     /**
-     * How the field presents its choices.
-     * - `'popover'`: the inline combobox with its anchored suggestion menu —
-     *   the stable behavior.
-     * - `'bottom-sheet'`: a trigger showing the selected tokens that opens one
-     *   tall modal sheet: a search row on top, full-width checkbox rows that
-     *   keep their place while the sheet is open, a create row with
-     *   `hasCreate`, and a footer pinned in every state with a confirmed Clear
-     *   all and Save. The sheet edits a draft: `onChange` fires once, when Save
-     *   commits it, and a swipe, scrim or Escape close of a changed draft asks
-     *   before discarding. Suited to compact touch screens, where the inline
-     *   combobox competes with the software keyboard.
-     * - `'adaptive'`: the bottom sheet on compact coarse-pointer screens,
-     *   otherwise the popover — the same resolution Selector uses.
-     *
-     * In the sheet presentation the trigger is the control: `ref`, `id`,
-     * `aria-*`, and `data-*` reach it. `renderItem`, `renderToken`,
-     * `endContent`, `hasClear`, `hasEntriesOnFocus`, `menuWidth`,
-     * `tokenOverflowBehavior`, and `hasAutoFocus` have no surface to act on
-     * and warn once in development.
+     * The earlier spelling of `presentation`, with the same values. The
+     * top-level `presentation` wins when both are set.
      * @experimental
-     * @default 'popover'
+     * @deprecated Use the stable `presentation` prop.
      */
-    presentation?: 'popover' | 'bottom-sheet' | 'adaptive';
+    presentation?: TokenizerPresentation;
   };
 }
 
+/** How Tokenizer presents its choices; see `TokenizerProps.presentation`. */
+export type TokenizerPresentation = AdaptivePresentation;
+
 /**
- * The props the experimental opt-in admits. `experimental` is present, and
- * `ref` also accepts the sheet presentation's trigger button, the control it
- * stands for there. Only the overload below reaches this type. `TokenizerProps`
- * stays the component's declared props type: it is an interface, so
- * `interface X extends TokenizerProps<T>`, `Omit<TokenizerProps<T>, …>` and
- * `ComponentProps<typeof Tokenizer>` keep their released shapes.
+ * The props the component accepts: `TokenizerProps`, whose `ref` keeps its
+ * released input type, with a `ref` that also accepts the sheet
+ * presentation's trigger button. `TokenizerProps` stays the declared props
+ * type, so `interface X extends TokenizerProps<T>`, `Omit<TokenizerProps<T>,
+ * …>` and `ComponentProps<typeof Tokenizer>` keep their released shapes.
  */
-type TokenizerExperimentalProps<T extends SearchableItem> = Omit<
+type TokenizerAcceptedProps<T extends SearchableItem> = Omit<
   TokenizerProps<T>,
-  'ref' | 'experimental'
+  'ref'
 > & {
-  /** @experimental */
-  experimental: NonNullable<TokenizerProps<T>['experimental']>;
   /**
    * Ref forwarded to the control: the combobox input in the popover
    * presentation, the trigger button in the sheet presentation.
-   * @experimental
    */
   ref?: React.Ref<HTMLInputElement | HTMLButtonElement>;
 };
@@ -722,11 +738,11 @@ function EndLane({
 }
 
 // Keep this overload first. TypeScript resolves `ComponentProps<typeof
-// Tokenizer>` against the last overload, so that type stays the stable props.
-// A call that passes `experimental` matches this one and may pass the wider
-// `ref`.
+// Tokenizer>` against the last overload, so that type stays the released
+// props. Every call matches this one, so a ref typed for both controls is
+// accepted.
 export function Tokenizer<T extends SearchableItem>(
-  props: TokenizerExperimentalProps<T>,
+  props: TokenizerAcceptedProps<T>,
 ): React.JSX.Element;
 export function Tokenizer<T extends SearchableItem>(
   props: TokenizerProps<T>,
@@ -776,12 +792,13 @@ export function Tokenizer<T extends SearchableItem>({
   ref,
   handleRef,
   onKeyDown,
+  presentation: presentationProp,
   experimental,
   id: idProp,
   'aria-describedby': ariaDescribedByProp,
   'aria-labelledby': ariaLabelledByProp,
   ...restProps
-}: TokenizerProps<T> | TokenizerExperimentalProps<T>): React.JSX.Element {
+}: TokenizerProps<T> | TokenizerAcceptedProps<T>): React.JSX.Element {
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const {rest, container} = useFieldInputStyling('Tokenizer', restProps, {
     containerXstyle,
@@ -807,11 +824,16 @@ export function Tokenizer<T extends SearchableItem>({
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  // Experimental presentation (`component:Tokenizer` DEC-3). `adaptive`
-  // resolves through the policy the selection controls share; an open sheet
-  // keeps its presentation until it closes, so a resolution change mid-task
-  // cannot pull the surface out from under the person.
-  const presentation = experimental?.presentation ?? 'popover';
+  // `adaptive` resolves through the policy the selection controls share. An
+  // open sheet keeps its presentation until it closes. A resolution change
+  // during a task does not replace the open surface.
+  const presentation =
+    presentationProp ?? experimental?.presentation ?? 'adaptive';
+  useDevWarning(
+    'Tokenizer',
+    '`presentation` and `experimental.presentation` are both set; `presentation` wins. Remove `experimental.presentation`.',
+    presentationProp !== undefined && experimental?.presentation !== undefined,
+  );
   const resolvedPresentation = useAdaptivePresentation(presentation);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   // Latched for the sheet's lifetime: a sheet stays presented after it closes
@@ -931,7 +953,7 @@ export function Tokenizer<T extends SearchableItem>({
         inertSheetProps.length === 1 ? 'has' : 'have'
       } no surface in the bottom-sheet presentation and ${
         inertSheetProps.length === 1 ? 'is' : 'are'
-      } not rendered there.`,
+      } not rendered there. Pass \`presentation="popover"\` to keep the inline field on every device.`,
     );
     // eslint-disable-next-line @eslint-react/exhaustive-deps -- keyed by the joined names
   }, [inertSheetPropsKey]);
@@ -1466,8 +1488,8 @@ export function Tokenizer<T extends SearchableItem>({
               {...rest}
               ref={useMergedRefs(
                 inputRef,
-                // With `experimental`, the ref type admits the trigger too; in
-                // this presentation it receives the input.
+                // The ref type admits the sheet's trigger too; in this
+                // presentation it receives the input.
                 ref as React.Ref<HTMLInputElement> | undefined,
                 handOffFocusRef,
               )}

@@ -517,6 +517,7 @@ function StandaloneBottomSheet({
   const stackViewRef = useRef(stackView);
   stackViewRef.current = stackView;
   const scrimWriteRef = useRef<BottomSheetScrimWrite>({frame: null});
+  // Releases the pending scrim write frame on unmount.
   useEffect(() => () => cancelScrimWrite(scrimWriteRef.current), []);
   const writeScrim = useCallback(
     (opacity: '0' | '1') =>

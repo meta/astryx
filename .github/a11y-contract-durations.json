@@ -1093,7 +1093,7 @@
     "packages/core/src/CheckboxInput/__tests__/Checkbox.a11y.chromium.spec.ts › CheckboxInput [input-disabled] — a disabled checkbox that keeps its tab stop": 14.4,
     "packages/core/src/CheckboxInput/__tests__/Checkbox.a11y.chromium.spec.ts › CheckboxInput [input-handlerless-read-only] — a handlerless controlled checkbox that is inert but does not declare read-only semantics": 14.6,
     "packages/core/src/CheckboxInput/__tests__/Checkbox.a11y.chromium.spec.ts › CheckboxInput [input-hidden-label] — a checkbox named by a visually hidden associated label": 19.3,
-    "packages/core/src/CheckboxInput/__tests__/Checkbox.a11y.chromium.spec.ts › CheckboxInput [input-inherited-required-valid] — an unchecked checkbox inheriting required semantics without native validation": 17.6,
+    "packages/core/src/CheckboxInput/__tests__/Checkbox.a11y.chromium.spec.ts › CheckboxInput [input-under-required-default] — an unchecked checkbox under a required form default, which gives it no required state": 17.6,
     "packages/core/src/CheckboxInput/__tests__/Checkbox.a11y.chromium.spec.ts › CheckboxInput [input-invalid] — a checkbox whose current value is in error": 21.1,
     "packages/core/src/CheckboxInput/__tests__/Checkbox.a11y.chromium.spec.ts › CheckboxInput [input-loading] — a busy checkbox that stays focusable but refuses another change": 14.2,
     "packages/core/src/CheckboxInput/__tests__/Checkbox.a11y.chromium.spec.ts › CheckboxInput [input-mixed] — a tri-state select-all checkbox in its partially checked state": 19.6,

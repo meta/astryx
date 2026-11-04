@@ -517,6 +517,8 @@ export function ResizeHandle({
   // are released here. The region outlives this handle and still has to hear
   // that its gesture is over.
   const hasRegion = resizable != null;
+  // Interrupts the region's gesture when the handle loses its region or
+  // unmounts.
   useEffect(() => {
     if (!hasRegion) {
       return;

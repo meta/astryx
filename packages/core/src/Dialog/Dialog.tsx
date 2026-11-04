@@ -606,7 +606,8 @@ export function Dialog({
   const allowEscape = purpose !== 'required';
   const allowBackdropClick = purpose === 'info';
 
-  // Handle open/close state — skip for inline rendering
+  // Syncs the native dialog with `isOpen` through `showModal()` and `close()`.
+  // An inline dialog is not in the top layer, so it skips this.
   useEffect(() => {
     if (isInline) {
       return;
