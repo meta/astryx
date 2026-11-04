@@ -21,7 +21,6 @@ import {
   calendarDayOfMonth,
   calendarMonthOf,
   calendarMonthsInYear,
-  formatDayNumber,
   isCalendarSystemAvailable,
   isGregorianAligned,
 } from './calendarSystem';
@@ -32,6 +31,10 @@ import {
   formatSharedDate,
   getDaysInMonth,
   plainDateAddDays,
+  plainDateDiffDays,
+  plainDateFormat,
+  plainDateFormatDayNumber,
+  plainDateFormatToParts,
   plainDateToday,
 } from './plainDate';
 import {INVISIBLE_CHARS, toAsciiDigits} from './unicodeDigits';
@@ -190,23 +193,9 @@ function textCalendar(calendar: CalendarSystem): CalendarSystem {
 // Intl access
 // =============================================================================
 
-function formatter(
-  locale: Locale,
-  calendar: CalendarSystem,
-  options: Intl.DateTimeFormatOptions,
-): Intl.DateTimeFormat {
-  return dateTimeFormatFor(locale, {...options, calendar, timeZone: 'UTC'});
-}
-
 /** Part types such as `relatedYear` and `yearName` are absent from older TS libs. */
 function partType(part: Intl.DateTimeFormatPart): string {
   return part.type;
-}
-
-function epochMs(pd: PlainDate): number {
-  const date = new Date(0);
-  date.setUTCFullYear(pd.year, pd.month - 1, pd.day);
-  return date.getTime();
 }
 
 function isoToPlainDate(iso: string): PlainDate {
@@ -223,7 +212,7 @@ function partsOf(
   options: Intl.DateTimeFormatOptions,
   pd: PlainDate,
 ): Intl.DateTimeFormatPart[] {
-  return formatter(locale, calendar, options).formatToParts(epochMs(pd));
+  return plainDateFormatToParts(pd, {...options, calendar}, locale);
 }
 
 // =============================================================================
@@ -311,7 +300,7 @@ function sampleMonths(calendar: CalendarSystem): SampledMonth[] {
         }
       }
     }
-    starts.sort((a, b) => epochMs(a.start) - epochMs(b.start));
+    starts.sort((a, b) => plainDateDiffDays(b.start, a.start));
     starts.forEach(({code, start}, i) => {
       const month = calendarMonthOf(calendar, start);
       sampled.push({
@@ -892,7 +881,6 @@ export function parseCalendarDate(
   }
   const typedEra = eraCodes.size === 1 ? [...eraCodes][0] : undefined;
 
-  // Assign the numbers to fields.
   const assigned = new Map<Token, DateField>();
   let monthCode: string | undefined;
   let monthOrdinal: number | undefined;
@@ -966,7 +954,6 @@ export function parseCalendarDate(
     return startsField ? INCOMPLETE : UNREADABLE;
   }
 
-  // Resolve the year.
   const today = options.today ?? plainDateToday();
   const dateFields: DateFields = {day};
   if (monthCode != null) {
@@ -1254,8 +1241,11 @@ function formatLunisolar(
   const month = calendarMonthOf(calendar, pd);
   const mid = plainDateAddDays(month.start, Math.floor(month.length / 2));
   const parts = partsOf(locale, calendar, options, mid);
-  const numberingSystem = formatter(locale, calendar, options).resolvedOptions()
-    .numberingSystem;
+  const {numberingSystem} = dateTimeFormatFor(locale, {
+    ...options,
+    calendar,
+    timeZone: 'UTC',
+  }).resolvedOptions();
   const weekday = partsOf(locale, calendar, options, pd).find(
     p => p.type === 'weekday',
   )?.value;
@@ -1265,7 +1255,7 @@ function formatLunisolar(
   return parts
     .map(part => {
       if (part.type === 'day') {
-        return formatDayNumber(
+        return plainDateFormatDayNumber(
           calendarDayOfMonth(calendar, pd),
           locale,
           numberingSystem,
@@ -1276,7 +1266,7 @@ function formatLunisolar(
       }
       if (!hasRelatedYear && /^year(Name)?$/.test(partType(part))) {
         const year = calendarYearOf(calendar, mid);
-        return formatDayNumber(year, locale, numberingSystem);
+        return plainDateFormatDayNumber(year, locale, numberingSystem);
       }
       return part.value;
     })
@@ -1292,11 +1282,11 @@ function formatInCalendar(
   if (LUNISOLAR.has(calendar)) {
     return formatLunisolar(pd, options, locale, calendar);
   }
-  return formatter(
+  return plainDateFormat(
+    pd,
+    {...displayOptions(locale, calendar, options), calendar},
     locale,
-    calendar,
-    displayOptions(locale, calendar, options),
-  ).format(epochMs(pd));
+  );
 }
 
 /**
