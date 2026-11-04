@@ -64,6 +64,16 @@ committed: a pull request links or attaches it.
 | `storyboard.ts` | `animationStoryboard` (seek to t = 0, 16.7, 33.3 … ms), `touchStoryboard` (a frame per scripted event), `castStoryboard` (real screencast frames): PNG contact sheet + JSON trace.                                                                                           |
 | `output.ts`     | `evidenceDir`, `writeEvidence`: where evidence goes and how it is attached to the report.                                                                                                                                                                                    |
 | `story.ts`      | `phone`, `withStorybook`, `openStory`, `frames`, and the timer gate (`installTimerGate`, `freezeTimers`, `thawTimers`).                                                                                                                                                      |
+| `pointer.ts`    | `newFinePointerPage(browser)`: a page under a mouse that really reads `(pointer: fine)`. `assertFinePointer` / `assertCoarsePointer`: fail before a case's checks when the page reads the other pointer.                                                                     |
+
+## A fine pointer
+
+Every interaction project is the touch phone, and a context a test makes with
+`browser.newContext()` inherits it: it reads `(pointer: coarse)` unless it
+passes `hasTouch: false`. A case that shows touch work costs nothing under a
+mouse opens its page with `newFinePointerPage(browser)`, which turns touch and
+mobile off and checks the pointer first. A case that builds its own context
+calls `assertFinePointer(page)` before its checks.
 
 ## The proofs
 
