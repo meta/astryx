@@ -562,9 +562,9 @@ guidance recommend for disabled menu items. Arrow keys, Home, End and
 type-ahead visit it; it takes focus and is announced as disabled; it does
 nothing when activated and does not close the menu. Opening a menu from the
 keyboard still lands on an enabled row: the first, or the last after ArrowUp
-on the trigger. The rule belongs to Core's menus: DropdownMenu, its sub-menus,
-MoreMenu, ContextMenu, the BreadcrumbItem and TabMenu menus, and
-NavHeadingMenu. Other composites, such as a toolbar, a button group or a
+on the trigger. The rule covers DropdownMenu, its sub-menus, MoreMenu,
+ContextMenu and NavHeadingMenu; other menus are out of scope for this decision.
+Other composites, such as a toolbar, a button group or a
 listbox, keep their own navigation. Rejected: skipping disabled rows, which
 hides an unavailable action and its reason from keyboard and screen-reader
 users.
