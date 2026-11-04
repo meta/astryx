@@ -4,43 +4,20 @@
  * @file focusReturn.ts
  * @input The document's current active element and the shared interaction
  *   modality.
- * @output Whether focus is currently "detached" — on nothing in particular —
- *   or would be lost if a surface hid now; a focus move whose ring follows the
- *   last input; and the one path that moves focus out of content a change
- *   removed or hid (`noteFocusWithin`, `moveFocusLeftBehind`).
- * @position Utility; used by overlay triggers (e.g. DateInput, DateTimeInput)
- *   that return focus to their control when the overlay closes, but only when
- *   the dismiss did not already move focus somewhere the user chose, and by
- *   overlays (Dialog, DropdownMenu) that move focus programmatically, and by
- *   disclosures that hide focused content. Only
- *   `isFocusDetached` is exported from the utils entry; the rest is internal.
+ * @output Whether focus would be lost if a surface hid now; a focus move whose
+ *   ring follows the last input; and the one path that moves focus out of
+ *   content a change removed or hid (`noteFocusWithin`, `moveFocusLeftBehind`).
+ * @position Utility; used by overlays (BottomSheet, Dialog, DropdownMenu) that
+ *   move focus programmatically, and by disclosures that hide focused
+ *   content. isFocusDetached lives in isFocusDetached.ts, so the utils entry,
+ *   which exports only it, does not reach this module.
  */
 
 import {
   getInteractionModality,
   type InteractionModality,
 } from './interactionModality';
-
-/**
- * True when focus rests on nothing in particular — no active element, or the
- * document body / root element.
- *
- * An overlay (popover, calendar, dropdown) that restores focus to its trigger
- * on close should do so ONLY when this is true. A native `popover="auto"`
- * light-dismiss fires its close synchronously with the pointer event that
- * moved focus, so by the time the close handler runs, focus has already
- * landed on whatever the user clicked — another field, a button, anywhere.
- * Restoring focus unconditionally would yank it back and fight that click.
- * The one case the browser leaves unresolved is Escape or a click on
- * non-focusable empty space, which drops focus to the body; that is exactly
- * when the trigger should reclaim it.
- */
-export function isFocusDetached(doc: Document = document): boolean {
-  const active = doc.activeElement;
-  return (
-    active == null || active === doc.body || active === doc.documentElement
-  );
-}
+import {isFocusDetached} from './isFocusDetached';
 
 /**
  * True when focus would be lost if `surface` hid now: nothing is focused (see

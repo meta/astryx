@@ -70,6 +70,7 @@ import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {getInitialFocusDate} from './getInitialFocusDate';
+import {getWeekdayHeaders} from './getWeekdayHeaderNames';
 import {
   computeDayCellState,
   computeRangeRounding,
@@ -855,19 +856,15 @@ function MonthGrid({
   const year = month.year;
 
   // Use hooks for days generation and constraints
-  const {days, weeks, dayNames} = useCalendarDays({
+  const {days, weeks} = useCalendarDays({
     year,
     month: month.month,
     weekStartsOn,
     hasVariableRowCount,
   });
   const dayNameHeaders = useMemo(
-    () =>
-      dayNames.map((name, offset) => ({
-        dayOfWeek: ((weekStartsOn + offset) % 7) as DayOfWeek,
-        name,
-      })),
-    [dayNames, weekStartsOn],
+    () => getWeekdayHeaders(locale, weekStartsOn),
+    [locale, weekStartsOn],
   );
 
   const rangeAnchor = useMemo(
