@@ -3907,6 +3907,11 @@
       "aliases": []
     },
     {
+      "name": "hook-lab-use-media-playback-time",
+      "path": "hooks/lab/use-media-playback-time",
+      "aliases": []
+    },
+    {
       "name": "hook-lab-use-media-player",
       "path": "hooks/lab/use-media-player",
       "aliases": []

@@ -370,11 +370,15 @@ actions to the system media controls. The player keeps no queue, so
 
 ## Open questions
 
-- **OQ1 — Is the timeline core Slider with additions, or its own primitive?**
-  The timeline needs a buffered range, a time preview at the pointer, and arrow
-  keys whose step differs from the drag resolution. Core Slider has none of
-  these; adding them grows a shared component, and a dedicated primitive
-  duplicates Slider's touch and RTL handling. The prototype draws its own track, ranges, markers, and thumb under a Slider whose paint it clears through theme tokens; Slider support for ranges and markers would remove that coupling. (`human-api`)
+- **OQ1 — How does the media timeline share Slider's behavior?** The
+  timeline is its own part, with a buffered range, chapters, markers, a time
+  preview at the pointer, and arrow keys whose step differs from the drag
+  resolution. It keeps the core Slider for drag, keys, focus, and value text,
+  clears the Slider's paint through its theme tokens, and draws its own track
+  under it. A shared headless slider hook in core would let Slider and the
+  timeline draw their own visuals on one engine; adding ranges and markers to
+  Slider grows a shared component; keeping the token approach couples the
+  timeline to Slider's internals. (`human-api`)
 - **OQ2 — Does a theme token own the frosted surface?** The frosted recipe
   appears in more than one surface. A theme-owned material token lets a flat
   theme turn frost off everywhere; a component-owned recipe keeps the theme
