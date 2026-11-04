@@ -10,5 +10,5 @@ export const doc = {
     "An AutoGrowTextArea that forwards the caller's ref and also keeps its own ref to measure scrollHeight. The merged ref attaches both to the same textarea: it resizes itself while a parent button focuses it through the forwarded ref.",
   isReady: true,
   aspectRatio: 4 / 3,
-  componentsUsed: ['Card', 'Button', 'Text', 'Layout'],
+  componentsUsed: ['Card', 'Button', 'Layout'],
 };

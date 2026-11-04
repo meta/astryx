@@ -6,8 +6,7 @@ import {forwardRef, useEffect, useRef, useState} from 'react';
 import {Button} from '@astryxdesign/core/Button';
 import {Card} from '@astryxdesign/core/Card';
 import {useMergedRefs} from '@astryxdesign/core/hooks';
-import {HStack, VStack} from '@astryxdesign/core/Layout';
-import {Text} from '@astryxdesign/core/Text';
+import {VStack} from '@astryxdesign/core/Layout';
 
 type AutoGrowTextAreaProps = {
   value: string;
@@ -21,6 +20,8 @@ const AutoGrowTextArea = forwardRef<HTMLTextAreaElement, AutoGrowTextAreaProps>(
     const keptRef = useRef<HTMLTextAreaElement>(null);
     const mergedRef = useMergedRefs(forwardedRef, keptRef);
 
+    // Syncs the textarea's inline height with the committed value.
+    // scrollHeight is right only after React writes the new text.
     useEffect(() => {
       const el = keptRef.current;
       if (!el) {
@@ -36,6 +37,7 @@ const AutoGrowTextArea = forwardRef<HTMLTextAreaElement, AutoGrowTextAreaProps>(
         value={value}
         onChange={event => onChange(event.target.value)}
         rows={1}
+        aria-label="Auto-growing message"
         placeholder="Type — the box grows itself"
         style={{
           width: '100%',
@@ -65,16 +67,11 @@ export default function UseMergedRefsHookUsage() {
     <Card width={360} padding={4}>
       <VStack gap={3}>
         <AutoGrowTextArea ref={areaRef} value={value} onChange={setValue} />
-        <HStack gap={2}>
-          <Button
-            label="Focus via forwarded ref"
-            size="sm"
-            onClick={() => areaRef.current?.focus()}
-          />
-          <Text type="body" color="secondary">
-            forwarded ref + kept ref, one textarea
-          </Text>
-        </HStack>
+        <Button
+          label="Focus via forwarded ref"
+          size="sm"
+          onClick={() => areaRef.current?.focus()}
+        />
       </VStack>
     </Card>
   );

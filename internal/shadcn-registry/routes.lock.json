@@ -349,16 +349,12 @@
     {
       "name": "component-drawer",
       "path": "components/drawer",
-      "aliases": [
-        "components/lab/drawer"
-      ]
+      "aliases": ["components/lab/drawer"]
     },
     {
       "name": "component-drawer-header",
       "path": "components/drawer-header",
-      "aliases": [
-        "components/lab/drawer-header"
-      ]
+      "aliases": ["components/lab/drawer-header"]
     },
     {
       "name": "component-dropdown-menu",
@@ -468,9 +464,7 @@
     {
       "name": "component-info-tip",
       "path": "components/info-tip",
-      "aliases": [
-        "components/lab/info-tip"
-      ]
+      "aliases": ["components/lab/info-tip"]
     },
     {
       "name": "component-input-group",
@@ -1825,9 +1819,7 @@
     {
       "name": "example-collapsible-group-density",
       "path": "examples/collapsible-group/density",
-      "aliases": [
-        "examples/collapsible-group/accordion"
-      ]
+      "aliases": ["examples/collapsible-group/accordion"]
     },
     {
       "name": "example-collapsible-controlled",
@@ -1837,9 +1829,7 @@
     {
       "name": "example-collapsible-faq",
       "path": "examples/collapsible/faq",
-      "aliases": [
-        "examples/collapsible/divided-accordion"
-      ]
+      "aliases": ["examples/collapsible/divided-accordion"]
     },
     {
       "name": "example-collapsible-multiple-mode",
@@ -3719,6 +3709,11 @@
     {
       "name": "example-use-locale-invoice-summary",
       "path": "examples/use-locale/invoice-summary",
+      "aliases": []
+    },
+    {
+      "name": "example-use-merged-refs-auto-grow-text-area",
+      "path": "examples/use-merged-refs/auto-grow-text-area",
       "aliases": []
     },
     {
