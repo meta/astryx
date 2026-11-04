@@ -102,8 +102,9 @@ const NAMED_SIZE_INITIALS_FONT_TOKEN: Record<
  * The most an initials font size may grow, per named size: half the avatar's
  * box. The type-scale tokens follow the root font size, but the box is fixed
  * px, so at a 200% text size two-letter initials would outgrow the circle and
- * clip (20/20/28/40/84px in a 20/24/36/48/128px box). At the default scale
- * every token is already below its cap, so the rendered size is unchanged.
+ * clip (20/20/28/40/84px in a 20/24/36/48/128px box). `xsm` sits at its cap,
+ * so it stays 10px at any text size. The cap also holds a theme role that is
+ * larger than it.
  */
 const NAMED_SIZE_INITIALS_MAX_PX: Record<AvatarNamedSize, number> = {
   xsm: 10,
@@ -317,7 +318,8 @@ const dynamicStyles = stylex.create({
  * NAMED_SIZE_INITIALS_FONT_TOKEN). Static, not a dynamic style, since each
  * named tier's value is fixed rather than derived from a runtime number —
  * and reading the token (not a literal px value) means a theme retinting
- * `typography.scale` retints these too.
+ * `typography.scale` retints these too. A theme's type scale sets these sizes
+ * up to the cap.
  */
 const initialsFontSizeStyles = stylex.create({
   xsm: {
