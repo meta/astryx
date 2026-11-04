@@ -367,6 +367,10 @@ clear-glyph target of its own.
   states they do.
 - **Month pager (PR2).** Under a finger the touch calendar moves through the
   native month scroller rather than a drag-driven pager.
+- **Sheet wheel edge fade.** In the touch sheet wheel, the edge fade puts rows
+  three and four from the selection band below 4.5:1 in every built-in theme
+  (as low as 2.1:1 in light, 2.8–3.7:1 in dark); a fix capping the fade at
+  4.5:1 is in progress.
 
 ## Decision log
 
