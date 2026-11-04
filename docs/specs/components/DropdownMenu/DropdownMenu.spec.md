@@ -548,7 +548,7 @@ pattern requires; Escape and a press outside close it. Without either prop
 the component is unchanged: a Menu Button whose Tab closes the menu. Rejected:
 closing on Tab past either end, which leaves a modal dialog by Tab.
 
-### DEC-11 — The trigger's press handlers stay until 0.8.0
+### DEC-11 — The trigger's press handlers stay
 
 **Reference:** `component:DropdownMenu/DEC-11`
 
@@ -558,9 +558,7 @@ closing on Tab past either end, which leaves a modal dialog by Tab.
 `renderTrigger` control's forward of a mouse or pen press, so it stays exactly
 as released. The menu listens on the control itself for a finger, through its
 `ref`. A caller that spreads them hands the same event to the press, which
-takes it once. They are not deprecated now. At the next minor release, CLN-0030
-of `module:DropdownMenu/useMenuPress` moves a mouse's or pen's press to the
-trigger's own listener and deprecates them.
+takes it once.
 
 ## Open questions
 

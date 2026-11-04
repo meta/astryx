@@ -2,7 +2,7 @@
 
 /**
  * @file useMenuPress.test.tsx
- * @input vitest, @testing-library/react, useMenuPress
+ * @input vitest, @testing-library/react, useMenuPress, useCoreMenuPress
  * @output Unit tests for the DOM half of the menu press model: tracking,
  *   highlight, activation, the stray-click swallower, dismissal, the trigger
  *   press and edge autoscroll
@@ -14,13 +14,13 @@ import {readFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {act, fireEvent, render, screen, within} from '@testing-library/react';
-import {useRef, useState} from 'react';
+import {useRef, useState, type ComponentProps, type RefObject} from 'react';
 import {
   MENU_PRESS_AUTOSCROLL_ZONE_PX,
   MENU_PRESS_LONG_PRESS_MS,
   MENU_PRESS_STRAY_CLICK_MS,
   __resetMenuPressForTest,
-  useDropdownMenuPress,
+  useCoreMenuPress,
   useMenuPress,
 } from './useMenuPress';
 import {MENU_PRESS_HANDOFF_PX, MENU_PRESS_SETTLE_MS} from './menuPressGesture';
@@ -38,61 +38,67 @@ interface HarnessProps {
   hitTest?: (x: number, y: number) => Element | null;
   getScroller?: () => HTMLElement | null;
   onHighlight?: (row: HTMLElement | null) => void;
-  touchModel?: 'pointer' | 'uikit';
 }
 
-function Harness({
-  onSelect,
-  onDismiss,
-  onOpenChange,
-  hitTest,
-  getScroller,
-  onHighlight,
-  touchModel,
-}: HarnessProps) {
-  const menuRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
+/** The open state both harnesses keep, and the trigger press that flips it. */
+function useHarnessOpen(onOpenChange?: (isOpen: boolean) => void) {
   const [isOpen, setIsOpen] = useState(false);
   const open = (next: boolean) => {
     setIsOpen(next);
     onOpenChange?.(next);
   };
-  // DropdownMenu's own entry, so the harness can also drive its touch model;
-  // without `touchModel` it behaves as the public hook.
-  const press = useDropdownMenuPress({
-    menuRef,
-    triggerRef,
-    itemSelector: ITEM_SELECTOR,
-    onTriggerPress: () => {
-      if (isOpen) {
-        open(false);
-        return false;
-      }
-      open(true);
-      return true;
-    },
-    onDismiss,
-    hitTest,
-    getScroller,
-    onHighlight,
-    touchModel,
-  });
+  const onTriggerPress = () => {
+    if (isOpen) {
+      open(false);
+      return false;
+    }
+    open(true);
+    return true;
+  };
+  return {isOpen, open, onTriggerPress};
+}
+
+interface HarnessViewProps {
+  menuRef: RefObject<HTMLDivElement | null>;
+  triggerRef: RefObject<HTMLButtonElement | null>;
+  isOpen: boolean;
+  open: (next: boolean) => void;
+  isTriggerClickFromPress: () => boolean;
+  triggerPress: Pick<
+    ComponentProps<'button'>,
+    'onPointerDown' | 'onContextMenu'
+  >;
+  menuPress: Pick<ComponentProps<'div'>, 'onPointerDown'>;
+  onSelect?: (label: string) => void;
+}
+
+/** The menu both harnesses render, with the press wired by the caller. */
+function HarnessView({
+  menuRef,
+  triggerRef,
+  isOpen,
+  open,
+  isTriggerClickFromPress,
+  triggerPress,
+  menuPress,
+  onSelect,
+}: HarnessViewProps) {
   return (
     <>
       <button
         type="button"
         ref={triggerRef}
-        {...press.triggerProps}
+        {...triggerPress}
         aria-expanded={isOpen}
         onClick={() => {
-          if (press.isTriggerClickFromPress()) {
+          if (isTriggerClickFromPress()) {
             return;
           }
           open(!isOpen);
         }}>
         Open
       </button>
-      <div ref={menuRef} role="menu" tabIndex={-1} {...press.menuProps}>
+      <div ref={menuRef} role="menu" tabIndex={-1} {...menuPress}>
         {['A', 'B', 'C'].map(label => (
           <div
             key={label}
@@ -114,6 +120,84 @@ function Harness({
         Outside
       </button>
     </>
+  );
+}
+
+/** The public options form, with its props spread on the trigger and menu. */
+function Harness({
+  onSelect,
+  onDismiss,
+  onOpenChange,
+  hitTest,
+  getScroller,
+  onHighlight,
+}: HarnessProps) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const {isOpen, open, onTriggerPress} = useHarnessOpen(onOpenChange);
+  const press = useMenuPress({
+    menuRef,
+    triggerRef,
+    itemSelector: ITEM_SELECTOR,
+    onTriggerPress,
+    onDismiss,
+    hitTest,
+    getScroller,
+    onHighlight,
+  });
+  return (
+    <HarnessView
+      menuRef={menuRef}
+      triggerRef={triggerRef}
+      isOpen={isOpen}
+      open={open}
+      isTriggerClickFromPress={press.isTriggerClickFromPress}
+      triggerPress={press.triggerProps}
+      menuPress={press.menuProps}
+      onSelect={onSelect}
+    />
+  );
+}
+
+/**
+ * The same menu on Core's ref form with UIMenu's touch model, as DropdownMenu
+ * runs it. A mouse's or pen's press-down is forwarded from React handlers.
+ */
+function UIKitHarness({
+  onSelect,
+  onDismiss,
+  onOpenChange,
+  hitTest,
+  getScroller,
+  onHighlight,
+}: HarnessProps) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const {isOpen, open, onTriggerPress} = useHarnessOpen(onOpenChange);
+  const press = useCoreMenuPress(menuRef, {
+    triggerRef,
+    itemSelector: ITEM_SELECTOR,
+    onTriggerPress,
+    onDismiss,
+    hitTest,
+    getScroller,
+    onHighlight,
+    touchModel: 'uikit',
+  });
+  return (
+    <HarnessView
+      menuRef={menuRef}
+      triggerRef={triggerRef}
+      isOpen={isOpen}
+      open={open}
+      isTriggerClickFromPress={press.isTriggerClickFromPress}
+      triggerPress={{
+        onPointerDown: press.handleTriggerPointerDown,
+        onContextMenu: press.handleTriggerContextMenu,
+      }}
+      menuPress={{onPointerDown: press.handleMenuPointerDown}}
+      onSelect={onSelect}
+    />
   );
 }
 
@@ -318,7 +402,7 @@ describe('useMenuPress — the row a held press lights (spec:AST-094 FR27, FR43)
 
   it('marks the row under the finger that opened the menu once it hands off, and clears it at the lift', () => {
     vi.useFakeTimers();
-    render(<Harness touchModel="uikit" />);
+    render(<UIKitHarness />);
     const trigger = screen.getByRole('button', {name: 'Open'});
     fireEvent.pointerDown(trigger, {...touch(), clientX: 0, clientY: 0});
     act(() => {
@@ -910,13 +994,7 @@ describe('useMenuPress — the opening finger hands off (DropdownMenu\u2019s tou
     vi.useFakeTimers();
     const onSelect = vi.fn();
     const onOpenChange = vi.fn();
-    render(
-      <Harness
-        touchModel="uikit"
-        onSelect={onSelect}
-        onOpenChange={onOpenChange}
-      />,
-    );
+    render(<UIKitHarness onSelect={onSelect} onOpenChange={onOpenChange} />);
     const trigger = screen.getByRole('button', {name: 'Open'});
     fireEvent.pointerDown(trigger, {...touch(), clientX: 0, clientY: 0});
     act(() => {
@@ -949,13 +1027,7 @@ describe('useMenuPress — the opening finger hands off (DropdownMenu\u2019s tou
     vi.useFakeTimers();
     const onSelect = vi.fn();
     const onOpenChange = vi.fn();
-    render(
-      <Harness
-        touchModel="uikit"
-        onSelect={onSelect}
-        onOpenChange={onOpenChange}
-      />,
-    );
+    render(<UIKitHarness onSelect={onSelect} onOpenChange={onOpenChange} />);
     const trigger = screen.getByRole('button', {name: 'Open'});
     fireEvent.pointerDown(trigger, {...touch(), clientX: 0, clientY: 0});
     act(() => {

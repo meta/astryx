@@ -47,12 +47,7 @@ export {
   MENU_PRESS_MARKER,
   isMenuPressActivation,
 } from './useMenuPress';
-export type {
-  UseMenuPressOptions,
-  UseMenuPressReturn,
-  UseMenuPressRefOptions,
-  UseMenuPressRefReturn,
-} from './useMenuPress';
+export type {UseMenuPressOptions, UseMenuPressReturn} from './useMenuPress';
 export {createMenuPress} from './createMenuPress';
 export type {
   CreateMenuPressOptions,

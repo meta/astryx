@@ -4,13 +4,13 @@
 
 /**
  * @file useMenuPress.ts
- * @input The menu's ref, and createMenuPress's options with the trigger as a
- *   ref
- * @output Exports useMenuPress, createMenuPress's React form, and the
- *   internal entries with DropdownMenu's touch model. Re-exports the marker
- *   attributes, the press constants and the activation mark.
- * @position Core hook; a thin wrapper over createMenuPress. Every Core menu
- *   uses the ref form; the options form is deprecated.
+ * @input The menu and trigger refs, and the press options
+ * @output Exports useMenuPress, and useCoreMenuPress, the internal ref form
+ *   over createMenuPress that Core's menus use, with DropdownMenu's touch
+ *   model. Re-exports the marker attributes, the press constants and the
+ *   activation mark.
+ * @position Core hook; a thin wrapper over createMenuPress's core. Core's
+ *   menus use the internal ref form.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/hooks/index.ts
@@ -52,8 +52,13 @@ export {
 // Options
 // =============================================================================
 
-/** The ref form's options: createMenuPress's, with the trigger as a ref. */
-export interface UseMenuPressRefOptions extends Omit<
+/**
+ * Core's menus' ref form: createMenuPress's options, with the trigger as a
+ * ref, plus DropdownMenu's touch model.
+ *
+ * @internal
+ */
+export interface CoreMenuPressRefOptions extends Omit<
   CreateMenuPressOptions,
   'trigger'
 > {
@@ -62,13 +67,23 @@ export interface UseMenuPressRefOptions extends Omit<
    * the press only while the menu element is mounted.
    */
   triggerRef?: RefObject<HTMLElement | null>;
+  /**
+   * How the finger that opened the menu from the trigger picks.
+   * `'pointer'`: its opening press follows the settle rule. `'uikit'`: it
+   * picks only after UIMenu's handoff distance, so the row that appeared
+   * under it never acts on a still lift. A mouse is unaffected.
+   * @default 'pointer'
+   */
+  touchModel?: MenuPressTouchModel;
 }
 
 /**
- * What the ref form returns: the press's reads and forwards. The hook owns
- * its life.
+ * What Core's menus' ref form returns: the press's reads and forwards. The
+ * hook owns its life.
+ *
+ * @internal
  */
-export type UseMenuPressRefReturn = Pick<
+export type CoreMenuPressRefReturn = Pick<
   CreateMenuPressReturn,
   | 'isTriggerClickFromPress'
   | 'cancel'
@@ -79,8 +94,6 @@ export type UseMenuPressRefReturn = Pick<
 
 /**
  * The options form's options: the menu and the trigger as refs.
- * @deprecated Use the ref form, `useMenuPress(menuRef, options)`.
- *   `astryx upgrade` rewrites calls. It is removed in 0.8.0.
  */
 export interface UseMenuPressOptions {
   /** The menu (or listbox) root: the surface whose rows the press picks from. */
@@ -135,8 +148,6 @@ export interface UseMenuPressOptions {
 
 /**
  * What the options form returns: props to spread on the menu and the trigger.
- * @deprecated Use the ref form, `useMenuPress(menuRef, options)`.
- *   `astryx upgrade` rewrites calls. It is removed in 0.8.0.
  */
 export interface UseMenuPressReturn {
   /** Spread onto the menu root: claims presses that begin inside it. */
@@ -165,7 +176,7 @@ export interface UseMenuPressReturn {
  * and the factory falls back to its own behavior.
  */
 function factoryOptionsOf(
-  options: UseMenuPressRefOptions,
+  options: CoreMenuPressRefOptions,
 ): CreateMenuPressOptions {
   return {
     trigger: options.triggerRef?.current ?? null,
@@ -184,91 +195,56 @@ function factoryOptionsOf(
 
 /** The factory's options with the touch model the entry allows. */
 function coreOptionsOf(latest: {
-  options: UseMenuPressRefOptions;
+  options: CoreMenuPressRefOptions;
   touchModel: MenuPressTouchModel;
 }): CoreMenuPressOptions {
   return {...factoryOptionsOf(latest.options), touchModel: latest.touchModel};
 }
 
 /**
- * DropdownMenu's options for the press model: everything the public hook
- * takes, plus its touch model. DropdownMenu reaches the touch model through
- * its `presentation`, so the public hook has no such option.
- *
- * @internal
- */
-export interface DropdownMenuPressOptions extends UseMenuPressOptions {
-  /**
-   * How the finger that opened the menu from the trigger picks.
-   * `'pointer'`: its opening press follows the settle rule. `'uikit'`: it
-   * picks only after UIMenu's handoff distance, so the row that appeared
-   * under it never acts on a still lift. A mouse is unaffected.
-   * @default 'pointer'
-   */
-  touchModel?: MenuPressTouchModel;
-}
-
-/**
- * What core's own menus get from {@link useDropdownMenuPress}: the public
- * return. Not exported from the hooks entry point.
- *
- * @internal
- */
-export type DropdownMenuPressReturn = UseMenuPressReturn;
-
-/**
- * Core's menus' ref form: the ref form's options, plus DropdownMenu's touch
- * model ({@link DropdownMenuPressOptions.touchModel}).
- *
- * @internal
- */
-export interface CoreMenuPressRefOptions extends UseMenuPressRefOptions {
-  /** How the finger that opened the menu from the trigger picks. */
-  touchModel?: MenuPressTouchModel;
-}
-
-/**
  * The press model for a menu: the row under the release acts, the highlight
- * follows a held pointer, a mouse opens on press. createMenuPress on the
- * element behind `menuRef`; see createMenuPress.ts. The press attaches when the
- * calling component commits, so a menu that a child mounts in a later commit
- * attaches at the caller's next commit. While the menu element is unmounted,
- * there is no press, not even on the trigger. So a menu that opens on a press
- * of its trigger keeps its element mounted while it is closed.
+ * follows a held pointer, and a mouse opens the menu on press.
+ *
+ * - The document tracks the pointer by `pointerId`. A finger's events stay
+ *   with the element it landed on, so the menu never sees a finger that slid
+ *   onto it.
+ * - The release acts on its row as the row's own click would, with the
+ *   release's button and modifier keys.
+ * - The browser's stray `click` after a tracked release is swallowed at the
+ *   window, in the capture phase. A click with `detail === 0` always passes.
+ * - A finger held on the trigger opens the menu after the long-press delay.
+ *   The settle rule in menuPressGesture.ts decides if that release can act.
+ * - `pointercancel`, a second pointer, or a window blur ends the gesture, and
+ *   nothing acts.
+ * - A pointer that rests near the edge of an overflowing menu scrolls it.
+ * - The root carries `data-astryx-menu-press`, so a nested flyout can tell
+ *   which level owns a press.
  *
  * @example
  * ```
- * const menuPress = useMenuPress(listRef, {
+ * const menuPress = useMenuPress({
+ *   menuRef: listRef,
  *   triggerRef: buttonRef,
  *   itemSelector: MENU_ITEM_SELECTOR,
  *   onTriggerPress: () => openMenu(),
  *   onDismiss: closeMenu,
  * });
- * <button ref={buttonRef} onClick={e => {
+ * <button {...menuPress.triggerProps} onClick={e => {
  *   if (menuPress.isTriggerClickFromPress()) return;
  *   toggle();
  * }} />
- * <div ref={listRef} role="menu">…</div>
+ * <div ref={listRef} role="menu" {...menuPress.menuProps}>…</div>
  * ```
  */
-export function useMenuPress(
-  menuRef: RefObject<HTMLElement | null>,
-  options: UseMenuPressRefOptions,
-): UseMenuPressRefReturn;
-/**
- * The options form: props to spread on the menu root and the trigger. The ref
- * form above listens on both itself, so nothing is spread.
- * @deprecated Use the ref form, `useMenuPress(menuRef, options)`.
- *   `astryx upgrade` rewrites calls. It is removed in 0.8.0.
- */
-export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn;
-export function useMenuPress(
-  first: RefObject<HTMLElement | null> | UseMenuPressOptions,
-  second?: UseMenuPressRefOptions,
-): UseMenuPressRefReturn | UseMenuPressReturn {
+export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
   // The touch model is DropdownMenu's alone; an untyped caller's
   // `touchModel` does not reach the model.
-  return useMenuPressWith(first, second, createMenuPress, 'pointer');
+  return useMenuPressWith(
+    options,
+    undefined,
+    createMenuPress,
+    'pointer',
+  ) as UseMenuPressReturn;
 }
 
 /**
@@ -279,31 +255,13 @@ export function useMenuPress(
 export function useCoreMenuPress(
   menuRef: RefObject<HTMLElement | null>,
   options: CoreMenuPressRefOptions,
-): UseMenuPressRefReturn {
+): CoreMenuPressRefReturn {
   return useMenuPressWith(
     menuRef,
     options,
     createForwardedMenuPress,
     options.touchModel ?? 'pointer',
-  ) as UseMenuPressRefReturn;
-}
-
-/**
- * The options form with DropdownMenu's touch model
- * ({@link DropdownMenuPressOptions.touchModel}). Not exported from the hooks
- * entry point.
- *
- * @internal
- */
-export function useDropdownMenuPress(
-  options: DropdownMenuPressOptions,
-): DropdownMenuPressReturn {
-  return useMenuPressWith(
-    options,
-    undefined,
-    createMenuPress,
-    options.touchModel ?? 'pointer',
-  ) as DropdownMenuPressReturn;
+  ) as CoreMenuPressRefReturn;
 }
 
 /** A ref that never holds a menu, for the options form's attachment. */
@@ -311,19 +269,19 @@ const NO_MENU: RefObject<HTMLElement | null> = {current: null};
 
 function useMenuPressWith(
   first: RefObject<HTMLElement | null> | UseMenuPressOptions,
-  second: UseMenuPressRefOptions | undefined,
+  second: CoreMenuPressRefOptions | undefined,
   create: (
     menu: HTMLElement,
     options: CoreMenuPressOptions,
   ) => CreateMenuPressReturn,
   touchModel: MenuPressTouchModel,
-): UseMenuPressRefReturn | UseMenuPressReturn {
+): CoreMenuPressRefReturn | UseMenuPressReturn {
   // A call site keeps one form for its life, so both take the same hooks.
   const isRefForm = second !== undefined;
   const menuRef = isRefForm
     ? (first as RefObject<HTMLElement | null>)
     : (first as UseMenuPressOptions).menuRef;
-  const options: UseMenuPressRefOptions = isRefForm
+  const options: CoreMenuPressRefOptions = isRefForm
     ? second
     : (first as UseMenuPressOptions);
   // The options form reads the latest render's options when an event arrives.
@@ -374,7 +332,7 @@ function useMenuPressWith(
   // exists.
   useInteractionModalityTrackingFor(menuRef, !isRefForm);
 
-  return useMemo<UseMenuPressRefReturn | UseMenuPressReturn>(() => {
+  return useMemo<CoreMenuPressRefReturn | UseMenuPressReturn>(() => {
     if (core == null) {
       return {
         isTriggerClickFromPress: () =>

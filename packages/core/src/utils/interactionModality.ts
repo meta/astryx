@@ -237,7 +237,7 @@ export function useInteractionModalityTracking(): InteractionModalityTracking {
  * and the same Effect's cleanup releases it, so a detached, replaced or moved
  * node releases the old document before the new one is held.
  * With `holdsDocument` false it holds no element document, for a hook whose
- * element another tracker already holds (useMenuPress's ref form, through
+ * element another tracker already holds (Core's menus, through
  * createMenuPress). The page's tracking still starts at mount, so a menu
  * mounted at its first open reads that open's input.
  */

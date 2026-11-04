@@ -3,7 +3,7 @@
 /**
  * @file useMenuPress.factory.test.tsx
  * @input vitest, @testing-library/react, useMenuPress, createMenuPress
- * @output Tests that useMenuPress is a thin wrapper over createMenuPress. The
+ * @output Tests that the press hooks are thin wrappers over the factory. Core's
  *   ref form creates a factory on the element behind the ref and calls the
  *   latest callbacks. It creates a new factory when an input changes, has none
  *   while the menu is unmounted, and destroys it at unmount. It adds no
@@ -32,12 +32,17 @@ import {
 } from 'react';
 import {
   MENU_PRESS_MARKER,
+  createForwardedMenuPress,
   createMenuPress,
   createMenuPressCore,
   type CreateMenuPressReturn,
 } from './createMenuPress';
 import type * as CreateMenuPressModule from './createMenuPress';
-import {__resetMenuPressForTest, useMenuPress} from './useMenuPress';
+import {
+  __resetMenuPressForTest,
+  useCoreMenuPress,
+  useMenuPress,
+} from './useMenuPress';
 import {disarmClickGuard} from '../utils/clickGuard';
 import {
   __startInteractionModalityTrackingForTest,
@@ -59,6 +64,7 @@ vi.mock('./createMenuPress', async importOriginal => {
   return {
     ...actual,
     createMenuPress: vi.fn(actual.createMenuPress),
+    createForwardedMenuPress: vi.fn(actual.createForwardedMenuPress),
     createMenuPressCore: vi.fn(actual.createMenuPressCore),
   };
 });
@@ -71,11 +77,14 @@ interface RefHarnessProps {
   isEnabled?: boolean;
 }
 
-/** The ref form: no props to spread. */
+/**
+ * Core's ref form, as Core's menus use it: nothing to spread, and a mouse's or
+ * pen's press-down forwarded from the React handlers.
+ */
 function RefHarness({onTriggerPress, onSelect, isEnabled}: RefHarnessProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const press = useMenuPress(menuRef, {
+  const press = useCoreMenuPress(menuRef, {
     triggerRef,
     itemSelector: ITEM_SELECTOR,
     onTriggerPress,
@@ -86,6 +95,8 @@ function RefHarness({onTriggerPress, onSelect, isEnabled}: RefHarnessProps) {
       <button
         type="button"
         ref={triggerRef}
+        onPointerDown={press.handleTriggerPointerDown}
+        onContextMenu={press.handleTriggerContextMenu}
         onClick={() => {
           if (press.isTriggerClickFromPress()) {
             onSelect?.('trigger click from the press');
@@ -93,7 +104,12 @@ function RefHarness({onTriggerPress, onSelect, isEnabled}: RefHarnessProps) {
         }}>
         Open
       </button>
-      <div ref={menuRef} role="menu" tabIndex={-1} data-testid="menu">
+      <div
+        ref={menuRef}
+        role="menu"
+        tabIndex={-1}
+        data-testid="menu"
+        onPointerDown={press.handleMenuPointerDown}>
         {['A', 'B'].map(label => (
           <div
             key={label}
@@ -117,6 +133,7 @@ const restores: (() => void)[] = [];
 beforeEach(() => {
   __resetMenuPressForTest();
   vi.mocked(createMenuPress).mockClear();
+  vi.mocked(createForwardedMenuPress).mockClear();
   vi.mocked(createMenuPressCore).mockClear();
 });
 
@@ -127,9 +144,9 @@ afterEach(() => {
   disarmClickGuard(document);
 });
 
-describe('useMenuPress(menuRef, options) — a thin wrapper over createMenuPress (spec:AST-107 FR6)', () => {
+describe("useCoreMenuPress(menuRef, options) — Core's ref form, a thin wrapper over the factory (spec:AST-107 FR6)", () => {
   it('creates one factory on the element behind the ref, with the trigger behind triggerRef, and destroys it at unmount', () => {
-    const create = vi.mocked(createMenuPress);
+    const create = vi.mocked(createForwardedMenuPress);
     const {unmount} = render(<RefHarness onTriggerPress={() => true} />);
     expect(create).toHaveBeenCalledTimes(1);
     const [menu, options] = create.mock.calls[0];
@@ -153,7 +170,7 @@ describe('useMenuPress(menuRef, options) — a thin wrapper over createMenuPress
   });
 
   it('calls the latest callbacks without creating a new factory', () => {
-    const create = vi.mocked(createMenuPress);
+    const create = vi.mocked(createForwardedMenuPress);
     const first = vi.fn(() => true);
     const next = vi.fn(() => true);
     const {rerender} = render(<RefHarness onTriggerPress={first} />);
@@ -195,7 +212,7 @@ describe('useMenuPress(menuRef, options) — a thin wrapper over createMenuPress
   });
 
   it('passes a value option change to its factory through update(), with no new factory', () => {
-    const create = vi.mocked(createMenuPress);
+    const create = vi.mocked(createForwardedMenuPress);
     const onTriggerPress = vi.fn(() => true);
     const {rerender} = render(
       <RefHarness isEnabled onTriggerPress={onTriggerPress} />,
@@ -217,7 +234,7 @@ describe('useMenuPress(menuRef, options) — a thin wrapper over createMenuPress
       const menuRef = useRef<HTMLDivElement>(null);
       // The options name onDismiss only while it is given, as a caller that
       // builds them conditionally does.
-      useMenuPress(
+      const press = useCoreMenuPress(
         menuRef,
         onDismiss == null
           ? {itemSelector: ITEM_SELECTOR}
@@ -226,7 +243,10 @@ describe('useMenuPress(menuRef, options) — a thin wrapper over createMenuPress
       return (
         <>
           <button type="button">Outside</button>
-          <div ref={menuRef} role="menu">
+          <div
+            ref={menuRef}
+            role="menu"
+            onPointerDown={press.handleMenuPointerDown}>
             <div role="menuitem" tabIndex={-1}>
               A
             </div>
@@ -243,7 +263,7 @@ describe('useMenuPress(menuRef, options) — a thin wrapper over createMenuPress
   });
 
   it('passes a callback given or dropped through update(), with no new factory: the press falls back without one', () => {
-    const create = vi.mocked(createMenuPress);
+    const create = vi.mocked(createForwardedMenuPress);
     const onTriggerPress = vi.fn(() => true);
     const {rerender} = render(<RefHarness />);
     rerender(<RefHarness onTriggerPress={onTriggerPress} />);
@@ -253,12 +273,12 @@ describe('useMenuPress(menuRef, options) — a thin wrapper over createMenuPress
   });
 
   it('moves the press to a new trigger through update(), with no new factory', () => {
-    const create = vi.mocked(createMenuPress);
+    const create = vi.mocked(createForwardedMenuPress);
     const onTriggerPress = vi.fn(() => true);
     function TwoTriggers({isSecond}: {isSecond: boolean}) {
       const menuRef = useRef<HTMLDivElement>(null);
       const triggerRef = useRef<HTMLButtonElement>(null);
-      useMenuPress(menuRef, {
+      useCoreMenuPress(menuRef, {
         triggerRef,
         itemSelector: ITEM_SELECTOR,
         onTriggerPress,
@@ -276,15 +296,15 @@ describe('useMenuPress(menuRef, options) — a thin wrapper over createMenuPress
       );
     }
     const {rerender} = render(<TwoTriggers isSecond={false} />);
+    const handle = create.mock.results[0].value as CreateMenuPressReturn;
+    const update = vi.spyOn(handle, 'update');
     rerender(<TwoTriggers isSecond />);
     expect(create).toHaveBeenCalledTimes(1);
-    fireEvent.pointerDown(screen.getByRole('button', {name: 'First'}), mouse());
-    expect(onTriggerPress).not.toHaveBeenCalled();
-    fireEvent.pointerDown(
-      screen.getByRole('button', {name: 'Second'}),
-      mouse(2),
+    expect(update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        trigger: screen.getByRole('button', {name: 'Second'}),
+      }),
     );
-    expect(onTriggerPress).toHaveBeenCalledWith('mouse');
   });
 
   it('takes a trigger press once when a handler of the caller\u2019s also forwards it: a press that closes the menu does not open it again', () => {
@@ -293,7 +313,7 @@ describe('useMenuPress(menuRef, options) — a thin wrapper over createMenuPress
     function Forwarding() {
       const menuRef = useRef<HTMLDivElement>(null);
       const triggerRef = useRef<HTMLButtonElement>(null);
-      const menuPress = useMenuPress(menuRef, {
+      const menuPress = useCoreMenuPress(menuRef, {
         triggerRef,
         itemSelector: ITEM_SELECTOR,
         onTriggerPress,
@@ -321,19 +341,22 @@ describe('useMenuPress(menuRef, options) — a thin wrapper over createMenuPress
   });
 
   it('has no press, not even on the trigger, while the menu element is unmounted', () => {
-    const create = vi.mocked(createMenuPress);
+    const create = vi.mocked(createForwardedMenuPress);
     const onTriggerPress = vi.fn(() => true);
     function MenuWhileOpen({isOpen}: {isOpen: boolean}) {
       const menuRef = useRef<HTMLDivElement>(null);
       const triggerRef = useRef<HTMLButtonElement>(null);
-      useMenuPress(menuRef, {
+      const press = useCoreMenuPress(menuRef, {
         triggerRef,
         itemSelector: ITEM_SELECTOR,
         onTriggerPress,
       });
       return (
         <>
-          <button type="button" ref={triggerRef}>
+          <button
+            type="button"
+            ref={triggerRef}
+            onPointerDown={press.handleTriggerPointerDown}>
             Open
           </button>
           {isOpen && <div ref={menuRef} role="menu" />}
@@ -351,7 +374,7 @@ describe('useMenuPress(menuRef, options) — a thin wrapper over createMenuPress
   });
 
   it('returns the factory’s isTriggerClickFromPress and cancel', () => {
-    const create = vi.mocked(createMenuPress);
+    const create = vi.mocked(createForwardedMenuPress);
     const onSelect = vi.fn();
     render(<RefHarness onTriggerPress={() => true} onSelect={onSelect} />);
     const handle = create.mock.results[0].value as CreateMenuPressReturn;
@@ -365,11 +388,11 @@ describe('useMenuPress(menuRef, options) — a thin wrapper over createMenuPress
   });
 
   it('follows the element when the ref moves to a new node', () => {
-    const create = vi.mocked(createMenuPress);
+    const create = vi.mocked(createForwardedMenuPress);
     function Swapping() {
       const menuRef = useRef<HTMLDivElement>(null);
       const [which, setWhich] = useState<'a' | 'b'>('a');
-      useMenuPress(menuRef, {itemSelector: ITEM_SELECTOR});
+      useCoreMenuPress(menuRef, {itemSelector: ITEM_SELECTOR});
       return (
         <>
           <button type="button" onClick={() => setWhich('b')}>
@@ -393,14 +416,14 @@ describe('useMenuPress(menuRef, options) — a thin wrapper over createMenuPress
   });
 
   it('re-creates its factory when the menu moves to another document, so the factory tracks the document the menu is in', () => {
-    const create = vi.mocked(createMenuPress);
+    const create = vi.mocked(createForwardedMenuPress);
     const first = document.implementation.createHTMLDocument();
     const second = document.implementation.createHTMLDocument();
     const menu = first.createElement('div');
     first.body.append(menu);
     const menuRef = {current: menu};
     const {rerender, unmount} = renderHook(() =>
-      useMenuPress(menuRef, {itemSelector: ITEM_SELECTOR}),
+      useCoreMenuPress(menuRef, {itemSelector: ITEM_SELECTOR}),
     );
     expect(create).toHaveBeenCalledTimes(1);
     const firstRemove = vi.spyOn(first, 'removeEventListener');
@@ -427,7 +450,7 @@ describe('useMenuPress(menuRef, options) — a thin wrapper over createMenuPress
       handleTriggerContextMenu: () => {},
       destroy: () => {},
     };
-    vi.mocked(createMenuPress).mockReturnValueOnce(stub);
+    vi.mocked(createForwardedMenuPress).mockReturnValueOnce(stub);
     // React's own root listeners go in first, and the page's input-modality
     // pair: the shared utility's, installed once per document at the first
     // consumer's mount.
@@ -466,10 +489,10 @@ describe('useMenuPress(menuRef, options) — a thin wrapper over createMenuPress
   });
 
   it('creates one live factory under StrictMode and destroys every one it created', () => {
-    const create = vi.mocked(createMenuPress);
+    const create = vi.mocked(createForwardedMenuPress);
     const real = create.getMockImplementation();
     if (real == null) {
-      throw new Error('createMenuPress is not wrapped');
+      throw new Error('createForwardedMenuPress is not wrapped');
     }
     // Count each handle's destroy from the moment it is created, so the one
     // StrictMode's replayed effect destroys is counted too.
