@@ -2623,7 +2623,6 @@ component Tokenizer(props: TokenizerProps)
   prop disabledMessage?: string
   prop emptySearchText?: ReactNode = 'No results found'
   prop endContent?: ReactNode
-  prop experimental?: { presentation?: TokenizerPresentation } @experimental
   prop handleRef?: React.Ref<TokenizerHandle>
   prop hasAutoFocus?: boolean = false
   prop hasClear?: boolean = false
