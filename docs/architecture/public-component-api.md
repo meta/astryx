@@ -118,9 +118,9 @@ guidance owns the process used to propose and test APIs.
   take it. `lift` names motion under a press, such as
   Switch's thumb lift, Slider's `springs.sliderLift`, and ContextMenu's
   `springs.contextMenuLift`, so it does not name a layout distance. An element
-  ref in a hook's config object is named for the element's job, as
-  `containerRef`, `viewportRef`, `trackRef`, and `inputRef` are, or `ref` when
-  the element has no narrower job.
+  ref a hook takes is named for the element's job, as `containerRef`,
+  `viewportRef`, `trackRef`, and `inputRef` are, or `ref` when the element has
+  no narrower job.
 - **INV3 — One prop controls one independent concept.** A prop does not silently
   suppress an unrelated prop. A parent does not duplicate state already owned by
   a composed child. One interaction behavior is one prop, never parallel touch,
@@ -231,40 +231,18 @@ guidance owns the process used to propose and test APIs.
   behavior of its own, and a component built entirely on a public factory are
   one API with that factory, not a second one (`spec:AST-107` FR6, FR8). A
   deprecation follows INV9. A hook whose value a component takes through one
-  slot prop is one API with that component, as in `const resizable =
-useResizable({…});` then `<LayoutPanel resizable={resizable}>`, or
-  `hasSnap={useSnapPaging()}`. The hook keeps its config object (INV22; owner
-  decision, 2026-11-04).
+  slot prop is one API with that component, not a second one; for example,
+  `hasSnap={useSnapPaging()}` (owner decision, 2026-11-04).
 - **INV21a — Shipped APIs change only for user value.** A breaking or
   deprecating change to a shipped public API needs user value; conformance to a
   system rule alone does not justify it. New APIs follow the current rules;
   shipped APIs are grandfathered until a real need arises (owner decision,
-  2026-11-04).
-- **INV22 — Every interaction primitive has a non-React twin that matches it.**
-  A public hook that attaches gesture, press, drag, or motion behavior to an
-  app's own element has a public `create…(element, options)` twin, with React
-  content taken as a render callback (`spec:AST-107` FR8) and a handle that
-  follows `spec:AST-107` FR6. Where a primitive hook and its `create…` twin both
-  exist, they match closely: the same option names and meanings, the same
-  events, and the same return concepts. INV22 prescribes no other shape (owner
-  decision, 2026-11-04). The exceptions are a hook whose result only an Astryx
-  React component or StyleX can use, such as `useAnimatedLayout`,
-  `useEntryAnimation`, `useContainerReveal`, `useTouchTrigger`,
-  `useTableRowExpansion`, and `useTableColumnResize`, and a hook whose output
-  directly feeds one Astryx component prop (a slot hook such as `useResizable` →
-  `resizable` or `useSnapPaging` → `hasSnap`), which delegates to internal code.
-  A slot hook has no `create…` twin by default; the owner may add one where a
-  non-React caller needs it, matching the hook's options closely (owner
-  decision, 2026-11-04). A slot hook exists to feed an Astryx component's prop,
-  so a non-React twin has no meaningful use: outside React there is no component
-  to feed. Primitives that act on any element keep their twins. A factory's
-  announced and shown strings follow `architecture:internationalization` INV3a's
-  options.
-- **INV22a — A new public interaction hook takes one config object.** The
-  element it attaches to is a named ref field in that object (`ref`, or a
-  job-named field such as `viewportRef` or `containerRef`, INV2), not a
-  positional argument. Internal hooks may keep a positional ref (owner decision,
-  2026-11-04).
+  2026-11-04). Each component API change still needs its own owner approval.
+- **INV22 — Interaction utilities have non-React equivalents.** Interaction
+  utilities have non-React equivalents (`create…`) that closely match their
+  hooks (the same option names and meanings, events and return concepts). A slot
+  hook, whose output feeds one Astryx component prop, has none by default; the
+  owner may add one (owner decision, 2026-11-04).
 - **INV23 — Each private data attribute has one owner module.** A
   `data-astryx-*` attribute is private unless this invariant names it public.
   Each private attribute has one internal owner module in the package that
@@ -432,8 +410,7 @@ Rejected: component-local names for shared concepts.
 | INV20                   | Public-API review of new boolean props                                                                                   | A boolean whose only effect is a visual swap where a variant fits                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | INV21                   | Public-API review against existing props, components, hooks, and factories                                               | A new API that shares a job with an existing one that is not being deprecated in its favor; a hook fed to one component slot prop counted as a second API                                                                                                                                                                                                                                                                                                                               |
 | INV21a                  | Public-API review of each breaking or deprecating change to a shipped API                                                | A breaking or deprecating change to a shipped public API justified only by conformance to a system rule                                                                                                                                                                                                                                                                                                                                                                                 |
-| INV22                   | Public-API review of each public gesture, press, drag, or motion hook against its `create…` factory                      | A public interaction primitive with no public `create…` twin, outside the listed exceptions and slot hooks that feed one component prop; or a hook and its twin whose option names and meanings, events, or return concepts differ                                                                                                                                                                                                                                                      |
-| INV22a                  | Public-API review of each new public interaction hook                                                                    | A new public interaction hook with a positional `(ref, options)` signature instead of one config object with a named ref field                                                                                                                                                                                                                                                                                                                                                          |
+| INV22                   | Public-API review of each public interaction utility hook against its `create…` equivalent                               | An interaction utility hook with no `create…` equivalent, outside slot hooks that feed one component prop, or an equivalent whose option names and meanings, events, or return concepts differ from its hook                                                                                                                                                                                                                                                                            |
 | INV23                   | `@astryx/no-raw-private-attribute` lint with its baseline (test files exempt), plus public-API review of the public list | A `data-astryx-*` name or selector written outside its owner module, a test, or the public list; a `dataAttr()` call that names a private attribute; an owner module that exports its raw name or a selector; a package that imports another package's owner module; a caller that sets a property an owner style it spreads also sets; a private attribute in a public export, `.doc.mjs`, or Changeset; a baseline entry added; a public data attribute changed without INV9 evidence |
 | INV24                   | API report generator tests over representative entry points, plus the pull-request report's API changes                  | A promised export, prop, hook, type, custom property, theme target, or public attribute is missing from a report; a reachable internal-tagged member is missing; an `./internal/*` or Lab member appears; a stale committed report is not flagged, or its rows are listed as the pull request's API changes; the check fails a pull request                                                                                                                                             |
 | INV25                   | Public-API review routing against the pull request's API changes                                                         | A row that no current record decides does not reach human review; a row a current record decides is held for a human; an undeclared row alone draws a request for changes                                                                                                                                                                                                                                                                                                               |
@@ -464,12 +441,11 @@ Known verification gaps:
   (`component:Outline` FR4), not a gap from an anchor.
 - INV22: known gaps include `useLongPress`, `useMenuPress`, `usePressFeedback`,
   `useClickableContainer`, `useInputContainer`, `useOverlay`, `useCombobox`,
-  `useMultiCombobox`, `useTooltip`, `useHoverCard`, and `useChatStreamScroll`:
-  each attaches gesture, press, drag, or motion behavior and has no `create…`
-  factory yet; no full inventory exists yet. Each conforms by adding its
-  factory; a shipped hook's signature changes only when a real need arises
-  (INV21a). `useResizable` feeds one component prop, so it has no `create…` twin
-  and is not a gap.
+  `useMultiCombobox`, `useResizable`, `useTooltip`, `useHoverCard`, and
+  `useChatStreamScroll`: each attaches gesture, press, drag, or motion behavior
+  and has no `create…` factory yet; no full inventory exists yet. Each conforms
+  by adding its factory; a shipped hook's signature changes only when a real
+  need arises (INV21a).
 - The passthrough lint is warning-only while known violations remain.
 - The current source-to-doc completeness matcher still looks for old prefixed
   props interfaces, so it does not yet prove full prop coverage.
