@@ -16,7 +16,12 @@
  *   of it is in jsdom. Wheel.test.tsx and PickerWheel.test.tsx hold the rule.
  */
 
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

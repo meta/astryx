@@ -463,6 +463,22 @@ function currentOutputMap(root, files) {
   );
 }
 
+/**
+ * The merge-back's changes against `base`: `git diff --name-status` lines.
+ * `base` must be the merge commit's first parent, the main commit the merge
+ * was built on. A later main would show every file it gained as a deletion.
+ */
+function mergeBackEntries(root, base) {
+  const raw = git(root, [
+    'diff',
+    '--name-status',
+    '--find-renames',
+    base,
+    'HEAD',
+  ]);
+  return raw ? raw.split('\n') : [];
+}
+
 function markerAtRef(root, ref) {
   return JSON.parse(
     git(root, ['show', `${ref}:${RELEASE_DIR}/${MARKER_FILE}`]),
@@ -1142,13 +1158,7 @@ async function main() {
       errors.push(
         'release merge-back requires exactly the marked active branch',
       );
-    const raw = git(root, [
-      'diff',
-      '--name-status',
-      '--find-renames',
-      base,
-      'HEAD',
-    ]);
+    const entries = mergeBackEntries(root, base);
     const releaseDiff = git(root, [
       'diff',
       '--name-status',
@@ -1198,7 +1208,7 @@ async function main() {
     const baseConfig = jsonAtRef(root, base, '.changeset/config.json');
     errors.push(
       ...validateReleaseMergeBack({
-        entries: raw ? raw.split('\n') : [],
+        entries,
         plan,
         baseChangesets: changesetMapAtRef(root, base),
         headChangesets: new Map(
@@ -1292,6 +1302,7 @@ export {
   isStableReleasePackage,
   latestStableVersion,
   listActiveBranches,
+  mergeBackEntries,
   validateIdentity,
   validateRefMarker,
   validateReleaseDiff,

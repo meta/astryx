@@ -8,7 +8,7 @@
  * @position Harness regression coverage; proves browser AX properties are exposed without DOM substitution.
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from '../playwright';
 import {createChromiumHarness, holdMotionStill} from './chromium';
 
 test('computed node exposes selected state for tabs', async ({page}) => {

@@ -12,7 +12,7 @@
  *   algorithm, so only a browser shows the painted order.
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   finishEvidence,
   openStory,

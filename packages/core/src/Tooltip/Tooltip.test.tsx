@@ -550,6 +550,50 @@ describe('Tooltip', () => {
       });
     });
 
+    it('stays open when a pen that lands and stays down past the hover delay lifts', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Tooltip content="Tooltip text" onOpenChange={onOpenChange} delay={0}>
+          Abbreviation
+        </Tooltip>,
+      );
+
+      const trigger = screen.getByText('Abbreviation');
+      // A pen in range hovers like a mouse: its arrival starts the hover show.
+      fireEvent.pointerEnter(trigger, {pointerType: 'pen'});
+      fireEvent.mouseEnter(trigger);
+      fireEvent.pointerDown(trigger, {pointerType: 'pen'});
+      // The pen stays down past the hover delay, then lifts.
+      await new Promise(resolve => setTimeout(resolve, 50));
+      fireEvent.pointerUp(trigger, {pointerType: 'pen'});
+      fireEvent.click(trigger);
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+      expect(onOpenChange).not.toHaveBeenCalledWith(false);
+    });
+
+    it('still opens on a mouse hover after its delay, and a mouse press still closes it', async () => {
+      const onOpenChange = vi.fn();
+      render(
+        <Tooltip content="Tooltip text" onOpenChange={onOpenChange} delay={20}>
+          Abbreviation
+        </Tooltip>,
+      );
+
+      const trigger = screen.getByText('Abbreviation');
+      fireEvent.pointerEnter(trigger, {pointerType: 'mouse'});
+      fireEvent.mouseEnter(trigger);
+      expect(onOpenChange).not.toHaveBeenCalled();
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenCalledWith(true);
+      });
+      fireEvent.pointerDown(trigger, {pointerType: 'mouse'});
+      await waitFor(() => {
+        expect(onOpenChange).toHaveBeenLastCalledWith(false);
+      });
+    });
+
     it('never opens for a touch that turns into a scroll', async () => {
       const onOpenChange = vi.fn();
       render(
