@@ -385,8 +385,8 @@ export function Timestamp({
   // abbreviation) and for the AT-facing aria-label, which spells the timezone
   // out in full: abbreviations like "PST" or "GMT+2" are unexpanded
   // abbreviations to a screen-reader user (WCAG 3.1.4). Both stay in the
-  // viewer's zone: the default hover-card row per FR7, and the relative
-  // accessible name because relative formats ignore `timezoneID`.
+  // viewer's zone: the default hover-card row, and the relative accessible
+  // name because relative formats ignore `timezoneID`.
   const fullAbsoluteText = isValidDate
     ? formatInstant(date, 'full', locale, {timeZone: undefined})
     : '';
