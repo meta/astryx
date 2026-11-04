@@ -229,7 +229,7 @@ under `spec:AST-020` FR1; reduced motion cites `design:reduced-motion`.
   touch drag starts them (DR2), including a mouse, pen, or trackpad release
   where the primary pointer is coarse (`spec:AST-094` FR43). Otherwise they
   complete at once (DR3). The momentum coast of a thrown zoomed photo is direct
-  movement and continues (DR2). These motions read the named motion roles or the theme's tokens (FR5), which carry the
+  movement and continues (DR2). These motions read the named motion roles (FR5), which carry the
   reduced-motion path.
 - **AR7 — Focus visible and not obscured (WCAG 2.2 2.4.7, 2.4.11).** Every
   focusable control and the zoom target show the shared focus indicator. A
