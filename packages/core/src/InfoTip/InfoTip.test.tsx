@@ -16,6 +16,7 @@ import * as stylex from '@stylexjs/stylex';
 import {describe, it, expect, vi, beforeAll, afterAll} from 'vitest';
 import {render, screen, fireEvent, waitFor, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import {Icon} from '../Icon/Icon';
 import {InternationalizationProvider} from '../i18n';
 import type * as HitAreaModule from '../utils/hitArea';
 import type {HitInsets} from '../utils/hitArea';
@@ -224,6 +225,35 @@ describe('InfoTip', () => {
     await waitFor(() => {
       expect(popoverOpenState.get(layer)).toBe(true);
     });
+  });
+
+  it('shows the registry info icon at each size, sm by default (FR1)', () => {
+    const cases = [
+      [undefined, 'sm'],
+      ['xsm', 'xsm'],
+      ['sm', 'sm'],
+      ['md', 'md'],
+      ['lg', 'lg'],
+    ] as const;
+    for (const [size, expected] of cases) {
+      const {unmount} = render(
+        <>
+          <InfoTip content="Helpful context" size={size} />
+          <span data-testid="reference">
+            <Icon icon="info" size={expected} />
+          </span>
+        </>,
+      );
+      const icon = screen
+        .getByRole('button', {name: 'More information'})
+        .querySelector('.astryx-icon');
+      const reference = screen
+        .getByTestId('reference')
+        .querySelector('.astryx-icon');
+      expect(icon).toHaveAttribute('data-size', expected);
+      expect(icon?.innerHTML).toBe(reference?.innerHTML);
+      unmount();
+    }
   });
 
   it('renders ReactNode tooltip content', () => {

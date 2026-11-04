@@ -2292,6 +2292,16 @@
       "aliases": []
     },
     {
+      "name": "example-info-tip-metric-definitions",
+      "path": "examples/info-tip/metric-definitions",
+      "aliases": []
+    },
+    {
+      "name": "example-info-tip-permission-notes",
+      "path": "examples/info-tip/permission-notes",
+      "aliases": []
+    },
+    {
       "name": "example-input-group-basic",
       "path": "examples/input-group/basic",
       "aliases": []
@@ -4589,6 +4599,11 @@
     {
       "name": "showcase-icon-default",
       "path": "showcases/icon/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-info-tip-default",
+      "path": "showcases/info-tip/default",
       "aliases": []
     },
     {

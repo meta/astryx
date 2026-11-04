@@ -110,6 +110,15 @@
     "reason": "IconButton is a thin wrapper that renders Button with `isIconOnly`, adding no layout, no positioning, and no directional affordance of its own, so it inherits `core/Button`'s verification above exactly. Its single icon is centred in a square control, which has no reading direction to mirror."
   },
   {
+    "component": "core/InfoTip",
+    "reason": "InfoTip renders one round icon button holding the registry's `info` glyph, which is symmetric and has no reading direction to mirror; its padding and radius are uniform and it has no control order, scrolling, dragging, or horizontal keyboard behavior. Its help opens in Tooltip's layer on the block axis (above), owned by Tooltip. Under a coarse pointer its invisible hit area grows by insets the shared hit area measures from page rects on each physical side, so the growth is the same in either direction. The info glyph and the button's box are the same in RTL as in LTR.",
+    "evidence": {
+      "apps/storybook/stories/InfoTip.stories.tsx": "sha256:d7c86b16106ac1fbc37e4cfccfbd108969bbfb7da9cbe0ad064943f11af8cb1e",
+      "packages/core/src/InfoTip/InfoTip.tsx": "sha256:d2c652a2d2b73136b275e50da471422ca51c87d6b1391bf2b807b3a68bf69480",
+      "packages/core/src/InfoTip/index.ts": "sha256:0470065a1a899926b2b627db5eaad0d43a41710b0f03ab977b0b8b53ed881ba4"
+    }
+  },
+  {
     "component": "core/SelectableCard",
     "reason": "SelectableCard renders content in normal flow inside a symmetric Card. Its hover overlay and selected ring cover all four edges equally, its source uses no physical left/right positioning or directional glyphs, and its checkbox interaction uses only pointer, Space, Enter, and Tab rather than inline-direction keys. Every current story therefore has no component-owned visual or behavioral RTL difference for the audit to measure.",
     "evidence": {
