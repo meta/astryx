@@ -72,8 +72,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 - The active Astryx locale and optional explicit direction for one React subtree.
 - Binding supplied locale catalogs, rich or generated, and sparse overrides to a
   stable translator function, and exposing them to consumers in the rich shape.
-- Resolving the subtree's calendar system from `calendar` and `locale`, and
-  exposing it on the context.
+- Resolving the subtree's calendar system from `calendar`, and exposing it on
+  the context.
 - Updating provider consumers when any provider input changes.
 - The no-provider English/LTR context defaults exposed by the i18n entry point.
 

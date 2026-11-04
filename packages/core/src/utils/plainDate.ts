@@ -473,7 +473,7 @@ export function plainDateFormat(
 export function plainDateFormatToParts(
   pd: PlainDate,
   options: Intl.DateTimeFormatOptions,
-  locale: Locale = 'en',
+  locale: Locale,
 ): Intl.DateTimeFormatPart[] {
   const [format, date] = plainDateFormatInput(pd, options, locale);
   return format.formatToParts(date);

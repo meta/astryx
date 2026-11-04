@@ -21,8 +21,7 @@ import {
   plainDateFormatDayNumber,
   plainDateFormatStandaloneMonthYear,
   plainDateFormatToParts,
-  plainDateIsAfter,
-  plainDateIsBefore,
+  plainDateIsInRange,
   getDaysInMonth,
 } from './plainDate';
 
@@ -270,9 +269,7 @@ export function isInCalendarMonth(
   pd: PlainDate,
   month: CalendarMonth,
 ): boolean {
-  return (
-    !plainDateIsBefore(pd, month.start) && !plainDateIsAfter(pd, month.end)
-  );
+  return plainDateIsInRange(pd, [month.start, month.end]);
 }
 
 /**
