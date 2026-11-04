@@ -21,6 +21,7 @@ import {
   globalCli,
   packedCli,
   placeCli,
+  recyclePlacedCopies,
   seedPackedRelease,
   startRegistry,
 } from '../test-utils/global-local-fixtures.mjs';
@@ -56,7 +57,11 @@ const computers = [];
 // the message below and its folders are still removed.
 afterEach(async () => {
   const busy = await settleBackgroundSteps(computers.splice(0));
-  cleanupFixtures();
+  try {
+    recyclePlacedCopies({keep: busy.length === 0});
+  } finally {
+    cleanupFixtures();
+  }
   if (busy.length > 0) {
     throw new Error(
       `A background step was still writing into ${busy.join(', ')} 60 s after the test: it is stuck.`,
