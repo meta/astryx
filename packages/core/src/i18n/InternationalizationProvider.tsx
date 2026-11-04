@@ -22,7 +22,10 @@
 import {useMemo, type ReactNode} from 'react';
 import {InternationalizationContext} from './InternationalizationContext';
 import {getLocaleDirection} from './getLocaleDirection';
-import {resolveCalendarSystem} from './useCalendarSystem';
+import {
+  getExplicitLocaleCalendar,
+  resolveCalendarSystem,
+} from './useCalendarSystem';
 import type {CalendarSystem} from '../utils/calendarSystem';
 import type {
   Locale,
@@ -109,9 +112,10 @@ export interface InternationalizationProviderProps {
    * `Calendar` shows it, and Timestamp, PowerSearch, and Lab's Schedule write
    * their dates in it. `DateInput`, `DateRangeInput`, and `DateTimeInput`
    * show it too. Values stay
-   * Gregorian ISO dates. When omitted, the calendar is Gregorian: a locale
-   * never selects it, neither by its default calendar nor by a `-u-ca-`
-   * keyword. A component's own `calendar` prop takes precedence. Calendars
+   * Gregorian ISO dates. When omitted, an explicit `-u-ca-` keyword in
+   * `locale`, such as `th-TH-u-ca-buddhist`, selects the calendar, else
+   * Gregorian; a locale's default calendar never applies. A component's own
+   * `calendar` prop takes precedence. Calendars
    * other than `gregory`, `iso8601`, `buddhist`, `roc`, and `japanese` need
    * `Temporal`. The context keeps the requested calendar; where `Temporal` is
    * missing, these components show Gregorian dates and warn once in
@@ -143,8 +147,8 @@ export function InternationalizationProvider({
     () =>
       calendarProp != null
         ? resolveCalendarSystem(calendarProp, PROVIDER_NAME)
-        : 'gregory',
-    [calendarProp],
+        : (getExplicitLocaleCalendar(locale, PROVIDER_NAME) ?? 'gregory'),
+    [calendarProp, locale],
   );
   const value = useMemo(() => {
     const providedMessages = messages ?? {};

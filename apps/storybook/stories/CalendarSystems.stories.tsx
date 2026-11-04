@@ -110,14 +110,14 @@ export const PersianEnglish = story(
   'The calendar is independent of the language.',
 );
 
-export const LocaleKeywordStaysGregorian = story(
+export const PersianFromLocaleKeyword = story(
   {
-    title: 'fa-IR-u-ca-persian, no calendar',
+    title: 'fa-IR-u-ca-persian',
     locale: 'fa-IR-u-ca-persian',
     value: '2026-10-30',
     weekStartsOn: 'sat',
   },
-  'A `-u-ca-` keyword in the provider locale does not select the calendar: the months stay Gregorian.',
+  'A `-u-ca-` keyword in the provider locale selects the calendar.',
 );
 
 export const LocaleAloneStaysGregorian = story(

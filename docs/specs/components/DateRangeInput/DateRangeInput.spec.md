@@ -39,18 +39,22 @@ the range stays Gregorian ISO dates.
 
 ## Compatibility and migration
 
-- Released default preserved: `yes`; canonical DateRangeInput behavior is unchanged
+- Released default preserved: `yes`, except under a provider locale with an
+  explicit `-u-ca-` keyword; canonical DateRangeInput behavior is otherwise
+  unchanged
 - The `calendar` prop is additive; it defaults to the provider's calendar, else
   `gregory`, so a field without a provider calendar keeps its Gregorian text. A
-  provider locale with a `-u-ca-` keyword keeps Gregorian dates (`spec:AST-111`
-  DEC-2); set `calendar` to choose one
+  provider locale with an explicit `-u-ca-` keyword shows that calendar.
+  Breaking (`spec:AST-017` FR1): an application that wants Gregorian dates sets
+  `calendar="gregory"`
 - 0.7.0 removes the `date-range-input-clear-icon` alias; the shared clear glyph
   remains available through `input-clear-icon`
 - The preset constraint correction remains unchanged
 - Controlled/uncontrolled behavior: unchanged; DateRangeInput remains controlled
 - Migration decision: replace the removed theme key and CSS class with
   `input-clear-icon` and `.astryx-input-clear-icon`, or run
-  `astryx upgrade --from 0.6.3 --apply --path .`
+  `astryx upgrade --from 0.6.3 --apply --path .`; set `calendar="gregory"` to
+  keep Gregorian dates under a `-u-ca-` locale
 
 Consumer migration instructions belong in consumer docs and release notes.
 

@@ -71,7 +71,8 @@ or pointer-adaptive combinations of those surfaces.
 
 ## Compatibility and migration
 
-- Released default preserved: `yes`, except `hourFormat`, which follows the
+- Released default preserved: `yes`, except a provider locale with an explicit
+  `-u-ca-` keyword, and except `hourFormat`, which follows the
   provider locale's hour cycle (`12h` for `en` and `en-US`, the released
   default with no provider) and shares TimeInput's locale time text
 - Compatibility class: default change for non-English-US locales; additive
@@ -79,11 +80,13 @@ or pointer-adaptive combinations of those surfaces.
   `onChange` only for complete input (FR11); a non-Gregorian calendar replaces
   native controls with the Astryx surfaces for the pointer, and an explicit
   `native` warns in development (FR12); existing types, callbacks, roles, and
-  exports remain stable. A provider locale with a `-u-ca-` keyword keeps
-  Gregorian dates (`spec:AST-111` DEC-2); set `calendar` to choose one.
+  exports remain stable. A provider locale with an explicit `-u-ca-` keyword
+  shows that calendar. Breaking (`spec:AST-017` FR1): an application that wants
+  Gregorian dates sets `calendar="gregory"`.
 - Controlled/uncontrolled behavior: DateTimeInput remains controlled; `undefined`
   represents no committed date-time value
-- Migration decision: none; picker presentation and deprecated `nativePicker`
+- Migration decision: set `calendar="gregory"` to keep Gregorian dates under a
+  `-u-ca-` locale; picker presentation and deprecated `nativePicker`
   compatibility remain governed by `spec:AST-043`
 
 Consumer migration instructions belong in consumer docs and release notes.

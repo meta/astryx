@@ -86,7 +86,8 @@ browser/OS date picker selected by the public presentation contract.
 
 ## Compatibility and migration
 
-- Released default preserved: `yes`
+- Released default preserved: `yes`, except under a provider locale with an
+  explicit `-u-ca-` keyword
 - Compatibility class: additive `calendar` prop with a Gregorian default; under
   a finger the sheet wheels' markup changes, and under every presentation keys
   step through the values in time order (FR17). Typed Gregorian entry fires
@@ -96,13 +97,15 @@ browser/OS date picker selected by the public presentation contract.
   the locale's field order lacks, and a one- or three-digit year is not a date
   (FR20). A non-Gregorian calendar replaces the native control with the Astryx
   surface for the pointer, and an explicit `native` warns in development (FR21).
-  A provider locale with a `-u-ca-` keyword keeps Gregorian dates
-  (`spec:AST-111` DEC-2); set `calendar` to choose one.
+  A provider locale with an explicit `-u-ca-` keyword shows that calendar.
+  Breaking (`spec:AST-017` FR1): an application that wants Gregorian dates sets
+  `calendar="gregory"`.
 - Controlled/uncontrolled behavior: unchanged; DateInput remains controlled by
   `value`, with `undefined` representing no selected date
 - Migration decision: `spec:AST-043/DEC-1` and `spec:AST-043/DEC-2` own the
   `presentation` vocabulary, default, deprecated `nativePicker` mapping, and
-  precedence
+  precedence; set `calendar="gregory"` to keep Gregorian dates under a `-u-ca-`
+  locale
 
 Consumer migration instructions belong in consumer docs and release notes.
 
