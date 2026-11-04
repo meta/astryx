@@ -119,7 +119,7 @@ guidance owns the process used to propose and test APIs.
   Switch's thumb lift, Slider's `springs.sliderLift`, and ContextMenu's
   `springs.contextMenuLift`, so it does not name a layout distance. An element
   ref a hook takes is named for the element's job, as `containerRef`,
-  `viewportRef`, `trackRef`, and `inputRef` are, or `ref` when the element has
+  `scrollRef`, `menuRef`, `triggerRef`, and `inputRef` are, or `ref` when the element has
   no narrower job.
 - **INV3 — One prop controls one independent concept.** A prop does not silently
   suppress an unrelated prop. A parent does not duplicate state already owned by
@@ -231,8 +231,8 @@ guidance owns the process used to propose and test APIs.
   behavior of its own, and a component built entirely on a public factory are
   one API with that factory, not a second one (`spec:AST-107` FR6, FR8). A
   deprecation follows INV9. A hook whose value a component takes through one
-  slot prop is one API with that component, not a second one; for example,
-  `hasSnap={useSnapPaging()}` (owner decision, 2026-11-04).
+  slot prop is one API with that component, not a second one, as in `const value
+= useX(…); <Component x={value} />` (owner decision, 2026-11-04).
 - **INV21a — Shipped APIs change only for user value.** A breaking or
   deprecating change to a shipped public API needs user value; conformance to a
   system rule alone does not justify it. New APIs follow the current rules;
