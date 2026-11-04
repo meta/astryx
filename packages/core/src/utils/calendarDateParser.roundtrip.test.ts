@@ -136,6 +136,7 @@ describe('committed text reads back as the same date (FR13)', () => {
     ['lv-LV', 'hebrew', [1900, 2, 1], [1900, 3, 2], [1901, 2, 20]],
     ['lv-LV', 'islamic-civil', [1900, 7, 1], [1900, 8, 26]],
     ['am-ET', 'roc', [1900, 1, 1], [1911, 12, 31], [1912, 1, 1], [2026, 1, 1]],
+    ['ksh', 'roc', [1900, 1, 1], [1912, 1, 1]],
     [
       'am-ET',
       'japanese',
@@ -157,5 +158,12 @@ describe('committed text reads back as the same date (FR13)', () => {
     expect(hint(1990, 'japanese')).toBe('1/1/2 H');
     expect(hint(2026, 'roc')).toBe('1/1/115 ROC');
     expect(hint(1900, 'roc')).toBe('1/1/12 BROC');
+  });
+  it('adds no era to a calendar whose era does not change', () => {
+    const day = {year: 2026, month: 1, day: 1};
+    expect(formatCalendarDateHint(day, 'am-ET', 'ethiopic')).toBe('23/4/2018');
+    expect(
+      formatCalendarDateHint({year: 2026, month: 11, day: 2}, 'tk', 'buddhist'),
+    ).toBe('02.11.2569');
   });
 });

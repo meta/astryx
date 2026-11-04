@@ -1230,11 +1230,30 @@ const displayOptionCache = new WeakMap<
   Map<string, Intl.DateTimeFormatOptions>
 >();
 
+const eraChangeCache = new Map<CalendarSystem, boolean>();
+
+/**
+ * Whether the era changes between 1900 and 2100. Only then can a year without
+ * its era read as two dates.
+ */
+function hasEraChange(calendar: CalendarSystem): boolean {
+  let result = eraChangeCache.get(calendar);
+  if (result == null) {
+    const eraOf = (date: PlainDate) =>
+      calendarEraYear('en', calendar, date).era;
+    result =
+      eraOf({year: 1900, month: 1, day: 1}) !==
+      eraOf({year: 2100, month: 12, day: 31});
+    eraChangeCache.set(calendar, result);
+  }
+  return result;
+}
+
 /**
  * Adds the era to a format that omits it, so a year never reads as a
  * Gregorian year. Keeps the locale's own pattern when the era would reorder
- * the fields. In Amharic the short era moves the month first, but the narrow
- * era keeps the day/month/year order.
+ * the fields. Where the era changes, a narrow era that keeps the order is
+ * used instead, such as Amharic Japanese "1/1/8 R".
  */
 function displayOptions(
   locale: Locale,
@@ -1257,7 +1276,10 @@ function displayOptions(
     result = options;
     const order = fieldOrder(parts).join();
     if (!parts.some(p => p.type === 'era')) {
-      for (const era of ['short', 'narrow'] as const) {
+      const widths = hasEraChange(calendar)
+        ? (['short', 'narrow'] as const)
+        : (['short'] as const);
+      for (const era of widths) {
         const withEra = {...options, era};
         const eraParts = partsOf(locale, calendar, withEra, sample);
         if (fieldOrder(eraParts).join() === order) {
@@ -1283,7 +1305,6 @@ function formatInCalendar(
     });
   }
   const display = displayOptions(locale, calendar, options);
-  const parts = partsOf(locale, calendar, display, pd);
   const text = plainDateFormat(pd, {...display, calendar}, locale);
   // When every era width reorders the fields, such as the Amharic short-month
   // date, the text has no era. Text without an era reads in the latest era,
@@ -1291,9 +1312,9 @@ function formatInCalendar(
   // it.
   const eraOf = (date: PlainDate) => calendarEraYear('en', calendar, date).era;
   if (
-    WITHOUT_ERA.has(calendar) ||
-    parts.some(p => p.type === 'era') ||
-    eraOf(pd) === eraOf({year: 9999, month: 12, day: 31})
+    !hasEraChange(calendar) ||
+    eraOf(pd) === eraOf({year: 9999, month: 12, day: 31}) ||
+    partsOf(locale, calendar, display, pd).some(p => p.type === 'era')
   ) {
     return text;
   }
