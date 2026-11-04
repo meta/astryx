@@ -24,6 +24,7 @@ import {
 import {render, screen, fireEvent, act} from '@testing-library/react';
 import {useTooltip, type TooltipOptions} from './useTooltip';
 import {useLayer} from '../Layer/useLayer';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 
 // jsdom implements neither the Popover API nor `:popover-open`; mirror
 // Tooltip.test.tsx's shims so the layer can open.
@@ -168,7 +169,11 @@ function DetachableHarness({
   isAttached,
   ...options
 }: TooltipOptions & {isAttached: boolean}) {
-  const tooltip = useTooltip(options);
+  // As Button does for DropdownMenu: removing the wiring also disables it.
+  const tooltip = useTooltip({
+    ...options,
+    isEnabled: isAttached && (options.isEnabled ?? true),
+  });
   return (
     <div>
       <button
@@ -218,6 +223,101 @@ describe('useTooltip — a trigger that detaches and attaches again', () => {
 
     rerender(<DetachableHarness isAttached />);
     expect(tooltipElement().matches(':popover-open')).toBe(false);
+  });
+});
+
+/** A trigger whose caller merges its own inline ref, as Button and InfoTip do. */
+function InlineRefHarness({
+  label,
+  isShown = true,
+  ...options
+}: TooltipOptions & {label: string; isShown?: boolean}) {
+  const tooltip = useTooltip(options);
+  return (
+    <div>
+      {isShown && (
+        <button
+          type="button"
+          ref={el => {
+            tooltip.ref(el);
+          }}
+          aria-describedby={tooltip.describedBy}>
+          {label}
+        </button>
+      )}
+      {tooltip.renderTooltip('Helpful text')}
+    </div>
+  );
+}
+
+/** A trigger whose ref merges a new inline ref on each render, as Button does. */
+function MergedRefHarness(options: TooltipOptions) {
+  const tooltip = useTooltip(options);
+  const ref = useMergedRefs<HTMLButtonElement>(() => {}, tooltip.ref);
+  return (
+    <div>
+      <button type="button" ref={ref} aria-describedby={tooltip.describedBy}>
+        Trigger
+      </button>
+      {tooltip.renderTooltip('Helpful text')}
+    </div>
+  );
+}
+
+describe('useTooltip — a caller ref that changes on each render', () => {
+  it('keeps a hovered tooltip open when the parent renders again', () => {
+    const onHide = vi.fn();
+    const {rerender} = render(<MergedRefHarness onHide={onHide} />);
+    fireEvent.mouseEnter(trigger());
+    tick(200);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+
+    rerender(<MergedRefHarness onHide={onHide} />);
+    rerender(<MergedRefHarness onHide={onHide} />);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+    expect(onHide).not.toHaveBeenCalled();
+  });
+
+  it('keeps a tooltip dismissed with Escape closed when the parent renders again', () => {
+    const {rerender} = render(<MergedRefHarness />);
+    const matches = trigger().matches.bind(trigger());
+    vi.spyOn(trigger(), 'matches').mockImplementation(
+      selector => selector === ':focus-visible' || matches(selector),
+    );
+    act(() => trigger().focus());
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+    fireEvent.keyDown(trigger(), {key: 'Escape'});
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+
+    rerender(<MergedRefHarness />);
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+  });
+
+  it('removes its listeners when the caller reports null for a removed trigger', () => {
+    const onShow = vi.fn();
+    const {rerender} = render(
+      <InlineRefHarness label="Trigger" onShow={onShow} />,
+    );
+    const removed = screen.getByRole('button', {name: 'Trigger'});
+    rerender(
+      <InlineRefHarness label="Trigger" onShow={onShow} isShown={false} />,
+    );
+    fireEvent.mouseEnter(removed);
+    tick(1000);
+    expect(onShow).not.toHaveBeenCalled();
+  });
+});
+
+describe('useTooltip — a pending show and isEnabled', () => {
+  it('drops a pending show when the tooltip is disabled, even if it is enabled again before the delay ends', () => {
+    const onShow = vi.fn();
+    const {rerender} = render(<Harness onShow={onShow} />);
+    fireEvent.mouseEnter(trigger());
+    tick(100);
+    rerender(<Harness onShow={onShow} isEnabled={false} />);
+    rerender(<Harness onShow={onShow} />);
+    tick(200);
+    expect(onShow).not.toHaveBeenCalled();
   });
 });
 

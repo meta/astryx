@@ -419,6 +419,24 @@ describe('InfoTip press-to-pin (component:InfoTip FR2)', () => {
   });
 });
 
+describe('a pinned InfoTip and a caller ref that changes on each render', () => {
+  it('stays pinned when the parent renders again with an inline ref', () => {
+    const Parent = ({count}: {count: number}) => (
+      <div data-count={count}>
+        <InfoTip ref={() => {}} content={TIP} label="About billing" />
+      </div>
+    );
+    const {rerender} = render(<Parent count={0} />);
+    const trigger = screen.getByRole('button', {name: 'About billing'});
+    click(trigger);
+    expect(shows(TIP)).toBe(true);
+    rerender(<Parent count={1} />);
+    rerender(<Parent count={2} />);
+    expect(shows(TIP)).toBe(true);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+  });
+});
+
 describe('InfoTip trigger state (component:InfoTip FR2)', () => {
   it('carries aria-expanded, true only while pinned, and aria-controls while it shows', () => {
     render(<InfoTooltip />);

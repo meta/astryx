@@ -21,10 +21,7 @@ import {
   type ReactNode,
   type RefCallback,
 } from 'react';
-import {
-  createTriggerFocusGate,
-  isFocusableTrigger,
-} from '../utils/triggerFocus';
+import {createTriggerFocusGate, isFocusOnTrigger} from '../utils/triggerFocus';
 import * as stylex from '@stylexjs/stylex';
 import {
   useLayerInternal,
@@ -315,6 +312,13 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // (a pending hover show) and for the trigger ref callback.
   const isEnabledRef = useRef(isEnabled);
   isEnabledRef.current = isEnabled;
+  // Counts the renders in which the tooltip is disabled. A pending show
+  // records it, so a show scheduled before a disable is dropped even when
+  // the tooltip is enabled again before the timer fires.
+  const disabledRendersRef = useRef(0);
+  if (!isEnabled) {
+    disabledRendersRef.current += 1;
+  }
 
   // Clear all timeouts
   const clearTimeouts = useCallback(() => {
@@ -467,10 +471,11 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       return;
     }
     clearTimeouts();
+    const disabledRenders = disabledRendersRef.current;
     showTimeoutRef.current = setTimeout(() => {
-      // A show scheduled while the tooltip was enabled runs only if it still
-      // is: nothing would close a tooltip that opens after it is disabled.
-      if (isEnabledRef.current) {
+      // A show runs only if the tooltip stayed enabled since it was
+      // scheduled: nothing would close a tooltip that opens after a disable.
+      if (disabledRendersRef.current === disabledRenders) {
         showLayer();
       }
     }, delay);
@@ -542,12 +547,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // a tap never does: a tapped `<input>` also matches `:focus-visible`.
   const opensOnFocus = useCallback(
     (target: HTMLElement, trigger: HTMLElement | null): boolean => {
-      if (
-        trigger != null &&
-        focusTrigger !== 'always' &&
-        (focusTrigger === 'never' ||
-          (target !== trigger && !isFocusableTrigger(trigger)))
-      ) {
+      if (trigger != null && !isFocusOnTrigger(target, trigger, focusTrigger)) {
         return false;
       }
       return !isTouchInteraction() && target.matches(':focus-visible');
@@ -663,9 +663,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     ],
   );
 
-  // The trigger's listeners call the latest handlers through this ref, so
-  // the trigger ref callback keeps one identity. React then detaches it only
-  // when the trigger really goes away, not on an ordinary rerender.
+  // The trigger's listeners call the latest handlers through this ref, so the
+  // trigger ref callback keeps one identity.
   const handlersRef = useRef({
     handleMouseEnter,
     handleMouseLeave,
@@ -700,14 +699,21 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // Removes the attached trigger's listeners (the trigger ref callback's
   // cleanup).
   const detachTriggerRef = useRef<(() => void) | null>(null);
+  // Set when the trigger detached while the tooltip was disabled: the
+  // caller removed the wiring (DropdownMenu's Button while its menu is
+  // open), so the next enabled attach reads the focus that arrived meanwhile.
+  const wasSuppressedRef = useRef(false);
 
   // The trigger's ref callback owns every trigger listener, and reads the
   // trigger's state when it attaches and detaches.
   const interactionRef = useCallback((el: HTMLElement | null) => {
-    // Detach runs through the returned cleanup. A caller's own ref that
-    // reports `null` and then the same element on each render (an inline
-    // ref) leaves the trigger attached as it is.
-    if (el == null || el === triggerRef.current) {
+    // A caller that reports `null` by hand detaches the trigger, as the
+    // returned cleanup does.
+    if (el == null) {
+      detachTriggerRef.current?.();
+      return;
+    }
+    if (el === triggerRef.current) {
       return;
     }
     detachTriggerRef.current?.();
@@ -742,12 +748,19 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     el.addEventListener('focusout', onHeldFocusOut);
     triggerRef.current = el;
 
-    // A trigger that attaches with focus already inside it (DropdownMenu's
-    // Button gets its tooltip wiring back as its menu closes) missed that
-    // focus. Show for it only if it would open the tooltip: returned keyboard
-    // focus does, focus returned after a pointer pick does not.
+    // A trigger that attaches again after its wiring was removed
+    // (DropdownMenu's Button as its menu closes) missed the focus that
+    // arrived meanwhile. Show for it only if it would open the tooltip:
+    // returned keyboard focus does, focus returned after a pointer pick does
+    // not. Any other attach leaves the tooltip as it is, so a tooltip
+    // dismissed with Escape stays closed.
     const focused = el.ownerDocument.activeElement;
+    const wasSuppressed = wasSuppressedRef.current;
+    if (isEnabledRef.current) {
+      wasSuppressedRef.current = false;
+    }
     if (
+      wasSuppressed &&
       isEnabledRef.current &&
       latest().isOpen === undefined &&
       latest().focusTrigger !== 'never' &&
@@ -773,11 +786,12 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       if (triggerRef.current === el) {
         triggerRef.current = null;
       }
-      // A tooltip belongs to its trigger: when the trigger goes away (a
-      // caller removes the wiring while its own layer is open), close an
-      // uncontrolled tooltip and drop its pending show, or the next attach
-      // brings a stale tooltip back.
-      if (latest().isOpen === undefined) {
+      // A caller removes the wiring as it disables the tooltip. Close an
+      // uncontrolled tooltip then, or the next attach shows a stale tooltip.
+      // A detach while enabled, such as a merged ref that changes identity
+      // on a re-render, keeps a hovered or held tooltip open.
+      if (!isEnabledRef.current && latest().isOpen === undefined) {
+        wasSuppressedRef.current = true;
         latest().dropHold();
         latest().hideNow();
       }
