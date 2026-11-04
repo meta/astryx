@@ -253,7 +253,9 @@ export interface UseTypedDateFieldOptions extends UseTypedDateOptions {
   onTypedDate?: (value: ISODateString) => void;
   /**
    * A disabled or busy field ignores typing, Enter and blur, and hides a typed
-   * rejection. Typed text stays until the field is editable or `value` changes.
+   * rejection. Typed text stays until the next Enter or blur once the field is
+   * editable, or until `value` changes. Once the field is editable, text whose
+   * date typing already reported gives way to the field's value.
    */
   isDisabled: boolean;
   /** The caller's status. Rejected text that stays shows its own error instead. */
@@ -349,6 +351,23 @@ export function useTypedDateField({
         setPendingInput(null);
         setIsRejectionCommitted(false);
       }
+    }
+  }
+
+  // Typing already committed a reported date through `onChange`. When the
+  // change that locked the field settles, the field shows the resulting value,
+  // whether the change took or not, and a retyped date reports again.
+  const wasDisabledRef = useRef(isDisabled);
+  if (isDisabled !== wasDisabledRef.current) {
+    wasDisabledRef.current = isDisabled;
+    if (
+      !isDisabled &&
+      typedResult?.kind === 'value' &&
+      plainDateToISO(typedResult.date) === lastFiredRef.current
+    ) {
+      lastFiredRef.current = undefined;
+      setPendingInput(null);
+      setIsRejectionCommitted(false);
     }
   }
 

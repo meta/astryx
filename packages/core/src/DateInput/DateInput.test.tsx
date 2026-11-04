@@ -951,6 +951,82 @@ describe('DateInput', () => {
         expectNoRejection(input);
       },
     );
+
+    it.each(locks)(
+      'shows the old value once a %s change that did not take a typed date ends',
+      async lock => {
+        const {user, onChange, input, setProps} = renderField('2026-01-12');
+        await user.clear(input);
+        await user.type(input, '3/15/2026');
+        expect(onChange).toHaveBeenCalledExactlyOnceWith('2026-03-15');
+
+        setProps(lock);
+        await user.tab();
+        expect(input).toHaveValue('3/15/2026');
+
+        setProps();
+        expect(input).toHaveValue('January 12, 2026');
+        await user.clear(input);
+        await user.type(input, '3/15/2026');
+        expect(onChange).toHaveBeenCalledTimes(2);
+      },
+    );
+
+    it.each(locks)(
+      'shows the new value once a %s change that took a typed date ends',
+      async lock => {
+        const {user, input, setProps} = renderField('2026-01-12');
+        await user.clear(input);
+        await user.type(input, '3/15/2026');
+
+        setProps(lock, {value: '2026-03-15'});
+        await user.tab();
+        expect(input).toHaveValue('3/15/2026');
+
+        setProps(undefined, {value: '2026-03-15'});
+        expect(input).toHaveValue('March 15, 2026');
+      },
+    );
+
+    it.each([
+      ['fails', false, 'January 12, 2026'],
+      ['succeeds', true, 'March 15, 2026'],
+    ])(
+      'shows the resulting value after a changeAction save that %s',
+      async (_, takes, shown) => {
+        const user = userEvent.setup();
+        let settle = () => {};
+        function Field() {
+          const [value, setValue] = useState<ISODateString>('2026-01-12');
+          const save = async (next: ISODateString | undefined) =>
+            new Promise<void>(resolve => {
+              settle = () => {
+                if (takes && next) {
+                  setValue(next);
+                }
+                resolve();
+              };
+            });
+          return (
+            <DateInput
+              label="Date"
+              value={value}
+              onChange={() => {}}
+              changeAction={save}
+            />
+          );
+        }
+        render(<Field />);
+        const input = screen.getByRole('combobox');
+        await user.clear(input);
+        await user.type(input, '3/15/2026');
+        expect(input).toHaveAttribute('aria-busy', 'true');
+        await user.tab();
+
+        await act(async () => settle());
+        expect(input).toHaveValue(shown);
+      },
+    );
   });
 
   // --- Enter key commits typed date ---
