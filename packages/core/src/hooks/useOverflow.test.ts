@@ -15,6 +15,7 @@ function mockMeasure(
   itemWidths: number[],
   indicatorWidth?: number,
   itemHeight = 0,
+  indicatorHeight = itemHeight,
 ): HTMLElement {
   const children: {offsetWidth: number; offsetHeight: number}[] =
     itemWidths.map(w => ({
@@ -22,7 +23,7 @@ function mockMeasure(
       offsetHeight: itemHeight,
     }));
   if (indicatorWidth != null) {
-    children.push({offsetWidth: indicatorWidth, offsetHeight: itemHeight});
+    children.push({offsetWidth: indicatorWidth, offsetHeight: indicatorHeight});
   }
   return {children} as unknown as HTMLElement;
 }
@@ -510,8 +511,11 @@ describe('useOverflow with behavior=observeParent', () => {
 
 describe('useOverflow when the observer reports a resize (component:OverflowList PR1)', () => {
   // A box whose width a test changes, as a resize would.
+  // A box with no laid-out children, whose width a test changes.
   function resizableBox(width: number): {offsetWidth: number} & Element {
-    return {offsetWidth: width} as unknown as {offsetWidth: number} & Element;
+    return {offsetWidth: width, children: []} as unknown as {
+      offsetWidth: number;
+    } & Element;
   }
 
   // Reports resizes the way the browser does: after layout, outside act(). A
@@ -557,15 +561,19 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
     },
   );
 
-  // A visible container whose children sit in rows of 20px items with a
-  // 10px gap: `rowOf[i]` is the row (0-based) child i is laid out in.
+  // A visible container whose children sit in rows of `height` px items with
+  // a 10px gap: `rowOf[i]` is the row (0-based) child i is laid out in.
   function laidOutRows(
     width: number,
     rowOf: number[],
+    height = 20,
   ): {offsetWidth: number; children: unknown[]} & Element {
     return {
       offsetWidth: width,
-      children: rowOf.map(row => ({offsetTop: row * 30, offsetHeight: 20})),
+      children: rowOf.map(row => ({
+        offsetTop: row * (height + 10),
+        offsetHeight: height,
+      })),
     } as unknown as {offsetWidth: number; children: unknown[]} & Element;
   }
 
@@ -577,7 +585,7 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
         renders++;
         return useOverflow(3, {gap: 10, maxRows: 2});
       });
-      const box = laidOutRows(200, [0, 0, 0]);
+      const box = laidOutRows(200, [0, 0, 0], itemHeight);
 
       act(() => {
         result.current.measureRef(mockMeasure([50, 50, 50], 30, itemHeight));
@@ -630,6 +638,49 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
     Object.assign(box, laidOutRows(200, [0, 0]));
     await deliverBeforePaint(box);
     expect(result.current.visibleCount).toBe(1);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(result.current.visibleCount).toBe(3);
+  });
+
+  it('renders after paint when a single-row fold shows an indicator taller than the items', async () => {
+    const {result} = renderHook(() => useOverflow(3, {gap: 10}));
+    const box = laidOutRows(200, [0, 0, 0]);
+    act(() => {
+      result.current.measureRef(mockMeasure([50, 50, 50], 30, 20, 40));
+      result.current.containerRef(box as unknown as HTMLElement);
+    });
+    expect(result.current.visibleCount).toBe(3);
+
+    // At 100px one item and the 40px indicator show, so the list grows taller.
+    box.offsetWidth = 100;
+    await deliverBeforePaint(box);
+    expect(result.current.visibleCount).toBe(3);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(result.current.visibleCount).toBe(1);
+  });
+
+  it('renders after paint when the shown indicator can be narrower than the measured one', async () => {
+    const {result} = renderHook(() => useOverflow(5, {gap: 0, maxRows: 2}));
+    const box = laidOutRows(400, [0, 0, 0, 0, 0]);
+    act(() => {
+      // The measured indicator holds all five items; one for two is narrower.
+      result.current.measureRef(mockMeasure([50, 50, 50, 180, 50], 44, 20));
+      result.current.containerRef(box as unknown as HTMLElement);
+    });
+    expect(result.current.visibleCount).toBe(5);
+
+    // At 170px the five shown items fill two clipped rows. Three items with
+    // the measured indicator need two rows, without it one, so the rows the
+    // new set fills are not known.
+    Object.assign(box, laidOutRows(170, [0, 0, 0, 1, 2]));
+    await deliverBeforePaint(box);
+    expect(result.current.visibleCount).toBe(5);
 
     await act(async () => {
       await new Promise(resolve => setTimeout(resolve, 0));

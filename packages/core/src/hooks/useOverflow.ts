@@ -142,21 +142,71 @@ function observeForOverflow(element: Element, measure: Measure): () => void {
   return unobserve;
 }
 
+/** A visible set as the list renders it, in render order. */
+interface RenderedSet {
+  widths: number[];
+  heights: number[];
+  /** The measured indicator, when the set collapses items. */
+  indicator: {width: number; height: number} | null;
+  indicatorFirst: boolean;
+}
+
 /**
- * Counts the rows the container's children fill in the current layout, up to
- * `maxRows`. A child that starts at or below the bottom of the current row
- * starts a new row.
+ * Counts the rows the children fill in the current layout, up to `maxRows`.
+ * A child that starts at or below the bottom of the current row starts a new
+ * row.
  */
-function countLaidOutRows(container: HTMLElement, maxRows: number): number {
+function countLaidOutRows(children: HTMLElement[], maxRows: number): number {
   let rows = 0;
   let rowBottom = -Infinity;
-  for (const child of Array.from(container.children) as HTMLElement[]) {
+  for (const child of children) {
     if (child.offsetHeight > 0 && child.offsetTop >= rowBottom) {
       rows++;
       rowBottom = child.offsetTop + child.offsetHeight;
     }
   }
   return Math.min(rows, maxRows);
+}
+
+/**
+ * Tells whether rendering `next` can change the list's own height: its
+ * tallest child, or for a multi-row list the rows it fills.
+ *
+ * The measured indicator holds every item, so the rendered one can be
+ * narrower. When the rows with and without the measured indicator differ, the
+ * rows the set fills are not known, and the height can change.
+ */
+function canChangeListHeight(
+  container: HTMLElement,
+  next: RenderedSet,
+  gap: number,
+  availableWidth: number,
+  maxRows: number,
+): boolean {
+  const laidOut = Array.from(container.children) as HTMLElement[];
+  const tallestNow = Math.max(0, ...laidOut.map(child => child.offsetHeight));
+  const tallestNext = Math.max(0, ...next.heights, next.indicator?.height ?? 0);
+  if (tallestNow !== tallestNext) {
+    return true;
+  }
+  if (maxRows <= 1) {
+    return false;
+  }
+  const rowsWithout = Math.min(
+    countRows(next.widths, gap, availableWidth),
+    maxRows,
+  );
+  let nextRows = rowsWithout;
+  if (next.indicator) {
+    const widths = next.indicatorFirst
+      ? [next.indicator.width, ...next.widths]
+      : [...next.widths, next.indicator.width];
+    nextRows = Math.min(countRows(widths, gap, availableWidth), maxRows);
+    if (nextRows !== rowsWithout) {
+      return true;
+    }
+  }
+  return countLaidOutRows(laidOut, maxRows) !== nextRows;
 }
 
 /**
@@ -287,28 +337,35 @@ export function useOverflow(
         collapseFrom,
       });
 
-      // A multi-row list changes its own height when the new set fills a
-      // different number of rows than the list fills now. Rendering that
-      // before paint makes the browser report a ResizeObserver loop error, so
-      // that update renders after paint.
-      if (timing === 'beforePaint' && maxRows != null && maxRows > 1) {
-        // The new set as the list renders it: its items, plus the indicator
-        // on the collapsing side.
+      // A fold that changes the list's own height inside the resize step
+      // makes the browser report a ResizeObserver loop error, so that update
+      // renders after paint.
+      if (timing === 'beforePaint') {
         const shown =
           collapseFrom === 'end'
-            ? widths.slice(0, nextVisible)
-            : widths.slice(widths.length - nextVisible);
-        const rendered =
-          hasIndicator && nextVisible < itemCount
-            ? collapseFrom === 'end'
-              ? [...shown, indicatorWidth]
-              : [indicatorWidth, ...shown]
-            : shown;
-        const nextFilledRows = Math.min(
-          countRows(rendered, gap, availableWidth),
-          maxRows,
-        );
-        if (countLaidOutRows(container, maxRows) !== nextFilledRows) {
+            ? children.slice(0, nextVisible)
+            : children.slice(children.length - nextVisible);
+        const indicator = hasIndicator
+          ? allChildren[allChildren.length - 1]
+          : null;
+        const next: RenderedSet = {
+          widths: shown.map(child => child.offsetWidth),
+          heights: shown.map(child => child.offsetHeight || 0),
+          indicator:
+            indicator && nextVisible < itemCount
+              ? {width: indicatorWidth, height: indicator.offsetHeight || 0}
+              : null,
+          indicatorFirst: collapseFrom === 'start',
+        };
+        if (
+          canChangeListHeight(
+            container,
+            next,
+            gap,
+            availableWidth,
+            maxRows ?? 1,
+          )
+        ) {
           return () => apply(nextVisible, nextRows, measuredRowHeight);
         }
       }
