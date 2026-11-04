@@ -39,6 +39,7 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
+import {cancelNestedTouchPress} from '../hooks/useClickableContainer';
 import type {TokenColorMap} from './index';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
 import {TokenNamingContext} from './TokenNamingContext';
@@ -510,6 +511,19 @@ export function Token({
       }
       effectiveOnClick(e);
     };
+    // A finger press on Remove or a control in end content does not run the
+    // token's action, so the token shows no press for it. The inner button,
+    // the first button child, is the token's own action.
+    const handleContainerPointerDown = (
+      e: React.PointerEvent<HTMLSpanElement>,
+    ) => {
+      rest.onPointerDown?.(e);
+      cancelNestedTouchPress(
+        e,
+        e.currentTarget,
+        e.currentTarget.querySelector(':scope > button'),
+      );
+    };
 
     return (
       <span
@@ -535,7 +549,10 @@ export function Token({
           style,
         )}
         {...rest}
-        {...sharedProps}>
+        {...sharedProps}
+        onPointerDown={
+          isDisabled ? rest.onPointerDown : handleContainerPointerDown
+        }>
         {icon}
         <button
           type="button"
