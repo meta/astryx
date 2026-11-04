@@ -3,11 +3,11 @@
 /**
  * @file calendarSystem.ts
  * @input A calendar identifier and Gregorian PlainDates
- * @output Calendar months located by their Gregorian days, month and year
- *   steps, dates from calendar fields, availability of each calendar, and
- *   calendar labels and digits
- * @position Shared date utility; read by the i18n calendar resolution and by
- *   Calendar. Values stay Gregorian PlainDates. Temporal owns the arithmetic of
+ * @output Calendar months located by their Gregorian days, their year and
+ *   month numbers, month and year steps, dates from calendar fields,
+ *   availability of each calendar, and calendar labels and digits
+ * @position Shared date utility; read by the i18n calendar resolution, by
+ *   Calendar, and by its public hooks. Values stay Gregorian PlainDates. Temporal owns the arithmetic of
  *   every calendar whose months are not Gregorian.
  */
 
@@ -97,7 +97,7 @@ interface TemporalPlainDate {
   readonly day: number;
   readonly daysInMonth: number;
   readonly monthsInYear: number;
-  with(fields: {day: number}): TemporalPlainDate;
+  with(fields: {year?: number; month?: number; day: number}): TemporalPlainDate;
   add(duration: {months?: number; years?: number}): TemporalPlainDate;
   withCalendar(calendar: 'iso8601'): TemporalPlainDate;
 }
@@ -214,6 +214,61 @@ export function calendarMonthOf(
     return gregorianMonth(pd.year, pd.month);
   }
   return temporalMonth(inCalendar(calendar, pd).with({day: 1}));
+}
+
+/**
+ * A calendar month by its year and its position in that year, as
+ * `Temporal.PlainDate` numbers them: month 13 exists in a Hebrew leap year.
+ */
+export interface CalendarYearMonth {
+  readonly year: number;
+  readonly month: number;
+}
+
+// Temporal counts the years of these Gregorian-aligned calendars from another
+// epoch: 2026 is 2569 in `buddhist` and 115 in `roc`.
+const GREGORIAN_YEAR_OFFSETS: Partial<Record<CalendarSystem, number>> = {
+  buddhist: 543,
+  roc: -1911,
+};
+
+/** The year and month numbers of a calendar month. */
+export function calendarYearMonthOf(
+  calendar: CalendarSystem,
+  month: CalendarMonth,
+): CalendarYearMonth {
+  if (isGregorianAligned(calendar)) {
+    return {
+      year: month.start.year + (GREGORIAN_YEAR_OFFSETS[calendar] ?? 0),
+      month: month.start.month,
+    };
+  }
+  const {year, month: monthOfYear} = inCalendar(calendar, month.start);
+  return {year, month: monthOfYear};
+}
+
+/**
+ * The calendar month with these year and month numbers. A month past the end
+ * of its year becomes the last month of that year, as Temporal constrains it.
+ */
+export function calendarMonthFromYearMonth(
+  calendar: CalendarSystem,
+  {year, month}: CalendarYearMonth,
+): CalendarMonth {
+  if (isGregorianAligned(calendar)) {
+    return gregorianMonth(
+      year - (GREGORIAN_YEAR_OFFSETS[calendar] ?? 0),
+      month,
+    );
+  }
+  // `with` replaces the year and month of any date in the calendar.
+  return temporalMonth(
+    inCalendar(calendar, {year: 2000, month: 1, day: 1}).with({
+      year,
+      month,
+      day: 1,
+    }),
+  );
 }
 
 /** The calendar month `n` months after `month`, or before it when negative. */

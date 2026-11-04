@@ -6,9 +6,9 @@
  * @file useCalendarDays.ts
  * @input Uses React useMemo, useLocale, PlainDate and calendar-system
  *   utilities, generated CLDR weekday data
- * @output Exports useCalendarDays (a Gregorian month) and useCalendarMonthDays
- *   (a month of any calendar system) for generating calendar day grids
- * @position Calendar-specific hooks; useCalendarMonthDays is used by Calendar
+ * @output Exports useCalendarDays, the day grid of one month of any calendar
+ *   system (Gregorian by default)
+ * @position Calendar-specific hook; used by Calendar and MonthScroller
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Calendar/hooks/index.ts
@@ -19,17 +19,17 @@ import type {DayOfWeek, ISODateString} from '../../utils/dateTypes';
 import {
   type PlainDate,
   plainDateToISO,
-  getDaysInMonth,
   plainDateDayOfWeek,
   plainDateAddDays,
 } from '../../utils/plainDate';
 import {useLocale} from '../../i18n';
 import {getWeekdayHeaderNames} from '../getWeekdayHeaderNames';
 import {
-  type CalendarMonth,
   type CalendarSystem,
   calendarDayOfMonth,
+  calendarMonthFromYearMonth,
 } from '../../utils/calendarSystem';
+import {resolveShownCalendar} from '../../i18n/useCalendarSystem';
 
 /**
  * Represents a single day in the calendar grid.
@@ -49,14 +49,27 @@ export interface CalendarDay {
  * Configuration for calendar days generation
  */
 export interface UseCalendarDaysOptions {
-  /** The year to generate days for */
+  /** The year to generate days for, in `calendar`'s numbering */
   year: number;
-  /** The month (1-based: 1 = January, 12 = December) */
+  /**
+   * The month's position in its year (1-based). In the Gregorian calendar,
+   * 1 is January and 12 is December. In other calendars it is numbered as
+   * `Temporal.PlainDate` numbers it: 1 through 13 in a Hebrew leap year.
+   */
   month: number;
   /** First day of week (0=Sunday through 6=Saturday) */
   weekStartsOn?: DayOfWeek;
   /** Use variable rows per month vs. fixed 6-row grid */
   hasVariableRowCount?: boolean;
+  /**
+   * The calendar system that numbers `year`, `month`, and each `dayNumber`.
+   * Each day keeps its Gregorian `date` and `iso`. The hook never reads the
+   * InternationalizationProvider calendar. Calendars other than gregory,
+   * iso8601, buddhist, roc, and japanese need Temporal; without it, the hook
+   * reads Gregorian numbers and warns once in development.
+   * @default 'gregory'
+   */
+  calendar?: CalendarSystem;
 }
 
 /**
@@ -87,66 +100,35 @@ export interface UseCalendarDaysReturn {
  *   weekStartsOn: 0, // Sunday
  * });
  * // days[i].date is a PlainDate { year, month (1-based), day }
+ *
+ * // Aban 1405 in the Persian calendar; dates stay Gregorian
+ * useCalendarDays({year: 1405, month: 8, calendar: 'persian'});
  * ```
  */
 export function useCalendarDays(
   options: UseCalendarDaysOptions,
 ): UseCalendarDaysReturn {
-  const {year, month, weekStartsOn = 0, hasVariableRowCount = false} = options;
-  const days = useMemo(
-    () =>
-      layOutMonthDays({
-        first: {year, month, day: 1},
-        length: getDaysInMonth(year, month),
-        weekStartsOn,
-        hasVariableRowCount,
-        dayNumberOf: pd => pd.day,
-      }),
-    [year, month, weekStartsOn, hasVariableRowCount],
-  );
-  return useMonthGrid(days, weekStartsOn);
-}
-
-/** Configuration for the day grid of one month of a calendar system. */
-export interface UseCalendarMonthDaysOptions {
-  /** The month to lay out, located by its Gregorian days. */
-  month: CalendarMonth;
-  /** The calendar system the month belongs to; it numbers the days. */
-  calendar: CalendarSystem;
-  /** First day of week (0=Sunday through 6=Saturday) */
-  weekStartsOn?: DayOfWeek;
-  /** Use variable rows per month vs. fixed 6-row grid */
-  hasVariableRowCount?: boolean;
-}
-
-/**
- * The day grid of one month of any calendar system. Each day keeps its
- * Gregorian date; `dayNumber` is its day of the calendar month. Internal to
- * Calendar.
- */
-export function useCalendarMonthDays(
-  options: UseCalendarMonthDaysOptions,
-): UseCalendarDaysReturn {
   const {
+    year,
     month,
-    calendar,
     weekStartsOn = 0,
     hasVariableRowCount = false,
+    calendar: calendarOption = 'gregory',
   } = options;
-  const days = useMemo(
-    () =>
-      layOutMonthDays({
-        first: month.start,
-        length: month.length,
-        weekStartsOn,
-        hasVariableRowCount,
-        dayNumberOf: (pd, offset) =>
-          offset >= 0 && offset < month.length
-            ? offset + 1
-            : calendarDayOfMonth(calendar, pd),
-      }),
-    [month, calendar, weekStartsOn, hasVariableRowCount],
-  );
+  const calendar = resolveShownCalendar(calendarOption, 'useCalendarDays');
+  const days = useMemo(() => {
+    const calendarMonth = calendarMonthFromYearMonth(calendar, {year, month});
+    return layOutMonthDays({
+      first: calendarMonth.start,
+      length: calendarMonth.length,
+      weekStartsOn,
+      hasVariableRowCount,
+      dayNumberOf: (pd, offset) =>
+        offset >= 0 && offset < calendarMonth.length
+          ? offset + 1
+          : calendarDayOfMonth(calendar, pd),
+    });
+  }, [year, month, calendar, weekStartsOn, hasVariableRowCount]);
   return useMonthGrid(days, weekStartsOn);
 }
 
