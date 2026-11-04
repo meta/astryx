@@ -1,12 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 /**
- * Unit tests for `checkGhCli()` — the only export of _github.mjs.
- *
- * `checkGhCli` finds an executable `gh` on PATH without running it, so a
- * swizzle never waits on a process start or on GitHub. These tests use
- * temporary PATH directories, and mock `node:child_process` to prove it never
- * spawns anything.
+ * @file Unit tests for the swizzle adapter's `checkGhCli()`.
+ * @input temporary PATH folders; a `node:child_process` mock
+ * @output `checkGhCli` finds an executable `gh` on PATH, through the shared
+ *   search-path walk, without running it. A swizzle never waits on a process
+ *   start or on GitHub.
+ * @position Unit test of packages/cli/api/swizzle/_adapter.mjs
  */
 
 import {describe, it, expect, vi, afterEach} from 'vitest';
@@ -14,7 +14,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {execFileSync, spawn, spawnSync} from 'node:child_process';
-import {checkGhCli} from './_github.mjs';
+import {checkGhCli} from './_adapter.mjs';
 
 vi.mock('node:fs', async importOriginal => {
   const actual = await importOriginal();
@@ -111,12 +111,15 @@ describe('checkGhCli', () => {
     ).toBe(true);
   });
 
-  it('throws an error that is not the system answering about a candidate', () => {
-    const tools = dirWith({});
+  it('reads any error about a candidate as no gh there, and goes on', () => {
+    const odd = dirWith({});
+    const tools = dirWith({gh: 0o755});
     vi.mocked(fs.statSync).mockImplementationOnce(() => {
       throw new TypeError('not a path');
     });
-    expect(() => checkGhCli({PATH: tools}, 'linux')).toThrow(TypeError);
+    expect(checkGhCli({PATH: [odd, tools].join(path.delimiter)}, 'linux')).toBe(
+      true,
+    );
   });
 
   it('on Windows, finds gh with a PATHEXT extension', () => {

@@ -302,8 +302,8 @@ export async function swizzleCopy(component, options = {}) {
   const outputBase = confineWrite(output, cwd, {label: 'output directory'});
   const outputDir = path.join(outputBase, dirName);
 
-  // The gh lookup first: it can throw (a PATH error it does not expect), and
-  // a swizzle that fails must fail before it writes anything.
+  // The receipt's feedback first: a swizzle that fails must fail before it
+  // writes anything.
   const feedback = buildFeedback(dirName, owner.issuesUrl);
 
   // Pre-flight path and overwrite checks before any mkdir/writeFile.
