@@ -1228,15 +1228,11 @@ describe('DateInput — calendar surface', () => {
     [...weekdayRow().children].map(c => c.textContent?.trim());
 
   /**
-   * Three letters, where Calendar's own header uses two.
-   *
-   * The sheet is full width — ~51px a column against Calendar's popover — so
-   * there is room for the form people actually read, and a picker driven by
-   * thumb should not make anyone decode "Tu" against "Th".
+   * The sheet labels its columns with the names Calendar's header uses, so a
+   * locale reads the same in both pickers.
    *
    * Exact equality, not `toHaveTextContent`: that matches substrings, so it
-   * passes against "Sun" while asserting "Su" and would not have noticed this
-   * change at all.
+   * passes against "Sun" while asserting "Su".
    */
   it('labels the columns with three-letter weekday names', () => {
     renderAndOpen();
@@ -1249,6 +1245,46 @@ describe('DateInput — calendar surface', () => {
       'Fri',
       'Sat',
     ]);
+  });
+
+  it.each([
+    ['fr-FR', ['dim.', 'lun.', 'mar.', 'mer.', 'jeu.', 'ven.', 'sam.']],
+    ['pt-PT', ['dom.', 'seg.', 'ter.', 'qua.', 'qui.', 'sex.', 'sáb.']],
+    ['pl-PL', ['nie', 'pon', 'wto', 'śro', 'czw', 'pią', 'sob']],
+    ['id-ID', ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab']],
+  ])(
+    'labels the columns in %s with the same names as the Calendar header',
+    (locale, names) => {
+      renderAndOpen(
+        <InternationalizationProvider locale={locale}>
+          <Controlled initial="2026-03-21" />
+        </InternationalizationProvider>,
+      );
+      expect(weekdayNames()).toEqual(names);
+    },
+  );
+
+  it('keeps seven aligned columns when repeated narrow names rotate in an open sheet', () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const ui = (weekStartsOn: 0 | 1) => (
+        <InternationalizationProvider locale="sw-KE">
+          <Controlled initial="2026-03-21" weekStartsOn={weekStartsOn} />
+        </InternationalizationProvider>
+      );
+      withLayout(() => {
+        const {rerender} = render(ui(0));
+        fireEvent.click(field());
+        expect(weekdayNames()).toEqual(['S', 'M', 'T', 'W', 'T', 'F', 'S']);
+        rerender(ui(1));
+      });
+      expect(weekdayNames()).toEqual(['M', 'T', 'W', 'T', 'F', 'S', 'S']);
+      expect(
+        errors.mock.calls.some(call => String(call[0]).includes('same key')),
+      ).toBe(false);
+    } finally {
+      errors.mockRestore();
+    }
   });
 
   it('rotates the weekday header with weekStartsOn', () => {

@@ -614,16 +614,14 @@ function TokenizerSheetContent<T extends SearchableItem>({
   // `action` is declared on `SearchableItem` for the grid-adopting hosts; the
   // sheet rows have not adopted it, so a row renders the item without the
   // control and says so (`spec:AST-058` FR9), as the inline panel does.
-  useEffect(() => {
-    if (results.some(item => item.action != null)) {
-      warnOnce(
-        'tokenizer-sheet:item-action',
-        'Tokenizer',
-        'A result carries `action`, which the bottom-sheet rows do not render ' +
-          'yet; the item is shown without it.',
-      );
-    }
-  }, [results]);
+  if (results.some(item => item.action != null)) {
+    warnOnce(
+      'tokenizer-sheet:item-action',
+      'Tokenizer',
+      'A result carries `action`, which the bottom-sheet rows do not render ' +
+        'yet; the item is shown without it.',
+    );
+  }
 
   // The pending Spinner below stays named, as the inline field's does
   // (`family:input-fields` FR7), but is not a live region; the sheet announces

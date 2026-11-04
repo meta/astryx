@@ -61,7 +61,12 @@ export interface TimeOperatorValue {
 
 export interface DateAbsoluteOperatorValue {
   readonly type: 'date_absolute';
-  /** If true, only show date picker without time. */
+  /**
+   * True or unset: the value is a calendar day, edited with a date picker.
+   * False: the value is an instant with a time of day, edited with a date
+   * picker and a time field and shown with its time in `timezoneID`, else
+   * the viewer's zone.
+   */
   readonly isDateOnly?: boolean;
 }
 

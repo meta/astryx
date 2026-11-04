@@ -21,7 +21,7 @@ export type {
 
 // Overlay padding-variable reset (applied on overlay roots so the container
 // padding system does not cross a fixed/top-layer boundary)
-export {overlayPaddingReset} from './padding.stylex';
+export {overlayPaddingReset} from './overlayPaddingReset.stylex';
 
 // Edge compensation utility
 export {edgeCompSlot, EDGE_COMP_ATTR} from './edgeCompensation.stylex';

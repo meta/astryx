@@ -59,6 +59,7 @@ import {
   holdLayoutSwap,
   landLayoutGlide,
   layoutMotionFor,
+  layoutStartFor,
   playLayoutFrames,
   playLayoutSwap,
   reportLayoutChange,
@@ -1000,9 +1001,13 @@ export function AppShell({
         let entering = 0;
         const last = lastSwapRef.current;
         if (last != null && motion.kind === 'spring') {
-          const elapsed =
-            Number(main.ownerDocument.timeline?.currentTime ?? 0) -
-            last.startedAt;
+          // Read at the change's own start, where the glide it retargets
+          // carries on. After a block, that is later than the frame the
+          // timeline still reads.
+          const elapsed = Math.max(
+            0,
+            layoutStartFor(main.ownerDocument) - last.startedAt,
+          );
           if (elapsed < motion.progress.durationMs) {
             const p = 1 - motion.progress.remaining(elapsed);
             held = last.entering + (1 - last.entering) * p;
@@ -1062,7 +1067,7 @@ export function AppShell({
         }
         const {held, entering} = pending;
         lastSwapRef.current = {
-          startedAt: Number(main.ownerDocument.timeline?.currentTime ?? 0),
+          startedAt: layoutStartFor(main.ownerDocument),
           held,
           entering,
         };
