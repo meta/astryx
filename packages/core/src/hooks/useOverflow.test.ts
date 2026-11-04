@@ -665,6 +665,28 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
     expect(result.current.visibleCount).toBe(1);
   });
 
+  it('renders after paint when a fold hides a plain-text indicator taller than the items', async () => {
+    const {result} = renderHook(() => useOverflow(3, {gap: 10}));
+    // The visible list holds one item element; its indicator is a text node,
+    // which is not an element child.
+    const box = laidOutRows(100, [0], 16);
+    act(() => {
+      result.current.measureRef(mockMeasure([50, 50, 50], 30, 16, 24));
+      result.current.containerRef(box as unknown as HTMLElement);
+    });
+    expect(result.current.visibleCount).toBe(1);
+
+    // At 200px all three items fit, so the 24px indicator line goes away.
+    box.offsetWidth = 200;
+    await deliverBeforePaint(box);
+    expect(result.current.visibleCount).toBe(1);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(result.current.visibleCount).toBe(3);
+  });
+
   it('renders after paint when the shown indicator can be narrower than the measured one', async () => {
     const {result} = renderHook(() => useOverflow(5, {gap: 0, maxRows: 2}));
     const box = laidOutRows(400, [0, 0, 0, 0, 0]);
