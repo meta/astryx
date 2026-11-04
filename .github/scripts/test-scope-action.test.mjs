@@ -11,6 +11,7 @@
  */
 
 import fs from 'node:fs';
+import os from 'node:os';
 import {createRequire} from 'node:module';
 import path from 'node:path';
 
@@ -759,5 +760,76 @@ describe('a new Lab component (spec:AST-030 FR26)', () => {
     expect(
       (await decide({files: [...component, coreOnlyStory]})).outputs.lab_only,
     ).toBe('false');
+  });
+});
+
+describe('the temporary policy folder', () => {
+  // os.tmpdir() reads TMPDIR on each call, so each case gets its own folder.
+  async function inFreshTemp(run) {
+    const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'scope-tmp-test-'));
+    const runnerTemp = fs.mkdtempSync(path.join(os.tmpdir(), 'scope-runner-'));
+    const saved = {
+      TMPDIR: process.env.TMPDIR,
+      RUNNER_TEMP: process.env.RUNNER_TEMP,
+    };
+    process.env.TMPDIR = temp;
+    process.env.RUNNER_TEMP = runnerTemp;
+    try {
+      const result = await run();
+      return {result, left: fs.readdirSync(temp)};
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      fs.rmSync(temp, {recursive: true, force: true});
+      fs.rmSync(runnerTemp, {recursive: true, force: true});
+    }
+  }
+
+  it('is removed after a decided scope', async () => {
+    const {result, left} = await inFreshTemp(() =>
+      decide({files: changed('packages/core/src/Button/Button.tsx')}),
+    );
+    expect(result.outputs.decided).toBe('true');
+    expect(left).toEqual([]);
+  });
+
+  it('is removed when a base policy file cannot be read', async () => {
+    const {result, left} = await inFreshTemp(() =>
+      decide({
+        files: changed('packages/core/src/Button/Button.tsx'),
+        truncated: ['scripts/component-packages.cjs'],
+      }),
+    );
+    expect(result.outputs.decided).toBe('false');
+    expect(left).toEqual([]);
+  });
+
+  it('is removed when the trusted classifier rejects the change', async () => {
+    const {result, left} = await inFreshTemp(() =>
+      decide({
+        files: changed('packages/core/src/Button/Button.tsx'),
+        baseOverrides: {
+          '.github/scripts/change-scope.cjs': 'process.exit(1);\n',
+        },
+      }),
+    );
+    expect(result.messages.failed).toHaveLength(1);
+    expect(left).toEqual([]);
+  });
+
+  it('is removed after a component-audit scope, while the changed-file list stays for later steps', async () => {
+    const {result, left} = await inFreshTemp(() =>
+      decide({
+        files: changed('packages/core/src/Button/Button.tsx'),
+        inputs: {'component-audit': 'true'},
+      }).then(r => ({
+        ...r,
+        listed: fs.existsSync(r.outputs.changed_files_path),
+      })),
+    );
+    expect(result.listed).toBe(true);
+    expect(left).toEqual([]);
   });
 });

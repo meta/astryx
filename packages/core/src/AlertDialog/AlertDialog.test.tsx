@@ -49,6 +49,13 @@ const hostCoarseQuery = {
   dispatchEvent: () => false,
 };
 
+// The scroll lock's page hold reads the primary pointer as it starts
+// (gestures/pageHold.ts). The stub keeps that hold out of these tests, so the
+// pointer stubs below reach only AlertDialog's own layout and press.
+vi.mock('../gestures/pageHold', () => ({
+  holdPageScroll: () => () => {},
+}));
+
 function stubAlertDialogMedia({
   smallScreen,
   coarsePointer,
@@ -540,6 +547,28 @@ describe('AlertDialog action tracking', () => {
     element.getBoundingClientRect = () => rect;
   }
 
+  function mouse(
+    type: 'pointerdown' | 'pointermove' | 'pointerup',
+    target: Element,
+    point: {x: number; y: number},
+    pointerType: 'mouse' | 'pen' = 'mouse',
+  ): void {
+    touchClock += 16;
+    const event = new PointerEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      pointerId: pointerType === 'pen' ? 41 : 1,
+      pointerType,
+      isPrimary: true,
+      button: 0,
+      buttons: type === 'pointerup' ? 0 : 1,
+      clientX: point.x,
+      clientY: point.y,
+    });
+    Object.defineProperty(event, 'timeStamp', {value: touchClock});
+    target.dispatchEvent(event);
+  }
+
   function renderOpen(props: {isInline?: boolean; coarse?: boolean} = {}) {
     const isCoarse = props.coarse ?? true;
     stubAlertDialogMedia({
@@ -589,6 +618,69 @@ describe('AlertDialog action tracking', () => {
       expect(isTrackedByGroup(button)).toBe(false);
       expect(button).toHaveAttribute('data-astryx-pressable');
     }
+  });
+
+  it("tracks nothing under a fine primary pointer: a desktop press stays the native button's (family:action-groups FR1)", () => {
+    const {cancel, action} = renderOpen({coarse: false});
+    for (const button of [cancel, action]) {
+      expect(isTrackedByGroup(button)).toBe(false);
+      expect(button).toHaveAttribute('data-astryx-pressable');
+    }
+  });
+
+  it("keeps the selection that the action's own click makes when a pen press lifts on it (spec:AST-094 FR41)", async () => {
+    stubAlertDialogMedia({
+      smallScreen: true,
+      coarsePointer: true,
+      noHover: true,
+    });
+    const page = document.createElement('p');
+    page.textContent = 'Text the page selected';
+    const made = document.createElement('p');
+    made.textContent = 'Text the action selects';
+    document.body.append(page, made);
+    const selectText = (element: Element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      const selection = getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    };
+    render(
+      <AlertDialog
+        isOpen
+        onOpenChange={() => {}}
+        title="Delete item?"
+        description="This cannot be undone."
+        actionLabel="Delete"
+        onAction={() => selectText(made)}
+      />,
+    );
+    const action = screen.getByRole('button', {name: 'Delete'});
+    place(action, 16, 100);
+    place(screen.getByRole('button', {name: 'Cancel'}), 16, 140);
+    selectText(page);
+    mouse('pointerdown', action, {x: 60, y: 116}, 'pen');
+    mouse('pointerup', action, {x: 60, y: 116}, 'pen');
+    await Promise.resolve();
+    // The press's own mouseup would put the press's selection back.
+    document.dispatchEvent(new Event('selectionchange'));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(String(getSelection())).toBe('Text the action selects');
+    page.remove();
+    made.remove();
+  });
+
+  it('leaves a mouse press to the native button under the touch presentation: one slid from the action to Cancel runs nothing (family:action-groups FR1)', () => {
+    const {onOpenChange, onAction, cancel, action} = renderOpen();
+    mouse('pointerdown', action, {x: 60, y: 116});
+    mouse('pointermove', action, {x: 60, y: 156});
+    // The press paint stays on the pressed action, as `:active` does.
+    expect(action).toHaveAttribute('data-astryx-press', 'on');
+    expect(cancel).not.toHaveAttribute('data-astryx-press');
+    mouse('pointerup', cancel, {x: 60, y: 156});
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(onAction).not.toHaveBeenCalled();
   });
 
   it('runs the action a finger lifts on: from the action to Cancel cancels, from Cancel to the action runs it', () => {

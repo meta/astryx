@@ -14,11 +14,17 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {afterEach, describe, expect, it} from 'vitest';
 import {
+  createRepository,
+  importCommits,
+  workingTreeFiles,
+} from '../lib/git-fixture.mjs';
+import {
   buildMarker,
   buildPlan,
   canaryEligibility,
   declaredVersionAtRef,
   latestStableVersion,
+  mergeBackEntries,
   nextPlannedVersion,
   validateReleaseDiff,
   validateReleaseMergeBack,
@@ -84,12 +90,16 @@ function cutFixture(version = '0.6.5') {
     path.join(root, '.changeset/in-cut.md'),
     "---\n'@astryxdesign/core': patch\n---\n\n[fix] Included\n@person\n",
   );
-  git(root, 'init', '-q');
-  git(root, 'config', 'user.name', 'Release Test');
-  git(root, 'config', 'user.email', 'release@example.com');
-  git(root, 'add', '.');
-  git(root, 'commit', '-qm', 'cut');
-  return {...state, cutSha: git(root, 'rev-parse', 'HEAD')};
+  const {cut} = createRepository(root, [
+    {
+      ref: 'refs/heads/main',
+      name: 'cut',
+      message: 'cut',
+      snapshot: true,
+      files: workingTreeFiles(root),
+    },
+  ]);
+  return {...state, cutSha: cut};
 }
 
 function validate(state, overrides = {}) {
@@ -197,13 +207,16 @@ describe('one branch per release lifecycle', () => {
     ).toThrow(
       /main declares 0\.6\.5 at the cut|release refresh cannot change version/,
     );
-    git(root, 'commit', '-qm', 'later', '--allow-empty');
+    const {later} = importCommits(root, [
+      {
+        ref: 'refs/heads/main',
+        name: 'later',
+        parent: 'refs/heads/main',
+        message: 'later',
+      },
+    ]);
     expect(() =>
-      writeAuthority(
-        root,
-        {...values, 'cut-sha': git(root, 'rev-parse', 'HEAD')},
-        true,
-      ),
+      writeAuthority(root, {...values, 'cut-sha': later}, true),
     ).toThrow('release refresh cannot change cutSha');
   });
 
@@ -685,6 +698,88 @@ describe('published release merge-back (FR50)', () => {
         'release merge-back cannot verify frozen Changeset on current main: .changeset/frozen.md',
         'release merge-back changed post-cut Changeset: .changeset/post-cut.md',
       ]),
+    );
+  });
+
+  describe('compared with the merge commit it was built on', () => {
+    // A merge-back pull request's merge commit, built on an older main, while
+    // main has since gained a file.
+    function movedMain() {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-merge-back-'));
+      roots.push(root);
+      const write = (file, text) => {
+        fs.mkdirSync(path.dirname(path.join(root, file)), {recursive: true});
+        fs.writeFileSync(path.join(root, file), text);
+      };
+      git(root, 'init', '-q', '-b', 'main');
+      git(root, 'config', 'user.name', 'Release Test');
+      git(root, 'config', 'user.email', 'release@example.com');
+      write('.changeset/frozen.md', 'frozen\n');
+      write('packages/core/CHANGELOG.md', '# Changelog\n');
+      git(root, 'add', '.');
+      git(root, 'commit', '-qm', 'main the merge was built on');
+      const builtOn = git(root, 'rev-parse', 'HEAD');
+      git(root, 'checkout', '-q', '-b', 'chore/merge-v0.7.0-to-main');
+      fs.rmSync(path.join(root, '.changeset/frozen.md'));
+      write('packages/core/CHANGELOG.md', '# Changelog\n\n## 0.7.0\n');
+      git(root, 'add', '-A');
+      git(root, 'commit', '-qm', 'merge back v0.7.0');
+      git(root, 'checkout', '-q', 'main');
+      write('packages/core/src/Later.tsx', 'export {};\n');
+      git(root, 'add', '.');
+      git(root, 'commit', '-qm', 'main moves on');
+      git(root, 'update-ref', 'refs/remotes/origin/main', 'HEAD');
+      git(root, 'checkout', '-q', '--detach', builtOn);
+      git(
+        root,
+        'merge',
+        '-q',
+        '--no-ff',
+        '-m',
+        'merge ref',
+        'chore/merge-v0.7.0-to-main',
+      );
+      return root;
+    }
+
+    it('lists only the merge-back changes against the first parent', () => {
+      const root = movedMain();
+      const entries = mergeBackEntries(root, 'HEAD^1');
+      expect(entries).toEqual([
+        'D\t.changeset/frozen.md',
+        'M\tpackages/core/CHANGELOG.md',
+      ]);
+      expect(
+        mergeBack({base: mainAt('0.7.0'), head: mainAt('0.7.0'), entries}),
+      ).toEqual([]);
+    });
+
+    it("reads a later main's new file as a deletion, which fails merge-back", () => {
+      const root = movedMain();
+      const entries = mergeBackEntries(root, 'origin/main');
+      expect(entries).toContain('D\tpackages/core/src/Later.tsx');
+      expect(
+        mergeBack({
+          base: mainAt('0.7.0'),
+          head: mainAt('0.7.0'),
+          entries,
+        }).join('\n'),
+      ).toContain('packages/core/src/Later.tsx');
+    });
+
+    it.each(['.github/workflows/ci.yml', '.github/workflows/lint.yml'])(
+      '%s validates against the merge commit first parent',
+      file => {
+        const text = fs.readFileSync(
+          path.join(import.meta.dirname, '../..', file),
+          'utf8',
+        );
+        const call = text.slice(text.indexOf('validate-merge-back \\'));
+        expect(call).toMatch(
+          /^validate-merge-back \\\n\s+--root "\$GITHUB_WORKSPACE" \\\n\s+--base HEAD\^1 \\/,
+        );
+        expect(text).not.toContain('--base origin/main');
+      },
     );
   });
 

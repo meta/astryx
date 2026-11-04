@@ -7,7 +7,7 @@
  * @output `phone` (the touch-phone browser context every interaction proof
  *   runs in), `withStorybook` (serve the built Storybook for a spec file), and
  *   `openStory` (load one story, with Storybook's highlight module off, and
- *   wait until it has rendered).
+ *   wait until Storybook has finished rendering it).
  * @position Stories are the reproduction path, as for every other browser
  *   check in this repository: a scenario used for verification is checked in,
  *   not built in a one-off page.
@@ -74,9 +74,17 @@ export interface OpenStoryOptions {
 }
 
 /**
- * Loads a story in the page and waits for its first render, its fonts and two
- * frames. Storybook's highlight module is off (see `OpenStoryOptions`), and
- * that is checked: its root element must be absent once the story renders.
+ * Loads a story in the page and waits for its first render, for Storybook to
+ * finish that render, for its fonts and for two frames. Storybook's highlight
+ * module is off (see `OpenStoryOptions`), and that is checked: its root
+ * element must be absent once the story renders.
+ *
+ * Storybook finishes a render after the story first paints: it waits out the
+ * story's animations (phase `completing`), runs `afterEach`, and only then
+ * reports the story finished (`STORY_FINISHED`, phase `finished`), about
+ * 150 ms later. Its decorators' effects (a `pointermove` listener on the
+ * document, for one) land in between, so a proof measuring from first paint
+ * would measure Storybook as well.
  */
 export async function openStory(
   page: Page,
@@ -115,6 +123,16 @@ export async function openStory(
     .locator('#storybook-root > *')
     .first()
     .waitFor({state: 'attached'});
+  await page.waitForFunction(id => {
+    const render = (
+      globalThis as unknown as {
+        __STORYBOOK_PREVIEW__?: {
+          currentRender?: {readonly id?: string; readonly phase?: string};
+        };
+      }
+    ).__STORYBOOK_PREVIEW__?.currentRender;
+    return render?.id === id && render.phase === 'finished';
+  }, storyId);
   await page.evaluate(async () => {
     await document.fonts.ready;
     await new Promise<void>(resolve =>

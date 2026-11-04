@@ -4,7 +4,8 @@
 
 /**
  * @file MobileNav.tsx
- * @input Uses React, useEffect, useRef, useCallback, ReactNode, StyleX
+ * @input Uses React, useEffect, useRef, useCallback, ReactNode, StyleX and
+ *   the Layer module's entrance hold
  * @output Exports MobileNav component and MobileNavProps
  * @position Core implementation; consumed by index.ts
  *
@@ -18,8 +19,9 @@
  * without manual z-index management. The browser provides:
  * - Top layer promotion (no z-index needed)
  * - `::backdrop` pseudo-element
- * - Body scroll lock
  * - Focus trapping
+ *
+ * The page behind takes `useScrollLock`, the same lock as every other modal.
  *
  * Escape is owned by the shared dismissal stack (`useLayerDismissal`), so a
  * drawer opened over another layer takes the press and nothing behind it
@@ -36,7 +38,8 @@
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/MobileNav/index.ts (exports if types change)
  * - /packages/core/src/Layer/useLayerDismissal.ts (dismissal stack)
- * - /packages/core/src/hooks/scrollbarGutter.ts (shared scroll-lock gutter)
+ * - /packages/core/src/hooks/useScrollLock.ts (the page's scroll lock)
+ * - /packages/core/src/MobileNav/MobileNavTouchPresentation.test.tsx (touch)
  * - /packages/cli/assets/templates/blocks/components/MobileNav/ (showcase blocks)
  */
 
@@ -62,16 +65,13 @@ import {Button} from '../Button';
 import {Icon} from '../Icon';
 import {Heading} from '../Heading/Heading';
 import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
-import {
-  holdScrollbarGutter,
-  type ScrollbarGutterHold,
-} from '../hooks/scrollbarGutter';
+import {holdEntranceInput} from '../Layer/holdEntranceInput';
 import {mergeProps, composeEventHandlers} from '../utils';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
 import {layerClickBoundary} from '../Layer/layerClickBoundary';
-import {overlayPaddingReset} from '../Layout/padding.stylex';
+import {overlayPaddingReset} from '../Layout/overlayPaddingReset.stylex';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
@@ -79,6 +79,7 @@ import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useScrollLock} from '../hooks/useScrollLock';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -284,6 +285,14 @@ const dynamicStyles = stylex.create({
  * own scheduled `dialog.close()` has a chance to run (#5701).
  */
 export const MAX_CLOSE_DELAY_MS = 250;
+/**
+ * Longest the drawer slides in or out for, in ms. Both run for the theme's
+ * `--duration-medium`: 410 ms by default, and at most 545 ms on the default
+ * scale (`--duration-medium-max`). The slide-out keeps playing after the
+ * dialog closes, while the dialog's `display` transition keeps it rendered.
+ * The touch hold on the slide-in ends by this time.
+ */
+export const MAX_EXIT_MS = 550;
 /** Fraction of the hold to close at, so the close never lands on its boundary. */
 const CLOSE_WITHIN_HOLD = 0.6;
 
@@ -506,7 +515,11 @@ export function MobileNav({
   );
 
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout>>(null);
+  // The input hold on the drawer's layer while it slides in under a coarse
+  // primary pointer. It is null under a fine one and once the slide-in ends.
+  const releaseHoldRef = useRef<(() => void) | null>(null);
   // Element that was focused when the drawer opened; focus goes back to it
   // once the native dialog has closed (see closeAndRestoreFocus).
   const triggerElementRef = useRef<HTMLElement | null>(null);
@@ -525,15 +538,10 @@ export function MobileNav({
     setWasOpen(isOpen);
     setIsCloseHeld(!isOpen);
   }
-  const gutterRef = useRef<ScrollbarGutterHold | null>(null);
-
-  // Gives back the gutter held open in place of the hidden scrollbar.
-  const releaseGutter = useCallback(() => {
-    if (gutterRef.current) {
-      gutterRef.current.release();
-      gutterRef.current = null;
-    }
-  }, []);
+  // The same page lock as every other modal. Its effect runs before the
+  // open/close effect below, so it measures the scrollbar gutter before
+  // showModal() can hide the scrollbar.
+  useScrollLock(isOpen);
   // Resolved side — computed from trigger position when side='auto'
   const [resolvedSide, setResolvedSide] = useState<'start' | 'end'>(
     side === 'auto' ? 'end' : side,
@@ -576,10 +584,8 @@ export function MobileNav({
     }
 
     if (isOpen) {
-      // Taken first: every mutation below is one that can hide the scrollbar,
-      // and the gutter has to be measured while it is still there.
-      gutterRef.current ??= holdScrollbarGutter(document.documentElement);
-
+      releaseHoldRef.current?.();
+      releaseHoldRef.current = null;
       if (!dialog.open) {
         // Capture the opener before showModal() pulls focus into the top
         // layer. Only on the transition into open: a reopen while the delayed
@@ -589,15 +595,16 @@ export function MobileNav({
           document.activeElement as HTMLElement | null;
         dialog.showModal();
       }
-      // Prevent background scrolling and iOS pull-to-refresh.
-      // overflow: clip avoids creating a scroll container (unlike hidden),
-      // so there's no scroll bounce and no need to save/restore scroll position.
-      document.documentElement.style.overflow = 'clip';
-      gutterRef.current.settle();
+      // Under a coarse primary pointer, nothing takes a touch until the
+      // slide-in ends, at most MAX_EXIT_MS in. A close holds nothing, because
+      // only an entrance is held. Under a fine one, nothing is held.
+      releaseHoldRef.current = holdEntranceInput(dialog, {
+        entrance: drawerRef.current,
+        capMs: MAX_EXIT_MS,
+      });
     } else if (dialog.open) {
-      document.documentElement.style.overflow = '';
-      releaseGutter();
-
+      releaseHoldRef.current?.();
+      releaseHoldRef.current = null;
       closeTimeoutRef.current = setTimeout(() => {
         closeAndRestoreFocus(dialog, triggerElementRef);
         setIsCloseHeld(false);
@@ -613,10 +620,12 @@ export function MobileNav({
         clearTimeout(closeTimeoutRef.current);
         closeTimeoutRef.current = null;
       }
-      document.documentElement.style.overflow = '';
-      releaseGutter();
+      // The hold this run took ends with it: a reopen, a close or an
+      // unmount mid-slide never leaves input blocked.
+      releaseHoldRef.current?.();
+      releaseHoldRef.current = null;
     };
-  }, [isOpen, releaseGutter]);
+  }, [isOpen]);
 
   // Close the native dialog on unmount if it's still open. Inside AppShell the
   // drawer is mounted in an <Activity> that switches to mode="hidden" when the
@@ -634,6 +643,8 @@ export function MobileNav({
   useEffect(() => {
     const dialog = dialogRef.current;
     return () => {
+      releaseHoldRef.current?.();
+      releaseHoldRef.current = null;
       if (dialog?.open) {
         closeAndRestoreFocus(dialog, triggerElementRef);
       }
@@ -725,6 +736,7 @@ export function MobileNav({
           <LayerContentBoundary>
             {/* Drawer panel — tabIndex so showModal() focuses the drawer, not the close button */}
             <div
+              ref={drawerRef}
               tabIndex={-1}
               {...stylex.props(
                 styles.drawer,

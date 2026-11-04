@@ -16,7 +16,9 @@
  * guarded: the step's condition requires `hashFiles('<script>') != ''`, the
  * job's scope step names it as `requires-head-file` and the step reads
  * `head_file_present`, the step loads it from the workflow's own commit
- * (`git show "$WORKFLOW_SHA:<script>"`), or the step checks for it itself
+ * (`git show "$WORKFLOW_SHA:<script>"`, or from the job's `.test-scope`
+ * checkout, whose sparse directories hold it, directly or through a copy an
+ * earlier step made in `$RUNNER_TEMP`), or the step checks for it itself
  * (`[ ! -f ... ]`). A job that does not measure the head takes the default
  * merge checkout instead, and this test does not apply to it.
  *
@@ -104,6 +106,58 @@ export function skipsWhenMissing(run, script) {
   );
 }
 
+/**
+ * Whether the job's scope checkout (`path: .test-scope`, the workflow's own
+ * commit) holds the script: a sparse-checkout directory contains it.
+ */
+export function scopeHolds(job, script) {
+  const scope = (job.steps ?? []).find(
+    step =>
+      String(step.uses ?? '').startsWith('actions/checkout@') &&
+      step.with?.path === '.test-scope' &&
+      step.with?.ref == null,
+  );
+  const dirs = String(scope?.with?.['sparse-checkout'] ?? '')
+    .split('\n')
+    .map(line => line.trim().replace(/\/$/, ''))
+    .filter(Boolean);
+  return dirs.some(dir => script.startsWith(`${dir}/`));
+}
+
+/**
+ * Whether the step runs `$RUNNER_TEMP/<dir>/<script>` that an earlier step of
+ * the job copied there from the scope checkout:
+ * `cp .test-scope/<script> "$RUNNER_TEMP/<dir>/<script's directory>/"`.
+ */
+export function copiedFromScope(job, step, script) {
+  const escaped = script.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const used = new RegExp(`\\$RUNNER_TEMP/([\\w.-]+)/${escaped}`).exec(
+    String(step.run ?? ''),
+  );
+  if (!used || !scopeHolds(job, script)) return false;
+  const copy = `cp .test-scope/${script} "$RUNNER_TEMP/${used[1]}/${script.slice(0, script.lastIndexOf('/') + 1)}"`;
+  const steps = job.steps ?? [];
+  return steps
+    .slice(0, steps.indexOf(step))
+    .some(
+      earlier =>
+        String(earlier.run ?? '').includes(copy) &&
+        beforeHeadCheckout(job, earlier),
+    );
+}
+
+/** Whether the step runs before the job's head checkout replaces the workspace. */
+export function beforeHeadCheckout(job, step) {
+  const steps = job.steps ?? [];
+  const head = steps.findIndex(
+    each =>
+      String(each.uses ?? '').startsWith('actions/checkout@') &&
+      String(each.with?.ref ?? '').includes('pull_request.head.sha') &&
+      !each.with?.path,
+  );
+  return head === -1 || steps.indexOf(step) < head;
+}
+
 export function unguardedScripts(job) {
   const scope = (job.steps ?? []).find(step =>
     String(step.uses ?? '').includes('test-scope'),
@@ -118,6 +172,16 @@ export function unguardedScripts(job) {
       if (condition.includes(`hashFiles('${script}') != ''`)) continue;
       // Loaded from the workflow's own commit, not the head.
       if (run.includes(`$WORKFLOW_SHA:${script}`)) continue;
+      // Read from the job's scope checkout, also the workflow's own commit,
+      // before the head checkout replaces the workspace.
+      if (
+        run.includes(`.test-scope/${script}`) &&
+        scopeHolds(job, script) &&
+        beforeHeadCheckout(job, step)
+      )
+        continue;
+      // Run from a copy an earlier step took from that scope checkout.
+      if (copiedFromScope(job, step, script)) continue;
       // The step skips a head without this script on its own.
       if (skipsWhenMissing(run, script)) continue;
       if (

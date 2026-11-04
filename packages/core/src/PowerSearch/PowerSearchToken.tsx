@@ -42,6 +42,7 @@ export function PowerSearchToken({
   onClick,
   onRemove,
   isDisabled,
+  timezoneID,
 }: PowerSearchTokenProps) {
   const config = useInternalConfig(configProp);
   const t = useComponentTranslator();
@@ -66,6 +67,7 @@ export function PowerSearchToken({
     adjustedMaxLength,
     t,
     locale,
+    timezoneID,
   );
 
   const valueContent = valueStr ? (

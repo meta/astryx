@@ -401,7 +401,12 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
   // Tap-to-open on touch; on a mouse this does nothing and hover still rules.
   const handlePointerDown = useCallback(
     (event: PointerEvent) => {
-      handleTouchPointerDown(event);
+      // A pen in range starts the hover show before it lands. Left pending,
+      // that show opens the card during the press. The tap then closes it.
+      if (handleTouchPointerDown(event) && showTimeoutRef.current) {
+        clearTimeout(showTimeoutRef.current);
+        showTimeoutRef.current = null;
+      }
     },
     [handleTouchPointerDown],
   );
@@ -585,7 +590,7 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
     [layerRef, interactionRef],
   );
 
-  // Cleanup on unmount
+  // Releases the hover-card timers on unmount.
   useEffect(() => {
     return () => {
       clearTimeouts();
@@ -600,7 +605,8 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
     // eslint-disable-next-line @eslint-react/exhaustive-deps -- intentionally only on mount
   }, []);
 
-  // Controlled open state — overrides hover/focus triggers
+  // Syncs the layer with the controlled `isOpen`. A close moves focus back to
+  // the trigger when the card holds it.
   useEffect(() => {
     if (isOpen === undefined) {
       return;

@@ -3,11 +3,11 @@
 import {describe, it, expect, afterEach, beforeEach, vi} from 'vitest';
 import {
   focusForLastInput,
-  isFocusDetached,
   isFocusLost,
   moveFocusLeftBehind,
   noteFocusWithin,
 } from './focusReturn';
+import {isFocusDetached} from './isFocusDetached';
 import {
   __resetInteractionModalityForTest,
   __startInteractionModalityTrackingForTest,

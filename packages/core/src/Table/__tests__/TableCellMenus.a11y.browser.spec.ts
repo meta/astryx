@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope ^packages/core/src/Table/ ^packages/core/src/ContextMenu/ ^packages/core/src/hooks/useLongPress ^apps/storybook/stories/TableRowExpansion
+// @pr-a11y scope ^packages/core/src/Table/ ^packages/core/src/ContextMenu/ ^packages/core/src/hooks/(useLongPress|longPressDetector) ^apps/storybook/stories/TableRowExpansion
 
 /**
  * @file TableCellMenus.a11y.browser.spec.ts
@@ -16,7 +16,12 @@
  *   open (row expansion gives every body cell a context menu)
  */
 
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

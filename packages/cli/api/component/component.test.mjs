@@ -252,6 +252,30 @@ describe('component dispatcher — name resolution', () => {
   );
 
   it(
+    'opens Tokenizer for tokenizer, not CodeBlock through its tokenizer module (spec:AST-083 FR7)',
+    async () => {
+      const r = await component('tokenizer', {cwd});
+      expect(r.type).toBe('component.detail');
+      expect(r.data.name).toBe('Tokenizer');
+    },
+    SLOW,
+  );
+
+  it.each(['slider', 'switch', 'progressBar', 'tokenizer'])(
+    'reads no source for %s, a component name in another case that a motion table or helper module shares',
+    async name => {
+      let err;
+      try {
+        await component(name, {cwd, source: true});
+      } catch (e) {
+        err = e;
+      }
+      expect(err?.code).toBe('ERR_NO_SOURCE');
+    },
+    SLOW,
+  );
+
+  it(
     'throws ERR_UNKNOWN_COMPONENT for a genuinely unknown name',
     async () => {
       let err;

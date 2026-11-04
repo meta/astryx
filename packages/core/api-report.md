@@ -570,7 +570,9 @@ component CheckboxList(props: CheckboxListProps)
   prop hasDividers?: boolean = false
   prop isDisabled?: boolean = false
   prop isLabelHidden?: boolean = false
+  prop isOptional?: boolean = false
   prop isReadOnly?: boolean = false
+  prop isRequired?: boolean = false
   prop label: string
   prop onChange?: (values: string[]) => void
   prop ref?: React.Ref<HTMLDivElement>
@@ -640,6 +642,7 @@ component CodeBlock(props: CodeBlockProps)
   prop onCopy?: () => void
   prop ref?: React.Ref<HTMLPreElement>
   prop size?: 'sm' | 'md'
+  prop startLineNumber?: number = 1
   prop syntaxTheme?: SyntaxThemeDefinition
   prop title?: string
   prop tokenizer?: (code: string, language: string) => { type: string; start: number; end: number }[] @deprecated
@@ -1810,7 +1813,6 @@ component PowerSearch(props: PowerSearchProps)
   prop config: PowerSearchConfig
   prop disabledMessage?: string
   prop endContent?: React.ReactNode
-  prop experimental?: { presentation?: 'popover' | 'bottom-sheet' | 'adaptive' } @experimental
   prop filters: ReadonlyArray<PowerSearchFilter>
   prop handleRef?: React.Ref<PowerSearchHandle>
   prop hasAutoFocus?: boolean = false
@@ -1828,6 +1830,7 @@ component PowerSearch(props: PowerSearchProps)
   prop onFocus?: (e: React.FocusEvent) => void
   prop placeholder?: string = 'Search...'
   prop popoverSaveButtonLabel?: string = 'Apply'
+  prop presentation?: PowerSearchPresentation = 'adaptive'
   prop ref?: React.Ref<HTMLDivElement>
   prop resultCount?: number | string
   prop size?: PowerSearchSize = 'md'
@@ -1856,6 +1859,7 @@ component PowerSearchToken(props: PowerSearchTokenProps)
   prop onClick?: () => void
   prop onRemove?: () => void
   prop operator: PowerSearchOperator
+  prop timezoneID?: string
 component ProgressBar(props: ProgressBarProps)
   prop data-testid?: string
   prop formatValueLabel?: (value: number, max: number) => string = (value, max) => `${Math.round((value / max) * 100)}%`
@@ -2610,7 +2614,7 @@ component Token(props: TokenProps)
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component Tokenizer(props: TokenizerProps)
-  overload <T extends SearchableItem>(props: Omit<TokenizerProps<T>, 'ref' | 'experimental'> & { experimental: NonNullable<TokenizerProps<T>['experimental']>; ref?: React.Ref<HTMLInputElement | HTMLButtonElement> }) => React.JSX.Element @experimental
+  overload <T extends SearchableItem>(props: Omit<TokenizerProps<T>, 'ref'> & { ref?: React.Ref<HTMLInputElement | HTMLButtonElement> }) => React.JSX.Element
   prop containerClassName?: string
   prop containerStyle?: CSSProperties
   prop containerXstyle?: StyleXStyles
@@ -2622,7 +2626,6 @@ component Tokenizer(props: TokenizerProps)
   prop disabledMessage?: string
   prop emptySearchText?: ReactNode = 'No results found'
   prop endContent?: ReactNode
-  prop experimental?: { presentation?: 'popover' | 'bottom-sheet' | 'adaptive' } @experimental
   prop handleRef?: React.Ref<TokenizerHandle>
   prop hasAutoFocus?: boolean = false
   prop hasClear?: boolean = false
@@ -2645,6 +2648,7 @@ component Tokenizer(props: TokenizerProps)
   prop onFocus?: (e: React.FocusEvent) => void
   prop onKeyDown?: React.KeyboardEventHandler<HTMLElement>
   prop placeholder?: string
+  prop presentation?: TokenizerPresentation = 'adaptive'
   prop ref?: React.Ref<HTMLInputElement>
   prop renderItem?: (item: T) => ReactNode
   prop renderToken?: (item: T, onRemove: () => void) => ReactNode
@@ -3343,7 +3347,8 @@ const durationDefaults: object
   --duration-slow-min: '730ms'
   --duration-slow: '975ms'
   --duration-slow-max: '1300ms'
-const durationVars: stylex.VarGroup<Readonly<{ readonly '--duration-fast-min': "130ms"; readonly '--duration-fast': "175ms"; readonly '--duration-fast-max': "230ms"; readonly '--du … #4dd3e52f
+  --duration-exit: 'var(--duration-fast)'
+const durationVars: stylex.VarGroup<Readonly<{ readonly '--duration-fast-min': "130ms"; readonly '--duration-fast': "175ms"; readonly '--duration-fast-max': "230ms"; readonly '--du … #f2df5593
 const easeDefaults: object
   --ease-standard: 'cubic-bezier(0.24, 1, 0.4, 1)'
   --ease-entrance: 'cubic-bezier(0.24, 1, 0.4, 1)'
@@ -3866,6 +3871,7 @@ interface ClickableCardProps extends BaseProps (props of ClickableCard)
 interface ClickableContainerResult
   onClick: (event: MouseEvent<HTMLElement>) => void
   onMouseUp: (event: MouseEvent<HTMLElement>) => void
+  onPointerDown: (event: PointerEvent<HTMLElement>) => void
 interface CodeBlockProps extends BaseProps<HTMLPreElement> (props of CodeBlock)
 type CodeColor = 'primary' | 'secondary' | 'inherit'
 type CodeLanguage
@@ -4989,6 +4995,7 @@ interface PowerSearchOperatorWithLabel extends PowerSearchOperatorBase
   key: string
   label: string
   value: OperatorValue
+type PowerSearchPresentation = AdaptivePresentation
 interface PowerSearchProps extends Omit<BaseProps<HTMLElement>, 'onChange'> (props of PowerSearch)
 type PowerSearchSize = 'sm' | 'md' | 'lg'
 interface PowerSearchTokenProps (props of PowerSearchToken)
@@ -5663,6 +5670,7 @@ interface TokenizerHandle
   blur: () => void
   focus: () => void
 type TokenizerOverflowBehavior = 'none' | 'unfocusedInline' | 'unfocusedLayer'
+type TokenizerPresentation = AdaptivePresentation
 interface TokenizerProps<T extends SearchableItem> extends Omit<FieldInputBaseProps<HTMLInputElement>, 'onChange' | 'onFocus' | 'onBlur' | 'onKeyDown'> (props of Tokenizer)
 type TokenizerSize = 'sm' | 'md' | 'lg'
 interface TokenizerStatus
@@ -5899,8 +5907,8 @@ interface UseGridFocusOptions
   isCellFocusable?: (cell: HTMLElement) => boolean
   onNavigateAfter?: (column: number, offset: number) => void
   onNavigateBefore?: (column: number, offset: number) => void
-  onPageDown?: () => void
-  onPageUp?: () => void
+  onPageDown?: (event: React.KeyboardEvent) => void
+  onPageUp?: (event: React.KeyboardEvent) => void
 interface UseGridFocusReturn<T extends HTMLElement = HTMLElement>
   focusCell: (index: number) => void
   focusFirst: () => void
@@ -5977,8 +5985,8 @@ interface UseListFocusReturn<T extends HTMLElement = HTMLElement>
 interface UseLongPressHandlers
   cancel: () => void
   moveTo: (point: { x: number; y: number }) => boolean
-  onTouchCancel: () => void
-  onTouchEnd: () => void
+  onTouchCancel: (e?: React.TouchEvent) => void
+  onTouchEnd: (e?: React.TouchEvent) => void
   onTouchMove: (e: React.TouchEvent) => void
   onTouchStart: (e: React.TouchEvent) => void
   start: (point: { x: number; y: number }) => void
@@ -6160,6 +6168,7 @@ interface UseTableRowExpansionConfig<T extends Record<string, unknown>>
   expandedKeys: Set<string>
   getIsItemExpandable?: (item: T) => boolean = all rows expandable
   getRowKey: (item: T) => string
+  getRowLabel?: (item: T) => string
   hasRowClickExpansion?: boolean = false (only the chevron toggles expansion).
   onToggle: (key: string) => void
   panelVariant?: 'muted' | 'transparent' = 'transparent'
@@ -6213,6 +6222,7 @@ interface UseTableStickyColumnsConfig
   endKeys?: string[]
   startKeys?: string[]
 interface UseTableTreeDataConfig<T extends Record<string, unknown>>
+  getRowLabel?: (item: T) => string
   getRowMeta: (item: T) => TableTreeRowMeta | undefined
   hasExpandAllControl?: boolean = false
   hasExpandableRows: boolean
@@ -8236,6 +8246,7 @@ PowerSearchOperator (.)
 PowerSearchOperatorBase (.)
 PowerSearchOperatorWithI18nKey (.)
 PowerSearchOperatorWithLabel (.)
+PowerSearchPresentation (.)
 PowerSearchProps (.)
 PowerSearchSize (.)
 PowerSearchToken (.)
@@ -8917,6 +8928,7 @@ Tokenizer (.)
 TokenizerChange (.)
 TokenizerHandle (.)
 TokenizerOverflowBehavior (.)
+TokenizerPresentation (.)
 TokenizerProps (.)
 TokenizerSize (.)
 TokenizerStatus (.)
@@ -9897,6 +9909,7 @@ var --container-padding-block-end (./astryx.css)
 var --container-padding-block-start (./astryx.css)
 var --container-padding-inline-end (./astryx.css)
 var --container-padding-inline-start (./astryx.css)
+var --duration-exit (./astryx.css)
 var --duration-fast (./astryx.css)
 var --duration-fast-max (./astryx.css)
 var --duration-fast-min (./astryx.css)
