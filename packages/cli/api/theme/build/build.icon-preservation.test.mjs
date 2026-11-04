@@ -16,17 +16,22 @@ import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {themeBuild} from './build.mjs';
+import {
+  makeLinkedFixture,
+  removeLinkedFixture,
+} from '../../../test-utils/linked-fixture.mjs';
 
 let tmpDir;
 beforeEach(() => {
-  // Keeping fixtures under the CLI package makes real core/React imports
-  // resolve in both the theme loader and the native Node artifact check.
-  tmpDir = fs.mkdtempSync(
-    path.resolve(import.meta.dirname, '../../..', '.tmp-icon-preservation-'),
-  );
+  // Real core and React imports resolve in both the theme loader and the
+  // native Node artifact check.
+  tmpDir = makeLinkedFixture('astryx-icon-preservation-', [
+    '@astryxdesign',
+    'react',
+  ]);
 });
 afterEach(() => {
-  fs.rmSync(tmpDir, {recursive: true, force: true});
+  removeLinkedFixture(tmpDir);
 });
 
 function write(file, source) {
