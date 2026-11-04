@@ -3,7 +3,8 @@
 /**
  * @file ListRowPressPaths.interaction.browser.spec.ts
  * @input The built List "Interactive" and Press Feedback "Rows" stories, the
- *   interaction harness, and the cell release clock (motion/uikit/timing.ts)
+ *   interaction harness, and the release clock (the default theme's
+ *   `--duration-exit`)
  * @output The row press paths beside the main release proofs: a press the
  *   browser takes for a scroll drops the highlight at once (the press
  *   controller's cancel, unchanged by the compositor layer); Reduce
@@ -34,11 +35,18 @@ import {
 } from '@astryxdesign/interaction-harness';
 // @ts-expect-error -- pngjs ships no declarations; runtime support is pinned.
 import {PNG} from 'pngjs';
-import {timing} from '../../motion/uikit/timing';
 
 const storybook = withStorybook(test);
 
-const RELEASE_MS: number = timing.press.highlightOutMs;
+/** The release clock where the press paints: the theme's `--duration-exit`, ms. */
+async function exitMsOf(surface: Locator): Promise<number> {
+  return surface.evaluate(el => {
+    const time = getComputedStyle(el)
+      .getPropertyValue('--duration-exit')
+      .trim();
+    return time.endsWith('ms') ? parseFloat(time) : parseFloat(time) * 1000;
+  });
+}
 
 /** The press layer's strength: 0 while the row has no layer box (at rest). */
 const layerOpacity = async (row: Locator) =>
@@ -163,10 +171,11 @@ test('Reduce Motion keeps the release fade: a fade, not a movement', async ({
   await driver.play(
     tap({x: box.x + box.width / 2, y: box.y + box.height / 2}, {holdMs: 300}),
   );
+  const releaseMs = await exitMsOf(row);
   await holdAnimations(page);
   await seekAnimations(page, 0);
   expect(await layerOpacity(row)).toBeCloseTo(1, 2);
-  await seekAnimations(page, RELEASE_MS / 2);
+  await seekAnimations(page, releaseMs / 2);
   const midway = await layerOpacity(row);
   expect(midway).toBeGreaterThan(0.05);
   expect(midway).toBeLessThan(0.95);
@@ -234,8 +243,9 @@ test('under a finger, a row held and released between two divided rows keeps bot
     },
   );
   // Released: halfway through the release fade.
+  const releaseMs = await exitMsOf(pressed);
   await holdAnimations(page);
-  await seekAnimations(page, RELEASE_MS / 2);
+  await seekAnimations(page, releaseMs / 2);
   expect(await pressState(pressed)).toBe('fading');
   await expectDividersAsAtRest('releasing');
   await releaseAnimations(page, {finish: true});

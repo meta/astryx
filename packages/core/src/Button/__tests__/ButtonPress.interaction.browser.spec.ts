@@ -40,12 +40,15 @@ import {scroll} from '../../motion/uikit/scroll';
 
 const storybook = withStorybook(test);
 
-/**
- * The release clock: `PRESS_FADE_MS` in utils/pressGesture.ts, which this
- * runner cannot import (it compiles StyleX). pressFeedback.test.ts holds the
- * two equal.
- */
-const RELEASE_MS = 200;
+/** The release clock where the press paints: the theme's `--duration-exit`, ms. */
+async function exitMsOf(surface: Locator): Promise<number> {
+  return surface.evaluate(el => {
+    const time = getComputedStyle(el)
+      .getPropertyValue('--duration-exit')
+      .trim();
+    return time.endsWith('ms') ? parseFloat(time) : parseFloat(time) * 1000;
+  });
+}
 const CONTENT_TOUCH_DELAY_MS = scroll.delaysContentTouchesMs;
 /** Long enough that a press in a scroller is believed. */
 const HOLD_MS = 400;
@@ -140,9 +143,11 @@ test('outside a scroller, a finger’s press highlights in the frame it lands, a
   }
   expect(on[1] - down[1]).toBeLessThan(SAME_FRAME_MS);
   expect(fading[1] - up[1]).toBeLessThan(SAME_FRAME_MS);
-  // The attribute leaves when the shared release clock runs out.
-  expect(gone[1] - fading[1]).toBeGreaterThanOrEqual(RELEASE_MS - 5);
-  expect(gone[1] - fading[1]).toBeLessThan(RELEASE_MS + 80);
+  // The attribute leaves when the shared release clock, the theme's exit
+  // duration, runs out.
+  const releaseMs = await exitMsOf(opened.surface);
+  expect(gone[1] - fading[1]).toBeGreaterThanOrEqual(releaseMs - 5);
+  expect(gone[1] - fading[1]).toBeLessThan(releaseMs + 80);
   // WebKit synthesises a click only from its own tap path, not from a raw
   // touch sequence (harness README, engine limits); Chromium does from both.
   if (opened.driver.engine === 'chromium') {
