@@ -8,7 +8,7 @@ import {ClickableCard} from './ClickableCard';
 import {LinkProvider} from '../Link';
 import {
   afterPaintsPress,
-  hasReleaseFade,
+  hasCardReleaseFade,
   pressArmsShadowedByDefault,
   readsPressStrength,
 } from '../__tests__/pressState';
@@ -360,7 +360,8 @@ describe('ClickableCard pressed state (touch)', () => {
     // The controller writes the card; the card owns the strength and its
     // release, and its `::after` paints the pressed token at that strength
     // as its image on both arms, its hover and mouse colour yielding.
-    expect(hasReleaseFade(card)).toBe(true);
+    // Under a coarse primary pointer its release fades on the exit tokens.
+    expect(hasCardReleaseFade(card)).toBe(true);
     expect(readsPressStrength(card, '[data-astryx-press="on"]')).toBe(true);
     expect(readsPressStrength(card)).toBe(true);
     expect(afterPaintsPress(card, '[data-astryx-press="on"]')).toBe(true);
