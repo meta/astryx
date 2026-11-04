@@ -148,6 +148,8 @@ export function useMobileKeyboard({
     }
   }, [isEnabled, isSheetTraveling, sheetRef]);
 
+  // Syncs the on-screen keyboard with the sheet. When a presented sheet closes,
+  // the focused field blurs, so the keyboard closes.
   useEffect(() => {
     if (!isEnabled || !isPresented || isOpen) {
       return;
@@ -165,6 +167,8 @@ export function useMobileKeyboard({
     }
   }, [isEnabled, isOpen, isPresented, sheetRef]);
 
+  // Syncs the body's end inset with the visual viewport, so the on-screen
+  // keyboard does not cover the body.
   useEffect(() => {
     const body = bodyRef.current;
     const sheet = sheetRef.current;

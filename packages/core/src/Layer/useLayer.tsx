@@ -57,7 +57,7 @@ import {
 import {preserveAnimations} from './preserveAnimations';
 import {useLayerContext} from './LayerContext';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
-import {overlayPaddingReset} from '../Layout/padding.stylex';
+import {overlayPaddingReset} from '../Layout/overlayPaddingReset.stylex';
 
 const styles = stylex.create({
   // Base reset for all layers
@@ -1560,6 +1560,8 @@ function useLayerImplementation(
     forgetDismissalRef.current = forget;
   }, []);
 
+  // Syncs the document's capture-phase gesture tracking with this mount.
+  // Unmount forgets the layer's dismissal.
   useEffect(() => {
     // Install capture-phase gesture tracking before the first interaction.
     currentGesture();

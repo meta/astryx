@@ -538,26 +538,40 @@ export function Typeahead<T extends SearchableItem>({
     [editingValue, isEditing],
   );
 
+  // Focus the token's button once it renders (the next cycle), so keyboard
+  // users stay in the component after edit mode ends.
+  const focusTokenNextFrame = useCallback(() => {
+    requestAnimationFrame(() => {
+      const tokenEl = tokenRef.current;
+      if (tokenEl) {
+        const button = tokenEl.querySelector('button');
+        (button ?? tokenEl).focus();
+      }
+    });
+  }, []);
+
   // Handle selection from dropdown — clears edit mode
   const handleChange = useCallback(
     (item: T | null) => {
       setIsEditing(false);
       setEditingValue(null);
       onChange(item);
-      // After selection, focus the token so keyboard users stay in the component.
-      // Use requestAnimationFrame because the token renders on the next cycle.
       if (item) {
-        requestAnimationFrame(() => {
-          const tokenEl = tokenRef.current;
-          if (tokenEl) {
-            // Focus the internal button inside the token
-            const button = tokenEl.querySelector('button');
-            (button ?? tokenEl).focus();
-          }
-        });
+        focusTokenNextFrame();
       }
     },
-    [onChange],
+    [onChange, focusTokenNextFrame],
+  );
+
+  // Whether the base's list is shown: Escape then hides the list first, and
+  // edit mode stays.
+  const isListOpenRef = useRef(false);
+  const handleOpenChange = useCallback(
+    (isOpen: boolean) => {
+      isListOpenRef.current = isOpen;
+      onOpenChange?.(isOpen);
+    },
+    [onOpenChange],
   );
 
   // Handle clear (explicit X button on token). Edit mode copied the label into
@@ -593,14 +607,14 @@ export function Typeahead<T extends SearchableItem>({
       if (isImeKeyEvent(e.nativeEvent)) {
         return;
       }
-      if (e.key === 'Escape' && editingValue) {
+      if (e.key === 'Escape' && editingValue && !isListOpenRef.current) {
         e.preventDefault();
         setIsEditing(false);
         setEditingValue(null);
-        inputRef.current?.blur();
+        focusTokenNextFrame();
       }
     },
-    [editingValue],
+    [editingValue, focusTokenNextFrame],
   );
 
   // Click wrapper to focus input or enter edit mode
@@ -738,7 +752,7 @@ export function Typeahead<T extends SearchableItem>({
                 // aria-required / aria-invalid still applies.
                 aria-invalid={status?.type === 'error' || rest['aria-invalid']}
                 onChangeQuery={onChangeQuery}
-                onOpenChange={onOpenChange}
+                onOpenChange={handleOpenChange}
                 debounceMs={debounceMs}
                 anchorRef={wrapperRef}
                 onKeyDown={handleKeyDown}

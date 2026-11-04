@@ -255,6 +255,10 @@ const styles = stylex.create({
     // surface behind the pill itself, fading out across the lower half so the
     // content emerging below has no visible cut line.
     backgroundImage: `linear-gradient(to bottom, ${colorVars['--color-background-surface']} 60%, transparent)`,
+    // WebKit can draw this bar under the scrolling body's own layer while the
+    // sheet's transform animates, so the pill vanishes until the sheet rests.
+    // A layer of its own keeps it above the body.
+    willChange: 'transform',
     // Drags are the handle's; a pinch still zooms the page (WCAG 1.4.4).
     touchAction: 'pinch-zoom',
     cursor: {
@@ -296,14 +300,19 @@ const styles = stylex.create({
   },
   content: {
     // Preserve the body's block formatting (including margin/float isolation)
-    // and its definite percentage-height basis. min-content lets this real
+    // and its definite percentage-height basis. fit-content lets this real
     // observed box grow with async content beyond a fixed-height viewport.
     // This box is also the sheet's container: it carries the padding and
     // publishes it, so a lone Section child escapes it exactly as in Dialog.
     display: 'flow-root',
     boxSizing: 'border-box',
     height: '100%',
-    minHeight: 'min-content',
+    // fit-content, not min-content: they are one size in the block axis, but
+    // WebKit ignores min-content on a block's min-height. There the box keeps
+    // its body's height on a budget-height sheet. Content placed directly in
+    // it then overflows the box, and its block-end padding leaves the scroll
+    // range.
+    minHeight: 'fit-content',
   },
   tallKeyboardBody: {
     scrollPaddingBlockEnd: MOBILE_KEYBOARD_BOTTOM_CLEARANCE,
@@ -413,6 +422,7 @@ function waitForTransition(
 
   let done = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let backstopMs = 0;
   const finish = () => {
     if (done) {
       return;
@@ -426,9 +436,24 @@ function waitForTransition(
     complete();
   };
   const handleTransitionEnd = (event: TransitionEvent) => {
-    if (event.target === element && event.propertyName === propertyName) {
-      finish();
+    if (event.target !== element || event.propertyName !== propertyName) {
+      return;
     }
+    // The engine cancels a transition whose end value changes mid-flight. A
+    // percentage transform does when the closing frame moves the height by a
+    // fraction of a pixel. A replacement runs on from where it was. That one
+    // ends the motion, not the cancel.
+    if (
+      event.type === 'transitioncancel' &&
+      hasRunningTransition(element, propertyName)
+    ) {
+      if (timer != null) {
+        clearTimeout(timer);
+        timer = setTimeout(finish, backstopMs);
+      }
+      return;
+    }
+    finish();
   };
   element.addEventListener('transitionend', handleTransitionEnd);
   element.addEventListener('transitioncancel', handleTransitionEnd);
@@ -479,7 +504,8 @@ function waitForTransition(
     return () => {};
   }
 
-  timer = setTimeout(finish, transitionMs + TRANSITION_BACKSTOP_BUFFER_MS);
+  backstopMs = transitionMs + TRANSITION_BACKSTOP_BUFFER_MS;
+  timer = setTimeout(finish, backstopMs);
   return () => {
     if (timer != null) {
       clearTimeout(timer);
@@ -487,6 +513,19 @@ function waitForTransition(
     element.removeEventListener('transitionend', handleTransitionEnd);
     element.removeEventListener('transitioncancel', handleTransitionEnd);
   };
+}
+
+// Whether a CSS transition of `propertyName` still runs on `element`.
+function hasRunningTransition(
+  element: HTMLElement,
+  propertyName: string,
+): boolean {
+  return (element.getAnimations?.() ?? []).some(
+    animation =>
+      (animation as Animation & {transitionProperty?: string})
+        .transitionProperty === propertyName &&
+      (animation.playState === 'running' || animation.playState === 'paused'),
+  );
 }
 
 function parseTransitionTime(value: string): number | null {
@@ -671,14 +710,29 @@ export function BottomSheetPanel({
   const isCoarseCrossFade = useMediaQuery(REDUCED_MOTION_COARSE_QUERY);
   const isCrossFade =
     isCoarseCrossFade || (isReducedMotion && isDismissedByTouchDrag);
+  // Syncs the motion with the panel's CSS transition. The motion completes when
+  // that transition ends.
   useLayoutEffect(() => {
     if (motion == null) {
       return;
     }
-    startedMotionRef.current = null;
+    // React can run this effect again for the same motion, for example when
+    // a Suspense boundary shows this content again. The passive effect below
+    // does not run again then, so the motion it started stays started, and a
+    // completion completes at once instead of waiting for that effect.
+    if (startedMotionRef.current !== motion) {
+      startedMotionRef.current = null;
+    }
     pendingMotionCompleteRef.current = null;
+    const complete = () => {
+      if (startedMotionRef.current === motion) {
+        onMotionCompleteRef.current?.(motion);
+      } else {
+        pendingMotionCompleteRef.current = motion;
+      }
+    };
     if (motion === 'entering' && reactivatedEntranceRef.current) {
-      pendingMotionCompleteRef.current = motion;
+      complete();
       return;
     }
     // What ends a motion: the fade is opacity, and the entrance, alignment and
@@ -690,13 +744,7 @@ export function BottomSheetPanel({
     return waitForTransition(
       elementRef.current,
       motion === 'fading' || crossFadeMotion ? 'opacity' : 'transform',
-      () => {
-        if (startedMotionRef.current === motion) {
-          onMotionCompleteRef.current?.(motion);
-        } else {
-          pendingMotionCompleteRef.current = motion;
-        }
-      },
+      complete,
     );
   }, [motion, isCrossFade]);
   // The snap is transform-only; the layout height reconciles when it lands.

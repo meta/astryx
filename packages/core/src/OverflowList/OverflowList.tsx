@@ -350,6 +350,8 @@ export function OverflowList({
   const overflowItemsRef = useRef(overflowItems);
   overflowItemsRef.current = overflowItems;
 
+  // Reports the measured overflow to `onOverflowChange`. A ResizeObserver
+  // drives the measurement, so no event handler can report it.
   useIsomorphicLayoutEffect(() => {
     if (
       !onOverflowChange ||

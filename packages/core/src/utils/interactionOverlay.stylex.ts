@@ -15,8 +15,9 @@
  * SYNC: When modified, update pressFeedback.ts, pressGesture.ts (the fade
  * clock), hooks/usePressFeedback.doc.mjs, the components that paint the touch
  * press off an ancestor scope or a pseudo-element (Switch, Tab,
- * CheckboxInput, RadioListItem, ClickableCard, SelectableCard, Thumbnail)
- * and scripts/build-css.test.mjs.
+ * CheckboxInput, RadioListItem, ClickableCard, SelectableCard, Thumbnail),
+ * Button (a tracked action sizes its `:active` image to zero) and
+ * scripts/build-css.test.mjs.
  */
 
 // Every surface that paints a press uses one of these styles, so a change to
@@ -75,8 +76,9 @@ export const pressVars = stylex.defineVars({
  *
  * `defineConsts`, so the one number is inlined here at build time and is the
  * controller's constant at run time (`PRESS_FADE_MS` in pressGesture.ts):
- * the release animation and the timer that removes the attribute after it
- * cannot drift apart.
+ * the release animation and the controller's clock cannot drift apart. When
+ * that clock runs out, the controller waits for a release animation that a
+ * busy main thread started late, then removes the attribute.
  */
 export const pressConsts = stylex.defineConsts({
   /** How long the release takes, in ms. UIKit's deselect clock. */
