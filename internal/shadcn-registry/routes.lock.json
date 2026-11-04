@@ -3702,6 +3702,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-locale-invoice-summary",
+      "path": "examples/use-locale/invoice-summary",
+      "aliases": []
+    },
+    {
       "name": "example-use-outline-from-markdown-docs-article",
       "path": "examples/use-outline-from-markdown/docs-article",
       "aliases": []
