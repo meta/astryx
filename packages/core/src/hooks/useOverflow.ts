@@ -79,17 +79,9 @@ export interface UseOverflowReturn {
   visibleCount: number;
   /** Whether any items are overflowing */
   hasOverflow: boolean;
-  /**
-   * Number of rows the visible items occupy. Measured on the multi-row path
-   * (`maxRows` above 1); the single-line path reports 1 without measuring.
-   */
+  /** Number of rows the visible items occupy (1 for the single-line path) */
   rows: number;
-  /**
-   * Measured max item height in pixels; used to size the multi-row container.
-   * Measured on the multi-row path (`maxRows` above 1); the single-line path
-   * reports 0 without measuring, so a change of item height there never
-   * re-renders the host.
-   */
+  /** Measured max item height in pixels; used to size the multi-row container */
   rowHeight: number;
 }
 
@@ -115,6 +107,21 @@ export function useOverflow(
   itemCount: number,
   options: UseOverflowOptions = {},
 ): UseOverflowReturn {
+  return useOverflowInternal(itemCount, options, {tracksRows: true});
+}
+
+/**
+ * `useOverflow` for a host inside Core that states whether it renders from
+ * `rows` and `rowHeight`. With `tracksRows` false, the hook does not track
+ * them and reports `rows: 1` and `rowHeight: 0`: a state set nobody reads
+ * would still re-render the host, once per measurement that moves it.
+ * Internal: the public hook always tracks them.
+ */
+export function useOverflowInternal(
+  itemCount: number,
+  options: UseOverflowOptions,
+  {tracksRows}: {tracksRows: boolean},
+): UseOverflowReturn {
   const {
     gap = 0,
     minVisibleItems = 0,
@@ -133,12 +140,6 @@ export function useOverflow(
   );
 
   const observeParent = behavior === 'observeParent';
-  // Only the multi-row path renders from `rows` and `rowHeight` (the row
-  // count caps the container's height). On the single-line path neither is
-  // tracked: a state set nobody reads would still re-render the host, once
-  // per measurement that moves it.
-  const tracksRows = maxRows != null && maxRows > 1;
-
   const [visibleCount, setVisibleCount] = useState(itemCount);
   const [rows, setRows] = useState(1);
   const [rowHeight, setRowHeight] = useState(0);
@@ -283,8 +284,8 @@ export function useOverflow(
     measureRef,
     visibleCount,
     hasOverflow,
-    // A host whose `maxRows` dropped to the single-line path keeps the state
-    // its multi-row measurements wrote; the path's own values are reported.
+    // A host that stops tracking keeps the state its earlier measurements
+    // wrote; the untracked values are reported instead.
     rows: tracksRows ? rows : 1,
     rowHeight: tracksRows ? rowHeight : 0,
   };

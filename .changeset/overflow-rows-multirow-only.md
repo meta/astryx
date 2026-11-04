@@ -2,6 +2,6 @@
 '@astryxdesign/core': patch
 ---
 
-[perf] useOverflow: `rows` and `rowHeight` are measured and tracked on the multi-row path only (`maxRows` above 1), where the container's height renders from them. On the single-line path the hook reports `rows: 1` and `rowHeight: 0` without measuring, so a host that reads neither (every single-line `OverflowList`) no longer re-renders when the first measurement finds the item height.
+[perf] A single-line `OverflowList` renders once on mount, not twice: it no longer tracks the row count and item height that only its multi-row form (`maxRows` above 1) renders from. The public `useOverflow` hook is unchanged and still reports both on every path.
 
 @vjeux
