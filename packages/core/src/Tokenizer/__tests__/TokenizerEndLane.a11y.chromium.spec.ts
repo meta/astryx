@@ -12,7 +12,7 @@
  *   given width, which only a shipping layout engine can show.
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -367,9 +367,10 @@ for (const direction of ['ltr', 'rtl'] as const) {
       const search = page.getByRole('combobox');
       const cdp = await page.context().newCDPSession(page);
       await cdp.send('Performance.enable');
-      // Style recalculations over a short window: a ticking ring animation
-      // recalculates every frame (about 30 in 500ms), an unrendered one does
-      // not. The idle allowance absorbs a stray one-off recalculation.
+      // Style recalculations over a short window: an unrendered ring costs
+      // none. The idle allowance absorbs a stray one-off recalculation. The
+      // busy ring turns on the compositor, so it is checked by its running
+      // animation rather than by recalculations.
       const recalcsOver = async (ms: number) => {
         const count = async () => {
           const {metrics} = await cdp.send('Performance.getMetrics');
@@ -390,6 +391,9 @@ for (const direction of ['ltr', 'rtl'] as const) {
           return {
             hidden: spinner.getAttribute('aria-hidden') === 'true',
             width: spinner.getBoundingClientRect().width,
+            turning: spinner
+              .getAnimations({subtree: true})
+              .some(animation => animation.playState === 'running'),
           };
         });
       const idle = await spinnerState();
@@ -400,7 +404,7 @@ for (const direction of ['ltr', 'rtl'] as const) {
       await expect(search).toHaveAttribute('aria-busy', 'true');
       const busy = await spinnerState();
       expect(busy.hidden).toBe(false);
-      expect(await recalcsOver(500)).toBeGreaterThanOrEqual(10);
+      expect(busy.turning).toBe(true);
       expect(busy.width).toBe(idle.width);
     });
 

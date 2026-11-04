@@ -23,14 +23,19 @@ import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {RadioListContext} from './RadioList';
+import {RadioListReasonContext} from './RadioListReasonContext';
+import {joinAriaIDs} from '../utils/inputAria';
 import {colorVars, radiusVars} from '../theme/tokens.stylex';
-import {mergeProps, isRenderable, rtlStyles} from '../utils';
+import {isRenderable} from '../utils/isRenderable';
+import {mergeProps} from '../utils/mergeProps';
+import {rtlStyles} from '../utils/rtlStyles';
 import {indicatorScope} from '../Indicator/indicator.markers.stylex';
 import {useIndicatorFocusRing} from '../hooks/useIndicatorFocusRing';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {useIndicator} from '../Indicator';
-import {Item, type ItemAlign} from '../Item';
+import {useIndicator} from '../Indicator/useIndicator';
+import {Item, type ItemAlign} from '../Item/Item';
 import {themeProps} from '../utils/themeProps';
+import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 
 // The touch press's paint, declared by the shared overlay styles on the
 // element the controller writes to (`pressedAlpha`) at the press's strength,
@@ -143,11 +148,6 @@ const rowStyles = stylex.create({
     // Suppress Item's interactive hover/press background so the resting and
     // hovered row look identical by default (a theme can restyle either).
     backgroundColor: 'transparent',
-    // ...and the touch press's overlay image, for the same reason: under a
-    // finger only the radio circle paints, as under a mouse. The press's
-    // strength still lands on the row, which is where the layer over the
-    // circle reads it.
-    backgroundImage: 'none',
   },
   // The mouse press (a finger's lives on `data-astryx-press`): the row is
   // pressed, but not through a nested link or button, which keep their own
@@ -265,6 +265,7 @@ export function RadioListItem({
   // the touch press controller (pressableCoverage.test.ts).
   const pressable = usePressFeedback();
   const context = use(RadioListContext);
+  const disabledReasonID = use(RadioListReasonContext);
   if (!context) {
     throw new Error('RadioListItem must be used within an RadioList');
   }
@@ -326,6 +327,12 @@ export function RadioListItem({
         // from submission, matching a natively disabled control.
         form={keepsFocusableForMessage ? '' : undefined}
         required={context.isRequired}
+        // Chromium reports an unanswered native-required radio invalid before
+        // any interaction; the invalid state follows the group's status
+        // instead (RadioList FR6).
+        aria-invalid={
+          context.isRequired ? context.status?.type === 'error' : undefined
+        }
         onChange={() => {
           if (isDisabled) {
             return;
@@ -334,15 +341,23 @@ export function RadioListItem({
         }}
         // A consumer onClick rides on the radio input itself, so it fires for
         // both direct control clicks and row-surface clicks the row delegates
-        // to the input — the same routing CheckboxListItem uses.
-        onClick={onClick}
+        // to the input — the same routing CheckboxListItem uses. A disabled
+        // radio that stays focusable (`aria-disabled`, not native `disabled`)
+        // is not silenced by the browser, so drop the handler here
+        // (`spec:AST-085` FR2), as CheckboxInput does.
+        onClick={isDisabled ? undefined : onClick}
         // The radio names itself from the visible label element, which works
         // for a rich label as well as a plain string. `aria-label` replaces
         // that name rather than adding to it, so the two are mutually
         // exclusive — aria-labelledby would otherwise win over it.
         aria-label={ariaLabel}
         aria-labelledby={ariaLabel == null ? labelID : undefined}
-        aria-describedby={hasDescription ? descriptionID : undefined}
+        // The item's own description, then the group's disabled reason
+        // (RadioList's disabledMessage), which describes each radio (FR5).
+        aria-describedby={joinAriaIDs(
+          hasDescription ? descriptionID : undefined,
+          disabledReasonID,
+        )}
         {...stylex.props(
           styles.input,
           rtlStyles.centerInline('-50%'),
@@ -395,6 +410,9 @@ export function RadioListItem({
           // the painting row element (Item), the same element that carries the
           // theme target, so a theme's hover styling stays in step with the tint.
           !isDisabled && indicatorScope,
+          // The row keeps no press paint of its own: the circle paints, and
+          // reads the strength whose release the row keeps.
+          rowPressLayerStyles.cellWithoutLayer,
           // Restore the bare default look: zero Item's padding/radius and its
           // interactive hover/press background. Applied after Item's own base
           // styles so it wins within the base layer; a `radio-list-item` theme

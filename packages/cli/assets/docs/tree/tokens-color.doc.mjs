@@ -86,7 +86,7 @@ export const docs = {
             [
               "--color-accent",
               "#0064E0",
-              "#2694FE"
+              "#0171E3"
             ],
             [
               "--color-accent-muted",

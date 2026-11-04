@@ -160,7 +160,7 @@ export const docs = {
       name: 'hasNumberSteppers',
       type: 'boolean',
       description:
-        'Shows increment and decrement buttons at the end of the input.',
+        'Shows increment and decrement buttons at the end of the input on fine pointers. Hidden on coarse pointers (such as touch screens); text entry and keyboard stepping remain available.',
       default: 'false',
     },
     {
@@ -226,12 +226,14 @@ export const docs = {
     {
       name: 'containerClassName',
       type: 'string',
-      description: 'Class name for the field container. Same targeting as `containerXstyle`.',
+      description:
+        'Class name for the field container. Same targeting as `containerXstyle`.',
     },
     {
       name: 'containerStyle',
       type: 'CSSProperties',
-      description: 'Inline styles for the field container. Same targeting as `containerXstyle`.',
+      description:
+        'Inline styles for the field container. Same targeting as `containerXstyle`.',
     },
     {
       name: 'controlXstyle',
@@ -474,7 +476,8 @@ export const docsZh = {
     {
       name: 'hasNumberSteppers',
       type: 'boolean',
-      description: '是否在输入框末尾显示递增和递减按钮。',
+      description:
+        '在精细指针设备上于输入框末尾显示递增和递减按钮。粗指针设备（例如触摸屏）上隐藏按钮；仍可直接输入数值或使用键盘步进。',
       default: 'false',
     },
     {
@@ -720,10 +723,12 @@ export const docsDense = {
     ],
   },
   propDescriptions: {
-    containerXstyle: 'StyleX styles for the field container; no effect in InputGroup or horizontal-labels FormLayout. No root xstyle/className/style.',
+    containerXstyle:
+      'StyleX styles for the field container; no effect in InputGroup or horizontal-labels FormLayout. No root xstyle/className/style.',
     containerClassName: 'Class name for the field container.',
     containerStyle: 'Inline styles for the field container.',
-    controlXstyle: 'StyleX styles for the visual control box (border, background, icons); not the native input.',
+    controlXstyle:
+      'StyleX styles for the visual control box (border, background, icons); not the native input.',
     controlClassName: 'Class name for the visual control box.',
     controlStyle: 'Inline styles for the visual control box.',
     label: 'Label text (always rendered for accessibility).',
@@ -754,7 +759,8 @@ export const docsDense = {
       'Formats committed value at rest; raw number is shown while editing.',
     isWheelEnabled:
       'Allow focused wheel gestures to step value. Defaults to true.',
-    hasNumberSteppers: 'Show increment + decrement buttons. Defaults to false.',
+    hasNumberSteppers:
+      'Show increment + decrement buttons on fine pointers; hidden on coarse pointers. Defaults to false.',
     units: 'Units suffix (e.g. "%" or "GB").',
     isIntegerOnly: 'Only allow integer values.',
     hasClear:

@@ -41,14 +41,24 @@ import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
+import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
-import {overlayPaddingReset} from '../Layout/padding.stylex';
+import {overlayPaddingReset} from '../Layout/overlayPaddingReset.stylex';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
-import {useTranslator} from '../i18n';
+import {useFocusRegionContainment} from '../hooks/useFocusTrap';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {isRtlElement} from '../hooks/isRtlElement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Lightbox/Lightbox.generated';
+import {isRenderable} from '../utils/isRenderable';
+import {prepareFocusReturnOnRemoval} from '../utils/focusReturn';
+
+registerEnglishFallback(english);
 /**
  * Media type for lightbox items.
  */
@@ -124,7 +134,10 @@ const styles = stylex.create({
     position: 'fixed',
     inset: 0,
     width: '100vw',
-    height: '100vh',
+    // The dynamic viewport: the height a mobile browser shows. Its 100vh is
+    // the large viewport, measured with the toolbars retracted, so a viewer
+    // that tall runs under Safari's bottom toolbar and hides the caption.
+    height: stylex.firstThatWorks('100dvh', '100vh'),
     maxWidth: 'none',
     maxHeight: 'none',
     margin: 0,
@@ -326,9 +339,12 @@ export function Lightbox({
   onKeyDown: onKeyDownProp,
   ...props
 }: LightboxProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const mergedDialogRef = useMergedRefs(ref, dialogRef);
+  // Native showModal() lets Tab leave for the browser's own UI, so the shared
+  // module wraps it.
+  useFocusRegionContainment(dialogRef, isOpen);
   const containerRef = useRef<HTMLDivElement>(null);
   const imageWrapperRef = useRef<HTMLDivElement>(null);
   const triggerElementRef = useRef<Element | null>(null);
@@ -414,10 +430,13 @@ export function Lightbox({
     );
   }, [index, isOpen, announce, mediaArray, t]);
 
-  // Open/close dialog
+  // Open/close dialog. The dialog renders only with an item, so a viewer
+  // opened before its first item arrives opens when that item does.
+  const hasItem = currentItem != null;
+  // Syncs the native dialog with `isOpen` through `showModal()` and `close()`.
   useIsomorphicLayoutEffect(() => {
     const dialog = dialogRef.current;
-    if (!dialog) {
+    if (!dialog || !hasItem) {
       return;
     }
 
@@ -430,7 +449,24 @@ export function Lightbox({
         triggerElementRef.current.focus();
       }
     }
-  }, [isOpen]);
+  }, [isOpen, hasItem]);
+
+  // A viewer that unmounts while open (rendered only while open, or removed
+  // with the rest of a view) never runs the close branch above. Focus the
+  // removal lost goes back to the opener while the opener is still on the
+  // page.
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog == null) {
+      return;
+    }
+    const returnFocusOnRemoval = prepareFocusReturnOnRemoval(dialog);
+    return () => {
+      if (dialog.open) {
+        returnFocusOnRemoval(triggerElementRef.current);
+      }
+    };
+  }, [hasItem]);
 
   const handleClose = useCallback(() => {
     onOpenChange(false);
@@ -454,6 +490,11 @@ export function Lightbox({
   // only, and never while an IME composition is in progress.
   const handleCancel = useCallback(
     (e: React.SyntheticEvent) => {
+      // A cancel that bubbles up from inside (a dismissed file picker) is not
+      // a close request; the platform's is fired at the dialog itself.
+      if (e.target !== e.currentTarget) {
+        return;
+      }
       e.preventDefault();
       if (!shouldDismissOnCloseRequest()) {
         return;
@@ -632,10 +673,6 @@ export function Lightbox({
     <dialog
       ref={mergedDialogRef}
       onCancel={handleCancel}
-      onClick={e => {
-        handleBackdropClick(e);
-        onClickProp?.(e);
-      }}
       onKeyDown={e => {
         handleKeyDown(e);
         onKeyDownProp?.(e);
@@ -653,7 +690,16 @@ export function Lightbox({
         className,
         style,
       )}
-      {...props}>
+      {...props}
+      // Presses inside the lightbox do not reach handlers around where it is
+      // written.
+      {...layerClickBoundary({
+        ...props,
+        onClick: (e: React.MouseEvent<HTMLDialogElement>) => {
+          handleBackdropClick(e);
+          onClickProp?.(e);
+        },
+      })}>
       <LayerDepthProvider>
         <ModalAnnounceProvider dialogRef={dialogRef} isOpen={isOpen}>
           <LayerContentBoundary>
@@ -740,7 +786,7 @@ export function Lightbox({
                   )}
                 </div>
 
-                {currentItem.caption && (
+                {isRenderable(currentItem.caption) && (
                   <div {...stylex.props(styles.caption)}>
                     {currentItem.caption}
                   </div>
