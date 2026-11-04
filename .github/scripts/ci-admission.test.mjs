@@ -12,6 +12,7 @@
  */
 
 import fs from 'node:fs';
+import {createRequire} from 'node:module';
 import path from 'node:path';
 
 import {afterEach, describe, expect, it, vi} from 'vitest';
@@ -19,6 +20,7 @@ import yaml from 'yaml';
 import {matrixFor} from './ci-matrix.mjs';
 import {PR_CI_GATE, ungated} from './ci-pr-gate.mjs';
 
+const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, '../..');
 const read = file => yaml.parse(fs.readFileSync(path.join(root, file), 'utf8'));
 const action = read('.github/actions/ci-admission/action.yml');
@@ -312,17 +314,21 @@ describe('slim runners', () => {
   // GitHub stops a job on an `ubuntu-slim` runner at fifteen minutes, and the
   // run is cancelled. So no job that can land on one may plan to run longer.
   const SLIM_CAP_MINUTES = 15;
-  const EVENTS = ['pull_request', 'push', 'workflow_dispatch', 'merge_group'];
-  const pick = (value, event) => {
-    const split =
-      /^\$\{\{ github\.event_name == '([a-z_]+)' && '?([\w-]+)'? \|\| '?([\w-]+)'? \}\}$/.exec(
-        String(value),
-      );
-    if (!split) return String(value);
-    return event === split[1] ? split[2] : split[3];
+  const {labelsOf} = require('./lib/runner-labels.cjs');
+  const TERNARY =
+    /^\$\{\{\s*(.+?)\s*&&\s*'?([\w.-]+)'?\s*\|\|\s*'?([\w.-]+)'?\s*\}\}$/;
+  /** A job's value on its slim branch: `cond && a || b`, as `runs-on` picks slim. */
+  const onSlim = (job, value) => {
+    if (value == null) return null;
+    const runner = TERNARY.exec(String(job['runs-on']));
+    const split = TERNARY.exec(String(value));
+    if (!split) return Number(value);
+    if (!runner || runner[1] !== split[1])
+      throw new Error(`cannot tell which branch of ${value} runs on slim`);
+    return Number(runner[2] === 'ubuntu-slim' ? split[2] : split[3]);
   };
 
-  it('no job that can run on a slim runner has a limit past its fifteen-minute cap', () => {
+  it('no job that can run on a slim runner plans past its fifteen-minute cap', () => {
     const files = fs
       .readdirSync(path.join(root, '.github/workflows'))
       .filter(file => file.endsWith('.yml'));
@@ -330,36 +336,46 @@ describe('slim runners', () => {
     for (const file of files) {
       const workflow = read(`.github/workflows/${file}`);
       for (const [id, job] of Object.entries(workflow.jobs ?? {})) {
-        for (const event of EVENTS) {
-          if (pick(job['runs-on'], event) !== 'ubuntu-slim') continue;
-          slimJobs += 1;
-          const timeout = job['timeout-minutes'];
-          if (timeout == null) continue;
+        if (!labelsOf(job).includes('ubuntu-slim')) continue;
+        slimJobs += 1;
+        const timeout = onSlim(job, job['timeout-minutes']);
+        if (timeout != null)
+          expect(timeout, `${file} ${id}`).toBeLessThanOrEqual(
+            SLIM_CAP_MINUTES,
+          );
+        // An admission wait, set or by default, must end before the cap
+        // whether or not the job sets its own limit.
+        for (const step of job.steps ?? []) {
+          if (step.name !== STEP) continue;
           expect(
-            Number(pick(timeout, event)),
-            `${file} ${id} on ${event}`,
-          ).toBeLessThanOrEqual(SLIM_CAP_MINUTES);
-          for (const step of job.steps ?? []) {
-            if (step.name !== STEP) continue;
-            expect(
-              Number(pick(step.with?.['max-wait-minutes'] ?? 15, event)),
-              `${file} ${id} wait on ${event}`,
-            ).toBeLessThan(SLIM_CAP_MINUTES);
-          }
+            onSlim(job, step.with?.['max-wait-minutes'] ?? 15),
+            `${file} ${id} admission wait`,
+          ).toBeLessThan(SLIM_CAP_MINUTES);
         }
       }
     }
     expect(slimJobs).toBeGreaterThan(0);
   });
 
-  it("picks each event's runner and limit from the workflow expressions", () => {
-    expect(pick(ci.jobs.room['runs-on'], 'workflow_dispatch')).toBe(
-      'ubuntu-latest',
-    );
-    expect(pick(ci.jobs.room['runs-on'], 'pull_request')).toBe('ubuntu-slim');
-    expect(Number(pick(ci.jobs.room['timeout-minutes'], 'pull_request'))).toBe(
-      15,
-    );
+  it("reads a slim job's own limit from the branch its runner takes", () => {
+    expect(onSlim(ci.jobs.room, ci.jobs.room['timeout-minutes'])).toBe(15);
+    expect(
+      onSlim(
+        ci.jobs['test-native-swift'],
+        ci.jobs['test-native-swift']['timeout-minutes'],
+      ),
+    ).toBe(15);
+    // The merge base's Main shape: slim, no job limit, the default wait.
+    const oldMainCommit = {
+      'runs-on': 'ubuntu-slim',
+      steps: [{name: STEP, with: {main: true}}],
+    };
+    expect(
+      onSlim(
+        oldMainCommit,
+        oldMainCommit.steps[0].with['max-wait-minutes'] ?? 15,
+      ),
+    ).toBe(15);
   });
 });
 
@@ -1428,6 +1444,26 @@ describe('ci admission', () => {
     });
     expect(result.looks).toBe(2);
     expect(result.lookTimes[1]).toBeGreaterThan(11 * 60_000);
+  });
+
+  it("yields to a waiting main run only for that wait's first fifteen minutes", async () => {
+    const mainSince = minutes => {
+      const run = waitingRun(70, {event: 'workflow_dispatch'});
+      run.jobs[0].steps[0].started_at = new Date(
+        Date.now() - minutes * 60_000,
+      ).toISOString();
+      return run;
+    };
+    // Fourteen minutes in, a pull-request run that would fit still yields.
+    expect(
+      (await admit({active: () => [mainSince(14)], maxWait: 12, maxLooks: 2}))
+        .looks,
+    ).toBeGreaterThan(1);
+    // Sixteen minutes in, it starts at once; the main run still counts its peak.
+    expect(
+      (await admit({active: () => [mainSince(16)], maxWait: 12, maxLooks: 2}))
+        .looks,
+    ).toBe(1);
   });
 
   it('lets a waiting main run go first, counting its whole peak; never waits for a pull-request run', async () => {

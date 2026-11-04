@@ -23,8 +23,9 @@
 #   jobs a run) always count at least eighteen jobs, which covers all but their
 #   rarest bursts, so the room they can still take is kept free. A pull-request run (`main: false`) also
 #   waits while a
-#   `main` full check or release re-check is waiting, so `main` fits first;
-#   pull-request runs never wait for each other.
+#   `main` full check or release re-check is waiting, for that wait's first
+#   fifteen minutes, so `main` fits first; pull-request runs never wait for
+#   each other.
 # - It waits at most `max-wait-minutes` (120 for `main`, on a standard runner,
 #   since a slim job stops at fifteen minutes; twelve for a pull request,
 #   inside its fifteen-minute job budget), looking at even intervals
@@ -176,6 +177,10 @@ runs:
           // At most this many pull-request runs wait at once; one more finding
           // no room is turned away (spec:AST-030 DEC-16).
           const MAX_WAITING = 10;
+          // A pull-request run yields to a waiting `main` run for the first
+          // fifteen minutes of that wait. A longer `main` wait still counts its
+          // whole peak, but pull-request runs no longer stop for it.
+          const MAIN_YIELD_MS = 15 * 60_000;
           const PHASE = process.env.PHASE || 'whole';
           // The most jobs a run holds at once, by workflow: ci.yml's
           // release-check and Main's runs (a push's fast checks or a unit run)
@@ -310,7 +315,7 @@ runs:
                     // it runs: the job that waits and its Storybook build,
                     // which starts beside it.
                     const holds = isMain(run) ? estimate(run) : Math.max(1, jobs.filter(job => LIVE.includes(job.status)).length);
-                    if (isMain(run) && !main) mainWaiting = true;
+                    if (isMain(run) && !main && !(Date.now() - span.began >= MAIN_YIELD_MS)) mainWaiting = true;
                     if (run.event === 'pull_request') waitingPulls += 1;
                     large += holds;
                     counted.push(`${short(run)} ${run.id} ${run.event}: ${holds} waiting`);

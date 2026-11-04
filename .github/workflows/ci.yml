@@ -1037,7 +1037,9 @@ jobs:
     needs: [heavy-ci, native-swift-runner]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled())) }}
     runs-on: ${{ needs.native-swift-runner.outputs.applies == 'true' && 'macos-15' || 'ubuntu-slim' }}
-    timeout-minutes: 30
+    # The slim branch only reports that Swift is out of scope; a slim job
+    # stops at fifteen minutes.
+    timeout-minutes: ${{ needs.native-swift-runner.outputs.applies == 'true' && 30 || 15 }}
     permissions:
       contents: read
     steps:

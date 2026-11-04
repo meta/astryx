@@ -922,7 +922,10 @@ spend a low API budget. A `main` full check, release re-check or baseline
 capture (every dispatch of the CI workflow) goes first: while one waits,
 pull-request runs wait too, their Storybook builds included. A pull-request run
 that would fit and waits only for a `main` check looks again every two minutes
-until it starts, since `main` waits are short. The extra looks happen only while
+until it starts. It yields only during the `main` check's first fifteen minutes
+of waiting; a longer `main` wait still counts its whole peak, but pull-request
+runs no longer stop for it, so a long `main` wait never turns pull requests
+away for hours. The extra looks happen only while
 CI is near full or `main` waits. Every pull-request job ends within its
 fifteen-minute budget, so `main` usually fits within fifteen minutes. A `main`
 run still waits until there is room, up to two hours, and its waiting job runs
