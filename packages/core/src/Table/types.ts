@@ -428,6 +428,7 @@ export type TableContextActions =
 export interface TableRenderContext {
   readonly mode: 'data' | 'children';
   readonly rowModel: 'flat' | 'tree' | 'grouped' | 'detail' | 'custom';
+  readonly canActivate: boolean;
   readonly logicalRowCount: number;
   readonly headerRowCount: number;
   readonly viewport: RefObject<HTMLDivElement | null>;
@@ -472,6 +473,8 @@ export interface TablePlugin<
 > {
   /** Structural compatibility declaration; absent body modifiers are not flat-admitted. */
   readonly rowModel?: TableRenderContext['rowModel'];
+  /** Whole-row action owner, independent from ordinary non-owning handlers. */
+  readonly wholeRowOwner?: 'activation' | 'expansion' | 'navigation';
   /**
    * Transform the column definitions before rendering.
    * Runs before any element-level transforms. Use to filter, reorder,

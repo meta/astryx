@@ -1,10 +1,17 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-import {describe, it, expect, vi, beforeEach} from 'vitest';
-import {render, screen, fireEvent, act} from '@testing-library/react';
+import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import {
+  render,
+  renderHook,
+  screen,
+  fireEvent,
+  act,
+} from '@testing-library/react';
 import {useState} from 'react';
 import {Table} from '../../Table';
 import type {TableColumn} from '../../types';
+import {useTableActivation} from '../activation/useTableActivation';
 import {useTableRowExpansion} from './useTableRowExpansion';
 import {InternationalizationProvider} from '../../../i18n';
 
@@ -32,6 +39,11 @@ beforeEach(() => {
     }
     return originalMatches.call(this, selector);
   };
+});
+
+afterEach(() => {
+  document.getSelection()?.removeAllRanges();
+  vi.restoreAllMocks();
 });
 
 interface Row extends Record<string, unknown> {
@@ -123,6 +135,77 @@ describe('useTableRowExpansion (detail panel)', () => {
     expect(document.activeElement).toBe(trigger);
     expect(screen.queryByTestId('panel')).not.toBeInTheDocument();
   });
+
+  it.each([undefined, false, true])(
+    'declares whole-row ownership only with row-click expansion %s',
+    hasRowClickExpansion => {
+      const {result, rerender} = renderHook(
+        ({hasRowClickExpansion}) =>
+          useTableRowExpansion<Row>({
+            expandedKeys: EMPTY_KEYS,
+            onToggle: vi.fn(),
+            getRowKey: item => item.id,
+            renderExpanded: defaultRenderExpanded,
+            hasRowClickExpansion,
+          }),
+        {initialProps: {hasRowClickExpansion}},
+      );
+      expect(result.current.rowModel).toBe('detail');
+      expect(result.current.wholeRowOwner).toBe(
+        hasRowClickExpansion === true ? 'expansion' : undefined,
+      );
+      rerender({hasRowClickExpansion: !hasRowClickExpansion});
+      expect(result.current.rowModel).toBe('detail');
+      expect(result.current.wholeRowOwner).toBe(
+        hasRowClickExpansion === true ? undefined : 'expansion',
+      );
+    },
+  );
+
+  it.each([false, true])(
+    'keeps detail-model activation inactive while preserving expansion with row-click %s',
+    hasRowClickExpansion => {
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const onActivate = vi.fn();
+      function Fixture() {
+        const [expandedKeys, setExpandedKeys] = useState(EMPTY_KEYS);
+        const expansion = useTableRowExpansion<Row>({
+          expandedKeys,
+          onToggle: key => setExpandedKeys(new Set([key])),
+          getRowKey: item => item.id,
+          renderExpanded: defaultRenderExpanded,
+          hasRowClickExpansion,
+        });
+        const activation = useTableActivation<Row>({
+          activeKey: 'a',
+          onActivate,
+        });
+        return (
+          <Table
+            data={rows}
+            columns={columns}
+            idKey="id"
+            plugins={{expansion, activation}}
+          />
+        );
+      }
+      render(<Fixture />);
+      const fixture = screen.getByText('Ada').closest('tr')!;
+      expect(fixture).not.toHaveAttribute('aria-current');
+      expect(fixture).not.toHaveAttribute('tabindex');
+      fireEvent.click(screen.getByText('Ada'));
+      if (hasRowClickExpansion) {
+        expect(screen.getByTestId('panel')).toHaveTextContent('Ada: Ada bio');
+      } else {
+        expect(screen.queryByTestId('panel')).not.toBeInTheDocument();
+        fireEvent.click(
+          screen.getAllByRole('button', {name: /expand row/i})[0],
+        );
+        expect(screen.getByTestId('panel')).toHaveTextContent('Ada: Ada bio');
+      }
+      expect(onActivate).not.toHaveBeenCalled();
+    },
+  );
   it('renders an "Expand row" chevron button for every expandable row', () => {
     render(<Harness />);
     expect(screen.getAllByRole('button', {name: /expand row/i})).toHaveLength(
@@ -620,41 +703,48 @@ describe('useTableRowExpansion (detail panel)', () => {
     });
 
     it('yields to a text selection', () => {
-      // Dragging across a cell to copy it ends in a click. Toggling then would
-      // shift the row out from under the text the reader just selected. The
-      // selection has to be anchored inside the row: one somewhere else on the
-      // page is not this row's business, which is why the shared guard scopes
-      // it to the node rather than asking the document for any selection.
       render(<Harness hasRowClickExpansion />);
       const cell = screen.getByText('Ada');
-      const selection = {
-        isCollapsed: false,
-        anchorNode: cell.firstChild ?? cell,
-        toString: () => 'Ada',
-      } as unknown as Selection;
-      const spy = vi.spyOn(document, 'getSelection').mockReturnValue(selection);
+      const range = document.createRange();
+      range.selectNodeContents(cell);
+      document.getSelection()!.addRange(range);
       fireEvent.click(cell);
       expect(screen.queryByTestId('panel')).not.toBeInTheDocument();
-      spy.mockRestore();
+    });
+
+    it('yields when a selected range starts outside and intersects the row', () => {
+      render(
+        <>
+          <p>Outside</p>
+          <Harness hasRowClickExpansion />
+        </>,
+      );
+      const cell = screen.getByText('Ada');
+      const range = document.createRange();
+      range.setStart(screen.getByText('Outside').firstChild!, 0);
+      range.setEnd(cell.firstChild!, 2);
+      const selection = document.getSelection()!;
+      selection.addRange(range);
+      expect(rowFor('Ada').contains(selection.anchorNode)).toBe(false);
+      fireEvent.click(cell);
+      expect(screen.queryByTestId('panel')).not.toBeInTheDocument();
+      selection.removeAllRanges();
+      fireEvent.click(cell);
+      expect(screen.getByTestId('panel')).toHaveTextContent('Ada: Ada bio');
     });
 
     it('toggles despite a text selection somewhere else on the page', () => {
-      // The old guard asked the document for any selection at all, so text
-      // selected in a sidebar made every row in the table inert.
-      render(<Harness hasRowClickExpansion />);
-      const outside = document.createElement('p');
-      outside.textContent = 'elsewhere';
-      document.body.appendChild(outside);
-      const selection = {
-        isCollapsed: false,
-        anchorNode: outside.firstChild,
-        toString: () => 'elsewhere',
-      } as unknown as Selection;
-      const spy = vi.spyOn(document, 'getSelection').mockReturnValue(selection);
+      render(
+        <>
+          <p>Outside</p>
+          <Harness hasRowClickExpansion />
+        </>,
+      );
+      const range = document.createRange();
+      range.selectNodeContents(screen.getByText('Outside'));
+      document.getSelection()!.addRange(range);
       fireEvent.click(screen.getByText('Ada'));
       expect(screen.getByTestId('panel')).toBeInTheDocument();
-      spy.mockRestore();
-      outside.remove();
     });
 
     it('leaves non-expandable rows inert', () => {

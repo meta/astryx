@@ -83,8 +83,9 @@ export function innermostInteractive(
   rootEl: Element | null,
   isInteractive: (element: Element) => boolean = matchesInteractiveSelectors,
 ): Element | null {
+  const body = el.ownerDocument.body;
   let current: Element | null = el;
-  while (current != null && current !== rootEl && current !== document.body) {
+  while (current != null && current !== rootEl && current !== body) {
     if (isInteractive(current)) {
       return current;
     }
@@ -127,14 +128,26 @@ function belongsToSomethingElse(element: Element): boolean {
  * selection somewhere else on the page does not make the surface inert.
  */
 export function hasTextSelection(node: Element): boolean {
-  if (typeof document === 'undefined' || !('getSelection' in document)) {
+  const document = node.ownerDocument;
+  if (!('getSelection' in document)) {
     return false;
   }
   const selection = document.getSelection();
   if (selection == null || selection.isCollapsed) {
     return false;
   }
-  return node.contains(selection.anchorNode);
+  for (let index = 0; index < selection.rangeCount; index++) {
+    try {
+      const range = selection.getRangeAt(index);
+      if (!range.collapsed && range.intersectsNode(node)) {
+        return true;
+      }
+    } catch {
+      // A changing or inaccessible range is not a proven container press.
+      return true;
+    }
+  }
+  return false;
 }
 
 export interface UseClickableContainerOptions {

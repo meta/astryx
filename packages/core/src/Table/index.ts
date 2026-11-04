@@ -28,6 +28,8 @@ export interface TableSemanticRowStatus {
 }
 
 export {Table} from './Table';
+export {useTableActivation} from './plugins/activation';
+export type {UseTableActivationConfig} from './plugins/activation';
 export {useTableRowsVirtualization} from './plugins/virtualization';
 export type {
   UseTableRowsVirtualizationConfig,

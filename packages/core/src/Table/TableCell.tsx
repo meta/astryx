@@ -6,7 +6,7 @@
  * @file TableCell.tsx
  * @input React, StyleX, TableContext, theme tokens, useTableCellStyles
  * @output Exports TableCell component, TableCellProps
- * @position Sub-component; used inside Table children mode
+ * @position Sub-component; paints the independent current-row cue on cell anatomy
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Table/Table.doc.mjs
@@ -66,6 +66,49 @@ export interface TableCellProps extends BaseProps<HTMLTableCellElement> {
    */
   contextMenuActions?: TableContextActions;
 }
+
+const activeCueStyles = stylex.create({
+  cell: {
+    position: {
+      default: null,
+      ':first-child': 'relative',
+    },
+    // Paint on the existing sticky overlay layer, above its background. Keep
+    // ::after available for the pinned-column scroll shadow.
+    '::before': {
+      content: {
+        default: null,
+        ':first-child': '""',
+      },
+      position: 'absolute',
+      inset: 0,
+      pointerEvents: 'none',
+      // Forced colours remove box shadows. Keep a single inline-start stroke,
+      // not a surrounding outline that could be mistaken for keyboard focus.
+      borderInlineStartWidth: {
+        default: null,
+        '@media (forced-colors: active)': {
+          ':first-child': 'var(--table-row-active-cue-width, 0px)',
+        },
+      },
+      borderInlineStartStyle: {
+        default: null,
+        '@media (forced-colors: active)': {':first-child': 'solid'},
+      },
+      borderInlineStartColor: {
+        default: null,
+        '@media (forced-colors: active)': {':first-child': 'Highlight'},
+      },
+      boxShadow: {
+        default: null,
+        ':first-child':
+          'inset var(--table-row-active-cue-width, 0px) 0 0 0 var(--color-accent)',
+        ':first-child:is([dir="rtl"] *)':
+          'inset calc(-1 * var(--table-row-active-cue-width, 0px)) 0 0 0 var(--color-accent)',
+      },
+    },
+  },
+});
 
 const densityStyles = stylex.create({
   compact: {
@@ -228,6 +271,7 @@ export function TableCell({
   // padding included — opens the menu. Otherwise padding lives on the `<td>`.
   const cellStyles: StyleXStyles[] = ctx
     ? [
+        activeCueStyles.cell,
         hasContextMenu
           ? densityTextStyles[ctx.density]
           : densityStyles[ctx.density],

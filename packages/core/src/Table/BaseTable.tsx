@@ -34,6 +34,7 @@ import {getTableVirtualizationConfig} from './plugins/virtualization/useTableRow
 import {TableContext} from './TableContext';
 import {use} from 'react';
 import {TableRowFocusContext} from './tableRowFocus';
+import {finalizeRowActivation} from './tableRowActivation';
 import {
   isFixedHeightColumn,
   getLogicalPositionRenderer,
@@ -353,17 +354,19 @@ function TableRowInner<T extends Record<string, unknown>>({
   // Apply plugin transforms for row (with pre-rendered children).
   // Seed `aria-rowindex` (when the table opts into ARIA row indexing) as a
   // base htmlProp so plugins compose over it and can still override.
-  const rowRenderProps = applyRowPlugins(
-    plugins,
-    p => p.transformBodyRow,
-    {
-      htmlProps: ariaRowIndex == null ? {} : {'aria-rowindex': ariaRowIndex},
-      xstyle: [],
-      children: <>{cells}</>,
-    } satisfies BodyRowRenderProps,
-    context,
-    item,
-    rowIndex,
+  const rowRenderProps = finalizeRowActivation(
+    applyRowPlugins(
+      plugins,
+      p => p.transformBodyRow,
+      {
+        htmlProps: ariaRowIndex == null ? {} : {'aria-rowindex': ariaRowIndex},
+        xstyle: [],
+        children: <>{cells}</>,
+      } satisfies BodyRowRenderProps,
+      context,
+      item,
+      rowIndex,
+    ),
   );
 
   const rowHtml = rowRenderProps.htmlProps;
@@ -448,6 +451,8 @@ function areRowPropsEqual<T extends Record<string, unknown>>(
     (prevProps.renderContext !== nextProps.renderContext &&
       (prevProps.rowHeight != null ||
         nextProps.rowHeight != null ||
+        prevProps.renderContext.canActivate !==
+          nextProps.renderContext.canActivate ||
         prevProps.plugins.some(readsRowCount) ||
         prevProps.renderContext.mode !== nextProps.renderContext.mode ||
         prevProps.renderContext.rowModel !== nextProps.renderContext.rowModel ||
@@ -568,7 +573,8 @@ function BaseTableInner<T extends Record<string, unknown>>({
   const runtime = useMemo(() => createTableRuntime(), []);
   const admission = useMemo(() => resolveTableAdmission(plugins), [plugins]);
   const mode = children ? 'children' : 'data';
-  const usesCanonicalIdentity = virtualization != null;
+  const usesCanonicalIdentity =
+    admission.usesCanonicalIdentity || virtualization != null;
   const identityLength = data?.length ?? 0;
   const cachedIdentity = useMemo(
     () =>
@@ -584,6 +590,19 @@ function BaseTableInner<T extends Record<string, unknown>>({
     () => identity.map((row, index) => row.key ?? index),
     [identity],
   );
+  useDevWarningPerMessage(
+    'Table',
+    'Conflicting whole-row owners; activation is inactive.',
+    admission.hasOwnerConflict,
+  );
+  useDevWarningPerMessage(
+    'Table',
+    'Explicit unique string or finite-number idKey is required by activation/windowing.',
+    virtualization == null &&
+      admission.usesCanonicalIdentity &&
+      identity.some(row => row.identityStatus !== 'valid'),
+  );
+
   const ariaRowIndexingEnabled = rowIndexStart != null || rowCount != null;
   const firstRowAriaIndex = rowIndexStart ?? 1;
   const ariaRowCount = ariaRowIndexingEnabled ? (rowCount ?? -1) : undefined;
@@ -694,6 +713,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
     () => ({
       mode,
       rowModel: admission.rowModel,
+      canActivate: mode === 'data' && admission.canActivate,
       logicalRowCount: data?.length ?? 0,
       headerRowCount,
       viewport: runtime.viewport,
