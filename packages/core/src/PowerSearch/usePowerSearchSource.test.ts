@@ -596,11 +596,11 @@ describe('usePowerSearchSource', () => {
       expect(aux.filterValue).toEqual({type: 'enum_list', value: ['bug']});
     });
   });
-  describe("valueSuggestionBehavior: 'all-string-fields'", () => {
+  describe("valueMatchBehavior: 'all-string-fields'", () => {
     const allStringsConfig: PowerSearchConfig = {
       ...baseConfig,
       contentSearchFieldKey: 'title',
-      valueSuggestionBehavior: 'all-string-fields',
+      valueMatchBehavior: 'all-string-fields',
     };
 
     it('is off by default: free text offers only the content-search item', () => {
@@ -637,7 +637,7 @@ describe('usePowerSearchSource', () => {
       const config: PowerSearchConfig = {
         name: 'OptOut',
         contentSearchFieldKey: 'title',
-        valueSuggestionBehavior: 'all-string-fields',
+        valueMatchBehavior: 'all-string-fields',
         fields: [
           {
             key: 'title',
@@ -656,7 +656,7 @@ describe('usePowerSearchSource', () => {
     it('respects typeaheadMinQueryLength', () => {
       const config: PowerSearchConfig = {
         name: 'MinLength',
-        valueSuggestionBehavior: 'all-string-fields',
+        valueMatchBehavior: 'all-string-fields',
         fields: [
           {
             key: 'title',
@@ -682,7 +682,7 @@ describe('usePowerSearchSource', () => {
       const config: PowerSearchConfig = {
         name: 'SourceValues',
         contentSearchFieldKey: 'title',
-        valueSuggestionBehavior: 'all-string-fields',
+        valueMatchBehavior: 'all-string-fields',
         fields: [
           {
             key: 'title',
@@ -729,7 +729,7 @@ describe('usePowerSearchSource', () => {
       // query ('title nest') as the value. (The content-search item quotes
       // the raw query by design, so it is excluded here.)
       const valueItems = results.filter(
-        r => !String(r.id).startsWith('__content_search__'),
+        r => !r.id.startsWith('__content_search__'),
       );
       expect(valueItems.some(r => r.label.includes('"title nest"'))).toBe(
         false,
@@ -742,7 +742,7 @@ describe('usePowerSearchSource', () => {
       query => {
         const source = createSource(allStringsConfig);
         const valueItems = syncSearch(source, query).filter(r =>
-          String(r.id).includes(':value:'),
+          r.id.includes(':value:'),
         );
         expect(valueItems).toEqual([]);
       },

@@ -180,7 +180,7 @@ export function usePowerSearchSource(
         // Opt-in free-text value matches across every visible string field.
         // A query that starts with a field label belongs to the prefix path
         // above. Its value is the text after the label, not the whole query.
-        if (config.config.valueSuggestionBehavior === 'all-string-fields') {
+        if (config.config.valueMatchBehavior === 'all-string-fields') {
           const startsWithFieldLabel = config.getVisibleFields().some(f => {
             const label = f.label.toLowerCase();
             return lower === label || lower.startsWith(`${label} `);
@@ -203,9 +203,8 @@ export function usePowerSearchSource(
                 ) {
                   continue;
                 }
-                // A free-text row commits a value the field's editor never
-                // offers when the operator takes its values from a search
-                // source, so skip those unless arbitrary strings are allowed.
+                // The editor of a search-source operator lists only source values.
+                // Skip the operator unless it allows arbitrary strings.
                 if (
                   op.value.searchSource != null &&
                   op.value.isArbitraryStringAllowed !== true

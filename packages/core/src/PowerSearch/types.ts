@@ -347,11 +347,12 @@ export interface PowerSearchConfig {
   readonly contentSearchFieldKey?: string;
   /**
    * How free text (not starting with a field label) suggests values.
-   * `'field-prefix'` (default) only offers the content-search item;
-   * `'all-string-fields'` additionally emits a `<Field> <op> "<text>"` item
-   * for every visible string/string_list operator.
+   * `'field-prefix'` answers only field-prefixed queries; `'all-string-fields'`
+   * additionally emits a `<Field> <op> "<text>"` item for every visible
+   * string/string_list operator.
+   * @default 'field-prefix'
    */
-  readonly valueSuggestionBehavior?: 'field-prefix' | 'all-string-fields';
+  readonly valueMatchBehavior?: 'field-prefix' | 'all-string-fields';
 }
 
 // =============================================================================
