@@ -43,7 +43,7 @@ import {Calendar} from '@astryxdesign/core/Calendar';
         },
         {
           type: 'prose',
-          text: "Most calendars need the runtime's `Temporal`. Safari and older runtimes lack it: load `temporal-polyfill/full/global` there, on the server and in the browser. Without it, those calendars show Gregorian dates. See {@link namespace:calendars} for the supported calendars, server rendering, and the Chinese and Korean calendars.",
+          text: "Most calendars need the runtime's `Temporal`. Safari and older runtimes lack it: load `temporal-polyfill/full/global` there, on the server and in the browser. Without it, those calendars show Gregorian dates. See {@link namespace:calendars} for the supported calendars, server rendering, and the lunisolar calendars.",
         },
       ],
     },

@@ -945,7 +945,7 @@
       "choose-a-calendar",
       "supported-calendars",
       "load-temporal-where-the-runtime-lacks-it",
-      "chinese-and-korean-calendars",
+      "lunisolar-calendars",
       "week-numbers"
     ],
     "mentions": []

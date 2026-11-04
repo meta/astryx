@@ -3,7 +3,7 @@
 /**
  * @file `astryx docs internationalization/calendars/calendar-systems`:
  * choosing a calendar, the supported calendars, loading Temporal on the server
- * and in the browser, the Chinese and Korean calendars, and week numbers.
+ * and in the browser, the lunisolar calendars, and week numbers.
  */
 
 /** @type {import('@astryxdesign/cli/authoring').ReferenceDoc} */
@@ -19,7 +19,7 @@ export const docs = {
   },
   category: 'guide',
   description:
-    'Choosing a calendar, which calendars need Temporal, server rendering, the Chinese and Korean calendars, and week numbers.',
+    'Choosing a calendar, which calendars need Temporal, server rendering, the lunisolar calendars, and week numbers.',
 
   sections: [
     {
@@ -60,7 +60,7 @@ import {Calendar} from '@astryxdesign/core/Calendar';
           rows: [
             ['Gregorian', '`gregory`, `iso8601`', 'No'],
             ['Buddhist (Thai)', '`buddhist`', 'No'],
-            ['Republic of China (Minguo)', '`roc`', 'No'],
+            ['Minguo', '`roc`', 'No'],
             ['Japanese (eras)', '`japanese`', 'No'],
             ['Persian (Solar Hijri)', '`persian`', 'Yes'],
             ['Indian national (Saka)', '`indian`', 'Yes'],
@@ -70,8 +70,7 @@ import {Calendar} from '@astryxdesign/core/Calendar';
               '`islamic-umalqura`, `islamic-civil`, `islamic-tbla`',
               'Yes',
             ],
-            ['Chinese', '`chinese`', 'Yes'],
-            ['Korean (Dangi)', '`dangi`', 'Yes'],
+            ['Lunisolar', '`chinese`, `dangi`', 'Yes'],
             ['Coptic', '`coptic`', 'Yes'],
             ['Ethiopian', '`ethiopic`, `ethioaa`', 'Yes'],
           ],
@@ -91,7 +90,7 @@ import {Calendar} from '@astryxdesign/core/Calendar';
         },
         {
           type: 'prose',
-          text: 'Where `Temporal` is missing, load the full build of `temporal-polyfill` before your app renders. The default build has no non-ISO calendars. Load it only where `Temporal` is missing: a native implementation is more accurate for the Chinese and Korean calendars.',
+          text: 'Where `Temporal` is missing, load the full build of `temporal-polyfill` before your app renders. The default build has no non-ISO calendars. Load it only where `Temporal` is missing: a native implementation is more accurate for the lunisolar calendars.',
         },
         {
           type: 'code',
@@ -113,18 +112,18 @@ if (!('Temporal' in globalThis)) {
       ],
     },
     {
-      title: 'Chinese and Korean calendars',
+      title: 'Lunisolar calendars',
       content: [
         {
           type: 'prose',
-          text: "Chinese and Korean months start on new moons computed from astronomy, and runtimes do not all agree on a few of them. Astryx follows the runtime's `Temporal` and does not correct it.",
+          text: "In the lunisolar calendars, months start on new moons computed from astronomy, and runtimes do not all agree on a few of them. Astryx follows the runtime's `Temporal` and does not correct it.",
         },
         {
           type: 'list',
           style: 'unordered',
           items: [
             'Native `Temporal` in Chrome, Edge, Firefox, and Node.js 26 agrees with official observatory data from 1900 through 2100.',
-            "A polyfill reads the platform's `Intl` data instead. Under a polyfill, Node.js 24 starts nine Chinese and four Korean months in that range one day apart from the native result: Chinese New Year 2027 is February 6 with native `Temporal` and February 7 under the polyfill. Safari uses the same kind of `Intl` data, so expect the same differences there.",
+            "A polyfill reads the platform's `Intl` data instead. Under a polyfill, Node.js 24 starts nine `chinese` and four `dangi` months in that range one day apart from the native result: the first month of the 2027 `chinese` year starts on February 6 with native `Temporal` and on February 7 under the polyfill. Safari uses the same kind of `Intl` data, so expect the same differences there.",
             'Within one browser, the day numbers a person sees, the dates a screen reader announces, and the value they pick agree. Only two different runtimes can disagree.',
           ],
         },

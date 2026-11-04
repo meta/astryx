@@ -3,7 +3,7 @@
 /**
  * @file `astryx docs internationalization/calendars`: calendar systems in
  * detail. Which calendars date components show, how to load Temporal, server
- * rendering, and the Chinese and Korean calendars. The `i18n-calendars` guide
+ * rendering, and the lunisolar calendars. The `i18n-calendars` guide
  * beside it has the short version.
  */
 
@@ -18,7 +18,7 @@ export const docs = {
   },
   title: 'Calendars',
   summary:
-    'Show dates in the Persian, Hebrew, Islamic, Buddhist, Japanese, Chinese, and other calendars while values stay Gregorian ISO dates.',
+    'Show dates in the Persian, Hebrew, Islamic, Buddhist, Japanese, lunisolar, and other calendars while values stay Gregorian ISO dates.',
   keywords: [
     'calendar',
     'calendar system',
@@ -29,8 +29,9 @@ export const docs = {
     'Islamic',
     'Buddhist',
     'Japanese era',
-    'Chinese',
-    'Korean',
+    'lunisolar',
+    'chinese',
+    'dangi',
     'Ethiopian',
     'Temporal',
     'polyfill',
