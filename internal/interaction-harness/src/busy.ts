@@ -22,14 +22,45 @@
 
 import type {Locator, Page} from '@playwright/test';
 import {defineCurveEnd} from './curve-end';
-import {frameStats, type FrameStats, type TrackedFrame} from './frames';
+import {
+  frameStats,
+  trackMarker,
+  type CastFrame,
+  type FrameStats,
+  type TrackedFrame,
+} from './frames';
 
 /** The control's colour, apart from the component's marker (`MARKER_RGB`). */
 export const CONTROL_RGB: readonly [number, number, number] = [0, 255, 255];
 
-/** The control box's side, and how far it travels along the top edge, CSS px. */
-const CONTROL_SIDE = 12;
+/**
+ * The control box's side, CSS px: it crosses the page's top `CONTROL_SIDE` px,
+ * where a proof reads nothing of the component.
+ */
+export const CONTROL_SIDE = 12;
+/** How far the control travels along the top edge, CSS px. */
 const CONTROL_TRAVEL = 240;
+/** How long the control takes to travel `CONTROL_TRAVEL` one way, ms. */
+const CONTROL_LEG_MS = 400;
+
+/**
+ * The control in each frame (`startBusyControl`'s box): `trackMarker` with
+ * `CONTROL_RGB`, searching only the strip the box crosses.
+ */
+export async function trackControl(
+  page: Page,
+  frames: readonly CastFrame[],
+): Promise<TrackedFrame[]> {
+  return trackMarker(page, frames, {
+    rgb: CONTROL_RGB,
+    region: {
+      x: 0,
+      y: 0,
+      width: CONTROL_SIDE + CONTROL_TRAVEL + 4,
+      height: CONTROL_SIDE + 4,
+    },
+  });
+}
 
 /**
  * Starts a plain compositor-only control animation: a `CONTROL_RGB` box in the
@@ -70,7 +101,7 @@ export async function startBusyControl(
     );
   }
   await page.evaluate(
-    ({color, side, travel}) =>
+    ({color, side, travel, legMs}) =>
       new Promise<void>((resolve, reject) => {
         const host = document.querySelector('[data-harness-control-host]');
         host?.removeAttribute('data-harness-control-host');
@@ -90,7 +121,7 @@ export async function startBusyControl(
             {transform: `translateX(${travel}px)`},
           ],
           {
-            duration: 400,
+            duration: legMs,
             iterations: Infinity,
             direction: 'alternate',
             easing: 'linear',
@@ -131,7 +162,12 @@ export async function startBusyControl(
         };
         frame(tick);
       }),
-    {color: [...rgb], side: CONTROL_SIDE, travel: CONTROL_TRAVEL},
+    {
+      color: [...rgb],
+      side: CONTROL_SIDE,
+      travel: CONTROL_TRAVEL,
+      legMs: CONTROL_LEG_MS,
+    },
   );
   return {
     raise: () =>
@@ -150,6 +186,58 @@ export async function startBusyControl(
         }
       }),
   };
+}
+
+/**
+ * The compositor's clock in each frame of `control` (`startBusyControl`'s box,
+ * tracked with `CONTROL_RGB`), ms from the start of the first leg seen. The
+ * box moves `CONTROL_TRAVEL` px every `CONTROL_LEG_MS`, back and forth, so its
+ * position and direction say how far its animation has run. The compositor
+ * samples every animation at one time in a frame. So a component can be
+ * judged against this clock, not the screencast's stamps. A loaded machine
+ * can set those a frame or more after the frame's own time.
+ *
+ * A frame beside a turn could be on either leg, so it gets no reading, and
+ * neither does a frame without the box. Two readings a whole leg or more
+ * apart could hide two turns, so that throws: the compositor presented too
+ * little there to count the turns.
+ */
+export function controlClock(
+  control: readonly TrackedFrame[],
+): Map<number, number> {
+  const seen = control.flatMap(f =>
+    f.box == null ? [] : [{t: f.t, x: f.box.x}],
+  );
+  const step = (from: number, to: number) =>
+    Math.abs(to - from) > 0.25 ? Math.sign(to - from) : 0;
+  const clock = new Map<number, number>();
+  let leg = -1;
+  let way = 0;
+  let last: number | null = null;
+  seen.forEach((frame, i) => {
+    const back = i > 0 ? step(seen[i - 1].x, frame.x) : 0;
+    const ahead = i + 1 < seen.length ? step(frame.x, seen[i + 1].x) : 0;
+    if (back !== 0 && ahead !== 0 && back !== ahead) {
+      return;
+    }
+    const direction = back || ahead;
+    if (direction === 0) {
+      return;
+    }
+    if (last != null && frame.t - last >= CONTROL_LEG_MS) {
+      throw new Error(
+        `controlClock: no reading for ${(frame.t - last).toFixed(0)} ms, a whole leg or more, so the control's turns cannot be counted`,
+      );
+    }
+    if (direction !== way) {
+      leg = leg < 0 ? (direction > 0 ? 0 : 1) : leg + 1;
+      way = direction;
+    }
+    const along = direction > 0 ? frame.x : CONTROL_TRAVEL - frame.x;
+    clock.set(frame.t, (leg + along / CONTROL_TRAVEL) * CONTROL_LEG_MS);
+    last = frame.t;
+  });
+  return clock;
 }
 
 /** What the control presented in the judged part (see `busyWindowProof`). */
