@@ -364,6 +364,7 @@
     "/templates/InfoTipPermissionNotes/",
     "/templates/InfoTipShowcase/",
     "/templates/InputGroupBasic/",
+    "/templates/InputGroupSearchAction/",
     "/templates/InputGroupShowcase/",
     "/templates/InternationalizationProvider01ShippedLocale/",
     "/templates/InternationalizationProvider02Overrides/",

@@ -2307,6 +2307,11 @@
       "aliases": []
     },
     {
+      "name": "example-input-group-search-action",
+      "path": "examples/input-group/search-action",
+      "aliases": []
+    },
+    {
       "name": "example-internationalization-provider-overrides",
       "path": "examples/internationalization-provider/overrides",
       "aliases": []
