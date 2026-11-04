@@ -353,4 +353,47 @@ describe('build-css astryx.css', () => {
       expect(costly).toEqual([]);
     });
   });
+
+  describe("the list rows' touch hit layer", () => {
+    /**
+     * A rule the build puts inside the touch gate (TOUCH_QUERY,
+     * utils/touchQueries.ts): a coarse primary pointer, iOS and Android alike,
+     * never a mouse. No engine condition: one touch model.
+     */
+    const TOUCH_GATED = /^@media \(pointer: coarse\)\{(?!@supports)/;
+    const rules = () => astryxCss.split('\n').map(line => line.trim());
+
+    it('gives an interactive row its hit layer only under a finger, and no row a new height', () => {
+      // Its top and bottom edges grow by the insets utils/hitArea.ts measures,
+      // plus the border the row declares on that side. The layer's offsets
+      // start at the row's padding box, but the insets start at its border
+      // box.
+      const edges = rules().filter(rule =>
+        /::after\{(top|bottom):calc\(\(var\(--astryx-hit-inset-\1, ?0px\) ?\+ ?var\(--_hit-border-\1, ?0px\)\) ?\* ?-1\)\}/.test(
+          rule,
+        ),
+      );
+      const sides = new Set(
+        edges.map(rule => /::after\{(top|bottom):/.exec(rule)[1]),
+      );
+      expect([...sides].sort()).toEqual(['bottom', 'top']);
+      for (const rule of edges) {
+        expect(rule).toMatch(TOUCH_GATED);
+      }
+      // Row height and geometry stay as they are, under every pointer.
+      expect(
+        rules().filter(rule => /\{min-height:(52|62)px\}/.test(rule)),
+      ).toEqual([]);
+    });
+
+    it('declares a row’s border width on its layer alone, so content inside the row never inherits it', () => {
+      const declared = rules().filter(rule =>
+        /\{--_hit-border-(top|right|bottom|left):/.test(rule),
+      );
+      expect(declared.length).toBeGreaterThan(0);
+      for (const rule of declared) {
+        expect(rule).toMatch(/::after\{--_hit-border-/);
+      }
+    });
+  });
 });

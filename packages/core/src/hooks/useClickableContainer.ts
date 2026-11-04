@@ -6,7 +6,8 @@
  * @file useClickableContainer.ts
  * @input Container ref, interactive element ref, click/href handlers
  * @output onClick and onMouseUp handlers for the container; INTERACTIVE_SELECTORS list;
- *   hasInteractiveAncestor and the shared innermostInteractive walk
+ *   hasInteractiveAncestor and the shared innermostInteractive walk; the
+ *   internal useClickableContainerProxy, the click handlers without the marker
  * @position Core hook for clickable containers with nested interactive
  *   elements. A click on a nested button or link does not run the card's
  *   action. Each navigation passes the rule in utils/safeUrl.ts first.
@@ -188,14 +189,10 @@ export interface ClickableContainerResult {
  * );
  * ```
  */
-export function useClickableContainer({
-  containerRef,
-  interactiveRef,
-  onClick: onClickProp,
-  href,
-  target,
-  disabled = false,
-}: UseClickableContainerOptions): ClickableContainerResult {
+export function useClickableContainer(
+  options: UseClickableContainerOptions,
+): ClickableContainerResult {
+  const {containerRef} = options;
   // Mark container as pressable for the interactive selector check
   useEffect(() => {
     const el = containerRef.current;
@@ -203,7 +200,22 @@ export function useClickableContainer({
       el.setAttribute(PRESSABLE_CONTAINER_ATTRIBUTE, 'true');
     }
   }, [containerRef]);
+  return useClickableContainerProxy(options);
+}
 
+/**
+ * `useClickableContainer`'s click handlers, without its marker. Internal: Item
+ * serves its delegate and List link rows from one call, and renders the marker
+ * on a delegate row itself.
+ */
+export function useClickableContainerProxy({
+  containerRef,
+  interactiveRef,
+  onClick: onClickProp,
+  href,
+  target,
+  disabled = false,
+}: UseClickableContainerOptions): ClickableContainerResult {
   const onClick = useCallback(
     (event: MouseEvent<HTMLElement>) => {
       if (disabled) {
