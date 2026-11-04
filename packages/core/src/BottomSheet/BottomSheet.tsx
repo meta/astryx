@@ -445,10 +445,9 @@ function StandaloneBottomSheet({
     false,
   );
   const isEntrySettled = settledOpen && isOpen;
-  // An open modal sheet is a focus region: Tab and Shift+Tab wrap inside it
-  // through the shared module (component:Dialog/DEC-2). A non-modal sheet
-  // leaves the page's focus order alone (FR11), and a closing sheet stops
-  // containing as soon as it starts to leave.
+  // Only a modal sheet contains Tab; a non-modal one leaves the page's focus
+  // order alone. A closing sheet stops containing as soon as it starts to
+  // leave.
   useFocusRegionContainment(dialogRef, isOpen && hasScrim);
   // Presentation outlives the controlled prop: a closing sheet stays mounted
   // and in its native host through its exit, and only its motion completion

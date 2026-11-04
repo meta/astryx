@@ -28,7 +28,7 @@ import {
   resolveDialogPositionOffsets,
 } from './Dialog';
 import {DialogHeader} from './DialogHeader';
-import {getFocusableElements} from '../hooks/useFocusTrap';
+import {getFocusableElements, useFocusTrap} from '../hooks/useFocusTrap';
 import {defineTheme, generateThemeCSS} from '../theme';
 import {
   __resetInteractionModalityForTest,
@@ -1883,10 +1883,9 @@ describe('Dialog', () => {
   });
 });
 
-// component:Dialog/DEC-2: every modal presentation contains Tab through the
-// shared focus-region module. Tab from the last tabbable control wraps to the
-// first and Shift+Tab from the first wraps to the last, so focus never leaves
-// the modal for the browser's own UI.
+// Tab from the last tabbable control wraps to the first and Shift+Tab from the
+// first wraps to the last, so focus never leaves the modal for the browser's
+// own UI.
 function expectTabWrapsInside(modal: HTMLElement) {
   const tabbables = getFocusableElements(modal);
   expect(tabbables.length).toBeGreaterThan(0);
@@ -1902,7 +1901,61 @@ function expectTabWrapsInside(modal: HTMLElement) {
   expect(last).toHaveFocus();
 }
 
+function PanelRegion() {
+  const {containerRef} = useFocusTrap<HTMLDivElement>({isActive: true});
+  return (
+    <div ref={containerRef}>
+      <button type="button">Panel first</button>
+      <button type="button">Panel last</button>
+    </div>
+  );
+}
+
 describe('Dialog focus region (DEC-2)', () => {
+  it('lets a region opened last inside the Dialog answer its own Tab', () => {
+    // The panel's last control is also the Dialog's last Tab stop. The
+    // Dialog's listener runs first because it was activated first, so only
+    // the innermost-region rule keeps Tab inside the panel.
+    const {rerender} = render(
+      <Dialog isOpen onOpenChange={() => {}} aria-label="Settings">
+        <button type="button">Dialog first</button>
+      </Dialog>,
+    );
+    rerender(
+      <Dialog isOpen onOpenChange={() => {}} aria-label="Settings">
+        <button type="button">Dialog first</button>
+        <PanelRegion />
+      </Dialog>,
+    );
+    const panelLast = screen.getByRole('button', {name: 'Panel last'});
+    panelLast.focus();
+
+    expect(fireEvent.keyDown(panelLast, {key: 'Tab'})).toBe(false);
+    expect(screen.getByRole('button', {name: 'Panel first'})).toHaveFocus();
+  });
+
+  it('leaves a Tab that the last control handles itself where it is', () => {
+    render(
+      <Dialog isOpen onOpenChange={() => {}} aria-label="Settings">
+        <button type="button">First</button>
+        <textarea
+          aria-label="Notes"
+          onKeyDown={event => {
+            if (event.key === 'Tab') {
+              // An editor that indents on Tab.
+              event.preventDefault();
+            }
+          }}
+        />
+      </Dialog>,
+    );
+    const notes = screen.getByRole('textbox', {name: 'Notes'});
+    notes.focus();
+
+    fireEvent.keyDown(notes, {key: 'Tab'});
+    expect(notes).toHaveFocus();
+  });
+
   it('wraps Tab and Shift+Tab inside the open modal', () => {
     render(
       <Dialog isOpen onOpenChange={() => {}} aria-label="Settings">

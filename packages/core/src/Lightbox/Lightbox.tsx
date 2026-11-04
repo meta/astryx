@@ -342,8 +342,8 @@ export function Lightbox({
   const t = useComponentTranslator();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const mergedDialogRef = useMergedRefs(ref, dialogRef);
-  // The open viewer is a focus region: Tab and Shift+Tab wrap inside it
-  // through the shared module (component:Dialog/DEC-2).
+  // Native showModal() lets Tab leave for the browser's own UI, so the shared
+  // module wraps it.
   useFocusRegionContainment(dialogRef, isOpen);
   const containerRef = useRef<HTMLDivElement>(null);
   const imageWrapperRef = useRef<HTMLDivElement>(null);

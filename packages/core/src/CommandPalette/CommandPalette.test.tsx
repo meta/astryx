@@ -919,10 +919,9 @@ describe('CommandPalette', () => {
   });
 });
 
-// component:Dialog/DEC-2: every modal presentation contains Tab through the
-// shared focus-region module. Tab from the last tabbable control wraps to the
-// first and Shift+Tab from the first wraps to the last, so focus never leaves
-// the modal for the browser's own UI.
+// Tab from the last tabbable control wraps to the first and Shift+Tab from the
+// first wraps to the last, so focus never leaves the modal for the browser's
+// own UI.
 function expectTabWrapsInside(modal: HTMLElement) {
   const tabbables = getFocusableElements(modal);
   expect(tabbables.length).toBeGreaterThan(0);

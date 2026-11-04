@@ -240,18 +240,13 @@ function hasInnerRegionHolding(
 }
 
 /**
- * Tab containment for a focus region. While `isActive`, Tab and Shift+Tab
- * pressed inside the container move through its tabbable descendants and wrap
- * at either end, and focus that a Tab from inside carries out is redirected
- * back in. A Tab that starts outside the container is left to the page
- * (`component:Popover/DEC-9`). When regions nest, the innermost one holding
- * focus answers.
+ * Tab containment for a focus region: Tab and Shift+Tab pressed inside wrap at
+ * either end, and a Tab that starts outside is left to the page. When regions
+ * nest, the innermost one holding focus answers.
  *
- * `useFocusTrap` composes this. A native modal surface whose own lifecycle
- * already owns focus entry and return (Dialog, BottomSheet, Lightbox) applies
- * it directly, so every modal presentation wraps Tab through this one module
- * (`component:Dialog/DEC-2`). Intentionally internal: not re-exported from
- * `hooks`.
+ * `useFocusTrap` composes this. Dialog, BottomSheet and Lightbox call it
+ * directly, because their native lifecycle already owns focus entry and
+ * return. Internal: not re-exported from `hooks`.
  */
 export function useFocusRegionContainment(
   containerRef: React.RefObject<HTMLElement | null>,
@@ -351,6 +346,11 @@ export function useFocusRegionContainment(
       }
 
       if (event.key === 'Tab') {
+        if (event.defaultPrevented) {
+          // A control that handles Tab itself (an editor that indents) keeps
+          // focus where it is.
+          return;
+        }
         const active = doc.activeElement;
         // Any focused node counts, not only HTML elements: an SVG control
         // inside the container is still inside.
