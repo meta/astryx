@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {afterEach, describe, expect, it} from 'vitest';
-import {containsAlongFlatTree} from './flatTree';
+import {containsAlongFlatTree, deepActiveElement} from './flatTree';
 
 afterEach(() => {
   document.body.innerHTML = '';
@@ -38,5 +38,31 @@ describe('containsAlongFlatTree', () => {
     expect(containsAlongFlatTree(b, child)).toBe(false);
     expect(containsAlongFlatTree(child, a)).toBe(false);
     expect(containsAlongFlatTree(a, document.createElement('i'))).toBe(false);
+  });
+});
+
+describe('deepActiveElement', () => {
+  it("is the document's focused element in light DOM, and null without a document", () => {
+    document.body.innerHTML = '<input id="field" />';
+    const field = document.getElementById('field') as HTMLInputElement;
+    field.focus();
+    expect(deepActiveElement(document)).toBe(field);
+    expect(deepActiveElement(null)).toBeNull();
+    expect(deepActiveElement(undefined)).toBeNull();
+  });
+
+  it('goes down through open shadow roots to the element that has focus', () => {
+    const outer = document.createElement('div');
+    document.body.append(outer);
+    const outerRoot = outer.attachShadow({mode: 'open'});
+    const inner = document.createElement('span');
+    outerRoot.append(inner);
+    const innerRoot = inner.attachShadow({mode: 'open'});
+    const button = document.createElement('button');
+    innerRoot.append(button);
+    button.focus();
+    // The document sees only the outermost host.
+    expect(document.activeElement).toBe(outer);
+    expect(deepActiveElement(document)).toBe(button);
   });
 });
