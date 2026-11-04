@@ -10,6 +10,8 @@ tags:
   - 'AI'
   - 'Community'
   - 'Design systems'
+coverImage: '/blog/building-for-people-and-agents/cover.png'
+coverAlt: 'Astryx Meetup SF event graphic asking whether design systems are still valuable.'
 ---
 
 Bay Area friends, join us November 12 at Meta San Francisco for an evening with the team behind **Astryx**, Meta's open-source design system.
