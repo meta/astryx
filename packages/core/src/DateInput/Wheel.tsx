@@ -532,7 +532,6 @@ export function ScrollWheel({
   // there is no way to share — it takes every touch that lands on it.
   useOwnScrollGesture(scrollerRef, 'all', {isEnabled: isActive});
 
-  // A key commits the row it moves to and scrolls the column there.
   const moveTo = useCallback(
     (row: number | null) => {
       const option = row == null ? undefined : options[row];
