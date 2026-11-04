@@ -115,7 +115,7 @@ import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {normalizeDayOfWeek} from '../utils/dateTypes';
-import {getWeekdayHeaderNames} from '../Calendar/getWeekdayHeaderNames';
+import {getWeekdayHeaders} from '../Calendar/getWeekdayHeaderNames';
 import {MonthScroller, type MonthScrollerHandle} from './MonthScroller';
 import {MonthYearWheels} from './MonthYearWheels';
 import {
@@ -720,13 +720,8 @@ export function TouchDateField({
 
   const {year, month} = fromMonthIndex(monthIndex);
 
-  // Each name carries its day of week for a key: narrow names repeat.
   const weekdayHeaders = useMemo(
-    () =>
-      getWeekdayHeaderNames(locale, weekStartsOn).map((name, offset) => ({
-        dayOfWeek: (weekStartsOn + offset) % 7,
-        name,
-      })),
+    () => getWeekdayHeaders(locale, weekStartsOn),
     [locale, weekStartsOn],
   );
   const monthYearLabel = plainDateFormatStandaloneMonthYear(

@@ -70,7 +70,7 @@ import {rtlStyles} from '../utils/rtlStyles';
 import {themeProps} from '../utils/themeProps';
 import {normalizeDayOfWeek} from '../utils/dateTypes';
 import {formatLocaleTime} from '../utils/timeFormat';
-import {getWeekdayHeaderNames} from '../Calendar/getWeekdayHeaderNames';
+import {getWeekdayHeaders} from '../Calendar/getWeekdayHeaderNames';
 import {
   formatISOTime,
   isImeKeyEvent,
@@ -658,13 +658,8 @@ export function TouchDateTimeField({
   const canStepBack = monthIndex > minMonthIndex;
   const canStepForward = monthIndex < maxMonthIndex;
 
-  // Each name carries its day of week for a key: narrow names repeat.
   const weekdayHeaders = useMemo(
-    () =>
-      getWeekdayHeaderNames(locale, weekStartsOn).map((name, offset) => ({
-        dayOfWeek: (weekStartsOn + offset) % 7,
-        name,
-      })),
+    () => getWeekdayHeaders(locale, weekStartsOn),
     [locale, weekStartsOn],
   );
   const monthYearLabel = plainDateFormatStandaloneMonthYear(

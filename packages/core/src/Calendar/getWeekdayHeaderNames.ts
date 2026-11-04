@@ -58,17 +58,31 @@ function sundayFirstNames(locale: string): ReadonlyArray<string> {
   );
 }
 
+/** One weekday header cell: its day of week (a stable key, since narrow names repeat) and its name. */
+export interface WeekdayHeader {
+  dayOfWeek: DayOfWeek;
+  name: string;
+}
+
 /**
- * The seven weekday header names for a locale, in column order for the week
- * that starts on `weekStartsOn`. Unicode extensions are ignored.
+ * The seven weekday headers for a locale, in column order for the week that
+ * starts on `weekStartsOn`. Unicode extensions are ignored.
  */
+export function getWeekdayHeaders(
+  locale: string,
+  weekStartsOn: DayOfWeek = 0,
+): WeekdayHeader[] {
+  const names = sundayFirstNames(locale);
+  return Array.from({length: 7}, (_, offset) => {
+    const dayOfWeek = ((weekStartsOn + offset) % 7) as DayOfWeek;
+    return {dayOfWeek, name: names[dayOfWeek]};
+  });
+}
+
+/** The names alone, in the same order as `getWeekdayHeaders`. */
 export function getWeekdayHeaderNames(
   locale: string,
   weekStartsOn: DayOfWeek = 0,
 ): string[] {
-  const names = sundayFirstNames(locale);
-  return Array.from(
-    {length: 7},
-    (_, offset) => names[(weekStartsOn + offset) % 7],
-  );
+  return getWeekdayHeaders(locale, weekStartsOn).map(header => header.name);
 }
