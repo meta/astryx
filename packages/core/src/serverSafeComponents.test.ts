@@ -76,7 +76,10 @@ const EXTENSIONS = ['.tsx', '.ts', '.mjs', '.js', '.jsx'];
  * island: each does nothing on the server, so the component's server output
  * is unchanged. The walk stops at them.
  */
-const CLIENT_ISLANDS = new Set(['hooks/AnnounceRenderedText.tsx']);
+const CLIENT_ISLANDS = new Set([
+  'hooks/AnnounceRenderedText.tsx',
+  'hooks/StackItemScrollRegion.tsx',
+]);
 
 const isSourceFile = (name: string) =>
   /\.[jt]sx?$/.test(name) &&
