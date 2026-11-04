@@ -16,6 +16,11 @@
  *   - getLocaleDirection          — server-safe locale → direction helper
  *   - Translator                  — interface for consumer-injected runtimes
  *
+ * `useTranslator` and `InternationalizationContext` are the public paths
+ * that resolve any Astryx key, so they register the whole English catalog.
+ * Core modules import the defining modules (useComponentTranslator.ts,
+ * InternationalizationContext.ts) instead of this barrel for those two.
+ *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/index.ts
  * - /packages/core/src/i18n/useLocale.ts
@@ -26,7 +31,7 @@
 
 export {InternationalizationProvider} from './InternationalizationProvider';
 export type {InternationalizationProviderProps} from './InternationalizationProvider';
-export {InternationalizationContext} from './InternationalizationContext';
+export {InternationalizationContext} from './publicContext';
 export type {InternationalizationContextValue} from './InternationalizationContext';
 export {useTranslator} from './useTranslator';
 export type {TranslatorFn} from './useTranslator';

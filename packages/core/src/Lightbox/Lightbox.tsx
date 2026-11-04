@@ -41,15 +41,24 @@ import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
+import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
-import {overlayPaddingReset} from '../Layout/padding.stylex';
+import {overlayPaddingReset} from '../Layout/overlayPaddingReset.stylex';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 import {useFocusRegionContainment} from '../hooks/useFocusTrap';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {isRtlElement} from '../hooks/isRtlElement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Lightbox/Lightbox.generated';
+import {isRenderable} from '../utils/isRenderable';
+import {prepareFocusReturnOnRemoval} from '../utils/focusReturn';
+
+registerEnglishFallback(english);
 /**
  * Media type for lightbox items.
  */
@@ -330,7 +339,7 @@ export function Lightbox({
   onKeyDown: onKeyDownProp,
   ...props
 }: LightboxProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const mergedDialogRef = useMergedRefs(ref, dialogRef);
   // The open viewer is a focus region: Tab and Shift+Tab wrap inside it
@@ -424,6 +433,7 @@ export function Lightbox({
   // Open/close dialog. The dialog renders only with an item, so a viewer
   // opened before its first item arrives opens when that item does.
   const hasItem = currentItem != null;
+  // Syncs the native dialog with `isOpen` through `showModal()` and `close()`.
   useIsomorphicLayoutEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog || !hasItem) {
@@ -440,6 +450,23 @@ export function Lightbox({
       }
     }
   }, [isOpen, hasItem]);
+
+  // A viewer that unmounts while open (rendered only while open, or removed
+  // with the rest of a view) never runs the close branch above. Focus the
+  // removal lost goes back to the opener while the opener is still on the
+  // page.
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog == null) {
+      return;
+    }
+    const returnFocusOnRemoval = prepareFocusReturnOnRemoval(dialog);
+    return () => {
+      if (dialog.open) {
+        returnFocusOnRemoval(triggerElementRef.current);
+      }
+    };
+  }, [hasItem]);
 
   const handleClose = useCallback(() => {
     onOpenChange(false);
@@ -646,10 +673,6 @@ export function Lightbox({
     <dialog
       ref={mergedDialogRef}
       onCancel={handleCancel}
-      onClick={e => {
-        handleBackdropClick(e);
-        onClickProp?.(e);
-      }}
       onKeyDown={e => {
         handleKeyDown(e);
         onKeyDownProp?.(e);
@@ -667,7 +690,16 @@ export function Lightbox({
         className,
         style,
       )}
-      {...props}>
+      {...props}
+      // Presses inside the lightbox do not reach handlers around where it is
+      // written.
+      {...layerClickBoundary({
+        ...props,
+        onClick: (e: React.MouseEvent<HTMLDialogElement>) => {
+          handleBackdropClick(e);
+          onClickProp?.(e);
+        },
+      })}>
       <LayerDepthProvider>
         <ModalAnnounceProvider dialogRef={dialogRef} isOpen={isOpen}>
           <LayerContentBoundary>
@@ -754,7 +786,7 @@ export function Lightbox({
                   )}
                 </div>
 
-                {currentItem.caption && (
+                {isRenderable(currentItem.caption) && (
                   <div {...stylex.props(styles.caption)}>
                     {currentItem.caption}
                   </div>

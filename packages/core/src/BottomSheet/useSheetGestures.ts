@@ -4,71 +4,50 @@
 
 /**
  * @file useSheetGestures.ts
- * @input Uses React (useCallback, useEffect, useMemo, useRef, useState)
- * @output Exports useSheetGestures hook and its option/result types
- * @position Internal to BottomSheet; not exported from the core entry point
- *
- * Drag + snap machinery for the bottom sheet. Tracks a pointer drag down the
- * block axis, translates the sliding surface live, and on release settles to
- * the detent nearest where the sheet would coast to at the finger's speed, or
- * dismisses when that is past the dismiss line. A slow drag projects onto
- * itself and places; a throw continues past the finger. This is the core
- * behavior split the sheet needs: DRAG places, SWIPE closes.
- *
- * A settled detent is split across two properties: `settledLayoutOffset` is
- * the part the scrolling area gives up as layout height, and the remainder is
- * a transform. Gestures and snaps only ever move the transform, so they stay
- * on the compositor; layout height changes at rest, in one transition-free
- * render whose visible geometry is identical. A peek detent — a stop that is
- * only a sliver of the sheet — keeps the full height and slides below the
- * viewport instead of reflowing to that sliver.
- *
- * A live drag writes that transform straight to the sheet element, once per
- * input sample, and renders nothing: React state changes when the drag begins
- * and ends, and in between only when the layout split changes (a drag that
- * crosses above its base detent restores the full height). The live offset
- * is readable through `activeOffsetRef`. The host owns the element's
- * transform outside a drag and writes the resting value after each commit,
- * so a settle animates from wherever the finger left the sheet.
- *
- * Those are pixels, and the stops behind them are relative to the viewport, so
- * a sheet at rest re-resolves its detent on `resize` / `orientationchange`,
- * and whenever the host swaps the snap points, and re-anchors to the new
- * geometry without animating. The detent it returns to is tracked by index:
- * the pixels stop meaning the same thing when the viewport changes, the stop
- * the user chose does not.
- *
- * On touch, the scrolling body hands the gesture to the sheet at a scroll
- * edge — once every scroller under the finger, a box nested inside the body
- * and the body itself, is at the edge the pull opposes (see
- * scrollChainUnder). Two shapes, because the browser only offers one of them
- * a choice: a
- * finger that lands on an edge and pulls away from it promotes by cancelling
- * the first, still-cancelable touchmove; a finger that scrolls INTO the end of
- * the content mid-gesture cannot, since the browser has committed the gesture
- * to scrolling and every remaining event is non-cancelable. The second shape
- * needs no cancelling — the scroller is clamped at its end, so there is
- * nothing left to scroll — and instead anchors at the point where the content
- * ran out and drives the sheet from the travel beyond it.
- *
- * Every gesture here is one finger. A second finger is a pinch, and pinch-zoom
- * belongs to the browser (WCAG 1.4.4): the surfaces declare `pinch-zoom` in
- * their `touch-action`, and a second finger — on either surface, in either
- * order — ends any drag in flight or armed (yieldToPinch), as does the
- * browser cancelling a handle drag to take the pinch. The sheet returns to
- * its detent and the pinch zooms the page.
- *
- * Kept private to BottomSheet: a dismiss edge + detents on a bottom-anchored
- * surface are inherently sheet concepts. It is not a general primitive and is
- * intentionally not exported.
- *
- * SSR-safe: no window/document access at module scope; all measurement
- * happens inside handlers. Respects prefers-reduced-motion by skipping the
- * settle transition.
+ * @input React hooks
+ * @output useSheetGestures hook, its option/result types, and the height and
+ *   end-inset formats a host renders for the layout split
+ * @position Internal to BottomSheet; not exported from the core entry point.
+ *   A dismiss edge and detents on a bottom-anchored surface are sheet
+ *   concepts, so this is not a general primitive.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/BottomSheet/useSheetGestures.test.ts
  */
+
+// A drag moves the sheet live. On release it settles to the detent nearest
+// where the sheet would coast at the finger's speed, or it dismisses past the
+// dismiss line. So a slow drag places and a throw closes.
+//
+// A settled detent is split in two: `settledLayoutOffset` is the layout
+// height that the scrolling area gives up, and the rest is a transform.
+// Gestures and snaps move only the transform, on the compositor. The layout
+// height changes at rest, in one transition-free render with the same visible
+// geometry. A peek detent keeps the full height and slides below the
+// viewport.
+//
+// A live drag writes the transform to the element for each input sample and
+// renders nothing. A drag that crosses above its base detent changes the
+// transform, the height and the end inset, which only look right together.
+// The move writes all three in one task, so they paint in one frame. The host
+// writes the resting values after each commit, so a settle animates from
+// where the finger left the sheet.
+//
+// A resting sheet re-resolves its detent by index on a resize, an
+// orientation change, or new snap points, and re-anchors without animating.
+// The pixels change meaning when the viewport changes, but the chosen stop
+// does not.
+//
+// On touch, the body hands the gesture to the sheet when every scroller under
+// the finger is at the edge that the pull opposes (see scrollChainUnder). A
+// finger that lands on an edge and pulls away cancels the first touchmove. A
+// finger that scrolls into the end mid-gesture cannot cancel, so it anchors
+// where the content ran out and drives the sheet from the travel beyond it.
+//
+// A second finger is a pinch, and pinch-zoom belongs to the browser (WCAG
+// 1.4.4). The surfaces declare `pinch-zoom` in `touch-action`, and a second
+// finger ends any drag (yieldToPinch). There is no module-scope DOM access,
+// so the hook is SSR-safe. Reduced motion skips the settle transition.
 
 import {
   useCallback,
@@ -145,18 +124,10 @@ const OVERSCROLL_MAX = 48;
 // the scroll, large enough that a swipe merely coming to rest on the last pixel
 // doesn't start a drag on jitter.
 const CONTENT_END_HANDOFF_SLOP = 4;
-// How far a finger resting on the body must travel before the pull becomes a
-// sheet drag rather than a tap.
-//
-// This used to be zero: any downward movement promoted. A finger is never
-// still, so tapping a control inside the sheet drifted a pixel or two and
-// started a drag -- which suppresses the panel's transition, correctly, for as
-// long as the sheet is tracking the finger. The close that the tap triggered
-// then landed inside that window and cut instead of animating. A deliberate
-// pull was unaffected; only a tap, and only a tap inside the sheet, since the
-// scrim is outside the body and arms nothing.
-//
-// 8px is the conventional tap slop, a shade over iOS's own recognizer, and
+// How far a finger resting on the body moves before the pull becomes a drag.
+// A finger is never still. With no slop, a tap on a control in the sheet
+// started a drag, which turns off the panel's transition, so the close that
+// the tap caused cut instead of animating. 8px is the usual tap slop and is
 // well under what a real pull covers in its first frames.
 const DRAG_PROMOTION_SLOP = 8;
 
@@ -206,6 +177,28 @@ function preservationInsetForOffset(
   return Math.max(0, baseOffset - targetOffset - naturalEndGap);
 }
 
+/**
+ * The sheet's height, in px, while it is in motion or rests with a layout
+ * split: the fully open height less the part the scrolling area gives up.
+ * The host renders it and a live drag writes it; one format keeps the two
+ * identical, so the render that follows a written value changes nothing.
+ */
+export function sheetLayoutHeight(
+  sheetHeight: number,
+  layoutOffset: number,
+): string {
+  return `${Math.max(0, sheetHeight - Math.max(0, layoutOffset))}px`;
+}
+
+/**
+ * The scrolling area's end padding that preserves its scroll position across
+ * a height change, or nothing when there is none to add. Shared by the host's
+ * render and a live drag's write for the same reason as sheetLayoutHeight.
+ */
+export function scrollPreservationPadding(inset: number): string | undefined {
+  return inset > 0 ? `${inset}px` : undefined;
+}
+
 function renderedBlockEndPadding(element: HTMLElement): number {
   const value = Number.parseFloat(getComputedStyle(element).paddingBlockEnd);
   return Number.isFinite(value) ? value : 0;
@@ -242,9 +235,10 @@ function isBlockScroller(element: HTMLElement): boolean {
  * renders its dialog as a descendant of the host's body, so its pointer and
  * touch events bubble through the host's gesture listeners. That gesture is
  * the layer's own: the host must neither arm a drag on it nor take pointer
- * capture for it, which would cancel the drag the layer's own handle began
- * (`component:BottomSheet` FR7: a swipe reaches only the top sheet of a
- * stack; FR6: a covered sheet is blocked).
+ * the layer's own: the host must neither arm a drag on it nor take pointer
+ * capture for it, which would cancel the drag the layer's own handle began.
+ * A swipe reaches only the top sheet of a stack, and a covered sheet is
+ * blocked.
  */
 export function isInsideNestedLayer(
   target: EventTarget | null,
@@ -360,6 +354,8 @@ export interface UseSheetGesturesOptions {
   snapHeights?: () => number[];
   /** Notified when the settled visible detent height (px) changes. */
   onSnap?: (heightPx: number) => void;
+  /** Called once a drag first moves the sheet off its detent. */
+  onTravelStart?: () => void;
   /**
    * Called with the scrim opacity the sheet should show (1 = fully visible,
    * 0 = hidden) as the drag moves and on settle. Full while the sheet is at
@@ -368,6 +364,14 @@ export interface UseSheetGesturesOptions {
    * on the dismiss overshoot. Lets the owner mirror it onto the scrim.
    */
   onScrimOpacity?: (opacity: number) => void;
+  /**
+   * Whether the host draws the sheet at a fixed height of its own (a caller's
+   * height) rather than the layout-split height. A drag across the base
+   * detent then writes only the transform and the end inset, and leaves the
+   * element's height to the host.
+   * @default false
+   */
+  hasFixedHeight?: boolean;
 }
 
 export interface SheetContentProps {
@@ -439,9 +443,8 @@ export interface UseSheetGesturesResult {
    * touch drag (a finger's swipe or fling past the dismiss line). True from
    * the release until the sheet is open again; false for a dismissal from a
    * control, Escape, the scrim or code, and for a mouse or pen drag. Under
-   * reduced motion a transition a touch drag's release starts cross-fades on
-   * every pointer (`design:reduced-motion` DR2), so the exit's motion needs
-   * to know.
+   * reduced motion, a transition that a touch drag's release starts
+   * cross-fades on every pointer, so the exit's motion needs to know.
    */
   isDismissedByTouchDrag: boolean;
   /**
@@ -507,7 +510,9 @@ export function useSheetGestures({
   onDismiss,
   snapHeights,
   onSnap,
+  onTravelStart,
   onScrimOpacity,
+  hasFixedHeight = false,
 }: UseSheetGesturesOptions): UseSheetGesturesResult {
   const [dragOffset, setDragOffset] = useState(0);
   const [settledOffset, setSettledOffset] = useState(0);
@@ -652,16 +657,20 @@ export function useSheetGestures({
   // stops by the time the re-anchor read it.
   const snapHeightsRef = useRef(snapHeights);
   snapHeightsRef.current = snapHeights;
+  const onTravelStartRef = useRef(onTravelStart);
+  onTravelStartRef.current = onTravelStart;
 
   const onDismissRef = useRef(onDismiss);
   const canDismissRef = useRef(canDismiss);
   const onSnapRef = useRef(onSnap);
   const onScrimOpacityRef = useRef(onScrimOpacity);
+  const hasFixedHeightRef = useRef(hasFixedHeight);
   useEffect(() => {
     onDismissRef.current = onDismiss;
     canDismissRef.current = canDismiss;
     onSnapRef.current = onSnap;
     onScrimOpacityRef.current = onScrimOpacity;
+    hasFixedHeightRef.current = hasFixedHeight;
   });
 
   // Live drag bookkeeping (refs so pointermove doesn't churn renders).
@@ -695,6 +704,8 @@ export function useSheetGestures({
   const sheetElRef = useRef<HTMLElement | null>(null);
   const bodyNodeRef = useRef<HTMLElement | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
+  // Syncs the browser layout with the transform reset, then ends the
+  // scroll-area reconcile one frame later.
   useLayoutEffect(() => {
     if (!isScrollAreaReconciling) {
       return;
@@ -734,7 +745,9 @@ export function useSheetGestures({
         }
         return;
       }
-      recordSheetHeight(node.getBoundingClientRect().height);
+      // No measure here: reading the height while the sheet mounts forces a
+      // layout in the middle of the open. The observer's first report comes
+      // after the browser's own layout, before the first paint.
       const ro = new ResizeObserver(entries => {
         const entry = entries[0];
         if (entry) {
@@ -752,6 +765,7 @@ export function useSheetGestures({
     },
     [recordSheetHeight],
   );
+  // Releases the height observer on unmount.
   useEffect(() => () => observerRef.current?.disconnect(), []);
 
   // Reset to the tallest detent each time the sheet re-opens.
@@ -807,12 +821,9 @@ export function useSheetGestures({
     return {offsets, peekOffset: peekOffsetFor(offsets, visibleSheetHeight)};
   }, []);
 
-  // The height the sheet WOULD have fully open, right now. While it rests at a
-  // resizing detent the element carries a pixel height computed for whatever
-  // the viewport was then, so measuring it directly just reads that stale
-  // number back. Drop the inline height for the measurement and put it back in
-  // the same synchronous block — the browser cannot paint in between, so this
-  // is invisible — and the natural CSS budget is what gets measured.
+  // The fully open height right now. At a resizing detent the element has a
+  // stale pixel height. So drop the inline height, measure, and put it back in
+  // the same synchronous block. The browser cannot paint in between.
   const measureFullyOpenHeight = useCallback((): number => {
     const element = sheetElRef.current;
     if (!element) {
@@ -828,18 +839,12 @@ export function useSheetGestures({
     return height;
   }, []);
 
-  // Detents are viewport fractions, but a settled sheet holds them as pixels:
-  // an offset to translate by, and a layout height to render. Both are read
-  // once, at gesture time. Without this, a viewport change leaves the sheet
-  // frozen at the old pixel geometry — a "half height" sheet showing 75% of a
-  // shorter window, a peek detent whose slide-down is taller than the whole
-  // window (so the sheet leaves the screen while its dialog stays modal), and
-  // a stale fully-open height for the next drag to overshoot past.
-  //
-  // Re-resolve the SAME detent — by index, the one thing that survives the
-  // units changing — against the new geometry, and re-anchor without
-  // animating: the geometry moved, not the user's finger, so there is no
-  // gesture to continue and nothing to ease.
+  // A settled sheet holds its viewport-fraction detents as pixels, read at
+  // gesture time. Without this, a viewport change freezes the old geometry: a
+  // half-height sheet shows 75% of a shorter window, or a peek slides past the
+  // whole window while the dialog stays modal. So re-resolve the same detent
+  // by index and re-anchor without animating, because the geometry moved, not
+  // the finger.
   const reanchorToSettledDetent = useCallback(() => {
     // A closed sheet re-anchors on its way back open; a live drag re-measures
     // on its own, and a settle in flight owns the layout until it lands.
@@ -912,6 +917,8 @@ export function useSheetGestures({
     resolveDetents,
   ]);
 
+  // Syncs window resize and orientation listeners with `isOpen`. Each event
+  // anchors the sheet to its settled detent again.
   useEffect(() => {
     if (!isOpen || typeof window === 'undefined') {
       return;
@@ -950,6 +957,31 @@ export function useSheetGestures({
       const translation = offset - layoutOffset;
       element.style.transform =
         translation !== 0 ? `translateY(${translation}px)` : '';
+    },
+    [],
+  );
+
+  // A live drag's layout split moved. The transform written beside this call
+  // is only correct on the new split, so the height and end inset that pair
+  // with it go to the elements in the same task. They are the values the host
+  // renders from the state this move also sets, in the same format, so its
+  // commit, whenever it lands, leaves them as they are. If the drag ends
+  // before that commit, the host's post-commit write puts the resting values
+  // back, since React sees no change from what it committed before the drag.
+  // A host with a fixed height of its own renders that height throughout and
+  // never restores a written one, so its height is not written.
+  const writeLiveLayout = useCallback(
+    (sheetHeight: number, layoutOffset: number) => {
+      const element = sheetElRef.current;
+      // Unmeasured, the host renders no height to pair with.
+      if (element != null && sheetHeight > 0 && !hasFixedHeightRef.current) {
+        element.style.height = sheetLayoutHeight(sheetHeight, layoutOffset);
+      }
+      const body = bodyNodeRef.current;
+      if (body != null) {
+        body.style.paddingBlockEnd =
+          scrollPreservationPadding(scrollPreservationInsetRef.current) ?? '';
+      }
     },
     [],
   );
@@ -1004,6 +1036,8 @@ export function useSheetGestures({
     [prepareScrollAreaSettle, resolveDetents],
   );
 
+  // Syncs window blur and document visibilitychange listeners with `isOpen`. A
+  // blur or a hidden page cancels a drag.
   useEffect(() => {
     // Only an open sheet can be dragged; a closed one listens to nothing.
     if (!isOpen) {
@@ -1262,16 +1296,6 @@ export function useSheetGestures({
       state.renderedOffset = next;
       state.layoutOffset = layoutOffset;
       activeOffsetRef.current = next;
-      writeLiveTransform(next, layoutOffset);
-      if (hasLayoutChanged) {
-        // The layout split moved: the host renders the new height, reading
-        // the offset it has to pair with it from state.
-        setDragOffset(next);
-      }
-      if (!state.hasTraveled && next !== state.baseOffset) {
-        state.hasTraveled = true;
-        setIsTraveling(true);
-      }
       updateScrollPreservationInset(
         preservationInsetForOffset(
           state.baseLayoutOffset,
@@ -1279,6 +1303,22 @@ export function useSheetGestures({
           state.naturalEndGap,
         ),
       );
+      writeLiveTransform(next, layoutOffset);
+      if (hasLayoutChanged) {
+        // The layout split moved. The new height and end inset are written
+        // with the transform, in this task: a render scheduled normally can
+        // commit after the next paint, and the transform alone on the old
+        // height would put the sheet the whole split away from the finger
+        // for that frame. The host still renders them from state, reading
+        // the offset it has to pair with the height from here.
+        writeLiveLayout(state.height, layoutOffset);
+        setDragOffset(next);
+      }
+      if (!state.hasTraveled && next !== state.baseOffset) {
+        state.hasTraveled = true;
+        setIsTraveling(true);
+        onTravelStartRef.current?.();
+      }
 
       // Mirror the scrim to the live drag: full at/above the mid detent,
       // fading to hidden as it collapses onto the peek detent and through the
@@ -1295,7 +1335,12 @@ export function useSheetGestures({
         scrimOpacityForOffset(next, offsets, dismissOffset, peekOffset),
       );
     },
-    [resolveDetents, updateScrollPreservationInset, writeLiveTransform],
+    [
+      resolveDetents,
+      updateScrollPreservationInset,
+      writeLiveLayout,
+      writeLiveTransform,
+    ],
   );
 
   const endDrag = useCallback(
@@ -1760,7 +1805,7 @@ export function useSheetGestures({
         // is the panel's own stylesheet's to honor (its transform transition
         // collapses under the preference), not an inline `none` here: the
         // shorthand would also silence the panel's opacity transition, the
-        // cross-fade `design:reduced-motion` DR2 asks for on a coarse pointer.
+        // reduced-motion cross-fade on a coarse pointer.
         transition:
           isOpen && (isDragging || isScrollAreaReconciling)
             ? 'none'

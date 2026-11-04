@@ -31,6 +31,7 @@ import type {BaseProps} from '../BaseProps';
 import {useSideNavCollapse} from './SideNavCollapseContext';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {themeProps} from '../utils/themeProps';
+import {isRenderable} from '../utils/isRenderable';
 // =============================================================================
 // Styles
 // =============================================================================
@@ -160,7 +161,7 @@ export function SideNavSection({
         </span>
         {subtitle && <span {...stylex.props(styles.subtitle)}>{subtitle}</span>}
       </span>
-      {endContent && (
+      {isRenderable(endContent) && (
         <span {...stylex.props(styles.endContent)}>{endContent}</span>
       )}
     </>

@@ -68,4 +68,23 @@ describe('mainArtifactRunId', () => {
       }),
     ).resolves.toBeNull();
   });
+
+  it("without a commit, takes Main's run at any commit, and still ignores a branch or a fork", async () => {
+    const lookupAny = candidate =>
+      mainArtifactRunId({
+        github: github([candidate]),
+        owner: 'meta',
+        repo: 'astryx',
+        name: 'x',
+      });
+    await expect(
+      lookupAny(artifact({}, {head_sha: 'b'.repeat(40)})),
+    ).resolves.toBe('42');
+    await expect(
+      lookupAny(artifact({}, {head_branch: 'feature'})),
+    ).resolves.toBeNull();
+    await expect(
+      lookupAny(artifact({}, {head_repository_id: 2})),
+    ).resolves.toBeNull();
+  });
 });

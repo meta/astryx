@@ -3,6 +3,9 @@
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {AppShell} from '@astryxdesign/core/AppShell';
+import {Layout, LayoutHeader} from '@astryxdesign/core/Layout';
+import {Card} from '@astryxdesign/core/Card';
+import {Section} from '@astryxdesign/core/Section';
 import {Banner} from '@astryxdesign/core/Banner';
 import {Badge} from '@astryxdesign/core/Badge';
 import {Button} from '@astryxdesign/core/Button';
@@ -10,6 +13,7 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {Text} from '@astryxdesign/core/Text';
 import {MobileNav} from '@astryxdesign/core/MobileNav';
 import {TopNav, TopNavHeading, TopNavItem} from '@astryxdesign/core/TopNav';
+import {BreadcrumbItem, Breadcrumbs} from '@astryxdesign/core/Breadcrumbs';
 import {NavIcon} from '@astryxdesign/core/NavIcon';
 import {
   SideNav,
@@ -348,6 +352,37 @@ export const LongHeadingOnMobile: Story = {
                 icon={<UserCircleIcon style={{width: 16, height: 16}} />}
                 isIconOnly
               />
+            </>
+          }
+        />
+      }
+      sideNav={<SideNavWithoutHeader />}>
+      <MockContent />
+    </AppShell>
+  ),
+};
+
+/**
+ * Breadcrumbs in TopNav's start content on a phone. Below the breakpoint they
+ * render in the mobile drawer; a crumb link closes the drawer, like the
+ * TopNav and SideNav rows beside it, and the current crumb leaves it open.
+ */
+export const BreadcrumbsInMobileDrawer: Story = {
+  globals: {viewport: {value: 'mobile1', isRotated: false}},
+  render: () => (
+    <AppShell
+      contentPadding={6}
+      topNav={
+        <TopNav
+          label="Main navigation"
+          heading={<TopNavHeading heading="Acme App" headingHref="#/" />}
+          startContent={
+            <>
+              <Breadcrumbs>
+                <BreadcrumbItem href="#/projects">Projects</BreadcrumbItem>
+                <BreadcrumbItem isCurrent>Detail</BreadcrumbItem>
+              </Breadcrumbs>
+              <TopNavItem label="Docs" href="#/docs" />
             </>
           }
         />
@@ -840,6 +875,91 @@ export const WithBanner: Story = {
       <MockContent />
     </AppShell>
   ),
+};
+
+/**
+ * Auto height with a banner and a side nav but no top nav. Below the mobile
+ * breakpoint, the side nav shows as the phone top bar under the banner. Both
+ * stick to the top as the page scrolls.
+ */
+export const AutoHeightSideNavBanner: Story = {
+  render: () => (
+    <AppShell
+      contentPadding={6}
+      sideNav={<SideNavWithHeader />}
+      height="auto"
+      banner={
+        <Banner
+          status="info"
+          container="section"
+          title="System maintenance scheduled"
+          description="The system will undergo maintenance tonight at 10pm UTC."
+        />
+      }>
+      <MockContent paragraphs={20} />
+    </AppShell>
+  ),
+};
+
+/**
+ * A layout root (FR18): a With Banner shell at the page root (`host: root`)
+ * or placed in a padded Card that clips overflow, as a docs example card
+ * does (`card`), in an outer Layout's content area (`layout`), or in a
+ * Section with explicit padding (`section`). It lays out the same in each:
+ * nothing an ancestor Layout, Card or Section publishes reaches its regions.
+ */
+type LayoutHost = 'root' | 'card' | 'layout' | 'section';
+
+export const InsideLayoutHosts: StoryObj<{host: LayoutHost}> = {
+  args: {host: 'card'},
+  argTypes: {
+    host: {
+      control: 'select',
+      options: ['root', 'card', 'layout', 'section'],
+      type: {name: 'string'},
+    },
+  },
+  render: ({host}) => {
+    const shell = (
+      <AppShell
+        data-testid="shell"
+        contentPadding={6}
+        style={{height: 420}}
+        topNav={<AppTopNav />}
+        sideNav={<SideNavWithoutHeader />}
+        banner={
+          <Banner
+            status="info"
+            container="section"
+            title="System maintenance scheduled"
+            description="The system will undergo maintenance tonight at 10pm UTC."
+            isDismissable
+          />
+        }>
+        <MockContent />
+      </AppShell>
+    );
+    switch (host) {
+      case 'card':
+        return (
+          <Card padding={3} style={{overflow: 'hidden'}}>
+            {shell}
+          </Card>
+        );
+      case 'layout':
+        return (
+          <Layout
+            padding={4}
+            header={<LayoutHeader>Outer layout header</LayoutHeader>}
+            content={shell}
+          />
+        );
+      case 'section':
+        return <Section padding={6}>{shell}</Section>;
+      default:
+        return shell;
+    }
+  },
 };
 
 /**

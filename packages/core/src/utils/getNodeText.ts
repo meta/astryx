@@ -9,6 +9,7 @@
  */
 
 import {isValidElement} from 'react';
+import {isRenderable} from './isRenderable';
 import type {ReactNode} from 'react';
 
 /**
@@ -17,7 +18,7 @@ import type {ReactNode} from 'react';
  * props other than `children`, is not reachable and yields `''`.
  */
 export function getNodeText(node: ReactNode): string {
-  if (node == null || typeof node === 'boolean') {
+  if (!isRenderable(node)) {
     return '';
   }
   if (typeof node === 'string') {

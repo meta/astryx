@@ -15,7 +15,7 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/lab/src/CommentPin/CommentPin.doc.mjs
- * - /packages/lab/src/CommentPin/CommentPin.spec.md
+ * - /docs/specs/components/CommentPin/CommentPin.spec.md
  * - /packages/lab/src/CommentPin/CommentPin.test.tsx
  * - /packages/lab/src/CommentPin/index.ts
  * - /apps/storybook/stories/CommentPin.stories.tsx

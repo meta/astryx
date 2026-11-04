@@ -33,7 +33,13 @@ import type {
   TableRenderProps,
 } from './types';
 import type {StyleXStyles} from '../theme/types';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Table/Table.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Table Types
@@ -161,7 +167,7 @@ function TableScrollWrapper({
   beforeTable?: React.ReactNode;
   afterTable?: React.ReactNode;
 }) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const tableName = use(TableNameContext);
   // The focusable scroll region takes the table's own name (spec:AST-025
   // FR12), so two tables are not two groups both named "Table". It is named

@@ -90,7 +90,7 @@ describe('component audit scope', () => {
     expect(
       classifyComponentAuditScope(
         [
-          'packages/core/src/Button/Button.spec.md',
+          'docs/specs/components/Button/Button.spec.md',
           'packages/cli/api/theme/build/build.mjs',
         ],
         COMPONENT_PACKAGES,
@@ -102,7 +102,7 @@ describe('component audit scope', () => {
     expect(
       classifyComponentAuditScope(
         [
-          'packages/core/src/Button/Button.spec.md',
+          'docs/specs/components/Button/Button.spec.md',
           'packages/core/src/Button/Button.tsx',
         ],
         COMPONENT_PACKAGES,

@@ -1,11 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, expect, it} from 'vitest';
-import {
-  formatDateAbsolute,
-  formatDateAbsoluteCompact,
-  formatFilterValue,
-} from './formatFilterValue';
+import {formatDateAbsolute, formatFilterValue} from './formatFilterValue';
 import type {TranslatorFn} from '../i18n';
 import type {OperatorValue, FilterValue} from './types';
 
@@ -274,11 +270,30 @@ describe('formatFilterValue', () => {
         ),
       ).toBe('date range');
     });
+    it('reads a date-only value as its day in the zone, with no time, and a time-of-day value with its time', () => {
+      // 2024-03-10T03:00:00Z: March 10 in Tokyo, March 9 in Los Angeles.
+      const unixSeconds = Date.parse('2024-03-10T03:00:00Z') / 1000;
+      expect(formatDateAbsolute(unixSeconds, 'en-US', 'Asia/Tokyo')).toBe(
+        'Mar 10, 2024',
+      );
+      expect(
+        formatDateAbsolute(unixSeconds, 'en-US', 'America/Los_Angeles'),
+      ).toBe('Mar 9, 2024');
+      expect(formatDateAbsolute(unixSeconds, 'en-US', undefined)).toBe(
+        'Mar 10, 2024',
+      );
+      expect(
+        formatDateAbsolute(unixSeconds, 'en-US', 'America/Los_Angeles', false),
+      ).toBe('Mar 9, 2024, 7:00 PM');
+    });
+
     it('keeps Gregorian years for locales that default to another calendar', () => {
       const unixSeconds = Date.parse('2026-08-22T12:00:00Z') / 1000;
       for (const value of [
         formatDateAbsolute(unixSeconds, 'th-TH', 'UTC'),
-        formatDateAbsoluteCompact(unixSeconds, 'th-TH'),
+        formatDateAbsolute(unixSeconds, 'th-TH', undefined),
+        formatDateAbsolute(unixSeconds, 'th-TH', 'UTC', false),
+        formatDateAbsolute(unixSeconds, 'th-TH', undefined, false),
       ]) {
         expect(value).toContain('2026');
         expect(value).not.toContain('2569');

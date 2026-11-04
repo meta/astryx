@@ -319,11 +319,6 @@
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
     },
     {
-      "key": "Icon::Inherit Color::color-contrast",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
-    },
-    {
       "key": "InputGroup::All Variations::color-contrast",
       "impact": "serious",
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
