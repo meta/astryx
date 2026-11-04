@@ -54,7 +54,6 @@ import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
-import {nestedPressStyles} from '../privateAttributes/nestedPress.stylex';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {SelectableCardInputContext} from './selectableCardInput';
@@ -101,8 +100,22 @@ const styles = stylex.create({
     // stylesheet and a flat one alike. A custom property's attribute arm
     // does not: a layered build emits the property's default outside the
     // priority layers its attribute arms land in, and the default wins.
-    // `--_press-overlay`, the colour of the hover and mouse press, comes from
-    // nestedPressStyles.cardPressOverlay.
+    '--_press-overlay': {
+      default: 'transparent',
+      ':where(:not(:disabled,[aria-disabled="true"]))': {
+        default: null,
+        ':active': {
+          default: colorVars['--color-overlay-pressed'],
+          '@media (pointer: coarse)': 'transparent',
+        },
+        '@media (hover: hover)': {
+          default: null,
+          ':hover:where(:not(:disabled,[aria-disabled="true"]))':
+            colorVars['--color-overlay-hover'],
+          ':active': colorVars['--color-overlay-pressed'],
+        },
+      },
+    },
     '::after': {
       content: '""',
       position: 'absolute',
@@ -509,7 +522,6 @@ export function SelectableCard({
         [
           styles.interactive,
           isSelected && selectedStyleForVariant(variant),
-          !isDisabled && nestedPressStyles.cardPressOverlay,
           !isDisabled && styles.overlay,
           // The touch press's strength and release, on the element the
           // controller writes to; the `::after` above paints off it.

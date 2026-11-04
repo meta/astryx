@@ -16,6 +16,12 @@ import {useRef} from 'react';
 import {fireEvent, render, screen} from '@testing-library/react';
 import {useClickableContainer} from './useClickableContainer';
 
+const {cancelPress} = vi.hoisted(() => ({cancelPress: vi.fn()}));
+vi.mock('../utils/pressFeedback', async importOriginal => ({
+  ...(await importOriginal<typeof import('../utils/pressFeedback')>()),
+  cancelPress,
+}));
+
 // The scheme the rule exists to stop (kept in consts so the JSX below stays
 // lint-clean — the tests are ABOUT these URLs never navigating).
 const scriptUrl = 'javascript:alert(1)';
@@ -255,40 +261,34 @@ describe('onPointerDown', () => {
     );
   }
 
-  it('marks the container for a press that starts on a nested control, until it ends', () => {
-    render(<Harness />);
-    const container = screen.getByTestId('container');
-    const nested = screen.getByRole('button', {name: 'Nested'});
-    fireEvent.pointerDown(nested, {pointerType: 'mouse', button: 0});
-    expect(container.hasAttribute('data-astryx-nested-press')).toBe(true);
-    fireEvent.pointerUp(nested, {pointerType: 'mouse', button: 0});
-    expect(container.hasAttribute('data-astryx-nested-press')).toBe(false);
+  afterEach(() => {
+    cancelPress.mockClear();
   });
 
-  it('leaves the container unmarked for a secondary-button press on a nested control', () => {
+  it('cancels the press on the container for a finger press that starts on a nested control', () => {
     render(<Harness />);
     fireEvent.pointerDown(screen.getByRole('button', {name: 'Nested'}), {
-      pointerType: 'mouse',
-      button: 2,
+      pointerType: 'touch',
     });
-    expect(
-      screen.getByTestId('container').hasAttribute('data-astryx-nested-press'),
-    ).toBe(false);
+    expect(cancelPress).toHaveBeenCalledWith(screen.getByTestId('container'));
   });
 
-  it('leaves the container unmarked for a press on its surface or while disabled', () => {
+  it('leaves a mouse or pen press to the paint it has today', () => {
+    render(<Harness />);
+    const nested = screen.getByRole('button', {name: 'Nested'});
+    fireEvent.pointerDown(nested, {pointerType: 'mouse'});
+    fireEvent.pointerDown(nested, {pointerType: 'pen'});
+    expect(cancelPress).not.toHaveBeenCalled();
+  });
+
+  it('leaves a finger press on the surface, or in a disabled container, alone', () => {
     const {unmount} = render(<Harness />);
-    fireEvent.pointerDown(screen.getByText('Surface'), {pointerType: 'mouse'});
-    expect(
-      screen.getByTestId('container').hasAttribute('data-astryx-nested-press'),
-    ).toBe(false);
+    fireEvent.pointerDown(screen.getByText('Surface'), {pointerType: 'touch'});
     unmount();
     render(<Harness disabled />);
     fireEvent.pointerDown(screen.getByRole('button', {name: 'Nested'}), {
-      pointerType: 'mouse',
+      pointerType: 'touch',
     });
-    expect(
-      screen.getByTestId('container').hasAttribute('data-astryx-nested-press'),
-    ).toBe(false);
+    expect(cancelPress).not.toHaveBeenCalled();
   });
 });

@@ -10,7 +10,7 @@
  *   hasInteractiveAncestor and the shared innermostInteractive walk
  * @position Core hook for clickable containers with nested interactive
  *   elements. A click on a nested button or link does not run the card's
- *   action, and a press there shows no press on the card. Each navigation
+ *   action, and a finger press there shows no press on the card. Each navigation
  *   passes the rule in utils/safeUrl.ts first.
  *
  * SYNC: When modified, update:
@@ -27,7 +27,6 @@ import {
 import {isLayerSurface} from '../Layer/layerSurfacePress';
 import {isSafeUrl} from '../utils/safeUrl';
 import {cancelPress} from '../utils/pressFeedback';
-import {markNestedPress} from '../privateAttributes/nestedPress.stylex';
 
 /**
  * The attribute this hook sets on the container it makes clickable. A click
@@ -327,16 +326,15 @@ export function useClickableContainer({
     [containerRef, href, disabled],
   );
 
-  // The press-state counterpart of onClick's rule: a press that would not
-  // activate the container shows no press on it.
+  // The press-state counterpart of onClick's rule, for touch: a finger press
+  // that would not activate the container shows no press on it. A mouse or
+  // pen press keeps its `:active` paint.
   const onPointerDown = useCallback(
     (event: PointerEvent<HTMLElement>) => {
       const containerEl = containerRef.current;
       const eventTarget = event.target;
-      // Only a primary press paints, so only it can need the mark. Touch and
-      // pen presses report button 0.
       if (
-        event.button !== 0 ||
+        event.pointerType !== 'touch' ||
         disabled ||
         containerEl == null ||
         !(eventTarget instanceof Element) ||
@@ -348,7 +346,6 @@ export function useClickableContainer({
       ) {
         return;
       }
-      markNestedPress(containerEl);
       cancelPress(containerEl);
     },
     [containerRef, interactiveRef, disabled],
