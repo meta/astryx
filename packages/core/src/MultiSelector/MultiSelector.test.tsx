@@ -798,6 +798,97 @@ describe('MultiSelector', () => {
     expect(trigger).toHaveAttribute('aria-activedescendant', options[2].id);
   });
 
+  it('typeahead walks to the next match on a repeated letter', async () => {
+    const user = userEvent.setup();
+    render(
+      <MultiSelector
+        label="Food"
+        options={['Tea', 'Toast', 'Tofu']}
+        value={[]}
+        onChange={() => {}}
+      />,
+    );
+
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    const options = screen.getAllByRole('option', h);
+    expect(trigger).toHaveAttribute('aria-activedescendant', options[0].id);
+
+    await user.keyboard('t');
+    expect(trigger).toHaveAttribute('aria-activedescendant', options[1].id);
+    await user.keyboard('t');
+    expect(trigger).toHaveAttribute('aria-activedescendant', options[2].id);
+    await user.keyboard('t');
+    expect(trigger).toHaveAttribute('aria-activedescendant', options[0].id);
+  });
+
+  it('typeahead searches a letter typed after a pause from the next option', async () => {
+    vi.useFakeTimers({shouldAdvanceTime: true});
+    try {
+      const user = userEvent.setup({advanceTimers: vi.advanceTimersByTime});
+      render(
+        <MultiSelector
+          label="Food"
+          options={['Tea', 'Toast', 'Tofu']}
+          value={[]}
+          onChange={() => {}}
+        />,
+      );
+
+      const trigger = screen.getByRole('combobox');
+      await user.click(trigger);
+      const options = screen.getAllByRole('option', h);
+
+      await user.keyboard('{ArrowDown}');
+      expect(trigger).toHaveAttribute('aria-activedescendant', options[1].id);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      await user.keyboard('t');
+      expect(trigger).toHaveAttribute('aria-activedescendant', options[2].id);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('typeahead keeps refining a longer prefix from the current option', async () => {
+    const user = userEvent.setup();
+    render(
+      <MultiSelector
+        label="Food"
+        options={['Tea', 'Toast', 'Tofu']}
+        value={[]}
+        onChange={() => {}}
+      />,
+    );
+
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    const options = screen.getAllByRole('option', h);
+
+    await user.keyboard('tof');
+    expect(trigger).toHaveAttribute('aria-activedescendant', options[2].id);
+  });
+
+  it('typeahead opens a closed list on the match', async () => {
+    const user = userEvent.setup();
+    render(
+      <MultiSelector
+        label="Food"
+        options={['Apple', 'Banana', 'Cherry']}
+        value={[]}
+        onChange={() => {}}
+      />,
+    );
+
+    const trigger = screen.getByRole('combobox');
+    await act(async () => trigger.focus());
+    await user.keyboard('c');
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    const options = screen.getAllByRole('option', h);
+    expect(trigger).toHaveAttribute('aria-activedescendant', options[2].id);
+  });
+
   it('toggles item with Enter key', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();

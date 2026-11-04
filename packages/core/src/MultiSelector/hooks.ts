@@ -4,7 +4,7 @@
 
 /**
  * @file hooks.ts
- * @input Uses React hooks, MultiSelectorOptionData type
+ * @input Uses React hooks, the shared useTypeahead hook, MultiSelectorOptionData type
  * @output Exports useMultiCombobox hook
  * @position Public hook, exported from the MultiSelector entry point; used by
  *   MultiSelector.tsx
@@ -14,11 +14,11 @@
  * - /packages/core/src/MultiSelector/useMultiCombobox.doc.mjs
  */
 
-import {useCallback, useRef, useState} from 'react';
+import {useCallback, useState} from 'react';
 import {isRtlElement} from '../hooks/isRtlElement';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import type {MultiSelectorOptionData} from './types';
-import {findTypeaheadMatch} from '../utils/typeaheadMatch';
+import {useTypeahead} from '../hooks/useTypeahead';
 
 interface UseMultiComboboxOptions {
   selectableItems: MultiSelectorOptionData[];
@@ -104,10 +104,21 @@ export function useMultiCombobox({
     setHighlightedIndexState(index);
     setHighlightedCell('option');
   }, []);
-  const [typeahead, setTypeahead] = useState('');
-  const typeaheadTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
+
+  // Type-to-select, shared with Selector and the menus: a repeated letter
+  // walks to the next match, and a single letter searches from the option
+  // after the highlighted one. Closed, a match opens the list on it.
+  const typeahead = useTypeahead({
+    getItemLabels: () => selectableItems.map(item => item.label),
+    isDisabled: index => selectableItems[index]?.disabled === true,
+    getCurrentIndex: () => (isOpen ? highlightedIndex : -1),
+    onMatch: index => {
+      if (isOpen || onOpen() !== false) {
+        setHighlightedIndex(index);
+      }
+    },
+  });
+  const resetTypeahead = typeahead.reset;
 
   const getItemId = useCallback(
     (index: number) => `${listboxId}-item-${index}`,
@@ -131,9 +142,11 @@ export function useMultiCombobox({
   }, [selectableItems]);
 
   const closeAndReset = useCallback(() => {
+    // A pending prefix must not survive the close and poison the next keystroke.
+    resetTypeahead();
     setHighlightedIndex(-1);
     onClose();
-  }, [onClose, setHighlightedIndex]);
+  }, [onClose, resetTypeahead, setHighlightedIndex]);
 
   const onTriggerClick = useCallback(() => {
     if (isDisabled) {
@@ -187,6 +200,14 @@ export function useMultiCombobox({
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (isDisabled) {
+        return;
+      }
+
+      // With hasSearch the query input owns typing, so type-to-select is off.
+      // It runs ahead of the switch so a Space mid-typing extends the query
+      // instead of toggling, as in Selector.
+      if (!hasSearch && typeahead.onKeyDown(e)) {
+        e.preventDefault();
         return;
       }
 
@@ -330,32 +351,6 @@ export function useMultiCombobox({
             onClear();
           }
           break;
-
-        default:
-          // Typeahead only when search is not present
-          if (!hasSearch && e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
-            const newTypeahead = typeahead + e.key;
-            // INV17: the shared type-to-select fold, as Selector uses.
-            const matchIndex = findTypeaheadMatch(
-              selectableItems.flatMap((item, i) => (item.disabled ? [] : [i])),
-              i => selectableItems[i].label,
-              newTypeahead,
-            );
-            const didOpen = isOpen || matchIndex < 0 || onOpen() !== false;
-            if (didOpen) {
-              setTypeahead(newTypeahead);
-              if (typeaheadTimeoutRef.current) {
-                clearTimeout(typeaheadTimeoutRef.current);
-              }
-              typeaheadTimeoutRef.current = setTimeout(() => {
-                setTypeahead('');
-              }, 500);
-              if (matchIndex >= 0) {
-                setHighlightedIndex(matchIndex);
-              }
-            }
-          }
-          break;
       }
     },
     [
@@ -372,8 +367,8 @@ export function useMultiCombobox({
       setHighlightedIndex,
       onToggle,
       getEnabledIndices,
-      typeahead,
       hasSearch,
+      typeahead,
       onClear,
       hasValue,
     ],
