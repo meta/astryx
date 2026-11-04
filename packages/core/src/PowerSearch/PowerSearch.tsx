@@ -242,6 +242,15 @@ const sheetTriggerStyles = stylex.create({
     },
     outline: 'none',
   },
+  // A placeholder longer than the trigger ends in an ellipsis inside it, as
+  // Selector's value does. It never runs under the result count or past the
+  // field's border.
+  placeholder: {
+    minWidth: 0,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
   // Once a token is present the empty trigger covers the token lane instead
   // of reserving 40px or wrapping onto an otherwise blank row.
   triggerWithTokens: {
@@ -1544,7 +1553,11 @@ export function PowerSearch({
                   sheetTriggerStyles.trigger,
                   filters.length > 0 && sheetTriggerStyles.triggerWithTokens,
                 )}>
-                {filters.length === 0 ? placeholder : null}
+                {filters.length === 0 ? (
+                  <span {...stylex.props(sheetTriggerStyles.placeholder)}>
+                    {placeholder}
+                  </span>
+                ) : null}
               </button>
             </div>
             {(endContent || isRenderable(resultCountText)) && (

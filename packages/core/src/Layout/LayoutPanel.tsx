@@ -4,7 +4,8 @@
 
 /**
  * @file LayoutPanel.tsx
- * @input Uses React StyleX, LayoutAreaContext, LayoutSlotsContext
+ * @input Uses React StyleX, LayoutAreaContext, LayoutSlotsContext,
+ *   useScrollRegionProps
  * @output Exports LayoutPanel component and LayoutPanelProps
  * @position Sidebar panel for Layout start/end slots. Use for navigation panels,
  *   settings sidebars, detail panels, or any fixed-width side content.
@@ -22,6 +23,8 @@ import * as stylex from '@stylexjs/stylex';
 import {colorVars, spacingVars} from '../theme/tokens.stylex';
 import {LayoutAreaContext} from './LayoutAreaContext';
 import {LayoutSlotsContext} from './LayoutSlotsContext';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {useScrollRegionProps} from '../hooks/useScrollRegionProps';
 import {mergeProps} from '../utils';
 import type {SizeValue, SpacingStep} from '../utils/types';
 import type {ResizableProps} from '../Resizable/useResizable';
@@ -144,6 +147,8 @@ export interface LayoutPanelProps extends BaseProps<HTMLDivElement> {
   /**
    * Accessible label for the landmark.
    * Required when role is set and multiple landmarks of the same type exist.
+   * While the panel scrolls, it also names the scrolling region, which
+   * otherwise takes a translated "Content".
    */
   label?: string;
 
@@ -235,6 +240,8 @@ export function LayoutPanel({
   // When no divider, collapse spacing for seamless visual flow
   const shouldCollapseSpacing =
     !hasDivider && !isZeroPadding && padding == null;
+  const region = useScrollRegionProps({isScrollable, role, label});
+  const mergedRef = useMergedRefs(ref, region.ref);
 
   // Select divider style based on position
   const dividerStyle = isStartPanel
@@ -252,9 +259,9 @@ export function LayoutPanel({
 
   return (
     <div
-      ref={ref}
-      role={role}
-      aria-label={label}
+      ref={mergedRef}
+      role={region.role}
+      aria-label={region['aria-label']}
       {...mergeProps(
         themeProps('layout-panel'),
         stylex.props(

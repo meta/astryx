@@ -212,13 +212,23 @@ function syncRotationPhase(
 // =============================================================================
 
 /**
+ * Full turns in one iteration of the rotation.
+ *
+ * Chromium wakes the main thread at each iteration boundary while the
+ * document listens for `animationiteration`. React listens for it on every
+ * root. One iteration holds 100 turns, so the wake comes once in 100 turns.
+ * Each turn is 360 degrees, so the ring looks the same.
+ */
+const TURNS_PER_ITERATION = 100;
+
+/**
  * A `transform` animation runs on the compositor, so the ring keeps turning
  * while a script runs. A `stroke-dashoffset` animation would repaint the arc
  * on the main thread every frame, so it would stop while a script runs.
  */
 const rotation = stylex.keyframes({
   '0%': {transform: 'rotate(0deg)'},
-  '100%': {transform: 'rotate(360deg)'},
+  '100%': {transform: `rotate(${360 * TURNS_PER_ITERATION}deg)`},
 });
 
 // =============================================================================
@@ -307,8 +317,8 @@ const styles = stylex.create({
     // broken. The status role and its name still say that work is busy.
     animationDuration: {
       // The loop reads the duration before a theme's tempo scales it.
-      default: `var(--_astryx-pre-tempo-duration-slow-min, ${durationVars['--duration-slow-min']})`,
-      '@media (prefers-reduced-motion: reduce)': '3s',
+      default: `calc(var(--_astryx-pre-tempo-duration-slow-min, ${durationVars['--duration-slow-min']}) * ${TURNS_PER_ITERATION})`,
+      '@media (prefers-reduced-motion: reduce)': `calc(3s * ${TURNS_PER_ITERATION})`,
     },
     animationIterationCount: 'infinite',
     animationName: rotation,

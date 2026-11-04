@@ -238,7 +238,7 @@ const styles = stylex.create({
   },
   presetButtonActive: {
     backgroundColor: colorVars['--color-accent-muted'],
-    color: colorVars['--color-accent'],
+    color: colorVars['--color-text-accent'],
   },
   presetButtonDisabled: {
     color: colorVars['--color-text-disabled'],

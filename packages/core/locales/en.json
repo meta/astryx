@@ -1323,6 +1323,10 @@
     "defaultMessage": "Loading",
     "description": "Screen-reader-only default name for a standalone Spinner's role=\"status\" element, used when the consumer supplies neither `aria-label` nor a visible string label; also announced once when a busy input or selector starts loading, in place of its decorative Spinner. Present-progressive form. Kept separate from `button.loading` and `typeahead.loading` — translations may diverge."
   },
+  "@astryx.scrollRegion.label": {
+    "defaultMessage": "Content",
+    "description": "Accessible name of a scrolling content region (LayoutContent, LayoutPanel or StackItem) when the caller gives none. A screen reader announces it with the region's group role while the region scrolls."
+  },
   "@astryx.chatComposerDrawer.expand": {
     "defaultMessage": "Expand {label}",
     "description": "Screen-reader-only label on the ChatComposerDrawer toggle when the drawer is collapsed. `{label}` is the drawer's visible name — example: `Expand Attachments`. Pairs with `collapse`."
