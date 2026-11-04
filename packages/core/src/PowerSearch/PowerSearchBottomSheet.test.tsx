@@ -295,6 +295,17 @@ const valueTypesConfig: PowerSearchConfig = {
       ],
     },
     {
+      key: 'updated',
+      label: 'Updated',
+      operators: [
+        {
+          key: 'after',
+          label: 'is after',
+          value: {type: 'date_absolute', isDateOnly: false},
+        },
+      ],
+    },
+    {
       key: 'age',
       label: 'Age',
       operators: [
@@ -4406,6 +4417,46 @@ describe('PowerSearch sheet value types (FR17)', () => {
     openEditFlow(/^Created is after/);
     expect(within(sheet()).getByText('custom editor')).toBeTruthy();
     expect(seen).toContain('Asia/Tokyo');
+  });
+
+  it('date_absolute with isDateOnly: false: the value step shows the time in timezoneID on the row, the date picker and the time field, and stores the time typed (FR26)', () => {
+    const instantFilter: PowerSearchFilter = {
+      field: 'updated',
+      operator: 'after',
+      // 2024-03-10T03:00:00Z: March 9, 7:00 PM in Los Angeles.
+      value: {type: 'date_absolute', unixSeconds: 1710039600},
+    };
+    const {onChange} = setupValues({
+      filters: [instantFilter],
+      timezoneID: 'America/Los_Angeles',
+    });
+    openSheet();
+    expect(
+      within(sheet()).getByRole('button', {name: /Mar 9, 2024, 7:00 PM/}),
+    ).toBeTruthy();
+    tapRow(/^Updated is after/);
+    expect(within(sheet()).getByRole('combobox', {name: 'Date'})).toHaveValue(
+      'March 9, 2024',
+    );
+    const time = within(sheet()).getByLabelText('Time');
+    expect(time).toHaveValue('7:00 PM');
+    fireEvent.change(time, {target: {value: '8:30 PM'}});
+    fireEvent.blur(time);
+    apply();
+    expect(onChange).toHaveBeenCalledWith(
+      [
+        {
+          field: 'updated',
+          operator: 'after',
+          value: {
+            type: 'date_absolute',
+            unixSeconds: Date.parse('2024-03-10T04:30:00Z') / 1000,
+          },
+        },
+      ],
+      'edit',
+      0,
+    );
   });
 
   it('date_relative: rows stage a single relative value', () => {
