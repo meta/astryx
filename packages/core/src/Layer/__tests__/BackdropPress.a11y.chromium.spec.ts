@@ -1,13 +1,14 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-// @pr-a11y scope core/Layer core/Dialog core/Drawer core/CommandPalette ^apps/storybook/stories/BackdropPressA11y
+// @pr-a11y scope core/Layer core/Dialog core/Drawer core/CommandPalette core/DropdownMenu ^apps/storybook/stories/BackdropPressA11y
 
 /**
  * @file BackdropPress.a11y.chromium.spec.ts
  * @input The built A11y/BackdropPress story; real Chromium mouse and touch
  *   input
  * @output Browser evidence that a press which crosses the edge of a Dialog,
- *   Drawer or CommandPalette, either way, leaves it open, and that a
- *   press on the backdrop alone still dismisses it
+ *   Drawer or CommandPalette, either way, leaves it open, that a press on the
+ *   backdrop alone still dismisses it, and that a backdrop press which closes
+ *   a menu open inside a Dialog or Drawer leaves the host open
  * @position Chromium proof for the shared backdrop-press rule
  *   (Layer/useBackdropPress.ts). jsdom has no backdrop hit testing and no
  *   click retargeting to the common ancestor.
@@ -107,6 +108,42 @@ for (const {name, open, dialog, field} of MEMBERS) {
 
     test('a finger tap on the backdrop dismisses it', async ({page}) => {
       const surface = await openMember(page, open, dialog);
+      await page.touchscreen.tap(BACKDROP.x, BACKDROP.y);
+      await expect(surface).toBeHidden();
+    });
+  });
+}
+
+for (const {name, open, dialog} of MEMBERS.filter(
+  member => member.name !== 'CommandPalette',
+)) {
+  test.describe(`${name} with a menu open inside`, () => {
+    async function openMenu(page: Page) {
+      const surface = await openMember(page, open, dialog);
+      await surface.getByRole('button', {name: 'Actions'}).click();
+      const menu = page.getByRole('menu');
+      await expect(menu).toBeVisible();
+      return {surface, menu};
+    }
+
+    test('a mouse press on the backdrop closes only the menu, and the next closes the host', async ({
+      page,
+    }) => {
+      const {surface, menu} = await openMenu(page);
+      await page.mouse.click(BACKDROP.x, BACKDROP.y);
+      await expect(menu).toBeHidden();
+      await expect(surface).toBeVisible();
+      await page.mouse.click(BACKDROP.x, BACKDROP.y);
+      await expect(surface).toBeHidden();
+    });
+
+    test('a finger tap on the backdrop closes only the menu, and the next closes the host', async ({
+      page,
+    }) => {
+      const {surface, menu} = await openMenu(page);
+      await page.touchscreen.tap(BACKDROP.x, BACKDROP.y);
+      await expect(menu).toBeHidden();
+      await expect(surface).toBeVisible();
       await page.touchscreen.tap(BACKDROP.x, BACKDROP.y);
       await expect(surface).toBeHidden();
     });

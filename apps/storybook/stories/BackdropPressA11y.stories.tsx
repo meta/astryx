@@ -3,9 +3,10 @@
 /**
  * @file BackdropPressA11y.stories.tsx
  * @input Dialog, Drawer and CommandPalette, each with a text field, opened
- *   from a button
+ *   from a button; Dialog and Drawer also hold a DropdownMenu
  * @output Fixtures for the Chromium check that a backdrop press dismisses only
- *   when it starts and ends on the backdrop; excluded from the visual matrix
+ *   when it starts and ends on the backdrop, and that a press which closes a
+ *   menu open inside leaves the host open; excluded from the visual matrix
  * @position Browser fixtures for the shared backdrop-press rule
  */
 
@@ -15,6 +16,7 @@ import {Button} from '@astryxdesign/core/Button';
 import {CommandPalette} from '@astryxdesign/core/CommandPalette';
 import {Dialog} from '@astryxdesign/core/Dialog';
 import {Drawer} from '@astryxdesign/core/Drawer';
+import {DropdownMenu} from '@astryxdesign/core/DropdownMenu';
 import {createStaticSource} from '@astryxdesign/core/Typeahead';
 
 const meta: Meta = {
@@ -25,6 +27,11 @@ const meta: Meta = {
 export default meta;
 
 const NOTE = 'A long note to select with the pointer and release past the edge';
+
+const menuItems = [
+  {label: 'Rename', onClick: () => {}},
+  {label: 'Archive', onClick: () => {}},
+];
 
 const commands = createStaticSource([
   {id: 'open', label: 'Open file'},
@@ -55,6 +62,7 @@ export const Members: StoryObj = {
             defaultValue={NOTE}
             style={{width: '100%'}}
           />
+          <DropdownMenu button={{label: 'Actions'}} items={menuItems} />
         </Dialog>
         <Drawer
           isOpen={open === 'drawer'}
@@ -65,6 +73,7 @@ export const Members: StoryObj = {
             defaultValue={NOTE}
             style={{width: '100%'}}
           />
+          <DropdownMenu button={{label: 'Actions'}} items={menuItems} />
         </Drawer>
         <CommandPalette
           isOpen={open === 'palette'}
