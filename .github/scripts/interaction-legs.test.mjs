@@ -227,6 +227,8 @@ describe('the interaction proof legs in ci.yml', () => {
       'packages/core/src/motion/__tests__/animator.interaction',
       'packages/core/src/hooks/__tests__/usePager.interaction',
       'internal/interaction-harness/',
+      // Plus the interaction specs this pull request changes.
+      '"${CHANGED_SPECS[@]}"',
     ]);
   });
 

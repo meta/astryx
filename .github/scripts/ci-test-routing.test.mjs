@@ -481,6 +481,7 @@ describe('ci.yml RTL package sharding', () => {
         'pr-a11y-guards',
         'pr-a11y-specs',
         'pr-component-a11y-contracts',
+        'pr-interaction-webkit',
         'pr-rtl',
         'pr-rtl-merge',
         'pr-rtl-shard',

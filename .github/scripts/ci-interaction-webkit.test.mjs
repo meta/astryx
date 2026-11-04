@@ -14,7 +14,9 @@
  * context. The scope step's own behavior is in test-scope-action.test.mjs.
  */
 
+import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import {build} from 'esbuild';
@@ -178,18 +180,105 @@ describe('WebKit interaction proof routing', () => {
     // SideNav) stay with the Chromium proofs.
     expect(run).not.toContain('animatedLayoutAdopters');
     expect(run).not.toMatch(/motion\/ /);
-    // Carousel paging renders its Storybook story, so it stays there too, and
-    // its files start no WebKit run.
+    // Carousel paging renders its Storybook story, so it stays there too: its
+    // code starts no WebKit run. A change to its spec does (see below).
     expect(run).not.toContain('CarouselPaging');
-    for (const file of [
-      'packages/core/src/Carousel/useCarouselPaging.ts',
-      'packages/core/src/Carousel/__tests__/CarouselPaging.interaction.browser.spec.ts',
-    ]) {
-      expect(inScope(file), file).toBe(false);
-    }
+    expect(inScope('packages/core/src/Carousel/useCarouselPaging.ts')).toBe(
+      false,
+    );
     for (const component of ['DateInput', 'TabList', 'TreeList', 'SideNav']) {
       expect(run).not.toContain(component);
     }
+  });
+
+  // A pull request that changes an interaction spec runs that spec in both
+  // lanes, wherever it lives: the Chromium legs plan every spec, and the
+  // WebKit plan adds the changed ones to its paths.
+  describe('a changed interaction spec', () => {
+    const spec =
+      'packages/core/src/List/__tests__/ListRowPress.interaction.browser.spec.ts';
+
+    it('starts both lanes', () => {
+      expect(inScope(spec)).toBe(true);
+      expect(new RegExp(decide(chromium).with.paths).test(spec)).toBe(true);
+      expect(
+        inScope(
+          'packages/core/src/Carousel/__tests__/CarouselPaging.interaction.browser.spec.ts',
+        ),
+      ).toBe(true);
+      // Only spec files: the component's code still starts no WebKit run.
+      expect(inScope('packages/core/src/List/ListRow.tsx')).toBe(false);
+      expect(inScope('packages/core/src/List/__tests__/ListRow.test.tsx')).toBe(
+        false,
+      );
+    });
+
+    it('lists the changed files for the WebKit plan', () => {
+      expect(decide(webkit).with['component-audit']).toBe('true');
+      expect(
+        step(webkit, "Plan this leg's WebKit interaction proofs").env
+          .CHANGED_FILES,
+      ).toBe('${{ steps.scope.outputs.changed_files_path }}');
+      // The Chromium legs plan every spec file, with no path filter.
+      expect(
+        step(chromium, "Plan this leg's interaction proofs").run,
+      ).not.toContain(' -- ');
+    });
+
+    // Runs the plan step with a stub `node` that prints its arguments.
+    function planArgs(changed, present) {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'webkit-plan-'));
+      try {
+        for (const file of present) {
+          fs.mkdirSync(path.join(dir, path.dirname(file)), {recursive: true});
+          fs.writeFileSync(path.join(dir, file), '');
+        }
+        const list = path.join(dir, 'changed.txt');
+        fs.writeFileSync(list, changed.map(file => `${file}\n`).join(''));
+        const bin = path.join(dir, 'bin');
+        fs.mkdirSync(bin);
+        fs.writeFileSync(
+          path.join(bin, 'node'),
+          '#!/usr/bin/env bash\nprintf "%s\\n" "$@"\n',
+          {mode: 0o755},
+        );
+        const script = step(webkit, "Plan this leg's WebKit interaction proofs")
+          .run.replaceAll('${{ matrix.leg }}', '1')
+          .replaceAll('${{ strategy.job-total }}', '2');
+        const out = execFileSync('bash', ['-e', '-c', script], {
+          cwd: dir,
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: `${bin}:${process.env.PATH}`,
+            RUNNER_TEMP: dir,
+            CHANGED_FILES: list,
+          },
+        });
+        return out.trim().split('\n');
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
+    }
+
+    it("adds the changed spec to the WebKit plan's paths", () => {
+      const args = planArgs(
+        [spec, 'packages/core/src/List/ListRow.tsx'],
+        [spec],
+      );
+      const paths = args.slice(args.indexOf('--') + 1);
+      expect(paths).toContain(spec);
+      expect(paths).toContain('packages/core/src/gestures/');
+      expect(paths).not.toContain('packages/core/src/List/ListRow.tsx');
+    });
+
+    it('leaves out a spec the pull request deletes, and plans as before with no list', () => {
+      const deleted =
+        'packages/core/src/List/__tests__/Old.interaction.browser.spec.ts';
+      const args = planArgs([deleted], []);
+      expect(args).not.toContain(deleted);
+      expect(args.at(-1)).toBe('internal/interaction-harness/');
+    });
   });
 
   // Every source file the WebKit specs bundle into their pages is in scope,

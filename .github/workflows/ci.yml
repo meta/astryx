@@ -2374,7 +2374,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(interaction-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/interaction-durations\.json$|\.github/actions/test-scope/)'
+          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(interaction-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/interaction-durations\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
 
@@ -2533,9 +2533,11 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform|flatTree|inputStream|clickGuard|selectionLock|coarsePointer|sharedResizeObserver|scrollView)|packages/core/src/privateAttributes/(hapticSwitch|reducedMotion)\.stylex\.ts$|packages/core/src/Layer/inputHold\.ts$|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback|isRtlElement|useIsomorphicLayoutEffect|useAttachment|usePager|__tests__/(usePager|pagerBundle))|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(interaction-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/interaction-durations\.json$|\.github/actions/test-scope/)'
+          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform|flatTree|inputStream|clickGuard|selectionLock|coarsePointer|sharedResizeObserver|scrollView)|packages/core/src/privateAttributes/(hapticSwitch|reducedMotion)\.stylex\.ts$|packages/core/src/Layer/inputHold\.ts$|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback|isRtlElement|useIsomorphicLayoutEffect|useAttachment|usePager|__tests__/(usePager|pagerBundle))|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(interaction-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/interaction-durations\.json$|\.github/actions/test-scope/|.*\.interaction\.browser\.spec\.ts$)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
+          # Lists the changed files, so the planner adds a changed spec.
+          component-audit: 'true'
 
       - name: Require this pull request's Storybook build
         if: steps.scope.outputs.applies == 'true' && needs.build-storybook.result != 'success'
@@ -2545,7 +2547,7 @@ jobs:
 
       - name: Skip the WebKit proofs outside their scope
         if: steps.scope.outputs.applies != 'true'
-        run: echo "No WebKit interaction proofs for this change (it touches no gesture, motion, touch or press code, and none of their shared setup)."
+        run: echo "No WebKit interaction proofs for this change (it touches no gesture, motion, touch or press code, no interaction spec, and none of their shared setup)."
 
       # The head checkout below replaces the workspace, scope checkout
       # included, so the leg planner, the modules it imports (the shared
@@ -2613,11 +2615,22 @@ jobs:
 
       # This leg's share of the WebKit spec files, from the paths the lane
       # covers, by their recorded times. The planner and the times come from
-      # the scope checkout, as for the Chromium legs.
+      # the scope checkout, as for the Chromium legs. An interaction spec the
+      # pull request changes runs here too, wherever it lives.
       - name: Plan this leg's WebKit interaction proofs
         id: plan
         if: steps.scope.outputs.applies == 'true'
+        env:
+          CHANGED_FILES: ${{ steps.scope.outputs.changed_files_path }}
         run: |
+          CHANGED_SPECS=()
+          if [ -n "${CHANGED_FILES:-}" ] && [ -s "$CHANGED_FILES" ]; then
+            while IFS= read -r file; do
+              case "$file" in
+                *.interaction.browser.spec.ts) [ -f "$file" ] && CHANGED_SPECS+=("$file") ;;
+              esac
+            done < "$CHANGED_FILES"
+          fi
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/interaction-legs.mjs" plan --project webkit \
             --leg ${{ matrix.leg }} --of ${{ strategy.job-total }} \
             --durations "$RUNNER_TEMP/interaction-legs/.github/interaction-durations.json" \
@@ -2626,7 +2639,8 @@ jobs:
             packages/core/src/motion/__tests__/animatedLayout.interaction \
             packages/core/src/motion/__tests__/animator.interaction \
             packages/core/src/hooks/__tests__/usePager.interaction \
-            internal/interaction-harness/
+            internal/interaction-harness/ \
+            "${CHANGED_SPECS[@]}"
 
       # WebKit renders through Mesa's llvmpipe, which sizes its thread pool
       # from the CPUs the process may run on. A container's CPU quota is not
