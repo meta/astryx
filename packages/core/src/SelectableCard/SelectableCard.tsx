@@ -52,10 +52,7 @@ import {closestLayerRoot} from '../privateAttributes/layerRoot.stylex';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
-import {
-  interactionOverlayStyles,
-  pressConsts,
-} from '../utils/interactionOverlay.stylex';
+import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -74,42 +71,7 @@ const PRESSED_ON = '[data-astryx-press="on"]';
 /** Written by the press controller for the press's release. */
 const PRESSED_FADING = '[data-astryx-press="fading"]';
 
-/**
- * The shared touch release, restated: the card's release style replaces the
- * whole property, so a fine primary pointer keeps the overlay's clock and
- * curve. SYNC: utils/interactionOverlay.stylex.ts PRESS_RELEASE_DURATION,
- * PRESS_RELEASE_DURATION_REDUCED and RELEASE_EASE.
- */
-const SHARED_RELEASE = `calc(${pressConsts.releaseMs}ms * min(var(--_astryx-motion-tempo, 1), 1.5))`;
-const SHARED_RELEASE_REDUCED = `min(${pressConsts.releaseMs}ms, calc(${pressConsts.releaseMs}ms * var(--_astryx-motion-tempo, 1)))`;
-const SHARED_RELEASE_EASE = 'cubic-bezier(0, 0, 0.2, 1)';
-
 const styles = stylex.create({
-  // Under a coarse primary pointer the press release fades on the exit
-  // tokens. The controller already shows the press on its first frame.
-  touchRelease: {
-    animationDuration: {
-      default: null,
-      [PRESSED_FADING]: {
-        default: SHARED_RELEASE,
-        '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
-          SHARED_RELEASE_REDUCED,
-        // Cap the release at the shared press clock until that clock follows
-        // the exit tokens.
-        '@media (pointer: coarse)': {
-          default: `min(${durationVars['--duration-exit']}, ${SHARED_RELEASE})`,
-          '@media (prefers-reduced-motion: reduce)': `min(${durationVars['--duration-exit']}, ${SHARED_RELEASE_REDUCED})`,
-        },
-      },
-    },
-    animationTimingFunction: {
-      default: null,
-      [PRESSED_FADING]: {
-        default: SHARED_RELEASE_EASE,
-        '@media (pointer: coarse)': easeVars['--ease-exit'],
-      },
-    },
-  },
   interactive: {
     // Declared here, on the element that carries the `astryx-selectable-card`
     // target, so a theme has something to override — the ring for a variant
@@ -599,7 +561,6 @@ export function SelectableCard({
           // The touch press's strength and release, on the element the
           // controller writes to; the `::after` above paints off it.
           !isDisabled && interactionOverlayStyles.pressedAlpha,
-          !isDisabled && styles.touchRelease,
           isDisabled && styles.disabled,
           xstyleProp,
         ] as unknown as StyleXStyles

@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event';
 import {Thumbnail} from './Thumbnail';
 import {
   afterPaintsPress,
-  hasCardReleaseFade,
+  hasReleaseFade,
   pressArmsShadowedByDefault,
   readsPressStrength,
 } from '../__tests__/pressState';
@@ -367,8 +367,7 @@ describe('Thumbnail pressed state (touch)', () => {
     if (surface == null) {
       throw new Error('the interactive thumbnail carries no pressable marker');
     }
-    // Under a coarse primary pointer its release fades on the exit tokens.
-    expect(hasCardReleaseFade(surface)).toBe(true);
+    expect(hasReleaseFade(surface)).toBe(true);
     expect(readsPressStrength(surface, '[data-astryx-press="on"]')).toBe(true);
     expect(readsPressStrength(surface)).toBe(true);
     expect(afterPaintsPress(surface, '[data-astryx-press="on"]')).toBe(true);

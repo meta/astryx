@@ -11,8 +11,8 @@
  *   `design:reduced-motion`. A press never scales a button (DR1). With a fine
  *   primary pointer their state changes are immediate (DR3). On a touch screen
  *   their colors change at once, and only opacity fades, on the exit tokens
- *   within 200 ms. Under a coarse primary pointer a card's press release fades
- *   on the exit tokens. With a fine one its timing is unchanged.
+ *   within 200 ms. A card's press release fades on the exit tokens on every
+ *   pointer, and a mouse's timing is unchanged.
  * @position Run with `pnpm test:a11y-contract`. Browser layer of the
  *   reduced-motion arms in Button.tsx and the cards' overlays.
  */
@@ -414,7 +414,7 @@ test('under a coarse primary pointer, a card’s press release fades on the exit
   }
 });
 
-test('with a fine primary pointer, a card’s press timing is unchanged without Reduce Motion', async ({
+test('with a fine primary pointer, a card’s mouse timing is unchanged, and a finger’s release fades on the exit tokens', async ({
   browser,
 }) => {
   for (const [name, story, index] of CARDS) {
@@ -448,11 +448,10 @@ test('with a fine primary pointer, a card’s press timing is unchanged without 
       } finally {
         await card.page.mouse.up();
       }
-      // A finger's release on this desktop keeps the shared clock and curve.
-      expect(await releaseTimingOf(card.page, index), name).toEqual({
-        duration: 200,
-        curve: 'cubic-bezier(0, 0, 0.2, 1)',
-      });
+      // A finger's release on this desktop fades on the exit tokens too.
+      const exit = await tokensOf(card.page, '--duration-exit', '--ease-exit');
+      expect(exit.duration, 'exit token').toBeGreaterThan(0);
+      expect(await releaseTimingOf(card.page, index), name).toEqual(exit);
     } finally {
       await card.close();
     }

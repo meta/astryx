@@ -13,7 +13,7 @@ import {render, screen, fireEvent} from '@testing-library/react';
 import {SelectableCard} from './SelectableCard';
 import {
   afterPaintsPress,
-  hasCardReleaseFade,
+  hasReleaseFade,
   pressArmsShadowedByDefault,
   readsPressStrength,
 } from '../__tests__/pressState';
@@ -204,8 +204,7 @@ describe('SelectableCard pressed state (touch)', () => {
     if (card == null) {
       throw new Error('the card carries no pressable marker');
     }
-    // Under a coarse primary pointer its release fades on the exit tokens.
-    expect(hasCardReleaseFade(card)).toBe(true);
+    expect(hasReleaseFade(card)).toBe(true);
     expect(readsPressStrength(card, '[data-astryx-press="on"]')).toBe(true);
     expect(readsPressStrength(card)).toBe(true);
     expect(afterPaintsPress(card, '[data-astryx-press="on"]')).toBe(true);
