@@ -8,6 +8,7 @@ import {afterEach, describe, expect, it} from 'vitest';
 import {readDiff} from './review-diff.mjs';
 import {collectConcernMatches} from '../check-knowledge.mjs';
 import {loadKnowledgeIndex} from '../specs-for-file.mjs';
+import {routeReviewBaselines} from '../review-global-baselines.mjs';
 
 const HERE = import.meta.dirname;
 const ROOT = path.resolve(HERE, '../..');
@@ -259,12 +260,17 @@ describe('review-global-baselines.mjs', () => {
     );
   }
 
+  // The router runs in this process; the case below runs the command once.
   it("routes a concern the head's added lines match, beside the requested triggers", () => {
-    const result = route(
-      repository(
-        'export function A() {\n  useEffect(() => () => {}, []);\n}\n',
-      ),
+    const {root, base, head} = repository(
+      'export function A() {\n  useEffect(() => () => {}, []);\n}\n',
     );
+    const result = routeReviewBaselines({
+      root,
+      authorityCommit: base,
+      reviewHead: head,
+      requestedTriggers: ['styling'],
+    });
     expect(result.matches.map(match => match.claimId)).toEqual(['INV2']);
     expect(result.concernMatches).toEqual([
       expect.objectContaining({
