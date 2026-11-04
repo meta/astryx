@@ -649,6 +649,14 @@ describe('Lab entry files (spec:AST-030 FR26)', () => {
     expect(entry(routes(route(lines)))).toBe(false);
   });
 
+  it('refuses an example or showcase name for a component the change does not carry', () => {
+    for (const name of ['example-button-basic', 'showcase-button-tour']) {
+      expect(entry(routes(route([`+      "name": "${name}",`]))), name).toBe(
+        false,
+      );
+    }
+  });
+
   it('matches a route name and path exactly, not by prefix', () => {
     const swap = (from, to) => ownRoute.map(line => line.replace(from, to));
     expect(
@@ -782,6 +790,14 @@ describe('Lab entry files (spec:AST-030 FR26)', () => {
     // Inside Lab's part: accepted; inside the next package's part: refused.
     expect(entry(discovery(ownEntry), baseWithNext)).toBe(true);
     expect(entry(discovery(ownEntry, 25), baseWithNext)).toBe(false);
+    // A hunk that starts in Lab's last lines but runs into the next package.
+    const crossing = {
+      change: {filename: OFFICIAL_PACKAGES, status: 'M'},
+      patches: {
+        [OFFICIAL_PACKAGES]: `@@ -19,4 +19,8 @@\n${ownEntry.join('\n')}`,
+      },
+    };
+    expect(entry(crossing, baseWithNext)).toBe(false);
   });
 
   it("refuses the discovery list when the base's copy is missing", () => {
@@ -816,5 +832,27 @@ describe('Lab entry files (spec:AST-030 FR26)', () => {
       expect(labRouteSlug(name), name).toBe(slugifyRegistryName(name));
     }
     expect(labRouteSlug('SVGIcon')).toBe('svg-icon');
+  });
+});
+
+describe('Lab component folders (spec:AST-030 FR26)', () => {
+  it('reads a carried component only from a component folder, not a shared one', () => {
+    const {ROUTES_LOCK} = require('./change-scope.cjs');
+    const routePatch = [
+      '@@ -556,6 +556,11 @@',
+      '+    {',
+      '+      "name": "component-lab-tests",',
+      '+      "path": "components/lab/tests",',
+      '+      "aliases": []',
+      '+    },',
+    ].join('\n');
+    const result = classifyChanges(
+      [
+        {filename: 'packages/lab/src/__tests__/helpers.ts', status: 'M'},
+        {filename: ROUTES_LOCK, status: 'M'},
+      ],
+      {patches: {[ROUTES_LOCK]: routePatch}},
+    );
+    expect(result.labOnly).toBe(false);
   });
 });

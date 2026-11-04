@@ -113,7 +113,11 @@ they are separately named.
 - **FR3 — Classification uses trusted base policy.** Pull-request code MUST NOT
   choose its own lane. The workflow MUST load the classifier and every classifier
   dependency from the trusted base ref, then apply that policy to the merge-base
-  three-dot path set. Workflow changes use the broad lane unless they are an
+  three-dot path set. For a Lab component's entry files (FR26), the trusted
+  classifier also reads GitHub's patch text for those three files. It reads
+  the text as data, matches each line against fixed patterns and never runs
+  it, so a pull request supplies only data that the base policy judges, never
+  the policy. Workflow changes use the broad lane unless they are an
   admitted tool's non-PR dispatch workflow. Classifier,
   classifier-dependency, and routing-test changes use the broad lane.
 - **FR4 — Uncertainty fails closed.** A missing merge base, missing trusted
@@ -318,8 +322,9 @@ they are separately named.
   build or test configuration and test setup, `internal/` (the test harness
   included), `theme-build` paths (tokens and themes), Storybook configuration,
   `node-tooling` paths (FR8 keeps their whole Node project), and every other
-  `shared-or-unknown` path except Changesets and, in a Lab-only change, a
-  carried Lab component's entry files (FR26). Every fail-closed
+  `shared-or-unknown` path. Changesets are excepted, and so, in a Lab-only
+  change, are a carried Lab component's entry files (FR26), the route lock
+  under `internal/` included. Every fail-closed
   condition of FR3–FR4 also runs the full suite. `main`, release branches,
   merge-group entries and `release-check` dispatches always run the full suite,
   and release checks keep FR12's full scope.
@@ -1048,9 +1053,11 @@ hundred is Lab-only, and each skips most of a full run's work.
 Rejected: keeping full CI for Lab (it spends shipped-surface checks on a
 package no stable release includes); Lab tests alone, without the
 repository-wide guards (a landed guard break blocks everyone else's pull
-requests); counting Lab stories under `apps/storybook/stories/` as Lab-only
-(they share the visual surface, and a path cannot tell a Lab story from a core
-one without reading pull-request content, FR3).
+requests); counting a story under `apps/storybook/stories/` as Lab-only by its
+path alone (stories share the visual surface, and a path cannot tell a Lab
+story from a core one). FR26 admits only a carried Lab component's new story,
+and only after the trusted classifier reads the story's patch text as data
+(FR3).
 
 ### DEC-22 — A touched component's own accessibility contracts run, and block, on its pull request
 
