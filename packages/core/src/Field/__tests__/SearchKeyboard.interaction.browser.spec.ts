@@ -2,8 +2,8 @@
 
 /**
  * @file SearchKeyboard.interaction.browser.spec.ts
- * @input Storybook stories of Typeahead, Tokenizer, Selector, MultiSelector
- *   and CommandPaletteInput
+ * @input Storybook stories of Typeahead, Tokenizer (its inline field and its
+ *   sheet), Selector, MultiSelector and CommandPaletteInput
  * @output On a touch-emulated phone, the search input that a tap focuses
  *   carries `enterkeyhint="search"` and `autocorrect="off"`
  * @position Search keyboard evidence in the interaction lane. jsdom has no
@@ -44,11 +44,25 @@ test('a tap on Typeahead focuses a field that asks for the Search key and no aut
   await expectSearchKeyboard(page.getByRole('combobox'));
 });
 
-test('a tap on Tokenizer focuses a field that asks for the Search key and no autocorrection', async ({
+test('a tap on the inline Tokenizer focuses a field that asks for the Search key and no autocorrection', async ({
   page,
 }) => {
-  await openStory(page, storybook(), 'core-tokenizer--default');
+  // The story pins `presentation="popover"`, so the phone keeps the inline field.
+  await openStory(page, storybook(), 'core-tokenizer--with-end-content');
   await expectSearchKeyboard(page.getByRole('combobox'));
+});
+
+test("a tap in the search field of Tokenizer's sheet focuses a field that asks for the Search key and no autocorrection", async ({
+  page,
+}) => {
+  // The default presentation is the sheet on a phone.
+  await openStory(page, storybook(), 'core-tokenizer--default');
+  const trigger = page.getByRole('button', {name: /^Team Members/});
+  await expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
+  await trigger.tap();
+  await expectSearchKeyboard(
+    page.getByRole('dialog').getByLabel('Search Team Members', {exact: true}),
+  );
 });
 
 test("a tap in Selector's search row focuses a field that asks for the Search key and no autocorrection", async ({

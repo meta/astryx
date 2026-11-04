@@ -378,7 +378,7 @@ export function Timestamp({
     ? formatInstant(date, 'full', locale, {timeZoneNameStyle: 'long'})
     : '';
 
-  // Live updates
+  // Syncs the relative time with an interval timer while the timestamp is live.
   useEffect(() => {
     if (!isLive || !isValidDate || !isRelativeFormat(effectiveFormat)) {
       return;

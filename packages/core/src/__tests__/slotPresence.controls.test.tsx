@@ -161,7 +161,7 @@ describe('Tokenizer startIcon follows isRenderable', () => {
     ],
     [
       'the bottom-sheet trigger',
-      {value: [token], experimental: {presentation: 'bottom-sheet'}},
+      {value: [token], presentation: 'bottom-sheet'},
     ],
   ];
 

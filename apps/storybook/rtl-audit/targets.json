@@ -551,24 +551,6 @@
     }
   },
   {
-    "component": "MobilePowerSearch",
-    "storyId": "lab-mobilepowersearch--touch-flow",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-token:has-text(\"Status\")",
-      "next": ".astryx-token:has-text(\"Priority\")"
-    }
-  },
-  {
-    "component": "MobileTokenizer",
-    "storyId": "lab-mobiletokenizer--touch-flow",
-    "dims": ["D2"],
-    "selectors": {
-      "prev": ".astryx-token:has-text(\"Design\")",
-      "next": ".astryx-token:has-text(\"Eng\")"
-    }
-  },
-  {
     "component": "MoreMenu",
     "storyId": "core-moremenu--default",
     "dims": ["D4"],

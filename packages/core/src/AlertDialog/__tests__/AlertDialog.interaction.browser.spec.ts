@@ -310,7 +310,7 @@ test('a tap runs its action exactly once', async ({page}) => {
 test.describe('with a mouse', () => {
   test.use({hasTouch: false, isMobile: false});
 
-  test('a press on Delete slid to Cancel runs Cancel once, and a click on Delete runs Delete once (family:action-groups FR5)', async ({
+  test('a mouse press on Delete slid to Cancel runs nothing, as a native button does, and a click on Delete runs Delete once (family:action-groups FR1)', async ({
     page,
   }) => {
     await openStory(page, storybook(), 'core-alertdialog--delete');
@@ -318,12 +318,6 @@ test.describe('with a mouse', () => {
     expect(
       await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
     ).toBe(false);
-    const open = async () => {
-      await page.getByRole('button', {name: 'Delete item'}).click();
-      const dialog = page.getByRole('alertdialog', {name: 'Delete item?'});
-      await expect(dialog).toBeVisible();
-      return dialog;
-    };
     const clicks: string[] = [];
     await page.exposeFunction('__alertClick', (label: string) => {
       clicks.push(label);
@@ -342,80 +336,28 @@ test.describe('with a mouse', () => {
         true,
       );
     });
-    let dialog = await open();
-    const del = await centerOf(dialog.getByRole('button', {name: 'Delete'}));
-    const cancel = await centerOf(dialog.getByRole('button', {name: 'Cancel'}));
-    await page.mouse.move(del.x, del.y);
-    await page.mouse.down();
-    await page.mouse.move(cancel.x, cancel.y, {steps: 8});
-    await page.mouse.up();
-    await expect(dialog).toBeHidden();
-    expect(clicks).toEqual(['Cancel']);
-    // A plain click: the group's click runs it, and the browser's own click
-    // for the same press is swallowed.
-    clicks.length = 0;
-    dialog = await open();
-    await dialog.getByRole('button', {name: 'Delete'}).click();
-    await expect.poll(() => clicks.length).toBe(1);
-    await frames(page, 4);
-    expect(clicks).toEqual(['Delete']);
-  });
-
-  test('a press held on Delete and slid onto Cancel lights only Cancel: Delete keeps no pressed look (family:action-groups FR2)', async ({
-    page,
-  }) => {
-    await openStory(page, storybook(), 'core-alertdialog--delete');
-    expect(
-      await page.evaluate(() => matchMedia('(pointer: coarse)').matches),
-    ).toBe(false);
     await page.getByRole('button', {name: 'Delete item'}).click();
     const dialog = page.getByRole('alertdialog', {name: 'Delete item?'});
     await expect(dialog).toBeVisible();
     await waitForRest(dialog);
     const delButton = dialog.getByRole('button', {name: 'Delete'});
-    const cancelButton = dialog.getByRole('button', {name: 'Cancel'});
-    // Whether an action looks pressed: its press paint, its press scale, or
-    // a pressed overlay image of nonzero size.
-    const looksPressed = async (locator: Locator) =>
-      locator.evaluate(element => {
-        const style = getComputedStyle(element);
-        const scale =
-          style.transform !== 'none' &&
-          !/^matrix\(1, 0, 0, 1, 0, 0\)$/.test(style.transform);
-        return {
-          paint: element.getAttribute('data-astryx-press'),
-          scaled: scale,
-          image:
-            style.backgroundImage !== 'none' &&
-            style.backgroundSize !== '0px 0px',
-        };
-      });
-    // Both painted and at rest before the press.
-    await expect(delButton).toBeVisible();
-    await expect(cancelButton).toBeVisible();
-    expect(await looksPressed(delButton)).toEqual({
-      paint: null,
-      scaled: false,
-      image: false,
-    });
     const del = await centerOf(delButton);
-    const cancel = await centerOf(cancelButton);
+    const cancel = await centerOf(dialog.getByRole('button', {name: 'Cancel'}));
     await page.mouse.move(del.x, del.y);
     await page.mouse.down();
-    await expect
-      .poll(async () => (await looksPressed(delButton)).paint)
-      .toBe('on');
     await page.mouse.move(cancel.x, cancel.y, {steps: 8});
-    await expect
-      .poll(async () => (await looksPressed(cancelButton)).paint)
-      .toBe('on');
-    await expect
-      .poll(async () => looksPressed(delButton))
-      .toEqual({paint: null, scaled: false, image: false});
-    const lit = await looksPressed(cancelButton);
+    // Delete, where the press began, keeps `:active`; no tracker paints.
+    expect(await delButton.evaluate(el => el.matches(':active'))).toBe(true);
+    await expect(dialog.locator('[data-astryx-press]')).toHaveCount(0);
     await page.mouse.up();
-    expect(lit.paint).toBe('on');
-    expect(lit.image).toBe(true);
+    // Past the release's click and the frames after it.
+    await frames(page, 4);
+    expect(clicks).toEqual([]);
+    await expect(dialog).toHaveJSProperty('open', true);
+    // A plain click on Delete runs it, which closes the alert.
+    await delButton.click();
+    await expect.poll(() => clicks).toEqual(['Delete']);
+    await expect(dialog).toBeHidden();
   });
 
   test('the dialog keeps its base styles: its text stays selectable', async ({

@@ -18,6 +18,8 @@ import type {FormLayoutDirection} from './FormLayoutContext';
 import {Field} from '../Field';
 import {TextInput} from '../TextInput';
 import {CheckboxInput} from '../CheckboxInput';
+import {CheckboxList, CheckboxListItem} from '../CheckboxList';
+import {Switch} from '../Switch';
 
 // Helper component to read context
 function DirectionReader() {
@@ -283,7 +285,8 @@ describe('FormLayout', () => {
   // `aria-required` must still be exposed — otherwise a sighted user reads a
   // field as required (form default, no indicator) while a screen reader hears
   // "not required". Native `required` stays bound to the explicit prop so a
-  // layout default never switches on browser validation.
+  // layout default never switches on browser validation. Checkboxes, switches
+  // and checkbox groups are the exception: empty or off is an answer.
 
   it('required default: an unmarked input still exposes aria-required', () => {
     render(
@@ -320,17 +323,49 @@ describe('FormLayout', () => {
     expect(screen.getByLabelText('Solo')).not.toHaveAttribute('aria-required');
   });
 
-  it('required default resolves aria-required without native required', () => {
+  // FR5 exception: an unchecked box, an off switch or an empty checkbox group
+  // is an answer, so the form default gives them no required state. A text
+  // field beside them still takes it.
+  it('required default gives an unmarked checkbox, switch and checkbox group no required state', () => {
     render(
       <FormLayout defaultOptionality="required">
-        <CheckboxInput label="Terms" value={false} onChange={() => {}} />
+        <TextInput label="Name" value="" onChange={() => {}} />
+        <CheckboxInput label="Subscribe" value={false} onChange={() => {}} />
+        <Switch label="Dark mode" value={false} onChange={() => {}} />
+        <CheckboxList label="Topics" value={[]} onChange={() => {}}>
+          <CheckboxListItem label="Design" value="design" />
+          <CheckboxListItem label="Code" value="code" />
+        </CheckboxList>
       </FormLayout>,
     );
-    const checkbox = screen.getByRole('checkbox', {name: 'Terms'});
-    // Announced as required (form default)…
-    expect(checkbox).toHaveAttribute('aria-required', 'true');
-    // …but the native `required` attribute is not switched on by the layout.
-    expect(checkbox).not.toHaveAttribute('required');
+    expect(screen.getByLabelText('Name')).toHaveAttribute(
+      'aria-required',
+      'true',
+    );
+    const unmarked = [
+      screen.getByRole('checkbox', {name: 'Subscribe'}),
+      screen.getByRole('switch', {name: 'Dark mode'}),
+      screen.getByRole('checkbox', {name: 'Design'}),
+      screen.getByRole('checkbox', {name: 'Code'}),
+    ];
+    for (const control of unmarked) {
+      expect(control).not.toHaveAttribute('aria-required');
+      expect(control).not.toHaveAttribute('required');
+    }
+    // The form default still hides the "Required" marker on these labels
+    // (FieldLabel FR4), as on every field.
+    expect(screen.queryByText('Required')).toBeNull();
+  });
+
+  it('explicit isRequired on a switch drives aria-required and native required under a layout', () => {
+    render(
+      <FormLayout defaultOptionality="required">
+        <Switch label="Accept" value={false} onChange={() => {}} isRequired />
+      </FormLayout>,
+    );
+    const control = screen.getByRole('switch', {name: 'Accept'});
+    expect(control).toHaveAttribute('aria-required', 'true');
+    expect(control).toBeRequired();
   });
 
   it('explicit isRequired still drives native required under a layout', () => {

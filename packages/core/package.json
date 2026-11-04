@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/core",
-  "version": "0.7.7",
+  "version": "0.7.8",
   "displayName": "Astryx Core",
   "description": "The component library. Accessible, themeable React components with built-in spacing, dark mode, and StyleX styling.",
   "author": "Meta Open Source",
@@ -834,10 +834,10 @@
       "types": "./dist/internal/touch.d.ts",
       "default": "./dist/internal/touch.js"
     },
-    "./internal/touch-sheet": {
-      "source": "./src/internal/touch-sheet.ts",
-      "types": "./dist/internal/touch-sheet.d.ts",
-      "default": "./dist/internal/touch-sheet.js"
+    "./internal/selectable-card": {
+      "source": "./src/internal/selectable-card.ts",
+      "types": "./dist/internal/selectable-card.d.ts",
+      "default": "./dist/internal/selectable-card.js"
     }
   },
   "files": [

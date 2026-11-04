@@ -50,6 +50,7 @@ import {installPressFeedback, pressableProps} from '../utils/pressFeedback';
  * ```
  */
 export function usePressFeedback(): typeof pressableProps {
+  // Syncs the shared document listener for press feedback with this mount.
   useEffect(() => installPressFeedback(), []);
   return pressableProps;
 }

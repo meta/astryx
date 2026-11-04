@@ -881,6 +881,8 @@ export function TouchDateTimeField({
       return {
         value: hour,
         label: String(hour),
+        // Keys step in time order: 12 PM comes before 1 PM.
+        order: hour24,
         isDisabled: !rangeOverlaps(
           hour24 * 3600,
           hour24 * 3600 + 3599,
