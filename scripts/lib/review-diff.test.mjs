@@ -8,6 +8,7 @@ import {afterEach, describe, expect, it} from 'vitest';
 import {readDiff} from './review-diff.mjs';
 import {collectConcernMatches} from '../check-knowledge.mjs';
 import {loadKnowledgeIndex} from '../specs-for-file.mjs';
+import {routeReviewBaselines} from '../review-global-baselines.mjs';
 
 const HERE = import.meta.dirname;
 const ROOT = path.resolve(HERE, '../..');
@@ -53,6 +54,68 @@ describe('readDiff', () => {
     const {addedLines, addedByFile} = readDiff(diff);
     expect(addedLines).toEqual([]);
     expect(addedByFile).toEqual({'docs/a.md': ['added']});
+  });
+
+  it('keeps every added line of any file with its new line number', () => {
+    const diff = [
+      'diff --git a/docs/a.md b/docs/a.md',
+      '--- a/docs/a.md',
+      '+++ b/docs/a.md',
+      '@@ -3,0 +4,2 @@',
+      '+one',
+      '+++ two',
+      '@@ -9 +11 @@',
+      '-old',
+      '+new',
+    ].join('\n');
+    expect(readDiff(diff).everyAddedLine).toEqual([
+      {file: 'docs/a.md', line: 4, text: 'one'},
+      {file: 'docs/a.md', line: 5, text: '++ two'},
+      {file: 'docs/a.md', line: 11, text: 'new'},
+    ]);
+  });
+
+  it('reads a path with a space, or a quoted non-ASCII path, from the +++ header', () => {
+    const diff = [
+      'diff --git a/My notes.md b/My notes.md',
+      'new file mode 100644',
+      '--- /dev/null',
+      '+++ b/My notes.md\t',
+      '@@ -0,0 +1 @@',
+      '+first',
+      'diff --git "a/caf\\303\\251.md" "b/caf\\303\\251.md"',
+      '--- "a/caf\\303\\251.md"',
+      '+++ "b/caf\\303\\251.md"',
+      '@@ -1 +1 @@',
+      '-old',
+      '+second',
+    ].join('\n');
+    const {files, everyAddedLine, unreadable} = readDiff(diff);
+    expect(files).toEqual(['My notes.md', 'café.md']);
+    expect(everyAddedLine).toEqual([
+      {file: 'My notes.md', line: 1, text: 'first'},
+      {file: 'café.md', line: 1, text: 'second'},
+    ]);
+    expect(unreadable).toBe(false);
+  });
+
+  it('reads a deleted file by its old path, and flags a hunk with no readable path', () => {
+    expect(
+      readDiff(
+        [
+          'diff --git a/gone file.md b/gone file.md',
+          '--- a/gone file.md',
+          '+++ /dev/null',
+          '@@ -1 +0,0 @@',
+          '-removed',
+        ].join('\n'),
+      ).files,
+    ).toEqual(['gone file.md']);
+    const odd = readDiff(
+      ['diff --git a/x y b/x y', '@@ -0,0 +1 @@', '+lost'].join('\n'),
+    );
+    expect(odd.unreadable).toBe(true);
+    expect(odd.everyAddedLine).toEqual([]);
   });
 
   it('reads added shipped-source lines with their new line numbers', () => {
@@ -259,12 +322,17 @@ describe('review-global-baselines.mjs', () => {
     );
   }
 
+  // The router runs in this process; the case below runs the command once.
   it("routes a concern the head's added lines match, beside the requested triggers", () => {
-    const result = route(
-      repository(
-        'export function A() {\n  useEffect(() => () => {}, []);\n}\n',
-      ),
+    const {root, base, head} = repository(
+      'export function A() {\n  useEffect(() => () => {}, []);\n}\n',
     );
+    const result = routeReviewBaselines({
+      root,
+      authorityCommit: base,
+      reviewHead: head,
+      requestedTriggers: ['styling'],
+    });
     expect(result.matches.map(match => match.claimId)).toEqual(['INV2']);
     expect(result.concernMatches).toEqual([
       expect.objectContaining({

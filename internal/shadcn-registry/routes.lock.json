@@ -3652,6 +3652,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-clipboard-share-link",
+      "path": "examples/use-clipboard/share-link",
+      "aliases": []
+    },
+    {
       "name": "example-use-collapsible-custom-disclosure",
       "path": "examples/use-collapsible/custom-disclosure",
       "aliases": []
@@ -3809,6 +3814,11 @@
     {
       "name": "example-use-translator-load-more-footer",
       "path": "examples/use-translator/load-more-footer",
+      "aliases": []
+    },
+    {
+      "name": "example-use-tree-focus-keyboard-file-tree",
+      "path": "examples/use-tree-focus/keyboard-file-tree",
       "aliases": []
     },
     {
