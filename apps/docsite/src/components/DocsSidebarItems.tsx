@@ -38,9 +38,10 @@ function DocsPageEntry({
 }
 
 /**
- * The shell stays mounted across in-site navigation, so the open state comes
- * from the current path on every render: a mount-time default would leave the
- * parent closed when a link or search moves the reader to one of its pages.
+ * The shell stays mounted across in-site navigation, so a mount-time default
+ * alone would leave the parent closed when a link or search moves the reader
+ * to one of its pages. Each move to a child page opens the parent again; a
+ * collapse on that page stays until the next move.
  */
 function DocsParentEntry({
   item: {page, children},
@@ -49,16 +50,23 @@ function DocsParentEntry({
   item: DocsSidebarItem;
   pathname: string;
 }) {
-  const [isClosedByReader, setIsClosedByReader] = useState(true);
   const hasCurrentChild = children.some(child => pathname === hrefOf(child));
+  const [isCollapsed, setIsCollapsed] = useState(!hasCurrentChild);
+  const [lastPathname, setLastPathname] = useState(pathname);
+  if (pathname !== lastPathname) {
+    setLastPathname(pathname);
+    if (hasCurrentChild) {
+      setIsCollapsed(false);
+    }
+  }
   return (
     <SideNavItem
       label={page.title}
       href={hrefOf(page)}
       isSelected={pathname === hrefOf(page)}
       collapsible={{
-        isCollapsed: !hasCurrentChild && isClosedByReader,
-        onCollapsedChange: setIsClosedByReader,
+        isCollapsed,
+        onCollapsedChange: setIsCollapsed,
       }}>
       {children.map(child => (
         <DocsPageEntry key={child.topic} page={child} pathname={pathname} />
