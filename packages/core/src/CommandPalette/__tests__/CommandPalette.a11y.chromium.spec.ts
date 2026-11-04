@@ -12,7 +12,7 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -332,8 +332,10 @@ async function capture(page: Page, scenario: Case) {
       const spinners = elements<HTMLElement>(
         '.astryx-command-palette-input .astryx-spinner',
       );
+      // The arc is the circle in the Spinner's turning rotor (an aria-hidden
+      // span); the track circle sits in its own svg beside it.
       const spinnerArcs = elements<SVGCircleElement>(
-        '.astryx-command-palette-input .astryx-spinner circle:last-of-type',
+        '.astryx-command-palette-input .astryx-spinner span[aria-hidden="true"] circle',
       );
       const shortcuts = elements<HTMLElement>(
         '.astryx-command-palette-footer .astryx-kbd',

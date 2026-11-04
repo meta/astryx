@@ -47,6 +47,15 @@ function packageStylesheetPath(packageDir) {
   return null;
 }
 
+// The import under measurement reaches esbuild as stdin, read as if it were
+// this file beside the entry. The outputs stay in memory under this directory
+// of the working directory, so nothing is written. esbuild reads the listing
+// of every directory above each file it bundles. On a shared machine the
+// system temp directory can hold hundreds of thousands of entries. A file
+// written there for the import cost more than the build itself.
+const ENTRY_SOURCE = '__astryx-size-entry__.mjs';
+const OUT_DIR = '.astryx-size-out';
+
 // Bundle what importing `entry` loads eagerly: the entry chunk and the chunks
 // it imports statically, including modules reached through package imports
 // (other Astryx packages, React, StyleX, third-party libraries), minified for
@@ -55,26 +64,25 @@ function packageStylesheetPath(packageDir) {
 // bundled.
 function bundleImportWithInputs(entry, exportName) {
   if (!entry || !fs.existsSync(entry)) return null;
-  const os = require('node:os');
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-size-'));
   try {
     const esbuild = require('esbuild');
     const workingDir = process.cwd();
-    const entryFile = path.join(scratch, 'entry.mjs');
-    fs.writeFileSync(
-      entryFile,
-      exportName
-        ? `export {${exportName}} from ${JSON.stringify(path.resolve(entry))};`
-        : `export * from ${JSON.stringify(path.resolve(entry))};`,
-    );
+    const resolveDir = path.dirname(path.resolve(entry));
+    const entryFile = path.join(resolveDir, ENTRY_SOURCE);
     // Code splitting keeps modules reached only through import() in their own
     // chunks, so the figure counts what the import loads eagerly: the entry
     // chunk and every chunk it imports statically.
-    const outdir = path.join(scratch, 'out');
     const result = esbuild.buildSync({
       absWorkingDir: workingDir,
-      entryPoints: [entryFile],
-      outdir,
+      stdin: {
+        contents: exportName
+          ? `export {${exportName}} from ${JSON.stringify(path.resolve(entry))};`
+          : `export * from ${JSON.stringify(path.resolve(entry))};`,
+        resolveDir,
+        sourcefile: ENTRY_SOURCE,
+        loader: 'js',
+      },
+      outdir: path.join(workingDir, OUT_DIR),
       metafile: true,
       bundle: true,
       splitting: true,
@@ -93,9 +101,16 @@ function bundleImportWithInputs(entry, exportName) {
         file.text,
       ]),
     );
+    // A chunk an import() reaches is an entry point too: the import's own
+    // chunk is the one whose entry is the import.
+    const entryPoint = path
+      .relative(workingDir, entryFile)
+      .split(path.sep)
+      .join('/');
     const entryOutput = Object.keys(outputs).find(
-      key => outputs[key].entryPoint !== undefined,
+      key => outputs[key].entryPoint === entryPoint,
     );
+    if (entryOutput === undefined) return null;
     // Chunks the entry reaches, following only the given import kinds.
     function reachable(kinds) {
       const seen = new Set();
@@ -129,8 +144,6 @@ function bundleImportWithInputs(entry, exportName) {
     return {text, inputs: [...inputs]};
   } catch {
     return null;
-  } finally {
-    fs.rmSync(scratch, {recursive: true, force: true});
   }
 }
 
@@ -140,15 +153,13 @@ function bundleImportWithInputs(entry, exportName) {
 function bundleInputsByEntry(entries) {
   const existing = entries.filter(entry => fs.existsSync(entry));
   if (existing.length === 0) return new Map();
-  const os = require('node:os');
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-reach-'));
   try {
     const esbuild = require('esbuild');
     const workingDir = process.cwd();
     const result = esbuild.buildSync({
       absWorkingDir: workingDir,
       entryPoints: existing,
-      outdir: scratch,
+      outdir: path.join(workingDir, OUT_DIR),
       metafile: true,
       bundle: true,
       format: 'esm',
@@ -176,8 +187,6 @@ function bundleInputsByEntry(entries) {
     return byEntry;
   } catch {
     return null;
-  } finally {
-    fs.rmSync(scratch, {recursive: true, force: true});
   }
 }
 

@@ -483,7 +483,10 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
           // Detach before acting: the activation usually closes the menu.
           endGesture();
           // Once armed, the one swallower stays installed.
-          armClickGuard(doc, {staysInstalled: true});
+          armClickGuard(doc, {
+            staysInstalled: true,
+            cancelsTouchEnd: native?.pointerType === 'touch',
+          });
           if (native != null) {
             activate(effect.row, native);
           }
@@ -492,7 +495,10 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
         case 'settle': {
           endGesture();
           if (effect.stray) {
-            armClickGuard(doc, {staysInstalled: true});
+            armClickGuard(doc, {
+              staysInstalled: true,
+              cancelsTouchEnd: native?.pointerType === 'touch',
+            });
           }
           if (effect.dismiss) {
             optionsRef.current.onDismiss?.();
@@ -825,6 +831,8 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
     endGesture();
   }, [endGesture, step]);
 
+  // Syncs the document listeners of the menu gesture counter with this mount.
+  // Unmount ends the gesture.
   useEffect(() => {
     // Install the gesture counter's listeners before the first press.
     currentGesture();

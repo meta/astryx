@@ -8,7 +8,8 @@
  *   draws the sheet elsewhere (motion/presentation.ts)
  * @output A finger on the drawn sheet reaches the sheet, not the scrim under
  *   its start, and its tap clicks the drawn button once (the engine's click
- *   cancelled, a late one swallowed); a finger where the sheet was but is no
+ *   cancelled, a late one swallowed, with a finger's late mousedown and
+ *   mouseup); a finger where the sheet was but is no
  *   longer drawn reaches what is drawn there; press bounds follow the drawn
  *   box, a control slotted into a moving shadow-tree panel's included; a
  *   claiming recognizer across a shadow boundary from the moving element
@@ -57,6 +58,29 @@ function touch(
   Object.defineProperty(event, 'changedTouches', {value: [contact]});
   Object.defineProperty(event, 'touches', {
     value: type === 'touchend' ? [] : [contact],
+  });
+  Object.defineProperty(event, 'timeStamp', {value: time});
+  target.dispatchEvent(event);
+  return event;
+}
+
+/** A finger's pointer event, for a host that reads fingers from them. */
+function fingerPointer(
+  type: 'pointerdown' | 'pointerup',
+  target: EventTarget,
+  at: {x: number; y: number},
+  time: number,
+): Event {
+  const event = new PointerEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    pointerId: 1,
+    pointerType: 'touch',
+    isPrimary: true,
+    clientX: at.x,
+    clientY: at.y,
+    buttons: type === 'pointerdown' ? 1 : 0,
   });
   Object.defineProperty(event, 'timeStamp', {value: time});
   target.dispatchEvent(event);
@@ -284,6 +308,43 @@ describe('presented hit testing (iOS WebKit hit-tests compositor motion at layou
     });
     scrim.dispatchEvent(late);
     expect(late.defaultPrevented).toBe(true);
+    expect(clicks).toEqual(['done']);
+  });
+
+  it("takes a retargeted finger tap's late mousedown and mouseup with the engine's click where the host reads fingers from pointer events (spec:AST-094 FR21)", () => {
+    mount({left: 0, top: 844, right: 390, bottom: 1244}, -544);
+    const gestures = new GestureHost(document, {
+      clock,
+      presentedHitTesting: 'always',
+      inputMode: 'pointer-events',
+    });
+    cleanups.push(
+      gestures.attach(
+        scrim,
+        new TapGestureRecognizer({name: 'scrim', claimsTouches: false}),
+      ),
+      gestures.attach(
+        sheet,
+        new PanGestureRecognizer({
+          name: 'sheet',
+          direction: 'down',
+          claimsTouches: false,
+        }),
+      ),
+    );
+    const onDone = {x: 340, y: 330};
+    fingerPointer('pointerdown', scrim, onDone, 0);
+    fingerPointer('pointerup', scrim, onDone, 80);
+    expect(clicks).toEqual(['done']);
+    for (const type of ['mousedown', 'mouseup', 'click']) {
+      const late = new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        detail: 1,
+      });
+      scrim.dispatchEvent(late);
+      expect(late.defaultPrevented, type).toBe(true);
+    }
     expect(clicks).toEqual(['done']);
   });
 

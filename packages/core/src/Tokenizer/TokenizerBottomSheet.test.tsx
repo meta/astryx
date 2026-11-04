@@ -1,10 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 /**
  * @file TokenizerBottomSheet.test.tsx
- * @input Uses vitest, Testing Library, Tokenizer with
- *   `experimental.presentation`
- * @output Tests for the experimental sheet presentation: the presentation
- *   resolution (`component:Tokenizer` FR16) and the single-sheet touch flow
+ * @input Uses vitest, Testing Library, Tokenizer with `presentation`
+ * @output Tests for the sheet presentation: the presentation resolution and
+ *   its default (`component:Tokenizer` FR16) and the single-sheet touch flow
  *   (FR17–FR24, AR6)
  * @position Core tests; validates Tokenizer.tsx and TokenizerBottomSheet.tsx
  */
@@ -26,13 +25,17 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
-import {createRef, useState} from 'react';
+import {StrictMode, createRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import type {TokenizerChange} from './Tokenizer';
-import {TokenizerWithPresentation} from '../internal/tokenizer-presentation';
+import {
+  Tokenizer,
+  type TokenizerChange,
+  type TokenizerProps,
+} from './Tokenizer';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {__resetDevWarnings} from '../utils/devWarning';
-import {colorVars} from '../theme/tokens.stylex';
+import {colorVars, sizeVars, spacingVars} from '../theme/tokens.stylex';
+import {inputWrapperStyles} from '../Field/inputStyles.stylex';
 import type {SearchSource, SearchableItem} from '../Typeahead/types';
 
 import {COMPACT_TOUCH_PRESENTATION_QUERY as COMPACT_TOUCH_QUERY} from '../hooks/useAdaptivePresentation';
@@ -83,7 +86,7 @@ function Harness({
 }) {
   const [value, setValue] = useState<SearchableItem[]>(initial);
   return (
-    <TokenizerWithPresentation
+    <Tokenizer
       label="Tags"
       searchSource={source}
       value={value}
@@ -93,7 +96,7 @@ function Harness({
         setValue(items);
         spy?.(items, change);
       }}
-      experimental={{presentation}}
+      presentation={presentation}
       {...props}
     />
   );
@@ -161,34 +164,34 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-describe('Tokenizer experimental.presentation (FR16)', () => {
-  it('keeps the inline combobox when experimental is omitted', () => {
-    render(
-      <TokenizerWithPresentation
-        label="Tags"
-        searchSource={source}
-        value={[ITEMS[0]]}
-        onChange={() => {}}
-      />,
-    );
+describe('Tokenizer presentation (FR16)', () => {
+  const plain = (props: Partial<TokenizerProps<SearchableItem>> = {}) => (
+    <Tokenizer
+      label="Tags"
+      searchSource={source}
+      value={[ITEMS[0]]}
+      onChange={() => {}}
+      {...props}
+    />
+  );
+
+  it('keeps the inline combobox by default on a screen that is not compact coarse-pointer', () => {
+    render(plain());
     expect(screen.getByRole('combobox')).toBeInTheDocument();
     expect(
       screen.queryByRole('button', {name: 'Tags'}),
     ).not.toBeInTheDocument();
   });
 
-  it('keeps the inline combobox for an empty experimental object and for popover', () => {
-    const {unmount} = render(
-      <TokenizerWithPresentation
-        label="Tags"
-        searchSource={source}
-        value={[]}
-        onChange={() => {}}
-        experimental={{}}
-      />,
-    );
-    expect(screen.getByRole('combobox')).toBeInTheDocument();
-    unmount();
+  it('defaults to adaptive: the sheet trigger on a compact coarse-pointer screen', () => {
+    stubMatchMedia(() => true);
+    render(plain());
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(openTrigger()).toHaveAttribute('aria-haspopup', 'dialog');
+  });
+
+  it('keeps the inline combobox with presentation="popover" on a compact coarse-pointer screen', () => {
+    stubMatchMedia(() => true);
     render(<Harness presentation="popover" />);
     expect(screen.getByRole('combobox')).toBeInTheDocument();
     expect(
@@ -277,10 +280,8 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     expect(design.lastElementChild).toHaveAttribute('data-size', 'md');
 
     fireEvent.click(screen.getByRole('checkbox', {name: 'Energizer'}));
-    expect(spy).toHaveBeenCalledWith(
-      [ITEMS[0], ITEMS[1], ITEMS[3]],
-      expect.objectContaining({type: 'add'}),
-    );
+    // The draft changed; `value` and `onChange` wait for Save (FR26).
+    expect(spy).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(screen.getByRole('checkbox', {name: 'Energizer'})).toBeChecked(),
     );
@@ -292,10 +293,8 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     ]);
 
     fireEvent.click(screen.getByRole('checkbox', {name: 'Eng'}));
-    expect(spy).toHaveBeenLastCalledWith(
-      [ITEMS[0], ITEMS[3]],
-      expect.objectContaining({type: 'remove'}),
-    );
+    expect(spy).not.toHaveBeenCalled();
+    expect(screen.getByRole('checkbox', {name: 'Eng'})).not.toBeChecked();
     expect(checkboxLabels()).toEqual([
       'Design',
       'Eng',
@@ -303,7 +302,13 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       'Energizer',
     ]);
 
-    fireEvent.click(screen.getByRole('button', {name: 'Done'}));
+    // Save reports the whole draft once, with the last edit that holds.
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith([ITEMS[0], ITEMS[3]], {
+      item: ITEMS[1],
+      type: 'remove',
+    });
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
 
     await act(async () => {
@@ -380,7 +385,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
 
   it('keeps the inline popover presentation on the shared live region', async () => {
     render(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={source}
         value={[ITEMS[0], ITEMS[1]]}
@@ -426,22 +431,20 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         screen.queryByRole('checkbox', {name: 'Create "Custom"'}),
       ).not.toBeInTheDocument();
       const create = await screen.findByRole('button', {name: 'Add Custom'});
+      // The footer stays pinned while searching (FR18).
       expect(
-        screen.queryByRole('button', {name: 'Clear all'}),
-      ).not.toBeInTheDocument();
-      expect(
-        screen.queryByRole('button', {name: 'Done'}),
-      ).not.toBeInTheDocument();
+        screen.getByRole('button', {name: 'Clear all'}),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('button', {name: 'Save'})).toBeInTheDocument();
       expect(create).toHaveAttribute('data-size', 'lg');
       expect(screen.getByText('Create "Custom"')).toBeInTheDocument();
       await act(async () => {
         fireEvent.click(create);
       });
-      expect(spy).toHaveBeenCalledWith(
-        [{id: 'Custom', label: 'Custom'}],
-        expect.objectContaining({type: 'create'}),
-      );
-      await waitFor(() => expect(trigger).toHaveTextContent('Custom'));
+      // The created item joins the draft; the trigger and `onChange` wait
+      // for Save (FR22, FR26), which then reports the create.
+      expect(spy).not.toHaveBeenCalled();
+      expect(trigger).not.toHaveTextContent('Custom');
       expect(search).toHaveValue('');
       const custom = await screen.findByRole('checkbox', {name: 'Custom'});
       expect(custom).toBeChecked();
@@ -460,6 +463,13 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           ':scope > [data-astryx-modal-live-region="polite"]',
         ),
       ).not.toHaveTextContent('Create');
+      fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy).toHaveBeenCalledWith([{id: 'Custom', label: 'Custom'}], {
+        item: {id: 'Custom', label: 'Custom'},
+        type: 'create',
+      });
+      await waitFor(() => expect(trigger).toHaveTextContent('Custom'));
     } finally {
       modalSpy.mockRestore();
     }
@@ -496,14 +506,14 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         ),
     };
     render(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Items"
         searchSource={longSource}
         value={[]}
         onChange={() => {}}
         maxMenuItems={120}
         debounceMs={0}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     fireEvent.click(screen.getByRole('button', {name: 'Items'}));
@@ -599,14 +609,14 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
   it('searches within the same sheet and shows the no-results state (FR18, FR20)', async () => {
     const onChangeQuery = vi.fn();
     const {rerender} = render(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={source}
         value={[ITEMS[0]]}
         onChange={() => {}}
         debounceMs={0}
         onChangeQuery={onChangeQuery}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     fireEvent.click(openTrigger());
@@ -630,14 +640,14 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
 
     // A string emptySearchText becomes the empty state's title.
     rerender(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={source}
         value={[ITEMS[0]]}
         onChange={() => {}}
         debounceMs={0}
         emptySearchText="Nothing here"
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     expect(
@@ -664,13 +674,13 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       });
     try {
       render(
-        <TokenizerWithPresentation
+        <Tokenizer
           label="Tags"
           searchSource={searchOnly}
           value={[]}
           onChange={() => {}}
           debounceMs={0}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />,
       );
       fireEvent.click(openTrigger());
@@ -698,7 +708,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           ?.textContent ?? '',
       ).toBe('');
       // The footer still closes the sheet (FR18); Clear all is spent.
-      expect(within(dialog).getByRole('button', {name: 'Done'})).toBeVisible();
+      expect(within(dialog).getByRole('button', {name: 'Save'})).toBeVisible();
       expect(
         within(dialog).getByRole('button', {name: 'Clear all'}),
       ).toHaveAttribute('aria-disabled', 'true');
@@ -745,7 +755,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     await screen.findByRole('dialog', {name: 'Tags'});
     expect(sheetDom().dialog).not.toBeNull();
 
-    fireEvent.click(screen.getByRole('button', {name: 'Done'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
     fireEvent.transitionEnd(document.querySelector('.astryx-bottom-sheet')!, {
       propertyName: 'transform',
     });
@@ -761,7 +771,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     expect(screen.getAllByText('Design')).toHaveLength(1);
   });
 
-  it('mounts the Clear all confirmation only from the press until it closes: no alertdialog while none is pending, focus placed on cancel and on confirm (FR24; INV7)', async () => {
+  it('mounts the Clear all confirmation only from the press until it closes: no alertdialog while none is pending, focus back on Clear all on cancel and on confirm (FR24; INV7)', async () => {
     const matches = Element.prototype.matches;
     const modalSpy = vi
       .spyOn(Element.prototype, 'matches')
@@ -793,15 +803,15 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       expect(clearAll).toHaveFocus();
       expect(screen.getByRole('checkbox', {name: 'Design'})).toBeChecked();
 
-      // Confirm: the confirmation goes, the search field takes focus, the
-      // clear is announced inside the sheet.
+      // Confirm: the confirmation goes, Clear all keeps focus (now
+      // aria-disabled), the clear is announced inside the sheet.
       fireEvent.click(clearAll);
       const second = await screen.findByRole('alertdialog');
       fireEvent.click(
         within(second).getByRole('button', {name: 'Clear selection'}),
       );
       await waitFor(noConfirmation);
-      expect(screen.getByLabelText('Search Tags')).toHaveFocus();
+      expect(screen.getByRole('button', {name: 'Clear all'})).toHaveFocus();
       await waitFor(() =>
         expect(
           sheet.querySelector(
@@ -822,14 +832,14 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     }
   });
 
-  it('keeps large equal-width Clear all and Done footer actions while guarding the bulk clear (FR24)', async () => {
+  it('keeps large equal-width Clear all and Save footer actions while guarding the bulk clear (FR24)', async () => {
     const spy = vi.fn();
     render(<Harness spy={spy} />);
     fireEvent.click(openTrigger());
     await screen.findByRole('checkbox', {name: 'Energizer'});
 
     const clearAll = screen.getByRole('button', {name: 'Clear all'});
-    const done = screen.getByRole('button', {name: 'Done'});
+    const done = screen.getByRole('button', {name: 'Save'});
     expect(clearAll).toHaveAttribute('data-size', 'lg');
     expect(clearAll).toHaveAttribute('data-variant', 'secondary');
     expect(done).toHaveAttribute('data-size', 'lg');
@@ -849,16 +859,16 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     fireEvent.click(
       within(confirmation).getByRole('button', {name: 'Clear selection'}),
     );
-    expect(spy).toHaveBeenLastCalledWith(
-      [],
-      expect.objectContaining({type: 'remove', item: ITEMS[1]}),
-    );
+    // The clear empties the draft; `value` waits for Save (FR24, FR26).
+    expect(spy).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(screen.getByRole('button', {name: 'Clear all'})).toHaveAttribute(
         'aria-disabled',
         'true',
       ),
     );
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+    expect(spy).toHaveBeenLastCalledWith([], {item: ITEMS[1], type: 'remove'});
   });
 
   it('keeps a disabled trigger focusable without opening the sheet (FR17; AST-085 FR1, FR2)', () => {
@@ -876,7 +886,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     expect(document.querySelector('[data-total-count]')).toBeNull();
   });
 
-  it('moves focus to the search field after a confirmed Clear all, since Clear all is disabled by then (FR24; AST-085 FR4)', async () => {
+  it('keeps focus on Clear all after a confirmed Clear all — aria-disabled, in the focus order — and never moves it to the search field, which would raise the keyboard (FR24; AST-085 FR4)', async () => {
     render(<Harness />);
     fireEvent.click(openTrigger());
     await screen.findByRole('dialog', {name: 'Tags'});
@@ -893,7 +903,8 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     const clearAllAfter = screen.getByRole('button', {name: 'Clear all'});
     expect(clearAllAfter).toHaveAttribute('aria-disabled', 'true');
     expect(clearAllAfter).not.toBeDisabled();
-    expect(screen.getByLabelText('Search Tags')).toHaveFocus();
+    expect(clearAllAfter).toHaveFocus();
+    expect(screen.getByLabelText('Search Tags')).not.toHaveFocus();
     expect(document.activeElement).not.toBe(document.body);
   });
 
@@ -911,14 +922,14 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       bootstrap: () => many,
     };
     render(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={manySource}
         value={[many[1], many[15]]}
         onChange={() => {}}
         debounceMs={0}
         maxMenuItems={5}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     fireEvent.click(openTrigger());
@@ -956,7 +967,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       // "Enzo" is a created value the source never returns; the source has
       // three "en" matches (Eng, Engineer, Energizer), capped to two rows.
       render(
-        <TokenizerWithPresentation
+        <Tokenizer
           label="Tags"
           searchSource={source}
           value={[{id: 'Enzo', label: 'Enzo'}]}
@@ -964,7 +975,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           debounceMs={0}
           maxMenuItems={2}
           hasCreate
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />,
       );
       fireEvent.click(openTrigger());
@@ -1064,7 +1075,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     function InlineSourceHarness() {
       const [value, setValue] = useState<SearchableItem[]>([ITEMS[0]]);
       return (
-        <TokenizerWithPresentation
+        <Tokenizer
           label="Tags"
           // A new object every render, as a caller writing the source inline
           // produces; the selection change on each toggle re-renders.
@@ -1072,7 +1083,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           value={value}
           onChange={items => setValue(items)}
           debounceMs={0}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -1155,23 +1166,23 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       onChange: () => {},
       onChangeQuery,
       debounceMs: 0,
-      experimental: {presentation: 'bottom-sheet' as const},
+      presentation: 'bottom-sheet' as const,
     };
-    const {rerender} = render(<TokenizerWithPresentation {...props} />);
+    const {rerender} = render(<Tokenizer {...props} />);
     fireEvent.click(openTrigger());
     await screen.findByRole('dialog', {name: 'Tags'});
     fireEvent.change(screen.getByLabelText('Search Tags'), {
       target: {value: 'En'},
     });
     onChangeQuery.mockClear();
-    rerender(<TokenizerWithPresentation {...props} isDisabled />);
+    rerender(<Tokenizer {...props} isDisabled />);
     fireEvent.transitionEnd(document.querySelector('.astryx-bottom-sheet')!, {
       propertyName: 'transform',
     });
     // Nothing the person did changed the query, so nothing is reported, and
     // the caller's mirror and the sheet agree on the next open.
     expect(onChangeQuery).not.toHaveBeenCalled();
-    rerender(<TokenizerWithPresentation {...props} />);
+    rerender(<Tokenizer {...props} />);
     fireEvent.click(openTrigger());
     await screen.findByRole('dialog', {name: 'Tags'});
     expect(screen.getByLabelText('Search Tags')).toHaveValue('En');
@@ -1186,9 +1197,9 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       onChange: () => {},
       debounceMs: 0,
       minQueryLength: 3,
-      experimental: {presentation: 'bottom-sheet' as const},
+      presentation: 'bottom-sheet' as const,
     };
-    const {rerender} = render(<TokenizerWithPresentation {...props} />);
+    const {rerender} = render(<Tokenizer {...props} />);
     fireEvent.click(openTrigger());
     await screen.findByRole('dialog', {name: 'Tags'});
     // Two characters: below the threshold, so nothing is searched.
@@ -1196,7 +1207,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       target: {value: 'En'},
     });
     // The field becomes disabled: the sheet closes, keeping the query.
-    rerender(<TokenizerWithPresentation {...props} isDisabled />);
+    rerender(<Tokenizer {...props} isDisabled />);
     fireEvent.transitionEnd(document.querySelector('.astryx-bottom-sheet')!, {
       propertyName: 'transform',
     });
@@ -1204,7 +1215,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     await waitFor(() =>
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument(),
     );
-    rerender(<TokenizerWithPresentation {...props} />);
+    rerender(<Tokenizer {...props} />);
     fireEvent.click(openTrigger());
     const dialog = await screen.findByRole('dialog', {name: 'Tags'});
     expect(screen.getByLabelText('Search Tags')).toHaveValue('En');
@@ -1236,13 +1247,13 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
 
   it('closes the sheet and returns focus to the trigger when the field becomes disabled (FR17; AST-085 FR2)', async () => {
     const {rerender} = render(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={source}
         value={[ITEMS[0]]}
         onChange={() => {}}
         debounceMs={0}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     const trigger = openTrigger();
@@ -1253,18 +1264,20 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     expect(search).toHaveFocus();
 
     rerender(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={source}
         value={[ITEMS[0]]}
         onChange={() => {}}
         debounceMs={0}
         isDisabled
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    expect(dialog).toHaveAttribute('aria-hidden', 'true');
+    // Focus is in the search field, so the closing sheet stays out of inert
+    // and aria-hidden until its exit ends (component:BottomSheet FR9).
+    expect(dialog).not.toHaveAttribute('aria-modal');
     // BottomSheet hands focus back after its exit motion.
     fireEvent.transitionEnd(document.querySelector('.astryx-bottom-sheet')!, {
       propertyName: 'transform',
@@ -1273,13 +1286,13 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     expect(trigger).toHaveAttribute('aria-disabled', 'true');
     // Re-enabling does not reopen it.
     rerender(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={source}
         value={[ITEMS[0]]}
         onChange={() => {}}
         debounceMs={0}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
@@ -1290,7 +1303,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     render(
       <>
         <span id="hint">Up to five</span>
-        <TokenizerWithPresentation
+        <Tokenizer
           label="Tags"
           searchSource={source}
           value={[ITEMS[0], ITEMS[1]]}
@@ -1300,7 +1313,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           status={{type: 'error', message: 'Pick at least three'}}
           isDisabled
           disabledMessage="Locked while syncing"
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       </>,
     );
@@ -1361,7 +1374,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     const onFocus = vi.fn();
     const onKeyDown = vi.fn();
     render(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={source}
         value={[ITEMS[0]]}
@@ -1373,7 +1386,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         ref={ref}
         onFocus={onFocus}
         onKeyDown={onKeyDown}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     const trigger = openTrigger();
@@ -1398,7 +1411,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     const onBlur = vi.fn();
     render(
       <>
-        <TokenizerWithPresentation
+        <Tokenizer
           label="Tags"
           searchSource={source}
           value={[ITEMS[0]]}
@@ -1406,7 +1419,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           debounceMs={0}
           onFocus={onFocus}
           onBlur={onBlur}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
         <button type="button">Elsewhere</button>
       </>,
@@ -1421,7 +1434,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     screen.getByLabelText('Search Tags').focus();
     expect(onBlur).not.toHaveBeenCalled();
     // Done: focus returns from the sheet, not from outside.
-    fireEvent.click(screen.getByRole('button', {name: 'Done'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
     fireEvent.transitionEnd(document.querySelector('.astryx-bottom-sheet')!, {
       propertyName: 'transform',
     });
@@ -1436,7 +1449,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     expect(onFocus).toHaveBeenCalledTimes(2);
     fireEvent.click(trigger);
     await screen.findByRole('dialog', {name: 'Tags'});
-    fireEvent.click(screen.getByRole('button', {name: 'Done'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
     fireEvent.transitionEnd(document.querySelector('.astryx-bottom-sheet')!, {
       propertyName: 'transform',
     });
@@ -1449,7 +1462,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     const onBlur = vi.fn();
     render(
       <>
-        <TokenizerWithPresentation
+        <Tokenizer
           label="Tags"
           searchSource={source}
           value={[ITEMS[0]]}
@@ -1457,7 +1470,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           debounceMs={0}
           onFocus={onFocus}
           onBlur={onBlur}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
         <button type="button">Elsewhere</button>
       </>,
@@ -1471,7 +1484,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     expect(onBlur).not.toHaveBeenCalled();
     // Done: BottomSheet's return focus is the one focus the trigger gets in
     // this visit, so it is the entry, and is reported.
-    fireEvent.click(screen.getByRole('button', {name: 'Done'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
     fireEvent.transitionEnd(document.querySelector('.astryx-bottom-sheet')!, {
       propertyName: 'transform',
     });
@@ -1494,14 +1507,14 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       event.preventDefault();
     });
     render(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={source}
         value={[ITEMS[0]]}
         onChange={() => {}}
         debounceMs={0}
         onClick={onClick}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     const trigger = openTrigger();
@@ -1522,14 +1535,14 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     __resetDevWarnings();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const {rerender} = render(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={source}
         value={[ITEMS[0]]}
         onChange={() => {}}
         hasClear
         menuWidth={320}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     expect(warn).toHaveBeenCalledTimes(1);
@@ -1537,20 +1550,20 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     expect(warn.mock.calls[0][0]).toMatch(/`hasClear`, `menuWidth`/);
     expect(warn.mock.calls[0][0]).toMatch(/bottom-sheet presentation/);
     rerender(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={source}
         value={[ITEMS[0], ITEMS[1]]}
         onChange={() => {}}
         hasClear
         menuWidth={320}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     expect(warn).toHaveBeenCalledTimes(1);
     warn.mockClear();
     render(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Other"
         searchSource={source}
         value={[]}
@@ -1586,13 +1599,13 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       // Default debounceMs (150), so the debounce window is under test too.
       // hasCreate, so the create row's timing is under test as well.
       render(
-        <TokenizerWithPresentation
+        <Tokenizer
           label="Tags"
           searchSource={slow}
           value={[]}
           onChange={() => {}}
           hasCreate
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />,
       );
       fireEvent.click(openTrigger());
@@ -1689,11 +1702,13 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       expect(indicator).toHaveClass(name);
     }
     // The checked row still toggles, making room (FR23).
+    // Unchecking the selected row makes room in the draft: the limit is read
+    // against the draft, so the inert row becomes selectable before Save.
     fireEvent.click(screen.getByRole('checkbox', {name: 'Design'}));
-    expect(spy).toHaveBeenLastCalledWith(
-      [],
-      expect.objectContaining({type: 'remove'}),
-    );
+    expect(spy).not.toHaveBeenCalled();
+    expect(row).not.toHaveAttribute('aria-disabled');
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+    expect(spy).toHaveBeenLastCalledWith([], {item: ITEMS[0], type: 'remove'});
   });
 
   it('paints a disabled trigger, its placeholder, and its tokens GrayText in forced colors (AST-085 FR6)', () => {
@@ -1758,13 +1773,13 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       ],
     };
     render(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={withAction}
         value={[]}
         onChange={() => {}}
         debounceMs={0}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     fireEvent.click(openTrigger());
@@ -1772,6 +1787,38 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     expect(within(row).queryByRole('button')).not.toBeInTheDocument();
     await waitFor(() => expect(warn).toHaveBeenCalledTimes(1));
     expect(warn.mock.calls[0][0]).toMatch(/`action`/);
+    expect(warn.mock.calls[0][0]).toMatch(/bottom-sheet rows/);
+    warn.mockRestore();
+  });
+
+  it('warns about a row action once under StrictMode double renders', async () => {
+    __resetDevWarnings();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const withAction: SearchSource<SearchableItem> = {
+      search: () => [],
+      bootstrap: () => [
+        {
+          id: 'design',
+          label: 'Design',
+          action: <button type="button">Go</button>,
+        },
+      ],
+    };
+    render(
+      <StrictMode>
+        <Tokenizer
+          label="Tags"
+          searchSource={withAction}
+          value={[]}
+          onChange={() => {}}
+          debounceMs={0}
+          presentation="bottom-sheet"
+        />
+      </StrictMode>,
+    );
+    fireEvent.click(openTrigger());
+    await screen.findByRole('checkbox', {name: 'Design'});
+    expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0][0]).toMatch(/bottom-sheet rows/);
     warn.mockRestore();
   });
@@ -1815,7 +1862,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     expect(trigger).toBeInTheDocument();
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', {name: 'Done'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
     // The sheet is closing; the trigger stays mounted to take focus back,
     // and the inline input does not appear yet.
     expect(trigger).toBeInTheDocument();
@@ -1834,10 +1881,10 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('types ref for the control it reaches: the input without experimental, input or trigger with it', () => {
+  it('gives ref the control it reaches: the input in the popover presentation, the trigger in the sheet', () => {
     const inputRef = createRef<HTMLInputElement>();
     const {unmount} = render(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={source}
         value={[]}
@@ -1849,24 +1896,24 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     unmount();
     const wideRef = createRef<HTMLInputElement | HTMLButtonElement>();
     const {rerender} = render(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={source}
         value={[]}
         onChange={() => {}}
         ref={wideRef}
-        experimental={{presentation: 'popover'}}
+        presentation="popover"
       />,
     );
     expect(wideRef.current).toBe(screen.getByRole('combobox'));
     rerender(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={source}
         value={[]}
         onChange={() => {}}
         ref={wideRef}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     expect(wideRef.current).toBe(openTrigger());
@@ -1876,7 +1923,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     const search = vi.fn(source.search);
     const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     render(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={{...source, search}}
         value={[ITEMS[0]]}
@@ -1884,7 +1931,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         debounceMs={0}
         minQueryLength={3}
         hasCreate
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     fireEvent.click(openTrigger());
@@ -1927,7 +1974,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       });
     try {
       render(
-        <TokenizerWithPresentation
+        <Tokenizer
           label="Tags"
           searchSource={source}
           value={[]}
@@ -1939,7 +1986,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
               <span aria-hidden="true"> (decorative)</span>
             </p>
           }
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />,
       );
       fireEvent.click(openTrigger());
@@ -2029,13 +2076,13 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         },
       };
       render(
-        <TokenizerWithPresentation
+        <Tokenizer
           label="Tags"
           searchSource={flaky}
           value={[]}
           onChange={() => {}}
           debounceMs={0}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />,
       );
       fireEvent.click(openTrigger());
@@ -2096,14 +2143,14 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           ),
       };
       render(
-        <TokenizerWithPresentation
+        <Tokenizer
           label="Tags"
           searchSource={slow}
           value={[]}
           onChange={() => {}}
           debounceMs={0}
           minQueryLength={3}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />,
       );
       fireEvent.click(openTrigger());
@@ -2161,7 +2208,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           ),
       };
       render(
-        <TokenizerWithPresentation
+        <Tokenizer
           label="Tags"
           searchSource={slow}
           value={[]}
@@ -2169,7 +2216,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           onChangeQuery={onChangeQuery}
           debounceMs={0}
           hasCreate
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />,
       );
       fireEvent.click(openTrigger());
@@ -2253,7 +2300,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     const onChangeQuery = vi.fn();
     const search = vi.fn(source.search);
     render(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={{...source, search}}
         value={[]}
@@ -2262,7 +2309,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         debounceMs={0}
         minQueryLength={3}
         hasCreate
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     fireEvent.click(openTrigger());
@@ -2309,14 +2356,14 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         const [query, setQuery] = useState('');
         return (
           <>
-            <TokenizerWithPresentation
+            <Tokenizer
               label="Tags"
               searchSource={source}
               value={[]}
               onChange={() => {}}
               onChangeQuery={setQuery}
               debounceMs={0}
-              experimental={{presentation: 'bottom-sheet'}}
+              presentation="bottom-sheet"
             />
             <output data-testid="mirror">{query}</output>
           </>
@@ -2355,12 +2402,12 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     try {
       // Default debounceMs (150): the open must not wait for it.
       render(
-        <TokenizerWithPresentation
+        <Tokenizer
           label="Tags"
           searchSource={source}
           value={[ITEMS[0]]}
           onChange={() => {}}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />,
       );
       fireEvent.click(openTrigger());
@@ -2432,13 +2479,13 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       render(
-        <TokenizerWithPresentation
+        <Tokenizer
           label="Tags"
           searchSource={thenable}
           value={[]}
           onChange={() => {}}
           debounceMs={0}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />,
       );
       fireEvent.click(openTrigger());
@@ -2474,26 +2521,27 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       dispatchEvent: vi.fn(),
     }));
     vi.stubGlobal('matchMedia', matchMedia);
-    // The default popover, with and without the experimental object: no
-    // query is evaluated and no listener is registered.
-    const {unmount} = render(
-      <TokenizerWithPresentation
-        label="Tags"
-        searchSource={source}
-        value={[]}
-        onChange={() => {}}
-      />,
-    );
+    // A fixed presentation evaluates no query and registers no listener.
     render(<Harness presentation="popover" />);
     render(<Harness presentation="bottom-sheet" />);
     expect(
       matchMedia.mock.calls.filter(([q]) => q === COMPACT_TOUCH_QUERY),
     ).toHaveLength(0);
     expect(added.filter(q => q === COMPACT_TOUCH_QUERY)).toHaveLength(0);
-    unmount();
-    // Only adaptive reads the policy, and subscribes once.
-    render(<Harness presentation="adaptive" />);
+    // Only adaptive reads the policy, and subscribes once: by default and
+    // when it is passed.
+    const {unmount} = render(
+      <Tokenizer
+        label="Tags"
+        searchSource={source}
+        value={[]}
+        onChange={() => {}}
+      />,
+    );
     expect(added.filter(q => q === COMPACT_TOUCH_QUERY)).toHaveLength(1);
+    unmount();
+    render(<Harness presentation="adaptive" />);
+    expect(added.filter(q => q === COMPACT_TOUCH_QUERY)).toHaveLength(2);
   });
 
   it('moves focus to the sheet panel on open, not the search field (FR18)', async () => {
@@ -2630,7 +2678,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     const onFocus = vi.fn();
     const stableRef = () => {};
     const field = (isDisabled: boolean, ref: () => void = stableRef) => (
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={source}
         value={[]}
@@ -2639,7 +2687,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         isDisabled={isDisabled}
         disabledMessage="You need the Editor role"
         ref={ref}
-        experimental={{presentation: 'popover'}}
+        presentation="popover"
       />
     );
     const {rerender} = render(field(false));
@@ -2666,14 +2714,14 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
   it('moves no focus when a control re-attaches without a swap, such as a new ref callback (FR16; react-component-runtime INV6)', () => {
     const onFocus = vi.fn();
     const {rerender} = render(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={source}
         value={[]}
         onChange={() => {}}
         onFocus={onFocus}
         ref={() => {}}
-        experimental={{presentation: 'popover'}}
+        presentation="popover"
       />,
     );
     const input = screen.getByRole('combobox');
@@ -2682,14 +2730,14 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     // A new inline ref detaches and re-attaches the same input while it
     // holds focus: nothing is handed off, and no focus is reported again.
     rerender(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={source}
         value={[]}
         onChange={() => {}}
         onFocus={onFocus}
         ref={() => {}}
-        experimental={{presentation: 'popover'}}
+        presentation="popover"
       />,
     );
     expect(input).toHaveFocus();
@@ -2697,14 +2745,14 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     // Focus elsewhere: a later re-attach takes nothing back.
     input.blur();
     rerender(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={source}
         value={[]}
         onChange={() => {}}
         onFocus={onFocus}
         ref={() => {}}
-        experimental={{presentation: 'popover'}}
+        presentation="popover"
       />,
     );
     expect(document.body).toHaveFocus();
@@ -2712,14 +2760,14 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
 
   it('carries hidden form inputs and the field chrome in the sheet presentation', () => {
     const {container} = render(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={source}
         value={[ITEMS[0], ITEMS[1]]}
         onChange={() => {}}
         htmlName="tags"
         status={{type: 'error', message: 'Pick at least three'}}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     const hidden = container.querySelectorAll('input[type="hidden"]');
@@ -2738,14 +2786,14 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       isDisabled: boolean,
     ) => (
       <form>
-        <TokenizerWithPresentation
+        <Tokenizer
           label="Tags"
           searchSource={source}
           value={[ITEMS[0], ITEMS[1]]}
           onChange={() => {}}
           htmlName="tags"
           isDisabled={isDisabled}
-          experimental={{presentation}}
+          presentation={presentation}
         />
       </form>
     );
@@ -2761,6 +2809,188 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       expect(form.querySelector('input[type="hidden"]')).toBeNull();
       disabled.unmount();
     }
+  });
+});
+
+describe('Tokenizer sheet draft, Save and dismissal (FR18, FR23, FR24, FR26, FR27)', () => {
+  it('draws the search field as the shared input box at the lg input height above the 44px rows — the input border with its forced-colors branch, accent on focus, element radius, surface — unlike the borderless panel field the dropdowns share (FR18)', () => {
+    const atoms = (className: string | undefined) =>
+      (className ?? '').split(' ').filter(name => !name.includes('__'));
+    // The same shared box the inline field composes, then the sheet's own
+    // height and padding on top (later wins per property, as in the sheet).
+    const own = stylex.create({
+      field: {
+        minHeight: sizeVars['--size-element-lg'],
+        paddingBlock: spacingVars['--spacing-1'],
+      },
+      touch: {minHeight: 44},
+    });
+    render(<Harness />);
+    fireEvent.click(openTrigger());
+    const input = screen.getByLabelText('Search Tags');
+    const field = input.parentElement!;
+    for (const name of atoms(
+      stylex.props(inputWrapperStyles.base, own.field).className,
+    )) {
+      expect(field).toHaveClass(name);
+    }
+    for (const name of atoms(stylex.props(own.touch).className)) {
+      expect(field).not.toHaveClass(name);
+    }
+  });
+
+  it('keeps Clear all and Save pinned while searching, while pending and with an empty query (FR18)', async () => {
+    render(<Harness />);
+    fireEvent.click(openTrigger());
+    await screen.findByRole('checkbox', {name: 'Energizer'});
+    expect(screen.getByRole('button', {name: 'Save'})).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Search Tags'), {
+      target: {value: 'zzz'},
+    });
+    await screen.findByText('No results found');
+    expect(screen.getByRole('button', {name: 'Clear all'})).toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'Save'})).toBeInTheDocument();
+  });
+
+  it('Save with an unchanged draft reports nothing and closes (FR26)', async () => {
+    const spy = vi.fn();
+    render(<Harness spy={spy} />);
+    const trigger = openTrigger();
+    fireEvent.click(trigger);
+    await screen.findByRole('checkbox', {name: 'Energizer'});
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+    expect(spy).not.toHaveBeenCalled();
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it("Save's change is the last edit that still holds: a create then an add reports the add; an add then its own undo falls back to the other net edit (FR26)", async () => {
+    const spy = vi.fn();
+    render(<Harness spy={spy} hasCreate initial={[]} />);
+    fireEvent.click(openTrigger());
+    const search = await screen.findByLabelText('Search Tags');
+    fireEvent.change(search, {target: {value: 'Custom'}});
+    await act(async () => {
+      fireEvent.click(await screen.findByRole('button', {name: 'Add Custom'}));
+    });
+    await screen.findByRole('checkbox', {name: 'Design'});
+    fireEvent.click(screen.getByRole('checkbox', {name: 'Design'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledWith(
+      [{id: 'Custom', label: 'Custom'}, ITEMS[0]],
+      {item: ITEMS[0], type: 'add'},
+    );
+  });
+
+  it('an add that is undone before Save does not hold: Save names the edit that does (FR26)', async () => {
+    const spy = vi.fn();
+    render(<Harness spy={spy} initial={[ITEMS[0]]} />);
+    fireEvent.click(openTrigger());
+    await screen.findByRole('checkbox', {name: 'Energizer'});
+    // Remove Design (holds), add Eng, then undo the add: the last edit is a
+    // removal of Eng, which was never selected at open, so it does not hold;
+    // the removal of Design does.
+    fireEvent.click(screen.getByRole('checkbox', {name: 'Design'}));
+    fireEvent.click(screen.getByRole('checkbox', {name: 'Eng'}));
+    fireEvent.click(screen.getByRole('checkbox', {name: 'Eng'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+    expect(spy).toHaveBeenCalledWith([], {item: ITEMS[0], type: 'remove'});
+  });
+
+  it('a clean swipe, scrim or Escape dismissal closes directly; a changed draft asks first, Keep editing returns focus to the search field, Discard changes closes without a report (FR27)', async () => {
+    const spy = vi.fn();
+    render(<Harness spy={spy} />);
+    const trigger = openTrigger();
+    fireEvent.click(trigger);
+    const sheet = await screen.findByRole('dialog', {name: 'Tags'});
+    await screen.findByRole('checkbox', {name: 'Energizer'});
+    // Clean: Escape closes at once, nothing asked — also after a row is
+    // unchecked and checked again, which leaves the selection as it was.
+    fireEvent.click(screen.getByRole('checkbox', {name: 'Design'}));
+    fireEvent.click(screen.getByRole('checkbox', {name: 'Design'}));
+    fireEvent.keyDown(sheet, {key: 'Escape'});
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(spy).not.toHaveBeenCalled();
+    // Reopen, change the draft, Escape: the confirmation, safe action first.
+    await act(async () => {
+      fireEvent.click(trigger);
+    });
+    await screen.findByRole('checkbox', {name: 'Energizer'});
+    fireEvent.click(screen.getByRole('checkbox', {name: 'Energizer'}));
+    fireEvent.keyDown(screen.getByRole('dialog', {name: 'Tags'}), {
+      key: 'Escape',
+    });
+    const confirmation = await screen.findByRole('alertdialog');
+    expect(confirmation).toHaveTextContent('Discard changes?');
+    expect(confirmation).toHaveTextContent(
+      "Your changes to Tags haven't been saved.",
+    );
+    const [destructive, safe] = within(confirmation).getAllByRole('button');
+    expect(destructive).toHaveAccessibleName('Discard changes');
+    expect(safe).toHaveAccessibleName('Keep editing');
+    expect(safe).toHaveAttribute('data-autofocus');
+    // Keep editing: still open, the draft intact, focus on the search field.
+    fireEvent.click(safe);
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    expect(screen.getByLabelText('Search Tags')).toHaveFocus();
+    expect(screen.getByRole('checkbox', {name: 'Energizer'})).toBeChecked();
+    expect(spy).not.toHaveBeenCalled();
+    // Discard changes: closes without a report; `value` unchanged.
+    fireEvent.keyDown(screen.getByRole('dialog', {name: 'Tags'}), {
+      key: 'Escape',
+    });
+    fireEvent.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', {
+        name: 'Discard changes',
+      }),
+    );
+    expect(spy).not.toHaveBeenCalled();
+    expect(trigger).toHaveAttribute('aria-expanded', 'false');
+    expect(trigger).toHaveAccessibleDescription(/2 selected Design Eng/);
+  });
+
+  it('Save over the limit is aria-disabled with the limit as its reason, and works again once the draft is within it (FR23)', async () => {
+    const spy = vi.fn();
+    render(<Harness spy={spy} initial={[ITEMS[0], ITEMS[1]]} maxEntries={1} />);
+    fireEvent.click(openTrigger());
+    await screen.findByRole('checkbox', {name: 'Energizer'});
+    const save = screen.getByRole('button', {name: 'Save'});
+    expect(save).toHaveAttribute('aria-disabled', 'true');
+    expect(save).not.toHaveAttribute('disabled');
+    expect(save).toHaveAccessibleDescription('Select up to 1 item');
+    fireEvent.click(save);
+    expect(spy).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('checkbox', {name: 'Eng'}));
+    expect(screen.getByRole('button', {name: 'Save'})).not.toHaveAttribute(
+      'aria-disabled',
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Save'}));
+    expect(spy).toHaveBeenCalledWith([ITEMS[0]], {
+      item: ITEMS[1],
+      type: 'remove',
+    });
+  });
+
+  it('a direct vertical drag on the results moves focus from the search field to the sheet panel, keeping the query; a tap or a short move does not (FR18; AST-085 FR4)', async () => {
+    render(<Harness />);
+    fireEvent.click(openTrigger());
+    const sheet = await screen.findByRole('dialog', {name: 'Tags'});
+    await screen.findByRole('checkbox', {name: 'Energizer'});
+    const search = screen.getByLabelText('Search Tags');
+    fireEvent.change(search, {target: {value: 'En'}});
+    search.focus();
+    const results = list();
+    const touches = (clientY: number) => [{clientY}];
+    fireEvent.touchStart(results, {touches: touches(100)});
+    fireEvent.touchMove(results, {touches: touches(104)});
+    expect(search).toHaveFocus();
+    fireEvent.touchMove(results, {touches: touches(110)});
+    expect(search).not.toHaveFocus();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(sheet.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).toHaveAttribute('tabindex', '-1');
+    expect(search).toHaveValue('En');
   });
 });
 
@@ -2793,13 +3023,13 @@ describe('Tokenizer sheet under the BottomSheet stack (component:BottomSheet FR8
           isOpen={isHostOpen}
           onOpenChange={setIsHostOpen}
           label="Value">
-          <TokenizerWithPresentation
+          <Tokenizer
             label="Tags"
             searchSource={source}
             value={value}
             onChange={items => setValue(items)}
             debounceMs={0}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         </BottomSheet>
       </>
@@ -2829,10 +3059,16 @@ describe('Tokenizer sheet under the BottomSheet stack (component:BottomSheet FR8
     await waitFor(() =>
       expect(within(sheet).getByRole('checkbox', {name: 'Eng'})).toBeChecked(),
     );
-    // Escape reaches only the top sheet: the field sheet closes, the host
-    // stays open and is the top again; focus returns to the trigger inside
-    // the host (FR9: the opener, inside the revealed sheet).
+    // Escape reaches only the top sheet. The draft is changed, so the field
+    // sheet asks first (FR27); Discard changes closes it, the host stays open
+    // and is the top again; focus returns to the trigger inside the host
+    // (FR9: the opener, inside the revealed sheet).
     fireEvent.keyDown(sheet, {key: 'Escape'});
+    const confirmation = await screen.findByRole('alertdialog');
+    expect(stackSummary()).toEqual(['Value:covered:1', 'Tags:top:0']);
+    fireEvent.click(
+      within(confirmation).getByRole('button', {name: 'Discard changes'}),
+    );
     finishExit(sheet);
     await waitFor(() =>
       expect(
@@ -2843,8 +3079,8 @@ describe('Tokenizer sheet under the BottomSheet stack (component:BottomSheet FR8
     expect(host).not.toHaveAttribute('data-sheet-stack');
     expect(host).toHaveAttribute('open');
     await waitFor(() => expect(openTrigger()).toHaveFocus());
-    // The field's selection survived the dismissal.
-    expect(openTrigger()).toHaveAccessibleDescription(/2 selected Design Eng/);
+    // The discarded toggle never reached the field's value.
+    expect(openTrigger()).toHaveAccessibleDescription(/1 selected Design/);
   });
 
   it("the Clear all confirmation opens over the field's sheet and returns into it; a toast raised meanwhile lands in the field's dialog (AST-003 FR18)", async () => {
@@ -2869,9 +3105,11 @@ describe('Tokenizer sheet under the BottomSheet stack (component:BottomSheet FR8
     await waitFor(() =>
       expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument(),
     );
-    // Back in the field's sheet: focus on its search field, the sheet the
+    // Back in the field's sheet: focus on its Clear all, the sheet the
     // outlet again, the host still covered beneath.
-    expect(screen.getByLabelText('Search Tags')).toHaveFocus();
+    expect(
+      within(sheet).getByRole('button', {name: 'Clear all'}),
+    ).toHaveFocus();
     expect(getActiveModalOutlet()).toBe(sheet);
     expect(stackSummary()).toEqual(['Value:covered:1', 'Tags:top:0']);
   });
