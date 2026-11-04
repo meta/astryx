@@ -181,6 +181,8 @@ describe('the script on a real repository', () => {
     expect(result.stdout).toContain(
       'pull request description has an internal name',
     );
+    expect(result.stdout).toContain('Remove the reference there');
+    expect(result.stdout).toContain('ask a maintainer');
     for (const value of [FAKE_NAME, changeId]) {
       expect(result.stdout).not.toContain(value);
       expect(result.stderr).not.toContain(value);

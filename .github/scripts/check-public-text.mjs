@@ -9,7 +9,8 @@
  *   never the text it matched. Exit 0 with no finding, 1 with a finding, 2 when
  *   the range cannot be read.
  * @position Lint runs the base branch's copy on every pull request, over the
- *   commit messages and added lines between the merge base and the head.
+ *   commit messages and added lines between the merge base and the head
+ *   (spec:AST-030 FR27).
  *
  * Two kinds of check. A shape check finds an internal identifier by its form.
  * A hash check compares each word, and each host's last two labels, with
@@ -199,12 +200,12 @@ function main() {
   for (const {where, file, line, kind} of findings) {
     const at = file ? ` file=${file},line=${line},` : ' ';
     console.log(
-      `::error${at}title=Public text check::${where} has ${kind}. Public text must not carry internal identifiers, hosts or names; see ${POLICY}.`,
+      `::error${at}title=Public text check::${where} has ${kind}. Remove the reference there: public text must not carry internal identifiers, hosts or names (${POLICY}). If it is not clear what to remove, ask a maintainer.`,
     );
   }
   if (findings.length > 0) {
     console.log(
-      `${findings.length} finding(s). Edit the text, amend or reword the commits, then push again.`,
+      `${findings.length} finding(s). Edit the file or the pull request description, or reword the commit, then push again.`,
     );
     process.exit(1);
   }
