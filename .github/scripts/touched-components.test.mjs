@@ -749,14 +749,63 @@ describe('pr-component-a11y-contracts routing', () => {
     expect(find.run).toContain(
       'import {isA11ySpecFile} from "./.github/scripts/lib/a11y-spec-files.mjs";',
     );
-    const checkout = contractStep('Checkout');
-    expect(checkout.with?.ref).toBeUndefined();
+    // The merge commit, as the touched check: an older head lacks these scripts.
+    expect(
+      contractStep('Check out the selection scripts').with?.ref,
+    ).toBeUndefined();
+  });
+
+  it("runs the head's own specs against the Storybook that head built", () => {
+    const storybookCheckout = ci.jobs['build-storybook'].steps.find(
+      candidate =>
+        candidate.uses?.startsWith('actions/checkout@') && candidate.with?.ref,
+    );
+    const headCheckout = contractStep(
+      'Check out the head that built the Storybook',
+    );
+    expect(storybookCheckout.with.ref).toBe(
+      '${{ github.event.pull_request.head.sha || github.sha }}',
+    );
+    expect(headCheckout.with.ref).toBe(storybookCheckout.with.ref);
+    expect(headCheckout.if).toBe(ran);
+    const names = contracts.steps.map(({name}) => name);
+    const at = name => names.indexOf(name);
+    expect(at('Check out the head that built the Storybook')).toBeGreaterThan(
+      Math.max(
+        at('Decide the touched components'),
+        at('Find the changed browser accessibility specs'),
+      ),
+    );
+    for (const name of [
+      'Setup Node and pnpm',
+      'Download Storybook artifact',
+      'Install Playwright',
+      "Run the touched components' accessibility contracts",
+    ]) {
+      expect(at(name), name).toBeGreaterThan(
+        at('Check out the head that built the Storybook'),
+      );
+    }
+    // Only the selection and head checkouts: no later checkout moves the tree.
+    expect(
+      contracts.steps
+        .filter(candidate => candidate.uses?.startsWith('actions/checkout@'))
+        .map(({name}) => name),
+    ).toEqual([
+      'Check out the scope action',
+      'Check out the selection scripts',
+      'Check out the head that built the Storybook',
+    ]);
   });
 
   it('runs the changed specs and the touched owners, on four workers, inside the job budget', () => {
     expect(runStep.if).toBe(ran);
-    expect(runStep.run).toBe(
-      'node .github/scripts/a11y-pr-contracts.mjs --changed-only "$SPECS_PATH" --changed-files "$FILES_PATH" --owned-by "$OWNERS"',
+    // The runner comes from the merge commit; the head may predate it.
+    expect(runStep.run).toContain(
+      'git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"',
+    );
+    expect(runStep.run).toContain(
+      'node "$runner" --changed-only "$SPECS_PATH" --changed-files "$FILES_PATH" --owned-by "$OWNERS"',
     );
     // Every changed path, not only the changed specs: a change in a
     // component folder owns that folder's specs.

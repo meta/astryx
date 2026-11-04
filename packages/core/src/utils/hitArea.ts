@@ -356,6 +356,24 @@ function screenScale(
   element: Element,
   onScreen: HitRect,
 ): {x: number; y: number} {
+  // The offset size is the layout size in whole pixels, unaffected by
+  // transforms, and costs no style resolution. A box with none, such as an SVG
+  // element or a jsdom box, reads as unscaled.
+  const box = element as Partial<HTMLElement>;
+  const offsetWidth = box.offsetWidth ?? 0;
+  const offsetHeight = box.offsetHeight ?? 0;
+  if (offsetWidth === 0 || offsetHeight === 0) {
+    return UNSCALED;
+  }
+  // Within a pixel of its layout size the box reads as unscaled, which bounds
+  // the inset error at about a pixel. Only a box that a transform shrinks or
+  // grows reads its exact size from the computed style.
+  if (
+    Math.abs(onScreen.right - onScreen.left - offsetWidth) <= 1 &&
+    Math.abs(onScreen.bottom - onScreen.top - offsetHeight) <= 1
+  ) {
+    return UNSCALED;
+  }
   const style = element.ownerDocument.defaultView?.getComputedStyle(element);
   if (style == null || !style.width.endsWith('px')) {
     return UNSCALED;
