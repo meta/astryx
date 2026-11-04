@@ -1,8 +1,17 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @file Lightbox.stories.tsx
+ * @input Lightbox, TextInput, Slider, and React state
+ * @output Lightbox examples including editable controls in a mixed gallery
+ * @position Core Lightbox stories for manual interaction checks
+ */
+
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {Lightbox, useLightbox} from '@astryxdesign/core/Lightbox';
+import {TextInput} from '@astryxdesign/core/TextInput';
+import {Slider} from '@astryxdesign/core/Slider';
 
 const meta: Meta<typeof Lightbox> = {
   title: 'Core/Lightbox',
@@ -140,6 +149,94 @@ export const Video: Story = {
             type: 'video',
             caption: 'A flower blooming in time-lapse',
           }}
+        />
+      </>
+    );
+  },
+};
+
+export const CustomContent: Story = {
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <button onClick={() => setIsOpen(true)}>Open custom content</button>
+        <Lightbox
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          media={{
+            type: 'custom',
+            label: 'Dashboard template preview',
+            content: (
+              <div
+                style={{
+                  width: 'min(80vw, 960px)',
+                  height: 'min(70vh, 600px)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: '#ffffff',
+                  color: '#111827',
+                  borderRadius: 12,
+                  boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+                  fontSize: 24,
+                }}>
+                Live React preview goes here
+              </div>
+            ),
+            caption: 'A rich React subtree hosted inside the lightbox',
+          }}
+        />
+      </>
+    );
+  },
+};
+
+export const MixedGallery: Story = {
+  render: () => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [index, setIndex] = useState(0);
+    const [title, setTitle] = useState('Editable preview');
+    const [volume, setVolume] = useState(50);
+    const items = [
+      {src: 'https://picsum.photos/id/10/1200/800', alt: 'Forest path'},
+      {
+        type: 'custom' as const,
+        label: 'Interactive card',
+        content: (
+          <div
+            style={{
+              width: 'min(70vw, 720px)',
+              padding: 32,
+              background: '#ffffff',
+              color: '#111827',
+              borderRadius: 12,
+              textAlign: 'center',
+            }}>
+            <h2 style={{marginTop: 0}}>Custom slide</h2>
+            <p>Use arrow keys in these controls without changing slides.</p>
+            <TextInput
+              label="Preview title"
+              value={title}
+              onChange={setTitle}
+            />
+            <Slider label="Volume" value={volume} onChange={setVolume} />
+            <button onClick={() => alert('Interactive!')}>Click me</button>
+          </div>
+        ),
+        caption: 'A custom slide between images',
+      },
+      {src: 'https://picsum.photos/id/20/1200/800', alt: 'Beach sunset'},
+    ];
+    return (
+      <>
+        <button onClick={() => setIsOpen(true)}>Open mixed gallery</button>
+        <Lightbox
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          media={items}
+          index={index}
+          onIndexChange={setIndex}
         />
       </>
     );
