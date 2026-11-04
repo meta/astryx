@@ -249,16 +249,19 @@ export const ExplicitTimeZone: Story = {
         value="2026-02-19T17:00:00Z"
         format="date_time"
         timezoneID="UTC"
+        isTimezoneShown
       />
       <Timestamp
         value="2026-02-19T17:00:00Z"
         format="date_time"
         timezoneID="America/Los_Angeles"
+        isTimezoneShown
       />
       <Timestamp
         value="2026-02-19T17:00:00Z"
         format="date_time"
         timezoneID="Asia/Tokyo"
+        isTimezoneShown
       />
     </div>
   ),
