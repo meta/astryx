@@ -232,7 +232,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 No visual representation is introduced. FR6 keeps a finger's row press on
 `spec:AST-094` FR11's cell profile so the single focus highlight is the only
 lit row under a finger; the highlight paint itself is the existing focus overlay
-owned by the item components.
+owned by the item components, and in Core's menus a held finger or pen paints the
+lit row with the pressed overlay instead (AR1).
 
 ## Parent and system relationships
 
@@ -295,7 +296,8 @@ opens under the pointer would pick a row nobody chose.
 
 Menus already keep one highlight by moving focus on hover; the finger moves
 the same focus with `preventScroll`, so keyboard, mouse and touch share one
-state and one paint. A picker's list belongs to a combobox and must not take
+state and one paint; in Core's menus a held finger or pen paints that row with
+the pressed overlay (AR1). A picker's list belongs to a combobox and must not take
 focus from it. A row a finger left keeps no pressed paint, because it
 would light a second row (FR6). This record does not decide where
 focus goes after a pick.
