@@ -2,9 +2,10 @@
 
 /**
  * @file animatedLayout.ts
- * @input The DOM (layout rectangles, computed style), Web Animations, the
- *   internal `springs.settle` motion role (motion/roles.ts), the Reduce Motion
- *   cross-fade clock (uikit/timing.ts) and the block measure (frameBlock.ts)
+ * @input The DOM (layout rectangles, computed style) and Web Animations. The
+ *   internal `springs.settle` motion role at the area's tempo
+ *   (resolveMotion.ts), the Reduce Motion cross-fade clock (uikit/timing.ts)
+ *   and the block measure (frameBlock.ts)
  * @output Exports `createAnimatedLayout`, the opaque `AnimatedLayout` handle,
  *   `reportLayoutChange`, `playLayoutChange` and `layoutStartFor`. It also
  *   exports the exit hold (`holdLayoutExit`, `releaseLayoutExit`), the
@@ -81,6 +82,7 @@
  */
 
 import {LATE_START_MS} from './frameBlock';
+import {resolveMotion} from './resolveMotion';
 import {motionRole} from './roles';
 import {
   inertCopy,
@@ -138,11 +140,12 @@ function matches(element: Element, query: string): boolean {
  * `springs.settle` from the internal role registry: one shared value for the
  * glide, the changed element and the indicator. Motion roles are internal
  * (`spec:AST-094` DEC-11): no theme, scope or custom property changes it.
+ * The glide plays it at the tempo of the theme `area` is in.
  */
-function settleSpring(): SpringDescription {
+function settleSpring(area: Element): SpringDescription {
   registerSpringsTable();
   const value = motionRole(ROLE_ID)?.value;
-  return isSpring(value) ? value : SETTLE_SPRING;
+  return resolveMotion(area, isSpring(value) ? value : SETTLE_SPRING);
 }
 
 function springProgress(description: SpringDescription): SpringProgress {
@@ -173,7 +176,7 @@ function layoutMotion(area: Element): LayoutMotion {
       easing: `cubic-bezier(${x1}, ${y1}, ${x2}, ${y2})`,
     };
   }
-  return {kind: 'spring', progress: springProgress(settleSpring())};
+  return {kind: 'spring', progress: springProgress(settleSpring(area))};
 }
 
 /** Linear keyframes over `durationMs`, one per frame, from `frame(t ms)`. */
