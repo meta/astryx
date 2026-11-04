@@ -42,9 +42,8 @@ the range stays Gregorian ISO dates.
 - Released default preserved: `yes`; canonical DateRangeInput behavior is unchanged
 - The `calendar` prop is additive; it defaults to the provider's calendar, else
   `gregory`, so a field without a provider calendar keeps its Gregorian text. A
-  provider locale with an explicit `-u-ca-` keyword shows that calendar; the
-  keyword is the application's explicit request (`spec:AST-111` DEC-2):
-  nonbreaking; `calendar="gregory"` keeps Gregorian
+  provider locale with a `-u-ca-` keyword keeps Gregorian dates (`spec:AST-111`
+  DEC-2); set `calendar` to choose one
 - 0.7.0 removes the `date-range-input-clear-icon` alias; the shared clear glyph
   remains available through `input-clear-icon`
 - The preset constraint correction remains unchanged
