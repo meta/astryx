@@ -463,7 +463,7 @@ interface DropdownMenuDataProps extends DropdownMenuBaseProps {
    * Omitted, the menu is the anchored popover. Under a finger, on every
    * device, the finger that opened it picks as UIMenu's does, once it has
    * moved. `'popover'` pins the anchored popover with the pointer behavior on
-   * every device (the opening press follows the settle rule, as before).
+   * every device (the opening press follows the settle rule).
    */
   presentation?: DropdownMenuPresentation;
   items: DropdownMenuOption[];
@@ -473,7 +473,7 @@ interface DropdownMenuDataProps extends DropdownMenuBaseProps {
 interface DropdownMenuCompoundProps extends DropdownMenuBaseProps {
   /**
    * `'popover'` pins the pointer behavior on every device (the opening press
-   * follows the settle rule, as before). Omitted, on every device, the finger
+   * follows the settle rule). Omitted, on every device, the finger
    * that opened the menu picks as UIMenu's does, once it has moved.
    */
   presentation?: 'popover';
