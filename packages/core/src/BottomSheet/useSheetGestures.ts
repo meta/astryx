@@ -354,6 +354,8 @@ export interface UseSheetGesturesOptions {
   snapHeights?: () => number[];
   /** Notified when the settled visible detent height (px) changes. */
   onSnap?: (heightPx: number) => void;
+  /** Called once a drag first moves the sheet off its detent. */
+  onTravelStart?: () => void;
   /**
    * Called with the scrim opacity the sheet should show (1 = fully visible,
    * 0 = hidden) as the drag moves and on settle. Full while the sheet is at
@@ -508,6 +510,7 @@ export function useSheetGestures({
   onDismiss,
   snapHeights,
   onSnap,
+  onTravelStart,
   onScrimOpacity,
   hasFixedHeight = false,
 }: UseSheetGesturesOptions): UseSheetGesturesResult {
@@ -654,6 +657,8 @@ export function useSheetGestures({
   // stops by the time the re-anchor read it.
   const snapHeightsRef = useRef(snapHeights);
   snapHeightsRef.current = snapHeights;
+  const onTravelStartRef = useRef(onTravelStart);
+  onTravelStartRef.current = onTravelStart;
 
   const onDismissRef = useRef(onDismiss);
   const canDismissRef = useRef(canDismiss);
@@ -1312,6 +1317,7 @@ export function useSheetGestures({
       if (!state.hasTraveled && next !== state.baseOffset) {
         state.hasTraveled = true;
         setIsTraveling(true);
+        onTravelStartRef.current?.();
       }
 
       // Mirror the scrim to the live drag: full at/above the mid detent,

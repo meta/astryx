@@ -244,20 +244,32 @@ describe('the interaction proof legs in ci.yml', () => {
     expect(join.env.PR_INTERACTION_WEBKIT_RESULT).toBe(
       '${{ needs.pr-interaction-webkit.result }}',
     );
+    // Build the all-passing environment from the join step itself, so a lane
+    // added to the join cannot leave this fixture behind it.
+    const laneResults = Object.entries(join.env).flatMap(([name, value]) => {
+      const lane = /^\$\{\{ needs\.([\w-]+)\.result \}\}$/.exec(value)?.[1];
+      return lane && lane !== 'release-bump' ? [[name, lane]] : [];
+    });
+    expect(laneResults.map(([, lane]) => lane)).toEqual(
+      expect.arrayContaining([
+        'pr-interaction',
+        'pr-interaction-webkit',
+        'pr-component-a11y-contracts',
+      ]),
+    );
+    for (const [name, lane] of laneResults) {
+      expect(test.needs, name).toContain(lane);
+    }
+    const scopes = Object.keys(join.env).filter(name =>
+      /^\$\{\{ steps\.scope\.outputs\.\w+_only \}\}$/.test(join.env[name]),
+    );
     const passing = {
-      TEST_UI_RESULT: 'success',
-      TEST_NODE_RESULT: 'success',
-      TEST_BUILD_RESULT: 'success',
-      TEST_NATIVE_SWIFT_RESULT: 'success',
-      PR_INTERACTION_RESULT: 'success',
-      PR_INTERACTION_WEBKIT_RESULT: 'success',
+      ...Object.fromEntries(laneResults.map(([name]) => [name, 'success'])),
+      ...Object.fromEntries(scopes.map(name => [name, 'false'])),
       RELEASE_BUMP: 'false',
       RELEASE_BUMP_RESULT: 'skipped',
-      DOCSITE_ONLY: 'false',
-      SPEC_ONLY: 'false',
-      TOOLING_ONLY: 'false',
-      LAB_ONLY: 'false',
     };
+    expect(Object.keys(passing).sort()).toEqual(Object.keys(join.env).sort());
     const joinExit = env =>
       spawnSync(
         process.execPath,
@@ -266,11 +278,10 @@ describe('the interaction proof legs in ci.yml', () => {
       ).status;
     expect(joinExit(passing)).toBe(0);
     // GitHub reports a matrix job's result as success only when every leg
-    // succeeded; any other aggregate fails the join.
-    for (const lane of [
-      'PR_INTERACTION_RESULT',
-      'PR_INTERACTION_WEBKIT_RESULT',
-    ]) {
+    // succeeded; any other aggregate fails the join. A lane that has no work
+    // for the pull request still runs and reports success, so a skipped lane
+    // fails the join too.
+    for (const [lane] of laneResults) {
       for (const result of ['failure', 'cancelled', 'skipped', '']) {
         expect(
           joinExit({...passing, [lane]: result}),
