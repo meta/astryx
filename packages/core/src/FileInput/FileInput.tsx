@@ -755,8 +755,9 @@ export function FileInput({
       e.preventDefault();
       e.stopPropagation();
       if (isSelectionDisabled) {
-        // A cancelled dragover otherwise makes the zone a drop target with the
-        // copy cursor; the 'none' effect shows no-drop and sends no drop.
+        // A cancelled dragover with the default effect makes the zone a drop
+        // target.
+        // The 'none' effect shows the no-drop cursor and stops the drop.
         if (e.dataTransfer) {
           e.dataTransfer.dropEffect = 'none';
         }
@@ -772,8 +773,9 @@ export function FileInput({
       e.preventDefault();
       e.stopPropagation();
       if (isSelectionDisabled) {
-        // A cancelled dragover otherwise makes the zone a drop target with the
-        // copy cursor; the 'none' effect shows no-drop and sends no drop.
+        // A cancelled dragover with the default effect makes the zone a drop
+        // target.
+        // The 'none' effect shows the no-drop cursor and stops the drop.
         if (e.dataTransfer) {
           e.dataTransfer.dropEffect = 'none';
         }
