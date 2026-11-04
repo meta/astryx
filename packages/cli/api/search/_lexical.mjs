@@ -73,6 +73,8 @@ import {toResult, searchedComponentsOf} from './_result.mjs';
  *   author lists in `keywords`, without the code terms and table cells its
  *   other keywords add.
  * @property {string[]} [weakKeywords]
+ * @property {string[]} [weakKeywordBound] - Every name `weakKeywords` can
+ *   hold, for a page whose weak keywords cost a parse to read.
  * @property {string} [description]
  * @property {string[]} [prose]
  * @property {string[]} [guidance]

@@ -584,8 +584,6 @@ export function PickerWheel({
     isPointerKept: true,
   });
 
-  // A key commits the row at `position` at once and turns the wheel there
-  // from `offset`.
   const turnToPosition = useCallback(
     (position: number, offset: number) => {
       const current = latestRef.current;

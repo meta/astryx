@@ -29,13 +29,18 @@ import {describe, it, expect, beforeAll, beforeEach, afterEach} from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
-import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
+import {createRequire} from 'node:module';
 import {ensureCoreBuilt} from './ensure-core-built.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {
+  makeLinkedFixture,
+  removeLinkedFixture,
+} from '../../../test-utils/linked-fixture.mjs';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const CLI_ROOT = path.resolve(HERE, '../../..');
+const TSC = createRequire(import.meta.url).resolve('typescript/bin/tsc');
+// A consumer project type-checks against core and React's types.
+const CONSUMER_PACKAGES = ['@astryxdesign', 'react', '@types/react'];
 
 function writeTheme(dir, contents) {
   fs.mkdirSync(dir, {recursive: true});
@@ -207,12 +212,10 @@ describe('theme build custom-variant augmentations', () => {
     expect(variantsDts).toContain("'editorial': true;");
     expect(variantsDts).toContain("'shared': true;");
 
-    const projectDir = path.join(
-      CLI_ROOT,
-      `.tmp-surface-heading-consumer-${process.pid}`,
+    const projectDir = makeLinkedFixture(
+      'astryx-surface-heading-consumer-',
+      CONSUMER_PACKAGES,
     );
-    fs.rmSync(projectDir, {recursive: true, force: true});
-    fs.mkdirSync(projectDir);
     fs.copyFileSync(
       path.join(tmpDir, 'variants-theme.d.ts'),
       path.join(projectDir, 'variants-theme.d.ts'),
@@ -254,12 +257,12 @@ describe('theme build custom-variant augmentations', () => {
 
     try {
       execFileSync(
-        'pnpm',
-        ['exec', 'tsc', '--project', 'tsconfig.json', '--noEmit'],
+        process.execPath,
+        [TSC, '--project', 'tsconfig.json', '--noEmit'],
         {cwd: projectDir, stdio: 'pipe'},
       );
     } finally {
-      fs.rmSync(projectDir, {recursive: true, force: true});
+      removeLinkedFixture(projectDir);
     }
   });
 
@@ -438,12 +441,10 @@ describe('theme build custom-variant augmentations', () => {
     );
     expect(result.code).toBe(0);
 
-    const projectDir = path.join(
-      CLI_ROOT,
-      `.tmp-variant-consumer-${process.pid}`,
+    const projectDir = makeLinkedFixture(
+      'astryx-variant-consumer-',
+      CONSUMER_PACKAGES,
     );
-    fs.rmSync(projectDir, {recursive: true, force: true});
-    fs.mkdirSync(projectDir);
     fs.copyFileSync(
       path.join(tmpDir, 'variants-theme.d.ts'),
       path.join(projectDir, 'variants-theme.d.ts'),
@@ -517,15 +518,15 @@ describe('theme build custom-variant augmentations', () => {
 
     try {
       execFileSync(
-        'pnpm',
-        ['exec', 'tsc', '--project', 'tsconfig.json', '--noEmit'],
+        process.execPath,
+        [TSC, '--project', 'tsconfig.json', '--noEmit'],
         {
           cwd: projectDir,
           stdio: 'pipe',
         },
       );
     } finally {
-      fs.rmSync(projectDir, {recursive: true, force: true});
+      removeLinkedFixture(projectDir);
     }
   });
 

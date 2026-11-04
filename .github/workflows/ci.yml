@@ -848,22 +848,30 @@ jobs:
             # A change only to the Lab package runs every Lab test across the
             # same legs, and the guards below as any scoped run does
             # (spec:AST-030 FR26).
-            pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} packages/lab/
-            node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 > "$RUNNER_TEMP/fs-guards.txt"
+            .github/scripts/run-named.sh "Lab tests" -- pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} packages/lab/
+            # The guard run leaves out the tests the run above already ran, so
+            # no test runs twice. Every leg splits the same reduced list, so a
+            # leg that cannot list them fails rather than split a different one.
+            .github/scripts/run-named.sh "List the tests the first run ran" -- pnpm exec vitest list --project ui packages/lab/ --filesOnly --passWithNoTests --json="$RUNNER_TEMP/already-run.json"
+            .github/scripts/run-named.sh "List the tests that read source files" --stdout "$RUNNER_TEMP/fs-guards.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --already-run "$RUNNER_TEMP/already-run.json"
             mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"
             if [ "${#GUARDS[@]}" -gt 0 ]; then
-              pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"
+              .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"
             fi
           elif [ "$SCOPED" = true ]; then
-            pnpm test:ui --changed=HEAD^1 --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+            .github/scripts/run-named.sh "Tests the change reaches" -- pnpm test:ui --changed=HEAD^1 --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }}
             # Tests no module graph relates to the change run too: guards
             # that read sources, and tests that load a changed package from
             # its build (by name or its dist/).
             # The list goes through a file so a failing lister fails the step.
-            node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 > "$RUNNER_TEMP/fs-guards.txt"
+            # The guard run leaves out the tests the run above already ran, so
+            # no test runs twice. Every leg splits the same reduced list, so a
+            # leg that cannot list them fails rather than split a different one.
+            .github/scripts/run-named.sh "List the tests the first run ran" -- pnpm exec vitest list --project ui --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/already-run.json"
+            .github/scripts/run-named.sh "List the tests that read source files" --stdout "$RUNNER_TEMP/fs-guards.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --already-run "$RUNNER_TEMP/already-run.json"
             mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"
             if [ "${#GUARDS[@]}" -gt 0 ]; then
-              pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"
+              .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"
             fi
           else
             pnpm test:ui --shard=${{ matrix.shard }}/${{ strategy.job-total }}
@@ -976,15 +984,19 @@ jobs:
           SCOPED: ${{ github.event_name == 'pull_request' && steps.scope.outputs.full_suite == 'false' }}
         run: |
           if [ "$SCOPED" = true ]; then
-            pnpm test:node --changed=HEAD^1 --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+            .github/scripts/run-named.sh "Tests the change reaches" -- pnpm test:node --changed=HEAD^1 --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }}
             # Tests no module graph relates to the change run too: guards
             # that read sources, and tests that load a changed package from
             # its build (by name or its dist/).
             # The list goes through a file so a failing lister fails the step.
-            node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 > "$RUNNER_TEMP/fs-guards.txt"
+            # The guard run leaves out the tests the run above already ran, so
+            # no test runs twice. Every leg splits the same reduced list, so a
+            # leg that cannot list them fails rather than split a different one.
+            .github/scripts/run-named.sh "List the tests the first run ran" -- pnpm exec vitest list --project node --changed=HEAD^1 --filesOnly --passWithNoTests --json="$RUNNER_TEMP/already-run.json"
+            .github/scripts/run-named.sh "List the tests that read source files" --stdout "$RUNNER_TEMP/fs-guards.txt" -- node .github/scripts/fs-guard-tests.mjs --changed HEAD^1 --already-run "$RUNNER_TEMP/already-run.json"
             mapfile -t GUARDS < "$RUNNER_TEMP/fs-guards.txt"
             if [ "${#GUARDS[@]}" -gt 0 ]; then
-              pnpm test:node --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"
+              .github/scripts/run-named.sh "Tests that read source files" -- pnpm test:node --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"
             fi
           else
             pnpm test:node --shard=${{ matrix.shard }}/${{ strategy.job-total }}
@@ -1142,6 +1154,7 @@ jobs:
         test-native-swift,
         pr-interaction,
         pr-interaction-webkit,
+        pr-component-a11y-contracts,
       ]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && (github.event_name != 'workflow_dispatch' && always() && !cancelled()) }}
     runs-on: ubuntu-slim
@@ -1223,6 +1236,7 @@ jobs:
           TEST_NATIVE_SWIFT_RESULT: ${{ needs.test-native-swift.result }}
           PR_INTERACTION_RESULT: ${{ needs.pr-interaction.result }}
           PR_INTERACTION_WEBKIT_RESULT: ${{ needs.pr-interaction-webkit.result }}
+          PR_COMPONENT_A11Y_CONTRACTS_RESULT: ${{ needs.pr-component-a11y-contracts.result }}
         run: node .github/scripts/ci-test-join.mjs
 
   # Build the packages and Storybook, and analyze components (parallel with
@@ -3652,34 +3666,6 @@ jobs:
             --head-sha "$HEAD_SHA" \
             --out touched-components.json
 
-      # A scoped or always browser accessibility spec the change adds or
-      # modifies runs here by itself (spec:AST-030 FR12), so it is checked on
-      # its own pull request; audit and release-only specs still wait. No such
-      # file, no work.
-      - name: Find the changed browser accessibility specs
-        id: specs
-        env:
-          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
-        run: |
-          list="$RUNNER_TEMP/changed-a11y-specs.txt"
-          : > "$list"
-          if [ -n "$FILES_PATH" ] && [ -f "$FILES_PATH" ]; then
-            # The same spec globs playwright.config.ts runs.
-            node --input-type=module -e '
-              import fs from "node:fs";
-              import {isA11ySpecFile} from "./.github/scripts/lib/a11y-spec-files.mjs";
-              const paths = fs.readFileSync(process.argv[1], "utf8").split("\n");
-              for (const file of paths.filter(isA11ySpecFile)) console.log(file);
-            ' "$FILES_PATH" > "$list"
-          fi
-          echo "path=$list" >> "$GITHUB_OUTPUT"
-          if [ -s "$list" ]; then
-            echo "has_specs=true" >> "$GITHUB_OUTPUT"
-            echo "Changed browser accessibility specs:"; cat "$list"
-          else
-            echo "has_specs=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Skip when no component changed or the change is wide
         if: steps.touched.outputs.has_components != 'true'
         env:
@@ -3693,13 +3679,13 @@ jobs:
           fi
 
       - name: Setup Node and pnpm
-        if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
+        if: steps.touched.outputs.has_components == 'true'
         uses: ./.github/actions/setup
         with:
           install: 'false'
 
       - name: Download Storybook artifact
-        if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
+        if: steps.touched.outputs.has_components == 'true'
         uses: actions/download-artifact@v8
         with:
           name: storybook-${{ needs.build-storybook.outputs.short_hash }}
@@ -3707,7 +3693,7 @@ jobs:
 
       - name: Install Playwright
         id: playwright
-        if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
+        if: steps.touched.outputs.has_components == 'true'
         run: pnpm install --frozen-lockfile && npx playwright install chromium
 
       # The same changed-component filters an opted-in pull request uses.
@@ -3753,22 +3739,6 @@ jobs:
             test -s "rtl-reports/$PACKAGE.json"
           done
 
-      # Only the changed spec files, in Chromium, with their routing lines read
-      # from this merge commit; a changed release-only or audit spec still
-      # waits. A failing or unfinished spec turns this advisory job red, and a
-      # file over the budget is reported as not run.
-      - name: Run the changed browser accessibility specs
-        id: changed-specs
-        if: always() && steps.playwright.outcome == 'success' && steps.specs.outputs.has_specs == 'true'
-        # The runner runs at most four changed files and stops at eight
-        # minutes; this bounds a hung browser inside the job's 15 minutes.
-        timeout-minutes: 9
-        env:
-          ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          WORKFLOW_SHA: ${{ github.sha }}
-          SPECS_PATH: ${{ steps.specs.outputs.path }}
-        run: node .github/scripts/a11y-pr-contracts.mjs --changed-only "$SPECS_PATH"
-
       # The visual result comes from pr-visual, the one visual owner: its
       # default touched check, or its full check under ci:run-visual.
       - name: Download pr-visual's verdict
@@ -3802,7 +3772,7 @@ jobs:
             --out touched-components.json
 
       - name: Upload touched-components results
-        if: always() && (steps.touched.outputs.has_components == 'true' || steps.touched.outputs.wide_change == 'true' || steps.specs.outputs.has_specs == 'true')
+        if: always() && (steps.touched.outputs.has_components == 'true' || steps.touched.outputs.wide_change == 'true')
         uses: actions/upload-artifact@v7
         with:
           name: touched-components
@@ -3810,7 +3780,170 @@ jobs:
             touched-components.json
             a11y-report.json
             rtl-reports/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # The accessibility contracts of the components a pull request touches: the
+  # browser accessibility specs it changes, then each touched component's own
+  # scoped and release-only specs, inside an eight-minute budget. The job needs
+  # only the Storybook build, so it runs beside the test owners and ends before
+  # the slowest of them. The `test` join reads its result: a failing contract
+  # blocks the merge with no new required context. Out of scope (no component
+  # or browser accessibility spec changed, or a specialized lane), every step
+  # after the scope step skips and the job succeeds. A wide change runs only
+  # the changed specs. A file that does not fit the budget is reported as not
+  # run, and the job still succeeds.
+  pr-component-a11y-contracts:
+    name: Component accessibility contracts
+    needs: [room, admission, heavy-ci, build-storybook]
+    if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true')) }}
+    # One core per Playwright worker, as the release contract legs run.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Check out the scope action
+        uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/actions/test-scope
+          path: .test-scope
+          persist-credentials: false
+
+      - name: Decide this job's scope
+        id: scope
+        uses: ./.test-scope/.github/actions/test-scope
+        with:
+          paths: '^(packages/[^/]+/src/|internal/a11y-spec/)'
+          outside-pull-request: skip
+          component-audit: 'true'
+
+      - name: Require this pull request's Storybook build
+        if: steps.scope.outputs.applies == 'true' && needs.build-storybook.result != 'success'
+        run: |
+          echo "The contracts read this pull request's Storybook build, which did not succeed."
+          exit 1
+
+      - name: Skip the contracts outside their scope
+        if: steps.scope.outputs.applies != 'true'
+        run: echo "No component or browser accessibility spec changed; no contract to run."
+
+      # The tested merge commit, as the touched-components job checks out.
+      - name: Checkout
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # The changed-spec list and the folder rule both read this list. Without
+      # it, a contract would not run and the job would still pass.
+      - name: Require the changed-file list
+        if: steps.scope.outputs.applies == 'true' && steps.scope.outputs.changed_files_path == ''
+        run: |
+          echo "::error::The scope step could not list the changed files, so the contracts to run are unknown. Re-run the job."
+          exit 1
+
+      - name: Download analysis artifact
+        if: steps.scope.outputs.applies == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: pr-analysis
+
+      # The same touched components as the touched-components job. More than
+      # five, or a change to shared styles, is a wide change: no owned spec
+      # runs, and the comment points to the ci:run-<suite> labels.
+      - name: Decide the touched components
+        id: touched
+        if: steps.scope.outputs.applies == 'true'
+        env:
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+        run: |
+          GITHUB_STEP_SUMMARY=/dev/null node .github/scripts/touched-components.mjs scope \
+            --analysis analysis.json \
+            --files "$FILES_PATH" \
+            --out "$RUNNER_TEMP/touched-components.json"
+
+      - name: Find the changed browser accessibility specs
+        id: specs
+        if: steps.scope.outputs.applies == 'true'
+        env:
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+        run: |
+          list="$RUNNER_TEMP/changed-a11y-specs.txt"
+          : > "$list"
+          if [ -n "$FILES_PATH" ] && [ -f "$FILES_PATH" ]; then
+            # The same spec globs playwright.config.ts runs.
+            node --input-type=module -e '
+              import fs from "node:fs";
+              import {isA11ySpecFile} from "./.github/scripts/lib/a11y-spec-files.mjs";
+              const paths = fs.readFileSync(process.argv[1], "utf8").split("\n");
+              for (const file of paths.filter(isA11ySpecFile)) console.log(file);
+            ' "$FILES_PATH" > "$list"
+          fi
+          echo "path=$list" >> "$GITHUB_OUTPUT"
+          if [ -s "$list" ]; then
+            echo "has_specs=true" >> "$GITHUB_OUTPUT"
+            echo "Changed browser accessibility specs:"; cat "$list"
+          else
+            echo "has_specs=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip when no contract applies
+        if: steps.scope.outputs.applies == 'true' && steps.touched.outputs.has_components != 'true' && steps.specs.outputs.has_specs != 'true'
+        env:
+          WIDE: ${{ steps.touched.outputs.wide_change }}
+          COUNT: ${{ steps.touched.outputs.component_count }}
+        run: |
+          if [ "$WIDE" = true ]; then
+            echo "Wide change ($COUNT components) with no changed spec: add ci:run-a11y to run the scoped accessibility specs."
+          else
+            echo "No touched component and no changed spec; no contract to run."
+          fi
+
+      - name: Setup Node and pnpm
+        if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
+        uses: ./.github/actions/setup
+        with:
+          install: 'false'
+
+      - name: Download Storybook artifact
+        if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: storybook-${{ needs.build-storybook.outputs.short_hash }}
+          path: apps/storybook/dist
+
+      - name: Install Playwright
+        if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
+        run: pnpm install --frozen-lockfile && npx playwright install chromium
+
+      # Routing lines come from this merge commit. A failing or unfinished
+      # spec fails the job, and so the test join. A file that does not fit the
+      # budget is not run and does not fail the job.
+      - name: Run the touched components' accessibility contracts
+        id: contracts
+        if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
+        # The runner stops at eight minutes; this bounds a hung browser and
+        # the spec listing inside the job's 15 minutes.
+        timeout-minutes: 10
+        env:
+          ASTRYX_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          WORKFLOW_SHA: ${{ github.sha }}
+          SPECS_PATH: ${{ steps.specs.outputs.path }}
+          FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
+          OWNERS: ${{ steps.touched.outputs.has_components == 'true' && steps.touched.outputs.a11y_owners || '' }}
+          A11Y_CONTRACT_WORKERS: 4
+        run: node .github/scripts/a11y-pr-contracts.mjs --changed-only "$SPECS_PATH" --changed-files "$FILES_PATH" --owned-by "$OWNERS"
+
+      - name: Upload contract evidence
+        if: always() && (steps.contracts.outcome == 'success' || steps.contracts.outcome == 'failure')
+        uses: actions/upload-artifact@v7
+        with:
+          name: component-a11y-contracts
+          path: |
             pr-a11y-evidence/
+            pr-a11y-output/
           if-no-files-found: ignore
           retention-days: 7
 
