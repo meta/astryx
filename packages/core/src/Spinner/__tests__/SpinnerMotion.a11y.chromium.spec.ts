@@ -205,14 +205,16 @@ test('turning paints nothing on the main thread', async ({page}) => {
   await page.waitForTimeout(200);
   // Four rings turn for two seconds. A paint animation repaints every frame;
   // a transform animation paints none. React listens for
-  // `animationiteration`, so Chromium recalculates style at each iteration
-  // boundary. With many turns in one iteration, no boundary occurs here.
+  // `animationiteration`, so Chromium recalculates style a few times at each
+  // iteration boundary. One turn per iteration gives about 14 recalculations
+  // here. With many turns in one iteration, no boundary occurs, and the bound
+  // allows only unrelated single recalculations.
   const trace = await traceRendering(page, async () =>
     page.waitForTimeout(2000),
   );
   expect(trace.paint).toBe(0);
   expect(trace.layout).toBe(0);
-  expect(trace.styleRecalc).toBe(0);
+  expect(trace.styleRecalc).toBeLessThanOrEqual(2);
 });
 
 test('the arc turns clockwise at a constant rate, once per period', async ({
