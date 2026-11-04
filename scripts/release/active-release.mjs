@@ -375,9 +375,57 @@ function latestStableVersion(root) {
   return versions.at(-1) ?? null;
 }
 
-function fileDigestAtRef(root, ref, file) {
+// A found object's header line in `git cat-file --batch` output: its id,
+// type and size in bytes.
+const FOUND_OBJECT = /^[0-9a-f]{40,64} [a-z]+ (\d+)$/;
+
+/**
+ * Each file's bytes at `ref`, or null when the ref lacks it, read with one
+ * `git cat-file --batch` instead of one `git show` per file. This module
+ * imports nothing beyond its own lib (see the header), so it carries its own
+ * reader.
+ * @param {string} root
+ * @param {string} ref
+ * @param {string[]} files
+ * @returns {Map<string, Buffer | null>}
+ */
+function filesAtRef(root, ref, files) {
+  const contents = new Map();
+  if (files.length === 0) return contents;
+  const out = execFileSync('git', ['cat-file', '--batch'], {
+    cwd: root,
+    input: files.map(file => `${ref}:${file}\n`).join(''),
+    maxBuffer: 1024 * 1024 * 1024,
+  });
+  let at = 0;
+  for (const file of files) {
+    const end = out.indexOf(0x0a, at);
+    const found = FOUND_OBJECT.exec(out.toString('utf8', at, end));
+    at = end + 1;
+    if (found === null) {
+      contents.set(file, null);
+      continue;
+    }
+    const size = Number(found[1]);
+    contents.set(file, out.subarray(at, at + size));
+    at += size + 1;
+  }
+  return contents;
+}
+
+function fileDigestsAtRef(root, ref, files) {
+  const contents = filesAtRef(root, ref, files);
+  return new Map(
+    files.map(file => {
+      const content = contents.get(file);
+      return [file, content ? sha256(content) : null];
+    }),
+  );
+}
+
+function parseJson(content) {
   try {
-    return sha256(execFileSync('git', ['show', `${ref}:${file}`], {cwd: root}));
+    return content ? JSON.parse(content.toString('utf8')) : null;
   } catch {
     return null;
   }
@@ -392,7 +440,9 @@ function changesetMapAtRef(root, ref) {
     '--',
     '.changeset',
   ]);
-  return new Map(
+  return fileDigestsAtRef(
+    root,
+    ref,
     files
       .split('\n')
       .filter(
@@ -400,8 +450,7 @@ function changesetMapAtRef(root, ref) {
           file.startsWith('.changeset/') &&
           file.endsWith('.md') &&
           file !== '.changeset/README.md',
-      )
-      .map(file => [file, fileDigestAtRef(root, ref, file)]),
+      ),
   );
 }
 
@@ -416,11 +465,12 @@ function releaseOutputPathsAtRef(root, plan, releaseRef) {
 }
 
 function releaseOutputMapAtRef(root, plan, releaseRef) {
-  return new Map(
+  return fileDigestsAtRef(
+    root,
+    releaseRef,
     releaseOutputPathsAtRef(root, plan, releaseRef)
       .filter(isReleaseOutputPath)
-      .filter(file => !isPackageManifestPath(file))
-      .map(file => [file, fileDigestAtRef(root, releaseRef, file)]),
+      .filter(file => !isPackageManifestPath(file)),
   );
 }
 
@@ -439,7 +489,8 @@ function jsonAtRef(root, ref, file) {
 }
 
 function manifestMapAtRef(root, ref, files) {
-  return new Map([...files].map(file => [file, jsonAtRef(root, ref, file)]));
+  const contents = filesAtRef(root, ref, [...files]);
+  return new Map([...files].map(file => [file, parseJson(contents.get(file))]));
 }
 
 function currentManifestMap(root, files) {
@@ -461,6 +512,22 @@ function currentOutputMap(root, files) {
       ];
     }),
   );
+}
+
+/**
+ * The merge-back's changes against `base`: `git diff --name-status` lines.
+ * `base` must be the merge commit's first parent, the main commit the merge
+ * was built on. A later main would show every file it gained as a deletion.
+ */
+function mergeBackEntries(root, base) {
+  const raw = git(root, [
+    'diff',
+    '--name-status',
+    '--find-renames',
+    base,
+    'HEAD',
+  ]);
+  return raw ? raw.split('\n') : [];
 }
 
 function markerAtRef(root, ref) {
@@ -930,7 +997,12 @@ function versionTagExists(root, version) {
  * @returns {{version: string|null, errors: string[]}}
  */
 function declaredVersionAtRef(root, ref) {
-  const config = jsonAtRef(root, ref, '.changeset/config.json');
+  const configFile = '.changeset/config.json';
+  const files = expandWorkspaceDirs(root).map(dir =>
+    path.relative(root, path.join(dir, 'package.json')),
+  );
+  const contents = filesAtRef(root, ref, [configFile, ...files]);
+  const config = parseJson(contents.get(configFile));
   if (!config)
     return {
       version: null,
@@ -938,9 +1010,8 @@ function declaredVersionAtRef(root, ref) {
     };
   const fixed = new Set((config.fixed ?? []).flat());
   const versions = new Map();
-  for (const dir of expandWorkspaceDirs(root)) {
-    const file = path.relative(root, path.join(dir, 'package.json'));
-    const manifest = jsonAtRef(root, ref, file);
+  for (const file of files) {
+    const manifest = parseJson(contents.get(file));
     if (!manifest || !fixed.has(manifest.name)) continue;
     if (!isStableReleasePackage(manifest)) continue;
     if (!versions.has(manifest.version)) versions.set(manifest.version, []);
@@ -1142,13 +1213,7 @@ async function main() {
       errors.push(
         'release merge-back requires exactly the marked active branch',
       );
-    const raw = git(root, [
-      'diff',
-      '--name-status',
-      '--find-renames',
-      base,
-      'HEAD',
-    ]);
+    const entries = mergeBackEntries(root, base);
     const releaseDiff = git(root, [
       'diff',
       '--name-status',
@@ -1198,7 +1263,7 @@ async function main() {
     const baseConfig = jsonAtRef(root, base, '.changeset/config.json');
     errors.push(
       ...validateReleaseMergeBack({
-        entries: raw ? raw.split('\n') : [],
+        entries,
         plan,
         baseChangesets: changesetMapAtRef(root, base),
         headChangesets: new Map(
@@ -1288,10 +1353,12 @@ export {
   compareVersions,
   computePlanDigest,
   declaredVersionAtRef,
+  filesAtRef,
   nextPlannedVersion,
   isStableReleasePackage,
   latestStableVersion,
   listActiveBranches,
+  mergeBackEntries,
   validateIdentity,
   validateRefMarker,
   validateReleaseDiff,

@@ -128,6 +128,20 @@ export const docs = {
       description: 'Description text displayed below the label.',
     },
     {
+      name: 'isOptional',
+      type: 'boolean',
+      description:
+        'Whether the group is optional. Shows the optional indicator after the group label, unless a surrounding FormLayout already makes fields optional by default.',
+      default: 'false',
+    },
+    {
+      name: 'isRequired',
+      type: 'boolean',
+      description:
+        'Whether the group needs at least one checked box. Shows the required indicator after the group label by the same rules as every input field. While no box is checked, the browser blocks submit and moves focus to the first box that is neither disabled nor read-only, with its own message. A disabled or read-only group requires nothing. Show your own error text through status. Mutually exclusive with isOptional.',
+      default: 'false',
+    },
+    {
       name: 'density',
       type: "'compact' | 'balanced' | 'spacious'",
       description: 'Spacing density for list items.',

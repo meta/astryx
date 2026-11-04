@@ -9,7 +9,7 @@
  * @position Why a fine-pointer case may trust `newFinePointerPage`.
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {
   assertCoarsePointer,
   assertFinePointer,

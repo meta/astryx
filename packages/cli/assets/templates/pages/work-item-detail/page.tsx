@@ -463,6 +463,7 @@ function PageHeader({
                 onRemove={onRemove}
               />
             )}
+            presentation="popover"
           />
         </HStack>
       </VStack>
