@@ -434,11 +434,15 @@ subscriber cancels it: the host cancels `touchend` and `contextmenu` there
 while a claiming participant is attached, never a `touchstart` or a
 `touchmove`, and the click guard (`../utils/clickGuard.ts`) keeps a
 cancelling `click` while it is armed, and from the menu press model's first
-arm on. A blocking `touchmove` sits on a claiming
+arm on. A layer's input hold (`../Layer/inputHold.ts`) cancels pointer and
+mouse events, clicks, `touchmove` and `touchend` there while a layer is held,
+never a `touchstart`. A blocking `touchmove` sits on a claiming
 element and on a claimed touch's target, on the document while an element a
 claiming recognizer lives in is moving (Touches on moving elements), or on
-the window only while a page hold is held, so a page of pressables blocks
-no scroll.
+the window only while a page hold or a layer's input hold is held, so a page
+of pressables blocks no scroll. The stream records the type of the latest
+pointer event it delivers (`getLastPointerType`); the input hold reads it as
+a layer opens.
 
 ### Holding the page still
 
