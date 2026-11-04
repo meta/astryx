@@ -60,6 +60,8 @@ import {
 import english from '../../../i18n/generated-english/Table/plugins/selection/useTableSelection.generated';
 
 registerEnglishFallback(english);
+import {registerFixedHeightColumn} from '../../tableColumnAdmission';
+import {registerCountIndependentPlugin} from '../../tableRowContextUsage';
 
 // =============================================================================
 // Config Type
@@ -393,8 +395,9 @@ export function useTableSelection<T extends Record<string, unknown>>(
     [],
   );
 
-  return useMemo(
+  const plugin = useMemo(
     (): TablePlugin<T> => ({
+      rowModel: 'flat',
       transformTableContext(children: ReactNode) {
         return (
           <SelectionStoreContext value={store}>
@@ -404,6 +407,7 @@ export function useTableSelection<T extends Record<string, unknown>>(
       },
 
       transformColumns(columns: TableColumn<T>[]) {
+        registerFixedHeightColumn(selectionColumn);
         return [selectionColumn, ...columns];
       },
 
@@ -446,4 +450,5 @@ export function useTableSelection<T extends Record<string, unknown>>(
     }),
     [store, selectionColumn],
   );
+  return registerCountIndependentPlugin(plugin);
 }
