@@ -25,6 +25,11 @@
  * Cross-browser specs use `.a11y.browser.spec.ts`; Chromium-only contracts keep
  * `.a11y.chromium.spec.ts`. The WebKit project runs only the former.
  *
+ * Specs import `test` from `@astryxdesign/a11y-spec/playwright`, the base test
+ * this config and playwright.interaction.config.ts share. Its browser contexts
+ * answer remote images locally and block other remote requests, so a slow
+ * remote host cannot stall a spec. A lint rule enforces the import.
+ *
  * Pull requests run a scoped selection of the same files with
  * `pnpm test:a11y-contract:pr`; each spec's `@pr-a11y` header lines decide when
  * (`.github/scripts/a11y-pr-contracts.mjs`). A new spec needs no workflow edit.
