@@ -26,9 +26,9 @@ beforeAll(() => {
     };
 });
 
-function Drawer() {
+function Drawer({isOpen = true}: {isOpen?: boolean}) {
   return (
-    <MobileNav isOpen onOpenChange={() => {}} header="Menu">
+    <MobileNav isOpen={isOpen} onOpenChange={() => {}} header="Menu">
       <a href="#home">Home</a>
       <a href="#settings">Settings</a>
     </MobileNav>
@@ -66,23 +66,16 @@ describe('MobileNav focus region', () => {
     expect(last).toHaveFocus();
   });
 
-  it('leaves Tab alone once the drawer is closed', () => {
-    const {rerender} = render(
-      <>
-        <button type="button">Page</button>
-        <Drawer />
-      </>,
-    );
-    rerender(
-      <>
-        <button type="button">Page</button>
-        <MobileNav isOpen={false} onOpenChange={() => {}} header="Menu">
-          <a href="#home">Home</a>
-        </MobileNav>
-      </>,
-    );
-    const page = screen.getByRole('button', {name: 'Page', hidden: true});
-    page.focus();
-    expect(fireEvent.keyDown(page, {key: 'Tab'})).toBe(true);
+  it('stops containing Tab as soon as the drawer starts to close', () => {
+    const {rerender} = render(<Drawer />);
+    rerender(<Drawer isOpen={false} />);
+    // The dialog stays open through its slide-out; Tab from its last link is
+    // no longer wrapped.
+    const drawer = document.querySelector('dialog[open]') as HTMLElement;
+    expect(drawer).not.toBeNull();
+    const tabbables = getFocusableElements(drawer);
+    const last = tabbables[tabbables.length - 1];
+    last.focus();
+    expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(true);
   });
 });
