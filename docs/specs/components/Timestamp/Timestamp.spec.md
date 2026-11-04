@@ -40,15 +40,15 @@ system_specs: [spec:AST-009, spec:AST-085]
 
 ## Contract at a glance
 
-| Area                    | Contract                                                                                                                                                                                                                                          |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Public contract         | A `time` element for a `value` (Unix seconds, milliseconds, or ISO 8601) in one of twelve `format`s, with optional live updates, time-zone suffix, and a copyable hover card.                                                                     |
-| Behavior                | Relative output carries the full absolute date as its default accessible name; relative output, or configured `tooltipEntries`, attach a keyboard-reachable hover card of copyable rows.                                                          |
-| End-user impact         | Readers see compact or exact times in their locale; screen-reader users hear the full date and time zone; keyboard users can open and copy the exact time.                                                                                        |
-| Builder impact          | A theme may map the copy glyph through the `timestamp-copy` icon slot (FR10); otherwise none.                                                                                                                                                     |
-| Compatibility/readiness | Released behavior recorded as current; no API, default, or output changes. Three implementation gaps are listed under Current-state impact. FR10 (the copy icon slot, additive) is current and shipped; with no theme entry, output is unchanged. |
-| Review checks           | Reject a relative timestamp without the full absolute name when the caller names nothing, a hover card without a tab stop, a change that makes more server markup depend on the server's zone, or a crash on an unparseable value.                |
-| Governing rules         | `architecture:internationalization/INV4,INV8,INV10`; `architecture:react-component-runtime/INV1,INV3,INV5`; `architecture:public-component-api/INV5,INV6,INV8`; `architecture:icon-resolution-and-component-slots/INV2,INV4–INV8`.                |
+| Area                    | Contract                                                                                                                                                                                                                           |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public contract         | A `time` element for a `value` (Unix seconds, milliseconds, or ISO 8601) in one of twelve `format`s, with optional live updates, time-zone suffix, and a copyable hover card.                                                      |
+| Behavior                | Relative output carries the full absolute date as its default accessible name; relative output, or configured `tooltipEntries`, attach a keyboard-reachable hover card of copyable rows.                                           |
+| End-user impact         | Readers see compact or exact times in their locale; screen-reader users hear the full date and time zone; keyboard users can open and copy the exact time.                                                                         |
+| Builder impact          | A theme may map the copy glyph through the `timestamp-copy` icon slot (FR10); otherwise none.                                                                                                                                      |
+| Compatibility/readiness | Released behavior recorded as current; no prop, default, or output changes. FR10 adds the opt-in `timestamp-copy` theme slot, current and shipped. Three implementation gaps are listed under Current-state impact.                |
+| Review checks           | Reject a relative timestamp without the full absolute name when the caller names nothing, a hover card without a tab stop, a change that makes more server markup depend on the server's zone, or a crash on an unparseable value. |
+| Governing rules         | `architecture:internationalization/INV4,INV8,INV10`; `architecture:react-component-runtime/INV1,INV3,INV5`; `architecture:public-component-api/INV5,INV6,INV8`; `architecture:icon-resolution-and-component-slots/INV2,INV4–INV8`. |
 
 This table is a review projection; the body below is authoritative.
 
