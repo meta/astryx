@@ -125,6 +125,9 @@ No new performance or resource constraint is introduced.
   a range-span constraint is disabled and stays focusable (`spec:AST-085`); theme
   state reflection does not replace that behavior.
 
+Implementation gap: in dark mode the applied preset's label on its muted accent
+fill measures 3.88:1 on the popover surface, under 4.5:1.
+
 ## Design relationships
 
 | Anatomy or state | Design requirement                                              | Representation authority              | Hierarchy role | Component contract |
