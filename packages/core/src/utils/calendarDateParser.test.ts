@@ -143,7 +143,7 @@ describe('reading dates written in the calendar (FR9)', () => {
     expect(iso('he', 'hebrew', "1 אדר א' 5784")).toBe('2024-02-10');
   });
 
-  it('reads Chinese and Korean month numbers with the leap marker', () => {
+  it('reads month numbers of the Chinese and Dangi calendars with the leap marker', () => {
     expect(iso('zh-CN', 'chinese', '2025年闰六月1')).toBe('2025-07-25');
     expect(iso('zh-CN', 'chinese', '2025年六月1')).toBe('2025-06-25');
     expect(iso('zh-CN', 'chinese', '2025/6/1')).toBe('2025-06-25');
@@ -194,7 +194,7 @@ describe('years of the calendar (FR10)', () => {
     expect(iso('en-US', 'japanese', 'May 1, 31 Heisei')).toBe('nonexistent');
   });
 
-  it('reads ROC years of up to three digits in the 民國 era', () => {
+  it('reads Minguo calendar years of up to three digits in the 民國 era', () => {
     expect(iso('zh-TW', 'roc', '115/11/2')).toBe('2026-11-02');
     expect(iso('zh-TW', 'roc', '民國115/11/2')).toBe('2026-11-02');
     expect(iso('zh-TW', 'roc', '民國前12年1月1日')).toBe('1900-01-01');
@@ -344,7 +344,7 @@ describe('without Temporal', () => {
     host.Temporal = saved;
   });
 
-  it('reads Buddhist, ROC, and Japanese dates', () => {
+  it('reads Buddhist, Minguo, and Japanese dates', () => {
     expect(iso('th', 'buddhist', '2/11/2569')).toBe('2026-11-02');
     expect(iso('zh-Hant', 'roc', '民國115/11/2')).toBe('2026-11-02');
     expect(iso('ja', 'japanese', '令和8年11月2日')).toBe('2026-11-02');

@@ -1228,9 +1228,9 @@ function displayOptions(
 }
 
 /**
- * Chinese and Korean text from Temporal's day and Intl's names. Intl and a
- * polyfilled Temporal can start a month one day apart, so the month's name
- * comes from its middle day and the day number from Temporal.
+ * Text in the Chinese and Dangi calendars from Temporal's day and Intl's
+ * names. Intl and a polyfilled Temporal can start a month one day apart, so the
+ * month's name comes from its middle day and the day number from Temporal.
  */
 function formatLunisolar(
   pd: PlainDate,

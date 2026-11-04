@@ -63,8 +63,8 @@ const MORE_LOCALES: Partial<Record<CalendarSystem, string>> = {
   'islamic-civil': 'fr-FR hu-HU sr-RS',
 };
 
-// Chinese and Korean text costs far more to compose under the polyfill, so
-// those calendars sample fewer days. Each locale starts on another weekday.
+// Text in the lunisolar calendars costs far more to compose under the
+// polyfill, so those calendars sample fewer days. Each locale starts on another weekday.
 const FIRST = {year: 1900, month: 1, day: 1};
 const DAYS = plainDateDiffDays(FIRST, {year: 2100, month: 12, day: 31});
 const TODAY = {year: 2026, month: 11, day: 2};
