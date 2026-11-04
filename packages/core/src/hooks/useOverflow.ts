@@ -93,11 +93,9 @@ const pendingMeasures = new Set<() => void>();
 /**
  * Measures again for a resize the observer reported.
  *
- * The observer reports after layout and before paint. A state update made
- * there renders in a later task, after the frame paints, so one frame shows
- * the old visible set at the new width. A microtask still runs before paint:
- * it measures every list that this delivery reported, then applies all the
- * results in one synchronous render.
+ * The observer reports after layout and before paint. A state update here
+ * renders in a later task, after the frame paints. A microtask still runs
+ * before paint. It measures every reported list and renders the results once.
  */
 function measureBeforePaint(measure: () => void): void {
   if (pendingMeasures.size === 0) {
@@ -116,9 +114,8 @@ function measureBeforePaint(measure: () => void): void {
 }
 
 /**
- * Observes `element` and measures again on each reported resize. The
- * registration measurement runs at once: it happens while React commits the
- * ref, which is before paint already.
+ * The registration call runs while React commits the ref, before paint, so it
+ * measures at once.
  */
 function observeForOverflow(element: Element, measure: () => void): () => void {
   let isRegistering = true;
