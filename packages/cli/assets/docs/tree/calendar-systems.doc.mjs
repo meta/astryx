@@ -27,7 +27,7 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: '`Calendar` shows the Gregorian calendar unless you choose another one. Pass `calendar` to `<InternationalizationProvider>` to set it for a subtree. A locale with an explicit `-u-ca-` keyword, such as `th-TH-u-ca-buddhist`, selects its calendar too. A locale on its own never changes the calendar: `fa-IR` shows Gregorian dates in Persian until you pass `calendar="persian"`.',
+          text: '`Calendar` shows the Gregorian calendar unless you choose another one. Pass `calendar` to `<InternationalizationProvider>` to set it for a subtree. A locale on its own never changes the calendar: `fa-IR` shows Gregorian dates in Persian until you pass `calendar="persian"`. A locale with a `-u-ca-` keyword, such as `th-TH-u-ca-buddhist`, keeps Gregorian dates too; set `calendar` to choose one.',
         },
         {
           type: 'code',
@@ -77,7 +77,7 @@ import {Calendar} from '@astryxdesign/core/Calendar';
         },
         {
           type: 'prose',
-          text: 'A `-u-ca-islamic` keyword resolves to `islamic-tbla`. Any other identifier shows Gregorian dates and warns once in development.',
+          text: 'Any other identifier, such as `islamic`, shows Gregorian dates and warns once in development.',
         },
       ],
     },
