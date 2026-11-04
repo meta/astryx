@@ -44,6 +44,7 @@ import type {StyleXStyles} from '@stylexjs/stylex';
 import {colorVars, durationVars, easeVars} from '../theme/tokens.stylex';
 import type {Elevation, SizeValue, SpacingStep} from '../utils/types';
 import {isImeKeyEvent, mergeProps} from '../utils';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {Card} from '../Card/Card';
 import type {CardVariant} from '../Card/Card';
 import {useClickableContainer} from '../hooks/useClickableContainer';
@@ -398,6 +399,7 @@ export function SelectableCard({
   onChange,
   onClick: onClickProp,
   onMouseUp: onMouseUpProp,
+  onPointerDown: onPointerDownProp,
   isDisabled = false,
   children,
   padding,
@@ -458,7 +460,7 @@ export function SelectableCard({
     [isDisabled, requestChange],
   );
 
-  const {onClick, onMouseUp} = useClickableContainer({
+  const {onClick, onMouseUp, onPointerDown} = useClickableContainer({
     containerRef,
     interactiveRef,
     onClick: handleClick,
@@ -530,6 +532,11 @@ export function SelectableCard({
       }
       onClick={!isDisabled ? composedOnClick : undefined}
       onMouseUp={!isDisabled ? composedOnMouseUp : undefined}
+      onPointerDown={
+        !isDisabled
+          ? chainEventHandlers(onPointerDown, onPointerDownProp)
+          : onPointerDownProp
+      }
       {...props}
       onClickCapture={
         !isDisabled && handleLayerClickCapture

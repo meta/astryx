@@ -4,7 +4,8 @@
 
 /**
  * @file Item.tsx
- * @input Uses React, ReactNode, StyleXStyles, theme tokens, useClickableContainer
+ * @input Uses React, ReactNode, StyleXStyles, theme tokens, useClickableContainer,
+ *   the shared press overlays and the compositor press layer
  * @output Exports Item component, ItemProps type; publishes the shared inline inset.
  *   Only numbered composing rows keep their start/label/end slots in one flex
  *   group, through Item's private exact-marker scope; other marked rows keep
@@ -50,6 +51,7 @@ import {
 import type {BaseProps} from '../BaseProps';
 import {isRenderable} from '../utils/isRenderable';
 import {mergeProps} from '../utils/mergeProps';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import {ItemDescriptionContext} from './ItemDescriptionContext';
 import {ItemMarkerColumnsContext} from './ItemMarkerColumnsContext';
@@ -61,6 +63,7 @@ import {useDevWarning} from '../hooks/useDevWarning';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import type {ItemSwipeBridge} from './ItemSwipeLayer';
 
@@ -532,7 +535,6 @@ const styles = stylex.create({
   // zoomable (WCAG 1.4.4). The hover transition keeps its own clock beside
   // the transform's.
   swipeRoot: {
-    isolation: 'isolate',
     touchAction: 'pan-y pinch-zoom',
     transform: `translate3d(${SWIPE_TRAVEL}, 0, 0)`,
     transitionProperty: 'background-color, transform',
@@ -627,11 +629,12 @@ export function Item({
   const containerRef = useRef<HTMLElement | null>(null);
   // Only onClick is needed: onMouseUp handles middle-click href navigation,
   // which delegation mode never has (href is ignored here).
-  const {onClick: delegatedOnClick} = useClickableContainer({
-    containerRef,
-    interactiveRef: interactiveRef ?? undefined,
-    disabled: isDisabled,
-  });
+  const {onClick: delegatedOnClick, onPointerDown: delegatedOnPointerDown} =
+    useClickableContainer({
+      containerRef,
+      interactiveRef: interactiveRef ?? undefined,
+      disabled: isDisabled,
+    });
 
   useDevWarning(
     'Item',
@@ -896,6 +899,14 @@ export function Item({
       {...restProps}
       {...swipeHandlers}
       {...linkRootProps}
+      {...(isDelegate
+        ? {
+            onPointerDown: chainEventHandlers(
+              restProps.onPointerDown,
+              delegatedOnPointerDown,
+            ),
+          }
+        : null)}
       aria-selected={(allowsAriaSelected && isSelected) || undefined}
       // aria-selected is invalid on roles that don't permit it (listitem, a
       // bare div, etc.). For those, convey selection via aria-current — valid
@@ -916,6 +927,10 @@ export function Item({
           align === 'first-line' && styles.alignFirstLine,
           isInteractive && styles.interactive,
           isInteractive && interactionOverlayStyles.backgroundColor,
+          // The touch press on a compositor layer (after the overlay, whose
+          // own touch paint it turns off): the release keeps fading while
+          // script runs.
+          isInteractive && rowPressLayerStyles.cell,
           isLinkRoot && styles.linkRoot,
           isHighlighted && styles.highlighted,
           isSelected && styles.selected,

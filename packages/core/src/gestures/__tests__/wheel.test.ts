@@ -1757,6 +1757,37 @@ describe("a trackpad scroll through the splitter's undecided stretch (spec:AST-0
     },
   );
 
+  it("follows a swipe that resumes 100 ms after a flick's glide for all of its travel: six 30 px wheels", () => {
+    const {box, seen} = followed();
+    // The lift is read at the 8 px wheel, and the glide goes on at 7 px.
+    let time = stream(box, [12, 12, 12, 12, 11, 10, 9, 8, 7]);
+    // The fingers come back 100 ms after the glide's last wheel.
+    time += 100 - 16;
+    for (let i = 0; i < 6; i++) {
+      wheel(box, {trackpad: true, dx: 30, time});
+      time += 16;
+    }
+    clock.runDue(time + 500);
+    expect(seen.filter(entry => entry.state === 'began')).toHaveLength(2);
+    const ended = seen.filter(entry => entry.state === 'ended');
+    // All 180 px of the swipe, past the 10 px hysteresis.
+    expect(ended[ended.length - 1].x).toBeCloseTo(-170, 6);
+  });
+
+  it("follows a swipe that resumes after a flick's glide for all of its travel when its first two wheels arrive merged", () => {
+    const {box, seen} = followed();
+    let time = stream(box, [12, 12, 12, 12, 11, 10, 9, 8, 7]);
+    time += 100 - 16;
+    const times = [0, 0.5, 16, 32, 48, 64].map(offset => time + offset);
+    for (const at of times) {
+      wheel(box, {trackpad: true, dx: 30, time: at});
+    }
+    clock.runDue(times[times.length - 1] + 500);
+    expect(seen.filter(entry => entry.state === 'began')).toHaveLength(2);
+    const ended = seen.filter(entry => entry.state === 'ended');
+    expect(ended[ended.length - 1].x).toBeCloseTo(-170, 6);
+  });
+
   it("never moves or releases faster than the fingers when a stall's bunch of shrinking wheels arrives 1 ms apart", () => {
     const {box, seen} = followed();
     // 12 px every 16 ms. A step comes 60 ms late, then 11, 10 and 9 px wheels

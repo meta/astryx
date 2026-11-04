@@ -31,7 +31,7 @@ architecture:
     architecture:react-component-runtime,
   ]
 contributing: []
-system_specs: [spec:AST-013, spec:AST-020, spec:AST-021]
+system_specs: [spec:AST-013, spec:AST-020, spec:AST-021, spec:AST-094/FR35]
 ---
 
 # Dialog component contract
