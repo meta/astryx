@@ -25,8 +25,9 @@
 #   waits while a
 #   `main` full check or release re-check is waiting, so `main` fits first;
 #   pull-request runs never wait for each other.
-# - It waits at most `max-wait-minutes` (fifteen for `main`, twelve for a pull
-#   request, inside its fifteen-minute job budget), looking at even intervals
+# - It waits at most `max-wait-minutes` (120 for `main`, on a standard runner,
+#   since a slim job stops at fifteen minutes; twelve for a pull request,
+#   inside its fifteen-minute job budget), looking at even intervals
 #   plus a random 0-20 s so runs that look together spread out, and then
 #   starts (a pull request: see above).
 # - Each CI or Main run counts its live jobs, read once per look. A
@@ -39,7 +40,7 @@
 #   stale record GitHub still lists as active, and counts nothing.
 # - A look costs two run listings plus one call per active CI or Main run, and
 #   a run looks at most `max-looks` times: twice for a pull request (at once and
-#   after its longest wait), every two minutes for the rare `main` run. A
+#   after its longest wait), about every four minutes for the rare `main` run. A
 #   pull-request run that would fit but yields to a waiting `main` check looks
 #   again every two minutes while it does, and a run within ten jobs of room
 #   every four, both outside that count and inside the run's longest wait. When the

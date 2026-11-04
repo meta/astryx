@@ -46,11 +46,15 @@ describe('where runs wait', () => {
   const admission = ci.jobs.admission;
   const wait = stepOf(admission);
 
-  it('waits in two slim jobs: room for the Storybook build, then the rest of the run', () => {
+  it('waits in two jobs: room for the Storybook build, then the rest of the run', () => {
     const room = ci.jobs.room;
     expect(Object.keys(ci.jobs).slice(0, 2)).toEqual(['room', 'admission']);
     for (const job of [room, admission]) {
-      expect(job['runs-on']).toBe('ubuntu-slim');
+      // A pull request waits on a slim runner; a dispatch, whose wait can
+      // outlast a slim job's fifteen-minute cap, on a standard one.
+      expect(job['runs-on']).toBe(
+        "${{ github.event_name == 'workflow_dispatch' && 'ubuntu-latest' || 'ubuntu-slim' }}",
+      );
       expect(stepOf(job).uses).toBe(
         './.ci-admission/.github/actions/ci-admission',
       );
@@ -230,10 +234,13 @@ describe('where runs wait', () => {
     expect(
       limit(admission['timeout-minutes'], 'pull_request'),
     ).toBeLessThanOrEqual(15);
-    expect(limit(wait.with['max-wait-minutes'], 'workflow_dispatch')).toBe(15);
-    // A pull request looks twice; the rare main run every two minutes.
+    // A main or release check waits until room, up to two hours, inside its
+    // job's own limit; a pull request at most twelve minutes.
+    expect(limit(wait.with['max-wait-minutes'], 'workflow_dispatch')).toBe(120);
+    expect(limit(wait.with['max-wait-minutes'], 'pull_request')).toBe(12);
+    // A pull request looks twice; the rare main run about every four minutes.
     expect(limit(wait.with['max-looks'], 'pull_request')).toBe(2);
-    expect(limit(wait.with['max-looks'], 'workflow_dispatch')).toBe(8);
+    expect(limit(wait.with['max-looks'], 'workflow_dispatch')).toBe(30);
     expect(admission.steps.filter(step => step !== wait)).toEqual([
       expect.objectContaining({name: 'Stop when CI is full'}),
       expect.objectContaining({uses: 'actions/checkout@v7'}),
@@ -281,7 +288,13 @@ describe('where runs wait', () => {
     const step = stepOf(job);
     expect(step.uses).toBe('./.ci-admission/.github/actions/ci-admission');
     expect(step.with.main).toBe(true);
-    expect(step.with['max-wait-minutes']).toBeUndefined(); // fifteen
+    // It waits until room, up to two hours, on a standard runner: a slim job
+    // stops at fifteen minutes, which cancelled the whole run.
+    expect(step.with['max-wait-minutes']).toBe(120);
+    expect(step.with['max-looks']).toBe(30);
+    expect(job['runs-on']).toBe('ubuntu-latest');
+    expect(step['timeout-minutes']).toBeGreaterThan(120);
+    expect(job['timeout-minutes']).toBeGreaterThan(step['timeout-minutes']);
     expect(step['continue-on-error']).toBe(true);
     expect(job.permissions.actions).toBe('read');
     // Directly, or through the lanes it joins.
@@ -292,6 +305,61 @@ describe('where runs wait', () => {
     for (const id of Object.keys(main.jobs)) {
       if (id !== 'main-commit') expect(reaches(id), id).toBe(true);
     }
+  });
+});
+
+describe('slim runners', () => {
+  // GitHub stops a job on an `ubuntu-slim` runner at fifteen minutes, and the
+  // run is cancelled. So no job that can land on one may plan to run longer.
+  const SLIM_CAP_MINUTES = 15;
+  const EVENTS = ['pull_request', 'push', 'workflow_dispatch', 'merge_group'];
+  const pick = (value, event) => {
+    const split =
+      /^\$\{\{ github\.event_name == '([a-z_]+)' && '?([\w-]+)'? \|\| '?([\w-]+)'? \}\}$/.exec(
+        String(value),
+      );
+    if (!split) return String(value);
+    return event === split[1] ? split[2] : split[3];
+  };
+
+  it('no job that can run on a slim runner has a limit past its fifteen-minute cap', () => {
+    const files = fs
+      .readdirSync(path.join(root, '.github/workflows'))
+      .filter(file => file.endsWith('.yml'));
+    let slimJobs = 0;
+    for (const file of files) {
+      const workflow = read(`.github/workflows/${file}`);
+      for (const [id, job] of Object.entries(workflow.jobs ?? {})) {
+        for (const event of EVENTS) {
+          if (pick(job['runs-on'], event) !== 'ubuntu-slim') continue;
+          slimJobs += 1;
+          const timeout = job['timeout-minutes'];
+          if (timeout == null) continue;
+          expect(
+            Number(pick(timeout, event)),
+            `${file} ${id} on ${event}`,
+          ).toBeLessThanOrEqual(SLIM_CAP_MINUTES);
+          for (const step of job.steps ?? []) {
+            if (step.name !== STEP) continue;
+            expect(
+              Number(pick(step.with?.['max-wait-minutes'] ?? 15, event)),
+              `${file} ${id} wait on ${event}`,
+            ).toBeLessThan(SLIM_CAP_MINUTES);
+          }
+        }
+      }
+    }
+    expect(slimJobs).toBeGreaterThan(0);
+  });
+
+  it("picks each event's runner and limit from the workflow expressions", () => {
+    expect(pick(ci.jobs.room['runs-on'], 'workflow_dispatch')).toBe(
+      'ubuntu-latest',
+    );
+    expect(pick(ci.jobs.room['runs-on'], 'pull_request')).toBe('ubuntu-slim');
+    expect(Number(pick(ci.jobs.room['timeout-minutes'], 'pull_request'))).toBe(
+      15,
+    );
   });
 });
 
