@@ -229,6 +229,89 @@ describe('familyMember', () => {
   });
 });
 
+describe('a component name in another case is that component (spec:AST-083 FR7)', () => {
+  /**
+   * @param {string} core
+   * @returns {(rel: string, text: string) => void}
+   */
+  const writer = core => (rel, text) => {
+    const file = path.join(core, 'src', rel);
+    fs.mkdirSync(path.dirname(file), {recursive: true});
+    fs.writeFileSync(file, text);
+  };
+
+  it('never resolves through a module that only shares the spelling', () => {
+    const core = mkTmp('as-cd-case-');
+    const write = writer(core);
+    write('Button/Button.tsx', 'export function Button() {}\n');
+    write('Button/Button.doc.mjs', "export const docs = {name: 'Button'};\n");
+    write('Tokenizer/Tokenizer.tsx', 'export function Tokenizer() {}\n');
+    write(
+      'Tokenizer/Tokenizer.doc.mjs',
+      "export const docs = {name: 'Tokenizer'};\n",
+    );
+    // A motion table below a hook's doc.
+    write('motion/useAnimator.ts', 'export function useAnimator() {}\n');
+    write(
+      'motion/useAnimator.doc.mjs',
+      "export const docs = {name: 'useAnimator'};\n",
+    );
+    write('motion/uikit/button.ts', 'export const button = {};\n');
+    // A helper module in another component's folder.
+    write('CodeBlock/CodeBlock.tsx', 'export function CodeBlock() {}\n');
+    write(
+      'CodeBlock/CodeBlock.doc.mjs',
+      "export const docs = {name: 'CodeBlock'};\n",
+    );
+    write('CodeBlock/tokenizer.ts', 'export function tokenize() {}\n');
+    write('CodeBlock/grammar.ts', 'export const grammar = {};\n');
+    for (const name of ['button', 'tokenizer']) {
+      expect(findComponentReadme(core, name), name).toBeNull();
+      expect(findComponentSource(core, name), name).toBeNull();
+    }
+    // A module's own name keeps resolving through the nearest doc.
+    expect(findComponentReadme(core, 'grammar')).toBe(
+      path.join(core, 'src', 'CodeBlock', 'CodeBlock.doc.mjs'),
+    );
+    expect(findComponentSource(core, 'Button')).toBe(
+      path.join(core, 'src', 'Button', 'Button.tsx'),
+    );
+  });
+
+  it('protects a sub-component too: a module spelled like Tab in another case never resolves for it', () => {
+    const core = mkTmp('as-cd-sub-case-');
+    const write = writer(core);
+    write('TabList/TabList.tsx', 'export function TabList() {}\n');
+    write('TabList/Tab.tsx', 'export function Tab() {}\n');
+    write(
+      'TabList/TabList.doc.mjs',
+      "export const docs = {name: 'TabList'};\n",
+    );
+    write('motion/useAnimator.ts', 'export function useAnimator() {}\n');
+    write(
+      'motion/useAnimator.doc.mjs',
+      "export const docs = {name: 'useAnimator'};\n",
+    );
+    write('motion/uikit/tab.ts', 'export const tab = {};\n');
+    expect(findComponentSource(core, 'tab')).toBeNull();
+    expect(findComponentReadme(core, 'tab')).toBeNull();
+    expect(findComponentSource(core, 'Tab')).toBe(
+      path.join(core, 'src', 'TabList', 'Tab.tsx'),
+    );
+  });
+
+  it('takes a folder in another case for a component only when a file there exports its name', () => {
+    const core = mkTmp('as-cd-folder-case-');
+    const write = writer(core);
+    write('animator/animator.ts', 'export function createAnimator() {}\n');
+    write('hooks/Animator.ts', 'export function Animator() {}\n');
+    write('hooks/hooks.doc.mjs', "export const docs = {name: 'hooks'};\n");
+    expect(findComponentSource(core, 'Animator')).toBe(
+      path.join(core, 'src', 'hooks', 'Animator.ts'),
+    );
+  });
+});
+
 describe('findComponentReadme / findComponentSource / resolveImportPath', () => {
   it('finds the doc + source for a top-level component', () => {
     expect(findComponentReadme(CORE, 'Button')).toMatch(/Button\.doc\.mjs$/);

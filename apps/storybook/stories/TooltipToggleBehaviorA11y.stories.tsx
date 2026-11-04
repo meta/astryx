@@ -8,8 +8,8 @@
  *   an InfoTip.
  * @position The reproduction path for the press-to-pin cases in
  *   `packages/core/src/Layer/__tests__/TouchTrigger.a11y.chromium.spec.ts`
- *   (`component:Tooltip` FR9, FR10; InfoTip is Tooltip's press-to-pin
- *   trigger). Per `docs/specs/AST-009/spec.md` FR30, a browser claim is
+ *   (`component:InfoTip` FR2; InfoTip pins through `useTooltip`'s `show()`
+ *   and `hide()`). Per `docs/specs/AST-009/spec.md` FR30, a browser claim is
  *   checked against a checked-in story.
  *
  * SYNC: The spec navigates to these story ids by name. Nothing at compile

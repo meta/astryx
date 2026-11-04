@@ -257,7 +257,7 @@ describe('InfoTip', () => {
     expect(trigger.style.marginBlockStart).toBe('4px');
   });
 
-  describe('a press pins the help (FR2, Tooltip FR9 and FR10)', () => {
+  describe('a press pins the help (FR2)', () => {
     it('reports the pin on the button: aria-expanded and aria-controls', async () => {
       render(<InfoTip content="Helpful context" />);
       const trigger = screen.getByRole('button', {name: 'More information'});
@@ -330,9 +330,8 @@ describe('InfoTip', () => {
       const trigger = screen.getByRole('button');
       const layer = screen.getByRole('tooltip', {hidden: true});
 
-      // Revealing the help is the button's whole purpose, so a tap pins it
-      // (Tooltip's press-to-pin path). Without that its content is unreachable on
-      // a phone.
+      // Revealing the help is the button's whole purpose, so a tap pins it.
+      // Without that its content is unreachable on a phone.
       tap(trigger);
 
       await waitFor(() => {

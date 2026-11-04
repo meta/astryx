@@ -29,6 +29,9 @@ import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
  * Semantics only: this drives `aria-required`, never the native `required`
  * attribute, so a layout-level default can't silently switch on browser
  * validation bubbles. `isOptional` takes precedence, matching `FieldLabel`.
+ *
+ * CheckboxInput and Switch do not use this hook: an unchecked box or an off
+ * switch is an answer, so a form default gives them no required state.
  */
 export function useResolvedRequired({
   isRequired = false,
