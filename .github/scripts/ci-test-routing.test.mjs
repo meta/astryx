@@ -155,16 +155,31 @@ describe.each(Object.entries(WORKFLOWS))(
       const suites = job.steps.filter(
         step =>
           !specReaderRun(step) &&
-          expandScripts(step.run ?? '').includes('--project ui'),
+          /--project (ui|perf)\b/.test(expandScripts(step.run ?? '')),
       );
-      // The two package scripts every lane calls: the parallel suite without
-      // FR23, and FR23 alone with no file parallelism.
-      expect(rootScripts['test:ui']).toBe(
-        `vitest run --project ui --exclude ${benchmark}`,
-      );
+      // The two package scripts every lane calls: the parallel UI project, and
+      // the `perf` project with no file parallelism.
+      expect(rootScripts['test:ui']).toBe('vitest run --project ui');
       expect(rootScripts['test:ui:isolated']).toBe(
-        `vitest run --project ui ${benchmark} --no-file-parallelism`,
+        'vitest run --project perf --no-file-parallelism',
       );
+      // The benchmark is the `perf` project's only file, and `ui` excludes it.
+      // No other project sets a group, so `perf` starts after all of them.
+      const config = read('vitest.config.ts');
+      const projectBlock = name => {
+        const start = config.indexOf(`name: '${name}',`);
+        return config.slice(start, config.indexOf("name: '", start + 1));
+      };
+      const named = /const helperOverheadBenchmark =\s*'([^']+)';/.exec(config);
+      expect(named?.[1]).toBe(benchmark);
+      expect(projectBlock('ui')).toContain(
+        'exclude: [...configDefaults.exclude, helperOverheadBenchmark]',
+      );
+      expect(projectBlock('perf')).toContain(
+        'include: [helperOverheadBenchmark]',
+      );
+      expect(projectBlock('perf')).toContain('sequence: {groupOrder: 1}');
+      expect(config.match(/groupOrder/g)).toHaveLength(1);
       expect(job['continue-on-error']).not.toBe(true);
       for (const suite of suites) {
         expect(suite['continue-on-error']).not.toBe(true);
@@ -279,14 +294,12 @@ describe.each(Object.entries(WORKFLOWS))(
               !specReaderRun(step) &&
               /--project \w+/.test(expandScripts(step.run ?? '')),
           );
-          // The one step that is not sharded is the isolated FR23 benchmark.
+          // The one step that is not sharded is the `perf` project's benchmark.
           const unsharded = suites.filter(
             step => !step.run.includes(SHARD_ARG),
           );
           for (const step of unsharded) {
-            expect(expandScripts(step.run)).toContain(
-              'Markdown.fr23.perf.test.ts',
-            );
+            expect(expandScripts(step.run)).toContain('--project perf');
           }
           expect(suites.length - unsharded.length).toBe(1);
         }
