@@ -64,6 +64,7 @@ import {
   freezePageOn,
   freezePageWhen,
   freezeTimers,
+  HARNESS_READ,
   holdAnimations,
   installInputLog,
   type InputRecord,
@@ -2839,17 +2840,38 @@ test.describe('animation state', () => {
   }) => {
     await fixture(page);
     const box = page.locator('#box');
-    await box.evaluate(el => {
-      el.style.transition = 'transform 300ms linear 200ms';
+    await box.evaluate((el, read) => {
+      // The transition's time at each of the wait's own reads (it marks
+      // them), so the check reads what the wait judged, not a later frame.
+      const w = window as unknown as {__reads: (number | null)[]};
+      w.__reads = [];
+      const timeStamp = console.timeStamp.bind(console);
+      console.timeStamp = (label?: string) => {
+        if (label === read) {
+          const run = el.getAnimations()[0];
+          w.__reads.push(run == null ? null : Number(run.currentTime));
+        }
+        timeStamp(label);
+      };
+      // It runs for the whole test, so the wait finds it running however
+      // late it first looks: the claim is about its 200 ms delay.
+      el.style.transition = 'transform 60s linear 200ms';
       void (el as HTMLElement).offsetWidth;
       el.style.transform = 'translateY(100px)';
-    });
-    await waitForAnimation(box, {minProgressMs: 50});
-    // 50 ms along the curve: past the 200 ms delay, not inside it.
-    const currentTime = await box.evaluate(el =>
-      Number(el.getAnimations()[0]?.currentTime),
+    }, HARNESS_READ);
+    const [found] = await waitForAnimation(box, {minProgressMs: 50});
+    expect(found.finishedAt).toBeNull();
+    // 50 ms along the curve at the read the wait answered on: past the
+    // 200 ms delay, not inside it.
+    const reads = await page.evaluate(
+      () => (window as unknown as {__reads: (number | null)[]}).__reads,
     );
-    expect(currentTime).toBeGreaterThanOrEqual(250);
+    expect(reads.at(-1)).toBeGreaterThanOrEqual(250);
+    await box.evaluate(el => {
+      for (const run of el.getAnimations()) {
+        run.finish();
+      }
+    });
     await waitForRest(box);
   });
 
