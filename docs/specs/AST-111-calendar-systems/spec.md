@@ -69,8 +69,13 @@ server code stay calendar-neutral.
 - Calendar identifiers outside FR1, including the observational Islamic
   calendars.
 - Japanese era names before Meiji (1868).
-- Traditional numerals as typed input: Hebrew letter numerals, Chinese day
-  numerals, and sexagenary year names.
+- Guaranteed behavior for dates before 1900. Such dates display and navigate as
+  `Temporal` computes them, on a best-effort basis; typed entry, read-back, and
+  era display are specified and tested only from 1900 through 2100. Better
+  support, particularly for typed input, waits for evidence that applications
+  need it.
+- Traditional numerals as typed input: Hebrew letter numerals, the day numerals
+  of the Chinese calendar, and sexagenary year names.
 - Typed range entry in `DateRangeInput`.
 - Week numbering other than ISO 8601.
 - Equivalent internal implementations remain valid when they satisfy this
@@ -190,15 +195,20 @@ These requirements apply to the text fields of `DateInput` and
   `parseDateInput` reads it.
 - **FR10 — Years are years of the calendar.** A typed year is a year of the
   active calendar, never a converted Gregorian year: `2026` in a Buddhist field
-  is Buddhist year 2026. The format hint and the committed text show the era,
-  such as `พ.ศ.` (B.E., the Buddhist Era) or `民國` (Minguo, the Minguo calendar's
-  era). Without a typed era, a one- or two-digit Japanese year is in the current
-  era and a four-digit Japanese year is Gregorian, a Minguo year of up to three
-  digits is in the 民國 (Minguo) era, and an Ethiopic year is in the AM era. A
-  two-digit year resolves to the year within the 80 years before and 19 years
-  after the current year of the calendar. A Japanese era year outside its era is
-  rejected. No default year range applies; `min` and `max` catch a year typed in
-  the wrong calendar.
+  is Buddhist year 2026. The format hint and the committed text show the era
+  when the locale's format includes it, such as `พ.ศ.` (B.E., the Buddhist Era)
+  or `民國` (Minguo, the Minguo calendar's era), and add it when the year alone is
+  ambiguous, following the ICU4X year-ambiguity model: a year before the
+  calendar's epoch era always shows its era, and in the `japanese` and `roc`
+  calendars, whose era changes within 1900 through 2100, a format that omits the
+  era gains it, written narrow when that keeps the locale's field order. Without
+  a typed era, a one- or two-digit Japanese year is in the current era and a
+  four-digit Japanese year is Gregorian, a Minguo year of up to three digits is
+  in the 民國 (Minguo) era, and an Ethiopic year is in the AM era. A two-digit
+  year resolves to the year within the 80 years before and 19 years after the
+  current year of the calendar. A Japanese era year outside its era is rejected.
+  No default year range applies; `min` and `max` catch a year typed in the wrong
+  calendar.
 - **FR11 — Dates that the calendar does not have are rejected.** The field
   rejects and announces a date that does not exist in the calendar, such as 30
   Esfand in a common Persian year, Adar I in a common Hebrew year, or day 6 of
@@ -260,14 +270,14 @@ These requirements apply to the text fields of `DateInput` and
   starts come from the runtime's `Temporal`. Native `Temporal` agrees with
   official observatory data from 1900 through 2100. A polyfill that reads the
   platform's `Intl` data can start nine `chinese` and four `dangi` months in
-  that range one day apart, Lunar New Year 2027 among them. When a server and a
-  browser use implementations that disagree on a month start, the browser's
-  render of that month differs from the server markup, and React renders that
-  part again on the client during hydration. The internationalization guide and
-  the date component documentation state this. They advise loading a polyfill
-  only where `Temporal` is missing, and loading the same implementation on the
-  server and in the browser when a server-rendered application needs identical
-  `chinese` or `dangi` markup.
+  that range one day apart, the first month of the 2027 `chinese` year among
+  them. When a server and a browser use implementations that disagree on a month
+  start, the browser's render of that month differs from the server markup, and
+  React renders that part again on the client during hydration. The
+  internationalization guide and the date component documentation state this.
+  They advise loading a polyfill only where `Temporal` is missing, and loading
+  the same implementation on the server and in the browser when a
+  server-rendered application needs identical `chinese` or `dangi` markup.
 
 ### Accessibility contract
 
