@@ -5,10 +5,13 @@ date: '2026-11-03'
 type: 'story'
 authors:
   - 'liya'
+  - 'cvkxx'
 tags:
   - 'AI'
   - 'Community'
   - 'Design systems'
+coverImage: '/blog/building-for-people-and-agents/cover.png'
+coverAlt: 'Astryx Meetup SF, November 12, 6-8 PM, free with registration: Are design systems still valuable?'
 ---
 
 Bay Area friends, join us November 12 at Meta San Francisco for an evening with the team behind **Astryx**, Meta's open-source design system.
