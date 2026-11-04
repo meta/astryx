@@ -42,7 +42,9 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {titleOfSegment} from '../privateAttributes/segmentTitle.stylex';
 import {cubicBezier} from '../motion/bezier';
+import {mapProgress, mapRange} from '../motion/progress';
 import {parseCssEasing, parseMotionRoleValue} from '../motion/roles';
+import {easedProgress} from '../motion/themeTiming';
 import {useSegmentedTouchTracking} from './useSegmentedTouchTracking';
 
 /** The segments, in DOM order. */
@@ -351,18 +353,12 @@ function isEnabledSegment(segment: HTMLElement): boolean {
 
 const titleOf = titleOfSegment;
 
-/** The theme's timing: a duration in seconds and its easing. */
-interface ThemeTiming {
-  readonly seconds: number;
-  readonly ease: (progress: number) => number;
-}
-
 /**
- * The timing of `segment`'s own transition, which reads the theme's duration
- * and easing tokens. The values stay readable while a carry turns the
- * transition's property off. Null when the theme gives no duration.
+ * The eased progress of `segment`'s own transition, which reads the theme's
+ * duration and easing tokens. The values stay readable while a carry turns
+ * the transition's property off. Null when the theme gives no duration.
  */
-function themeTimingOf(segment: HTMLElement): ThemeTiming | null {
+function themeTimingOf(segment: HTMLElement): MotionCurve | null {
   const view = segment.ownerDocument.defaultView;
   if (view == null) {
     return null;
@@ -378,32 +374,11 @@ function themeTimingOf(segment: HTMLElement): ThemeTiming | null {
   if (ms == null || ms <= 0 || points == null) {
     return null;
   }
-  return {seconds: ms / 1000, ease: cubicBezier(points)};
+  return easedProgress(ms / 1000, cubicBezier(points));
 }
 
 /** A theme that gives the segments no transition: the lens lands at once. */
-const INSTANT: ThemeTiming = {seconds: 0.001, ease: progress => progress};
-
-/** A curve from `from` to `to` on `timing`. */
-function timedCurve(
-  from: number,
-  to: number,
-  timing: ThemeTiming,
-): MotionCurve {
-  const {seconds, ease} = timing;
-  const at = (t: number) =>
-    from + (to - from) * ease(Math.min(1, Math.max(0, t / seconds)));
-  const step = Math.min(seconds / 100, 0.001);
-  return {
-    duration: seconds,
-    at,
-    velocity: t => {
-      const before = Math.max(0, t - step);
-      const after = Math.min(seconds, t + step);
-      return (at(after) - at(before)) / (after - before);
-    },
-  };
-}
+const INSTANT = easedProgress(0.001, progress => progress);
 
 /** What the control reads of its selection motion. */
 export interface SegmentedSelection {
@@ -1277,14 +1252,17 @@ export class SegmentedSelectionMotion {
       return;
     }
     this.velocity = {};
-    const timing = themeTimingOf(segment) ?? INSTANT;
+    const progress = themeTimingOf(segment) ?? INSTANT;
     const at = options.at;
+    // Unclamped, so an easing that overshoots carries the lens with it.
+    const toward = (from: number, to: number) =>
+      mapProgress(progress, mapRange([0, 1], [from, to], {clamp: false}));
     this.trackHandle(
       this.animator.play(
         {
-          x: timedCurve(this.animator.get('x', at), 0, timing),
-          scaleX: timedCurve(this.animator.get('scaleX', at), 1, timing),
-          scaleY: timedCurve(this.animator.get('scaleY', at), 1, timing),
+          x: toward(this.animator.get('x', at), 0),
+          scaleX: toward(this.animator.get('scaleX', at), 1),
+          scaleY: toward(this.animator.get('scaleY', at), 1),
         },
         options,
       ),

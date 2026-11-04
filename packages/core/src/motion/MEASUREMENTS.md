@@ -314,3 +314,16 @@ scroll view coasts with 0.25 × the pan's velocity plus 0.75 × its value one
 event earlier (four HID releases; `velocity.scrollReleaseWeight`, which a
 pan's `scrollVelocity()` reads). On UIKit, Reduce Motion with Prefer Cross-Fade changes
 nothing on a picker; the Wheel follows design:reduced-motion instead.
+
+## Popovers (UIPopoverPresentationController)
+
+Values the popover reads from its own table (`uikit/popover.ts`). Its growth
+and shrink play the theme's duration and easing tokens, not UIKit's springs.
+
+Done (iOS 26.2 simulator, Oct 23 2026; in the popover's table): the scale and
+length a popover below its source grows from, and Reduce Motion, with the
+`.none` adaptation on iPhone.
+
+| ID    | Scene                                                                                                                                    | Gesture                     | Extract                                                                                                                      | Method |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------ |
+| M-PO1 | a popover above its source, one to its left and one to its right; a source near a screen edge so the arrow sits off the popover's centre | present, then a tap outside | which edge stays in place, which length grows from 100 pt, and the point the scale grows out of when the arrow is off centre | A, C   |

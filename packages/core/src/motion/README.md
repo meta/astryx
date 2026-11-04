@@ -22,6 +22,7 @@ roles through `resolveMotion`.
 | `uikit/alert.ts`                                 | UIAlertController: how a finger is tracked across the actions (highlight onset and bounds).                                                                          |
 | `uikit/navigation.ts`                            | UINavigationController: push velocity, parallax, dimming, transition clock, interactive pop finish rule.                                                             |
 | `uikit/progressBar.ts`                           | UIProgressView's fill: the whole-track duration and curve, its minimum length and empty alpha; the reduced-motion pulse (three roles).                               |
+| `uikit/popover.ts`                               | UIPopoverPresentationController: the scale and the length a popover grows out of and shrinks back into.                                                              |
 | `uikit/gestures.ts`                              | Gesture recognizer thresholds, the velocity filter and haptic stand-ins, as `{value, unit}` entries (sources in JSDoc).                                              |
 | `uikit/picker.ts`                                | UIPickerView: row pitch, height and rubber band, velocity floor, the coast's stop speed, snap at rest, tap spin, tick.                                               |
 | `uikit/segmented.ts`                             | UISegmentedControl: the selection indicator's spring; under Reduce Motion the animator's cross-fade replaces it.                                                     |
@@ -39,6 +40,7 @@ roles through `resolveMotion`.
 | `paging.ts`                                      | Paging: UIKit's paging settle as a playable curve, its velocity floor, the animated page scroll.                                                                     |
 | `resolveSnapPoint.ts`                            | Release policy: the snap point a release lands on (flick, back-out cancel, step limit), on `selectSnapPoint`. Internal.                                              |
 | `bezier.ts`                                      | Cubic-bézier timing functions (Core Animation's named curves).                                                                                                       |
+| `themeTiming.ts`                                 | The eased progress, as one timed MotionCurve, from the theme's tokens for a motion that a tap, a key or the program starts. Durations fall back down a chain.        |
 | `animator.ts`                                    | Compositor animator: springs, coasts and any closed-form curve compiled to Web Animations, read back analytically.                                                   |
 | `progress.ts`                                    | A spring's progress, one curve mapped from another (companions, clamped ranges), the velocity that continues a motion.                                               |
 | `presentation.ts`                                | Where each moving element is drawn relative to where the engine hit-tests it, reported by the animator while translate runs; read by the gesture host at touch-down. |

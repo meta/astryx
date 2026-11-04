@@ -1,0 +1,268 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+'use client';
+
+/**
+ * @file popoverSurfaceMotion.ts
+ * @input A Popover's layer element, the source it hangs off, the compositor
+ *   animator, the theme's duration and easing tokens, and the layer
+ *   runtime's exit copy
+ * @output Exports `popoverCollapsedState`, `popoverFrame` and
+ *   `createPopoverSurfaceMotion`, the touch presentation's present and
+ *   dismiss.
+ * @position Internal to Popover. Under a finger the popover grows out of its
+ *   source and shrinks back into it, as a UIKit popover does.
+ *
+ * SYNC: When modified, update:
+ * - /packages/core/src/Popover/popoverSurfaceFrame.ts
+ * - /packages/core/src/Popover/popoverSurfaceMotion.test.ts
+ * - /packages/core/src/Popover/Popover.tsx
+ */
+
+import {
+  createMotionAnimator,
+  type Animator,
+  type AnimatorOptions,
+  type MotionCurve,
+  type MotionHandle,
+} from '../motion/animator';
+import {mapProgress, mapRange} from '../motion/progress';
+import {readThemeTiming} from '../motion/themeTiming';
+import {placePopoverExitCopy} from '../privateAttributes/popoverExit.stylex';
+import {
+  frameOf,
+  popoverCollapsedState,
+  POPOVER_ENTRANCE_TOKENS,
+  POPOVER_EXIT_TOKENS,
+  PRESENTED,
+  type PopoverCollapsedState,
+  type PopoverSurfaceGeometry,
+  type SurfaceState,
+} from './popoverSurfaceFrame';
+
+export {popoverCollapsedState, popoverFrame} from './popoverSurfaceFrame';
+export type {
+  PopoverCollapsedState,
+  PopoverFrame,
+  PopoverSurfaceGeometry,
+  PopoverSurfaceRect,
+} from './popoverSurfaceFrame';
+
+/**
+ * The curves from `from` to `to` as `progress` moves from 0 to 1. The scale
+ * and the length move together, so the scale along the axis is their product.
+ */
+function surfaceCurves(
+  from: SurfaceState,
+  to: SurfaceState,
+  axis: 'x' | 'y',
+  progress: MotionCurve,
+): Record<'scaleX' | 'scaleY' | 'opacity', MotionCurve> {
+  // Unclamped, so an easing that overshoots carries the channels with it.
+  const lerp = (a: number, b: number) =>
+    mapRange([0, 1], [a, b], {clamp: false});
+  const scale = lerp(from.scale, to.scale);
+  const length = lerp(from.length, to.length);
+  const across = mapProgress(progress, scale);
+  const along = mapProgress(progress, p => scale(p) * length(p));
+  return {
+    scaleX: axis === 'x' ? along : across,
+    scaleY: axis === 'y' ? along : across,
+    opacity: mapProgress(progress, lerp(from.opacity, to.opacity)),
+  };
+}
+
+/** What `animator` shows now, split back into scale and length. */
+function readState(animator: Animator, axis: 'x' | 'y'): SurfaceState {
+  const across = animator.get(axis === 'x' ? 'scaleY' : 'scaleX');
+  const along = animator.get(axis === 'x' ? 'scaleX' : 'scaleY');
+  return {
+    scale: across,
+    length: across > 0 ? along / across : 1,
+    opacity: animator.get('opacity'),
+  };
+}
+
+export interface PopoverSurfaceMotion {
+  /**
+   * The popover has just been shown in its touch presentation: grow it out
+   * of its source. `measure` reads the geometry; it runs with the element at
+   * its full size. During a dismissal, the popover grows back from where the
+   * dismissal has it, about the same point.
+   */
+  enter(measure: () => PopoverSurfaceGeometry): void;
+  /**
+   * The popover is closing (its `beforetoggle` to closed, while it is still
+   * shown): shrink it back into its source. Does nothing unless the last
+   * presentation was a touch one.
+   */
+  exit(): void;
+  /**
+   * The popover opened in a presentation that does not use this motion:
+   * leave the element exactly as the component styles it.
+   */
+  reset(): void;
+  /** Cancels everything and restores the element. */
+  dispose(): void;
+}
+
+const MOTION_STYLE_PROPERTIES = [
+  'scale',
+  'opacity',
+  'transform-origin',
+  'animation-name',
+] as const;
+
+/**
+ * The popover is scaled about the point where it meets its source. Across
+ * the source's edge its scale is s = s₀ + (1 − s₀)·p. Along the axis away
+ * from the source it is s·f, with f = f₀ + (1 − f₀)·p, the share of its
+ * full length. Both follow one eased progress p, so they play as curves on
+ * the compositor. A dismissal during the growth, or a growth during the
+ * dismissal, turns back from the frame on screen.
+ *
+ * The browser hides a popover as it closes, so the dismissal plays on the
+ * layer runtime's exit copy, which is removed when its motion ends.
+ *
+ * Under Reduce Motion the animator's policy applies. On a coarse pointer the
+ * popover lands at its full size and cross-fades in, and it cross-fades out
+ * where it stands.
+ */
+export function createPopoverSurfaceMotion(
+  element: HTMLElement,
+  options: Pick<AnimatorOptions, 'now'> = {},
+): PopoverSurfaceMotion {
+  const animator = createMotionAnimator(element, options);
+  // The presentation in progress or last played; null while the popover is
+  // in a presentation this motion does not drive.
+  let collapsed: PopoverCollapsedState | null = null;
+  // The geometry the presentation measured. While the growth runs, the
+  // element's box includes a scale that only the curve knows.
+  let measured: PopoverSurfaceGeometry | null = null;
+  let presentHandle: MotionHandle | null = null;
+  // The dismissal in progress: its copy and the copy's animator.
+  let exiting: {copy: HTMLElement; animator: Animator} | null = null;
+
+  const endExit = () => {
+    if (exiting == null) {
+      return;
+    }
+    exiting.animator.dispose();
+    exiting.copy.remove();
+    exiting = null;
+  };
+
+  const reset = () => {
+    collapsed = null;
+    measured = null;
+    presentHandle = null;
+    endExit();
+    animator.set({scaleX: 1, scaleY: 1, opacity: 1});
+    for (const property of MOTION_STYLE_PROPERTIES) {
+      element.style.removeProperty(property);
+    }
+  };
+
+  const enter = (measure: () => PopoverSurfaceGeometry) => {
+    // A dismissal let the element go (exit, below).
+    animator.attach(element);
+    let from: SurfaceState | null = null;
+    if (exiting != null && collapsed != null) {
+      // Shown again during the dismissal: turn back from the frame on
+      // screen, about the same point.
+      from = readState(exiting.animator, collapsed.axis);
+    }
+    endExit();
+    if (from == null) {
+      // Full size and invisible for the read. The box must not include a
+      // scale from the last dismissal, nor the first keyframe of the layer's
+      // CSS entrance. The curves below replace these before anything paints.
+      element.style.setProperty('animation-name', 'none');
+      animator.set({scaleX: 1, scaleY: 1, opacity: 0});
+    }
+    const geometry = from != null && measured != null ? measured : measure();
+    const next =
+      from != null && collapsed != null
+        ? collapsed
+        : popoverCollapsedState(geometry);
+    collapsed = next;
+    measured = geometry;
+    // The layer's own CSS entrance belongs to the pointer presentation.
+    element.style.setProperty('animation-name', 'none');
+    element.style.setProperty(
+      'transform-origin',
+      `${next.originX}px ${next.originY}px`,
+    );
+    const start = from ?? {scale: next.scale, length: next.length, opacity: 0};
+    animator.set(frameOf(start, next.axis));
+    const handle = animator.play(
+      surfaceCurves(
+        start,
+        PRESENTED,
+        next.axis,
+        readThemeTiming(element, POPOVER_ENTRANCE_TOKENS),
+      ),
+    );
+    presentHandle = handle;
+    void handle.finished.then(() => {
+      if (presentHandle === handle) {
+        presentHandle = null;
+      }
+    });
+  };
+
+  const exit = () => {
+    const target = collapsed;
+    if (target == null || exiting != null) {
+      return;
+    }
+    const from = readState(animator, target.axis);
+    const timing = readThemeTiming(element, POPOVER_EXIT_TOKENS);
+    presentHandle = null;
+    // The copy stands where the surface is drawn, the growth's frame
+    // included.
+    const copy = placePopoverExitCopy(element);
+    if (copy == null) {
+      // No top layer for a copy: the close is immediate.
+      animator.set({scaleX: 1, scaleY: 1, opacity: 1});
+      return;
+    }
+    copy.style.setProperty(
+      'transform-origin',
+      `${target.originX}px ${target.originY}px`,
+    );
+    const closing = createMotionAnimator(copy, options);
+    closing.set(frameOf(from, target.axis));
+    const handle = closing.play(
+      surfaceCurves(
+        from,
+        {scale: target.scale, length: target.length, opacity: 0},
+        target.axis,
+        timing,
+      ),
+    );
+    exiting = {copy, animator: closing};
+    // The browser hides the element now. Leave it at rest, and let go of the
+    // layer its growth promoted in this task. Kept, the promotion would end
+    // inside the dismissal, a style write on an element that no longer
+    // paints (a Layout in the dismissal's frames). The next presentation
+    // attaches the element again.
+    animator.set({scaleX: 1, scaleY: 1, opacity: 1}, {promote: false});
+    animator.attach(null);
+    void handle.finished.then(finished => {
+      if (finished && exiting?.copy === copy) {
+        endExit();
+      }
+    });
+  };
+
+  return {
+    enter,
+    exit,
+    reset,
+    dispose() {
+      reset();
+      animator.dispose();
+    },
+  };
+}
