@@ -296,12 +296,26 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const {
     ref: layerRef,
     anchorId: layerAnchorId,
-    show: showLayer,
-    hide: hideLayer,
+    show: openLayer,
+    hide: closeLayer,
     isOpen: isLayerOpen,
     id: layerId,
     render: renderLayer,
   } = layer;
+
+  // Whether this hook asked its layer to show, from its own show and hide
+  // calls. A leave reads it at once, because the layer's open state changes
+  // only at the next commit. A show that the layer defers counts as shown, so
+  // the leave's hide still cancels it.
+  const isShownRef = useRef(false);
+  const showLayer = useCallback(() => {
+    isShownRef.current = true;
+    openLayer();
+  }, [openLayer]);
+  const hideLayer = useCallback(() => {
+    isShownRef.current = false;
+    closeLayer();
+  }, [closeLayer]);
 
   const popoverXstyle = styles.container;
 
@@ -485,6 +499,11 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       return;
     }
     clearTimeouts();
+    // Nothing is shown, so nothing needs a hide: the pointer or focus left
+    // before the show delay ran out, or a press hid the tooltip.
+    if (!isShownRef.current) {
+      return;
+    }
     const effectiveHideDelay = hideDelay > 0 ? hideDelay : HOVER_BRIDGE_DELAY;
     hideTimeoutRef.current = setTimeout(() => {
       hideLayer();

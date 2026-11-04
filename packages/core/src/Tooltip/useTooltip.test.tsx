@@ -250,6 +250,113 @@ describe('useTooltip — hide delay', () => {
   });
 });
 
+describe('useTooltip — a leave with no tooltip shown starts no timer', () => {
+  /** The delays of the timers started while `run` executes. */
+  function timersStartedBy(run: () => void): number[] {
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+    try {
+      run();
+      return setTimeoutSpy.mock.calls.map(([, delay]) => delay ?? 0);
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
+  }
+
+  function expectNothingShown() {
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+  }
+
+  it('starts no timer when the pointer passes over before the show delay elapses', () => {
+    const onShow = vi.fn();
+    render(<Harness onShow={onShow} />);
+    fireEvent.pointerEnter(trigger(), {pointerType: 'mouse'});
+    fireEvent.mouseEnter(trigger());
+    tick(100);
+    expectNothingShown();
+
+    const started = timersStartedBy(() => {
+      fireEvent.pointerLeave(trigger(), {pointerType: 'mouse'});
+      fireEvent.mouseLeave(trigger());
+    });
+
+    expect(started).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+    tick(1000);
+    expect(onShow).not.toHaveBeenCalled();
+  });
+
+  it('starts no timer when the pointer leaves after a press hid the tooltip', () => {
+    render(<Harness />);
+    fireEvent.pointerEnter(trigger(), {pointerType: 'mouse'});
+    fireEvent.mouseEnter(trigger());
+    fireEvent.pointerDown(trigger(), {pointerType: 'mouse'});
+    fireEvent.pointerUp(trigger(), {pointerType: 'mouse'});
+    fireEvent.click(trigger());
+    expectNothingShown();
+
+    const started = timersStartedBy(() => {
+      fireEvent.pointerLeave(trigger(), {pointerType: 'mouse'});
+      fireEvent.mouseLeave(trigger());
+    });
+
+    expect(started).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('starts no timer when a focus that showed nothing leaves', () => {
+    render(<Harness />);
+    // A pointer's focus does not match `:focus-visible`, so nothing shows.
+    act(() => trigger().focus());
+    tick(0);
+    expect(document.activeElement).toBe(trigger());
+    expectNothingShown();
+    expect(vi.getTimerCount()).toBe(0);
+
+    const started = timersStartedBy(() => {
+      fireEvent.focusOut(trigger(), {relatedTarget: document.body});
+    });
+
+    expect(started).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('starts no timer when a pen that hovered without landing leaves', () => {
+    render(<Harness />);
+    fireEvent.pointerEnter(trigger(), {pointerType: 'pen'});
+    fireEvent.mouseEnter(trigger());
+    tick(100);
+    expectNothingShown();
+
+    const started = timersStartedBy(() => {
+      fireEvent.pointerLeave(trigger(), {pointerType: 'pen'});
+      fireEvent.mouseLeave(trigger());
+    });
+
+    expect(started).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('still starts the hover bridge when the pointer leaves a shown tooltip', () => {
+    const onHide = vi.fn();
+    render(<Harness onHide={onHide} />);
+    fireEvent.pointerEnter(trigger(), {pointerType: 'mouse'});
+    fireEvent.mouseEnter(trigger());
+    tick(200);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+
+    const started = timersStartedBy(() => {
+      fireEvent.pointerLeave(trigger(), {pointerType: 'mouse'});
+      fireEvent.mouseLeave(trigger());
+    });
+
+    expect(started).toEqual([100]);
+    tick(99);
+    expect(onHide).not.toHaveBeenCalled();
+    tick(1);
+    expect(onHide).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('useTooltip — controlled isOpen', () => {
   it('shows on mount when isOpen is true', () => {
     const onShow = vi.fn();
