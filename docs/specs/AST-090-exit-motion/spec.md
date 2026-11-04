@@ -77,9 +77,9 @@ components read through two shared primitives is a system fact.
   `--duration-exit` and `--ease-exit`, and a gesture-driven exit keeps its
   velocity spring (FR14).
 - Surfaces that already animate out (`Drawer`, `BottomSheet`, `MobileNav`,
-  `Toast`, and the `TopNavMegaMenu` panel) keep their durations and curves
-  only for an exit a gesture drives, a swipe or a drag with velocity, which
-  keeps its measured spring. In a touch presentation, an exit that a tap, a
+  `Toast`, and the `TopNavMegaMenu` panel) keep their durations and curves in
+  a pointer presentation, and for an exit a gesture drives, a swipe or a drag
+  with velocity, which keeps its measured spring. In a touch presentation, an exit that a tap, a
   key or the program starts plays `--duration-exit` and `--ease-exit` (FR14),
   `BottomSheet`'s close included. `BottomSheet`'s close in a pointer
   presentation reads `--ease-exit` at the curve it uses (FR12); moving the
