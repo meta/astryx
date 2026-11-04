@@ -329,10 +329,9 @@ export function useOverflow(
         collapseFrom,
       });
 
-      // A fold that changes the list's own height inside the resize step
-      // makes the browser report a ResizeObserver loop error, so that update
-      // renders after paint. Both sets are sized from the measure copy, which
-      // also holds an indicator that renders as plain text.
+      // Folding to a new list height inside the resize step makes Chromium
+      // report a loop error. That update renders after paint. The measure copy
+      // sizes both sets, a plain-text indicator included.
       if (timing === 'beforePaint') {
         const indicator = hasIndicator
           ? allChildren[allChildren.length - 1]
