@@ -31,7 +31,7 @@ export interface InternationalizationContextValue {
   locale: Locale;
   direction: 'ltr' | 'rtl';
   /**
-   * The provider's resolved calendar system. A context without it means
+   * The provider's requested calendar system. A context without it means
    * Gregorian dates.
    */
   calendar?: CalendarSystem;

@@ -910,6 +910,8 @@ export function DateRangeInput({
               calendar only while it is open. */}
             {popover.isOpen && (
               <Calendar
+                // The field text is Gregorian, so the popover calendar is too.
+                calendar="gregory"
                 mode="range"
                 value={optimisticValue}
                 onChange={handleRangeSelect}
