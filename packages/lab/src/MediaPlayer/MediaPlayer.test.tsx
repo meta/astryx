@@ -233,7 +233,10 @@ describe('VideoPlayer', () => {
     const onError = vi.fn();
     const {video} = renderVideoPlayer({onPlay, onPause, onEnded, onError});
     const playback = fakePlayback(video);
-    await user.click(screen.getByRole('button', {name: 'Play'}));
+    // Before playback, the bar sits behind the large play control, so the
+    // bar's Play is reached with the keyboard.
+    act(() => screen.getByRole('button', {name: 'Play'}).focus());
+    await user.keyboard('{Enter}');
     expect(onPlay).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole('button', {name: 'Pause'}));
     expect(onPause).toHaveBeenCalledTimes(1);
@@ -246,6 +249,18 @@ describe('VideoPlayer', () => {
       video.dispatchEvent(new Event('error'));
     });
     expect(onError).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the bar behind the large play control until playback starts, in reach of the keyboard', async () => {
+    const user = userEvent.setup();
+    const {video} = renderVideoPlayer();
+    fakePlayback(video);
+    const barPlay = screen.getByRole('button', {name: 'Play'});
+    await expect(user.click(barPlay)).rejects.toThrow(/pointer-events/);
+    act(() => barPlay.focus());
+    await user.keyboard('{Enter}');
+    await user.click(screen.getByRole('button', {name: 'Pause'}));
+    expect(screen.getByRole('button', {name: 'Play'})).toBeInTheDocument();
   });
 
   it('keeps the loading spinner out of the accessibility tree', () => {

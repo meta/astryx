@@ -191,7 +191,7 @@ export const docs = {
       name: 'VideoPlayer',
       displayName: 'Video Player',
       description:
-        'A ready-made video player. Controls float in a frosted bar inset over the video; the video takes the theme’s element radius and the bar its container radius. A click plays and pauses; on touch, a tap shows the controls and the next tap hides them.',
+        'A ready-made video player. Controls float in a frosted bar inset over the video; the video takes the theme’s element radius and the bar its container radius. Before playback and after the end, a large play control takes the bar’s place. A click plays and pauses; on touch, a tap shows the controls and the next tap hides them.',
       props: [
         {
           name: 'src',
