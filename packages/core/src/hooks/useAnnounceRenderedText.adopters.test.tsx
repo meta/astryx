@@ -3,7 +3,7 @@
 /**
  * @file useAnnounceRenderedText.adopters.test.tsx
  * @input Every core component that announces its own rendered content,
- *   Tooltip's pin included, with the shared own-content module replaced by a
+ *   Tooltip's show() hold included, with the shared own-content module replaced by a
  *   recorder
  * @output architecture:react-component-runtime INV10 test: each adopter hands
  *   its own-content announcement to the shared module and announces none of it
@@ -68,7 +68,7 @@ const {BaseTypeahead} = await import('../Typeahead/BaseTypeahead');
 const {Tokenizer} = await import('../Tokenizer/Tokenizer');
 const {PowerSearch} = await import('../PowerSearch/PowerSearch');
 const {createStaticSource} = await import('../Typeahead/createStaticSource');
-const {TooltipWithTriggerBehavior} = await import('../Tooltip/Tooltip');
+const {InfoTip} = await import('../InfoTip/InfoTip');
 
 const source = createStaticSource([{id: 'apple', label: 'Apple'}]);
 
@@ -167,13 +167,12 @@ const ADOPTERS: Record<string, () => Promise<void>> = {
     await expectDelegated('No results found');
   },
   'Tooltip/useTooltip.tsx': async () => {
-    // A tooltip a press pinned says its own text (component:Tooltip FR10).
+    // A tooltip that show() holds says its own text (component:Tooltip FR12).
     render(
-      <TooltipWithTriggerBehavior
+      <InfoTip
         content="Billed on the first of each month"
-        triggerBehavior="toggle">
-        <button type="button">About billing</button>
-      </TooltipWithTriggerBehavior>,
+        label="About billing"
+      />,
     );
     fireEvent.click(screen.getByRole('button', {name: 'About billing'}));
     await expectDelegated('Billed on the first of each month');
@@ -231,7 +230,7 @@ const ADOPTERS: Record<string, () => Promise<void>> = {
         label="Filters"
         isLabelHidden={false}
         onChange={() => {}}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     fireEvent.click(screen.getByRole('button', {name: /^Filters/}));

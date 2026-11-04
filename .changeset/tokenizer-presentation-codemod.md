@@ -2,6 +2,6 @@
 '@astryxdesign/cli': patch
 ---
 
-[feat] `astryx upgrade` gains the `promote-tokenizer-presentation` codemod, which rewrites a static `experimental={{presentation: x}}` on Tokenizer to the stable `presentation={x}` and leaves a TODO where it cannot prove the rewrite. The Tokenizer blocks and page templates that show a prop the bottom sheet does not render (`hasClear`, `endContent`, `tokenOverflowBehavior`, `hasEntriesOnFocus`, `renderToken`) pass `presentation="popover"`, so they keep the inline field on phones under the new `'adaptive'` default.
+[feat] `astryx upgrade` gains the `promote-tokenizer-presentation` codemod. It rewrites a static `experimental={{presentation: x}}` on Tokenizer, the 0.7.7 spelling that Tokenizer no longer reads, to `presentation={x}`. Where it cannot prove the rewrite, including any Tokenizer that spreads props (a spread may also set `presentation`), it leaves the call unchanged with a TODO.
 
 @imdreamrunner

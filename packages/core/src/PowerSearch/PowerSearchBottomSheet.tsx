@@ -10,7 +10,7 @@
  *   RadioList, Text, TextInput, PowerSearchValueEditor, the internal sheet
  *   confirmation and search-drag owners, i18n
  * @output Exports PowerSearchBottomSheet — the touch surface of
- *   `PowerSearch experimental.presentation="bottom-sheet"`: a Filters sheet
+ *   `PowerSearch presentation="bottom-sheet"`: a Filters sheet
  *   with editable rows and trailing remove actions, Add filter in its fixed
  *   header and Clear all / Done in its fixed footer, an Add filter sheet with
  *   grouped field rows or the content search with inline suggestions, and a
