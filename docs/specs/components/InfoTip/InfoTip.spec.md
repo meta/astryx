@@ -81,9 +81,9 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Current-state impact
 
-- The default sm box is 20×20 px under a fine pointer; it meets WCAG 2.5.8
-  through the spacing exception (no neighboring target within 24 px), and
-  `spec:AST-094` FR42 keeps desktop boxes unchanged.
+- The sm box is 20×20 px under a fine pointer; it meets WCAG 2.5.8 through the
+  spacing exception (no neighboring target within 24 px), and `spec:AST-094`
+  FR42 keeps desktop boxes unchanged.
 
 ## Ownership boundary
 
