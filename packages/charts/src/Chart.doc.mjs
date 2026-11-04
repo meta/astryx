@@ -135,6 +135,12 @@ export const docs = {
       required: true,
     },
     {
+      name: 'xLabel',
+      type: 'string',
+      description:
+        'Display name for the x field, used for the axis, the data-table header, and the tooltip. Defaults to the xKey.',
+    },
+    {
       name: 'series',
       type: 'SeriesDef[]',
       description:

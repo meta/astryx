@@ -44,7 +44,7 @@ export interface SparklineProps extends BaseProps<HTMLDivElement> {
   yBaseline?: YBaseline;
   /** Show the pointer tooltip. @default false */
   tooltip?: boolean | Omit<ChartTooltipProps, 'series'>;
-  /** Accessible name for the chart image. */
+  /** Accessible name for the chart image. Paints a visible heading above the plot, so only set it when the layout has room. */
   title?: string;
 }
 

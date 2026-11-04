@@ -43,7 +43,7 @@ export const docs = {
         requirement: 'Required',
         states: ['All'],
         description:
-          'Provide title describing the trend. Without it, the chart falls back to a localized generic name.',
+          'Provide title describing the trend. The title paints a visible heading above the plot, so only set it when the surrounding layout has room; without it, the chart falls back to a localized generic name.',
       },
     ],
     anatomy: [

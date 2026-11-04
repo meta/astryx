@@ -119,8 +119,12 @@ describe('LineChart series composition', () => {
     );
     reportWidth(600);
 
-    expect(screen.getByText('Revenue')).toBeInTheDocument();
-    expect(screen.getByText('Trend')).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('list')).getByText('Revenue'),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('list')).getByText('Trend'),
+    ).toBeInTheDocument();
   });
 
   it('renders dots and custom stroke variants without crashing', () => {

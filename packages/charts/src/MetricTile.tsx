@@ -154,7 +154,6 @@ export interface MetricTileDelta {
   sentiment?: MetricTileDeltaSentiment;
 }
 
-/** Default direction-to-sentiment mapping (up=good, down=bad). */
 const DIRECTION_SENTIMENT: Record<
   MetricTileDeltaDirection,
   MetricTileDeltaSentiment

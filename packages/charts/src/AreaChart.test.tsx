@@ -121,8 +121,12 @@ describe('AreaChart series composition', () => {
     );
     reportWidth(600);
 
-    expect(screen.getByText('Revenue')).toBeInTheDocument();
-    expect(screen.getByText('Profit')).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('list')).getByText('Revenue'),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('list')).getByText('Profit'),
+    ).toBeInTheDocument();
   });
 
   it('accepts a single y key as a string', () => {
