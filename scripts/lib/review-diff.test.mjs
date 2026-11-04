@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {afterEach, describe, expect, it} from 'vitest';
+import {createRepository} from './git-fixture.mjs';
 import {readDiff} from './review-diff.mjs';
 import {collectConcernMatches} from '../check-knowledge.mjs';
 import {loadKnowledgeIndex} from '../specs-for-file.mjs';
@@ -197,46 +198,58 @@ describe('review-global-baselines.mjs', () => {
   function repository(source) {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'review-baselines-'));
     roots.push(root);
-    git(root, 'init', '-q', '-b', 'main');
-    write(
-      root,
-      'docs/architecture/react-component-runtime.md',
-      [
-        '---',
-        'authority: current',
-        'kind: architecture',
-        'id: architecture:react-component-runtime',
-        '---',
-        '',
-        '# React component runtime',
-        '',
-        '<!-- review-applicability:v1 -->',
-        '',
-        '```json',
-        JSON.stringify({
-          scope: 'global',
-          triggers: {styling: ['INV2']},
-          concerns: {
-            effects: {patterns: ['\\buseEffect\\b'], claims: ['INV1']},
-          },
-        }),
-        '```',
-        '',
-        '## Requirements',
-        '',
-        '- **INV1 — Effects clean up.** Detail.',
-        '- **INV2 — Styles stay static.** Detail.',
-        '',
-      ].join('\n'),
-    );
-    write(root, 'packages/core/src/A/A.tsx', 'export function A() {}\n');
-    git(root, 'add', '-A');
-    git(root, 'commit', '-q', '-m', 'base');
-    const base = git(root, 'rev-parse', 'HEAD');
-    git(root, 'update-ref', 'refs/remotes/origin/main', base);
+    const record = [
+      '---',
+      'authority: current',
+      'kind: architecture',
+      'id: architecture:react-component-runtime',
+      '---',
+      '',
+      '# React component runtime',
+      '',
+      '<!-- review-applicability:v1 -->',
+      '',
+      '```json',
+      JSON.stringify({
+        scope: 'global',
+        triggers: {styling: ['INV2']},
+        concerns: {
+          effects: {patterns: ['\\buseEffect\\b'], claims: ['INV1']},
+        },
+      }),
+      '```',
+      '',
+      '## Requirements',
+      '',
+      '- **INV1 — Effects clean up.** Detail.',
+      '- **INV2 — Styles stay static.** Detail.',
+      '',
+    ].join('\n');
+    const before = 'export function A() {}\n';
+    write(root, 'docs/architecture/react-component-runtime.md', record);
     write(root, 'packages/core/src/A/A.tsx', source);
-    git(root, 'commit', '-q', '-am', 'head');
-    return {root, base, head: git(root, 'rev-parse', 'HEAD')};
+    const {base, head} = createRepository(
+      root,
+      [
+        {
+          ref: 'refs/heads/main',
+          name: 'base',
+          message: 'base',
+          files: {
+            'docs/architecture/react-component-runtime.md': record,
+            'packages/core/src/A/A.tsx': before,
+          },
+        },
+        {
+          ref: 'refs/heads/main',
+          name: 'head',
+          message: 'head',
+          files: {'packages/core/src/A/A.tsx': source},
+        },
+      ],
+      {refs: {'refs/remotes/origin/main': 'base'}},
+    );
+    return {root, base, head};
   }
 
   function route({root, base, head}) {

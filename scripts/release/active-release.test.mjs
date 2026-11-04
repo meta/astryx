@@ -14,6 +14,11 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {afterEach, describe, expect, it} from 'vitest';
 import {
+  createRepository,
+  importCommits,
+  workingTreeFiles,
+} from '../lib/git-fixture.mjs';
+import {
   buildMarker,
   buildPlan,
   canaryEligibility,
@@ -84,12 +89,16 @@ function cutFixture(version = '0.6.5') {
     path.join(root, '.changeset/in-cut.md'),
     "---\n'@astryxdesign/core': patch\n---\n\n[fix] Included\n@person\n",
   );
-  git(root, 'init', '-q');
-  git(root, 'config', 'user.name', 'Release Test');
-  git(root, 'config', 'user.email', 'release@example.com');
-  git(root, 'add', '.');
-  git(root, 'commit', '-qm', 'cut');
-  return {...state, cutSha: git(root, 'rev-parse', 'HEAD')};
+  const {cut} = createRepository(root, [
+    {
+      ref: 'refs/heads/main',
+      name: 'cut',
+      message: 'cut',
+      snapshot: true,
+      files: workingTreeFiles(root),
+    },
+  ]);
+  return {...state, cutSha: cut};
 }
 
 function validate(state, overrides = {}) {
@@ -197,13 +206,16 @@ describe('one branch per release lifecycle', () => {
     ).toThrow(
       /main declares 0\.6\.5 at the cut|release refresh cannot change version/,
     );
-    git(root, 'commit', '-qm', 'later', '--allow-empty');
+    const {later} = importCommits(root, [
+      {
+        ref: 'refs/heads/main',
+        name: 'later',
+        parent: 'refs/heads/main',
+        message: 'later',
+      },
+    ]);
     expect(() =>
-      writeAuthority(
-        root,
-        {...values, 'cut-sha': git(root, 'rev-parse', 'HEAD')},
-        true,
-      ),
+      writeAuthority(root, {...values, 'cut-sha': later}, true),
     ).toThrow('release refresh cannot change cutSha');
   });
 
