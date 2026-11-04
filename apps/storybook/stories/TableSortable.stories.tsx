@@ -326,10 +326,16 @@ const largeIndicatorTheme = defineTheme({
   componentIcons: {'table-sort-indicator': {size: 'lg'}},
 });
 
+const hiddenIndicatorTheme = defineTheme({
+  name: 'story-hidden-sort-indicator',
+  componentIcons: {'table-sort-indicator': null},
+});
+
 /**
- * The same sorted table with the default indicator and with a theme that asks
- * the `table-sort-indicator` slot for a large glyph. The glyph grows; the Sort
- * control and the header row keep their height.
+ * The same sorted table with the default indicator, with a theme that asks
+ * the `table-sort-indicator` slot for a large glyph, and with a theme that
+ * hides it. The large glyph grows while the Sort control and the header row
+ * keep their height; the hidden glyph leaves no gap beside the label.
  */
 export const IndicatorSlotSize: Story = {
   render: () => {
@@ -349,6 +355,15 @@ export const IndicatorSlotSize: Story = {
         </div>
         <Theme theme={largeIndicatorTheme}>
           <div data-testid="large-indicator">
+            <Table
+              data={employees}
+              columns={columns}
+              plugins={{sort: sortPlugin}}
+            />
+          </div>
+        </Theme>
+        <Theme theme={hiddenIndicatorTheme}>
+          <div data-testid="hidden-indicator">
             <Table
               data={employees}
               columns={columns}

@@ -7,7 +7,8 @@
  *   WebKit
  * @output Browser evidence that a theme's `table-sort-indicator` size request
  *   changes only the glyph (component:Table FR5): the Sort control and the
- *   header row keep the height they have with the default glyph
+ *   header row keep the height they have with the default glyph; a hidden
+ *   glyph leaves no gap beside the label
  * @position Regression proof for the sort indicator wrapper's fixed block size
  */
 
@@ -60,4 +61,26 @@ test('a large sort indicator glyph keeps the Sort control and header height', as
   // The control and the row around it did not move.
   expect(large.control).toBeCloseTo(normal.control ?? 0, 1);
   expect(large.header).toBeCloseTo(normal.header ?? 0, 1);
+});
+
+test('a hidden sort indicator leaves no gap beside the label', async ({
+  page,
+}) => {
+  await page.goto(
+    `${storybook.origin}/iframe.html?id=core-tablesortable--indicator-slot-size&viewMode=story`,
+  );
+  const control = page
+    .getByTestId('hidden-indicator')
+    .getByRole('columnheader', {name: 'Name'})
+    .getByRole('button', {name: 'Name'});
+  await expect(control).toBeVisible();
+  // The label is the control's only laid-out child: the empty indicator
+  // wrapper collapses, so the button's gap does not follow the label.
+  const laidOut = await control.evaluate(
+    button =>
+      [...button.children].filter(child => child.getClientRects().length > 0)
+        .length,
+  );
+  expect(laidOut).toBe(1);
+  await expect(control.locator('.astryx-icon')).toHaveCount(0);
 });

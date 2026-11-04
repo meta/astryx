@@ -156,9 +156,11 @@ const sortStyles = stylex.create({
     justifyContent: 'flex-end',
   },
   // The wrapper takes no block size, so a theme's larger glyph overflows it
-  // instead of growing the Sort control or the header row.
+  // instead of growing the Sort control or the header row. When the slot
+  // hides the glyph, the empty wrapper collapses, so the button's gap does
+  // not offset an end-aligned label.
   iconWrapper: {
-    display: 'inline-flex',
+    display: {default: 'inline-flex', ':empty': 'none'},
     alignItems: 'center',
     blockSize: 0,
   },
