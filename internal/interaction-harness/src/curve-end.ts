@@ -5,7 +5,9 @@
  * @input The Web Animations API in the page
  * @output `defineCurveEnd`, a page function that installs
  *   `window.__harnessCurveEnd(animation)` once: the local time (ms, delay
- *   included) where the animation's effect stops changing.
+ *   included) where the animation's effect stops changing; and
+ *   `window.__harnessTiming(effect)`, the effect's timing, read without a
+ *   style update inside a rendering trace.
  * @position Shared by ./curves.ts (holds, `waitForRest`) and ./busy.ts
  *   (`blockMainThread`'s `during`), so both read an animation's held tail the
  *   same way. Not exported from the package: a page function, evaluated in
@@ -26,10 +28,46 @@
 export function defineCurveEnd(): void {
   const w = window as unknown as {
     __harnessCurveEnd?: (animation: Animation) => number;
+    __harnessTiming?: (
+      effect: AnimationEffect | null | undefined,
+    ) => ComputedEffectTiming | null;
+  };
+  // An effect's timing as getComputedTiming() reports it. Inside a rendering
+  // trace it is worked out from getTiming() instead: getComputedTiming()
+  // updates a running animation on demand, which restyles its target in the
+  // next frame (and lays out an anchored one), exactly what a trace counts.
+  w.__harnessTiming ??= effect => {
+    if (effect == null) {
+      return null;
+    }
+    if (
+      (window as unknown as {__harnessRenderingTrace?: boolean})
+        .__harnessRenderingTrace !== true
+    ) {
+      return effect.getComputedTiming();
+    }
+    const timing = effect.getTiming();
+    const duration = typeof timing.duration === 'number' ? timing.duration : 0;
+    const iterations = Number(timing.iterations ?? 1);
+    const delay = Number(timing.delay ?? 0);
+    const endDelay = Number(timing.endDelay ?? 0);
+    const activeDuration =
+      duration === 0 || iterations === 0 ? 0 : duration * iterations;
+    const derived: ComputedEffectTiming = {
+      ...timing,
+      duration,
+      iterations,
+      delay,
+      endDelay,
+      activeDuration,
+      endTime: Math.max(delay + activeDuration + endDelay, 0),
+    };
+    return derived;
   };
   if (w.__harnessCurveEnd) {
     return;
   }
+  const timingOf = w.__harnessTiming;
   const timingKeys = new Set([
     'offset',
     'computedOffset',
@@ -45,7 +83,7 @@ export function defineCurveEnd(): void {
     );
   w.__harnessCurveEnd = animation => {
     const effect = animation.effect as KeyframeEffect | null;
-    const timing = effect?.getComputedTiming();
+    const timing = timingOf(effect);
     const delay = Number(timing?.delay ?? 0);
     const active = Number(timing?.activeDuration ?? 0);
     if (
