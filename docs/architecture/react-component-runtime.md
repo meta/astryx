@@ -185,23 +185,24 @@ those contracts.
   field when that ancestor does not fill the viewport, its layout box before any
   transform sits at the viewport's bottom edge, its own computed `translate`,
   the value the app sets and not the module's own, is `none`, and no CSS
-  transition or animation on its position is running when the module measures
-  (`spec:AST-099` FR9). The translate equals the distance from the ancestor's
-  bottom edge as drawn, after the app's own lift, to the keyboard's top; the
-  module measures it after each keyboard report, including a height change while
-  focus stays in the bar, and each focus move, once the page's own listeners
-  have run, so a bar the app already lifts gets none, and rides the hook's one
-  transition to that value like every Core rider. The read of that bar is the
-  one exception to the hook's single layout read per keyboard change, stated
-  below. The `translate` property composes with a `transform` the app sets. The
-  module writes nothing on an ancestor whose own `translate` is not `none`, and
-  nothing else on app elements. This exception is the owner's decision of
-  2026-11-03 (`spec:AST-099/DEC-5`): a field docked in an app's own bottom bar
-  rides the keyboard like one in a Core host. The module owns that write as an
-  INV5 resource: it removes the translate once the keyboard hides after focus
-  leaves the field, or once the field unmounts. A covered field starts its
-  keyboard behavior from its focus handler, never from an Effect that reacts to
-  focus (INV2), keeps the 10 CSS px clearance `spec:AST-099` FR9 states as the
+  transition or animation of the app's own on its position is running when the
+  module measures (the module's own ride does not count) (`spec:AST-099` FR9).
+  The translate equals the distance from the ancestor's bottom edge as drawn,
+  after the app's own lift, to the keyboard's top; the module measures it after
+  each keyboard report, including a height change while focus stays in the bar,
+  and each focus move, once the page's own listeners have run, so a bar the app
+  already lifts gets none, and rides the hook's one transition to that value
+  like every Core rider. The read of that bar is the one exception to the hook's
+  single layout read per keyboard change, stated below. The `translate` property
+  composes with a `transform` the app sets. The module writes nothing on an
+  ancestor whose own `translate` is not `none`, and nothing else on app
+  elements. This exception is the owner's decision of 2026-11-03
+  (`spec:AST-099/DEC-5`): a field docked in an app's own bottom bar rides the
+  keyboard like one in a Core host. The module owns that write as an INV5
+  resource: it removes the translate once the keyboard hides after focus leaves
+  the field, or once the field unmounts. A covered field starts its keyboard
+  behavior from its focus handler, never from an Effect that reacts to focus
+  (INV2), keeps the 10 CSS px clearance `spec:AST-099` FR9 states as the
   module's one `offset` constant, and supplies a scroller's missing scroll range
   as a bottom offset on the field's own element. No Core component keeps its own
   visual-viewport listener for the keyboard. The hook publishes each keyboard
