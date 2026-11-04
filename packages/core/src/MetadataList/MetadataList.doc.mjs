@@ -7,7 +7,7 @@ export const docs = {
   displayName: 'Metadata List',
   group: 'MetadataList',
   category: 'Table & List',
-  keywords: ["metadata","description","definition","keyvalue","properties","details","attributes","summary"],
+  keywords: ["metadata","description","definition","keyvalue","properties","details","attributes","summary","descriptionlist","descriptions"],
   theming: {
     targets: [
       {

@@ -39,6 +39,11 @@ const EXPECTED_MIGRATIONS = [
     'a11y-radio-group-pattern--radio-list-group-disabled-with-message',
   ],
   [
+    'ProgressBar::Disabled',
+    'core/ProgressBar',
+    'a11y-progressbar--progress-bar-disabled',
+  ],
+  [
     'RadioList::Disabled',
     'core/RadioListItem',
     'a11y-radio-group-pattern--radio-list-option-group-disabled',
@@ -110,7 +115,7 @@ describe('a11y story identity migration', () => {
     }
   });
 
-  it('contains only the six proven legacy migrations', () => {
+  it('contains only the seven proven legacy migrations', () => {
     expect(Object.keys(LEGACY_BASELINE_STORY_MIGRATIONS).sort()).toEqual(
       EXPECTED_MIGRATIONS.map(([, , storyId]) => storyId).sort(),
     );

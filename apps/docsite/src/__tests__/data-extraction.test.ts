@@ -18,6 +18,10 @@ import {docs as chatDocs} from '../../../../packages/core/src/Chat/Chat.doc.mjs'
 import {docs as drawerDocs} from '../../../../packages/core/src/Drawer/Drawer.doc.mjs';
 import {docs as drawerHeaderDocs} from '../../../../packages/core/src/Drawer/DrawerHeader.doc.mjs';
 import docsiteConfig from '../../astryx.config.mjs';
+import {
+  DEMO_CONTENT_MODULE,
+  replaceDemoContent,
+} from '../../../../packages/cli/foundation/discovery/template-adapter.mjs';
 import {packages} from '../generated/packageRegistry';
 import {
   components,
@@ -37,6 +41,8 @@ import {eagerShowcases} from '../components/eagerShowcases';
 import {TEMPLATE_COMPONENTS} from '../components/templateComponents';
 import {exampleRegistry} from '../generated/exampleRegistry';
 import {normalizeComponentCategory} from '../lib/componentCategories';
+import {decompressCode} from '../lib/compress';
+import {buildPlaygroundHref} from '../components/playgroundLink';
 
 const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -1000,6 +1006,42 @@ describe('blockRegistry', () => {
     }
   });
 
+  it('shows each core block as a copy writes it, with no demo content (spec:AST-033 FR23)', () => {
+    const blocksDir = path.join(
+      REPO_ROOT,
+      'packages/cli/assets/templates/blocks',
+    );
+    for (const block of blocks.filter(b => b.sourcePackage == null)) {
+      const file = path.join(blocksDir, block.category, `${block.dirName}.tsx`);
+      expect(block.source).toBe(
+        replaceDemoContent(fs.readFileSync(file, 'utf-8')).source,
+      );
+      expect(block.source).not.toContain(DEMO_CONTENT_MODULE);
+    }
+    for (const entry of Object.values(exampleRegistry).flat()) {
+      expect(entry.source).not.toContain(DEMO_CONTENT_MODULE);
+    }
+  });
+
+  it('opens the displayed source in the playground, with no demo content (spec:AST-033 FR23)', () => {
+    for (const entry of Object.values(exampleRegistry).flat()) {
+      const hash = buildPlaygroundHref(entry.source).split('#code=')[1];
+      const opened = decompressCode(hash);
+      expect(opened).not.toBeNull();
+      expect(opened).not.toContain(DEMO_CONTENT_MODULE);
+    }
+    const pagesDir = path.join(
+      REPO_ROOT,
+      'packages/cli/assets/templates/pages',
+    );
+    for (const template of templates) {
+      const file = path.join(pagesDir, template.slug, 'page.tsx');
+      expect(template.source).toBe(
+        replaceDemoContent(fs.readFileSync(file, 'utf-8')).source,
+      );
+    }
+  });
+
   it('decodes unicode escapes in block titles', () => {
     const block = blocks.find(b => b.dirName === 'TabListTabsWithBadge');
     expect(block).toBeDefined();
@@ -1101,7 +1143,7 @@ describe('docsRegistry', () => {
 
     const theme = docTopics.find(d => d.topic === 'theme');
     expect(theme).toBeDefined();
-    expect(theme?.title).toBe('Theme System');
+    expect(theme?.title).toBe('Theming');
   });
 
   it('known topics are present', () => {

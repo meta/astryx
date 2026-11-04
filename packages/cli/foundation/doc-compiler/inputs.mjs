@@ -23,6 +23,7 @@ import {
 } from '../discovery/component-discovery.mjs';
 import {discoverHooks, findHookDoc} from '../discovery/hook-discovery.mjs';
 import {themeImportPackage} from '../discovery/theme-discovery.mjs';
+import {astryxIconDefinitions} from '../discovery/icon-definition-discovery.mjs';
 import {CLI_ROOT, findCoreDir} from '../fs/paths.mjs';
 import {packageSource} from './source.mjs';
 import {treeDocFiles} from './tree.mjs';
@@ -44,7 +45,7 @@ const NON_DESCRIPTOR_DIRS = new Set([
 ]);
 
 /**
- * @typedef {'components' | 'hooks' | 'templates' | 'themes' | 'docs' | 'self-docs' | 'tree'} DocRoot
+ * @typedef {'components' | 'hooks' | 'templates' | 'themes' | 'icon-definitions' | 'docs' | 'self-docs' | 'tree'} DocRoot
  */
 
 /**
@@ -109,7 +110,10 @@ export async function collectDocInputs(project) {
     list.add('components', record.name, record.package, record.docPath);
   }
 
-  const coreDir = findCoreDir(project.cwd);
+  const coreDir =
+    typeof project.coreDir === 'function'
+      ? project.coreDir()
+      : findCoreDir(project.cwd);
   if (coreDir != null) {
     for (const name of Object.values(discoverHooks(coreDir)).flat()) {
       const file = findHookDoc(coreDir, name);
@@ -135,6 +139,21 @@ export async function collectDocInputs(project) {
 
   for (const theme of await project.themes()) {
     list.add('themes', theme.slug, themeImportPackage(theme), theme.docPath);
+  }
+
+  // Icon definitions: Astryx's, then each installed set's own.
+  for (const {doc, file} of astryxIconDefinitions().definitions) {
+    list.add('icon-definitions', doc.name, CLI_PACKAGE, file);
+  }
+  for (const set of (await project.iconSets()).sets) {
+    for (const {doc, file} of set.definitions) {
+      list.add(
+        'icon-definitions',
+        `${set.name}/${doc.name}`,
+        set.package,
+        file,
+      );
+    }
   }
 
   for (const topic of (await project.docs()).entries()) {

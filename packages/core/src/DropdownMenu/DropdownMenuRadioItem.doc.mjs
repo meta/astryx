@@ -26,12 +26,14 @@ export const docs = {
     {
       name: 'value',
       type: 'string',
+      required: true,
       description:
         "The value this item represents within its group. The group's value matches against this to determine the checked state.",
     },
     {
       name: 'label',
       type: 'ReactNode',
+      required: true,
       description: 'Primary label text identifying the option.',
     },
     {
@@ -43,14 +45,14 @@ export const docs = {
       name: 'icon',
       type: 'IconType',
       description:
-        'Icon to display before the label. See `npx @astryxdesign/cli docs icons` for valid semantic names.',
+        'Icon to display before the label. See `astryx docs icons` for valid semantic names.',
     },
     {
       name: 'isDisabled',
       type: 'boolean',
       default: 'false',
       description:
-        'Whether this individual radio item is disabled. Disabled items stay focusable (via aria-disabled) so they remain discoverable by keyboard and assistive technology, but selection is blocked.',
+        'Whether this individual radio item is disabled. A disabled item stays in the accessibility tree as disabled (aria-disabled) but takes no focus: the arrow keys, typeahead, and the pointer highlight skip it, and selection is blocked.',
     },
     {
       name: 'endContent',
@@ -94,7 +96,8 @@ export const docsDense = {
     label: 'primary label text',
     description: 'secondary text below label',
     icon: 'icon before label',
-    isDisabled: 'disabled; stays focusable via aria-disabled',
+    isDisabled:
+      'disabled (aria-disabled); skipped by arrows/typeahead, not focusable',
     endContent: 'content after label+description',
     ref: 'forwarded to the row root (the role="menuitemradio" element)',
   },

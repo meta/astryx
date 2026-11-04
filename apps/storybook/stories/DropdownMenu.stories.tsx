@@ -16,6 +16,7 @@ import {
   DropdownMenuSubMenu,
 } from '@astryxdesign/core/DropdownMenu';
 import {Button} from '@astryxdesign/core/Button';
+import {RadioList, RadioListItem} from '@astryxdesign/core/RadioList';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {
@@ -1534,6 +1535,122 @@ export const HeaderAndFooter: Story = {
         </DropdownMenu>
         <output data-testid="created">{created}</output>
       </>
+    );
+  },
+};
+
+/**
+ * A sub-menu with its own filter field and "Create" button: the Labels level
+ * of a session menu. Its surface (the flyout, or the drilled-in view on a
+ * phone) is a modal dialog named by its row, beside the menu rather than
+ * inside it: Tab walks field, rows, button and wraps; Escape returns to the
+ * row. The picks are checkbox rows, so the sub-menu stays open while several
+ * are chosen.
+ */
+export const SubMenuHeaderAndFooter: Story = {
+  name: 'Submenu / header and footer',
+  render: () => {
+    const [query, setQuery] = useState('');
+    const [picked, setPicked] = useState<ReadonlyArray<string>>(['Bug']);
+    const [created, setCreated] = useState(0);
+    const visible = LABELS.filter(label =>
+      label.toLowerCase().includes(query.trim().toLowerCase()),
+    );
+    return (
+      <div data-testid="submenu-regions-fixture" style={{padding: 16}}>
+        <DropdownMenu button={{label: 'Session'}}>
+          <DropdownMenuItem
+            icon={PencilIcon}
+            label="Rename"
+            onClick={() => {}}
+          />
+          <DropdownMenuSubMenu
+            label="Labels"
+            header={
+              <TextInput
+                label="Filter labels"
+                isLabelHidden
+                placeholder="Filter labels"
+                value={query}
+                onChange={setQuery}
+              />
+            }
+            footer={
+              <Button
+                label="Create label"
+                variant="ghost"
+                onClick={() => setCreated(count => count + 1)}
+              />
+            }>
+            {visible.map(label => (
+              <DropdownMenuCheckboxItem
+                key={label}
+                label={label}
+                value={picked.includes(label)}
+                onChange={isChecked =>
+                  setPicked(current =>
+                    isChecked
+                      ? [...current, label]
+                      : current.filter(item => item !== label),
+                  )
+                }
+              />
+            ))}
+          </DropdownMenuSubMenu>
+          <DropdownMenuItem
+            icon={TrashIcon}
+            label="Delete"
+            onClick={() => {}}
+          />
+        </DropdownMenu>
+        <output data-testid="picked">{picked.join(', ')}</output>
+        <output data-testid="created">{created}</output>
+      </div>
+    );
+  },
+};
+
+/**
+ * A sub-menu whose header holds a choice rather than a field: whether the
+ * picked labels must all match. The radio group keeps its own arrow keys, and
+ * a flyout the pointer has left stays open while focus is inside it, so the
+ * choice can still be changed from the keyboard.
+ */
+export const SubMenuHeaderChoice: Story = {
+  name: 'Submenu / header with a choice',
+  render: () => {
+    const [match, setMatch] = useState('any');
+    const [picked, setPicked] = useState<ReadonlyArray<string>>(['Bug']);
+    return (
+      <div data-testid="submenu-choice-fixture" style={{padding: 16}}>
+        <DropdownMenu button={{label: 'Filters'}}>
+          <DropdownMenuItem label="Reset" onClick={() => {}} />
+          <DropdownMenuSubMenu
+            label="Labels"
+            header={
+              <RadioList label="Match" value={match} onChange={setMatch}>
+                <RadioListItem label="Any label" value="any" />
+                <RadioListItem label="All labels" value="all" />
+              </RadioList>
+            }>
+            {LABELS.map(label => (
+              <DropdownMenuCheckboxItem
+                key={label}
+                label={label}
+                value={picked.includes(label)}
+                onChange={isChecked =>
+                  setPicked(current =>
+                    isChecked
+                      ? [...current, label]
+                      : current.filter(item => item !== label),
+                  )
+                }
+              />
+            ))}
+          </DropdownMenuSubMenu>
+        </DropdownMenu>
+        <output data-testid="match">{match}</output>
+      </div>
     );
   },
 };

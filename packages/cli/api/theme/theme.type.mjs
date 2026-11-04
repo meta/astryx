@@ -245,7 +245,13 @@
  * @typedef {object} TonalPaletteGenerationReceipt
  * @property {1} schemaVersion
  * @property {'astryx-oklch-v1'} recipe Recipe that produced the candidate.
- * @property {string} candidateSha256 SHA-256 over the candidate bytes as written.
+ * @property {'palette-generator-v1'} generatorVersion Generator
+ * implementation that ran the recipe.
+ * @property {'palette-typescript-v1' | 'palette-json-v1'} candidateFormatVersion
+ * Format of the candidate bytes `candidateSha256` covers: the TypeScript
+ * module for a `.ts` output, otherwise canonical JSON.
+ * @property {string} candidateSha256 SHA-256 over the candidate bytes in
+ * `candidateFormatVersion`, exactly as written when an output path is given.
  * @property {{version: string, sha256: string}} [preview] Present when preview
  * content was generated for the request, even if no file was written because
  * the target already exists.

@@ -5,6 +5,7 @@ import {render, screen} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
 import {StatusDot} from './StatusDot';
+import {getForcedColorsRules} from '../__tests__/forcedColors';
 
 /** Renders a StatusDot and returns its root element. */
 function renderDot(props: React.ComponentProps<typeof StatusDot>) {
@@ -196,5 +197,17 @@ describe('StatusDot theme target names', () => {
     const dot = screen.getByRole('img', {name: 'Online'});
     expect(dot).toHaveClass('astryx-status-dot');
     expect(dot).not.toHaveClass('astryx-statusdot');
+  });
+});
+
+// jsdom cannot emulate forced colors, so this asserts the compiled rule the
+// status fill relies on (architecture:theme-tokens INV11): the fill becomes
+// Canvas, and a CanvasText boundary keeps its shape.
+describe('StatusDot forced colors', () => {
+  it('keeps a visible boundary on the status fill', () => {
+    render(<StatusDot variant="error" label="Offline" />);
+    const css = getForcedColorsRules();
+    expect(css).toContain('outline-style: solid;');
+    expect(css).toContain('outline-color: canvastext;');
   });
 });

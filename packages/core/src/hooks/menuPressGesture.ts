@@ -3,32 +3,10 @@
 /**
  * @file menuPressGesture.ts
  * @input A menu press gesture and one pointer event, both as plain data
- * @output Exports the pure `menuPressStep` state machine, its state, event and
- *   effect types, and the settle constant
- * @position Pure module under `useMenuPress`; no DOM, no React, so every
- *   transition is unit-testable without a browser
- *
- * The press model shared by every Astryx menu and picker: the row under the
- * pointer when it is RELEASED is the row that acts, and the highlight follows
- * the pointer while it is held. It is the model of macOS and iOS menus.
- *
- * States:
- * - `idle` — no gesture is live.
- * - `triggerPress` — a finger rests on the trigger; the menu is not open yet.
- *   A mouse skips this state: a mouse press on the trigger opens at once.
- * - `open` — the menu opened under a held pointer (a mouse press, or a finger
- *   held for the long-press delay) and the pointer has not entered it yet.
- * - `tracking` — the pointer is held and the highlight follows it.
- *
- * The settle rule: the release of the gesture that OPENED the menu acts only
- * once the pointer has entered the menu or the press has lasted
- * `MENU_PRESS_SETTLE_MS`; otherwise it acts on nothing and the menu stays
- * open. Without it a menu that opens under the pointer would pick a row
- * nobody chose.
- *
- * Rows are opaque (`T`): the machine never touches the DOM. The hook resolves
- * the enabled row under the pointer and feeds it in; `null` means the pointer
- * is over a divider, a heading, a disabled row, or outside the menu.
+ * @output The pure `menuPressStep` state machine, its state, event and effect
+ *   types, and the settle constant
+ * @position Pure module under `useMenuPress`. It has no DOM and no React, so
+ *   a unit test can check each transition without a browser.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/hooks/menuPressGesture.test.ts
@@ -135,6 +113,23 @@ function release<T>(
 
 /**
  * Advance the gesture by one event. Pure: same inputs, same output.
+ *
+ * The row under the pointer at the release acts, and the highlight follows
+ * the held pointer, as in macOS and iOS menus. The states:
+ * - `idle`: no gesture is live.
+ * - `triggerPress`: a finger rests on the trigger, and the menu is not open
+ *   yet. A mouse press on the trigger skips this state and opens at once.
+ * - `open`: the menu opened under a held pointer, and the pointer has not
+ *   entered it yet.
+ * - `tracking`: the pointer is held, and the highlight follows it.
+ *
+ * The settle rule: the release of the opening gesture acts only after the
+ * pointer entered the menu or the press lasted `MENU_PRESS_SETTLE_MS`. Else a
+ * menu that opens under the pointer would pick a row that nobody chose.
+ *
+ * Rows are opaque (`T`). The hook feeds in the enabled row under the
+ * pointer, or `null` over a divider, a heading, a disabled row, or outside
+ * the menu.
  */
 export function menuPressStep<T>(
   gesture: MenuPressGesture<T>,
@@ -209,10 +204,10 @@ function stepTriggerPress<T>(
       // it must pass, and no gesture is live afterwards.
       return idle({type: 'settle', stray: false, dismiss: false});
     case 'cancel':
-      // The browser took the gesture (an incoming call, a system gesture).
-      // Settle rather than going quiet: a held finger has already installed
-      // the document's touchmove preventer, and only the end of a gesture
-      // takes it back off. No click follows a cancelled pointer.
+      // The browser took the gesture, for example for a system gesture.
+      // Settle and do not go idle: a held finger installed the document's
+      // touchmove preventer, and only the end of a gesture removes it. No
+      // click follows a cancelled pointer.
       return idle({type: 'settle', stray: false, dismiss: false});
     case 'down':
     case 'move':

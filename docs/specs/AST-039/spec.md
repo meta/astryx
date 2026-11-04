@@ -13,7 +13,7 @@ owners: [josephfarina]
 affects_architecture: [architecture:cli-surface]
 affects_families: []
 affects_contributing: [contributing:cli-conventions]
-affects_consumer_docs: [cli/integrations]
+affects_consumer_docs: [authoring]
 ---
 
 # Integration contribution descriptor system spec
@@ -89,7 +89,9 @@ change.
   precedence over Core's keyword fallback. Discovery MUST reject a missing
   source, more than one eligible same-stem source, an invalid inferred export
   name, or a descriptor whose authored identity conflicts with its required
-  directory identity.
+  directory identity. A template answers to its display name too when that
+  name holds every word of the component it shows; a variant label alone does
+  not.
 - **FR5 — Multi-file items have one confined ownership boundary.** A kind whose
   item needs nested source, token, palette, asset, or receipt files MUST define
   one item-local copy and pack boundary. Discovery and authoring MUST enumerate

@@ -18,12 +18,12 @@ import {
 describe('linkifyPRs', () => {
   it('links bare PR references', () => {
     expect(linkifyPRs('Fix spinner (#2717)')).toBe(
-      'Fix spinner ([#2717](https://github.com/facebook/astryx/pull/2717))',
+      'Fix spinner ([#2717](https://github.com/meta/astryx/pull/2717))',
     );
   });
 
   it('leaves already-linked references untouched', () => {
-    const already = '[#2717](https://github.com/facebook/astryx/pull/2717)';
+    const already = '[#2717](https://github.com/meta/astryx/pull/2717)';
     expect(linkifyPRs(already)).toBe(already);
   });
 });
@@ -210,9 +210,7 @@ describe('full changelog pipeline', () => {
     ].join('\n');
 
     const out = linkifyContributors(linkifyPRs(md));
-    expect(out).toContain(
-      '[#2717](https://github.com/facebook/astryx/pull/2717)',
-    );
+    expect(out).toContain('[#2717](https://github.com/meta/astryx/pull/2717)');
     expect(out).toContain('[@cixzhang](https://github.com/cixzhang)');
     expect(out).toContain('[@ejhammond](https://github.com/ejhammond)');
     // Scoped package bullet must remain a plain bullet.

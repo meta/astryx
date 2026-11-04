@@ -5,7 +5,7 @@
  * @position src/lib — typed analytics helpers wrapping @vercel/analytics.
  *
  * Convention: small fixed set of event names, context pushed into properties.
- * See https://github.com/facebook/astryx/issues/2607 for the full spec.
+ * See https://github.com/meta/astryx/issues/2607 for the full spec.
  */
 
 import {track} from '@vercel/analytics';
@@ -15,12 +15,7 @@ import {track} from '@vercel/analytics';
 // ---------------------------------------------------------------------------
 
 type Page =
-  | 'templates'
-  | 'themes'
-  | 'components'
-  | 'playground'
-  | 'docs'
-  | 'landing';
+  'templates' | 'themes' | 'components' | 'playground' | 'docs' | 'landing';
 
 type CopyTarget =
   | 'cli_command'
@@ -30,11 +25,7 @@ type CopyTarget =
   | 'install_command';
 
 type CtaTarget =
-  | 'install'
-  | 'get_started'
-  | 'github'
-  | 'community'
-  | 'customize';
+  'install' | 'get_started' | 'github' | 'community' | 'customize';
 
 type NavigateTarget = 'prev_next' | 'tab' | 'view';
 

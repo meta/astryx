@@ -11,20 +11,22 @@
 
 import {useState} from 'react';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {render, screen, fireEvent, waitFor} from '@testing-library/react';
+import {act, render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
   return [prose, component].filter(Boolean).join('\n\n');
 }
-// getButton/queryButton instead of getByRole('button', {name}): the closed
-// popover keeps a two-month Calendar (~85 role=button nodes) mounted, which
-// made every role+name query compute ~85 accessible names through jsdom's
+// getButton/queryButton instead of getByRole('button', {name}): the open
+// popover holds a two-month Calendar (~85 role=button nodes), which makes
+// every role+name query compute ~85 accessible names through jsdom's
 // slow getComputedStyle (~450ms per query). See fastRoleQueries.ts.
 import {getButton, queryButton} from '../__tests__/fastRoleQueries';
+import * as stylex from '@stylexjs/stylex';
+import {colorVars} from '../theme/tokens.stylex';
 import {DateRangeInput} from './DateRangeInput';
-import type {DateRange} from './DateRangeInput';
+import type {DateRange, DateRangeInputProps} from './DateRangeInput';
 import {Icon} from '../Icon';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
@@ -155,7 +157,46 @@ describe('DateRangeInput', () => {
       />,
     );
     const trigger = getButton(/Range/);
-    expect(trigger).toBeDisabled();
+    expect(trigger).not.toHaveAttribute('disabled');
+    expect(trigger).toHaveAttribute('aria-disabled', 'true');
+    trigger.focus();
+    expect(trigger).toHaveFocus();
+  });
+
+  it('restores the focus ring on a focused disabled field (AST-085 FR6)', () => {
+    // The same declarations as the field's ring style compile to the same
+    // atomic classes.
+    const ringClasses = stylex
+      .props(
+        stylex.create({
+          ring: {
+            borderColor: {
+              default: colorVars['--color-border-emphasized'],
+              ':focus-within': colorVars['--color-accent'],
+            },
+            boxShadow: {
+              default: 'none',
+              ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+            },
+          },
+        }).ring,
+      )
+      .className!.split(' ')
+      // Keep the atomic classes, not the dev-only debug name.
+      .filter(name => !name.includes('__'));
+    render(
+      <DateRangeInput
+        label="Range"
+        isDisabled
+        value={null}
+        onChange={() => {}}
+      />,
+    );
+    // The shared disabled style alone drops these :focus-within declarations.
+    const wrapper = getButton(/Range/).parentElement!;
+    for (const name of ringClasses) {
+      expect(wrapper).toHaveClass(name);
+    }
   });
 
   it('is not disabled by default', () => {
@@ -272,7 +313,8 @@ describe('DateRangeInput', () => {
         onChange={() => {}}
       />,
     );
-    expect(getButton('Open calendar')).toBeDisabled();
+    expect(getButton('Open calendar')).not.toHaveAttribute('disabled');
+    expect(getButton('Open calendar')).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('renders with size="lg"', () => {
@@ -526,7 +568,8 @@ describe('DateRangeInput', () => {
       );
 
       const preset = getButton('Last 7 days');
-      expect(preset).toBeDisabled();
+      expect(preset).not.toHaveAttribute('disabled');
+      expect(preset).toHaveAttribute('aria-disabled', 'true');
       fireEvent.click(preset);
       expect(handleChange).not.toHaveBeenCalled();
     });
@@ -544,7 +587,8 @@ describe('DateRangeInput', () => {
       );
 
       const preset = getButton('Last 7 days');
-      expect(preset).toBeDisabled();
+      expect(preset).not.toHaveAttribute('disabled');
+      expect(preset).toHaveAttribute('aria-disabled', 'true');
       fireEvent.click(preset);
       expect(handleChange).not.toHaveBeenCalled();
     });
@@ -562,7 +606,8 @@ describe('DateRangeInput', () => {
       );
 
       const preset = getButton('Last 7 days');
-      expect(preset).toBeDisabled();
+      expect(preset).not.toHaveAttribute('disabled');
+      expect(preset).toHaveAttribute('aria-disabled', 'true');
       fireEvent.click(preset);
       expect(handleChange).not.toHaveBeenCalled();
     });
@@ -590,7 +635,7 @@ describe('DateRangeInput', () => {
 
       const getRangeCallsBeforeClick = getRange.mock.calls.length;
       const preset = getButton('Allowed range');
-      expect(preset).not.toBeDisabled();
+      expect(preset).not.toHaveAttribute('aria-disabled');
       fireEvent.click(preset);
       expect(handleChange).toHaveBeenCalledWith(range);
       expect(getRangeCallsAtChange).toBe(getRangeCallsBeforeClick);
@@ -613,7 +658,10 @@ describe('DateRangeInput', () => {
     // accessibility tree; use hidden: true to find it.
     const h = {hidden: true} as const;
 
-    function renderDisabled(props?: {disabledMessage?: string}) {
+    function renderDisabled(props?: {
+      disabledMessage?: string;
+      onClick?: () => void;
+    }) {
       return render(
         <DateRangeInput
           label="Range"
@@ -699,12 +747,163 @@ describe('DateRangeInput', () => {
       expect(trigger).toHaveAttribute('aria-expanded', 'false');
     });
 
-    it('remains natively disabled when disabled without a reason', () => {
-      renderDisabled();
+    it('blocks activation and a caller onClick when disabled without a reason (AST-085 FR1, FR2)', async () => {
+      const user = userEvent.setup();
+      const onClick = vi.fn();
+      renderDisabled({onClick});
       const trigger = getButton(/Range:/);
-      expect(trigger).toBeDisabled();
-      expect(trigger).not.toHaveAttribute('aria-disabled');
+      expect(trigger).not.toHaveAttribute('disabled');
+      await user.click(trigger);
+      await user.keyboard('{Enter}');
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(onClick).not.toHaveBeenCalled();
     });
+
+    it('blocks the calendar button while disabled (AST-085 FR2)', () => {
+      renderDisabled();
+      fireEvent.click(getButton('Open calendar'));
+      expect(getButton(/Range:/)).toHaveAttribute('aria-expanded', 'false');
+    });
+  });
+});
+
+describe('DateRangeInput calendar while the popover is closed', () => {
+  const calendarGrid = () => document.querySelector('[role="grid"]');
+
+  it('renders no calendar until the popover opens, and none after it closes', () => {
+    render(
+      <DateRangeInput
+        label="Range"
+        value={{start: '2026-01-05', end: '2026-01-09'}}
+        onChange={() => {}}
+      />,
+    );
+    const toggle = getButton('Open calendar');
+    expect(calendarGrid()).toBeNull();
+
+    fireEvent.click(toggle);
+    expect(calendarGrid()).not.toBeNull();
+
+    fireEvent.click(toggle);
+    expect(calendarGrid()).toBeNull();
+  });
+
+  it('moves focus into the popover on each open from the toggle', async () => {
+    render(
+      <DateRangeInput
+        label="Range"
+        value={{start: '2026-01-05', end: '2026-01-09'}}
+        onChange={() => {}}
+      />,
+    );
+    const toggle = getButton('Open calendar');
+
+    for (let i = 0; i < 2; i++) {
+      fireEvent.click(toggle);
+      // The first calendar control takes focus, not the dialog surface.
+      await waitFor(() => {
+        expect(getButton('Previous month')).toHaveFocus();
+      });
+      fireEvent.click(toggle);
+      expect(calendarGrid()).toBeNull();
+    }
+  });
+});
+
+describe('DateRangeInput disabled commit boundaries', () => {
+  const props = {
+    label: 'Range',
+    value: {start: '2026-01-01', end: '2026-01-03'},
+    onChange: vi.fn(),
+    changeAction: vi.fn(),
+    disabledMessage: 'Reporting is locked',
+    presets: [
+      {
+        label: 'Last three days',
+        getRange: () => ({start: '2026-01-08', end: '2026-01-10'}),
+      },
+    ],
+    numberOfMonths: 1,
+    min: '2026-01-01',
+    max: '2026-01-31',
+  } satisfies DateRangeInputProps;
+
+  beforeEach(() => {
+    props.onChange.mockClear();
+    props.changeAction.mockClear();
+  });
+
+  it('blocks pointer and keyboard preset commits while disabled, preserving focus and reason', async () => {
+    const user = userEvent.setup();
+    const {rerender} = render(<DateRangeInput {...props} />);
+    fireEvent.click(getButton('Open calendar'));
+    const preset = getButton('Last three days');
+    act(() => preset.focus());
+    rerender(<DateRangeInput {...props} isDisabled />);
+    fireEvent.click(preset);
+    await user.keyboard('{Enter} ');
+
+    expect(props.onChange).not.toHaveBeenCalled();
+    expect(props.changeAction).not.toHaveBeenCalled();
+    expect(preset).toHaveFocus();
+    expect(preset).not.toHaveAttribute('disabled');
+    expect(preset).toHaveAttribute('aria-disabled', 'true');
+    expect(preset).toHaveAttribute('data-disabled');
+    expect(preset).toHaveAccessibleDescription('Reporting is locked');
+    expect(getButton(/^Range:/)).toHaveTextContent(/Jan.*1.*Jan.*3/);
+    expect(getButton(/^Range:/)).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('blocks range commits after disabling an open picker without closing or moving focus', async () => {
+    const user = userEvent.setup();
+    const {rerender} = render(<DateRangeInput {...props} />);
+    await user.click(getButton('Open calendar'));
+    await waitFor(() => expect(getButton('Last three days')).toHaveFocus());
+    fireEvent.click(getButton(/January 15, 2026/));
+    expect(props.onChange).not.toHaveBeenCalled();
+    const end = getButton(/January 16, 2026/);
+    act(() => end.focus());
+
+    rerender(<DateRangeInput {...props} isDisabled />);
+    fireEvent.click(end);
+    await user.keyboard('{Enter} ');
+
+    expect(props.onChange).not.toHaveBeenCalled();
+    expect(props.changeAction).not.toHaveBeenCalled();
+    expect(end).toHaveFocus();
+    expect(getButton(/^Range:/)).toHaveTextContent(/Jan.*1.*Jan.*3/);
+    expect(getButton(/^Range:/)).toHaveAttribute('aria-expanded', 'true');
+
+    rerender(<DateRangeInput {...props} />);
+    await user.click(getButton(/January 15, 2026/));
+    await user.click(end);
+    const range = {start: '2026-01-15', end: '2026-01-16'};
+    expect(props.onChange).toHaveBeenCalledExactlyOnceWith(range);
+    expect(props.changeAction).toHaveBeenCalledExactlyOnceWith(range);
+    expect(getButton(/^Range:/)).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('preserves loading-only selection dismissal without committing a range', () => {
+    const {rerender} = render(<DateRangeInput {...props} />);
+    fireEvent.click(getButton('Open calendar'));
+    rerender(<DateRangeInput {...props} isLoading />);
+    const preset = getButton('Last three days');
+    expect(preset).not.toHaveAttribute('aria-disabled');
+    expect(preset).not.toHaveAttribute('data-disabled');
+    expect(preset).not.toHaveAttribute('aria-describedby');
+    fireEvent.click(preset);
+    expect(getButton(/^Range:/)).toHaveAttribute('aria-expanded', 'false');
+
+    rerender(<DateRangeInput {...props} />);
+    fireEvent.click(getButton('Open calendar'));
+    fireEvent.click(getButton(/January 15, 2026/));
+    rerender(<DateRangeInput {...props} isLoading />);
+    fireEvent.click(getButton(/January 16, 2026/));
+
+    expect(props.onChange).not.toHaveBeenCalled();
+    expect(props.changeAction).not.toHaveBeenCalled();
+    expect(getButton(/^Range:/)).toHaveTextContent(/Jan.*1.*Jan.*3/);
+    expect(getButton(/^Range:/)).toHaveAttribute('aria-expanded', 'false');
   });
 });
 
@@ -988,13 +1187,19 @@ describe('DateRangeInput range-span forwarding', () => {
     fireEvent.click(getButton('Open calendar'));
 
     // Before a start is picked, a far-off day is selectable.
-    expect(dayButton('2026-01-20')).not.toBeDisabled();
+    expect(dayButton('2026-01-20')).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
 
     fireEvent.click(dayButton('2026-01-10') as HTMLButtonElement);
 
     // A 7-day window spans start ± 6 days: Jan 16 is the edge, Jan 17 is out.
-    expect(dayButton('2026-01-16')).not.toBeDisabled();
-    expect(dayButton('2026-01-17')).toBeDisabled();
+    expect(dayButton('2026-01-16')).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(dayButton('2026-01-17')).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('disables a preset whose range violates the span cap', () => {
@@ -1030,9 +1235,10 @@ describe('DateRangeInput range-span forwarding', () => {
     // The 3-day preset fits the 7-day cap; the 30-day preset can't be committed.
     const withinCap = getButton('Last 3 days');
     const overCap = getButton('Last 30 days');
-    expect(withinCap).not.toBeDisabled();
+    expect(withinCap).not.toHaveAttribute('aria-disabled');
     expect(withinCap).not.toHaveAttribute('data-disabled');
-    expect(overCap).toBeDisabled();
+    expect(overCap).not.toHaveAttribute('disabled');
+    expect(overCap).toHaveAttribute('aria-disabled', 'true');
     expect(overCap).toHaveClass('astryx-date-range-input-preset');
     expect(overCap).toHaveAttribute('data-disabled', 'disabled');
 

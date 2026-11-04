@@ -45,14 +45,15 @@ export const docs = {
     {
       name: 'isDisabled',
       type: 'boolean',
-      description: 'Disable the trigger and picker.',
+      description:
+        'Disable the trigger and picker. The trigger stays focusable and exposes `aria-disabled`; opening is blocked.',
       default: 'false',
     },
     {
       name: 'disabledMessage',
       type: 'string',
       description:
-        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the field focusable via aria-disabled (activation stays blocked). Use this instead of wrapping a disabled DateRangeInput in Tooltip. Disabled controls swallow the hover events an external Tooltip needs.',
+        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and describes the trigger (activation stays blocked). Use this instead of wrapping a disabled DateRangeInput in Tooltip.',
     },
     {
       name: 'value',
@@ -114,7 +115,7 @@ export const docs = {
       name: 'presets',
       type: 'Array<DateRangePreset>',
       description:
-        'Preset ranges shown as quick-select options beside the calendar. A preset is disabled when either endpoint violates min, max, or dateConstraints, or when its span violates minRangeSpan or maxRangeSpan.',
+        'Preset ranges shown as quick-select options beside the calendar, or above it when the two do not fit side by side. A preset is disabled when either endpoint violates min, max, or dateConstraints, or when its span violates minRangeSpan or maxRangeSpan.',
     },
     {
       name: 'hasClear',
@@ -240,7 +241,7 @@ export const docs = {
       {
         guidance: false,
         description:
-          'Wrap a disabled DateRangeInput in Tooltip to explain why it is disabled; disabled triggers swallow the hover events the wrapper needs. Use the disabledMessage prop instead.',
+          'Wrap a disabled DateRangeInput in Tooltip to explain why it is disabled. Use the disabledMessage prop instead, which ties the reason to the field.',
       },
     ],
     anatomy: [
@@ -276,7 +277,8 @@ export const docs = {
       {
         name: 'Preset sidebar',
         required: false,
-        description: 'A list of preset range options beside the calendar.',
+        description:
+          'A list of preset range options beside the calendar, or above it when the two do not fit side by side.',
       },
       {
         name: 'Preset button',
@@ -344,7 +346,7 @@ export const docsDense = {
       {
         guidance: false,
         description:
-          'Wrap a disabled DateRangeInput in Tooltip to explain why it is disabled; disabled triggers swallow the hover events the wrapper needs. Use the disabledMessage prop instead.',
+          'Wrap a disabled DateRangeInput in Tooltip to explain why it is disabled. Use the disabledMessage prop instead, which ties the reason to the field.',
       },
     ],
   },
@@ -356,7 +358,7 @@ export const docsDense = {
     isRequired: 'mark field required',
     isDisabled: 'disable trigger+picker',
     disabledMessage:
-      'reason shown in a tooltip on hover/focus when disabled; keeps trigger focusable via aria-disabled',
+      'reason shown in a tooltip on hover/focus when disabled; describes the trigger',
     value:
       'selected range {start, end} or null; import DateRange type from @astryxdesign/core/DateRangeInput (do not redeclare)',
     onChange: 'callback on range change; null on clear',

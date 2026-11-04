@@ -17,6 +17,7 @@ import {
   integrationAddComponent,
   integrationAddTemplate,
 } from './add-contribution.mjs';
+import {formatCliCommand} from '../../foundation/env/package-manager.mjs';
 
 let tmpDir;
 
@@ -213,6 +214,7 @@ function writePackage({
   themeExports = false,
   npmignore,
   components = false,
+  templates = false,
   scripts,
 } = {}) {
   const pkg = {name, version};
@@ -272,6 +274,14 @@ export default {type: 'theme', name: 'ocean', displayName: 'Ocean', description:
       'export default function Card() { return null; }\n',
     );
   }
+  if (templates) {
+    const root = path.join(tmpDir, 'templates');
+    fs.mkdirSync(root, {recursive: true});
+    fs.writeFileSync(
+      path.join(root, 'stray.tsx'),
+      'export default function Stray() { return null; }\n',
+    );
+  }
   if (npmignore) {
     fs.writeFileSync(path.join(tmpDir, '.npmignore'), npmignore);
   }
@@ -302,6 +312,363 @@ function runCliVerify() {
     receipt: run.stdout ? JSON.parse(run.stdout) : null,
   };
 }
+
+/**
+ * Give the built ocean theme a font stylesheet and an entry module that loads
+ * the theme's own styles, and export them the way such a package does.
+ * @param {string} entry
+ * @param {string} [file] the entry's file name in `entries/`
+ */
+function writeOwnStylesEntry(entry, file = 'ocean.mjs') {
+  fs.writeFileSync(
+    path.join(tmpDir, 'themes', 'ocean', 'ocean.fonts.css'),
+    "@font-face { font-family: 'Ocean Sans'; src: local('Ocean Sans'); }\n",
+  );
+  fs.mkdirSync(path.join(tmpDir, 'entries'), {recursive: true});
+  fs.writeFileSync(path.join(tmpDir, 'entries', file), entry);
+  const packageFile = path.join(tmpDir, 'package.json');
+  const pkg = JSON.parse(fs.readFileSync(packageFile, 'utf-8'));
+  pkg.files = ['astryx.integration.mjs', 'themes', 'entries'];
+  pkg.exports = {
+    './themes/ocean': `./entries/${file}`,
+    './themes/ocean.css': './themes/ocean/ocean.css',
+    './themes/ocean.fonts.css': './themes/ocean/ocean.fonts.css',
+  };
+  fs.writeFileSync(packageFile, `${JSON.stringify(pkg, null, 2)}\n`);
+}
+
+/**
+ * Rename the ocean theme to deep-sea, keeping its `ocean` slug, and build it,
+ * so its outputs are named after the theme: `deep-sea.css` and `deep-sea.js`,
+ * which exports `deepSeaTheme`.
+ */
+function writeRenamedOcean() {
+  writePackage({files: ['astryx.integration.mjs', 'themes', 'entries']});
+  fs.writeFileSync(
+    path.join(tmpDir, 'themes', 'ocean', 'oceanTheme.ts'),
+    "import {defineTheme} from '@astryxdesign/core/theme';\n\nexport const oceanTheme = defineTheme({name: 'deep-sea'});\n",
+  );
+  const built = spawnSync(
+    process.execPath,
+    [
+      path.join(process.cwd(), 'packages/cli/clients/cli/bin/astryx.mjs'),
+      'theme',
+      'build',
+      'themes/ocean/oceanTheme.ts',
+    ],
+    {cwd: tmpDir, encoding: 'utf-8', timeout: 30_000},
+  );
+  if (built.status !== 0) {
+    throw new Error(`Could not build the theme fixture: ${built.stderr}`);
+  }
+}
+
+/**
+ * Give the ocean theme an icon registry and build it, so its built module
+ * also exports `oceanIcons`.
+ */
+function writeOceanWithIcons() {
+  writePackage({files: ['astryx.integration.mjs', 'themes', 'entries']});
+  const themeDir = path.join(tmpDir, 'themes', 'ocean');
+  fs.writeFileSync(
+    path.join(themeDir, 'icons.js'),
+    'export const oceanIcons = {};\n',
+  );
+  fs.writeFileSync(
+    path.join(themeDir, 'oceanTheme.ts'),
+    "import {defineTheme} from '@astryxdesign/core/theme';\nimport {oceanIcons} from './icons';\n\nexport const oceanTheme = defineTheme({name: 'ocean', icons: oceanIcons});\n",
+  );
+  const built = spawnSync(
+    process.execPath,
+    [
+      path.join(process.cwd(), 'packages/cli/clients/cli/bin/astryx.mjs'),
+      'theme',
+      'build',
+      'themes/ocean/oceanTheme.ts',
+    ],
+    {cwd: tmpDir, encoding: 'utf-8', timeout: 30_000},
+  );
+  if (built.status !== 0) {
+    throw new Error(`Could not build the theme fixture: ${built.stderr}`);
+  }
+}
+
+// An entry like one whose import is the whole integration: it loads the
+// theme's fonts and stylesheet, by relative path and through the package's
+// own exports, and re-exports the built theme.
+const OWN_STYLES_ENTRY = `// Copyright (c) Acme.
+
+import '../themes/ocean/ocean.fonts.css';
+import '@acme/widgets/themes/ocean.css';
+
+export {oceanTheme} from '../themes/ocean/ocean.js';
+`;
+
+describe('a theme module that loads its own styles', () => {
+  it('passes an entry that imports the theme stylesheet and fonts and re-exports the built module', async () => {
+    writePackage({themeExports: true});
+    writeOwnStylesEntry(OWN_STYLES_ENTRY);
+
+    const result = await integrationPackCheck({cwd: tmpDir});
+
+    expect(result.data.issues).toEqual([]);
+    expect(result.data.packable).toBe(true);
+    const cli = runCliVerify();
+    expect(cli.status, cli.stderr).toBe(0);
+    expect(cli.receipt?.data.issues).toEqual([]);
+  });
+
+  it('passes an entry that imports its fonts through the package exports and re-exports everything', async () => {
+    writePackage({themeExports: true});
+    writeOwnStylesEntry(
+      "import '@acme/widgets/themes/ocean.fonts.css';\nimport '../themes/ocean/ocean.css';\nexport * from '../themes/ocean/ocean.js';\n",
+    );
+
+    const result = await integrationPackCheck({cwd: tmpDir});
+
+    expect(result.data.issues).toEqual([]);
+    expect(result.data.packable).toBe(true);
+  });
+
+  it.each([
+    [
+      'also imports another stylesheet',
+      `${OWN_STYLES_ENTRY}import './other.css';\n`,
+      "./other.css is not the theme's own stylesheet or font stylesheet",
+    ],
+    [
+      'also imports a script',
+      `import './setup.mjs';\n${OWN_STYLES_ENTRY}`,
+      "./setup.mjs is not the theme's own stylesheet or font stylesheet",
+    ],
+    [
+      'runs code',
+      `${OWN_STYLES_ENTRY}console.log('ocean');\n`,
+      'line 7 is neither a stylesheet import nor the re-export',
+    ],
+    [
+      'exports another value',
+      `${OWN_STYLES_ENTRY}export const extra = 1;\n`,
+      'line 7 is neither a stylesheet import nor the re-export',
+    ],
+    [
+      'renames the theme it re-exports',
+      "import '../themes/ocean/ocean.css';\nexport {oceanTheme, oceanTheme as theme} from '../themes/ocean/ocean.js';\n",
+      'it re-exports names other than oceanTheme',
+    ],
+    [
+      'binds the stylesheet it imports',
+      "import styles from '../themes/ocean/ocean.css';\nexport {oceanTheme} from '../themes/ocean/ocean.js';\n",
+      'its import of ../themes/ocean/ocean.css is not a side-effect import',
+    ],
+    [
+      'imports the stylesheet as a CSS module script',
+      "import '../themes/ocean/ocean.css' with {type: 'css'};\nexport {oceanTheme} from '../themes/ocean/ocean.js';\n",
+      'its import of ../themes/ocean/ocean.css is not a side-effect import',
+    ],
+    [
+      're-exports another name',
+      "import '../themes/ocean/ocean.css';\nexport {oceanTheme, missing} from '../themes/ocean/ocean.js';\n",
+      'it re-exports names other than oceanTheme',
+    ],
+    [
+      're-exports a copy that is not a .js module',
+      "import '../themes/ocean/ocean.css';\nexport {oceanTheme} from './copy.cjs';\n",
+      'its re-export from ./copy.cjs does not name a .js module',
+    ],
+    [
+      'has a directive',
+      `'use client';\n${OWN_STYLES_ENTRY}`,
+      'it has a directive',
+    ],
+    [
+      're-exports twice',
+      `${OWN_STYLES_ENTRY}export * from '../themes/ocean/ocean.js';\n`,
+      'it has more than one re-export',
+    ],
+  ])('fails an entry that %s', async (_label, entry, reason) => {
+    writePackage({themeExports: true});
+    writeOwnStylesEntry(entry);
+    fs.writeFileSync(path.join(tmpDir, 'entries', 'other.css'), '.x {}\n');
+    fs.writeFileSync(path.join(tmpDir, 'entries', 'setup.mjs'), 'export {};\n');
+    fs.copyFileSync(
+      path.join(tmpDir, 'themes', 'ocean', 'ocean.js'),
+      path.join(tmpDir, 'entries', 'copy.cjs'),
+    );
+
+    const result = await integrationPackCheck({cwd: tmpDir});
+
+    expect(result.data.packable).toBe(false);
+    expect(result.data.issues).toEqual([
+      {
+        code: 'theme_module_stale',
+        severity: 'error',
+        message: `Theme "ocean" module is not the module \`${formatCliCommand('theme build themes/ocean/oceanTheme.ts', tmpDir)}\` writes and does not only wrap it: ${reason}. A module that wraps the built module may only import the theme's own stylesheet and font stylesheet for their side effects and re-export from the built module either everything or only its theme, as oceanTheme.`,
+      },
+    ]);
+  });
+
+  it('fails an entry whose re-exported module drifts from source', async () => {
+    writePackage({themeExports: true});
+    writeOwnStylesEntry(OWN_STYLES_ENTRY);
+    fs.appendFileSync(
+      path.join(tmpDir, 'themes', 'ocean', 'ocean.js'),
+      '// stale module\n',
+    );
+
+    const result = await integrationPackCheck({cwd: tmpDir});
+
+    expect(result.data.packable).toBe(false);
+    expect(result.data.issues).toEqual([
+      {
+        code: 'theme_module_stale',
+        severity: 'error',
+        message: `Theme "ocean" module re-exports ../themes/ocean/ocean.js, which does not match themes/ocean/oceanTheme.ts. Run \`${formatCliCommand('theme build themes/ocean/oceanTheme.ts', tmpDir)}\` before packing.`,
+      },
+    ]);
+  });
+
+  it('does not accept a TypeScript entry', async () => {
+    writePackage({themeExports: true});
+    writeOwnStylesEntry(OWN_STYLES_ENTRY, 'ocean.ts');
+
+    const result = await integrationPackCheck({cwd: tmpDir});
+
+    expect(result.data.packable).toBe(false);
+    expect(result.data.issues).toEqual([
+      {
+        code: 'theme_module_stale',
+        severity: 'error',
+        message: `Theme "ocean" module does not match themes/ocean/oceanTheme.ts. Run \`${formatCliCommand('theme build themes/ocean/oceanTheme.ts', tmpDir)}\` before packing.`,
+      },
+    ]);
+  });
+
+  it('does not accept an entry that re-exports itself', async () => {
+    writePackage({themeExports: true});
+    writeOwnStylesEntry(
+      "import '../themes/ocean/ocean.css';\nexport * from './ocean.js';\n",
+      'ocean.js',
+    );
+
+    const result = await integrationPackCheck({cwd: tmpDir});
+
+    expect(result.data.packable).toBe(false);
+    expect(result.data.issues).toContainEqual(
+      expect.objectContaining({
+        code: 'theme_import_unresolvable',
+        message: expect.stringContaining('does not export "oceanTheme"'),
+      }),
+    );
+  });
+
+  it('passes an entry for a theme whose own name differs from its slug', async () => {
+    writeRenamedOcean();
+    writeOwnStylesEntry(
+      "import '../themes/ocean/deep-sea.css';\nexport {deepSeaTheme as oceanTheme} from '../themes/ocean/deep-sea.js';\n",
+    );
+    setThemeExports({
+      './themes/ocean': './entries/ocean.mjs',
+      './themes/ocean.css': './themes/ocean/deep-sea.css',
+    });
+
+    const result = await integrationPackCheck({cwd: tmpDir});
+
+    expect(result.data.issues).toEqual([]);
+    expect(result.data.packable).toBe(true);
+    const cli = runCliVerify();
+    expect(cli.status, cli.stderr).toBe(0);
+  });
+
+  it('says a rebuild cannot fix exports that name the theme after its folder once its source renames it', async () => {
+    writePackage({
+      files: ['astryx.integration.mjs', 'themes'],
+      themeExports: true,
+    });
+    fs.writeFileSync(
+      path.join(tmpDir, 'themes', 'ocean', 'oceanTheme.ts'),
+      "import {defineTheme} from '@astryxdesign/core/theme';\n\nexport const oceanTheme = defineTheme({name: 'sea'});\n",
+    );
+
+    const result = await integrationPackCheck({cwd: tmpDir});
+
+    expect(result.data.issues.map(issue => issue.message)).toEqual([
+      `Theme "ocean" module is themes/ocean/ocean.js, but oceanTheme.ts calls defineTheme with name: 'sea', so \`${formatCliCommand('theme build themes/ocean/oceanTheme.ts', tmpDir)}\` writes themes/ocean/sea.js instead and rebuilding never updates ocean.js. Fix: point the package export that serves it at themes/ocean/sea.js after building, or set name: 'ocean' in oceanTheme.ts and rebuild.`,
+      `Theme "ocean" stylesheet is themes/ocean/ocean.css, but oceanTheme.ts calls defineTheme with name: 'sea', so \`${formatCliCommand('theme build themes/ocean/oceanTheme.ts', tmpDir)}\` writes themes/ocean/sea.css instead and rebuilding never updates ocean.css. Fix: point the package export that serves it at themes/ocean/sea.css after building, or set name: 'ocean' in oceanTheme.ts and rebuild.`,
+    ]);
+  });
+
+  it('compares a partial export set with the module named after the theme', async () => {
+    writeRenamedOcean();
+    setThemeExports({'./themes/ocean': './themes/ocean/deep-sea.js'});
+
+    const result = await integrationPackCheck({cwd: tmpDir});
+
+    expect(result.data.packable).toBe(true);
+    expect(result.data.issues.map(issue => issue.code)).toEqual([
+      'theme_exports_incomplete',
+    ]);
+  });
+
+  it('passes an entry that re-exports only the theme from a built module that also exports its icons', async () => {
+    writeOceanWithIcons();
+    writeOwnStylesEntry(OWN_STYLES_ENTRY);
+
+    const result = await integrationPackCheck({cwd: tmpDir});
+
+    expect(result.data.issues).toEqual([]);
+    expect(result.data.packable).toBe(true);
+  });
+
+  it('fails an entry that gives the built icons the theme export name', async () => {
+    writeOceanWithIcons();
+    writeOwnStylesEntry(
+      "import '../themes/ocean/ocean.css';\nexport {oceanIcons as oceanTheme} from '../themes/ocean/ocean.js';\n",
+    );
+
+    const result = await integrationPackCheck({cwd: tmpDir});
+
+    expect(result.data.packable).toBe(false);
+    expect(result.data.issues).toEqual([
+      expect.objectContaining({
+        code: 'theme_module_stale',
+        message: expect.stringContaining(
+          'it re-exports oceanIcons, which is not the built theme',
+        ),
+      }),
+    ]);
+  });
+
+  it('fails when packing changes the module an entry re-exports', async () => {
+    const prepack = [
+      "const fs=require('fs')",
+      "fs.copyFileSync('themes/ocean/ocean.js','.ocean.js.orig')",
+      "fs.appendFileSync('themes/ocean/ocean.js','// packed\\n')",
+    ].join(';');
+    const postpack =
+      "require('fs').renameSync('.ocean.js.orig','themes/ocean/ocean.js')";
+    writePackage({
+      themeExports: true,
+      scripts: {
+        prepack: `node -e "${prepack}"`,
+        postpack: `node -e "${postpack}"`,
+      },
+    });
+    writeOwnStylesEntry(OWN_STYLES_ENTRY);
+
+    const result = await integrationPackCheck({cwd: tmpDir});
+
+    expect(result.data.packable).toBe(false);
+    expect(result.data.issues).toEqual([
+      {
+        code: 'packed_theme_module_changed',
+        severity: 'error',
+        message:
+          'Theme "ocean" module changed during packing. Keep the built output unchanged in the tarball.',
+      },
+    ]);
+  });
+});
 
 describe('integrationPackCheck', () => {
   it('returns packable:true for a valid integration with themes', async () => {
@@ -337,8 +704,7 @@ describe('integrationPackCheck', () => {
       {
         code: 'theme_exports_missing',
         severity: 'warning',
-        message:
-          'Theme "ocean" has no declared built exports. The package remains source-compatible. To make it importable, run `astryx theme build themes/ocean/oceanTheme.ts` and export "./themes/ocean" plus "./themes/ocean.css" from package.json; `astryx integration add theme ocean` creates those exports for a new theme.',
+        message: `Theme "ocean" has no declared built exports. The package remains source-compatible. To make it importable, run \`${formatCliCommand('theme build themes/ocean/oceanTheme.ts', tmpDir)}\` and export "./themes/ocean" plus "./themes/ocean.css" from package.json; \`${formatCliCommand('integration add theme ocean', tmpDir)}\` creates those exports for a new theme.`,
       },
     ]);
     const cli = runCliVerify();
@@ -509,8 +875,7 @@ describe('integrationPackCheck', () => {
       {
         code: 'theme_stylesheet_stale',
         severity: 'warning',
-        message:
-          'Theme "ocean" stylesheet does not match themes/ocean/oceanTheme.ts. This incomplete export remains packable, but run `astryx theme build themes/ocean/oceanTheme.ts` before adding its matching export.',
+        message: `Theme "ocean" stylesheet does not match themes/ocean/oceanTheme.ts. This incomplete export remains packable, but run \`${formatCliCommand('theme build themes/ocean/oceanTheme.ts', tmpDir)}\` before adding its matching export.`,
       },
     ]);
     const cli = runCliVerify();
@@ -543,8 +908,7 @@ describe('integrationPackCheck', () => {
       {
         code: 'theme_stylesheet_stale',
         severity: 'warning',
-        message:
-          'Theme "ocean" stylesheet does not match themes/ocean/oceanTheme.ts. This incomplete export remains packable, but run `astryx theme build themes/ocean/oceanTheme.ts` before adding its matching export.',
+        message: `Theme "ocean" stylesheet does not match themes/ocean/oceanTheme.ts. This incomplete export remains packable, but run \`${formatCliCommand('theme build themes/ocean/oceanTheme.ts', tmpDir)}\` before adding its matching export.`,
       },
     ]);
     const cli = runCliVerify();
@@ -617,14 +981,12 @@ describe('integrationPackCheck', () => {
       {
         code: 'theme_module_stale',
         severity: 'error',
-        message:
-          'Theme "ocean" module does not match themes/ocean/oceanTheme.ts. Run `astryx theme build themes/ocean/oceanTheme.ts` before packing.',
+        message: `Theme "ocean" module does not match themes/ocean/oceanTheme.ts. Run \`${formatCliCommand('theme build themes/ocean/oceanTheme.ts', tmpDir)}\` before packing.`,
       },
       {
         code: 'theme_stylesheet_stale',
         severity: 'error',
-        message:
-          'Theme "ocean" stylesheet does not match themes/ocean/oceanTheme.ts. Run `astryx theme build themes/ocean/oceanTheme.ts` before packing.',
+        message: `Theme "ocean" stylesheet does not match themes/ocean/oceanTheme.ts. Run \`${formatCliCommand('theme build themes/ocean/oceanTheme.ts', tmpDir)}\` before packing.`,
       },
     ]);
     const cli = runCliVerify();
@@ -1362,6 +1724,69 @@ describe('integrationPackCheck', () => {
     expect(await codes()).not.toContain('section_ids_need_cli');
   }, 120_000);
 
+  it('warns, without failing, when a doc section sets before or after on a CLI range that rejects them', async () => {
+    writePackage({
+      manifest: "export default {docs: './docs'};\n",
+      themes: false,
+    });
+    fs.mkdirSync(path.join(tmpDir, 'docs'), {recursive: true});
+    const pkgFile = path.join(tmpDir, 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf-8'));
+    pkg.peerDependencies = {'@astryxdesign/cli': '>=0.7.0'};
+    fs.writeFileSync(pkgFile, `${JSON.stringify(pkg, null, 2)}\n`);
+    const issues = async () =>
+      (await integrationPackCheck({cwd: tmpDir})).data.issues.filter(
+        (/** @type {{code: string}} */ issue) =>
+          issue.code === 'section_position_needs_cli',
+      );
+    // A placed guide's section counts too: an older CLI rejects the field in
+    // any doc and hides the package's topics.
+    fs.writeFileSync(
+      path.join(tmpDir, 'docs', 'acme.doc.mjs'),
+      "export default {type: 'namespace', name: 'acme', title: 'Acme', summary: 'Acme.', slots: {guides: {title: 'Guides', accepts: {kinds: ['generic']}}}};\n",
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, 'docs', 'setup.doc.mjs'),
+      "export default {type: 'generic', name: 'setup', title: 'Setup', description: 'Set up.', placement: {parent: 'namespace:acme', slot: 'guides'}, sections: [{id: 'overview', title: 'Overview', after: 'nothing', content: [{type: 'prose', text: 'Set up.'}]}]};\n",
+    );
+    expect(await issues()).toEqual([
+      expect.objectContaining({severity: 'warning'}),
+    ]);
+    pkg.peerDependencies = {'@astryxdesign/cli': '>=0.7.4'};
+    fs.writeFileSync(pkgFile, `${JSON.stringify(pkg, null, 2)}\n`);
+    expect(await issues()).toEqual([]);
+  }, 120_000);
+
+  it('warns when a package whose docs write doc tokens has a CLI range that prints them raw', async () => {
+    writePackage({
+      manifest: "export default {docs: './docs'};\n",
+      themes: false,
+    });
+    fs.mkdirSync(path.join(tmpDir, 'docs'), {recursive: true});
+    const write = (/** @type {string} */ name, /** @type {string} */ text) =>
+      fs.writeFileSync(
+        path.join(tmpDir, 'docs', `${name}.doc.mjs`),
+        `export default {type: 'generic', name: '${name}', title: 'Notes', description: 'Notes.', sections: [{title: 'Run', content: [{type: 'prose', text: ${JSON.stringify(text)}}]}]};\n`,
+      );
+    const found = async () =>
+      (await integrationPackCheck({cwd: tmpDir})).data.issues.filter(
+        (/** @type {{code: string}} */ issue) => issue.code === 'doc_tokens_need_cli',
+      );
+    // An escaped token is shown as written by every release.
+    write('escaped', 'Write {@@pm install x} for an install.');
+    expect(await found()).toEqual([]);
+    write('tokens', 'Run {@command doctor} first.');
+    expect((await found()).map((/** @type {any} */ issue) => issue.severity)).toEqual(['warning']);
+    const pkgFile = path.join(tmpDir, 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf-8'));
+    pkg.peerDependencies = {'@astryxdesign/cli': '>=0.7.3'};
+    fs.writeFileSync(pkgFile, `${JSON.stringify(pkg, null, 2)}\n`);
+    expect(await found()).toHaveLength(1);
+    pkg.peerDependencies = {'@astryxdesign/cli': '>=0.7.4'};
+    fs.writeFileSync(pkgFile, `${JSON.stringify(pkg, null, 2)}\n`);
+    expect(await found()).toEqual([]);
+  }, 120_000);
+
   it('fails a package with a template that sets replaces on a CLI range that rejects the field', async () => {
     writePackage({
       manifest: "export default {templates: './templates'};\n",
@@ -1558,6 +1983,92 @@ describe('integrationPackCheck', () => {
     expect(sourceWarnings[0].message).toContain('Card.tsx');
   });
 
+  it('reports template sources without metadata as warnings', async () => {
+    writePackage({
+      manifest:
+        "export default {themes: './themes', templates: './templates'};\n",
+      files: ['astryx.integration.mjs', 'themes', 'templates'],
+      templates: true,
+    });
+    const result = await integrationPackCheck({cwd: tmpDir});
+
+    const sourceWarnings = result.data.issues.filter(
+      issue => issue.code === 'source_without_template_doc',
+    );
+    expect(sourceWarnings).toHaveLength(1);
+    expect(sourceWarnings[0].severity).toBe('warning');
+    expect(sourceWarnings[0].message).toContain('stray.tsx');
+  });
+
+  it('says npm pack skips a symlinked root instead of asking for a "files" entry', async () => {
+    writePackage({
+      manifest:
+        "export default {themes: './themes', components: './components'};\n",
+    });
+    const real = path.join(tmpDir, 'real-components');
+    fs.mkdirSync(real, {recursive: true});
+    fs.writeFileSync(
+      path.join(real, 'Card.doc.mjs'),
+      "export default {type: 'component', name: 'Card', displayName: 'Card', usage: {description: 'Card.'}, props: []};\n",
+    );
+    fs.writeFileSync(
+      path.join(real, 'Card.tsx'),
+      'export function Card() { return null; }\n',
+    );
+    fs.symlinkSync('real-components', path.join(tmpDir, 'components'));
+
+    const result = await integrationPackCheck({cwd: tmpDir});
+    const codes = result.data.issues.map(issue => issue.code);
+    expect(codes).toContain('symlinked_root');
+    const notPacked = result.data.issues.find(
+      issue => issue.code === 'root_not_packed',
+    );
+    expect(notPacked?.message).toBe(
+      'Declared components root "components" has 0 of 2 expected files in the pack list. It is reached through the symlink "components", and npm pack does not follow a symlinked folder. Fix: replace the link with the folder itself, or point "components" at the folder it links to.',
+    );
+  });
+
+  it('names packed files by their path in the package, never the scratch copy', async () => {
+    writePackage({
+      manifest:
+        "export default {themes: './themes', docs: './docs/a.doc.mjs'};\n",
+    });
+    fs.mkdirSync(path.join(tmpDir, 'docs'), {recursive: true});
+    fs.writeFileSync(path.join(tmpDir, 'docs', 'a.doc.mjs'), '');
+
+    const result = await integrationPackCheck({cwd: tmpDir});
+    const messages = result.data.issues.map(issue => issue.message);
+    expect(messages.join('\n')).not.toContain(
+      path.join(tmpDir, '.astryx-pack-check-'),
+    );
+    expect(messages).toContain(
+      'Packed: Declared docs root is a file, not a folder: docs/a.doc.mjs. Fix: point "docs" in the manifest at the folder that holds them.',
+    );
+    // The root's own issue covers it: no empty-root error, no raw errno.
+    const codes = result.data.issues.map(issue => issue.code);
+    expect(codes).not.toContain('empty_contribution_root');
+    expect(codes).not.toContain('local_discovery_failed');
+    expect(codes).not.toContain('packed_discovery_failed');
+  });
+
+  it('fails on a package.json npm cannot pack, which validate only warns about', async () => {
+    writePackage({files: ['astryx.integration.mjs', 'themes']});
+    const packageFile = path.join(tmpDir, 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(packageFile, 'utf-8'));
+    delete pkg.name;
+    fs.writeFileSync(packageFile, `${JSON.stringify(pkg, null, 2)}\n`);
+
+    const result = await integrationPackCheck({cwd: tmpDir});
+
+    expect(result.data.packable).toBe(false);
+    expect(
+      result.data.issues.map(issue => [issue.code, issue.severity]),
+    ).toEqual([
+      ['invalid_package_json', 'error'],
+      ['pack_failed', 'error'],
+    ]);
+  });
+
   it('cleans up its scratch consumer when npm pack fails', async () => {
     writePackage({
       files: ['astryx.integration.mjs', 'themes'],
@@ -1590,6 +2101,20 @@ describe('integrationPackCheck', () => {
     ).toEqual([]);
   });
 
+  it("reads npm 8's scoped tarball name as the file npm writes", () => {
+    const entry = {entryCount: 1, size: 1, unpackedSize: 1, files: []};
+    expect(
+      parseNpmPackOutput(
+        JSON.stringify([{...entry, filename: '@acme/kit-1.0.0.tgz'}]),
+      ).filename,
+    ).toBe('acme-kit-1.0.0.tgz');
+    expect(
+      parseNpmPackOutput(
+        JSON.stringify([{...entry, filename: 'acme-kit-1.0.0.tgz'}]),
+      ).filename,
+    ).toBe('acme-kit-1.0.0.tgz');
+  });
+
   it('rejects malformed npm pack output without a raw TypeError', () => {
     expect(() =>
       parseNpmPackOutput(
@@ -1600,10 +2125,13 @@ describe('integrationPackCheck', () => {
     ).toThrow(/without a files array/);
   });
 
-  it('reports npm missing from PATH as pack_failed', async () => {
+  it('reports pack_failed when no npm can be found', async () => {
     writePackage({files: ['astryx.integration.mjs', 'themes']});
     const originalPath = process.env.PATH;
+    const originalExecPath = process.execPath;
     process.env.PATH = '';
+    // A Node with no npm beside it, and no npm on the PATH.
+    process.execPath = path.join(tmpDir, 'no-npm', 'bin', 'node');
     try {
       const result = await integrationPackCheck({cwd: tmpDir});
       expect(result.data.packable).toBe(false);
@@ -1615,6 +2143,7 @@ describe('integrationPackCheck', () => {
       );
     } finally {
       process.env.PATH = originalPath;
+      process.execPath = originalExecPath;
     }
   });
 

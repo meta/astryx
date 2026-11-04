@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y audit CheckboxList, CheckboxListItem
 
 /**
  * @file CheckboxList.a11y.chromium.spec.ts
@@ -10,7 +11,8 @@
  *   indicators, row paint, hit targets, wrapping, list structure) are recorded
  *   for the audit and never gate. Only frames that prove a shipped remediation
  *   gate on its outcome. The select-all CLI block renders through its own
- *   story, and its source blob is bound in the manifest.
+ *   story, and its source blob is bound in the manifest. Disabled rows expect
+ *   focusable aria-disabled controls under AST-085 FR1 and FR7.
  */
 
 import {createHash} from 'node:crypto';
@@ -72,6 +74,8 @@ interface CaseExpectation {
   rows: RowExpectation[];
   status?: {type: 'error' | 'warning' | 'success'; text: string};
   tooltipText?: string;
+  /** The open disabled-reason tooltip describes the group and every checkbox. */
+  reasonDescribesRows?: boolean;
   density?: 'compact' | 'balanced' | 'spacious';
   labelHidden?: boolean;
 }
@@ -271,9 +275,9 @@ const CASES: AuditCase[] = [
     expect: {
       groupName: GROUP,
       rows: [
-        {checked: true, disabled: 'native'},
-        {checked: false, disabled: 'native'},
-        {checked: false, disabled: 'native'},
+        {checked: true, disabled: 'focusable'},
+        {checked: false, disabled: 'focusable'},
+        {checked: false, disabled: 'focusable'},
       ],
     },
   },
@@ -285,7 +289,7 @@ const CASES: AuditCase[] = [
       groupName: GROUP,
       rows: [
         {checked: false, disabled: false},
-        {checked: false, disabled: 'native'},
+        {checked: false, disabled: 'focusable'},
         {checked: false, disabled: false},
       ],
     },
@@ -304,6 +308,7 @@ const CASES: AuditCase[] = [
         {checked: false, disabled: 'focusable'},
       ],
       tooltipText: 'Notifications are managed by your administrator',
+      reasonDescribesRows: true,
     },
   },
   {
@@ -471,7 +476,7 @@ const CASES: AuditCase[] = [
       rows: [
         {checked: true},
         {checked: false},
-        {checked: false, disabled: 'native'},
+        {checked: false, disabled: 'focusable'},
       ],
     },
   },
@@ -1031,6 +1036,11 @@ async function readPage(page: Page, auditCase: AuditCase) {
             descriptionText: text(
               byIds(input?.getAttribute('aria-describedby') ?? null)[0] ?? null,
             ),
+            reasonDescribed:
+              tooltip != null &&
+              byIds(input?.getAttribute('aria-describedby') ?? null).includes(
+                tooltip as HTMLElement,
+              ),
             hovered: row.matches(':hover'),
             active: row.matches(':active'),
             focused: input != null && document.activeElement === input,
@@ -1565,6 +1575,18 @@ async function capture(browser: Browser, auditCase: AuditCase, mode: Mode) {
         !actual.tooltip.open
       ) {
         stateFailures.push('expected the open disabled-reason tooltip');
+      }
+      if (auditCase.expect.reasonDescribesRows === true) {
+        if (actual.rows.some(row => !row.reasonDescribed)) {
+          stateFailures.push(
+            'expected the disabled reason to describe every checkbox',
+          );
+        }
+        if (actual.tooltip?.describesGroup !== true) {
+          stateFailures.push(
+            'expected the disabled reason to describe the group',
+          );
+        }
       }
     } else if (actual.tooltip != null) {
       stateFailures.push('unexpected visible tooltip');

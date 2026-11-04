@@ -19,7 +19,7 @@
  * The timed region inside each process is the spec's protocol, unsmoothed:
  * ten untimed warmups, then one median of nine alternating paired rounds,
  * for a stable plugin list and a recreated equivalent one, against the
- * omitted baseline. A first attempt within budget on both paths certifies
+ * omitted baseline, timed on the main thread's CPU clock. A first attempt within budget on both paths certifies
  * them. Otherwise up to nine fresh-process attempts decide each path on its
  * own: a path fails the unchanged budget when a majority of the nine (five)
  * exceed it, and collection stops as soon as both paths are decided.
@@ -27,10 +27,15 @@
 
 import {execFileSync} from 'node:child_process';
 import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {Worker} from 'node:worker_threads';
 import {afterAll, describe, expect, it} from 'vitest';
-import {measureMarkdownPairedRatio} from './Markdown.fr23.sampling';
+import {
+  mainThreadCpuTime,
+  measureMarkdownPairedRatio,
+} from './Markdown.fr23.sampling';
 
 interface BenchmarkResult {
   readonly sections: number;
@@ -160,11 +165,17 @@ function runSettledBenchmark(sections: number): BenchmarkResult {
   return measured;
 }
 
+/**
+ * The ratios depend on the processor, so each line names it: a runner on a
+ * different CPU model shows up in the log rather than as an unexplained shift.
+ */
+const CPU_MODEL = os.cpus()[0]?.model.trim() ?? 'unknown CPU';
+
 function logBenchmarkResult(result: BenchmarkResult, attempt: number): void {
   console.log(
     `  ${result.sections} sections, attempt ${attempt}, FR23 representative set over empty:` +
       ` stable ${result.stable.toFixed(3)}, recreated ${result.recreated.toFixed(3)}` +
-      ` (budget ${FR23_BUDGET}, A/A control ${result.control.toFixed(3)})`,
+      ` (budget ${FR23_BUDGET}, A/A control ${result.control.toFixed(3)}; ${CPU_MODEL})`,
   );
 }
 
@@ -264,6 +275,37 @@ describe('Markdown FR23 helper overhead', () => {
         (round % 2 === 0 ? pair : pair.reverse()).join(''),
       );
     }
+  });
+
+  it("times only the main thread, not V8's or a worker's background threads", async () => {
+    // A worker spins for 300 ms of CPU while this thread sleeps without any.
+    // The process clock counts the worker's time; the sampling clock must not.
+    const flag = new Int32Array(new SharedArrayBuffer(4));
+    const processBefore = process.cpuUsage();
+    const threadBefore = mainThreadCpuTime();
+    const worker = new Worker(
+      `const {workerData} = require('node:worker_threads');
+       const end = Date.now() + 300;
+       while (Date.now() < end) {}
+       Atomics.store(workerData, 0, 1);
+       Atomics.notify(workerData, 0);`,
+      {eval: true, workerData: flag},
+    );
+    // A worker that dies before it finishes must fail the test, not hang it.
+    const deadline = Date.now() + 10_000;
+    while (Atomics.load(flag, 0) === 0) {
+      if (Date.now() > deadline) {
+        await worker.terminate();
+        throw new Error('The CPU-spinning worker did not finish in 10 s');
+      }
+      Atomics.wait(flag, 0, 0, 50);
+    }
+    const thread = mainThreadCpuTime() - threadBefore;
+    const processUsage = process.cpuUsage(processBefore);
+    await worker.terminate();
+    const processTime = processUsage.user + processUsage.system;
+    expect(processTime).toBeGreaterThan(200_000);
+    expect(thread).toBeLessThan(processTime / 4);
   });
 
   describe('deciding each path from fresh-process attempts', () => {

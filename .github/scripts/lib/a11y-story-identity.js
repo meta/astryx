@@ -59,6 +59,10 @@ const LEGACY_BASELINE_STORY_MIGRATIONS = Object.freeze({
     owner: 'core/RadioListItem',
     legacyStoryKeys: Object.freeze(['RadioList::Disabled With Message']),
   }),
+  'a11y-progressbar--progress-bar-disabled': Object.freeze({
+    owner: 'core/ProgressBar',
+    legacyStoryKeys: Object.freeze(['ProgressBar::Disabled']),
+  }),
 });
 
 function ownerForA11yStory(storyId) {

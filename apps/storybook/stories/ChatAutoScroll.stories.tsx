@@ -4,7 +4,7 @@
  * Demonstrates the auto-scroll behavior difference between streaming text
  * and discrete block additions (tool calls, custom elements).
  *
- * Issue: https://github.com/facebook/astryx/issues/2282
+ * Issue: https://github.com/meta/astryx/issues/2282
  *
  * The auto-scroll system (useChatStreamScroll + useChatNewMessages)
  * relies on ResizeObserver detecting content height changes. This story
@@ -402,9 +402,7 @@ export const ScrollBehaviorComparison: StoryObj = {
           <ChatMessageList>
             {messages.map(msg => (
               <ChatMessage key={msg.id} sender={msg.role}>
-                {msg.text && (
-                  <Markdown density="compact">{msg.text}</Markdown>
-                )}
+                {msg.text && <Markdown density="compact">{msg.text}</Markdown>}
                 {msg.toolCalls && msg.toolCalls.length > 0 && (
                   <ChatToolCalls calls={msg.toolCalls} />
                 )}
@@ -565,9 +563,7 @@ export const RapidToolCalls: StoryObj = {
           <ChatMessageList>
             {messages.map(msg => (
               <ChatMessage key={msg.id} sender={msg.role}>
-                {msg.text && (
-                  <Markdown density="compact">{msg.text}</Markdown>
-                )}
+                {msg.text && <Markdown density="compact">{msg.text}</Markdown>}
                 {msg.toolCalls && msg.toolCalls.length > 0 && (
                   <ChatToolCalls calls={msg.toolCalls} />
                 )}
@@ -826,9 +822,7 @@ export const MixedStreamAndTools: StoryObj = {
           <ChatMessageList>
             {messages.map(msg => (
               <ChatMessage key={msg.id} sender={msg.role}>
-                {msg.text && (
-                  <Markdown density="compact">{msg.text}</Markdown>
-                )}
+                {msg.text && <Markdown density="compact">{msg.text}</Markdown>}
                 {msg.toolCalls && msg.toolCalls.length > 0 && (
                   <ChatToolCalls calls={msg.toolCalls} />
                 )}

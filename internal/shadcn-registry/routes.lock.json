@@ -466,6 +466,13 @@
       "aliases": []
     },
     {
+      "name": "component-info-tip",
+      "path": "components/info-tip",
+      "aliases": [
+        "components/lab/info-tip"
+      ]
+    },
+    {
       "name": "component-input-group",
       "path": "components/input-group",
       "aliases": []
@@ -601,11 +608,6 @@
       "aliases": []
     },
     {
-      "name": "component-lab-info-tip",
-      "path": "components/lab/info-tip",
-      "aliases": []
-    },
-    {
       "name": "component-lab-list-input",
       "path": "components/lab/list-input",
       "aliases": []
@@ -613,11 +615,6 @@
     {
       "name": "component-lab-log-stream",
       "path": "components/lab/log-stream",
-      "aliases": []
-    },
-    {
-      "name": "component-lab-mobile-tokenizer",
-      "path": "components/lab/mobile-tokenizer",
       "aliases": []
     },
     {
@@ -633,6 +630,11 @@
     {
       "name": "component-lab-schedule",
       "path": "components/lab/schedule",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-selectable-card-group",
+      "path": "components/lab/selectable-card-group",
       "aliases": []
     },
     {
@@ -1955,6 +1957,11 @@
       "aliases": []
     },
     {
+      "name": "example-create-animator-playing-cards-in-plain-java-script",
+      "path": "examples/create-animator/playing-cards-in-plain-java-script",
+      "aliases": []
+    },
+    {
       "name": "example-date-input-clearable",
       "path": "examples/date-input/clearable",
       "aliases": []
@@ -2422,6 +2429,21 @@
     {
       "name": "example-link-with-tooltips",
       "path": "examples/link/with-tooltips",
+      "aliases": []
+    },
+    {
+      "name": "example-list-input-budget-allocation",
+      "path": "examples/list-input/budget-allocation",
+      "aliases": []
+    },
+    {
+      "name": "example-list-input-family-member-declaration",
+      "path": "examples/list-input/family-member-declaration",
+      "aliases": []
+    },
+    {
+      "name": "example-list-input-mailing-list",
+      "path": "examples/list-input/mailing-list",
       "aliases": []
     },
     {
@@ -3615,6 +3637,16 @@
       "aliases": []
     },
     {
+      "name": "example-use-animator-playing-cards",
+      "path": "examples/use-animator/playing-cards",
+      "aliases": []
+    },
+    {
+      "name": "example-use-announce-filter-result-count",
+      "path": "examples/use-announce/filter-result-count",
+      "aliases": []
+    },
+    {
       "name": "example-use-app-shell-mobile-custom-mobile-trigger",
       "path": "examples/use-app-shell-mobile/custom-mobile-trigger",
       "aliases": []
@@ -3625,8 +3657,28 @@
       "aliases": []
     },
     {
+      "name": "example-use-collator-locale-aware-name-sort",
+      "path": "examples/use-collator/locale-aware-name-sort",
+      "aliases": []
+    },
+    {
+      "name": "example-use-combobox-assign-to-field",
+      "path": "examples/use-combobox/assign-to-field",
+      "aliases": []
+    },
+    {
       "name": "example-use-container-reveal-reveal-on-hover-row-actions",
       "path": "examples/use-container-reveal/reveal-on-hover-row-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-use-focus-trap-quick-edit-panel",
+      "path": "examples/use-focus-trap/quick-edit-panel",
+      "aliases": []
+    },
+    {
+      "name": "example-use-grid-focus-color-swatch-grid",
+      "path": "examples/use-grid-focus/color-swatch-grid",
       "aliases": []
     },
     {
@@ -3645,8 +3697,43 @@
       "aliases": []
     },
     {
+      "name": "example-use-lightbox-gallery-grid",
+      "path": "examples/use-lightbox/gallery-grid",
+      "aliases": []
+    },
+    {
+      "name": "example-use-list-focus-recent-files",
+      "path": "examples/use-list-focus/recent-files",
+      "aliases": []
+    },
+    {
+      "name": "example-use-locale-invoice-summary",
+      "path": "examples/use-locale/invoice-summary",
+      "aliases": []
+    },
+    {
+      "name": "example-use-outline-from-markdown-docs-article",
+      "path": "examples/use-outline-from-markdown/docs-article",
+      "aliases": []
+    },
+    {
+      "name": "example-use-overflow-editor-toolbar",
+      "path": "examples/use-overflow/editor-toolbar",
+      "aliases": []
+    },
+    {
       "name": "example-use-popover-quick-actions",
       "path": "examples/use-popover/quick-actions",
+      "aliases": []
+    },
+    {
+      "name": "example-use-press-feedback-pressable-card",
+      "path": "examples/use-press-feedback/pressable-card",
+      "aliases": []
+    },
+    {
+      "name": "example-use-scrollable-area-activity-log-panel",
+      "path": "examples/use-scrollable-area/activity-log-panel",
       "aliases": []
     },
     {
@@ -3705,6 +3792,21 @@
       "aliases": []
     },
     {
+      "name": "example-use-toast-settings-saved",
+      "path": "examples/use-toast/settings-saved",
+      "aliases": []
+    },
+    {
+      "name": "example-use-translator-load-more-footer",
+      "path": "examples/use-translator/load-more-footer",
+      "aliases": []
+    },
+    {
+      "name": "example-use-typeahead-type-to-focus-a-country",
+      "path": "examples/use-typeahead/type-to-focus-a-country",
+      "aliases": []
+    },
+    {
       "name": "example-v-stack-basic",
       "path": "examples/v-stack/basic",
       "aliases": []
@@ -3722,6 +3824,21 @@
     {
       "name": "example-visually-hidden-supplementary-context",
       "path": "examples/visually-hidden/supplementary-context",
+      "aliases": []
+    },
+    {
+      "name": "hook-create-animator",
+      "path": "hooks/create-animator",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-animated-layout",
+      "path": "hooks/use-animated-layout",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-animator",
+      "path": "hooks/use-animator",
       "aliases": []
     },
     {
@@ -3840,6 +3957,11 @@
       "aliases": []
     },
     {
+      "name": "hook-use-lightbox",
+      "path": "hooks/use-lightbox",
+      "aliases": []
+    },
+    {
       "name": "hook-use-list-focus",
       "path": "hooks/use-list-focus",
       "aliases": []
@@ -3872,6 +3994,11 @@
     {
       "name": "hook-use-multi-combobox",
       "path": "hooks/use-multi-combobox",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-outline-from-markdown",
+      "path": "hooks/use-outline-from-markdown",
       "aliases": []
     },
     {
@@ -4492,6 +4619,11 @@
     {
       "name": "showcase-link-default",
       "path": "showcases/link/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-list-input-tag-options",
+      "path": "showcases/list-input/tag-options",
       "aliases": []
     },
     {

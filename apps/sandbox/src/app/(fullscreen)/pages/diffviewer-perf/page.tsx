@@ -4,16 +4,27 @@
 
 /**
  * @file page.tsx
- * @input Deterministic multi-file and single-file diff workloads, view mode,
- *   and syntax highlighting on or off
+ * @input Deterministic diff workloads (multi-file presets from typical to the
+ *   upper bound, or one file), view mode, and syntax highlighting on or off
  * @output Interactive DiffViewer benchmark: diff-model time, first file on
  *   screen, total render, long tasks, DOM size, heap, scroll frames, and the
- *   cost of collapse, expand, and view switches
+ *   cost of collapse, expand, and view switches; files mount on screen by
+ *   default, or all at once
+
  * @position Fullscreen sandbox tool for evaluating the Lab DiffViewer on large
  *   change sets
  */
 
-import {memo, useCallback, useMemo, useRef, useState} from 'react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+  type RefObject,
+} from 'react';
 import {flushSync} from 'react-dom';
 import {AppShell} from '@astryxdesign/core/AppShell';
 import {Badge} from '@astryxdesign/core/Badge';
@@ -43,18 +54,27 @@ import {
   MULTI_FILE_WORKLOADS,
   SINGLE_FILE_LINES,
   type DiffBenchmarkFile,
+  type MultiFileWorkloadId,
   type SingleFileChange,
 } from './benchmark';
 
 type Scenario = 'multi' | 'single';
 type Syntax = 'on' | 'off';
+/**
+ * `visible` mounts a file's DiffViewer only while it is near the viewport, so
+ * a phone can hold any workload; `all` mounts the whole change set at once.
+ */
+type Mount = 'visible' | 'all';
 
 /** What a run measured, captured when it started so later control changes don't relabel it. */
 interface RunSubject {
   label: string;
   totalLines: number;
+  changedLines: number;
+  largestFileChangedLines: number;
   viewMode: DiffViewerViewMode;
   syntax: Syntax;
+  mount: Mount;
 }
 
 interface RunMetrics {
@@ -101,6 +121,11 @@ const EMPTY_RUN: RunMetrics = {
 };
 
 const SCROLL_DURATION_MS = 4000;
+/** How far outside the viewport a file mounts, so scrolling meets rendered files. */
+const MOUNT_MARGIN_PX = 800;
+/** Placeholder estimate for a file never measured: its header and each row. */
+const FILE_HEADER_PX = 48;
+const DIFF_ROW_PX = 20;
 /** Stop looking for the first rendered file after this long. */
 const FIRST_FILE_TIMEOUT_MS = 60_000;
 
@@ -203,6 +228,103 @@ const BenchmarkFile = memo(function BenchmarkFile({
   );
 });
 
+/** A file's height before it has rendered: its header, plus each diff row. */
+function estimateFileHeight(
+  file: DiffViewerFile,
+  isCollapsed: boolean,
+): number {
+  if (isCollapsed) {
+    return FILE_HEADER_PX;
+  }
+  let rows = 0;
+  for (const hunk of file.hunks) {
+    rows += hunk.lines.length + 1;
+  }
+  return FILE_HEADER_PX + rows * DIFF_ROW_PX;
+}
+
+/**
+ * Mounts its file only while it is within MOUNT_MARGIN_PX of the scroll
+ * viewport, and keeps the file's last rendered height in its place otherwise,
+ * so the list's scroll height and position do not jump.
+ */
+function OnScreenFile({
+  viewportRef,
+  ...props
+}: ComponentProps<typeof BenchmarkFile> & {
+  viewportRef: RefObject<HTMLDivElement | null>;
+}) {
+  const {file, isCollapsed, viewMode, language} = props;
+  const slotRef = useRef<HTMLDivElement>(null);
+  // The last rendered height, kept only for the layout it was measured in.
+  const layout = `${isCollapsed}:${viewMode}:${language ?? ''}`;
+  const [measured, setMeasured] = useState<{
+    layout: string;
+    height: number;
+  } | null>(null);
+  const layoutRef = useRef(layout);
+  useEffect(() => {
+    layoutRef.current = layout;
+  }, [layout]);
+  const [isNear, setIsNear] = useState(false);
+
+  useEffect(() => {
+    const slot = slotRef.current;
+    if (slot == null) {
+      return;
+    }
+    const observer = new IntersectionObserver(
+      entries => {
+        for (const entry of entries) {
+          setIsNear(entry.isIntersecting);
+        }
+      },
+      {root: viewportRef.current, rootMargin: `${MOUNT_MARGIN_PX}px 0px`},
+    );
+    observer.observe(slot);
+    const sizes = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        const child = entry.target.firstElementChild;
+        if (child != null && !child.hasAttribute('data-placeholder')) {
+          const next = {
+            layout: layoutRef.current,
+            height: entry.contentRect.height,
+          };
+          setMeasured(previous =>
+            previous?.layout === next.layout && previous.height === next.height
+              ? previous
+              : next,
+          );
+        }
+      }
+    });
+    sizes.observe(slot);
+    return () => {
+      observer.disconnect();
+      sizes.disconnect();
+    };
+  }, [viewportRef]);
+
+  return (
+    <div ref={slotRef}>
+      {isNear ? (
+        <BenchmarkFile {...props} />
+      ) : (
+        <div
+          aria-hidden
+          data-placeholder=""
+          style={{
+            height:
+              measured?.layout === layout
+                ? measured.height
+                : estimateFileHeight(file, isCollapsed),
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 function Metric({label, value}: {label: string; value: string}) {
   return (
     <VStack gap={0.5}>
@@ -214,11 +336,12 @@ function Metric({label, value}: {label: string; value: string}) {
 
 export default function DiffViewerPerfPage() {
   const [scenario, setScenario] = useState<Scenario>('multi');
-  const [fileCount, setFileCount] = useState('200');
+  const [preset, setPreset] = useState<MultiFileWorkloadId>('large');
   const [lineCount, setLineCount] = useState('5000');
   const [change, setChange] = useState<SingleFileChange>('sparse');
   const [viewMode, setViewMode] = useState<DiffViewerViewMode>('unified');
   const [syntax, setSyntax] = useState<Syntax>('on');
+  const [mount, setMount] = useState<Mount>('visible');
   const [files, setFiles] = useState<ReadonlyArray<DiffViewerFile>>([]);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [run, setRun] = useState<RunMetrics>(EMPTY_RUN);
@@ -232,12 +355,16 @@ export default function DiffViewerPerfPage() {
   const workload = useMemo(() => {
     if (scenario === 'multi') {
       const entry =
-        MULTI_FILE_WORKLOADS.find(w => String(w.files) === fileCount) ??
+        MULTI_FILE_WORKLOADS.find(w => w.id === preset) ??
         MULTI_FILE_WORKLOADS[0];
-      return createMultiFileWorkload(entry.files, entry.totalLines);
+      const generated = createMultiFileWorkload(
+        entry.files,
+        entry.changedLines,
+      );
+      return {...generated, label: `${entry.label}, ${generated.label}`};
     }
     return createSingleFileWorkload(Number(lineCount), change);
-  }, [scenario, fileCount, lineCount, change]);
+  }, [scenario, preset, lineCount, change]);
 
   const language = syntax === 'on' ? undefined : 'plaintext';
   const diffLines = useMemo(() => diffLineCount(files), [files]);
@@ -246,8 +373,11 @@ export default function DiffViewerPerfPage() {
     const subject: RunSubject = {
       label: workload.label,
       totalLines: workload.totalLines,
+      changedLines: workload.changedLines,
+      largestFileChangedLines: workload.largestFileChangedLines,
       viewMode,
       syntax,
+      mount,
     };
     setIsBusy(true);
     setScroll(null);
@@ -296,15 +426,32 @@ export default function DiffViewerPerfPage() {
         // Looks for a rendered diff now and then once per frame, so a file
         // that renders late is caught at the frame it appears.
         const watchFirstFile = () => {
-          if (surfaceRef.current?.querySelector('table') != null) {
+          // Unified view renders a <table>; split view, a role="table" grid;
+          // a file folded for its size, only its fold row.
+          if (
+            surfaceRef.current?.querySelector(
+              'table, [role="table"], [data-diff-fold]',
+            ) != null
+          ) {
             afterNextPaint(renderStart, ms => {
               firstFileMs = ms;
+              // On screen, the files near the viewport mount together with
+              // the first one, so that paint is the full render.
+              if (subject.mount === 'visible') {
+                rendered = {renderMs: ms, longTasks: stopLongTasks()};
+              }
               publish();
             });
             return;
           }
           if (performance.now() - renderStart > FIRST_FILE_TIMEOUT_MS) {
             firstFileMs = null;
+            if (subject.mount === 'visible') {
+              rendered = {
+                renderMs: performance.now() - renderStart,
+                longTasks: stopLongTasks(),
+              };
+            }
             publish();
             return;
           }
@@ -316,13 +463,15 @@ export default function DiffViewerPerfPage() {
           setRunKey(key => key + 1);
         });
         watchFirstFile();
-        afterNextPaint(renderStart, renderMs => {
-          rendered = {renderMs, longTasks: stopLongTasks()};
-          publish();
-        });
+        if (subject.mount === 'all') {
+          afterNextPaint(renderStart, renderMs => {
+            rendered = {renderMs, longTasks: stopLongTasks()};
+            publish();
+          });
+        }
       }, 0);
     });
-  }, [workload, viewMode, syntax]);
+  }, [workload, viewMode, syntax, mount]);
 
   // `view` is what the timed update leaves on screen, which a switch changes.
   const timeInteraction = (
@@ -423,12 +572,18 @@ export default function DiffViewerPerfPage() {
   };
 
   const controlsDisabled = isBusy || isScrolling;
+  // The list keeps the mount mode its run was measured in, so switching Mount
+  // after a run changes the next run, not the readings on screen.
+  const listMount = run.subject?.mount ?? mount;
   // Badges describe the measured run once there is one, else the selection.
   const shown: RunSubject = run.subject ?? {
     label: workload.label,
     totalLines: workload.totalLines,
+    changedLines: workload.changedLines,
+    largestFileChangedLines: workload.largestFileChangedLines,
     viewMode,
     syntax,
+    mount,
   };
 
   return (
@@ -437,11 +592,9 @@ export default function DiffViewerPerfPage() {
         <VStack gap={1}>
           <Heading level={2}>DiffViewer Performance</Heading>
           <Text type="body" color="secondary">
-            Render a whole change set, one DiffViewer per file, and measure the
-            diff model, the first file on screen, the full render, long tasks,
-            DOM size and heap, then scroll the list and time collapse, expand
-            and view switches. Multi-file workloads mix many small files with a
-            few very large ones.
+            Render a whole change set, one DiffViewer per file, while observing
+            the first file on screen, the full render, long tasks, DOM size,
+            heap, scroll frames, and collapse, expand and view switches.
           </Text>
         </VStack>
 
@@ -458,16 +611,16 @@ export default function DiffViewerPerfPage() {
             </SegmentedControl>
             {scenario === 'multi' ? (
               <SegmentedControl
-                label="Files"
-                value={fileCount}
-                onChange={setFileCount}
+                label="Size"
+                value={preset}
+                onChange={value => setPreset(value as MultiFileWorkloadId)}
                 isDisabled={controlsDisabled}
                 size="sm">
                 {MULTI_FILE_WORKLOADS.map(entry => (
                   <SegmentedControlItem
-                    key={entry.files}
-                    value={String(entry.files)}
-                    label={entry.files.toLocaleString()}
+                    key={entry.id}
+                    value={entry.id}
+                    label={entry.label}
                   />
                 ))}
               </SegmentedControl>
@@ -516,20 +669,53 @@ export default function DiffViewerPerfPage() {
               <SegmentedControlItem value="on" label="Highlighted" />
               <SegmentedControlItem value="off" label="Plain" />
             </SegmentedControl>
+            <SegmentedControl
+              label="Mount"
+              value={mount}
+              onChange={value => setMount(value as Mount)}
+              isDisabled={controlsDisabled}
+              size="sm">
+              <SegmentedControlItem value="visible" label="On screen" />
+              <SegmentedControlItem value="all" label="All" />
+            </SegmentedControl>
             <Button
               label="Run benchmark"
               onClick={runBenchmark}
               isDisabled={controlsDisabled}
             />
+            <Button
+              label="Scroll test"
+              variant="secondary"
+              onClick={runScrollTest}
+              isDisabled={files.length === 0 || controlsDisabled}
+            />
+            <Button
+              label="Collapse all"
+              variant="secondary"
+              onClick={collapseAll}
+              isDisabled={files.length === 0 || controlsDisabled}
+            />
+            <Button
+              label="Expand all"
+              variant="secondary"
+              onClick={expandAll}
+              isDisabled={files.length === 0 || controlsDisabled}
+            />
           </HStack>
         </Section>
 
-        <Grid columns={2} gap={4}>
+        <Grid columns={{minWidth: 360, max: 2}} gap={4}>
           <Card padding={3}>
             <VStack gap={3}>
               <Heading level={3}>Run metrics</Heading>
               <HStack gap={2} wrap="wrap">
                 <Badge label={shown.label} />
+                <Badge
+                  label={`${shown.changedLines.toLocaleString()} changed lines`}
+                />
+                <Badge
+                  label={`largest file ${shown.largestFileChangedLines.toLocaleString()} changed`}
+                />
                 <Badge
                   label={`${shown.totalLines.toLocaleString()} file lines`}
                 />
@@ -537,6 +723,13 @@ export default function DiffViewerPerfPage() {
                 <Badge label={shown.viewMode} />
                 <Badge
                   label={shown.syntax === 'on' ? 'highlighted' : 'plain'}
+                />
+                <Badge
+                  label={
+                    shown.mount === 'visible'
+                      ? 'mounted on screen'
+                      : 'all mounted'
+                  }
                 />
               </HStack>
               <Grid columns={2} gap={3}>
@@ -586,26 +779,6 @@ export default function DiffViewerPerfPage() {
                   value={formatDuration(interaction?.ms ?? null)}
                 />
               </Grid>
-              <HStack gap={2} wrap="wrap">
-                <Button
-                  label="Scroll test"
-                  variant="secondary"
-                  onClick={runScrollTest}
-                  isDisabled={files.length === 0 || controlsDisabled}
-                />
-                <Button
-                  label="Collapse all"
-                  variant="secondary"
-                  onClick={collapseAll}
-                  isDisabled={files.length === 0 || controlsDisabled}
-                />
-                <Button
-                  label="Expand all"
-                  variant="secondary"
-                  onClick={expandAll}
-                  isDisabled={files.length === 0 || controlsDisabled}
-                />
-              </HStack>
               <Text type="body" color="secondary">
                 Full render runs from the commit to the next painted frame;
                 first file on screen runs from the commit to the paint after a
@@ -615,32 +788,47 @@ export default function DiffViewerPerfPage() {
                 heap reading that does not move) shows as a dash. Badges name
                 the workload the run was measured on; the scroll and interaction
                 readings name the view they were taken in. The scroll test moves
-                the list from top to bottom over four seconds.
+                the list from top to bottom over four seconds. With Mount on
+                screen, a file renders only near the viewport: DOM size and heap
+                cover what is on screen, full render is the paint the first
+                files appear in, and scrolling includes mounting files. Mount
+                all renders the whole change set at once, which can exhaust a
+                phone's memory.
               </Text>
             </VStack>
           </Card>
 
-          <ScrollableArea
-            key={runKey}
-            ref={surfaceRef}
-            label="Rendered change set"
-            height={640}>
-            <VStack gap={3}>
-              {files.map(file => {
-                const path = file.newPath ?? file.oldPath ?? '';
-                return (
-                  <BenchmarkFile
-                    key={path}
-                    file={file}
-                    viewMode={viewMode}
-                    language={language}
-                    isCollapsed={collapsed.has(path)}
-                    onToggle={toggleFile}
-                  />
-                );
-              })}
-            </VStack>
-          </ScrollableArea>
+          <Card padding={3}>
+            {/* A named scroll area keeps a keyboard stop for the list, even
+                when the files on screen unmount (AST-025 FR12). */}
+            <ScrollableArea
+              key={runKey}
+              ref={surfaceRef}
+              label="Rendered change set"
+              height={616}>
+              <VStack gap={3}>
+                {files.map(file => {
+                  const path = file.newPath ?? file.oldPath ?? '';
+                  const fileProps = {
+                    file,
+                    viewMode,
+                    language,
+                    isCollapsed: collapsed.has(path),
+                    onToggle: toggleFile,
+                  };
+                  return listMount === 'visible' ? (
+                    <OnScreenFile
+                      key={path}
+                      viewportRef={surfaceRef}
+                      {...fileProps}
+                    />
+                  ) : (
+                    <BenchmarkFile key={path} {...fileProps} />
+                  );
+                })}
+              </VStack>
+            </ScrollableArea>
+          </Card>
         </Grid>
       </VStack>
     </AppShell>

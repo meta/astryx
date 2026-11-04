@@ -60,7 +60,7 @@ export const docs = {
     {
       name: 'columns',
       type: "number | {minWidth: number, max?: number, repeat?: 'fill' | 'fit'}",
-      description: 'Column configuration. A number is exactly N equal columns at every width and never reflows (e.g. `columns={3}`); for columns that reflow on small screens, use `{minWidth, max}`. Use an object for responsive columns: `minWidth` sets the minimum column width in px, `repeat` controls track behavior (`"fill"` preserves empty tracks for consistent widths, `"fit"` collapses empty tracks so items stretch; defaults to `"fill"`), and `max` caps the maximum number of columns.',
+      description: 'Column configuration. A number creates exactly N `1fr` tracks at every width and never reflows (e.g. `columns={3}`); a child\'s minimum content may widen its track. For columns that reflow on small screens, use `{minWidth, max}`. Use an object for responsive columns: `minWidth` sets the minimum column width in px, `repeat` controls track behavior (`"fill"` preserves empty tracks for consistent widths, `"fit"` collapses empty tracks so items stretch; defaults to `"fill"`), and `max` caps the maximum number of columns.',
     },
     {
       name: 'width',
@@ -98,16 +98,22 @@ export const docs = {
       description: 'Column spacing; overrides `gap` for the column axis.',
     },
     {
+      name: 'rowHeight',
+      type: 'number',
+      description:
+        'Height of each implicit row track in pixels. Pair with `GridSpan rows={N}` for masonry-style layouts.',
+    },
+    {
       name: 'align',
       type: "'start' | 'center' | 'end' | 'stretch'",
-      description: 'Vertical alignment of items.',
-      default: "'stretch'",
+      description:
+        'Vertical alignment of items (`align-items`). Unset leaves the browser default, `normal`, which stretches items that have no natural size or aspect ratio.',
     },
     {
       name: 'justify',
       type: "'start' | 'center' | 'end' | 'stretch'",
-      description: 'Horizontal alignment of items.',
-      default: "'stretch'",
+      description:
+        'Horizontal alignment of items (`justify-items`). Unset leaves the browser default, `normal`, which stretches items that have no natural size or aspect ratio.',
     },
     {
       name: 'children',

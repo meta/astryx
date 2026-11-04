@@ -24,6 +24,10 @@ for (const file of fs.readdirSync(COMMANDS).sort()) {
 }
 
 const manifest = buildManifest(program, {jsonSupported: JSON_SUPPORTED, version: '0.0.0-test'});
+/** Hidden commands (a package-script hook): documented, never in the manifest. */
+const HIDDEN = new Set(
+  program.commands.filter((c) => /** @type {any} */ (c)._hidden).map((c) => c.name()),
+);
 /** @type {Map<string, any>} */
 const entries = new Map();
 const walk = (/** @type {any} */ c) => {
@@ -98,6 +102,7 @@ describe('command exit codes', () => {
 
   it('the manifest carries every command exit code', () => {
     for (const doc of commandDocs) {
+      if (HIDDEN.has(doc.name)) continue;
       expect(entries.get(doc.name)?.exitCodes, doc.name).toEqual(
         doc.exitCodes.map(({code, when}) => ({code, when})),
       );

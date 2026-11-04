@@ -28,11 +28,15 @@ export type {HookDoc} from './doctypes/types.js'; //         useToast.doc.mjs
 export type {FunctionDoc} from './doctypes/types.js'; //     search.doc.mjs (hook | api)
 export type {ReferenceDoc} from './doctypes/types.js'; //    theming.doc.mjs
 export type {TemplateDoc} from './doctypes/types.js'; //     Foo.doc.mjs
+export type {IntegrationTemplateDoc} from './doctypes/types.js'; // an integration's Foo.doc.mjs
 export type {SchemaDoc} from './doctypes/types.js'; //       config.doc.mjs (object shape)
 export type {CommandDoc} from './doctypes/types.js'; //      search.doc.mjs (CLI command)
 export type {EnumDoc} from './doctypes/types.js'; //         error-codes.doc.mjs (vocabulary)
 export type {NamespaceDoc} from './doctypes/types.js'; //    cli.doc.mjs (hierarchy)
 export type {ThemeDoc} from './doctypes/types.js'; //        oceanTheme.doc.mjs
+export type {IconSetDoc} from './doctypes/types.js'; //      outline.doc.mjs
+export type {IconSetData} from './doctypes/types.js'; //     outline.icons.json
+export type {IconDefinitionDoc} from './doctypes/types.js'; //  delete.doc.mjs
 export type {AstryxConfig} from './config/type.js'; //       astryx.config.{ts,mjs}
 export type {DebugEvent} from './debug/type.js'; //          one recorded CLI run
 export type {AstryxIntegration} from './integration/type.js'; // astryx.integration.{ts,mjs}
@@ -69,6 +73,10 @@ export {parseCommand} from './doctypes/command/parse.mjs';
 export {parseEnum} from './doctypes/enum/parse.mjs';
 export {parseNamespace} from './doctypes/namespace/parse.mjs';
 export {parseTheme} from './doctypes/theme/parse.mjs';
+/** @experimental Icon sets may change or be removed in a patch release. */
+export {parseIconSet, parseIconSetData} from './doctypes/icon-set/parse.mjs';
+/** @experimental Icon definitions may change or be removed in a patch release. */
+export {parseIconDefinition} from './doctypes/icon-definition/parse.mjs';
 export {parseLegacyDoc} from './doctypes/legacy.mjs';
 export {parseConfig} from './config/parse.mjs';
 export {parseIntegration} from './integration/parse.mjs';
@@ -162,8 +170,17 @@ export type {
   CommandArgDoc,
   CommandOptionDoc,
   CommandExampleDoc,
+  CommandOutsideProject,
   // enum
   EnumMemberDoc,
+  // icon set
+  IconSetDefault,
+  IconSetIcon,
+  IconSetMatch,
+  IconSetMatchConfidence,
+  IconSetSource,
+  IconSetVariant,
+  IconSetAdapter,
 } from './doctypes/types.js';
 export type {PostCodemodHook, DebugConfig} from './config/type.js';
 export type {

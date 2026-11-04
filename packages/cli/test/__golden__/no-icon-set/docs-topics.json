@@ -1,0 +1,303 @@
+{
+  "list": [
+    {
+      "topic": "author-a-theme",
+      "description": "<text>",
+      "package": "@astryxdesign/cli"
+    },
+    {
+      "topic": "browser-support",
+      "description": "<text>",
+      "package": "@astryxdesign/cli"
+    },
+    {
+      "topic": "color",
+      "description": "<text>",
+      "package": "@astryxdesign/cli"
+    },
+    {
+      "topic": "elevation",
+      "description": "<text>",
+      "package": "@astryxdesign/cli"
+    },
+    {
+      "topic": "getting-started",
+      "description": "<text>",
+      "package": "@astryxdesign/cli"
+    },
+    {
+      "topic": "icons",
+      "description": "<text>",
+      "package": "@astryxdesign/cli"
+    },
+    {
+      "topic": "illustrations",
+      "description": "<text>",
+      "package": "@astryxdesign/cli"
+    },
+    {
+      "topic": "is-my-code-good",
+      "description": "<text>",
+      "package": "@astryxdesign/cli"
+    },
+    {
+      "topic": "motion",
+      "description": "<text>",
+      "package": "@astryxdesign/cli"
+    },
+    {
+      "topic": "principles",
+      "description": "<text>",
+      "package": "@astryxdesign/cli"
+    },
+    {
+      "topic": "shape",
+      "description": "<text>",
+      "package": "@astryxdesign/cli"
+    },
+    {
+      "topic": "spacing",
+      "description": "<text>",
+      "package": "@astryxdesign/cli"
+    },
+    {
+      "topic": "styling-overview",
+      "description": "<text>",
+      "package": "@astryxdesign/cli"
+    },
+    {
+      "topic": "theme",
+      "description": "<text>",
+      "package": "@astryxdesign/cli"
+    },
+    {
+      "topic": "use-a-theme",
+      "description": "<text>",
+      "package": "@astryxdesign/cli"
+    },
+    {
+      "topic": "use-integrations",
+      "description": "<text>",
+      "package": "@astryxdesign/cli"
+    },
+    {
+      "topic": "working-with-ai",
+      "description": "<text>",
+      "package": "@astryxdesign/cli"
+    }
+  ],
+  "topics": {
+    "author-a-theme": {
+      "sections": [
+        "creating-a-custom-theme",
+        "palette",
+        "definetheme",
+        "extending-a-theme",
+        "component-style-overrides",
+        "custom-variants",
+        "theme-adaptations",
+        "adaptation-rules",
+        "building-themes-for-production",
+        "icon-registry",
+        "building-a-theme-family",
+        "token-utilities",
+        "usetheme-hook"
+      ],
+      "skeleton": "67521830da2f078f4335b843b78812e05919c7f7b976f089bfcf8c3d1552c496",
+      "mentions": []
+    },
+    "browser-support": {
+      "sections": [
+        "overview",
+        "support-tiers",
+        "which-features-set-the-floor",
+        "which-components-are-affected",
+        "what-astryx-guarantees",
+        "supporting-older-browsers",
+        "how-these-tiers-move-over-time"
+      ],
+      "skeleton": "98bdd1d0e1db35f5ad03896962be51d2f21679c3f3cd25cf724045778a959b5e",
+      "mentions": []
+    },
+    "color": {
+      "sections": [
+        "overview",
+        "surface-colors",
+        "usage",
+        "best-practices"
+      ],
+      "skeleton": "904d7bbe31a404b5fc50f7e514f621cd49e51bb32f27e720cd40bd70b85157c2",
+      "mentions": []
+    },
+    "elevation": {
+      "sections": [
+        "overview",
+        "elevation-scale",
+        "choosing-a-level",
+        "the-elevation-prop",
+        "usage",
+        "best-practices"
+      ],
+      "skeleton": "7a448412efe0ab7d7c8fd7e89966e74494ec3fcff734ec7e30ec353a3542b874",
+      "mentions": []
+    },
+    "getting-started": {
+      "sections": [
+        "quick-start-with-ai",
+        "install",
+        "install-once",
+        "add-base-css-and-a-theme",
+        "add-your-first-component",
+        "customize-with-stylex",
+        "example-apps",
+        "explore-the-cli"
+      ],
+      "skeleton": "3cd256cfa2bad3dc6e87eb50075aef0d8afb437a7be74d4e5d4aebecf6948d0b",
+      "mentions": []
+    },
+    "icons": {
+      "sections": [
+        "available-names",
+        "custom-icons",
+        "theme-overrides",
+        "icon-variants",
+        "component-and-library-icons"
+      ],
+      "skeleton": "b58107977247069a83428bd5c6af3c28edef4c4754cb12e6b8bbfa9dca6ab052",
+      "mentions": [
+        "This lets you swap the icon set (e.g."
+      ]
+    },
+    "illustrations": {
+      "sections": [
+        "when-to-use",
+        "guidelines",
+        "placement"
+      ],
+      "skeleton": "1bbcbbda636d363c3605412a29da2005832b14bea6d99a94a38e91ccdafbdeca",
+      "mentions": []
+    },
+    "is-my-code-good": {
+      "sections": [
+        "understand-the-app",
+        "choose-the-review",
+        "apply-the-rubric",
+        "collect-the-evidence",
+        "ask-an-agent",
+        "verify-and-repeat"
+      ],
+      "skeleton": "57ad5ac61d3b02e08bad08cd26a048b4096c260c40d733ac2c2cbea7e6467117",
+      "mentions": []
+    },
+    "motion": {
+      "sections": [
+        "overview",
+        "duration",
+        "easing",
+        "where-motion-helps",
+        "where-motion-hurts",
+        "movement-principles",
+        "respecting-user-preferences",
+        "usage",
+        "theme-motion",
+        "best-practices"
+      ],
+      "skeleton": "f1ffd7fc39f49d407c6caa563c25eadd8d79bf4d3c2fc6837f06297c37f714eb",
+      "mentions": []
+    },
+    "principles": {
+      "sections": [
+        "design-philosophy",
+        "rules",
+        "styling-approach",
+        "anti-patterns",
+        "design-tokens"
+      ],
+      "skeleton": "137859678ce5cc2df84192ca7065e7a4ecb46225c5a4437fe7a7393af7f8c87e",
+      "mentions": []
+    },
+    "shape": {
+      "sections": [
+        "overview",
+        "radius-scale",
+        "concentric-radius",
+        "best-practices"
+      ],
+      "skeleton": "f656eee5271a84e4b83cc3bbd7b09fdc47f3f308131882865f594b59581318fc",
+      "mentions": []
+    },
+    "spacing": {
+      "sections": [
+        "overview",
+        "scale",
+        "usage",
+        "best-practices"
+      ],
+      "skeleton": "bf2132b4acd9e8734709007ab1ae8bf40d89fb92d3281607d6ef19e4f2c7557e",
+      "mentions": []
+    },
+    "styling-overview": {
+      "sections": [
+        "pick-a-path",
+        "plain",
+        "tailwind",
+        "stylex-own-code",
+        "other-packages",
+        "what-each-file-does",
+        "further-reading"
+      ],
+      "skeleton": "2bb79103d25e7b1f1a0cb160776a00d871056f95a6b8a728bb5c4c487475a25f",
+      "mentions": []
+    },
+    "theme": {
+      "sections": [
+        "quick-start",
+        "creating-a-custom-theme",
+        "icon-sizes",
+        "light-dark-mode",
+        "integration-themes"
+      ],
+      "skeleton": "eacd1432d49237ed62f82ea054c0e5930503e9f072ab40b4965461f29cf31080",
+      "mentions": []
+    },
+    "use-a-theme": {
+      "sections": [
+        "quick-start",
+        "migrating-earlier-theme-copies",
+        "available-themes",
+        "theme-props",
+        "integration-themes",
+        "light-dark-mode",
+        "nesting-themes",
+        "runtime-vs-built-themes"
+      ],
+      "skeleton": "eeb293ed4c43f4ff72bb3d44ae5a36e3fdae16d01717f8db75370add6dc928d4",
+      "mentions": []
+    },
+    "use-integrations": {
+      "sections": [
+        "discover-integrations",
+        "install-an-integration",
+        "use-what-it-adds",
+        "check-for-problems"
+      ],
+      "skeleton": "906555b962d65e80281e888eabf678729956d8c13b8bc65f6fb892e6917d66f0",
+      "mentions": []
+    },
+    "working-with-ai": {
+      "sections": [
+        "overview",
+        "quick-start",
+        "what-gets-generated",
+        "cursor-setup",
+        "checking-your-setup",
+        "the-astryx-pattern",
+        "the-dense-flag",
+        "mcp-server",
+        "global-mode"
+      ],
+      "skeleton": "032b8da5c5f97f350157c8f4b270f1c954ba32da04cbb5e846f42ed7fc9e31bb",
+      "mentions": []
+    }
+  }
+}

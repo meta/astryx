@@ -38,7 +38,7 @@ export const docs = {
       name: 'Stack',
       displayName: 'Stack',
       description:
-        'Unified stack layout component with a direction prop. Use direction="horizontal" for left-to-right flow or direction="vertical" (default) for top-to-bottom. For convenience, HStack and VStack are pre-configured wrappers.',
+        'Unified stack layout component with a direction prop. Use direction="horizontal" to flow along the inline axis (left to right in LTR, right to left in RTL) or direction="vertical" (default) for top-to-bottom. For convenience, HStack and VStack are pre-configured wrappers.',
       playground: {
         defaults: {
           direction: 'horizontal',
@@ -55,7 +55,7 @@ export const docs = {
           name: 'direction',
           type: "'horizontal' | 'vertical'",
           description:
-            "Direction of the stack layout. 'horizontal' flows items left-to-right (like HStack), 'vertical' flows top-to-bottom (like VStack). Note: the value is 'horizontal', NOT 'row'.",
+            "Direction of the stack layout. 'horizontal' flows items along the inline axis, left to right in LTR and right to left in RTL (like HStack), 'vertical' flows top-to-bottom (like VStack). Note: the value is 'horizontal', NOT 'row'.",
           default: "'vertical'",
         },
         {
@@ -176,6 +176,21 @@ export const docs = {
           description:
             'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}.',
         },
+        {
+          name: 'className',
+          type: 'string',
+          description: 'Class name added to the stack element, after the component styles.',
+        },
+        {
+          name: 'style',
+          type: 'CSSProperties',
+          description: 'Inline styles for the stack element. width, height, maxWidth, and minHeight win over the same properties here.',
+        },
+        {
+          name: 'ref',
+          type: 'Ref<HTMLElement>',
+          description: 'Ref to the rendered stack element.',
+        },
       ],
     },
 
@@ -184,7 +199,7 @@ export const docs = {
       isHiddenFromOverview: true,
       displayName: 'H Stack',
       description:
-        'Horizontal stack for arranging items left-to-right. Supports polymorphic rendering.',
+        'Horizontal stack that arranges items along the inline axis: left to right in LTR, right to left in RTL. Supports polymorphic rendering.',
       playground: {
         defaults: {
           gap: 2,
@@ -285,12 +300,12 @@ export const docs = {
         {
           name: 'justify',
           type: "'start' | 'center' | 'end' | 'between' | 'around' | 'evenly'",
-          description: 'Main-axis alignment alias for hAlign. Mirrors CSS justify-content.',
+          description: 'Main-axis alignment alias for hAlign. Mirrors CSS justify-content. When hAlign is also set, hAlign wins.',
         },
         {
           name: 'align',
           type: "'start' | 'center' | 'end' | 'stretch'",
-          description: 'Cross-axis alignment alias for vAlign. Mirrors CSS align-items.',
+          description: 'Cross-axis alignment alias for vAlign. Mirrors CSS align-items. When vAlign is also set, vAlign wins.',
         },
         {
           name: 'wrap',
@@ -314,6 +329,21 @@ export const docs = {
           type: 'StyleXStyles',
           description:
             'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}.',
+        },
+        {
+          name: 'className',
+          type: 'string',
+          description: 'Class name added to the stack element, after the component styles.',
+        },
+        {
+          name: 'style',
+          type: 'CSSProperties',
+          description: 'Inline styles for the stack element. width, height, maxWidth, and minHeight win over the same properties here.',
+        },
+        {
+          name: 'ref',
+          type: 'Ref<HTMLElement>',
+          description: 'Ref to the rendered stack element.',
         },
       ],    },
     {
@@ -446,6 +476,27 @@ export const docs = {
           type: 'ReactNode',
           description: 'Stack content.',
         },
+        {
+          name: 'xstyle',
+          type: 'StyleXStyles',
+          description:
+            'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}.',
+        },
+        {
+          name: 'className',
+          type: 'string',
+          description: 'Class name added to the stack element, after the component styles.',
+        },
+        {
+          name: 'style',
+          type: 'CSSProperties',
+          description: 'Inline styles for the stack element. width, height, maxWidth, and minHeight win over the same properties here.',
+        },
+        {
+          name: 'ref',
+          type: 'Ref<HTMLElement>',
+          description: 'Ref to the rendered stack element.',
+        },
       ],
     },
     {
@@ -493,6 +544,27 @@ export const docs = {
           type: 'ReactNode',
           description: 'Item content.',
         },
+        {
+          name: 'xstyle',
+          type: 'StyleXStyles',
+          description:
+            'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}.',
+        },
+        {
+          name: 'className',
+          type: 'string',
+          description: 'Class name added to the item element, after the component styles.',
+        },
+        {
+          name: 'style',
+          type: 'CSSProperties',
+          description: 'Inline styles for the item element.',
+        },
+        {
+          name: 'ref',
+          type: 'Ref<HTMLElement>',
+          description: 'Ref to the rendered item element.',
+        },
       ],
     },
   ],
@@ -525,7 +597,7 @@ export const docsZh = {
       isHiddenFromOverview: true,
       displayName: 'H Stack',
       description:
-        '水平堆叠组件，将元素从左到右排列。支持多态渲染。',
+        '水平堆叠组件，沿行内方向排列元素：LTR 中从左到右，RTL 中从右到左。支持多态渲染。',
       props: [
         {
           name: 'gap',
@@ -557,12 +629,12 @@ export const docsZh = {
         {
           name: 'justify',
           type: "'start' | 'center' | 'end' | 'between' | 'around' | 'evenly'",
-          description: 'hAlign 的别名。对应 CSS justify-content。',
+          description: 'hAlign 的别名。对应 CSS justify-content。同时设置 hAlign 时，以 hAlign 为准。',
         },
         {
           name: 'align',
           type: "'start' | 'center' | 'end' | 'stretch'",
-          description: 'vAlign 的别名。对应 CSS align-items。',
+          description: 'vAlign 的别名。对应 CSS align-items。同时设置 vAlign 时，以 vAlign 为准。',
         },
         {
           name: 'wrap',
@@ -716,15 +788,15 @@ export const docsDense = {
       name: 'HStack',
       isHiddenFromOverview: true,
       displayName: 'H Stack',
-      description: 'Horizontal stack; left-to-right, polymorphic rendering.',
+      description: 'Horizontal stack; inline direction (left to right in LTR, right to left in RTL), polymorphic rendering.',
       propDescriptions: {
         gap: 'Number literal spacing step: 0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10. Use gap={4} not gap="4".',
         width: "Width of container. Numbers=pixels, strings=as-is (e.g. '100%').",
         height: "Height of container. Numbers=pixels, strings=as-is (e.g. '100%').",
         hAlign: 'Horizontal (main-axis) alignment.',
         vAlign: 'Vertical (cross-axis) alignment.',
-        justify: 'Main-axis alignment alias for hAlign. Mirrors CSS justify-content.',
-        align: 'Cross-axis alignment alias for vAlign. Mirrors CSS align-items.',
+        justify: 'Main-axis alignment alias for hAlign. Mirrors CSS justify-content. An explicit hAlign wins.',
+        align: 'Cross-axis alignment alias for vAlign. Mirrors CSS align-items. An explicit vAlign wins.',
         wrap: 'Flex wrap behavior.',
         as: 'HTML element to render as container.',
         children: 'Stack content.',

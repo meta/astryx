@@ -452,8 +452,10 @@ const meta: Meta<typeof PowerSearch> = {
   component: PowerSearch,
   tags: ['autodocs'],
   decorators: [
+    // A 600px column where there is room that shrinks with the viewport, so
+    // the stories, the touch presentations above all, fit a phone-sized canvas.
     Story => (
-      <div style={{width: 600}}>
+      <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 600px)'}}>
         <Story />
       </div>
     ),
@@ -557,7 +559,7 @@ export const NearFullTokenRow: Story = {
       {
         field: 'title',
         operator: 'contains',
-        value: {type: 'string', value: 'aaaaaaaaaaaaaaaaaa'},
+        value: {type: 'string', value: 'aaaaaaaaaaaaa'},
       },
     ]);
     return (
@@ -718,6 +720,264 @@ export const NearFullTokenRowRTL: Story = {
   name: 'Near-full Token Row (RTL)',
 };
 
+const tokenRowGuardFilters: PowerSearchFilter[] = [
+  {field: 'status', operator: 'is', value: {type: 'enum', value: 'open'}},
+  {field: 'priority', operator: 'is', value: {type: 'enum', value: 'p1'}},
+  {
+    field: 'title',
+    operator: 'contains',
+    value: {type: 'string', value: 'release notes'},
+  },
+];
+
+const settleFrames = () =>
+  new Promise<void>(resolve =>
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+  );
+
+/** Resolves once fonts are ready and the clear-all lane has published its reserve. */
+async function waitForTokenRow(wrapper: HTMLElement) {
+  await document.fonts.ready;
+  const deadline = performance.now() + 2000;
+  while (
+    wrapper.style.getPropertyValue('--_tokenizer-end-lane-reserve') === ''
+  ) {
+    if (performance.now() >= deadline) {
+      throw new Error('Clear-all lane reserve was not measured');
+    }
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+  }
+  await settleFrames();
+}
+
+function tokenRowParts(canvasElement: HTMLElement) {
+  const wrapper = canvasElement.querySelector<HTMLElement>('.astryx-tokenizer');
+  const input = wrapper?.querySelector<HTMLInputElement>('[role="combobox"]');
+  const tokens = [
+    ...(wrapper?.querySelectorAll<HTMLElement>('.astryx-token') ?? []),
+  ];
+  if (!wrapper || !input || tokens.length !== tokenRowGuardFilters.length) {
+    throw new Error('Token-row fixture did not render as expected');
+  }
+  return {wrapper, input, tokens};
+}
+
+/**
+ * Default filters fill more than half of the field, and the search input
+ * stays beside them: no token paints over it, and pressing the input's
+ * center reaches the input rather than a token.
+ */
+export const DefaultFiltersBesideSearch: Story = {
+  render: args => {
+    const [filters, setFilters] = useState(tokenRowGuardFilters);
+    return (
+      <div style={{width: 600}}>
+        <PowerSearch
+          {...args}
+          config={basicConfig}
+          filters={filters}
+          onChange={newFilters => setFilters([...newFilters])}
+        />
+      </div>
+    );
+  },
+  args: {
+    placeholder: 'Add more filters...',
+  },
+  name: 'Default filters beside the search input',
+  play: async ({canvasElement}) => {
+    const {wrapper, input, tokens} = tokenRowParts(canvasElement);
+    await waitForTokenRow(wrapper);
+
+    const field = wrapper.getBoundingClientRect();
+    const tokenRects = tokens.map(token => token.getBoundingClientRect());
+    if (new Set(tokenRects.map(rect => Math.round(rect.top))).size !== 1) {
+      throw new Error('Fixture tokens no longer share one row');
+    }
+    // Fail closed if the fixture stops covering the field's middle, where a
+    // test or a person would naturally press the search input.
+    const fieldCenter = field.left + field.width / 2;
+    const tokenEnd = Math.max(...tokenRects.map(rect => rect.right));
+    const tokenStart = Math.min(...tokenRects.map(rect => rect.left));
+    if (getComputedStyle(wrapper).direction === 'rtl') {
+      if (tokenStart > fieldCenter) {
+        throw new Error('Fixture tokens no longer reach the field center');
+      }
+    } else if (tokenEnd < fieldCenter) {
+      throw new Error('Fixture tokens no longer reach the field center');
+    }
+
+    const inputRect = input.getBoundingClientRect();
+    if (inputRect.width <= 0) {
+      throw new Error('The search input has no pointer hit target');
+    }
+    tokens.forEach((token, index) => {
+      const rect = tokenRects[index];
+      const overlapX =
+        Math.min(rect.right, inputRect.right) -
+        Math.max(rect.left, inputRect.left);
+      const overlapY =
+        Math.min(rect.bottom, inputRect.bottom) -
+        Math.max(rect.top, inputRect.top);
+      if (overlapX > 0.5 && overlapY > 0.5) {
+        throw new Error(
+          `Token "${token.textContent ?? ''}" covers ${overlapX.toFixed(2)}px of the search input`,
+        );
+      }
+    });
+    const hit = document.elementFromPoint(
+      inputRect.left + inputRect.width / 2,
+      inputRect.top + inputRect.height / 2,
+    );
+    if (hit !== input) {
+      throw new Error(
+        `The search input's center is hit-tested as ${hit?.tagName ?? 'nothing'}${hit?.getAttribute('aria-label') ? ` "${hit.getAttribute('aria-label')}"` : ''}`,
+      );
+    }
+    hit.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+    if (document.activeElement !== input) {
+      throw new Error('Pressing the search input did not focus it');
+    }
+    input.blur();
+  },
+};
+
+export const DefaultFiltersBesideSearchRTL: Story = {
+  ...DefaultFiltersBesideSearch,
+  decorators: [
+    Story => (
+      <div dir="rtl">
+        <Story />
+      </div>
+    ),
+  ],
+  name: 'Default filters beside the search input (RTL)',
+};
+
+/**
+ * An app that compiles its own StyleX can emit the same atomic class as the
+ * search input's resting styles, unlayered, so it outranks the input's
+ * layered empty-query styles. Whichever single resting declaration wins that
+ * way, the empty input stays on the token row: the field never grows a
+ * blank row under its filters.
+ */
+export const TokenRowWhenRestingStylesWin: Story = {
+  render: args => {
+    const [filters, setFilters] = useState(tokenRowGuardFilters.slice(0, 2));
+    return (
+      <div style={{width: 600}}>
+        <PowerSearch
+          {...args}
+          config={basicConfig}
+          filters={filters}
+          onChange={newFilters => setFilters([...newFilters])}
+        />
+      </div>
+    );
+  },
+  args: {
+    placeholder: 'Add more filters...',
+  },
+  name: 'Token row when resting styles win',
+  play: async ({canvasElement}) => {
+    const wrapper =
+      canvasElement.querySelector<HTMLElement>('.astryx-tokenizer');
+    const input = wrapper?.querySelector<HTMLInputElement>('[role="combobox"]');
+    const tokens = [
+      ...(wrapper?.querySelectorAll<HTMLElement>('.astryx-token') ?? []),
+    ];
+    if (!wrapper || !input || tokens.length !== 2) {
+      throw new Error('Token-row fixture did not render as expected');
+    }
+    await waitForTokenRow(wrapper);
+    if (!input.matches(':placeholder-shown')) {
+      throw new Error(
+        'The empty search input does not match :placeholder-shown',
+      );
+    }
+
+    // The input's own atomic rules, split into resting and empty-query ones.
+    const ownClasses = new Set(input.classList);
+    const resting: Array<{className: string; property: string; value: string}> =
+      [];
+    const emptyQueryProperties = new Set<string>();
+    const visit = (rules: CSSRuleList) => {
+      for (const rule of rules) {
+        if (rule instanceof CSSLayerBlockRule) {
+          visit(rule.cssRules);
+          continue;
+        }
+        if (!(rule instanceof CSSStyleRule)) {
+          continue;
+        }
+        for (const selector of rule.selectorText.split(',')) {
+          const match = /^\.([\w-]+)((?::[\w-]+(?:\([^)]*\))?)*)$/.exec(
+            selector.trim(),
+          );
+          if (!match || !ownClasses.has(match[1])) {
+            continue;
+          }
+          const pseudo = match[2].replace(/:not\(#\\#\)/g, '');
+          for (const property of rule.style) {
+            if (pseudo === '') {
+              resting.push({
+                className: match[1],
+                property,
+                value: rule.style.getPropertyValue(property),
+              });
+            } else if (pseudo.includes(':placeholder-shown')) {
+              emptyQueryProperties.add(property);
+            }
+          }
+        }
+      }
+    };
+    for (const sheet of document.styleSheets) {
+      try {
+        visit(sheet.cssRules);
+      } catch {
+        // A cross-origin sheet cannot style the input's own classes.
+      }
+    }
+    const contested = resting.filter(({property}) =>
+      emptyQueryProperties.has(property),
+    );
+    // Fail closed: with no resting declaration that an empty-query rule
+    // overrides, the loop below would prove nothing.
+    if (contested.length === 0) {
+      throw new Error(
+        'No resting declaration of the search input has an empty-query override',
+      );
+    }
+
+    const restingHeight = wrapper.getBoundingClientRect().height;
+    const override = document.createElement('style');
+    document.head.append(override);
+    try {
+      for (const {className, property, value} of contested) {
+        override.textContent = `.${CSS.escape(className)}{${property}:${value} !important}`;
+        await settleFrames();
+        const height = wrapper.getBoundingClientRect().height;
+        const inputRect = input.getBoundingClientRect();
+        const row = tokens[tokens.length - 1].getBoundingClientRect();
+        const inputMiddle = inputRect.top + inputRect.height / 2;
+        if (inputMiddle < row.top || inputMiddle > row.bottom) {
+          throw new Error(
+            `With the resting "${property}: ${value}" winning, the empty search input left the token row (input middle ${inputMiddle.toFixed(2)}, row ${row.top.toFixed(2)}-${row.bottom.toFixed(2)})`,
+          );
+        }
+        if (height > restingHeight + 0.5) {
+          throw new Error(
+            `With the resting "${property}: ${value}" winning, the field grew from ${restingHeight.toFixed(2)} to ${height.toFixed(2)}`,
+          );
+        }
+      }
+    } finally {
+      override.remove();
+    }
+  },
+};
+
 export const FullFeatured: Story = {
   render: args => {
     const [filters, setFilters] = useState<PowerSearchFilter[]>([]);
@@ -778,6 +1038,7 @@ export const IssueTracker: Story = {
     maxSearchResults: 2,
     maxOperatorMenuItems: 2,
     menuWidth: 700,
+    presentation: 'popover',
   },
   parameters: {
     docs: {
@@ -1556,6 +1817,7 @@ export const OverflowInline: Story = {
           filters={filters}
           onChange={newFilters => setFilters([...newFilters])}
           tokenOverflowBehavior="unfocusedInline"
+          presentation="popover"
         />
         <p style={{marginTop: 8}}>
           This text will shift down when the search bar expands on focus.
@@ -1581,6 +1843,7 @@ export const OverflowLayer: Story = {
           filters={filters}
           onChange={newFilters => setFilters([...newFilters])}
           tokenOverflowBehavior="unfocusedLayer"
+          presentation="popover"
         />
         <p style={{marginTop: 8}}>
           This text should not shift when the search bar expands on focus.
@@ -1795,4 +2058,184 @@ export const StatusVariantComparison: Story = {
       </div>
     );
   },
+};
+
+// =============================================================================
+// Bottom-sheet presentation
+// =============================================================================
+
+// The sheet flow is designed for a phone: view these stories at a compact
+// touch viewport (Storybook's mobile2 preset) to see the sheets as a person
+// would.
+function PhoneFrame({children}: {children: React.ReactNode}) {
+  return <div style={{width: 390, maxWidth: '100%'}}>{children}</div>;
+}
+
+function FilterDump({filters}: {filters: ReadonlyArray<PowerSearchFilter>}) {
+  if (filters.length === 0) {
+    return null;
+  }
+  return (
+    <pre
+      style={{
+        marginTop: 16,
+        padding: 12,
+        borderRadius: 8,
+        fontSize: 12,
+        overflow: 'auto',
+        maxWidth: 390,
+      }}>
+      {JSON.stringify(filters, null, 2)}
+    </pre>
+  );
+}
+
+const sheetPresetFilters: ReadonlyArray<PowerSearchFilter> = [
+  {
+    field: 'status',
+    operator: 'any_of',
+    value: {type: 'enum_list', value: ['open', 'in_progress']},
+  },
+  {field: 'priority', operator: 'is', value: {type: 'enum', value: 'p1'}},
+  {
+    field: 'created',
+    operator: 'after',
+    value: {type: 'date_absolute', unixSeconds: 1710039600},
+  },
+];
+
+/**
+ * `presentation="bottom-sheet"`: the field is one trigger
+ * with display-only tokens; a tap opens the Filters sheet, whose rows edit or
+ * remove a filter, Add filter opens above it with the fields, and the value
+ * step opens above that and stages operator → value. Dismissing a step
+ * reveals the one beneath. Clear all asks first. List values (Assignee, Tags)
+ * open the Tokenizer's own sheet above the step.
+ */
+export const SheetPresentation: Story = {
+  render: args => {
+    const [filters, setFilters] =
+      useState<ReadonlyArray<PowerSearchFilter>>(sheetPresetFilters);
+    return (
+      <PhoneFrame>
+        <PowerSearch
+          {...args}
+          config={fullConfig}
+          filters={filters}
+          onChange={next => setFilters(next)}
+          // A count that follows the filters, so a commit from the flow (and
+          // Clear all) changes it and the flow announces the change.
+          resultCount={Math.max(1, Math.round(240 / (filters.length + 1)))}
+          timezoneID="America/Los_Angeles"
+          presentation="bottom-sheet"
+        />
+        <FilterDump filters={filters} />
+      </PhoneFrame>
+    );
+  },
+  name: 'Bottom sheet (forced)',
+  parameters: {viewport: {defaultViewport: 'mobile2'}},
+};
+
+/**
+ * The default presentation, `adaptive`: the sheet flow on a compact
+ * coarse-pointer screen, the tokenizer field and editor popover otherwise.
+ * Resize the viewport or switch the pointer emulation to see it switch.
+ */
+export const AdaptivePresentation: Story = {
+  render: args => {
+    const [filters, setFilters] =
+      useState<ReadonlyArray<PowerSearchFilter>>(sheetPresetFilters);
+    return (
+      <PhoneFrame>
+        <PowerSearch
+          {...args}
+          config={fullConfig}
+          filters={filters}
+          onChange={next => setFilters(next)}
+          timezoneID="America/Los_Angeles"
+        />
+        <FilterDump filters={filters} />
+      </PhoneFrame>
+    );
+  },
+  name: 'Adaptive (default)',
+};
+
+/**
+ * With `contentSearchFieldKey`, Add filter carries the content search: the
+ * field typeahead's suggestions list inline under the search box, and a value
+ * suggestion commits a filter straight away.
+ */
+export const SheetPresentationContentSearch: Story = {
+  render: args => {
+    const [filters, setFilters] = useState<ReadonlyArray<PowerSearchFilter>>(
+      [],
+    );
+    return (
+      <PhoneFrame>
+        <PowerSearch
+          {...args}
+          config={contentSearchConfig}
+          filters={filters}
+          onChange={next => setFilters(next)}
+          placeholder="Search issues…"
+          presentation="bottom-sheet"
+        />
+        <FilterDump filters={filters} />
+      </PhoneFrame>
+    );
+  },
+  name: 'Bottom sheet with content search',
+  parameters: {viewport: {defaultViewport: 'mobile2'}},
+};
+
+/**
+ * Read-only keeps the Filters sheet as plain rows with Done only; disabled
+ * keeps the trigger focusable (aria-disabled) and shows its reason; the result
+ * count renders at the end of the field in both presentations.
+ */
+export const SheetPresentationStates: Story = {
+  render: () => {
+    const [filters, setFilters] =
+      useState<ReadonlyArray<PowerSearchFilter>>(sheetPresetFilters);
+    return (
+      <PhoneFrame>
+        <div style={{display: 'flex', flexDirection: 'column', gap: 24}}>
+          <PowerSearch
+            config={fullConfig}
+            filters={filters}
+            onChange={next => setFilters(next)}
+            label="Read-only filters"
+            isLabelHidden={false}
+            isReadOnly
+            resultCount={42}
+            presentation="bottom-sheet"
+          />
+          <PowerSearch
+            config={fullConfig}
+            filters={filters}
+            onChange={next => setFilters(next)}
+            label="Disabled filters"
+            isLabelHidden={false}
+            isDisabled
+            disabledMessage="Pick a project first"
+            presentation="bottom-sheet"
+          />
+          <PowerSearch
+            config={fullConfig}
+            filters={filters}
+            onChange={next => setFilters(next)}
+            label="With a status"
+            isLabelHidden={false}
+            status={{type: 'error', message: 'Add at least one filter'}}
+            startIcon={MagnifyingGlassIcon}
+            presentation="bottom-sheet"
+          />
+        </div>
+      </PhoneFrame>
+    );
+  },
+  name: 'Bottom sheet states',
+  parameters: {viewport: {defaultViewport: 'mobile2'}},
 };

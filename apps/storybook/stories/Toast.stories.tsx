@@ -16,6 +16,8 @@ import {Card} from '@astryxdesign/core/Card';
 import {Stack} from '@astryxdesign/core/Stack';
 import {Heading} from '@astryxdesign/core/Text';
 import {Dialog} from '@astryxdesign/core/Dialog';
+import {BottomSheet} from '@astryxdesign/core/BottomSheet';
+import {Drawer} from '@astryxdesign/core/Drawer';
 import {Text} from '@astryxdesign/core/Text';
 import {
   colorVars,
@@ -752,6 +754,166 @@ function DialogToastContent({onClose}: {onClose: () => void}) {
         />
       </Stack>
     </Stack>
+  );
+}
+
+export const AppToastOverBottomSheet: StoryObj = {
+  render: function AppToastOverBottomSheetStory() {
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    return (
+      // Toasts at the top, clear of the sheet rising from the bottom.
+      <ToastViewport position="topEnd">
+        <Stack gap={2}>
+          <SheetToastContent openLabel="Open sheet" />
+          <Button label="Open dialog" onClick={() => setIsDialogOpen(true)} />
+          <Dialog
+            isOpen={isDialogOpen}
+            onOpenChange={() => setIsDialogOpen(false)}
+            aria-label="Edit item">
+            <SheetToastContent openLabel="Open sheet from the dialog" />
+          </Dialog>
+        </Stack>
+      </ToastViewport>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "The app's own `ToastViewport` and a `BottomSheet`, opened on its own or from a dialog: while the sheet is open the viewport moves into it, so a toast fired from the sheet paints above it and its action stays clickable.",
+      },
+    },
+  },
+};
+
+export const AppToastOverDrawer: StoryObj = {
+  render: function AppToastOverDrawerStory() {
+    const [isOpen, setIsOpen] = useState(false);
+    const [status, setStatus] = useState('The candidate is in Screening.');
+    const toast = useToast();
+    return (
+      <ToastViewport>
+        <Button label="Open candidate" onClick={() => setIsOpen(true)} />
+        <Drawer isOpen={isOpen} onOpenChange={setIsOpen} label="Candidate">
+          <Stack gap={3}>
+            <p>{status}</p>
+            <Button
+              label="Move to Interview"
+              onClick={() => {
+                setStatus('The candidate is in Interview.');
+                toast({
+                  body: 'Moved to Interview',
+                  isAutoHide: false,
+                  endContent: (
+                    <Button
+                      label="Undo"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() =>
+                        setStatus('The candidate is back in Screening.')
+                      }
+                    />
+                  ),
+                });
+              }}
+            />
+          </Stack>
+        </Drawer>
+      </ToastViewport>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "The app's own `ToastViewport` and a modal `Drawer`: while the drawer is open the viewport moves into it, so a toast fired from the drawer paints above it and its action stays clickable and reachable with Tab.",
+      },
+    },
+  },
+};
+
+export const AppToastOverNonModalDrawer: StoryObj = {
+  render: function AppToastOverNonModalDrawerStory() {
+    const [isOpen, setIsOpen] = useState(false);
+    const [status, setStatus] = useState('The filters are saved.');
+    const toast = useToast();
+    return (
+      <ToastViewport>
+        <Stack gap={2}>
+          <p>{status}</p>
+          <Button
+            label="Save filters"
+            onClick={() =>
+              toast({
+                body: 'Filters saved',
+                isAutoHide: false,
+                endContent: (
+                  <Button
+                    label="Undo"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setStatus('The save is undone.')}
+                  />
+                ),
+              })
+            }
+          />
+          <Button label="Open filters" onClick={() => setIsOpen(true)} />
+        </Stack>
+        <Drawer
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          hasScrim={false}
+          label="Filters">
+          <p>Filter options</p>
+        </Drawer>
+      </ToastViewport>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          "The app's own `ToastViewport` and a `Drawer` without its scrim: a toast shown before the drawer opens stays above it, so its action stays clickable while the drawer covers its corner.",
+      },
+    },
+  },
+};
+
+function SheetToastContent({openLabel}: {openLabel: string}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [status, setStatus] = useState('The item is in your inbox.');
+  const toast = useToast();
+  return (
+    <>
+      <Button label={openLabel} onClick={() => setIsOpen(true)} />
+      <BottomSheet
+        isOpen={isOpen}
+        onOpenChange={setIsOpen}
+        label="Item actions">
+        <Stack gap={3}>
+          <p>{status}</p>
+          <Button
+            label="Archive"
+            onClick={() => {
+              setStatus('The item is archived.');
+              toast({
+                body: 'Item archived',
+                isAutoHide: false,
+                endContent: (
+                  <Button
+                    label="Undo"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setStatus('The item is back in your inbox.')}
+                  />
+                ),
+              });
+            }}
+          />
+        </Stack>
+      </BottomSheet>
+    </>
   );
 }
 

@@ -47,6 +47,7 @@ export const doc = {
       cli: 'astryx build "analytics dashboard" --json',
     },
   ],
+  outsideProject: 'same',
   exitCodes: [
     {code: 0, when: 'success (including zero matches)'},
     {

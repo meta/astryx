@@ -8,7 +8,7 @@
  * @output defineSyntaxTheme, SyntaxTheme, syntaxThemeStyle
  * @position Syntax theme definition API; consumed by presets, SyntaxTheme, defineTheme
  *
- * @see https://github.com/facebook/astryx/issues/1148
+ * @see https://github.com/meta/astryx/issues/1148
  */
 
 import {
@@ -229,7 +229,7 @@ export function syntaxThemeStyle(
   for (const key of ALL_SYNTAX_KEYS) {
     // An unset diff slot is left to its default rather than written empty.
     const value = theme.tokens[key];
-    if (value !== undefined) vars[toCSSProperty(key)] = value;
+    if (value !== undefined) {vars[toCSSProperty(key)] = value;}
   }
   return vars;
 }

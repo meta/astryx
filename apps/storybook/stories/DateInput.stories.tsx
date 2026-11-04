@@ -6,6 +6,7 @@ import {expect, userEvent, waitFor, within} from 'storybook/test';
 import {DateInput} from '@astryxdesign/core/DateInput';
 import {FormLayout} from '@astryxdesign/core/FormLayout';
 import {Text} from '@astryxdesign/core/Text';
+import {InternationalizationProvider} from '@astryxdesign/core/i18n';
 import {InputGroup, InputGroupText} from '@astryxdesign/core/InputGroup';
 import type {ISODateString} from '@astryxdesign/core/Calendar';
 import {Layout, LayoutContent} from '@astryxdesign/core/Layout';
@@ -72,7 +73,7 @@ const meta: Meta<typeof DateInput> = {
     disabledMessage: {
       control: 'text',
       description:
-        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the field focusable via aria-disabled (activation stays blocked). Use this instead of wrapping a disabled DateInput in Tooltip.',
+        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and describes the focusable controls of the field (activation stays blocked). Use this instead of wrapping a disabled DateInput in Tooltip.',
     },
     size: {
       control: 'radio',
@@ -155,6 +156,34 @@ export const WithValue: Story = {
   },
   args: {
     label: 'Event date',
+  },
+};
+
+/**
+ * A day-first locale: typed numeric dates read day, then month. The line
+ * under the field shows each value the field reports.
+ */
+export const DayFirstLocale: Story = {
+  tags: ['!autodocs'],
+  render: args => {
+    const [value, setValue] = useState<ISODateString | undefined>(undefined);
+    const [reported, setReported] = useState<string[]>([]);
+    return (
+      <InternationalizationProvider locale="en-GB">
+        <DateInput
+          {...args}
+          value={value}
+          onChange={next => {
+            setValue(next);
+            setReported(previous => [...previous, String(next)]);
+          }}
+        />
+        <Text data-testid="reported">{reported.join(', ')}</Text>
+      </InternationalizationProvider>
+    );
+  },
+  args: {
+    label: 'Start date',
   },
 };
 
@@ -320,9 +349,9 @@ export const Disabled: Story = {
 
 // Disabled with an explanation tooltip. Hover or keyboard-focus the field to
 // see why it's disabled — the reason is announced to assistive tech via
-// aria-describedby, and the field stays focusable (activation is still
-// blocked). Use disabledMessage instead of wrapping a disabled DateInput in Tooltip:
-// disabled controls swallow the pointer events a Tooltip wrapper needs.
+// aria-describedby on the field's focusable controls (activation is still
+// blocked). Use disabledMessage instead of wrapping a disabled DateInput in
+// Tooltip, so the reason is tied to the field.
 export const DisabledWithMessage: Story = {
   render: args => {
     const [value, setValue] = useState<ISODateString | undefined>(undefined);
@@ -831,4 +860,40 @@ export const StylingParts: Story = {
       </div>
     </div>
   ),
+};
+
+/**
+ * The bottom sheet with two centuries of years: the year wheel has 200 rows.
+ * Under a finger, opening the month and year wheels costs about the same as
+ * for two years: each year is drawn once, as a flat row.
+ */
+export const BottomSheetWideRange: Story = {
+  render: args => {
+    const [value, setValue] = useState<ISODateString | undefined>(
+      '2026-03-15' as ISODateString,
+    );
+    return <DateInput {...args} value={value} onChange={setValue} />;
+  },
+  args: {
+    label: 'Date of birth',
+    presentation: 'bottom-sheet',
+    min: '1900-01-01' as ISODateString,
+    max: '2099-12-31' as ISODateString,
+  },
+};
+
+/** The same sheet with two years: the year wheel has 2 rows. */
+export const BottomSheetNarrowRange: Story = {
+  render: args => {
+    const [value, setValue] = useState<ISODateString | undefined>(
+      '2026-03-15' as ISODateString,
+    );
+    return <DateInput {...args} value={value} onChange={setValue} />;
+  },
+  args: {
+    label: 'Date of birth',
+    presentation: 'bottom-sheet',
+    min: '2026-01-01' as ISODateString,
+    max: '2027-12-31' as ISODateString,
+  },
 };

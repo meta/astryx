@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y audit ChatSystemMessage
 
 /**
  * @file ChatSystemMessage.a11y.chromium.spec.ts
@@ -458,7 +459,8 @@ async function capture(
     forcedColors: false,
     coarsePointer: options.coarsePointer ?? false,
     touchPoints: options.touchPoints ?? false,
-    role: 'status',
+    // No live role of its own: the chat log delivers it (spec:AST-086 FR4).
+    role: null,
     variant: auditCase.variant,
     text: auditCase.text,
     separatorCount: auditCase.variant === 'divider' ? 1 : 0,
@@ -488,7 +490,7 @@ async function capture(
   check(actual.selectorCount === 1, 'expected exactly one audit subject');
   check(actual.visible, 'audit subject has no visible geometry');
   check(actual.text === expected.text, 'visible content drifted');
-  check(actual.role === expected.role, 'status role drifted');
+  check(actual.role === expected.role, 'root role drifted');
   check(actual.variant === expected.variant, 'variant reflection drifted');
   check(
     actual.separatorCount === expected.separatorCount,
@@ -915,11 +917,11 @@ test.afterAll(async () => {
           },
           emptyContentPartitions: {
             emptyString:
-              'Focused unit evidence: the default variant keeps role=status and renders the content unchanged (empty). In the divider variant, the status root and separator remain; no visible label or accessible name is produced.',
+              'Focused unit evidence: the default variant has no root role and renders the content unchanged (empty). In the divider variant, the root and separator remain; no visible label or accessible name is produced.',
             numericZero:
-              'Focused unit evidence: the default variant keeps role=status and renders the content unchanged as one 0. In the divider variant, the status root and separator remain; Divider paints two zero text nodes (textContent="00") with no accessible name.',
+              'Focused unit evidence: the default variant has no root role and renders the content unchanged as one 0. In the divider variant, the root and separator remain; Divider paints two zero text nodes (textContent="00") with no accessible name.',
             emptyFragment:
-              'Focused unit evidence: the default variant keeps role=status and renders the content unchanged (empty). In the divider variant, the status root and separator remain; no visible label or accessible name is produced.',
+              'Focused unit evidence: the default variant has no root role and renders the content unchanged (empty). In the divider variant, the root and separator remain; no visible label or accessible name is produced.',
           },
           sharedAdvisories: {
             dividerFalseyLabel:
@@ -933,9 +935,7 @@ test.afterAll(async () => {
             forcedColors:
               'Forced-colors rendering was not exercised. The default row makes no support claim, and the disappearing Divider rule is a shared component:Divider advisory.',
             assistiveTechnology:
-              'Browser role exposure is measured, but spoken announcement timing and output were not verified with real assistive technology.',
-            nestedLiveRegions:
-              'The nested-log frame records role=status inside ChatMessageList role=log aria-live=polite, but double-announcement behavior is unverified under spec:AST-009/FR4 and FR10.',
+              'Browser role exposure is measured; spoken output was not recorded with real assistive technology, which spec:AST-009 does not require for routing claims.',
           },
           stateVisualConformance: {
             default: ['text', 'text-with-icon', 'wrapped-long-content'],
@@ -943,7 +943,7 @@ test.afterAll(async () => {
               'labelled-separator',
               'unresolved-divider-icon-observation',
             ],
-            nestedLiveLog: ['status-inside-polite-log-unverified'],
+            nestedLiveLog: ['no-live-role-inside-polite-log'],
             colorModes: ['light', 'dark'],
             narrowCoarsePointer: [
               'default-with-icon',

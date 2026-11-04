@@ -13,6 +13,7 @@ import {themeBuild, themeBuildFamily} from './build.mjs';
 import {interceptCore} from './core-interception.mjs';
 import {ensureCoreBuilt} from '../../../clients/cli/commands/ensure-core-built.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
+import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 vi.setConfig({testTimeout: 120_000});
 const CLI_ROOT = path.resolve(import.meta.dirname, '../../..');
 const FAMILY_KEY = 'ocean-family';
@@ -252,20 +253,67 @@ describe('themeBuildFamily()', () => {
     expect(fs.existsSync(dtsPath)).toBe(false);
   });
 
-  it('refuses family outputs outside cwd before checking or writing', async () => {
+  it('refuses to write family outputs outside cwd, and checks them read-only', async () => {
     const dir = makeDir();
     const files = writeFamily(dir).map(file => path.join(dir, file));
     const app = path.join(dir, 'app');
     fs.mkdirSync(app);
 
-    for (const check of [false, true]) {
-      await expect(
-        themeBuildFamily(files, {familyKey: FAMILY_KEY, check}, {cwd: app}),
-      ).rejects.toMatchObject({code: 'ERR_PATH_TRAVERSAL'});
-    }
+    await expect(
+      themeBuildFamily(files, {familyKey: FAMILY_KEY}, {cwd: app}),
+    ).rejects.toMatchObject({code: 'ERR_PATH_TRAVERSAL'});
+    const checked = await themeBuildFamily(
+      files,
+      {familyKey: FAMILY_KEY, check: true},
+      {cwd: app},
+    );
+    expect(checked?.type).toBe('theme.build.check');
+    expect(checked?.data.upToDate).toBe(false);
+    // The `.css.d.ts` import stub may be absent in check mode.
+    expect(checked?.data.stale).toEqual(
+      OUTPUTS.filter(file => !file.endsWith('.css.d.ts')).map(file => ({
+        path: `../themes/${file}`,
+        reason: 'missing',
+      })),
+    );
     for (const output of OUTPUTS) {
       expect(fs.existsSync(path.join(dir, 'themes', output))).toBe(false);
     }
+  });
+
+  it('ends a stale family report for outputs outside cwd with a remedy that works', async () => {
+    const dir = makeDir();
+    const files = writeFamily(dir).map(file => path.join(dir, file));
+    const app = path.join(dir, 'app');
+    fs.mkdirSync(app);
+    const family = ['--family', ...files, '--family-key', FAMILY_KEY];
+
+    const stale = await runCli(['theme', 'build', ...family, '--check'], app);
+    expect(stale.code).toBe(1);
+    // The old remedy ran the build from cwd, which refuses these outputs.
+    expect(stale.stderr).not.toContain('Rebuild with:');
+
+    const lines = stale.stderr.split('\n').map(line => line.trim());
+    const runDir = lines.find(line => line.startsWith('cd '))?.slice(3);
+    expect(runDir).toBe(fs.realpathSync(path.join(dir, 'themes')));
+    const stem = `${getCliInvocation(runDir)} theme build `;
+    const [buildArgs, checkArgs] = lines
+      .filter(line => line.startsWith(stem))
+      .map(line => line.slice(stem.length).split(' '));
+    expect(checkArgs).toEqual([...buildArgs, '--check']);
+
+    // Following the remedy builds, and the check from there passes.
+    const built = await runCli(['theme', 'build', ...buildArgs], runDir);
+    expect(built.code).toBe(0);
+    for (const output of OUTPUTS) {
+      expect(fs.existsSync(path.join(dir, 'themes', output))).toBe(true);
+    }
+    const checked = await runCli(
+      ['--json', 'theme', 'build', ...checkArgs],
+      runDir,
+    );
+    expect(checked.code).toBe(0);
+    expect(JSON.parse(checked.stdout).data.upToDate).toBe(true);
   });
 
   it('fails without publishing a mixed trio when staging a write fails', async () => {

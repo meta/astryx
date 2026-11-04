@@ -4,6 +4,7 @@
 
 import {afterEach, describe, expect, it} from 'vitest';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {checkAppThemes, checkThemes} from './theme-checks.mjs';
@@ -12,6 +13,8 @@ import {themeAdd} from '../theme/add/add.mjs';
 import {themeEject} from '../theme/eject/eject.mjs';
 import {themeBuild} from '../theme/build/build.mjs';
 import {parseThemeModuleRecord} from '../../foundation/config/theme-state.mjs';
+import {CLI_VERSION} from '../../test-utils/release-fixtures.mjs';
+import {globalCli} from '../../test-utils/global-local-fixtures.mjs';
 
 /** @type {string[]} */
 const dirs = [];
@@ -25,11 +28,12 @@ function write(file, content) {
 
 /**
  * @param {Array<{slug: string, css?: string, fontFamily?: string, fontCss?: string}>} themeSpecs
- * @param {{peerRange?: string, importModule?: boolean}} [options]
+ * @param {{peerRange?: string, importModule?: boolean, root?: string}} [options]
+ *   `root`: the folder the fixture is made in (default: this package)
  */
 async function fixture(themeSpecs = [{slug: 'ocean'}], options = {}) {
   const dir = fs.mkdtempSync(
-    path.join(process.cwd(), '.astryx-doctor-themes-'),
+    path.join(options.root ?? process.cwd(), '.astryx-doctor-themes-'),
   );
   dirs.push(dir);
   fs.mkdirSync(path.join(dir, 'src'), {recursive: true});
@@ -47,7 +51,7 @@ async function fixture(themeSpecs = [{slug: 'ocean'}], options = {}) {
   );
   write(
     path.join(dir, 'node_modules/@astryxdesign/core/package.json'),
-    JSON.stringify({name: '@astryxdesign/core', version: '1.0.0'}),
+    JSON.stringify({name: '@astryxdesign/core', version: CLI_VERSION}),
   );
 
   const packageDir = path.join(dir, 'node_modules/@acme/themes');
@@ -67,7 +71,7 @@ async function fixture(themeSpecs = [{slug: 'ocean'}], options = {}) {
       version: '1.0.0',
       type: 'module',
       peerDependencies: {
-        '@astryxdesign/core': options.peerRange ?? '^1.0.0',
+        '@astryxdesign/core': options.peerRange ?? `^${CLI_VERSION}`,
       },
       exports: exportsMap,
     }),
@@ -340,6 +344,142 @@ describe('app-theme doctor checks', () => {
     expect(result.message).not.toMatch(/\n\s+at /u);
   });
 
+  it('passes theme-owners when a built module imports its stylesheet', async () => {
+    const {dir, packageDir} = await fixture();
+    write(
+      path.join(packageDir, 'dist/ocean.js'),
+      "import './ocean.css';\nimport '@acme/themes/themes/ocean.css';\nexport const oceanTheme = {name: 'ocean', tokens: {}};\n",
+    );
+
+    const checks = await checkAppThemes(dir);
+
+    expect(checks.map(item => item.status)).toEqual(Array(10).fill('pass'));
+    expect(check(checks, 'theme-owners').message).toContain(
+      'every built module loads',
+    );
+    const cli = runDoctor(dir);
+    expect(cli.status).toBe(0);
+    expect(cli.stdout).not.toContain('could not load its built module');
+  }, 30_000);
+
+  it('passes every check for an entry that loads its fonts and stylesheet and re-exports the built module', async () => {
+    const {dir, packageDir} = await fixture([
+      {
+        slug: 'ocean',
+        fontFamily: 'Ocean Sans',
+        fontCss:
+          "@font-face { font-family: 'Ocean Sans'; src: local('Ocean Sans'); }\n",
+      },
+    ]);
+    write(
+      path.join(packageDir, 'dist/ocean.built.js'),
+      "export const oceanTheme = {name: 'ocean', tokens: {}, fontFamily: 'Ocean Sans'};\n",
+    );
+    write(
+      path.join(packageDir, 'dist/ocean.js'),
+      "import './ocean.fonts.css';\nimport '@acme/themes/themes/ocean.css';\nexport {oceanTheme} from './ocean.built.js';\n",
+    );
+
+    const checks = await checkAppThemes(dir);
+
+    expect(checks.map(item => [item.id, item.status])).toEqual(
+      checks.map(item => [item.id, 'pass']),
+    );
+    expect(checks).toHaveLength(10);
+    const cli = runDoctor(dir);
+    expect(cli.status).toBe(0);
+    expect(cli.stdout).not.toContain('could not load its built module');
+  }, 30_000);
+
+  it('passes every check for an entry that re-exports a theme whose own name differs from its slug', async () => {
+    const {dir, packageDir} = await fixture([
+      {
+        slug: 'ocean',
+        css: '[data-astryx-theme="deep-sea"] { --color-text: black; }\n',
+        fontFamily: 'Ocean Sans',
+        fontCss:
+          "@font-face { font-family: 'Ocean Sans'; src: local('Ocean Sans'); }\n",
+      },
+    ]);
+    write(
+      path.join(packageDir, 'dist/deep-sea.js'),
+      "export const deepSeaTheme = {name: 'deep-sea', tokens: {}, fontFamily: 'Ocean Sans'};\n",
+    );
+    write(
+      path.join(packageDir, 'dist/ocean.js'),
+      "import './ocean.fonts.css';\nimport './ocean.css';\nexport {deepSeaTheme as oceanTheme} from './deep-sea.js';\n",
+    );
+
+    const checks = await checkAppThemes(dir);
+
+    expect(checks.map(item => [item.id, item.status])).toEqual(
+      checks.map(item => [item.id, 'pass']),
+    );
+    expect(checks).toHaveLength(10);
+  }, 30_000);
+
+  it.each([
+    [
+      'a missing dependency',
+      "import '@acme/definitely-missing-dep';\nexport const oceanTheme = {name: 'ocean', tokens: {}};\n",
+      '@acme/definitely-missing-dep',
+    ],
+    [
+      'a throwing module',
+      "throw new Error('broken theme module');\nexport const oceanTheme = {name: 'ocean', tokens: {}};\n",
+      'broken theme module',
+    ],
+  ])(
+    'still fails theme-owners when a built module imports its stylesheet and has %s',
+    async (_label, rest, detail) => {
+      const {dir, packageDir} = await fixture();
+      write(
+        path.join(packageDir, 'dist/ocean.js'),
+        `import './ocean.css';\n${rest}`,
+      );
+
+      const result = check(await checkAppThemes(dir), 'theme-owners');
+
+      expect(result).toMatchObject({id: 'theme-owners', status: 'fail'});
+      expect(result.message).toContain(
+        'Theme "ocean" from @acme/themes could not load its built module',
+      );
+      expect(result.message).toContain(detail);
+    },
+  );
+
+  it("still fails theme-owners when the theme's stylesheet export is missing", async () => {
+    const {dir, packageDir} = await fixture();
+    write(
+      path.join(packageDir, 'dist/ocean.js'),
+      "import './ocean.css';\nexport const oceanTheme = {name: 'ocean', tokens: {}};\n",
+    );
+    fs.rmSync(path.join(packageDir, 'dist/ocean.css'));
+
+    const result = check(await checkAppThemes(dir), 'theme-owners');
+
+    expect(result).toMatchObject({id: 'theme-owners', status: 'fail'});
+    expect(result.message).toContain(
+      'Missing stylesheet export @acme/themes/themes/ocean.css',
+    );
+  });
+
+  it('still fails theme-owners when another stylesheet the built module imports is missing', async () => {
+    const {dir, packageDir} = await fixture();
+    write(
+      path.join(packageDir, 'dist/ocean.js'),
+      "import './ocean.css';\nimport './fonts.css';\nexport const oceanTheme = {name: 'ocean', tokens: {}};\n",
+    );
+
+    const result = check(await checkAppThemes(dir), 'theme-owners');
+
+    expect(result).toMatchObject({id: 'theme-owners', status: 'fail'});
+    expect(result.message).toContain(
+      'Theme "ocean" from @acme/themes could not load its built module',
+    );
+    expect(result.message).toContain('fonts.css');
+  });
+
   it('fails theme-owners for an ambiguous multi-theme record', async () => {
     const {dir, packageDir} = await fixture([{slug: 'ocean'}, {slug: 'reef'}]);
     const packageFile = path.join(packageDir, 'package.json');
@@ -455,6 +595,82 @@ describe('app-theme doctor checks', () => {
       fix: expect.stringContaining('theme build'),
     });
   });
+
+  it("check 5 is info, and builds nothing, when the project's Core is not installed (spec AST-081 FR3)", async () => {
+    // Outside this repository, whose own installed Core would be found above.
+    const {dir} = await fixture(undefined, {root: os.tmpdir()});
+    await themeEject('ocean', {cwd: dir, package: '@acme/themes'});
+    const sourceFile = path.join(dir, 'src/themes/ocean/oceanTheme.ts');
+    fs.writeFileSync(
+      sourceFile,
+      "const oceanTheme = {name: 'ocean', tokens: {'--color-bg': '#000'}};\nexport {oceanTheme};\nexport default oceanTheme;\n",
+    );
+    await themeBuild(sourceFile, {}, {cwd: dir});
+    await themeAdd('ocean', {cwd: dir, import: true});
+    // A fresh clone: the project declares Core but has not installed it.
+    fs.rmSync(path.join(dir, 'node_modules/@astryxdesign/core'), {
+      recursive: true,
+      force: true,
+    });
+
+    expect(check(await checkAppThemes(dir), 'theme-local-builds')).toEqual({
+      id: 'theme-local-builds',
+      label: 'Local theme build freshness',
+      status: 'info',
+      message:
+        "The project's Core isn't installed, so local theme builds were not checked. Install the project's dependencies, then run doctor again.",
+    });
+    // A build that may read only the project's Core refuses instead of
+    // reading another one.
+    await expect(
+      themeBuild(sourceFile, {check: true}, {cwd: dir, projectCore: true}),
+    ).rejects.toMatchObject({code: 'ERR_CORE_NOT_FOUND'});
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'check 5 through a CLI installed for the computer, in a fresh clone: info, and no carried Core is read or fetched',
+    async () => {
+      const home = fs.mkdtempSync(
+        path.join(os.tmpdir(), 'astryx-doctor-home-'),
+      );
+      dirs.push(home);
+      const g = globalCli('npm', CLI_VERSION, {root: home});
+      const {dir} = await fixture(undefined, {root: os.tmpdir()});
+      await themeEject('ocean', {cwd: dir, package: '@acme/themes'});
+      const sourceFile = path.join(dir, 'src/themes/ocean/oceanTheme.ts');
+      await themeBuild(sourceFile, {}, {cwd: dir});
+      await themeAdd('ocean', {cwd: dir, import: true});
+      fs.rmSync(path.join(dir, 'node_modules/@astryxdesign/core'), {
+        recursive: true,
+        force: true,
+      });
+      const cache = path.join(home, '.cache');
+      const result = spawnSync(process.execPath, [g.bin, 'doctor', '--json'], {
+        cwd: dir,
+        encoding: 'utf8',
+        timeout: 120_000,
+        env: {
+          PATH: path.dirname(process.execPath),
+          HOME: home,
+          USERPROFILE: home,
+          XDG_CACHE_HOME: cache,
+          XDG_CONFIG_HOME: path.join(home, '.config'),
+          // Nothing can be fetched: a fetch of the carried Core would fail.
+          npm_config_registry: 'http://127.0.0.1:9/',
+          npm_config_update_notifier: 'false',
+          NO_COLOR: '1',
+        },
+      });
+      const checks = JSON.parse(result.stdout).data.checks;
+      expect(checks.find(c => c.id === 'theme-local-builds')).toMatchObject({
+        status: 'info',
+      });
+      expect(
+        fs.existsSync(path.join(cache, 'astryx', 'releases', CLI_VERSION)),
+      ).toBe(false);
+    },
+    180_000,
+  );
 
   it('check 6 ignores private variables generated from guaranteed component properties', async () => {
     const {dir, packageDir} = await fixture([
@@ -610,7 +826,7 @@ describe('app-theme doctor checks', () => {
     for (const name of ['@astryxdesign/core', '@astryxdesign/theme-neutral']) {
       write(
         path.join(root, 'node_modules', name, 'package.json'),
-        JSON.stringify({name, version: '1.0.0'}),
+        JSON.stringify({name, version: CLI_VERSION}),
       );
     }
     const app = path.join(root, 'packages/app');
@@ -620,8 +836,8 @@ describe('app-theme doctor checks', () => {
         name: 'app',
         private: true,
         dependencies: {
-          '@astryxdesign/core': '1.0.0',
-          '@astryxdesign/theme-neutral': '1.0.0',
+          '@astryxdesign/core': CLI_VERSION,
+          '@astryxdesign/theme-neutral': CLI_VERSION,
         },
         astryx: {theme: '@astryxdesign/theme-neutral'},
       }),

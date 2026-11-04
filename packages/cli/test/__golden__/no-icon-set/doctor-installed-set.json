@@ -1,0 +1,142 @@
+{
+  "apiVersion": 1,
+  "type": "doctor",
+  "data": {
+    "checks": [
+      {
+        "id": "node-version",
+        "label": "<text>",
+        "status": "pass",
+        "message": "<text> 22.13.0"
+      },
+      {
+        "id": "core-installed",
+        "label": "<text>",
+        "status": "pass",
+        "message": "<text>"
+      },
+      {
+        "id": "version-alignment",
+        "label": "<text>",
+        "status": "pass",
+        "message": "<text>"
+      },
+      {
+        "id": "themes",
+        "label": "<text>",
+        "status": "warn",
+        "message": "<text>",
+        "fix": "<text>"
+      },
+      {
+        "id": "theme-management",
+        "label": "<text>",
+        "status": "info",
+        "message": "<text>",
+        "fix": "<text>"
+      },
+      {
+        "id": "config",
+        "label": "<text>",
+        "status": "pass",
+        "message": "<text>"
+      },
+      {
+        "id": "implicit-integrations",
+        "label": "<text>",
+        "status": "info",
+        "message": "<text>"
+      },
+      {
+        "id": "configured-integrations",
+        "label": "<text>",
+        "status": "pass",
+        "message": "<text> 1"
+      },
+      {
+        "id": "provider-identity",
+        "label": "<text>",
+        "status": "pass",
+        "message": "<text> 1"
+      },
+      {
+        "id": "integration-issues",
+        "label": "<text>",
+        "status": "pass",
+        "message": "<text> 1"
+      },
+      {
+        "id": "agent-docs",
+        "label": "<text>",
+        "status": "info",
+        "message": "<text>",
+        "fix": "<text>"
+      },
+      {
+        "id": "peer-deps",
+        "label": "<text>",
+        "status": "warn",
+        "message": "<text> 0.19.0",
+        "fix": "<text>"
+      },
+      {
+        "id": "package-manager",
+        "label": "<text>",
+        "status": "info",
+        "message": "<text>"
+      },
+      {
+        "id": "cli-command",
+        "label": "<text>",
+        "status": "info",
+        "message": "<text>"
+      },
+      {
+        "id": "newest-release"
+      },
+      {
+        "id": "cli-on-path"
+      },
+      {
+        "id": "computer-integrations"
+      },
+      {
+        "id": "authoring-docs",
+        "label": "<text>",
+        "status": "pass",
+        "message": "<text> 19"
+      },
+      {
+        "id": "cli-docs",
+        "label": "<text>",
+        "status": "pass",
+        "message": "<text> 101 82 19"
+      },
+      {
+        "id": "docs-tree",
+        "label": "<text>",
+        "status": "pass",
+        "message": "<text> 199 31 12"
+      },
+      {
+        "id": "docs-progressive-disclosure",
+        "label": "<text>",
+        "status": "pass",
+        "message": "<text> 117 32"
+      }
+    ],
+    "summary": {
+      "pass": 11,
+      "warn": 2,
+      "fail": 0,
+      "info": 5
+    }
+  },
+  "meta": {
+    "answeredBy": {
+      "cli": "<version>",
+      "core": "<version>",
+      "copy": "project"
+    }
+  }
+}

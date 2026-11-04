@@ -21,4 +21,23 @@ export const doc = {
   // No `category` — it's hidden from the overview gallery (the only consumer
   // of `category`), and 'Showcase' isn't part of the TemplateCategory taxonomy.
   isHiddenFromOverview: true,
+  icons: {
+    Banknote: 'money',
+    CreditCard: 'creditCard',
+    Download: 'download',
+    Folder: 'folder',
+    LayoutGrid: 'apps',
+    List: 'list',
+    Lock: 'lock',
+    MapPin: 'location',
+    Mic: 'microphone',
+    Plus: 'add',
+    Search: 'search',
+    ShoppingBag: 'shoppingBag',
+    Smartphone: 'mobile',
+    Tag: 'tag',
+    User: 'user',
+    Wallet: 'money',
+    X: 'close',
+  },
 };

@@ -10,4 +10,10 @@ export const doc = {
   aspectRatio: 16 / 9,
   isShowcase: true,
   componentsUsed: ['Icon', 'Layout', 'ToggleButton'],
+  icons: {
+    BellIcon: 'notification',
+    BellSlashIcon: 'notificationOff',
+    BookmarkIcon: 'bookmark',
+    StarIcon: 'star',
+  },
 };

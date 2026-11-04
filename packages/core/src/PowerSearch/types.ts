@@ -407,6 +407,8 @@ export interface PowerSearchTokenProps {
   readonly onClick?: () => void;
   readonly onRemove?: () => void;
   readonly isDisabled?: boolean;
+  /** The zone the field reads date values in; see PowerSearch `timezoneID`. */
+  readonly timezoneID?: string;
 }
 
 /**

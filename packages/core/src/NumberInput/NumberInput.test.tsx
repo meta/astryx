@@ -13,6 +13,8 @@ import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {act, useState} from 'react';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import * as stylex from '@stylexjs/stylex';
+import {colorVars} from '../theme/tokens.stylex';
 import {TestIcon} from '../__tests__/TestIcon';
 import {InternationalizationProvider} from '../i18n';
 import {registerIcons, resetIcons} from '../Icon';
@@ -21,6 +23,21 @@ import {NumberInput} from './NumberInput';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+
+// jsdom cannot match `:focus-visible`: compare the ring's StyleX class hash.
+const RING = stylex
+  .props(
+    stylex.create({
+      ring: {
+        boxShadow: {
+          default: null,
+          ':has(> [aria-disabled="true"]:focus-visible)': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+        },
+      },
+    }).ring,
+  )
+  .className!.split(' ')
+  .pop()!;
 
 // FieldStatus announces status messages through the persistent useAnnounce
 // singletons; remove them between tests so role/aria-live queries in this
@@ -149,7 +166,7 @@ describe('NumberInput', () => {
     expect(screen.getByRole('spinbutton')).not.toHaveAttribute('aria-required');
   });
 
-  it('sets disabled attribute when isDisabled is true', () => {
+  it('exposes aria-disabled, not native disabled, when isDisabled is true (spec:AST-085)', () => {
     render(
       <NumberInput
         label="Quantity"
@@ -158,7 +175,76 @@ describe('NumberInput', () => {
         onChange={() => {}}
       />,
     );
-    expect(screen.getByRole('spinbutton')).toBeDisabled();
+    expect(screen.getByRole('spinbutton')).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+
+  it('keeps a disabled input in the tab order and rings it (spec:AST-085 FR1, FR6)', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <NumberInput label="First" value={1} onChange={() => {}} />
+        <NumberInput label="Second" value={2} onChange={() => {}} isDisabled />
+      </>,
+    );
+    await user.tab();
+    await user.tab();
+    const input = screen.getByRole('spinbutton', {name: 'Second'});
+    expect(input).toHaveFocus();
+    expect(input.parentElement).toHaveClass(RING);
+  });
+
+  it('runs no caller handler, steps nothing and submits no form while disabled (spec:AST-085 FR2)', async () => {
+    const user = userEvent.setup();
+    const handlers = {
+      onChange: vi.fn(),
+      onEnter: vi.fn(),
+      onKeyDown: vi.fn(),
+      onPaste: vi.fn(),
+    };
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <NumberInput
+          label="Quantity"
+          value={5}
+          isDisabled
+          hasNumberSteppers
+          {...handlers}
+        />
+      </form>,
+    );
+    await user.click(screen.getByRole('spinbutton'));
+    await user.keyboard('{ArrowUp}{ArrowDown}{Enter}');
+    await user.paste('9');
+    await user.click(screen.getByRole('button', {name: 'Increment Quantity'}));
+    for (const handler of [...Object.values(handlers), onSubmit]) {
+      expect(handler).not.toHaveBeenCalled();
+    }
+  });
+
+  it('commits nothing when a field disabled mid-entry loses focus (spec:AST-085 FR2)', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const field = (isDisabled: boolean) => (
+      <NumberInput
+        label="Quantity"
+        value={5}
+        onChange={onChange}
+        isDisabled={isDisabled}
+      />
+    );
+    const {rerender} = render(field(false));
+    const input = screen.getByRole('spinbutton');
+    await user.clear(input);
+    await user.type(input, '8');
+    onChange.mockClear();
+    rerender(field(true));
+    await user.tab();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(input).toHaveValue('5');
   });
 
   it('does not fire onChange when disabled', async () => {
@@ -270,6 +356,95 @@ describe('NumberInput', () => {
       expect(input).toHaveValue('$1,234');
       expect(input).toHaveAttribute('aria-valuetext', '$1,234');
       expect(input).toHaveAttribute('aria-valuenow', '1234');
+    });
+
+    it('keeps the whole text selected when focus arrives with it selected, as Tab does', () => {
+      render(
+        <NumberInput
+          label="Amount"
+          value={1500000}
+          onChange={() => {}}
+          formatValue={number => number.toLocaleString('en-US')}
+        />,
+      );
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
+      expect(input).toHaveValue('1,500,000');
+
+      // Tab into a text field selects its text before the focus event.
+      input.focus();
+      input.setSelectionRange(0, input.value.length);
+      fireEvent.focus(input);
+
+      // The editable text replaces the formatted text, and stays selected.
+      expect(input).toHaveValue('1500000');
+      expect(input.selectionStart).toBe(0);
+      expect(input.selectionEnd).toBe('1500000'.length);
+    });
+
+    it('selects the editable text when Tab moves focus into the field', async () => {
+      const user = userEvent.setup();
+      const onFocus = vi.fn();
+      render(
+        <>
+          <button type="button">Before</button>
+          <NumberInput
+            label="Amount"
+            value={1500000}
+            onChange={() => {}}
+            onFocus={onFocus}
+            formatValue={number => number.toLocaleString('en-US')}
+          />
+        </>,
+      );
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
+      await user.click(screen.getByRole('button', {name: 'Before'}));
+      await user.tab();
+      expect(input).toHaveFocus();
+      expect(input).toHaveValue('1500000');
+      expect(input.selectionStart).toBe(0);
+      expect(input.selectionEnd).toBe('1500000'.length);
+      expect(onFocus).toHaveBeenCalledTimes(1);
+      // Typing replaces the whole number.
+      await user.keyboard('42');
+      expect(input).toHaveValue('42');
+    });
+
+    it('does not swallow keystrokes when focus swaps no text', async () => {
+      const user = userEvent.setup();
+      function Controlled() {
+        const [value, setValue] = useState<number | null>(1);
+        return <NumberInput label="Amount" value={value} onChange={setValue} />;
+      }
+      render(
+        <>
+          <button type="button">Before</button>
+          <Controlled />
+        </>,
+      );
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
+      // Tab into the field with its text selected, as a browser does. The
+      // text is the same at rest and focused, so nothing is swapped.
+      input.focus();
+      input.setSelectionRange(0, input.value.length);
+      fireEvent.focus(input);
+      await user.keyboard('75');
+      expect(input).toHaveValue('75');
+    });
+
+    it('leaves the caret where a click put it', () => {
+      render(
+        <NumberInput
+          label="Amount"
+          value={1500000}
+          onChange={() => {}}
+          formatValue={number => number.toLocaleString('en-US')}
+        />,
+      );
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
+      input.focus();
+      input.setSelectionRange(3, 3);
+      fireEvent.focus(input);
+      expect(input.selectionStart).toBe(input.selectionEnd);
     });
 
     it('keeps ARIA value text on the committed value while an edit is pending', () => {
@@ -994,6 +1169,49 @@ describe('NumberInput', () => {
       }
     });
 
+    it('names the input by its label and a caller aria-labelledby', () => {
+      render(
+        <>
+          <span id="shipping-heading">Shipping</span>
+          <NumberInput
+            label="Amount"
+            value={null}
+            onChange={() => {}}
+            aria-labelledby="shipping-heading"
+          />
+        </>,
+      );
+      const input = screen.getByRole('spinbutton', {name: 'Amount Shipping'});
+      expect(input.getAttribute('aria-labelledby')?.split(' ')).toContain(
+        'shipping-heading',
+      );
+    });
+
+    it('names a grouped input by the group, its label, and a caller aria-labelledby', () => {
+      render(
+        <>
+          <span id="shipping-heading">Shipping</span>
+          <InputGroup label="Price">
+            <NumberInput
+              label="Amount"
+              value={null}
+              onChange={() => {}}
+              aria-labelledby="shipping-heading"
+            />
+          </InputGroup>
+        </>,
+      );
+      expect(
+        screen.getByRole('spinbutton', {name: 'Price Amount Shipping'}),
+      ).toBeInTheDocument();
+    });
+
+    it('leaves a standalone input named by its label element without a caller aria-labelledby', () => {
+      render(<NumberInput label="Amount" value={null} onChange={() => {}} />);
+      const input = screen.getByRole('spinbutton', {name: 'Amount'});
+      expect(input).not.toHaveAttribute('aria-labelledby');
+    });
+
     it('does not render status message when not provided', () => {
       render(
         <NumberInput
@@ -1376,7 +1594,7 @@ describe('NumberInput', () => {
           isReadOnly
         />,
       );
-      const input = screen.getByRole('spinbutton');
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
       input.focus();
       await user.keyboard('{ArrowUp}{ArrowDown}');
       expect(handleChange).not.toHaveBeenCalled();
@@ -1396,7 +1614,7 @@ describe('NumberInput', () => {
           />
         </div>,
       );
-      const input = screen.getByRole('spinbutton');
+      const input = screen.getByRole<HTMLInputElement>('spinbutton');
       input.focus();
       const event = new WheelEvent('wheel', {
         bubbles: true,
@@ -1424,10 +1642,10 @@ describe('NumberInput', () => {
       const increment = screen.getByRole('button', {
         name: 'Increment Quantity',
       });
-      expect(increment).toBeDisabled();
+      expect(increment).toHaveAttribute('aria-disabled', 'true');
       expect(
         screen.getByRole('button', {name: 'Decrement Quantity'}),
-      ).toBeDisabled();
+      ).toHaveAttribute('aria-disabled', 'true');
 
       fireEvent.click(increment);
       expect(handleChange).not.toHaveBeenCalled();
@@ -1446,7 +1664,10 @@ describe('NumberInput', () => {
           />
         </form>,
       );
-      expect(screen.getByRole('spinbutton')).toBeDisabled();
+      expect(screen.getByRole('spinbutton')).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
       expect([
         ...new FormData(container.querySelector('form')!).keys(),
       ]).toEqual([]);
@@ -1478,6 +1699,24 @@ describe('NumberInput', () => {
       expect(
         screen.getByRole('button', {name: 'Clear Qty'}),
       ).toBeInTheDocument();
+    });
+
+    it('focuses the field inside the tap that clears it, without scrolling', () => {
+      // iOS Safari brings up its keyboard only for a focus made while
+      // handling the touch.
+      const onChange = vi.fn();
+      const focusSpy = vi.spyOn(HTMLElement.prototype, 'focus');
+      render(
+        <NumberInput label="Qty" value={5} onChange={onChange} hasClear />,
+      );
+      const input = screen.getByRole('spinbutton');
+      fireEvent.click(screen.getByRole('button', {name: 'Clear Qty'}), {
+        detail: 1,
+      });
+      expect(onChange).toHaveBeenCalledWith(null);
+      expect(document.activeElement).toBe(input);
+      expect(focusSpy).toHaveBeenLastCalledWith({preventScroll: true});
+      focusSpy.mockRestore();
     });
 
     it('does not show clear button when value is null', () => {
@@ -1693,7 +1932,7 @@ describe('NumberInput', () => {
       expect(onChange).not.toHaveBeenCalled();
     });
 
-    it('remains natively disabled when disabled without a reason', () => {
+    it('stays focusable when disabled without a reason', () => {
       render(
         <NumberInput
           label="Quantity"
@@ -1703,8 +1942,8 @@ describe('NumberInput', () => {
         />,
       );
       const input = screen.getByRole('spinbutton');
-      expect(input).toBeDisabled();
-      expect(input).not.toHaveAttribute('aria-disabled');
+      expect(input).not.toBeDisabled();
+      expect(input).toHaveAttribute('aria-disabled', 'true');
     });
   });
 });
@@ -2006,14 +2245,14 @@ describe('NumberInput stepping', () => {
 
     const input = screen.getByRole('spinbutton');
     const increment = screen.getByRole('button', {name: 'Increment Amount'});
-    expect(increment).toBeEnabled();
+    expect(increment).not.toHaveAttribute('aria-disabled');
 
     fireEvent.click(increment);
 
     expect(input).toHaveValue('99.99');
     expect(input).toHaveAttribute('aria-valuenow', '99.99');
     expect(input).not.toHaveAttribute('aria-invalid');
-    expect(increment).toBeDisabled();
+    expect(increment).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('allows wheel stepping by default and consumes the focused gesture', () => {
@@ -2024,7 +2263,7 @@ describe('NumberInput stepping', () => {
         <NumberInput label="Amount" value={5} onChange={onChange} />
       </div>,
     );
-    const input = screen.getByRole('spinbutton');
+    const input = screen.getByRole<HTMLInputElement>('spinbutton');
     input.focus();
     const event = new WheelEvent('wheel', {
       bubbles: true,
@@ -2051,7 +2290,7 @@ describe('NumberInput stepping', () => {
         />
       </div>,
     );
-    const input = screen.getByRole('spinbutton');
+    const input = screen.getByRole<HTMLInputElement>('spinbutton');
     input.focus();
     const event = new WheelEvent('wheel', {
       bubbles: true,
@@ -2078,7 +2317,7 @@ describe('NumberInput stepping', () => {
         />
       </div>,
     );
-    const input = screen.getByRole('spinbutton');
+    const input = screen.getByRole<HTMLInputElement>('spinbutton');
     input.focus();
 
     rerender(
@@ -2140,7 +2379,7 @@ describe('NumberInput stepping', () => {
         <NumberInput label="Amount" value={5} onChange={onChange} />
       </div>,
     );
-    const input = screen.getByRole('spinbutton');
+    const input = screen.getByRole<HTMLInputElement>('spinbutton');
     input.focus();
     fireEvent.wheel(input, {deltaY: -100, ctrlKey: true});
 
@@ -2162,7 +2401,7 @@ describe('NumberInput stepping', () => {
         />
       </div>,
     );
-    const input = screen.getByRole('spinbutton');
+    const input = screen.getByRole<HTMLInputElement>('spinbutton');
     input.focus();
     fireEvent.wheel(input, {deltaY: -100});
 
@@ -2259,10 +2498,33 @@ describe('NumberInput stepping', () => {
       );
       expect(
         screen.getByRole('button', {name: 'Increment Quantity'}),
-      ).toBeDisabled();
+      ).toHaveAttribute('aria-disabled', 'true');
       expect(
         screen.getByRole('button', {name: 'Decrement Quantity'}),
-      ).not.toBeDisabled();
+      ).not.toHaveAttribute('aria-disabled');
+    });
+
+    it('commits nothing from a click on the stepper at the reached boundary (spec:AST-085 FR2)', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <NumberInput
+          label="Quantity"
+          value={5}
+          onChange={onChange}
+          min={0}
+          max={10}
+          hasNumberSteppers
+        />,
+      );
+      const input = screen.getByRole('spinbutton');
+      await user.clear(input);
+      await user.type(input, '10');
+      onChange.mockClear();
+      await user.click(
+        screen.getByRole('button', {name: 'Increment Quantity'}),
+      );
+      expect(onChange).not.toHaveBeenCalled();
     });
 
     it('disables both steppers with the input', () => {
@@ -2277,10 +2539,10 @@ describe('NumberInput stepping', () => {
       );
       expect(
         screen.getByRole('button', {name: 'Increment Quantity'}),
-      ).toBeDisabled();
+      ).toHaveAttribute('aria-disabled', 'true');
       expect(
         screen.getByRole('button', {name: 'Decrement Quantity'}),
-      ).toBeDisabled();
+      ).toHaveAttribute('aria-disabled', 'true');
     });
   });
 });

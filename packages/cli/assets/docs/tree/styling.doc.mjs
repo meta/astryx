@@ -10,7 +10,7 @@
 export const docs = {
   type: 'namespace',
   name: 'styling',
-  title: 'Styling Components',
+  title: 'Styling components',
   summary:
     'Customize component appearance: xstyle, Tailwind, className, rest props, compound components, data attribute selectors, tokens, and StyleX setup.',
   keywords: [

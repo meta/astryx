@@ -11,6 +11,7 @@ import {
   integrationAddDoc,
   integrationAddTemplate,
 } from './add-contribution.mjs';
+import {iconNewSet} from '../icon/new-set/new-set.mjs';
 import {validateLocalIntegration} from './validate-integration.mjs';
 import {NAMESPACE_DOCS_CLI} from '../../foundation/integrations/cli-requirement.mjs';
 
@@ -536,7 +537,9 @@ describe('integrationAdd template', () => {
       path.join(tmpDir, 'templates/my-widget.doc.mjs'),
       'utf-8',
     );
-    expect(spec).toContain("@astryxdesign/cli/authoring').TemplateDoc");
+    expect(spec).toContain(
+      "@astryxdesign/cli/authoring').IntegrationTemplateDoc",
+    );
     expect(spec).toContain("type: 'page'");
     expect(spec).toContain("name: 'my-widget'");
 
@@ -824,14 +827,16 @@ describe('typed descriptor conformance', () => {
     await integrationAdd('doc', 'my-guide', {cwd: tmpDir});
     await integrationAdd('template', 'my-page', {cwd: tmpDir});
     await integrationAdd('theme', 'ocean', {cwd: tmpDir});
+    await iconNewSet('outline', {cwd: tmpDir});
 
     // Codemod and agent-doc keep their released formats for compatibility;
     // no new kind may copy those exceptions.
     for (const [relativePath, type] of [
       ['components/MyWidget.doc.mjs', 'ComponentDoc'],
       ['docs/my-guide.doc.mjs', 'ReferenceDoc'],
-      ['templates/my-page.doc.mjs', 'TemplateDoc'],
+      ['templates/my-page.doc.mjs', 'IntegrationTemplateDoc'],
       ['themes/ocean/oceanTheme.doc.mjs', 'ThemeDoc'],
+      ['icon-sets/outline/outline.doc.mjs', 'IconSetDoc'],
     ]) {
       const source = fs.readFileSync(path.join(tmpDir, relativePath), 'utf-8');
       expect(source).toContain(`@astryxdesign/cli/authoring').${type}`);
@@ -863,6 +868,7 @@ describe('public per-kind APIs', () => {
         to: '1.0.0',
       }),
       integrationAddAgentDoc('Use MyWidget.', {cwd: tmpDir, dryRun: true}),
+      iconNewSet('outline', {cwd: tmpDir, dryRun: true}),
     ]);
 
     expect(results.map(result => result.data.kind)).toEqual([
@@ -871,6 +877,7 @@ describe('public per-kind APIs', () => {
       'template',
       'codemod',
       'agent-doc',
+      'icon-set',
     ]);
   });
 });
@@ -911,7 +918,7 @@ describe('dry-run receipts match the real write', () => {
     'declared roots and an exports map': {
       pkg: {files: ['dist'], exports: {'.': './dist/index.js'}},
       manifest:
-        "export default {\n  components: './components',\n  docs: './docs',\n  templates: './templates',\n  codemods: './codemods',\n  themes: './themes',\n};\n",
+        "export default {\n  components: './components',\n  docs: './docs',\n  templates: './templates',\n  codemods: './codemods',\n  themes: './themes',\n  experimental: {iconSets: './icon-sets'},\n};\n",
     },
   };
   /** @type {Array<[any, string, Record<string, unknown>]>} */
@@ -923,6 +930,7 @@ describe('dry-run receipts match the real write', () => {
     ['codemod', 'rename-widget', {to: '1.2.0'}],
     ['agent-doc', 'Run acme verify before finishing.', {}],
     ['theme', 'ocean', {}],
+    ['icon-set', 'outline', {}],
   ];
 
   /** Every file under the package, keyed by project path, with its bytes. */
@@ -959,17 +967,15 @@ describe('dry-run receipts match the real write', () => {
         }
         const before = snapshot();
 
-        const plan = await integrationAdd(kind, name, {
-          cwd: tmpDir,
-          dryRun: true,
-          ...options,
-        });
+        // An icon set is experimental: its own call, not an integrationAdd kind.
+        const add = (/** @type {Record<string, unknown>} */ more) =>
+          kind === 'icon-set'
+            ? iconNewSet(name, {cwd: tmpDir, ...options, ...more})
+            : integrationAdd(kind, name, {cwd: tmpDir, ...options, ...more});
+        const plan = await add({dryRun: true});
         expect(snapshot()).toEqual(before);
 
-        const written = await integrationAdd(kind, name, {
-          cwd: tmpDir,
-          ...options,
-        });
+        const written = await add({});
         const after = snapshot();
         const changed = Object.keys(after)
           .filter(file => after[file] !== before[file])

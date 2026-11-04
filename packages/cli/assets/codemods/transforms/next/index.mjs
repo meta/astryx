@@ -7,14 +7,14 @@
  * this file into the resolved version folder.
  */
 
-import migrateListEdgeCompensationToEdge, {
-  meta as migrateListEdgeCompensationToEdgeMeta,
-} from './migrate-list-edge-compensation-to-edge.mjs';
+import promoteTokenizerPresentation, {
+  meta as promoteTokenizerPresentationMeta,
+} from './promote-tokenizer-presentation.mjs';
 
 export default [
   {
-    name: 'migrate-list-edge-compensation-to-edge',
-    transform: migrateListEdgeCompensationToEdge,
-    meta: migrateListEdgeCompensationToEdgeMeta,
+    name: 'promote-tokenizer-presentation',
+    transform: promoteTokenizerPresentation,
+    meta: promoteTokenizerPresentationMeta,
   },
 ];

@@ -736,7 +736,7 @@ describe('integration template discovery', () => {
     const command = await runCli(['template', 'shell-side-nav'], tmpDir);
     expect(command.status).toBe(0);
     expect(command.stderr).toContain('@acme/extra has 1 integration issue');
-    expect(command.stderr).toContain('astryx doctor');
+    expect(command.stderr).toMatch(/Run: .+ doctor/);
 
     const doctor = await runCli(['doctor'], tmpDir);
     expect(doctor.status).toBe(0);

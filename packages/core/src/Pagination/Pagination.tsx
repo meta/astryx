@@ -45,8 +45,14 @@ import {mergeProps, rtlStyles} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
-import {useTranslator} from '../i18n/useTranslator';
 import type {PaginationVariantMap} from './index';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Pagination/Pagination.generated';
+
+registerEnglishFallback(english);
 
 // =============================================================================
 // Types
@@ -395,7 +401,7 @@ export function Pagination({
   const [, startTransition] = useTransition();
 
   // Resolve system strings once per render. Prop overrides win.
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.pagination.label');
   const firstLabel = t('@astryx.pagination.first');
   const lastLabel = t('@astryx.pagination.last');
@@ -706,7 +712,9 @@ export function Pagination({
                   // needs to focus the dot, which some browsers (Safari) skip for
                   // buttons, so focus it explicitly.
                   onClick={e => e.currentTarget.focus()}
-                  disabled={isDisabled}
+                  // Disabled dots stay focusable (spec:AST-085 FR1); the page
+                  // only follows focus while enabled (handleDotsFocus).
+                  aria-disabled={isDisabled || undefined}
                   {...mergeProps(
                     themeProps('pagination-dot', {
                       active: isActive ? 'active' : null,
@@ -766,6 +774,7 @@ export function Pagination({
               {inputLabelText}
             </span>
             {inputNode}
+            {/* eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `computedTotalPages` is a page count, not a slot */}
             {computedTotalPages != null && (
               <span
                 {...mergeProps(

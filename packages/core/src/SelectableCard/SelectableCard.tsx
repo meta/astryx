@@ -23,6 +23,8 @@
  * A hidden <input type="checkbox"> inside the card provides the accessible
  * role, label, and checked state — the card surface itself has no role/tabIndex.
  * Space toggles it natively; Enter is wired up as an additional toggle key.
+ * Inside a single-choice group (Lab's SelectableCardGroup, through an internal
+ * context) the input is a radio: the card selects and never deselects itself.
  *
  * For static display, use Card.
  * For navigation or action cards, use ClickableCard.
@@ -34,16 +36,18 @@ import {
   type KeyboardEvent,
   useRef,
   useCallback,
+  use,
   type Ref,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {colorVars, durationVars, easeVars} from '../theme/tokens.stylex';
 import type {Elevation, SizeValue, SpacingStep} from '../utils/types';
-import {mergeProps} from '../utils';
+import {isImeKeyEvent, mergeProps} from '../utils';
 import {Card} from '../Card/Card';
 import type {CardVariant} from '../Card/Card';
 import {useClickableContainer} from '../hooks/useClickableContainer';
+import {closestLayerRoot} from '../privateAttributes/layerRoot.stylex';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
@@ -51,6 +55,7 @@ import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {SelectableCardInputContext} from './selectableCardInput';
 // =============================================================================
 // Styles — selection + interaction; Card handles the rest
 // =============================================================================
@@ -59,7 +64,11 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 // element the controller writes to (`pressedAlpha`) at the press's strength,
 // 1 while on and 1 → 0 over the release, and inherited resolved by the
 // `::after` that paints it. See interactionOverlay.stylex.ts.
-const pressedOverlayColor = 'var(--_press-paint)';
+const pressedOverlayImage = 'var(--_press-paint-image)';
+/** Written by the press controller while it paints a press. */
+const PRESSED_ON = '[data-astryx-press="on"]';
+/** Written by the press controller for the press's release. */
+const PRESSED_FADING = '[data-astryx-press="fading"]';
 
 const styles = stylex.create({
   interactive: {
@@ -78,16 +87,18 @@ const styles = stylex.create({
   },
   // Hover and pressed overlay. Hover is guarded by @media (hover: hover) so
   // touch devices don't show a stuck hover state; the press has two arms,
-  // `:active` for a mouse and `data-astryx-press` for a finger.
+  // `:active` for a mouse and `data-astryx-press` for the press controller.
   overlay: {
-    // The `::after` layer paints whatever `--_press-overlay` says, and the
-    // interaction arms set that variable on the element itself. Setting the
-    // pseudo-element's colour from compound keys (`:active::after`) would
-    // leave the touch arms unable to outrank the mouse arm: a pseudo-element
-    // key carries the highest generated priority, and the `data-astryx-press`
-    // attribute the touch press model writes must win over `:active`, which
-    // still matches under a finger (see interactionOverlay.stylex.ts). Same
-    // enabled guard as the shared overlay utility.
+    // The `::after` layer paints the hover and mouse states as its colour,
+    // `--_press-overlay`, which their arms set on the element itself (same
+    // enabled guard as the shared overlay utility). The press the controller
+    // paints (a finger's, and on a touch-first device a mouse's or a key's)
+    // is the same layer's image, keyed on the `data-astryx-press` attribute
+    // the controller writes. Every arm of that press is a plain property of
+    // the `::after`, which outranks the layer's own defaults in a layered
+    // stylesheet and a flat one alike. A custom property's attribute arm
+    // does not: a layered build emits the property's default outside the
+    // priority layers its attribute arms land in, and the default wins.
     '--_press-overlay': {
       default: 'transparent',
       ':where(:not(:disabled,[aria-disabled="true"]))': {
@@ -102,22 +113,7 @@ const styles = stylex.create({
             colorVars['--color-overlay-hover'],
           ':active': colorVars['--color-overlay-pressed'],
         },
-        // The touch arms paint through the press's strength, which the
-        // card's `pressedAlpha` arms own: 1 on the first frame of a believed
-        // press, then 1 → 0 over the release. The `::after` inherits the
-        // resolved colour and repaints with it on every frame of the fade.
-        '[data-astryx-press="on"]': pressedOverlayColor,
-        '[data-astryx-press="fading"]': pressedOverlayColor,
       },
-    },
-    // A believed touch press paints on the first frame, and the release is the
-    // strength's own animation, so neither may pass through the layer's colour
-    // transition (it would fade the onset in, and drag behind the release).
-    // The mouse states keep the fast fade.
-    '--_press-overlay-transition': {
-      default: durationVars['--duration-fast'],
-      '[data-astryx-press="on"]': '0s',
-      '[data-astryx-press="fading"]': '0s',
     },
     '::after': {
       content: '""',
@@ -125,10 +121,35 @@ const styles = stylex.create({
       inset: 0,
       borderRadius: 'inherit',
       pointerEvents: 'none',
-      transitionProperty: 'background-color',
-      transitionDuration: 'var(--_press-overlay-transition)',
+      // A press the controller paints shows on its first frame and fades on
+      // its strength's own animation, so the colour it replaces drops out at
+      // once rather than crossfading: no transition while it paints. The
+      // mouse states keep the fast fade.
+      transitionProperty: {
+        default: 'background-color',
+        [PRESSED_ON]: 'none',
+        [PRESSED_FADING]: 'none',
+      },
+      transitionDuration: durationVars['--duration-fast'],
       transitionTimingFunction: easeVars['--ease-standard'],
-      backgroundColor: 'var(--_press-overlay)',
+      // While the controller paints, the colour yields to the image: a
+      // touchscreen beside a fine pointer still matches `:active` under a
+      // finger, and the press would otherwise paint twice.
+      backgroundColor: {
+        default: 'var(--_press-overlay)',
+        [PRESSED_ON]: 'transparent',
+        [PRESSED_FADING]: 'transparent',
+      },
+      // The press at its strength, which the card's `pressedAlpha` arms own:
+      // 1 on the first frame of a believed press, then 1 → 0 over the
+      // release. The `::after` inherits the resolved paint and repaints with
+      // it on every frame of the fade. Read only inside this element's own
+      // arms, so a pressed ancestor's strength never paints here.
+      backgroundImage: {
+        default: null,
+        [PRESSED_ON]: pressedOverlayImage,
+        [PRESSED_FADING]: pressedOverlayImage,
+      },
     },
   },
   disabled: {
@@ -308,6 +329,44 @@ export interface SelectableCardProps extends Omit<BaseProps, 'onChange'> {
 // =============================================================================
 
 /**
+ * Call a caller's click handler during capture, before the layer's own
+ * handlers, without letting it change what those handlers see. Its
+ * stopPropagation() would keep the press from the control inside the layer,
+ * so it does nothing here. Its preventDefault() would mark the event handled
+ * for those controls (a Button skips its clickAction), so it is applied to
+ * the native event only after the press has bubbled to the document, where it
+ * still cancels the browser's default action.
+ */
+function callBeforeLayerHandlers(
+  handler: (event: MouseEvent<HTMLElement>) => void,
+  event: MouseEvent<HTMLElement>,
+): void {
+  const {stopPropagation, preventDefault} = event;
+  let isDefaultPreventedByCaller = false;
+  event.stopPropagation = () => {};
+  event.preventDefault = () => {
+    isDefaultPreventedByCaller = true;
+  };
+  try {
+    handler(event);
+  } finally {
+    event.stopPropagation = stopPropagation;
+    event.preventDefault = preventDefault;
+  }
+  if (isDefaultPreventedByCaller) {
+    const nativeEvent = event.nativeEvent;
+    const doc = event.currentTarget.ownerDocument;
+    const cancelDefault = (bubbled: Event) => {
+      doc.removeEventListener(nativeEvent.type, cancelDefault);
+      if (bubbled === nativeEvent) {
+        nativeEvent.preventDefault();
+      }
+    };
+    doc.addEventListener(nativeEvent.type, cancelDefault);
+  }
+}
+
+/**
  * A card that toggles between selected and unselected states.
  *
  * Composes Card for visual styling and adds selection state with
@@ -318,17 +377,17 @@ export interface SelectableCardProps extends Omit<BaseProps, 'onChange'> {
  * the accessible role, label, and checked state. The card surface
  * is a plain <div> — no role or tabIndex on the container.
  *
- * @compositionHint Use for multi-select or single-select card groups.
- * Manage selection state externally — use a Set for multi-select
- * or a single value for radio-style selection.
+ * @compositionHint Use for multi-select card groups, managing selection
+ * state externally in a Set. Not for single-select: each card is a
+ * checkbox, so assistive technology announces a multi-select group.
  * For navigation/action cards, use ClickableCard instead.
  *
  * @example
  * ```
  * <SelectableCard
  *   label="Option A"
- *   isSelected={selected === 'a'}
- *   onChange={() => setSelected('a')}>
+ *   isSelected={selected.has('a')}
+ *   onChange={isSelected => toggle('a', isSelected)}>
  *   <Text type="body" weight="bold">Option A</Text>
  * </SelectableCard>
  * ```
@@ -357,20 +416,34 @@ export function SelectableCard({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const interactiveRef = useRef<HTMLInputElement | null>(null);
 
+  // A group can make the input a radio. A radio only selects: a native radio
+  // stays checked when it is clicked again.
+  const groupInput = use(SelectableCardInputContext);
+  const isRadio = groupInput?.type === 'radio';
+  const requestChange = useCallback(() => {
+    if (!isRadio) {
+      onChange(!isSelected);
+    } else if (!isSelected) {
+      onChange(true);
+    }
+  }, [isRadio, isSelected, onChange]);
+
   const handleClick = useCallback(
     (_event: MouseEvent<HTMLElement>) => {
       if (!isDisabled) {
-        onChange(!isSelected);
+        requestChange();
       }
     },
-    [isDisabled, isSelected, onChange],
+    [isDisabled, requestChange],
   );
 
-  // The focusable control is a native checkbox, which toggles on Space but
-  // ignores Enter. Add Enter as an extra toggle key; Space keeps its native
-  // handling, so we deliberately do not toggle on Space here (would double).
+  // A native checkbox or radio reacts to Space but not to Enter. This handler
+  // adds Enter. Space is not handled here, because it would act twice.
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLInputElement>) => {
+      if (isImeKeyEvent(event.nativeEvent)) {
+        return;
+      }
       if (isDisabled) {
         if (event.key === ' ' || event.key === 'Enter') {
           event.preventDefault();
@@ -379,10 +452,10 @@ export function SelectableCard({
       }
       if (event.key === 'Enter') {
         event.preventDefault();
-        onChange(!isSelected);
+        requestChange();
       }
     },
-    [isDisabled, isSelected, onChange],
+    [isDisabled, requestChange],
   );
 
   const {onClick, onMouseUp} = useClickableContainer({
@@ -398,6 +471,24 @@ export function SelectableCard({
         onClickProp(e);
       }
     : onClick;
+
+  // Until the next minor, a click inside an open layer within the card still
+  // reaches the caller's onClick. The layer root stops that click before the
+  // bubble phase, so it is delivered here, during capture. It never toggles.
+  // Remove at the next minor, when that click stops reaching onClick.
+  const handleLayerClickCapture = onClickProp
+    ? (e: MouseEvent<HTMLElement>) => {
+        const target = e.target;
+        if (!(target instanceof Element)) {
+          return;
+        }
+        const layerRoot = closestLayerRoot(target);
+        if (layerRoot == null || layerRoot.contains(e.currentTarget)) {
+          return;
+        }
+        callBeforeLayerHandlers(onClickProp, e);
+      }
+    : undefined;
 
   const composedOnMouseUp = onMouseUpProp
     ? (e: MouseEvent<HTMLElement>) => {
@@ -439,10 +530,29 @@ export function SelectableCard({
       }
       onClick={!isDisabled ? composedOnClick : undefined}
       onMouseUp={!isDisabled ? composedOnMouseUp : undefined}
-      {...props}>
+      {...props}
+      onClickCapture={
+        !isDisabled && handleLayerClickCapture
+          ? (e: MouseEvent<HTMLDivElement>) => {
+              handleLayerClickCapture(e);
+              props.onClickCapture?.(e);
+            }
+          : props.onClickCapture
+      }>
       <input
         ref={interactiveRef}
-        type="checkbox"
+        type={isRadio ? 'radio' : 'checkbox'}
+        name={groupInput?.name}
+        value={groupInput?.value}
+        // Radios group by name and form owner, so every radio card leaves
+        // the form together and the group stays one tab stop. The group
+        // submits its choice itself. A disabled checkbox card submits
+        // nothing, so it leaves the form too.
+        form={
+          groupInput != null && (groupInput.type === 'radio' || isDisabled)
+            ? ''
+            : undefined
+        }
         checked={isSelected}
         aria-label={label}
         aria-disabled={isDisabled ? 'true' : undefined}
@@ -450,7 +560,7 @@ export function SelectableCard({
           if (isDisabled) {
             return;
           }
-          onChange(!isSelected);
+          requestChange();
         }}
         onKeyDown={handleKeyDown}
         {...stylex.props(styles.srOnly)}

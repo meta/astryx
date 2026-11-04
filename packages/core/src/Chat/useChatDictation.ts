@@ -395,6 +395,7 @@ export function useChatDictation(
     [userTransform],
   );
 
+  // Releases the audio analyser and the animation frame on unmount.
   useEffect(() => {
     return () => {
       analyserRef.current?.cleanup();

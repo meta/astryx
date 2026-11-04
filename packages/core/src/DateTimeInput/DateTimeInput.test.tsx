@@ -14,6 +14,7 @@ import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
+import {colorVars} from '../theme/tokens.stylex';
 import {getButton, queryButton} from '../__tests__/fastRoleQueries';
 import {DateTimeInput} from './DateTimeInput';
 import type {ISODateTimeString} from './DateTimeInput';
@@ -62,6 +63,69 @@ function expectResponsiveProbeClasses(
 }
 
 describe('DateTimeInput', () => {
+  it('Enter on a busy field does not submit the form', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <DateTimeInput
+          label="Starts"
+          value={'2026-01-12T09:00' as ISODateTimeString}
+          onChange={() => {}}
+          isLoading
+        />
+        <button type="submit">Save</button>
+      </form>,
+    );
+    screen.getAllByRole('combobox')[0].focus();
+    await user.keyboard('{Enter}');
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('Enter on a disabled field does not submit the form', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <DateTimeInput
+          label="Starts"
+          value={'2026-01-12T09:00' as ISODateTimeString}
+          onChange={() => {}}
+          isDisabled
+        />
+        <button type="submit">Save</button>
+      </form>,
+    );
+    screen.getAllByRole('combobox')[0].focus();
+    await user.keyboard('{Enter}');
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('Enter in the date segment submits the form when nothing is typed, and commits typed text without submitting', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    const onChange = vi.fn();
+    render(
+      <form onSubmit={onSubmit}>
+        <DateTimeInput
+          label="Starts"
+          value={'2026-01-12T09:00' as ISODateTimeString}
+          onChange={onChange}
+        />
+        <button type="submit">Save</button>
+      </form>,
+    );
+    const dateInput = screen.getAllByRole('combobox')[0];
+    dateInput.focus();
+    await user.keyboard('{Enter}');
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    await user.clear(dateInput);
+    await user.type(dateInput, '2026-02-03');
+    await user.keyboard('{Enter}');
+    expect(onChange).toHaveBeenLastCalledWith('2026-02-03T09:00');
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
   it('renders with label', () => {
     render(<DateTimeInput label="Meeting time" onChange={() => {}} />);
     expect(screen.getByLabelText('Meeting time')).toBeInTheDocument();
@@ -238,6 +302,26 @@ describe('DateTimeInput', () => {
     expect(screen.getByDisplayValue('2:30 PM')).toBeInTheDocument();
   });
 
+  it("follows the provider locale's hour cycle when hourFormat is unset", () => {
+    const renderIn = (locale: string) => (
+      <InternationalizationProvider locale={locale}>
+        <DateTimeInput
+          label="Meeting"
+          value={'2026-03-15T14:30' as ISODateTimeString}
+          onChange={() => {}}
+        />
+      </InternationalizationProvider>
+    );
+    const {rerender} = render(renderIn('en-US'));
+    expect(screen.getByDisplayValue('2:30 PM')).toBeInTheDocument();
+
+    rerender(renderIn('de-DE'));
+    expect(screen.getByDisplayValue('14:30')).toBeInTheDocument();
+
+    rerender(renderIn('ko-KR'));
+    expect(screen.getByDisplayValue('오후 2:30')).toBeInTheDocument();
+  });
+
   it('displays formatted time in 24h format', () => {
     render(
       <DateTimeInput
@@ -288,10 +372,52 @@ describe('DateTimeInput', () => {
     expect(screen.getByRole('combobox')).not.toHaveAttribute('aria-required');
   });
 
-  it('sets disabled on both inputs when isDisabled is true', () => {
+  it('keeps both disabled inputs focusable without native disabled (AST-085 FR1)', () => {
     render(<DateTimeInput label="Meeting" isDisabled onChange={() => {}} />);
-    expect(screen.getByRole('combobox')).toBeDisabled();
-    expect(screen.getByLabelText('Meeting time')).toBeDisabled();
+    for (const input of [
+      screen.getByRole('combobox'),
+      screen.getByLabelText('Meeting time'),
+    ]) {
+      expect(input).not.toHaveAttribute('disabled');
+      expect(input).toHaveAttribute('aria-disabled', 'true');
+      expect(input).toHaveAttribute('readonly');
+      input.focus();
+      expect(input).toHaveFocus();
+    }
+  });
+
+  it('restores the focus ring on a focused disabled field (AST-085 FR6)', () => {
+    // The same declarations as the field's ring style compile to the same
+    // atomic classes; the shared disabled style alone drops them.
+    const ringClasses = stylex
+      .props(
+        stylex.create({
+          ring: {
+            borderColor: {
+              default: colorVars['--color-border-emphasized'],
+              ':focus-within': colorVars['--color-accent'],
+            },
+            boxShadow: {
+              default: 'none',
+              ':focus-within': `inset 0px 0px 0px 2px ${colorVars['--color-accent-muted']}`,
+            },
+          },
+        }).ring,
+      )
+      .className!.split(' ')
+      .filter(name => !name.includes('__'));
+    render(<DateTimeInput label="Meeting" isDisabled onChange={() => {}} />);
+    for (const input of [
+      screen.getByRole('combobox'),
+      screen.getByLabelText('Meeting time'),
+    ]) {
+      const wrapper = input.closest(
+        '.astryx-date-time-input-date-segment, .astryx-date-time-input-time-segment',
+      )!;
+      for (const name of ringClasses) {
+        expect(wrapper).toHaveClass(name);
+      }
+    }
   });
 
   it('is not disabled by default', () => {
@@ -366,14 +492,25 @@ describe('DateTimeInput', () => {
   it('calendar button is disabled when isDisabled is true', () => {
     render(<DateTimeInput label="Meeting" isDisabled onChange={() => {}} />);
     const button = getButton('Open calendar');
-    expect(button).toBeDisabled();
+    expect(button).not.toHaveAttribute('disabled');
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(button);
+    expect(screen.getByRole('combobox')).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
   });
 
   it('disables inputs and button when isLoading is true', () => {
     render(<DateTimeInput label="Meeting" isLoading onChange={() => {}} />);
-    expect(screen.getByRole('combobox')).toBeDisabled();
-    expect(screen.getByLabelText('Meeting time')).toBeDisabled();
-    expect(getButton('Open calendar')).toBeDisabled();
+    for (const el of [
+      screen.getByRole('combobox'),
+      screen.getByLabelText('Meeting time'),
+      getButton('Open calendar'),
+    ]) {
+      expect(el).not.toHaveAttribute('disabled');
+      expect(el).toHaveAttribute('aria-disabled', 'true');
+    }
   });
 
   it('sets aria-busy when isLoading is true', () => {
@@ -872,6 +1009,12 @@ describe('DateTimeInput', () => {
       );
 
       const tooltip = screen.getByRole('tooltip', h);
+      // The calendar button keeps its enabled tab stop (spec:AST-085 FR1).
+      await user.tab();
+      expect(getButton('Open calendar')).toHaveFocus();
+      expect(
+        getButton('Open calendar').getAttribute('aria-describedby'),
+      ).toContain(tooltip.id);
       await user.tab();
       expect(screen.getByRole('combobox')).toHaveFocus();
       await waitFor(() => {
@@ -948,11 +1091,48 @@ describe('DateTimeInput', () => {
       expect(onChange).not.toHaveBeenCalled();
     });
 
-    it('remains natively disabled when disabled without a reason', () => {
-      render(<DateTimeInput label="When" onChange={() => {}} isDisabled />);
+    it('blocks typing, opening and a caller onClick when disabled without a reason (AST-085 FR2)', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const onClick = vi.fn();
+      render(
+        <DateTimeInput
+          label="When"
+          onChange={onChange}
+          onClick={onClick}
+          isDisabled
+        />,
+      );
       const dateInput = screen.getByRole('combobox');
-      expect(dateInput).toBeDisabled();
-      expect(dateInput).not.toHaveAttribute('aria-disabled');
+      await user.click(dateInput);
+      await user.type(dateInput, '2026-03-15');
+      await user.keyboard('{ArrowDown}');
+      expect(dateInput).toHaveValue('');
+      expect(dateInput).toHaveAttribute('aria-expanded', 'false');
+      expect(onChange).not.toHaveBeenCalled();
+      expect(onClick).not.toHaveBeenCalled();
+    });
+
+    it('drops a date draft instead of committing it when the field becomes disabled (AST-085 FR2)', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const value = '2026-03-10T09:00' as ISODateTimeString;
+      const {rerender} = render(
+        <DateTimeInput label="When" value={value} onChange={onChange} />,
+      );
+      const dateInput = screen.getByRole('combobox');
+      await user.click(dateInput);
+      await user.clear(dateInput);
+      rerender(
+        <DateTimeInput
+          label="When"
+          value={value}
+          onChange={onChange}
+          isDisabled
+        />,
+      );
+      await user.tab();
+      expect(onChange).not.toHaveBeenCalled();
     });
 
     it('does not swap in the time format-hint placeholder on focus while disabled', () => {
@@ -1028,6 +1208,24 @@ describe('DateTimeInput', () => {
       await waitFor(() => {
         expect(politeRegion()).toHaveTextContent('2:31 PM');
       });
+    });
+
+    it('announces no step from a disabled time field (AST-085 FR2)', async () => {
+      render(
+        <DateTimeInput
+          label="Meeting"
+          value={'2026-03-15T14:30' as ISODateTimeString}
+          onChange={() => {}}
+          isDisabled
+        />,
+      );
+
+      fireEvent.keyDown(screen.getByLabelText('Meeting time'), {
+        key: 'ArrowUp',
+      });
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(politeRegion()?.textContent ?? '').not.toContain('2:31 PM');
     });
 
     it('politely announces the new time after ArrowDown stepping', async () => {
@@ -1445,6 +1643,7 @@ describe('DateTimeInput', () => {
           .querySelector('[role="listbox"]')!
           .querySelectorAll('[role="option"]');
         fireEvent.mouseEnter(options[5]);
+        fireEvent.pointerMove(options[5], {screenX: 114, screenY: 114});
 
         expect(timeInput.getAttribute('aria-activedescendant')).toBe(
           options[5].id,
@@ -1624,9 +1823,50 @@ describe('DateTimeInput', () => {
       expect(timeInput).toHaveAttribute('aria-expanded', 'false');
     });
 
+    // architecture:layer-runtime: a press on the time field is inside its list.
+    it('keeps the time list open on a press in the time input, closes it on a press elsewhere', async () => {
+      const press = (target: Element) => {
+        fireEvent.pointerDown(target, {composed: true});
+        fireEvent.pointerUp(target, {composed: true});
+      };
+      render(
+        <>
+          <DateTimeInput
+            label="Meeting"
+            value={'2026-03-15T14:00' as ISODateTimeString}
+            timeOptionInterval={60}
+            onChange={() => {}}
+          />
+          <p>Elsewhere</p>
+        </>,
+      );
+      const timeInput = screen.getByLabelText('Meeting time');
+      fireEvent.keyDown(timeInput, {key: 'ArrowDown', altKey: true});
+      expect(timeInput).toHaveAttribute('aria-expanded', 'true');
+      const listbox = document.getElementById(
+        timeInput.getAttribute('aria-controls')!,
+      );
+      // The list is a manual popover, so the browser does not light-dismiss
+      // it on a press in the time input.
+      expect(listbox?.closest('[popover]')).toHaveAttribute(
+        'popover',
+        'manual',
+      );
+
+      press(timeInput);
+      expect(timeInput).toHaveAttribute('aria-expanded', 'true');
+      press(listbox!);
+      expect(timeInput).toHaveAttribute('aria-expanded', 'true');
+
+      press(screen.getByText('Elsewhere'));
+      await waitFor(() => {
+        expect(timeInput).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
     it('closes the list when focus leaves the field entirely', () => {
-      // Light dismiss covers outside clicks and Escape, never a programmatic
-      // focus move. Without this the listbox is orphaned in the top layer.
+      // The outside-press watch covers outside presses and Escape stays on the
+      // layer stack, never a programmatic focus move. Without this the listbox is orphaned in the top layer.
       render(
         <>
           <DateTimeInput
@@ -2175,6 +2415,67 @@ describe('DateTimeInput', () => {
 
       fireEvent.click(timeInput);
       expect(timeInput).toHaveAttribute('aria-expanded', 'true');
+    });
+  });
+
+  describe('calendar while the popover is closed', () => {
+    const calendarGrid = () => document.querySelector('[role="grid"]');
+
+    it('renders no calendar until the popover opens, and none after it closes', () => {
+      render(
+        <DateTimeInput
+          label="Meeting"
+          value={'2026-01-15T10:00' as ISODateTimeString}
+          onChange={() => {}}
+        />,
+      );
+      const toggle = getButton('Open calendar');
+      expect(calendarGrid()).toBeNull();
+
+      fireEvent.click(toggle);
+      expect(calendarGrid()).not.toBeNull();
+
+      fireEvent.click(toggle);
+      expect(calendarGrid()).toBeNull();
+    });
+
+    it('opens on the month of a date typed while closed', () => {
+      function Controlled() {
+        const [value, setValue] = useState<ISODateTimeString | undefined>(
+          '2026-01-15T10:00' as ISODateTimeString,
+        );
+        return (
+          <DateTimeInput label="Meeting" value={value} onChange={setValue} />
+        );
+      }
+      render(<Controlled />);
+      const dateInput = screen.getAllByRole('combobox')[0];
+
+      fireEvent.change(dateInput, {target: {value: 'March 5, 2027'}});
+      fireEvent.keyDown(dateInput, {key: 'ArrowDown'});
+
+      expect(calendarGrid()).toHaveAccessibleName('March 2027');
+    });
+
+    it('moves focus into the calendar on each open from the toggle', async () => {
+      render(
+        <DateTimeInput
+          label="Meeting"
+          value={'2026-01-15T10:00' as ISODateTimeString}
+          onChange={() => {}}
+        />,
+      );
+      const toggle = getButton('Open calendar');
+
+      for (let i = 0; i < 2; i++) {
+        fireEvent.click(toggle);
+        // The first calendar control takes focus, not the dialog surface.
+        await waitFor(() => {
+          expect(getButton('Previous month')).toHaveFocus();
+        });
+        fireEvent.click(toggle);
+        expect(calendarGrid()).toBeNull();
+      }
     });
   });
 

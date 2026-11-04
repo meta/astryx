@@ -16,13 +16,15 @@ export const doc = {
   description:
     'The doc-type for a closed vocabulary: a fixed set of literal values such as ' +
     'error codes or response-type discriminants. Colocated as a `.doc.mjs` next to ' +
-    'the source of truth it documents.',
+    'the source of truth it documents. Only the CLI reads enum docs, from its own ' +
+    "source: one in an integration's docs directory fails to load, and so do that package's other docs.",
   appliesTo: '<enum>.doc.mjs',
   fields: [
     {
       name: 'type',
       type: "'enum'",
-      description: 'Doc-kind discriminant. Marks the file as an enum doc.',
+      description:
+        'Doc-kind discriminant. Optional in the type, but the CLI reads a doc as an enum doc only when it is set; without it the doc drops out of the docs tree.',
     },
     {
       name: 'name',
@@ -54,7 +56,8 @@ export const doc = {
     {
       name: 'aliases',
       type: 'string[]',
-      description: 'Alternate slugs that also resolve to this doc.',
+      description:
+        'Reserved: alternate slugs for this doc. Nothing reads it today, so `astryx docs <alias>` does not open it.',
     },
     {
       name: 'members',
@@ -91,7 +94,7 @@ export const doc = {
   type: 'enum',
   name: 'error-codes',
   displayName: 'Error Codes',
-  namespace: 'cli',
+  namespace: 'cli/api',
   description: 'Stable error codes thrown by the CLI/API and surfaced in the JSON envelope.',
   members: [
     {value: 'ERR_UNKNOWN_TOPIC', description: 'The requested docs topic does not exist.'},

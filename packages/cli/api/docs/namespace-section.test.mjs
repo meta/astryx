@@ -157,13 +157,13 @@ describe('a section read on a namespace', () => {
       expect(names).toContain('layout/side-panels');
       expect(names.every(name => name.startsWith('layout/'))).toBe(true);
       // At any depth: guides under nested namespaces are named, namespaces are not.
-      const cli = await docs('cli', 'zzzz-nope').catch(e => e);
-      expect(cli.code).toBe('ERR_UNKNOWN_SECTION');
-      expect(cli.suggestions.map(s => s.name)).toContain(
-        'cli/integrations/quick-start',
+      const authoring = await docs('authoring', 'zzzz-nope').catch(e => e);
+      expect(authoring.code).toBe('ERR_UNKNOWN_SECTION');
+      expect(authoring.suggestions.map(s => s.name)).toContain(
+        'authoring/building-blocks/components/add-a-component',
       );
-      expect(cli.suggestions.map(s => s.name)).not.toContain(
-        'cli/integrations',
+      expect(authoring.suggestions.map(s => s.name)).not.toContain(
+        'authoring/building-blocks',
       );
     },
     SLOW,

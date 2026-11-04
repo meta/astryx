@@ -4,7 +4,7 @@
 
 export const docs = {
   name: 'browser-support',
-  title: 'Browser Support',
+  title: 'Browser support',
   category: 'guide',
   description:
     'What browsers Astryx targets, which modern platform features it depends on, and how to support older browsers for your own audience.',
@@ -149,7 +149,7 @@ export const docs = {
           type: 'list',
           style: 'ordered',
           items: [
-            'Polyfill anchor positioning. Load a CSS anchor positioning polyfill conditionally behind an `@supports` check so it costs nothing on Tier 1. This is the lowest-effort way to get correct positioning; note that polyfills may not cover every position-fallback feature.',
+            'Polyfill anchor positioning. Load a CSS anchor positioning polyfill conditionally behind an `@supports` check so it costs nothing on Tier 1. This is the lowest-effort way to get correct positioning; polyfills may not cover every position-fallback feature.',
             'Provide a JS positioning fallback. Detect missing support with `CSS.supports("anchor-name", "--x")` and position layers with a measurement-based library (e.g. a floating-element positioner) when it returns false. More code, full control.',
             'Accept degraded positioning. Document for your users that on Tier 2 browsers, layered surfaces open correctly but may not sit next to their trigger. Cheapest, and often fine for internal tools on evergreen browsers.',
           ],

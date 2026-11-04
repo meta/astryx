@@ -30,7 +30,7 @@ import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {AstryxError, writeFailed} from '../../error.mjs';
 
 /** Default issue tracker for maintainer feedback after swizzling. */
-const DEFAULT_ISSUES_URL = 'https://github.com/facebook/astryx/issues/new';
+const DEFAULT_ISSUES_URL = 'https://github.com/meta/astryx/issues/new';
 
 /**
  * Rewrite relative imports that point outside the component directory to use
@@ -115,7 +115,7 @@ function buildFeedback(component, issuesUrl) {
  */
 async function loadConfigSafely(cwd) {
   try {
-    const project = await Project.load(cwd);
+    const project = await Project.load(cwd, {core: 'project'});
     return {
       loadedIntegrations: project.loadedIntegrations,
       issuesUrl: project.config.issuesUrl,

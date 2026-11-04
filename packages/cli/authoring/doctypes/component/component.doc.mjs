@@ -30,7 +30,7 @@ export const doc = {
       name: 'name',
       type: 'string',
       description:
-        "Stable machine identity and directory name without the Astryx prefix, PascalCase. e.g. 'Button', 'TextInput', 'AppShell'. For an integration component it is the export apps import: the doc sits beside the file that exports it, and when that file exports nothing under its own name, `name` may name the export it does have. Change `displayName`, not `name`, to edit the visible label; registry URLs derive from this identity by default.",
+        "Stable machine identity without the Astryx prefix, PascalCase. e.g. 'Button', 'TextInput', 'AppShell'. For an integration component it is the export apps import: the doc sits beside the file that exports it, and when that file exports nothing under its own name, `name` may name the export it does have. Change `displayName`, not `name`, to edit the visible label; registry URLs derive from this identity by default.",
       required: true,
     },
     {
@@ -56,25 +56,25 @@ export const doc = {
       name: 'replaces',
       type: 'string',
       description:
-        'Integration components only: the exact `name` of the Core ComponentDoc this component takes over for unqualified lookup, so every app that loads the integration gets it from component detail, component lists, search, `swizzle <Name>`, and issue routing; `swizzle --list` keeps listing Core names. The Core original stays reachable with `--package @astryxdesign/core`. It takes effect only when the package\'s peer range starts at the release that applies it, `"@astryxdesign/cli": ">=0.6.7"` or later; without such a range the component keeps its own name and `doctor integration components` warns. Set it only to intentionally own a Core identity; give an alternative or variant its own name instead.',
+        'Integration components only: the exact `name` of the Core ComponentDoc this component takes over for unqualified lookup, so every app that loads the integration gets it from component detail, component lists, search, `swizzle <Name>`, and issue routing; `swizzle --list` keeps listing Core names. The Core original stays reachable with `--package @astryxdesign/core`. It takes effect only when the package\'s peer range starts at the release that applies it, `"@astryxdesign/cli": ">=0.6.7"` or later; with a lower range nothing changes and `doctor integration components` warns ({@link generic:replace-a-core-component}). Set it only to intentionally own a Core identity; give an alternative or variant its own name instead.',
     },
     {
       name: 'keywords',
       type: 'string[]',
       description:
-        'Search keywords for CLI discovery: synonyms and related UI concepts from other design systems (MUI, Chakra, Radix, and others). Lowercase. Used by `astryx component <term>` fuzzy matching.',
+        'Search keywords for CLI discovery: synonyms and related UI concepts from other design systems (MUI, Chakra, Radix, and others). Lowercase. `astryx search` matches them; `astryx component <term>` also suggests Core components by keyword.',
     },
     {
       name: 'hiddenComponents',
       type: 'string[]',
       description:
-        'Sub-component names to hide from human-facing UI (CLI listings, docs catalogs). They stay public and importable; agents and tooling can still discover them via source.',
+        "Sub-component names to hide from human-facing UI (CLI listings, docs catalogs). They stay public and importable; agents and tooling can still discover them via source. In an integration it hides only full entries in this doc's `components`, which the CLI then neither lists nor opens; hide a sub-component that has its own doc with `hidden` in that doc.",
     },
     {
       name: 'hidden',
       type: 'boolean',
       description:
-        'Hide this entire component from human-facing UI. It stays public and importable. Use for shared primitives (NavIcon, NavMenu) that only make sense inside their parent.',
+        'Hide this entire component from human-facing UI. It stays public and importable. Use for a shared primitive that only makes sense inside its parent.',
     },
     {
       name: 'group',
@@ -98,13 +98,13 @@ export const doc = {
       name: 'theming',
       type: '{ container?: boolean; targets: ComponentThemingTarget[]; vars?: ComponentThemingVar[]; derived?: ComponentThemingDerivedVar[] }',
       description:
-        'Theming configuration: the stable selector surface (xds-* classes + data-attribute reflections) that themes target via @scope selectors in defineTheme.',
+        'Theming configuration: the stable selector surface (astryx-* classes + data-attribute reflections) that themes target via @scope selectors in defineTheme.',
       fields: [
         {
           name: 'theming.container',
           type: 'boolean',
           description:
-            'When true, container `padding` props are mapped to container tokens by the theme pipeline instead of emitting raw CSS.',
+            "Marks a container component. Nothing reads it today: the theme pipeline maps `padding` to container tokens from a `theming.derived` entry `{property: 'padding', expand: 'container'}`.",
         },
         {
           name: 'theming.targets',
@@ -122,7 +122,7 @@ export const doc = {
           name: 'theming.derived',
           type: 'ComponentThemingDerivedVar[]',
           description:
-            'Maps standard CSS properties to internal vars for theme-pipeline expansion. Ordered by priority: earlier entries emit first.',
+            "Maps standard CSS properties to internal vars for theme-pipeline expansion. Ordered by priority: earlier entries emit first. The pipeline reads only Core components' entries, so an integration's have no effect.",
         },
       ],
     },
@@ -193,7 +193,7 @@ export const doc = {
       name: 'subComponentOf',
       type: 'string',
       description:
-        "SubComponentDoc variant (required there): the parent component's `name` (e.g. 'Chat'). Marks this file as a sub-component doc that inherits family fields (group, category, keywords, theming, playground) from the parent.",
+        "SubComponentDoc variant (required there): the parent component's `name` (e.g. 'Chat'). Marks this file as a sub-component doc. The CLI does not copy family fields (group, category, keywords, theming, playground) from the parent to an integration's sub-component: its detail, list group and search use only what its own doc sets. Set any the child needs in its own doc.",
     },
     {
       name: 'description',
@@ -206,9 +206,10 @@ export const doc = {
     {
       label: 'SingleComponentDoc (props on the doc)',
       code: `/** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */
-export const docs = {
-  name: 'Switch',
-  displayName: 'Switch',
+export default {
+  type: 'component',
+  name: 'AcmeSwitch',
+  displayName: 'Acme Switch',
   category: 'Form Controls',
   keywords: ['toggle', 'switch', 'on off'],
   usage: {
@@ -229,17 +230,18 @@ export const docs = {
     {
       label: 'MultiComponentDoc (a components array)',
       code: `/** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */
-export const docs = {
-  name: 'Table',
-  displayName: 'Table',
+export default {
+  type: 'component',
+  name: 'AcmeTable',
+  displayName: 'Acme Table',
   category: 'Table & List',
   usage: {description: 'Displays rows and columns of data. Compose the sub-components to build headers, rows, and cells.'},
   components: [
-    {name: 'Table', displayName: 'Table', description: 'The table container.', props: []},
-    {name: 'TableRow', displayName: 'Table Row', description: 'A row within the table body.', props: [
+    {name: 'AcmeTable', displayName: 'Acme Table', description: 'The table container.', props: []},
+    {name: 'AcmeTableRow', displayName: 'Acme Table Row', description: 'A row within the table body.', props: [
       {name: 'isSelected', type: 'boolean', description: 'Highlights the row as selected.'},
     ]},
-    {name: 'useTableSelection', displayName: 'useTableSelection', description: 'Manages row selection state.',
+    {name: 'useAcmeTableSelection', displayName: 'useAcmeTableSelection', description: 'Manages row selection state.',
       params: [{name: 'rows', type: 'T[]', description: 'The rows to track.', required: true}],
       returns: [{name: 'selectedIds', type: 'Set<string>', description: 'Currently selected row ids.'}]},
   ],
@@ -249,7 +251,7 @@ export const docs = {
   notes: [
     {
       type: 'prose',
-      text: "When it loads, a stamped component doc is checked as loosely as an unstamped one, so adding `type: 'component'` to an existing doc never breaks it: `displayName` may be missing, `category` may be any string, and `usage`, `theming`, `playground` and `examples` are not checked. Each entry in a group doc's `components` must have a `name`. Write to the type anyway; it is the contract.",
+      text: "When it loads, a stamped component doc is checked about as loosely as an unstamped one, so adding `type: 'component'` to a doc that follows the type never breaks it: `displayName` may be missing, `category` may be any string, `usage`, `theming` and `playground` are not checked, and `examples` need only be an array. Unlike an unstamped doc, each entry in a group doc's `components` must have a `name`, and `import` and `replaces`, when set, must be non-empty strings. Write to the type anyway; it is the contract.",
     },
     {
       type: 'prose',
@@ -261,7 +263,7 @@ export const docs = {
       items: [
         'SingleComponentDoc: one primary component; put props directly on the doc via `props`. Use for Switch, Badge, Spinner, TextInput.',
         'MultiComponentDoc: a directory exporting several components/hooks; list them in `components` (inline ComponentEntry or name-only ComponentRef). Use for Table, Dialog, TabList.',
-        'SubComponentDoc: a single sub-component in its own {Name}.doc.mjs inside the parent directory; set `subComponentOf` to the parent name. It inherits family fields and may omit `usage`.',
+        "SubComponentDoc: a single sub-component in its own {Name}.doc.mjs inside the parent directory; set `subComponentOf` to the parent name. It does not take the parent's family fields, and it may omit `usage`.",
       ],
     },
     {
@@ -269,11 +271,12 @@ export const docs = {
       lang: 'js',
       label: 'SubComponentDoc',
       code: `/** @type {import('@astryxdesign/cli/authoring').ComponentDoc} */
-export const docs = {
-  name: 'ChatComposer',
-  displayName: 'Chat Composer',
-  subComponentOf: 'Chat',
-  description: 'The message input row within a Chat, with an editor and send affordance.',
+export default {
+  type: 'component',
+  name: 'AcmeChatComposer',
+  displayName: 'Acme Chat Composer',
+  subComponentOf: 'AcmeChat',
+  description: 'The message input row within an Acme Chat, with an editor and send affordance.',
   props: [
     {name: 'onSend', type: '(text: string) => void', description: 'Called when the user submits a message.', required: true},
   ],
@@ -281,7 +284,7 @@ export const docs = {
     },
     {
       type: 'prose',
-      text: "The stamped format is `export default { type: 'component', ... }`; legacy docs use `export const docs = {...}` and omit `type` (the parser shape-sniffs). A hook that is part of a component API is documented as a ComponentEntry in a MultiComponentDoc `components` array (with `params`/`returns`), not as a standalone HookDoc.",
+      text: "The stamped format is `export default { type: 'component', ... }`, which `astryx integration add component` writes; legacy docs use `export const docs = {...}` and omit `type` (the parser shape-sniffs). A hook that is part of a component API is listed in a MultiComponentDoc `components` array: inline as a ComponentEntry (with `params`/`returns`), or by name with its own SubComponentDoc file, as Core's useTableSelection is.",
     },
   ],
 };

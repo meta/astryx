@@ -34,6 +34,7 @@ import {
   useTransition,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {BottomSheet} from '../BottomSheet';
 import {Button} from '../Button';
 import {useCalendarConstraints, type ISODateString} from '../Calendar';
@@ -47,9 +48,9 @@ import {
 } from '../Field';
 import {useInputStatusIcon, useMergedRefs} from '../hooks';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
+import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
 import {Icon} from '../Icon';
 import {IconButton} from '../IconButton';
-import {useTranslator, InternationalizationContext} from '../i18n';
 import {SegmentedControl, SegmentedControlItem} from '../SegmentedControl';
 import {useSize} from '../SizeContext/SizeContext';
 import {Spinner} from '../Spinner';
@@ -68,9 +69,8 @@ import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {rtlStyles} from '../utils/rtlStyles';
 import {themeProps} from '../utils/themeProps';
 import {normalizeDayOfWeek} from '../utils/dateTypes';
+import {formatLocaleTime} from '../utils/timeFormat';
 import {
-  formatDisplayTime12h,
-  formatDisplayTime24h,
   formatISOTime,
   isImeKeyEvent,
   isRenderable,
@@ -84,13 +84,13 @@ import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {joinAriaIDs} from '../utils/inputAria';
 import {
   DATE_FORMAT_LONG,
-  DATE_FORMAT_MONTH_YEAR,
   DATE_FORMAT_WEEKDAY_ONLY,
   plainDateFormat,
   plainDateFromISO,
   plainDateToday,
   type PlainDate,
 } from '../utils/plainDate';
+import {plainDateFormatStandaloneMonthYear} from '../utils/plainDate';
 import {
   MonthScroller,
   type MonthScrollerHandle,
@@ -108,6 +108,14 @@ import {
   monthIndexOf,
 } from '../DateInput/monthGeometry';
 import type {DateTimeInputProps, ISODateTimeString} from './DateTimeInput';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import {InternationalizationContext} from '../i18n/InternationalizationContext';
+import english from '../i18n/generated-english/DateTimeInput/TouchDateTimeField.generated';
+
+registerEnglishFallback(english);
 
 function splitDateTime(dt: ISODateTimeString | undefined): {
   date: ISODateString | undefined;
@@ -492,7 +500,7 @@ export function TouchDateTimeField({
     onKeyDown: onKeyDownProp,
     ...controlProps
   } = rest;
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const {locale} = use(InternationalizationContext);
   const placeholder =
@@ -565,6 +573,15 @@ export function TouchDateTimeField({
   });
 
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const sheetBodyRef = useRef<HTMLDivElement | null>(null);
+  // The busy Spinner is decorative; this control announces its busy start
+  // (spec:AST-086 FR8). A change made in the open modal sheet starts it while
+  // the sheet is open, so it is announced from inside the sheet.
+  useBusyAnnouncement(
+    isBusy,
+    t('@astryx.spinner.loading'),
+    isSheetOpen ? sheetBodyRef : dateInputRef,
+  );
   const [activePanel, setActivePanel] = useState<TouchDateTimePanel>('date');
   const [isWheelOpen, setIsWheelOpen] = useState(false);
   const [draftTime, setDraftTime] = useState<ISOTimeString | undefined>(() =>
@@ -652,9 +669,8 @@ export function TouchDateTimeField({
       ),
     [weekStartsOn, locale],
   );
-  const monthYearLabel = plainDateFormat(
+  const monthYearLabel = plainDateFormatStandaloneMonthYear(
     {year, month, day: 1},
-    DATE_FORMAT_MONTH_YEAR,
     locale,
   );
 
@@ -668,12 +684,9 @@ export function TouchDateTimeField({
   const timeDisplayValue = useMemo(() => {
     const displayTime = normalizedValueTime ?? draftTime;
     return displayTime
-      ? (hourFormat === '12h' ? formatDisplayTime12h : formatDisplayTime24h)(
-          displayTime,
-          hasSeconds,
-        )
+      ? formatLocaleTime(displayTime, locale, hourFormat, hasSeconds)
       : '';
-  }, [draftTime, normalizedValueTime, hourFormat, hasSeconds]);
+  }, [draftTime, normalizedValueTime, locale, hourFormat, hasSeconds]);
 
   const timeBoundsForDate = useCallback(
     (date: ISODateString | undefined) => ({
@@ -868,6 +881,8 @@ export function TouchDateTimeField({
       return {
         value: hour,
         label: String(hour),
+        // Keys step in time order: 12 PM comes before 1 PM.
+        order: hour24,
         isDisabled: !rangeOverlaps(
           hour24 * 3600,
           hour24 * 3600 + 3599,
@@ -1330,6 +1345,7 @@ export function TouchDateTimeField({
               sizeStyles[size],
               styles.touchDateWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
+              isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
               status && inputStatusBorderStyles[status.type],
               status &&
                 !isEffectivelyDisabled &&
@@ -1340,7 +1356,7 @@ export function TouchDateTimeField({
           <button
             type="button"
             onClick={() => openSheet('date')}
-            disabled={isEffectivelyDisabled}
+            aria-disabled={isEffectivelyDisabled || undefined}
             aria-label={t('@astryx.dateInput.openCalendar')}
             tabIndex={-1}
             {...stylex.props(
@@ -1367,7 +1383,11 @@ export function TouchDateTimeField({
             readOnly
             inputMode="none"
             onChange={() => {}}
-            onClick={chainEventHandlers(() => openSheet('date'), onClickProp)}
+            onClick={
+              isEffectivelyDisabled
+                ? undefined
+                : chainEventHandlers(() => openSheet('date'), onClickProp)
+            }
             onKeyDown={chainEventHandlers(
               (event: React.KeyboardEvent<HTMLInputElement>) =>
                 handleInputKeyDown(event, 'date'),
@@ -1375,8 +1395,7 @@ export function TouchDateTimeField({
             )}
             aria-labelledby={controlLabelledBy}
             placeholder={placeholder}
-            disabled={isEffectivelyDisabled && !showsDisabledMessage}
-            aria-disabled={showsDisabledMessage ? 'true' : undefined}
+            aria-disabled={isEffectivelyDisabled ? 'true' : undefined}
             aria-describedby={ariaDescribedBy}
             aria-required={isEffectivelyRequired ? 'true' : undefined}
             aria-invalid={status?.type === 'error' ? 'true' : undefined}
@@ -1397,7 +1416,7 @@ export function TouchDateTimeField({
               onClick={handleClear}
             />
           )}
-          {isBusy && <Spinner size="sm" />}
+          {isBusy && <Spinner size="sm" aria-hidden="true" />}
           {isRenderable(statusIcon) && statusIcon}
         </div>
 
@@ -1417,6 +1436,7 @@ export function TouchDateTimeField({
               sizeStyles[size],
               styles.touchTimeWrapper,
               isEffectivelyDisabled && inputWrapperStyles.disabled,
+              isEffectivelyDisabled && inputDisabledFocusStyles.withinRing,
               status && inputStatusBorderStyles[status.type],
               status &&
                 !isEffectivelyDisabled &&
@@ -1427,7 +1447,7 @@ export function TouchDateTimeField({
           <button
             type="button"
             onClick={() => openSheet('time')}
-            disabled={isEffectivelyDisabled}
+            aria-disabled={isEffectivelyDisabled || undefined}
             aria-label={t('@astryx.dateTimeInput.openTimePicker', {
               label: resolvedTimeLabel,
             })}
@@ -1456,8 +1476,7 @@ export function TouchDateTimeField({
             onClick={() => openSheet('time')}
             onKeyDown={event => handleInputKeyDown(event, 'time')}
             placeholder={timePlaceholder}
-            disabled={isEffectivelyDisabled && !showsDisabledMessage}
-            aria-disabled={showsDisabledMessage ? 'true' : undefined}
+            aria-disabled={isEffectivelyDisabled ? 'true' : undefined}
             aria-label={resolvedTimeLabel}
             aria-describedby={ariaDescribedBy}
             aria-required={isEffectivelyRequired ? 'true' : undefined}
@@ -1482,7 +1501,9 @@ export function TouchDateTimeField({
           // touchSheetBody owns the inset, including the band under the grab
           // handle.
           padding={0}>
-          <div {...stylex.props(styles.touchSheetBody)}>{surface}</div>
+          <div ref={sheetBodyRef} {...stylex.props(styles.touchSheetBody)}>
+            {surface}
+          </div>
         </BottomSheet>
         {showsDisabledMessage &&
           disabledMessageTooltip.renderTooltip(disabledMessage)}
