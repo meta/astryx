@@ -3,7 +3,7 @@
 import {describe, it, expect} from 'vitest';
 import {relativeLuminance, compositeOver, contrastRatio} from './contrast';
 import {parseColor} from '../utils/color';
-import {colorDefaults} from './tokens.stylex';
+import {resolveThemeToken} from './tokens';
 
 describe('relativeLuminance', () => {
   it('is 0 for black and 1 for white', () => {
@@ -95,22 +95,11 @@ describe('compositeOver', () => {
 });
 
 describe('the stock accent pair', () => {
-  function halves(value: string): [light: string, dark: string] {
-    const match = /^light-dark\(\s*([^,]+?)\s*,\s*([^)]+?)\s*\)$/.exec(value);
-    if (match == null) {
-      return [value, value];
-    }
-    return [match[1], match[2]];
-  }
-
   // --color-on-accent is the label on every --color-accent fill, such as a
   // primary Button's, which is normal-size text (WCAG 1.4.3: 4.5:1).
-  it.each([
-    ['light', 0],
-    ['dark', 1],
-  ] as const)('meets 4.5:1 in the %s theme', (_scheme, half) => {
-    const accent = halves(colorDefaults['--color-accent'])[half];
-    const onAccent = halves(colorDefaults['--color-on-accent'])[half];
+  it.each(['light', 'dark'] as const)('meets 4.5:1 in the %s theme', mode => {
+    const accent = resolveThemeToken(null, '--color-accent', {mode});
+    const onAccent = resolveThemeToken(null, '--color-on-accent', {mode});
     expect(contrastRatio(onAccent, accent)).toBeGreaterThanOrEqual(4.5);
   });
 });
