@@ -38,13 +38,9 @@ export function ExampleAnchor({
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!id) {
-      return;
-    }
+    if (!id) {return;}
     const scrollIfTarget = () => {
-      if (hashTarget() !== id) {
-        return;
-      }
+      if (hashTarget() !== id) {return;}
       requestAnimationFrame(() =>
         ref.current?.scrollIntoView({block: 'start'}),
       );

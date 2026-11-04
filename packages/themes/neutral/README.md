@@ -108,8 +108,8 @@ Without this, the theme falls back to system fonts. If you'd rather avoid extern
 
 ## Related Packages
 
-| Package                                                                          | Description                               |
-| -------------------------------------------------------------------------------- | ----------------------------------------- |
+| Package                                                                              | Description                               |
+| ------------------------------------------------------------------------------------ | ----------------------------------------- |
 | [`@astryxdesign/core`](https://github.com/meta/astryx/tree/main/packages/core)   | Core components and theme system          |
 | [`@astryxdesign/build`](https://github.com/meta/astryx/tree/main/packages/build) | Build plugins for StyleX source builds    |
 | [`@astryxdesign/cli`](https://github.com/meta/astryx/tree/main/packages/cli)     | CLI tooling including `astryx docs theme` |

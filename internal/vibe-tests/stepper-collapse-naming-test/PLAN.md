@@ -24,7 +24,7 @@ props or one?**
 
 Four-ingredient intake per [Designing Vibe Tests](https://github.com/meta/astryx/wiki/Designing-Vibe-Tests).
 
-**Goal & measure.** A naive agent is told what the _page_ provides and never told a prop
+**Goal & measure.** A naive agent is told what the *page* provides and never told a prop
 name. Scored on correctness, hallucination, directness, and confidence calibration.
 Tie-break: hallucination, then fewer concepts.
 
@@ -32,21 +32,21 @@ Tie-break: hallucination, then fewer concepts.
 2×2 over what the surrounding page already has. None name a prop, a value, or the word
 "collapse".
 
-|     | page already has     | correct answer                     |
-| --- | -------------------- | ---------------------------------- |
-| p1  | footer Back/Continue | controls off, name kept            |
-| p2  | a per-step heading   | name off, controls kept            |
-| p3  | both                 | both off — bare track              |
-| p4  | neither              | **set nothing** (negative control) |
+| | page already has | correct answer |
+| --- | --- | --- |
+| p1 | footer Back/Continue | controls off, name kept |
+| p2 | a per-step heading | name off, controls kept |
+| p3 | both | both off — bare track |
+| p4 | neither | **set nothing** (negative control) |
 
 **Arms.** Four conditions, plus a recall probe.
 
-| arm      | shape                                                                             |
-| -------- | --------------------------------------------------------------------------------- |
-| `A`      | `hasCollapsedControls` / `hasCollapsedLabel`, both default `true`                 |
-| `B`      | `hasControls` / `hasLabel`, both default `true`                                   |
-| `C`      | `hasSummaryControls` / `hasSummaryLabel`, both default `true`                     |
-| `D`      | `collapsedSummary?: 'auto' \| 'label' \| 'controls' \| 'none'`                    |
+| arm | shape |
+| --- | --- |
+| `A` | `hasCollapsedControls` / `hasCollapsedLabel`, both default `true` |
+| `B` | `hasControls` / `hasLabel`, both default `true` |
+| `C` | `hasSummaryControls` / `hasSummaryLabel`, both default `true` |
+| `D` | `collapsedSummary?: 'auto' \| 'label' \| 'controls' \| 'none'` |
 | `recall` | behavior described, props deliberately unnamed — the agent writes what it expects |
 
 **Orchestration.** One isolated sub-agent per (prompt × arm), spawned fresh with the
@@ -55,13 +55,13 @@ One judge agent with cross-arm visibility. 22 agents total.
 
 ### Fairness (Checker Protocol)
 
-| Invariant                     | How this honors it                                                                                                                                                                                                                                                                                                           |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| §1 Fair evaluators            | One judge, all arms side by side, one rubric. Blinding is impossible here — the arm is legible from the prop names — so the judge was told to score the rubric and not its own taste, and to audit doc parity before reading any result                                                                                      |
-| §2 Only the SUT varies        | The four arm docs are **machine-generated from one template** ([`gen-docs.mjs`](gen-docs.mjs)); intro, prop-table rows, `Step` description, example 1 and the anti-pattern are byte-identical. 349/349/349/354 words. The prose naming the props is one sentence with the names swapped, so no arm gets a lexical head start |
-| §3 Never leak the answer      | Ground truth lives in `prompts.json` and never reached a generating agent                                                                                                                                                                                                                                                    |
-| §4 Representative environment | A skill doc is exactly what a consumer's agent gets                                                                                                                                                                                                                                                                          |
-| §5 Context-free               | Fresh sub-agents, explicitly barred from reading the repo, the component source, or each other's docs                                                                                                                                                                                                                        |
+| Invariant | How this honors it |
+| --- | --- |
+| §1 Fair evaluators | One judge, all arms side by side, one rubric. Blinding is impossible here — the arm is legible from the prop names — so the judge was told to score the rubric and not its own taste, and to audit doc parity before reading any result |
+| §2 Only the SUT varies | The four arm docs are **machine-generated from one template** ([`gen-docs.mjs`](gen-docs.mjs)); intro, prop-table rows, `Step` description, example 1 and the anti-pattern are byte-identical. 349/349/349/354 words. The prose naming the props is one sentence with the names swapped, so no arm gets a lexical head start |
+| §3 Never leak the answer | Ground truth lives in `prompts.json` and never reached a generating agent |
+| §4 Representative environment | A skill doc is exactly what a consumer's agent gets |
+| §5 Context-free | Fresh sub-agents, explicitly barred from reading the repo, the component source, or each other's docs |
 
 ---
 
@@ -73,8 +73,8 @@ One judge agent with cross-arm visibility. 22 agents total.
 every prompt, including the p4 negative control, which no arm's agent was tempted into
 touching. Directness split on a single result (`c-p2` added an unrequested `<h1>`).
 
-Per the wiki's decision patterns, _all options produce identical code → the difference
-doesn't matter, pick the simpler one_. On this battery the naming does not change whether
+Per the wiki's decision patterns, *all options produce identical code → the difference
+doesn't matter, pick the simpler one*. On this battery the naming does not change whether
 an agent can use the API. Everything below is the tie-break.
 
 ### 3.2 The recall probe is where the arms separate
@@ -82,13 +82,13 @@ an agent can use the API. Everything below is the tie-break.
 Five agents were given the behavior with the props deliberately unnamed and asked to
 write what they expected.
 
-| sample | controls                | name                     |
-| ------ | ----------------------- | ------------------------ |
-| 1      | `showCollapsedControls` | `showCollapsedStepLabel` |
-| 2      | `showCollapsedControls` | `showCollapsedLabel`     |
-| 3      | `showNavigation`        | `showStepLabel`          |
-| 4      | `showSummaryControls`   | `showSummaryLabel`       |
-| 5      | `showSummaryControls`   | `showSummaryLabel`       |
+| sample | controls | name |
+| --- | --- | --- |
+| 1 | `showCollapsedControls` | `showCollapsedStepLabel` |
+| 2 | `showCollapsedControls` | `showCollapsedLabel` |
+| 3 | `showNavigation` | `showStepLabel` |
+| 4 | `showSummaryControls` | `showSummaryLabel` |
+| 5 | `showSummaryControls` | `showSummaryLabel` |
 
 **5/5 produced two independent booleans. Nobody produced an enum.** Every one rejected the
 enum unprompted, and converged on the same reason — that it forces you to restate the half
@@ -97,21 +97,21 @@ enums (`orientation`, `density`, `indicatorPosition`) are all mutually-exclusive
 and this is not one. **Arm D is out on shape**, despite scoring 5.00 on correctness.
 
 **4/5 rejected a bare `Label` because it collides with the existing `label` prop** — the
-accessible name of the whole sequence. Sample 3: _"a reader would think it toggles that
-string."_ Sample 2 flagged the other half too: _"`showControls` alone would sound like it
-suppresses `onStepClick`."_ **Arm B is out on ambiguity**, and this is a real collision in
+accessible name of the whole sequence. Sample 3: *"a reader would think it toggles that
+string."* Sample 2 flagged the other half too: *"`showControls` alone would sound like it
+suppresses `onStepClick`."* **Arm B is out on ambiguity**, and this is a real collision in
 the shipping API, not an artifact of the test.
 
 That leaves A and C, 2–2. Two things break it:
 
 - **Both `Summary` choosers started at `Collapsed` and switched**, and both said why:
   the anti-pattern's `data-astryx-stepper-summary` selector looked like the component's
-  internal name. Sample 4: _"`showCollapsedControls` was my first instinct … but the data
-  attribute pointed at 'summary' as the internal name."_ That is a reason to guess the
+  internal name. Sample 4: *"`showCollapsedControls` was my first instinct … but the data
+  attribute pointed at 'summary' as the internal name."* That is a reason to guess the
   implementation, not a reason a consumer would reach for the word.
-- **3/5 explicitly rejected `Summary` as internal vocabulary.** Sample 3: _"'summary' is
+- **3/5 explicitly rejected `Summary` as internal vocabulary.** Sample 3: *"'summary' is
   internal implementation vocabulary that appears nowhere in the prose or the props
-  table."_
+  table."*
 
 ### 3.3 The judge picks A, on an effect the scores don't show
 
@@ -123,9 +123,9 @@ because a reader who does not already know the row is called a summary cannot te
 the prop reaches.
 
 The judge also caught an inversion hazard specific to the enum: its values name what
-_survives_, while every requirement names what to _remove_. `d-p2` walked into it live —
-_"my first instinct was to set it to `'none'` … `'none'` is the value that most literally
-removes the name"_ — and recovered only via an unrelated clause in the prompt.
+*survives*, while every requirement names what to *remove*. `d-p2` walked into it live —
+*"my first instinct was to set it to `'none'` … `'none'` is the value that most literally
+removes the name"* — and recovered only via an unrelated clause in the prompt.
 
 ### 3.4 `show` beats `has` with LLMs, and the convention should still win
 
@@ -134,8 +134,8 @@ double negative. Astryx has ~30 `has*` booleans in `packages/core/src` and zero 
 ones, so the house convention says `has*`.
 
 Take the convention. §3.1 is the evidence that it is free: agents used `has*` correctly
-16/16 when the doc said `has*`. The prefix affects what an agent _guesses_, not what it
-_does_ with a documented API — and a design system's props are always documented.
+16/16 when the doc said `has*`. The prefix affects what an agent *guesses*, not what it
+*does* with a documented API — and a design system's props are always documented.
 
 ### 3.5 The finding that outranks the naming
 
@@ -179,9 +179,9 @@ step's name, both props are purely visual and cannot shorten what a screen reade
 
 1. **No per-step gating.** All 8 results on p1+p3 independently wrote the same
    `index < step` guard around `onStepClick`, because nothing lets a step declare itself
-   unreachable. `a-p1` noticed the resulting contradiction: _"my guard makes the future
+   unreachable. `a-p1` noticed the resulting contradiction: *"my guard makes the future
    steps look interactive and do nothing, which is the same tab-order complaint the
-   anti-pattern section raises."_ Worth a spec.
+   anti-pattern section raises."* Worth a spec.
 2. **The collapse cannot be forced.** All 16 reported being unable to preview or pin the
    collapsed state. That is a testing and Storybook gap, and it is why the unit tests
    here have to redefine `clientWidth` by hand.
@@ -196,14 +196,14 @@ step's name, both props are purely visual and cannot shorten what a screen reade
   independently; a re-run should vary which cell the worked example demonstrates.
 - **Both qualifiers were primed, unevenly.** "collapsed" appears 4× in the recall doc (3×
   in prose), "summary" once, inside a CSS selector. `Collapsed` therefore had the larger
-  prompt-side advantage — which makes the 2–2 split _favourable_ to `Summary` on a naive
+  prompt-side advantage — which makes the 2–2 split *favourable* to `Summary` on a naive
   read, and is why §3.2 leans on the switch narratives rather than the raw tally.
 - **n=5 on recall, n=4 per arm.** The unanimous results (enum 0/5, two-booleans 5/5,
   `show*` 5/5, the `label` collision 4/5) are wide of sampling noise. The 2–2 qualifier
   split is not, and is decided by §3.3 rather than by count.
 - **One battery, one author.** Written by the same person who drafted the candidates.
 - **Recall batched three scenarios per agent**, deviating from one-agent-per-prompt.
-  Deliberate: naming a coherent _pair_ is the realistic act, and splitting it would have
+  Deliberate: naming a coherent *pair* is the realistic act, and splitting it would have
   measured three unrelated guesses instead of one scheme.
 
 ---

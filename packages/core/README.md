@@ -61,8 +61,8 @@ astryx gap-report                   # report a missing capability
 
 ## Related Packages
 
-| Package                                                                                           | Description                                                   |
-| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Package                                                                                               | Description                                                   |
+| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | [`@astryxdesign/cli`](https://github.com/meta/astryx/tree/main/packages/cli)                      | CLI tooling: component docs, templates, scaffolding, codemods |
 | [`@astryxdesign/theme-neutral`](https://github.com/meta/astryx/tree/main/packages/themes/neutral) | Muted, minimal theme (Lucide icons)                           |
 

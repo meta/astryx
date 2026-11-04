@@ -16,9 +16,8 @@ describe('getNodeText', () => {
   });
 
   it('yields nothing for empty nodes and text a component renders from other props', () => {
-    for (const node of [null, undefined, true, false, []]) {
-      expect(getNodeText(node)).toBe('');
-    }
+    for (const node of [null, undefined, true, false, []])
+      {expect(getNodeText(node)).toBe('');}
     const Labelled = ({label}: {label: string}) => label;
     expect(getNodeText(createElement(Labelled, {label: 'Hidden'}))).toBe('');
   });

@@ -15,7 +15,12 @@ import {track} from '@vercel/analytics';
 // ---------------------------------------------------------------------------
 
 type Page =
-  'templates' | 'themes' | 'components' | 'playground' | 'docs' | 'landing';
+  | 'templates'
+  | 'themes'
+  | 'components'
+  | 'playground'
+  | 'docs'
+  | 'landing';
 
 type CopyTarget =
   | 'cli_command'
@@ -25,7 +30,11 @@ type CopyTarget =
   | 'install_command';
 
 type CtaTarget =
-  'install' | 'get_started' | 'github' | 'community' | 'customize';
+  | 'install'
+  | 'get_started'
+  | 'github'
+  | 'community'
+  | 'customize';
 
 type NavigateTarget = 'prev_next' | 'tab' | 'view';
 

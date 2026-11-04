@@ -255,9 +255,9 @@ describe('markGlidingRows', () => {
     expect(
       rows.map(row => row.hasAttribute('data-astryx-row-gliding')),
     ).toEqual([false, false, true, true, false]);
-    expect(rows[2].style.getPropertyValue('--_table-row-glide-width')).toBe(
-      '0px',
-    );
+    expect(
+      rows[2].style.getPropertyValue('--_table-row-glide-width'),
+    ).toBe('0px');
     // The first cell that scrolls draws the line; the pinned one draws its
     // own; the nested table's cell is not marked.
     expect(cellMarks(rows[2])).toEqual(['', 'line', '']);
@@ -271,7 +271,9 @@ describe('markGlidingRows', () => {
     expect(rows.some(row => row.hasAttribute('data-astryx-row-gliding'))).toBe(
       false,
     );
-    expect(rows[2].style.getPropertyValue('--_table-row-glide-width')).toBe('');
+    expect(
+      rows[2].style.getPropertyValue('--_table-row-glide-width'),
+    ).toBe('');
     expect(cellMarks(rows[2])).toEqual([null, null, null]);
     body.remove();
   });
