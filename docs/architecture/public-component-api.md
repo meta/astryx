@@ -231,8 +231,10 @@ guidance owns the process used to propose and test APIs.
   behavior of its own, and a component built entirely on a public factory are
   one API with that factory, not a second one (`spec:AST-107` FR6, FR8). A
   deprecation follows INV9. A hook whose value a component takes through one
-  slot prop (for example `resizable`, `hasSnap`) is one API with that component,
-  and the hook keeps its config object (INV22; owner decision, 2026-11-04).
+  slot prop is one API with that component, as in `const resizable =
+useResizable({…});` then `<LayoutPanel resizable={resizable}>`, or
+  `hasSnap={useSnapPaging()}`. The hook keeps its config object (INV22; owner
+  decision, 2026-11-04).
 - **INV21a — Shipped APIs change only for user value.** A breaking or
   deprecating change to a shipped public API needs user value; conformance to a
   system rule alone does not justify it. New APIs follow the current rules;
@@ -250,12 +252,14 @@ guidance owns the process used to propose and test APIs.
   `useEntryAnimation`, `useContainerReveal`, `useTouchTrigger`,
   `useTableRowExpansion`, and `useTableColumnResize`, and a hook whose output
   directly feeds one Astryx component prop (a slot hook such as `useResizable` →
-  `resizable` or `useSnapPaging` → `hasSnap`), which has no `create…` twin and
-  delegates to internal code (owner decision, 2026-11-04). A slot hook exists to
-  feed an Astryx component's prop, so a non-React twin has no meaningful use:
-  outside React there is no component to feed. Primitives that act on any
-  element keep their twins. A factory's announced and shown strings follow
-  `architecture:internationalization` INV3a's options.
+  `resizable` or `useSnapPaging` → `hasSnap`), which delegates to internal code.
+  A slot hook has no `create…` twin by default; the owner may add one where a
+  non-React caller needs it, matching the hook's options closely (owner
+  decision, 2026-11-04). A slot hook exists to feed an Astryx component's prop,
+  so a non-React twin has no meaningful use: outside React there is no component
+  to feed. Primitives that act on any element keep their twins. A factory's
+  announced and shown strings follow `architecture:internationalization` INV3a's
+  options.
 - **INV22a — A new public interaction hook takes one config object.** The
   element it attaches to is a named ref field in that object (`ref`, or a
   job-named field such as `viewportRef` or `containerRef`, INV2), not a
