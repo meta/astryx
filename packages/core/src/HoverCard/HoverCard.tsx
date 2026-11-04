@@ -23,6 +23,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from 'react';
+import {isRenderable} from '../utils/isRenderable';
 import {observeMutations} from '../utils/sharedMutationObserver';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import * as stylex from '@stylexjs/stylex';
@@ -155,9 +156,10 @@ export interface HoverCardProps extends Pick<
 
   /**
    * When to trigger on focus:
-   * - `auto`: Only if element is naturally focusable
-   * - `always`: Always attach focus listeners
-   * - `never`: Never attach focus listeners (for composite widgets)
+   * - `auto`: focus on the trigger itself, or within a trigger that is
+   *   focusable when focus arrives
+   * - `always`: focus on the trigger or anything inside it
+   * - `never`: never on focus (for composite widgets)
    *
    * @default 'auto'
    */
@@ -200,7 +202,8 @@ export interface HoverCardProps extends Pick<
   /**
    * Whether to show hover indication (dashed underline) on a text trigger.
    * An element trigger keeps its own styling, so this has no effect on it.
-   * - `'auto'`: Show when children is a single string or number
+   * - `'auto'`: Show when children is text: strings and numbers, such as
+   *   `Edited {when}`, with holes such as `false` and `null` ignored
    * - `true`: Show on a text trigger
    * - `false`: Never show
    *
@@ -234,7 +237,26 @@ export interface HoverCardProps extends Pick<
  * Check if children are text-only (no React elements)
  */
 function isTextOnly(children: ReactNode): boolean {
-  return typeof children === 'string' || typeof children === 'number';
+  if (typeof children === 'string' || typeof children === 'number') {
+    return true;
+  }
+  // Text written around an expression, such as `Edited {when}`, reaches React
+  // as several strings. Holes that render nothing do not change that; one
+  // element does.
+  if (!Array.isArray(children)) {
+    return false;
+  }
+  let hasText = false;
+  for (const child of children.flat(Infinity) as ReactNode[]) {
+    if (!isRenderable(child)) {
+      continue;
+    }
+    if (typeof child !== 'string' && typeof child !== 'number') {
+      return false;
+    }
+    hasText = true;
+  }
+  return hasText;
 }
 
 /**

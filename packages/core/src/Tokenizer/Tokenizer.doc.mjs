@@ -293,11 +293,18 @@ export const docs = {
       description: 'Inline styles for the visual control box.',
     },
     {
+      name: 'presentation',
+      type: "'popover' | 'bottom-sheet' | 'adaptive'",
+      description:
+        'How the field presents its choices. adaptive (the default) uses the bottom sheet on compact touch screens and the popover otherwise, resolved the same way Selector resolves it; the server render and the hydrating render are the popover. popover is the inline combobox with its anchored suggestion menu on every device. bottom-sheet replaces it on every device with a trigger showing the selected tokens that opens one tall modal sheet: a search row on top, full-width checkbox rows that keep their place while the sheet is open, a Create row with hasCreate, and a footer pinned in every state with a confirmed Clear all and Save; the sheet edits a draft, so onChange fires once, when Save commits it, and a swipe, scrim or Escape close of a changed draft asks before discarding. In the sheet presentation the trigger is the control: ref, id, aria-* and data-* reach it, and ref receives the trigger button there, so type it Ref<HTMLInputElement | HTMLButtonElement>, which the component accepts (TokenizerProps keeps its released input ref type). renderItem, renderToken, endContent, hasClear, hasEntriesOnFocus, menuWidth, tokenOverflowBehavior and hasAutoFocus have no surface in the sheet, and the field warns once in development when they are passed. Pass presentation="popover" to keep the inline field and those props on every device.',
+      default: "'adaptive'",
+    },
+    {
       name: 'experimental',
       type: "{presentation?: 'popover' | 'bottom-sheet' | 'adaptive'}",
       stability: 'experimental',
       description:
-        "Experimental options: anything in this object may change or be removed in a patch release, and omitting it keeps the stable behavior. presentation (default 'popover') chooses how the field presents its choices. popover is the inline combobox with its anchored suggestion menu. bottom-sheet replaces it with a trigger showing the selected tokens that opens one tall modal sheet: a search row on top, full-width checkbox rows that keep their place while the sheet is open, a Create row with hasCreate, and a footer pinned in every state with a confirmed Clear all and Save; the sheet edits a draft, so onChange fires once, when Save commits it, and a swipe, scrim or Escape close of a changed draft asks before discarding. adaptive uses the bottom sheet on compact touch screens and the popover otherwise, resolved the same way Selector resolves it. In the sheet presentation the trigger is the control (ref, id, aria-* and data-* reach it; with experimental passed, ref also accepts a Ref<HTMLInputElement | HTMLButtonElement> — an input-only ref still type-checks against that wider type, but with adaptive or bottom-sheet it receives the trigger button at runtime, so type the ref for both elements; TokenizerProps keeps its released ref type and gains only the optional experimental), and renderItem, renderToken, endContent, hasClear, hasEntriesOnFocus, menuWidth, tokenOverflowBehavior and hasAutoFocus have no surface to act on; the field warns once in development when they are passed. For example: <Tokenizer label=\"Tags\" searchSource={tagSource} value={tags} onChange={setTags} hasCreate experimental={{presentation: 'adaptive'}} />.",
+        'Experimental options: anything in this object may change or be removed in a patch release. Deprecated: experimental.presentation is the earlier spelling of presentation; use presentation. It still works with the same values, and presentation wins when both are set.',
     },
   ],
   theming: {
@@ -639,11 +646,18 @@ export const docsZh = {
       description: '可视控件框的内联样式。',
     },
     {
+      name: 'presentation',
+      type: "'popover' | 'bottom-sheet' | 'adaptive'",
+      description:
+        '字段如何呈现选项。adaptive（默认）在紧凑触摸屏上使用底部面板，其他情况使用 popover，解析方式与 Selector 相同；服务端渲染和水合期间的渲染均为 popover。popover 在所有设备上为内联组合框及其锚定建议菜单。bottom-sheet 在所有设备上改为一个显示已选标记的触发按钮，点按后打开一个高的模态底部面板——顶部为搜索行，下方为整行复选框行（面板打开期间位置保持不变），hasCreate 时有「创建」行，底部固定显示需确认的「全部清除」和「保存」；面板编辑的是草稿，onChange 仅在「保存」提交时触发一次，草稿有改动时滑动、点击遮罩或按 Escape 关闭会先询问是否放弃。在底部面板呈现中，触发按钮即为控件：ref、id、aria-* 和 data-* 都作用于它，ref 在该呈现中收到的是触发按钮，因此请将其类型声明为组件所接受的 Ref<HTMLInputElement | HTMLButtonElement>（TokenizerProps 保留已发布的输入框 ref 类型）。renderItem、renderToken、endContent、hasClear、hasEntriesOnFocus、menuWidth、tokenOverflowBehavior 和 hasAutoFocus 在底部面板中没有作用对象，传入时开发模式下会警告一次。传入 presentation="popover" 可在所有设备上保留内联字段和这些属性。',
+      default: "'adaptive'",
+    },
+    {
       name: 'experimental',
       type: "{presentation?: 'popover' | 'bottom-sheet' | 'adaptive'}",
       stability: 'experimental',
       description:
-        "实验性选项：此对象中的任何内容都可能在补丁版本中更改或移除；省略它即保持稳定行为。presentation（默认 'popover'）决定字段如何呈现选项：popover 为内联组合框及其锚定建议菜单；bottom-sheet 改为一个显示已选标记的触发按钮，点按后打开一个高的模态底部面板——顶部为搜索行，下方为整行复选框行（面板打开期间位置保持不变），hasCreate 时有「创建」行，底部固定显示需确认的「全部清除」和「保存」；面板编辑的是草稿，onChange 仅在「保存」提交时触发一次，草稿有改动时滑动、点击遮罩或按 Escape 关闭会先询问是否放弃；adaptive 在紧凑触摸屏上使用底部面板，其他情况使用 popover，解析方式与 Selector 相同。在底部面板呈现中，触发按钮即为控件（ref、id、aria-* 和 data-* 都作用于它；传入 experimental 后，ref 也接受 Ref<HTMLInputElement | HTMLButtonElement>——仅为输入框类型的 ref 在这个更宽的类型下仍能通过类型检查，但在 adaptive 或 bottom-sheet 下运行时收到的是触发按钮，因此请为两种元素声明 ref 的类型；TokenizerProps 保留已发布的 ref 类型，仅新增可选的 experimental）；renderItem、renderToken、endContent、hasClear、hasEntriesOnFocus、menuWidth、tokenOverflowBehavior 和 hasAutoFocus 没有作用对象，传入时开发模式下会警告一次。例如：<Tokenizer label=\"标签\" searchSource={tagSource} value={tags} onChange={setTags} hasCreate experimental={{presentation: 'adaptive'}} />。",
+        '实验性选项：此对象中的任何内容都可能在补丁版本中更改或移除。已弃用：experimental.presentation 是 presentation 的旧写法，请改用 presentation。它仍以相同的取值生效，两者同时设置时以 presentation 为准。',
     },
   ],
   theming: {
@@ -844,7 +858,9 @@ export const docsDense = {
       'Icon at input start, before tokens. Icon name, SVG component, or ReactNode.',
     endContent: 'Content at input row end. For buttons, counts, controls.',
     handleRef: 'Imperative handle for focus() and blur() control.',
+    presentation:
+      "'adaptive' (default: sheet on compact touch, else popover; SSR/hydration render popover) | 'popover' (inline combobox, every device) | 'bottom-sheet' (trigger + one searchable modal sheet of checkbox rows editing a draft that Save commits; onChange fires once, on Save). Sheet: ref reaches the trigger button; renderItem/renderToken/endContent/hasClear/hasEntriesOnFocus/menuWidth/tokenOverflowBehavior/hasAutoFocus inert (dev warning). presentation=\"popover\" keeps them on every device.",
     experimental:
-      "Experimental; may change in a patch. presentation: 'popover' (default, inline combobox) | 'bottom-sheet' (trigger + one searchable modal sheet of checkbox rows editing a draft that Save commits; onChange fires once, on Save) | 'adaptive' (sheet on compact touch, else popover).",
+      'Experimental; may change in a patch. Deprecated presentation: old spelling of presentation; presentation wins if both set.',
   },
 };

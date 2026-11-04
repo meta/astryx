@@ -488,6 +488,27 @@ export function plainDateWeekFieldName(locale: Locale = 'en'): string {
   return 'week';
 }
 
+const dayNumberFormats = new Map<Locale, Intl.NumberFormat>();
+
+/**
+ * A day of the month or a week number in the locale's own digits: `15` in
+ * English, `۱۵` in Persian, `١٥` in Egyptian Arabic. Only the digits follow the
+ * locale. The number stays the Gregorian day or ISO week that it names, so no
+ * other calendar applies, and no grouping separator or unit word is added.
+ * Internal: not re-exported from `utils/index.ts`.
+ */
+export function plainDateFormatDayNumber(
+  value: number,
+  locale: Locale,
+): string {
+  let format = dayNumberFormats.get(locale);
+  if (format == null) {
+    format = new Intl.NumberFormat(locale, {useGrouping: false});
+    dayNumberFormats.set(locale, format);
+  }
+  return format.format(value);
+}
+
 // =============================================================================
 // Shared date-only format vocabulary
 // =============================================================================

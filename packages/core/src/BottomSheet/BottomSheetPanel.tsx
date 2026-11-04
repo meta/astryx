@@ -255,6 +255,10 @@ const styles = stylex.create({
     // surface behind the pill itself, fading out across the lower half so the
     // content emerging below has no visible cut line.
     backgroundImage: `linear-gradient(to bottom, ${colorVars['--color-background-surface']} 60%, transparent)`,
+    // WebKit can draw this bar under the scrolling body's own layer while the
+    // sheet's transform animates, so the pill vanishes until the sheet rests.
+    // A layer of its own keeps it above the body.
+    willChange: 'transform',
     // Drags are the handle's; a pinch still zooms the page (WCAG 1.4.4).
     touchAction: 'pinch-zoom',
     cursor: {
@@ -418,6 +422,7 @@ function waitForTransition(
 
   let done = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
+  let backstopMs = 0;
   const finish = () => {
     if (done) {
       return;
@@ -431,9 +436,24 @@ function waitForTransition(
     complete();
   };
   const handleTransitionEnd = (event: TransitionEvent) => {
-    if (event.target === element && event.propertyName === propertyName) {
-      finish();
+    if (event.target !== element || event.propertyName !== propertyName) {
+      return;
     }
+    // The engine cancels a transition whose end value changes mid-flight. A
+    // percentage transform does when the closing frame moves the height by a
+    // fraction of a pixel. A replacement runs on from where it was. That one
+    // ends the motion, not the cancel.
+    if (
+      event.type === 'transitioncancel' &&
+      hasRunningTransition(element, propertyName)
+    ) {
+      if (timer != null) {
+        clearTimeout(timer);
+        timer = setTimeout(finish, backstopMs);
+      }
+      return;
+    }
+    finish();
   };
   element.addEventListener('transitionend', handleTransitionEnd);
   element.addEventListener('transitioncancel', handleTransitionEnd);
@@ -484,7 +504,8 @@ function waitForTransition(
     return () => {};
   }
 
-  timer = setTimeout(finish, transitionMs + TRANSITION_BACKSTOP_BUFFER_MS);
+  backstopMs = transitionMs + TRANSITION_BACKSTOP_BUFFER_MS;
+  timer = setTimeout(finish, backstopMs);
   return () => {
     if (timer != null) {
       clearTimeout(timer);
@@ -492,6 +513,19 @@ function waitForTransition(
     element.removeEventListener('transitionend', handleTransitionEnd);
     element.removeEventListener('transitioncancel', handleTransitionEnd);
   };
+}
+
+// Whether a CSS transition of `propertyName` still runs on `element`.
+function hasRunningTransition(
+  element: HTMLElement,
+  propertyName: string,
+): boolean {
+  return (element.getAnimations?.() ?? []).some(
+    animation =>
+      (animation as Animation & {transitionProperty?: string})
+        .transitionProperty === propertyName &&
+      (animation.playState === 'running' || animation.playState === 'paused'),
+  );
 }
 
 function parseTransitionTime(value: string): number | null {
@@ -676,6 +710,8 @@ export function BottomSheetPanel({
   const isCoarseCrossFade = useMediaQuery(REDUCED_MOTION_COARSE_QUERY);
   const isCrossFade =
     isCoarseCrossFade || (isReducedMotion && isDismissedByTouchDrag);
+  // Syncs the motion with the panel's CSS transition. The motion completes when
+  // that transition ends.
   useLayoutEffect(() => {
     if (motion == null) {
       return;

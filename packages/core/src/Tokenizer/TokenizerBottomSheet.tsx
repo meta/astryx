@@ -8,7 +8,7 @@
  *   EmptyState, AlertDialog, Icon, Spinner, Text, useBusyAnnouncement, and
  *   the i18n translator
  * @output Exports TokenizerBottomSheet — the touch surface of
- *   `Tokenizer experimental.presentation="bottom-sheet"`: one tall modal sheet
+ *   `Tokenizer presentation="bottom-sheet"`: one tall modal sheet
  *   with a search row on top, stable-order checkbox rows, progressive
  *   long-list rendering, an optional create row, and a confirmed Clear all
  * @position Internal presentation surface of Tokenizer. Loaded on demand by

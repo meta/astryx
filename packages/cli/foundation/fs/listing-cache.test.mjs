@@ -9,6 +9,7 @@ import {
   listDir,
   listDirEntries,
   listingCacheActive,
+  oncePerListing,
   pathExists,
   withListingCache,
 } from './listing-cache.mjs';
@@ -78,6 +79,19 @@ describe('listing cache', () => {
       fs.mkdirSync(missing);
       expect(listDir(missing)).toEqual([]);
     });
+  });
+
+  it('computes a value once per operation, and each time outside one', () => {
+    let computed = 0;
+    const compute = () => ({count: ++computed});
+    withListingCache(() => {
+      const first = oncePerListing('key', compute);
+      expect(oncePerListing('key', compute)).toBe(first);
+      expect(computed).toBe(1);
+    });
+    oncePerListing('key', compute);
+    oncePerListing('key', compute);
+    expect(computed).toBe(3);
   });
 
   it('keeps existsCaseExact exact-case inside an operation', () => {
