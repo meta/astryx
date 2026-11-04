@@ -62,8 +62,7 @@ Consumer syntax and examples belong in `OverflowList.doc.mjs`.
 - Controlled/uncontrolled behavior: not applicable; the visible count is
   measured.
 - Migration decision: test timing only: a test that fires a mocked
-  ResizeObserver callback awaits the update before asserting; no API or default
-  changes.
+  ResizeObserver callback awaits the update before asserting; no API changes.
 
 Consumer migration instructions belong in consumer docs and release notes.
 
