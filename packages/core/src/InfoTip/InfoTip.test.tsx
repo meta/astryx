@@ -402,5 +402,23 @@ describe('InfoTip', () => {
         false,
       );
     });
+
+    it('clears the button’s insets when its watch stops', () => {
+      const {unmount} = render(<InfoTip content="Helpful context" />);
+      const trigger = screen.getByRole('button', {name: 'More information'});
+      const watch = hitAreaWatches.find(entry => entry.element === trigger);
+      act(() => watch?.onInsets({top: 12, right: 6, bottom: 12, left: 4}));
+      expect(trigger.style.getPropertyValue('--astryx-hit-inset-top')).toBe(
+        '12px',
+      );
+
+      unmount();
+      expect(trigger.style.getPropertyValue('--astryx-hit-inset-top')).toBe(
+        '0px',
+      );
+      expect(trigger.style.getPropertyValue('--astryx-hit-inset-left')).toBe(
+        '0px',
+      );
+    });
   });
 });

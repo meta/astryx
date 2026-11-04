@@ -7,8 +7,8 @@
  * @output `touchHitAreaStyles.layer`: an element's invisible hit layer under a
  *   finger, for the coarse-only 44 px target
  * @position Internal styling utility. A host composes the layer and keeps its
- *   insets live with `useTouchHitArea` (utils/touchHitArea.ts). List rows use
- *   it.
+ *   insets live with `useTouchHitArea` (utils/touchHitArea.ts). List rows and
+ *   InfoTip use it.
  *
  * SYNC: When modified, update utils/hitArea.ts's HIT_INSET_PROPERTIES,
  * utils/touchHitArea.ts and touchHitArea.test.tsx.
