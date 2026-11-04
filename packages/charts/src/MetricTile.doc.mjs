@@ -53,7 +53,7 @@ export const docs = {
         requirement: 'Built in',
         states: ['Delta shown'],
         description:
-          'Sentiment is carried by both color and the direction glyph plus text, never by color alone.',
+          'The direction glyph and its announced text follow the movement direction, not an overridden sentiment: with a sentiment override, only the color says whether the move is good. Never rely on color alone to carry sentiment.',
       },
     ],
     anatomy: [
