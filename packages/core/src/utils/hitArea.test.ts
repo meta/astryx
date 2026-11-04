@@ -188,6 +188,18 @@ describe('watchHitArea', () => {
     };
   }
 
+  /** Give `element` the whole-pixel layout size that jsdom leaves at 0. */
+  function layOut(element: HTMLElement, width: number, height: number): void {
+    Object.defineProperty(element, 'offsetWidth', {
+      configurable: true,
+      value: width,
+    });
+    Object.defineProperty(element, 'offsetHeight', {
+      configurable: true,
+      value: height,
+    });
+  }
+
   function show(...elements: Element[]): void {
     intersection?.(
       elements.map(
@@ -279,6 +291,7 @@ describe('watchHitArea', () => {
       height: '24px',
       boxSizing: 'border-box',
     });
+    layOut(control, 24, 24);
     place(control, half(rect(100, 100, 24, 24)));
     place(byId('link'), half(rect(132, 100, 60, 24)));
     place(byId('other'), half(rect(400, 400, 24, 24)));
@@ -289,6 +302,25 @@ describe('watchHitArea', () => {
     // The same insets as the page at full size gives.
     expect(heard).toEqual([{top: 10, right: 4, bottom: 10, left: 10}]);
     stop();
+  });
+
+  it('reads no computed style for a control at its layout size', () => {
+    const control = byId('switch');
+    const other = byId('other');
+    layOut(control, 24, 24);
+    place(control, rect(100, 100, 24, 24));
+    place(other, rect(400, 400, 24, 24));
+    place(byId('link'), rect(132, 100, 60, 24));
+    const getComputedStyle = vi.spyOn(window, 'getComputedStyle');
+    const stops = [control, other].map(element =>
+      watchHitArea(element, () => {}),
+    );
+    show(control, other);
+    flush();
+    // One control is at its layout size and the other has none, so neither
+    // resolves style in the measuring pass.
+    expect(getComputedStyle).not.toHaveBeenCalled();
+    stops.forEach(stop => stop());
   });
 
   it('measures nothing off screen', () => {
@@ -303,6 +335,9 @@ describe('watchHitArea', () => {
   });
 
   it('batches every pending control into one frame: all reads, then all writes', () => {
+    // The clock holds still, so a slow machine cannot spend the frame budget
+    // and split the batch. The budget has its own case below.
+    vi.spyOn(performance, 'now').mockReturnValue(0);
     const first = byId('switch');
     const second = byId('other');
     place(first, rect(100, 100, 24, 24));
