@@ -6,7 +6,7 @@
 
 Typing changes for Gregorian fields too:
 
-- `onChange` fires while typing only once the date is complete, and once for each date, so partial input such as `12/0` or `12/01/202` no longer reports wrong dates. A two-digit year, such as `12/01/90`, or a date without a year commits on Enter or blur, and is read in the locale's field order. A one-digit year, such as `1/5/2`, is not a date: Enter or blur keeps it and shows it as invalid. Other text that `parseDateInput` reads still commits on Enter or blur, including a day-first date such as `13/5/2026` in `en-US`.
+- `onChange` fires while typing only once the date is complete, and once for each date, so partial input such as `12/0` or `12/01/202` no longer reports wrong dates. A two-digit year, such as `12/01/90`, or a date without a year commits on Enter or blur, and is read in the locale's field order. A one-digit or three-digit year, such as `1/5/2` or `12/01/202`, is not a date: Enter or blur keeps it and shows it as invalid. `parseDateInput` still reads, on Enter or blur, text the field cannot otherwise read and a date the locale's field order does not have, such as `13/5/2026` in `en-US`.
 - A typed date outside `min`, `max`, or `dateConstraints` stays in the field with an error that names the allowed range, or says the date is not available when only a `dateConstraints` rule rejects it, instead of reverting on blur; the error shows even when you set `status`. Unreadable text, a date that does not exist, and an out-of-range date each announce their own message, once.
 
 Fixes #8958.

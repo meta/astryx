@@ -1121,7 +1121,7 @@
   },
   "@astryx.dateInput.invalidDate": {
     "defaultMessage": "Invalid date",
-    "description": "Screen-reader-only live-region alert in DateInput / DateTimeInput when the typed text cannot be read as a date. The field silently reverts on blur, so this is the only rejection feedback a screen-reader user gets."
+    "description": "Screen-reader-only live-region alert in DateInput / DateTimeInput when the typed text cannot be read as a date. Text the field cannot finish, such as a one-digit year, stays on Enter or blur and shows this message as the field status."
   },
   "@astryx.dateInput.nonexistentDate": {
     "defaultMessage": "This date does not exist in the {calendar}",
@@ -1133,7 +1133,7 @@
   },
   "@astryx.dateInput.formatHint": {
     "defaultMessage": "e.g., {example}",
-    "description": "Placeholder hint in a DateInput / DateTimeInput date field that uses a calendar other than the Gregorian calendar, shown when the field is focused and empty. {example} is today's date written in that calendar's numeric pattern, such as ۱۴۰۵/۸/۱۱."
+    "description": "Placeholder hint in a DateInput / DateTimeInput date field that uses a calendar other than the Gregorian calendar, shown when the field is focused and empty. {example} is today's date, or the nearest date the field accepts, written in that calendar's numeric pattern, such as ۱۴۰۵/۸/۱۱."
   },
   "@astryx.dateInput.calendarDescription": {
     "defaultMessage": "Dates use the {calendar}",
