@@ -22,7 +22,7 @@
  *   SideNav.spec.md and the FR17 Verification row in AppShell.spec.md.
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

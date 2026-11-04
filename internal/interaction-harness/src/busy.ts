@@ -11,6 +11,8 @@
  *   read from its frames, `pooledBusyProof`, which judges several short
  *   blocks as one, and `BusyWindowTooLateError`, for a block that began
  *   after the motion it was meant to catch had ended.
+ *   `trackControl` and `controlClock` read the control's box and its own
+ *   clock from the screencast.
  * @position The busy-main-thread proof: an animation that runs on the
  *   compositor keeps advancing at display rate while JavaScript holds the main
  *   thread; one driven from the main thread (rAF, style writes, layout
@@ -22,14 +24,45 @@
 
 import type {Locator, Page} from '@playwright/test';
 import {defineCurveEnd} from './curve-end';
-import {frameStats, type FrameStats, type TrackedFrame} from './frames';
+import {
+  frameStats,
+  trackMarker,
+  type CastFrame,
+  type FrameStats,
+  type TrackedFrame,
+} from './frames';
 
 /** The control's colour, apart from the component's marker (`MARKER_RGB`). */
 export const CONTROL_RGB: readonly [number, number, number] = [0, 255, 255];
 
-/** The control box's side, and how far it travels along the top edge, CSS px. */
-const CONTROL_SIDE = 12;
+/**
+ * The control box's side, CSS px: it crosses the page's top `CONTROL_SIDE` px,
+ * where a proof reads nothing of the component.
+ */
+export const CONTROL_SIDE = 12;
+/** How far the control travels along the top edge, CSS px. */
 const CONTROL_TRAVEL = 240;
+/** How long the control takes to travel `CONTROL_TRAVEL` one way, ms. */
+const CONTROL_LEG_MS = 400;
+
+/**
+ * The control in each frame (`startBusyControl`'s box): `trackMarker` with
+ * `CONTROL_RGB`, searching only the strip the box crosses.
+ */
+export async function trackControl(
+  page: Page,
+  frames: readonly CastFrame[],
+): Promise<TrackedFrame[]> {
+  return trackMarker(page, frames, {
+    rgb: CONTROL_RGB,
+    region: {
+      x: 0,
+      y: 0,
+      width: CONTROL_SIDE + CONTROL_TRAVEL + 4,
+      height: CONTROL_SIDE + 4,
+    },
+  });
+}
 
 /**
  * Starts a plain compositor-only control animation: a `CONTROL_RGB` box in the
@@ -70,7 +103,7 @@ export async function startBusyControl(
     );
   }
   await page.evaluate(
-    ({color, side, travel}) =>
+    ({color, side, travel, legMs}) =>
       new Promise<void>((resolve, reject) => {
         const host = document.querySelector('[data-harness-control-host]');
         host?.removeAttribute('data-harness-control-host');
@@ -90,7 +123,7 @@ export async function startBusyControl(
             {transform: `translateX(${travel}px)`},
           ],
           {
-            duration: 400,
+            duration: legMs,
             iterations: Infinity,
             direction: 'alternate',
             easing: 'linear',
@@ -131,7 +164,12 @@ export async function startBusyControl(
         };
         frame(tick);
       }),
-    {color: [...rgb], side: CONTROL_SIDE, travel: CONTROL_TRAVEL},
+    {
+      color: [...rgb],
+      side: CONTROL_SIDE,
+      travel: CONTROL_TRAVEL,
+      legMs: CONTROL_LEG_MS,
+    },
   );
   return {
     raise: () =>
@@ -150,6 +188,94 @@ export async function startBusyControl(
         }
       }),
   };
+}
+
+/** How far a frame's stamp may run late and still agree with the others, ms. */
+const CONTROL_AGREE_MS = 20;
+/**
+ * Frames this near a turn get no reading. There the two times that a position
+ * gives are under 120 ms apart, and a stamp 60 ms late could pick either.
+ */
+const CONTROL_EDGE = 36;
+
+/**
+ * The compositor's clock in each frame of `control` (`startBusyControl`'s box,
+ * tracked with `trackControl`), ms. The compositor samples every animation at
+ * one time in a frame. So a component can be judged against this clock, not
+ * the screencast's stamps. A loaded machine can stamp a frame late, and
+ * `inPresentationOrder` then puts it after frames that it came before.
+ *
+ * The box's position gives two times a cycle, on the way out and on the way
+ * back. The cycle's origin is the one that the most frames agree with, each
+ * within `CONTROL_AGREE_MS` of one of its two times. So no single frame sets
+ * it. Each frame's stamp, measured from that origin, then picks its own time.
+ * A late or reordered frame moves only its own reading, and a gap moves none.
+ *
+ * A frame without the box gets no reading, and so does a frame within
+ * `CONTROL_EDGE` px of a turn. A frame that repeats the position before it
+ * shows no new time, so it gets none either. Readings count up from the
+ * origin a whole cycle or less before the first reading.
+ */
+export function controlClock(
+  control: readonly TrackedFrame[],
+): Map<number, number> {
+  const cycle = 2 * CONTROL_LEG_MS;
+  const usable = control.flatMap((frame, i) => {
+    const x = frame.box?.x;
+    const before = i > 0 ? control[i - 1].box?.x : undefined;
+    if (
+      x == null ||
+      x < CONTROL_EDGE ||
+      x > CONTROL_TRAVEL - CONTROL_EDGE ||
+      (before != null && Math.abs(x - before) <= 0.25)
+    ) {
+      return [];
+    }
+    const out = (x / CONTROL_TRAVEL) * CONTROL_LEG_MS;
+    return [{t: frame.t, out, back: cycle - out}];
+  });
+  const clock = new Map<number, number>();
+  if (usable.length === 0) {
+    return clock;
+  }
+  const onCycle = (a: number, b: number) => {
+    const d = Math.abs(a - b) % cycle;
+    return Math.min(d, cycle - d);
+  };
+  let origin = 0;
+  let agreeing = -1;
+  let spread = Number.POSITIVE_INFINITY;
+  for (let candidate = 0; candidate < cycle; candidate += 1) {
+    let count = 0;
+    let sum = 0;
+    for (const frame of usable) {
+      const phase = frame.t - candidate;
+      const d = Math.min(onCycle(phase, frame.out), onCycle(phase, frame.back));
+      if (d <= CONTROL_AGREE_MS) {
+        count += 1;
+        sum += d;
+      }
+    }
+    if (count > agreeing || (count === agreeing && sum < spread)) {
+      origin = candidate;
+      agreeing = count;
+      spread = sum;
+    }
+  }
+  const first = Math.min(...usable.map(frame => frame.t));
+  const anchored = origin + Math.floor((first - origin) / cycle) * cycle;
+  for (const frame of usable) {
+    const expected = frame.t - anchored;
+    const nearest = (ms: number) =>
+      ms + Math.round((expected - ms) / cycle) * cycle;
+    const out = nearest(frame.out);
+    const back = nearest(frame.back);
+    clock.set(
+      frame.t,
+      Math.abs(out - expected) <= Math.abs(back - expected) ? out : back,
+    );
+  }
+  return clock;
 }
 
 /** What the control presented in the judged part (see `busyWindowProof`). */

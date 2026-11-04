@@ -27,6 +27,7 @@ import {
   type BlockedWindow,
   busyWindowProof,
   CONTROL_RGB,
+  controlClock,
   countBetween,
   markElement,
   startBusyControl,
@@ -34,11 +35,10 @@ import {
   traceRendering,
   trackMarker,
 } from '@astryxdesign/interaction-harness';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {build} from 'esbuild';
 import type {Animator, MotionHandle} from '../animator';
 import type * as MotionBundle from './motionBundle';
-import {controlClock} from './controlClock';
 
 let script = '';
 
@@ -221,18 +221,17 @@ test('a spring keeps advancing every frame through a 1 s main-thread block, on i
     },
   );
   const [curve, faster] = curveMs;
-  const controlAt = new Map(
-    control.flatMap(f => (f.box == null ? [] : [[f.t, f.box.x] as const])),
-  );
   // The control's own time at each frame (controlClock): 240 px out in
   // 400 ms, back in 400 ms, read from its position on the origin most frames
   // agree with, so no one frame's stamp or direction sets it.
-  const clock = controlClock(
-    inside.map(f => ({t: f.t, x: controlAt.get(f.t) ?? null})),
-  );
+  const clock = controlClock(control);
+  const timed = inside.flatMap((f, i) => {
+    const ms = clock.get(f.t);
+    return ms == null ? [] : [{i, ms}];
+  });
   /** How far the box's curve time drifts from the control's, ms. */
   const drift = (times: number[]) => {
-    const gaps = clock.map(({i, ms}) => times[i] - ms).sort((x, y) => x - y);
+    const gaps = timed.map(({i, ms}) => times[i] - ms).sort((x, y) => x - y);
     return (
       gaps[Math.floor(gaps.length * 0.9)] - gaps[Math.floor(gaps.length * 0.1)]
     );
@@ -246,7 +245,7 @@ test('a spring keeps advancing every frame through a 1 s main-thread block, on i
     sorted[Math.floor(sorted.length * 0.9)] -
     sorted[Math.floor(sorted.length * 0.1)];
   const read = {
-    frames: clock.length,
+    frames: timed.length,
     drift: drift(curve),
     faster: drift(faster),
     median,
@@ -258,7 +257,7 @@ test('a spring keeps advancing every frame through a 1 s main-thread block, on i
   });
   // Placed on its curve and on the control's, every frame is the same time
   // apart, to within the 1 px steps of both; a spring 10% off drifts.
-  expect(clock.length, JSON.stringify(read)).toBeGreaterThan(20);
+  expect(timed.length, JSON.stringify(read)).toBeGreaterThan(20);
   expect(read.drift, JSON.stringify(read)).toBeLessThan(12);
   expect(read.faster, JSON.stringify(read)).toBeGreaterThan(24);
   if (browserName === 'chromium') {
