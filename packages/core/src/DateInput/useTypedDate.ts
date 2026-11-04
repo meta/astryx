@@ -274,7 +274,7 @@ export interface TypedDateField {
   isInvalid: boolean;
   /** The status the field shows. */
   fieldStatus: InputStatus | undefined;
-  /** A rejection that no shown status carries, for the field's alert. */
+  /** A typed rejection that the field status does not announce. */
   alertMessage: string;
   handleChange: (text: string) => void;
   /** Commits typed text, on Enter or blur. */
@@ -383,7 +383,6 @@ export function useTypedDateField({
     if (pendingInput === null) {
       return;
     }
-    // A disabled or busy field keeps its value and drops the draft.
     if (isDisabled && dropsDraftWhenDisabled) {
       reset();
       return;

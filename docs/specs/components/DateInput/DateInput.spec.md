@@ -51,6 +51,8 @@ system_specs:
     spec:AST-020/FR15,
     spec:AST-043,
     spec:AST-085,
+    spec:AST-085/FR1,
+    spec:AST-085/FR2,
     spec:AST-086,
     spec:AST-094/FR5,
     spec:AST-094/FR10,

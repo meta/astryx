@@ -1804,9 +1804,8 @@ function PointerDateTimeField({
                 )}
               />
               {/*
-            Announces a typed date rejection that no shown status carries,
-            with one message for each kind of rejection (WCAG 3.3.1). The
-            field status announces the rest itself.
+            Announces a typed date rejection that the field status does not
+            announce. The field status announces the rest.
           */}
               <VisuallyHidden as="div" role="alert" aria-live="assertive">
                 {dateAlertMessage}
