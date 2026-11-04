@@ -20,7 +20,7 @@ import {useState, useCallback, useRef} from 'react';
 import {flushSync} from 'react-dom';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {observeResize} from '../utils/sharedResizeObserver';
-import {computeOverflow} from './computeOverflow';
+import {computeOverflow, countRows} from './computeOverflow';
 import {useDevWarning} from './useDevWarning';
 
 export interface UseOverflowOptions {
@@ -288,15 +288,29 @@ export function useOverflow(
       });
 
       // A multi-row list changes its own height when the new set fills a
-      // different number of rows. Rendering that before paint makes the browser
-      // report a ResizeObserver loop error, so that update renders after paint.
-      if (
-        timing === 'beforePaint' &&
-        maxRows != null &&
-        maxRows > 1 &&
-        countLaidOutRows(container, maxRows) !== nextRows
-      ) {
-        return () => apply(nextVisible, nextRows, measuredRowHeight);
+      // different number of rows than the list fills now. Rendering that
+      // before paint makes the browser report a ResizeObserver loop error, so
+      // that update renders after paint.
+      if (timing === 'beforePaint' && maxRows != null && maxRows > 1) {
+        // The new set as the list renders it: its items, plus the indicator
+        // on the collapsing side.
+        const shown =
+          collapseFrom === 'end'
+            ? widths.slice(0, nextVisible)
+            : widths.slice(widths.length - nextVisible);
+        const rendered =
+          hasIndicator && nextVisible < itemCount
+            ? collapseFrom === 'end'
+              ? [...shown, indicatorWidth]
+              : [indicatorWidth, ...shown]
+            : shown;
+        const nextFilledRows = Math.min(
+          countRows(rendered, gap, availableWidth),
+          maxRows,
+        );
+        if (countLaidOutRows(container, maxRows) !== nextFilledRows) {
+          return () => apply(nextVisible, nextRows, measuredRowHeight);
+        }
       }
       apply(nextVisible, nextRows, measuredRowHeight);
       return undefined;

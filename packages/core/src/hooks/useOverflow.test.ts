@@ -557,6 +557,18 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
     },
   );
 
+  // A visible container whose children sit in rows of 20px items with a
+  // 10px gap: `rowOf[i]` is the row (0-based) child i is laid out in.
+  function laidOutRows(
+    width: number,
+    rowOf: number[],
+  ): {offsetWidth: number; children: unknown[]} & Element {
+    return {
+      offsetWidth: width,
+      children: rowOf.map(row => ({offsetTop: row * 30, offsetHeight: 20})),
+    } as unknown as {offsetWidth: number; children: unknown[]} & Element;
+  }
+
   it.each([0, 20])(
     'renders nothing for a resize that changes no measured value (items %ipx tall)',
     async itemHeight => {
@@ -565,7 +577,7 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
         renders++;
         return useOverflow(3, {gap: 10, maxRows: 2});
       });
-      const box = resizableBox(200);
+      const box = laidOutRows(200, [0, 0, 0]);
 
       act(() => {
         result.current.measureRef(mockMeasure([50, 50, 50], 30, itemHeight));
@@ -579,18 +591,6 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
       expect(renders).toBe(settled);
     },
   );
-
-  // A visible container whose children sit in rows of 20px items with a
-  // 10px gap: `rowOf[i]` is the row (0-based) child i is laid out in.
-  function laidOutRows(
-    width: number,
-    rowOf: number[],
-  ): {offsetWidth: number; children: unknown[]} & Element {
-    return {
-      offsetWidth: width,
-      children: rowOf.map(row => ({offsetTop: row * 30, offsetHeight: 20})),
-    } as unknown as {offsetWidth: number; children: unknown[]} & Element;
-  }
 
   it('renders after paint when a multi-row fold changes the rows the list fills', async () => {
     const {result} = renderHook(() => useOverflow(6, {gap: 10, maxRows: 2}));
@@ -613,6 +613,28 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
     });
     expect(result.current.visibleCount).toBe(6);
     expect(result.current.rows).toBe(2);
+  });
+
+  it('renders after paint when the new set fits one row but its indicator wraps', async () => {
+    const {result} = renderHook(() => useOverflow(5, {gap: 0, maxRows: 2}));
+    // At 100px one item shows, and the indicator wraps onto the second row.
+    const box = laidOutRows(100, [0, 1]);
+    act(() => {
+      result.current.measureRef(mockMeasure([60, 60, 60, 150, 60], 60, 20));
+      result.current.containerRef(box as unknown as HTMLElement);
+    });
+    expect(result.current.visibleCount).toBe(1);
+
+    // At 200px the shown item and the indicator fit on one row. The new set,
+    // three items, fills one row, and its indicator wraps onto a second.
+    Object.assign(box, laidOutRows(200, [0, 0]));
+    await deliverBeforePaint(box);
+    expect(result.current.visibleCount).toBe(1);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(result.current.visibleCount).toBe(3);
   });
 
   it('renders before paint when a multi-row fold keeps the rows the list fills', async () => {
