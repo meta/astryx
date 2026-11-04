@@ -725,7 +725,6 @@ describe('usePowerSearchSource', () => {
     it('leaves field-prefixed queries to the exact value path', () => {
       const source = createSource(allStringsConfig);
       const results = syncSearch(source, 'title nest');
-
       // The prefix path owns this query: no field item may reuse the whole
       // query ('title nest') as the value. (The content-search item quotes
       // the raw query by design, so it is excluded here.)
@@ -737,6 +736,17 @@ describe('usePowerSearchSource', () => {
       );
       expect(valueItems.map(r => r.label)).toContain('Title contains "nest"');
     });
+
+    it.each(['title', 'title '])(
+      'gives no free-text rows for a bare field label (%p)',
+      query => {
+        const source = createSource(allStringsConfig);
+        const valueItems = syncSearch(source, query).filter(r =>
+          String(r.id).includes(':value:'),
+        );
+        expect(valueItems).toEqual([]);
+      },
+    );
   });
 });
 

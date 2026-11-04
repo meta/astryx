@@ -181,9 +181,10 @@ export function usePowerSearchSource(
         // A query that starts with a field label belongs to the prefix path
         // above. Its value is the text after the label, not the whole query.
         if (config.config.valueSuggestionBehavior === 'all-string-fields') {
-          const startsWithFieldLabel = config
-            .getVisibleFields()
-            .some(f => lower.startsWith(`${f.label.toLowerCase()} `));
+          const startsWithFieldLabel = config.getVisibleFields().some(f => {
+            const label = f.label.toLowerCase();
+            return lower === label || lower.startsWith(`${label} `);
+          });
           if (!startsWithFieldLabel) {
             for (const field of config.getVisibleFields()) {
               if (field.isValueMatchAllowed === false) {
