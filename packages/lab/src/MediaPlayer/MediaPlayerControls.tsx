@@ -4,56 +4,53 @@
 
 /**
  * @file MediaPlayerControls.tsx
- * @input The nearest MediaPlayer's state and actions, plus per-part size and
- *   style props
+ * @input The nearest MediaPlayer's state and actions, plus per-part size,
+ *   style, and DOM props
  * @output Exports the control parts: play, seek, mute, volume, timeline, time,
- *   captions, fullscreen, and playback rate
+ *   captions, fullscreen, and the playback speed menu
  * @position Lab media parts; VideoPlayer and AudioPlayer arrange them, and
  *   custom layouts can arrange them inside any MediaPlayer
  */
 
-import {useMemo, useRef, type CSSProperties, type KeyboardEvent} from 'react';
+import {useMemo, useRef, type KeyboardEvent, type Ref} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import type {StyleXStyles} from '@stylexjs/stylex';
-import {Button} from '@astryxdesign/core/Button';
-import {Icon} from '@astryxdesign/core/Icon';
-import {IconButton} from '@astryxdesign/core/IconButton';
+import type {BaseProps} from '@astryxdesign/core';
+import {
+  DropdownMenu,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+} from '@astryxdesign/core/DropdownMenu';
+import {IconButton, type IconButtonProps} from '@astryxdesign/core/IconButton';
 import {useLocale, useTranslator} from '@astryxdesign/core/i18n';
 import {Slider} from '@astryxdesign/core/Slider';
 import {colorVars, typeScaleVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {ToggleButton} from '@astryxdesign/core/ToggleButton';
-import {mergeProps, themeProps} from '@astryxdesign/core/utils';
 import {
+  composeEventHandlers,
+  mergeProps,
+  themeProps,
+} from '@astryxdesign/core/utils';
+import {
+  DEFAULT_PLAYBACK_RATES,
   formatClock,
   formatSpokenTime,
   useMediaPlayerContext,
   useMediaSelector,
 } from './MediaPlayerContext';
-import {
-  CaptionsGlyph,
-  FullscreenEnterGlyph,
-  FullscreenExitGlyph,
-  PauseGlyph,
-  PlayGlyph,
-  ReplayGlyph,
-  VolumeHighGlyph,
-  VolumeLowGlyph,
-  VolumeOffGlyph,
-  createSkipGlyph,
-} from './mediaGlyphs';
+import {SkipIcon, useMediaIcon} from './mediaIcons';
 
 /** Control height on the shared element-size scale: 28, 32, or 36px. */
 export type MediaControlSize = 'sm' | 'md' | 'lg';
 
-interface MediaPartStyleProps {
-  xstyle?: StyleXStyles;
-  className?: string;
-  style?: CSSProperties;
-}
-
-interface MediaButtonPartProps extends MediaPartStyleProps {
-  /** Control height. Defaults to `'md'`. */
+/** Props every button part takes. */
+export interface MediaButtonPartProps extends Omit<
+  BaseProps<HTMLButtonElement>,
+  'children'
+> {
+  /** Control height. Follows the surrounding size, else `'md'`. */
   size?: MediaControlSize;
+  /** Ref to the button element. */
+  ref?: Ref<HTMLButtonElement>;
 }
 
 const styles = stylex.create({
@@ -72,20 +69,30 @@ const styles = stylex.create({
   },
 });
 
-const DEFAULT_RATES: readonly number[] = [1, 1.25, 1.5, 2, 0.75];
-
 export interface MediaPlayButtonProps extends MediaButtonPartProps {
   /** Button emphasis. Defaults to `'ghost'`. */
-  variant?: 'primary' | 'secondary' | 'ghost';
+  variant?: IconButtonProps['variant'];
 }
 
-/** Plays and pauses the media. After the end it replays from the start. */
+/**
+ * Plays and pauses the media. After the end it replays from the start.
+ *
+ * @example
+ * ```
+ * <MediaPlayer label="Episode 12">
+ *   <MediaPlayerAudio src="/media/episode-12.mp3" />
+ *   <MediaPlayButton variant="primary" />
+ * </MediaPlayer>
+ * ```
+ */
 export function MediaPlayButton({
-  size = 'md',
+  size,
   variant = 'ghost',
+  onClick,
   xstyle,
   className,
   style,
+  ...rest
 }: MediaPlayButtonProps) {
   const {store} = useMediaPlayerContext('MediaPlayButton');
   const isPaused = useMediaSelector('MediaPlayButton', state => state.isPaused);
@@ -96,15 +103,18 @@ export function MediaPlayButton({
     : isPaused
       ? t('@astryx.mediaPlayer.play')
       : t('@astryx.mediaPlayer.pause');
-  const glyph = isEnded ? ReplayGlyph : isPaused ? PlayGlyph : PauseGlyph;
+  const icon = useMediaIcon(isEnded ? 'replay' : isPaused ? 'play' : 'pause');
   return (
     <IconButton
+      {...rest}
       label={label}
       tooltip={label}
-      icon={<Icon icon={glyph} />}
+      icon={icon}
       variant={variant}
       size={size}
-      onClick={() => store.actions.togglePaused()}
+      onClick={composeEventHandlers(onClick, () =>
+        store.actions.togglePaused(),
+      )}
       {...mergeProps(themeProps('media-play-button'), {className, style})}
       xstyle={xstyle}
     />
@@ -118,13 +128,24 @@ export interface MediaSeekButtonProps extends MediaButtonPartProps {
   offset: number;
 }
 
-/** Skips back or forward by a fixed number of seconds. */
+/**
+ * Skips back or forward by a fixed number of seconds. It is disabled until
+ * the media reports its duration.
+ *
+ * @example
+ * ```
+ * <MediaSeekButton offset={-15} />
+ * <MediaSeekButton offset={30} />
+ * ```
+ */
 export function MediaSeekButton({
   offset,
-  size = 'md',
+  size,
+  onClick,
   xstyle,
   className,
   style,
+  ...rest
 }: MediaSeekButtonProps) {
   const {store} = useMediaPlayerContext('MediaSeekButton');
   const duration = useMediaSelector('MediaSeekButton', state => state.duration);
@@ -134,16 +155,19 @@ export function MediaSeekButton({
     offset < 0
       ? t('@astryx.mediaPlayer.skipBack', {seconds})
       : t('@astryx.mediaPlayer.skipForward', {seconds});
-  const glyph = useMemo(() => createSkipGlyph(offset), [offset]);
+  const arrow = useMediaIcon(offset < 0 ? 'skipBack' : 'skipForward');
   return (
     <IconButton
+      {...rest}
       label={label}
       tooltip={label}
-      icon={<Icon icon={glyph} />}
+      icon={<SkipIcon arrow={arrow} seconds={seconds} />}
       variant="ghost"
       size={size}
       isDisabled={!(Number.isFinite(duration) && duration > 0)}
-      onClick={() => store.actions.seekBy(offset)}
+      onClick={composeEventHandlers(onClick, () =>
+        store.actions.seekBy(offset),
+      )}
       {...mergeProps(themeProps('media-seek-button'), {className, style})}
       xstyle={xstyle}
     />
@@ -152,12 +176,21 @@ export function MediaSeekButton({
 
 MediaSeekButton.displayName = 'MediaSeekButton';
 
-/** Mutes and unmutes the media. Its icon follows the volume. */
+/**
+ * Mutes and unmutes the media. Its icon follows the volume.
+ *
+ * @example
+ * ```
+ * <MediaMuteButton />
+ * ```
+ */
 export function MediaMuteButton({
-  size = 'md',
+  size,
+  onClick,
   xstyle,
   className,
   style,
+  ...rest
 }: MediaButtonPartProps) {
   const {store} = useMediaPlayerContext('MediaMuteButton');
   const isMuted = useMediaSelector('MediaMuteButton', state => state.isMuted);
@@ -167,19 +200,18 @@ export function MediaMuteButton({
   const label = isSilent
     ? t('@astryx.mediaPlayer.unmute')
     : t('@astryx.mediaPlayer.mute');
-  const glyph = isSilent
-    ? VolumeOffGlyph
-    : volume < 0.5
-      ? VolumeLowGlyph
-      : VolumeHighGlyph;
+  const icon = useMediaIcon(
+    isSilent ? 'volumeOff' : volume < 0.5 ? 'volumeLow' : 'volumeHigh',
+  );
   return (
     <IconButton
+      {...rest}
       label={label}
       tooltip={label}
-      icon={<Icon icon={glyph} />}
+      icon={icon}
       variant="ghost"
       size={size}
-      onClick={() => store.actions.toggleMuted()}
+      onClick={composeEventHandlers(onClick, () => store.actions.toggleMuted())}
       {...mergeProps(themeProps('media-mute-button'), {className, style})}
       xstyle={xstyle}
     />
@@ -188,20 +220,32 @@ export function MediaMuteButton({
 
 MediaMuteButton.displayName = 'MediaMuteButton';
 
-export interface MediaVolumeSliderProps extends MediaPartStyleProps {
+export interface MediaVolumeSliderProps extends Omit<
+  BaseProps<HTMLDivElement>,
+  'onChange' | 'children'
+> {
   /** Slider width. Defaults to 88px. */
   width?: number | string;
+  /** Ref to the slider thumb. */
+  ref?: Ref<HTMLDivElement>;
 }
 
 /**
  * Sets the volume. It renders nothing where script cannot set the volume,
  * such as iOS Safari; MediaMuteButton still works there.
+ *
+ * @example
+ * ```
+ * <MediaMuteButton />
+ * <MediaVolumeSlider width={72} />
+ * ```
  */
 export function MediaVolumeSlider({
   width = 88,
   xstyle,
   className,
   style,
+  ...rest
 }: MediaVolumeSliderProps) {
   const {store} = useMediaPlayerContext('MediaVolumeSlider');
   const canSetVolume = useMediaSelector(
@@ -222,6 +266,7 @@ export function MediaVolumeSlider({
   }
   return (
     <Slider
+      {...rest}
       label={t('@astryx.mediaPlayer.volume')}
       isLabelHidden
       min={0}
@@ -240,17 +285,44 @@ export function MediaVolumeSlider({
 
 MediaVolumeSlider.displayName = 'MediaVolumeSlider';
 
+export interface MediaTimeSliderProps extends Omit<
+  BaseProps<HTMLDivElement>,
+  'onChange' | 'children'
+> {
+  /** Ref to the slider thumb. */
+  ref?: Ref<HTMLDivElement>;
+}
+
+const TIMELINE_KEY_OFFSETS: Readonly<Record<string, number>> = {
+  ArrowLeft: -5,
+  ArrowDown: -5,
+  ArrowRight: 5,
+  ArrowUp: 5,
+  PageDown: -10,
+  PageUp: 10,
+};
+
 /**
  * The timeline. Dragging previews the time and seeks on release; arrow keys
  * skip 5 seconds and Page Up and Page Down skip 10. The timeline runs left
  * to right in every direction, because it shows the direction of the media,
  * not reading order.
+ *
+ * @example
+ * ```
+ * <HStack gap={2} vAlign="center">
+ *   <MediaPlayButton />
+ *   <MediaTimeSlider />
+ *   <MediaTime display="remaining" />
+ * </HStack>
+ * ```
  */
 export function MediaTimeSlider({
   xstyle,
   className,
   style,
-}: MediaPartStyleProps) {
+  ...rest
+}: MediaTimeSliderProps) {
   const {store, scrubTime, setScrubTime, holdControls, wakeControls} =
     useMediaPlayerContext('MediaTimeSlider');
   const currentTime = useMediaSelector(
@@ -277,15 +349,7 @@ export function MediaTimeSlider({
   };
 
   const handleKeyDownCapture = (event: KeyboardEvent<HTMLDivElement>) => {
-    const offsets: Record<string, number> = {
-      ArrowLeft: -5,
-      ArrowDown: -5,
-      ArrowRight: 5,
-      ArrowUp: 5,
-      PageDown: -10,
-      PageUp: 10,
-    };
-    const offset = offsets[event.key];
+    const offset = TIMELINE_KEY_OFFSETS[event.key];
     if (
       offset == null ||
       !isSeekable ||
@@ -301,6 +365,8 @@ export function MediaTimeSlider({
     wakeControls();
   };
 
+  // The wrapper keeps the timeline left to right and owns the drag and key
+  // capture; the slider inside it carries the theme target.
   return (
     <div
       dir="ltr"
@@ -321,13 +387,9 @@ export function MediaTimeSlider({
           commit();
         }
       }}
-      {...mergeProps(
-        themeProps('media-time-slider'),
-        stylex.props(styles.timeline, xstyle),
-        className,
-        style,
-      )}>
+      {...stylex.props(styles.timeline)}>
       <Slider
+        {...rest}
         label={t('@astryx.mediaPlayer.seek')}
         isLabelHidden
         min={0}
@@ -351,6 +413,8 @@ export function MediaTimeSlider({
           }
         }}
         width="100%"
+        {...mergeProps(themeProps('media-time-slider'), {className, style})}
+        containerXstyle={xstyle}
       />
     </div>
   );
@@ -358,23 +422,34 @@ export function MediaTimeSlider({
 
 MediaTimeSlider.displayName = 'MediaTimeSlider';
 
-export interface MediaTimeProps extends MediaPartStyleProps {
+export interface MediaTimeProps extends Omit<
+  BaseProps<HTMLSpanElement>,
+  'children'
+> {
   /**
    * What to show: the current time, the duration, the time left, or the
    * current time and the duration. Defaults to `'current-duration'`.
    */
   display?: 'current' | 'duration' | 'remaining' | 'current-duration';
+  /** Ref to the text element. */
+  ref?: Ref<HTMLSpanElement>;
 }
 
 /**
  * Shows playback time. A live stream shows "Live" instead. The text reads left
  * to right in every direction.
+ *
+ * @example
+ * ```
+ * <MediaTime display="current-duration" />
+ * ```
  */
 export function MediaTime({
   display = 'current-duration',
   xstyle,
   className,
   style,
+  ...rest
 }: MediaTimeProps) {
   const {scrubTime} = useMediaPlayerContext('MediaTime');
   const currentTime = useMediaSelector('MediaTime', state => state.currentTime);
@@ -397,6 +472,7 @@ export function MediaTime({
   // Times read left to right in every direction, like the timeline.
   return (
     <span
+      {...rest}
       dir="ltr"
       {...mergeProps(
         themeProps('media-time', {display}),
@@ -414,12 +490,18 @@ MediaTime.displayName = 'MediaTime';
 /**
  * Turns captions on and off. It renders nothing when the media has no
  * caption or subtitle track.
+ *
+ * @example
+ * ```
+ * <MediaCaptionsButton />
+ * ```
  */
 export function MediaCaptionsButton({
-  size = 'md',
+  size,
   xstyle,
   className,
   style,
+  ...rest
 }: MediaButtonPartProps) {
   const {store} = useMediaPlayerContext('MediaCaptionsButton');
   const hasTracks = useMediaSelector(
@@ -431,15 +513,17 @@ export function MediaCaptionsButton({
     state => state.activeTextTrackId != null,
   );
   const t = useTranslator();
+  const icon = useMediaIcon('captions');
   if (!hasTracks) {
     return null;
   }
   const label = t('@astryx.mediaPlayer.captions');
   return (
     <ToggleButton
+      {...rest}
       label={label}
       tooltip={label}
-      icon={<Icon icon={CaptionsGlyph} />}
+      icon={icon}
       isIconOnly
       isPressed={isOn}
       size={size}
@@ -456,12 +540,19 @@ MediaCaptionsButton.displayName = 'MediaCaptionsButton';
  * Enters and exits fullscreen. The player's own element goes fullscreen, so
  * the controls come along. iPhone shows the system player instead. It
  * renders nothing where fullscreen is not available.
+ *
+ * @example
+ * ```
+ * <MediaFullscreenButton />
+ * ```
  */
 export function MediaFullscreenButton({
-  size = 'md',
+  size,
+  onClick,
   xstyle,
   className,
   style,
+  ...rest
 }: MediaButtonPartProps) {
   const {store} = useMediaPlayerContext('MediaFullscreenButton');
   const canFullscreen = useMediaSelector(
@@ -473,6 +564,9 @@ export function MediaFullscreenButton({
     state => state.isFullscreen,
   );
   const t = useTranslator();
+  const icon = useMediaIcon(
+    isFullscreen ? 'fullscreenExit' : 'fullscreenEnter',
+  );
   if (!canFullscreen) {
     return null;
   }
@@ -481,16 +575,15 @@ export function MediaFullscreenButton({
     : t('@astryx.mediaPlayer.enterFullscreen');
   return (
     <IconButton
+      {...rest}
       label={label}
       tooltip={label}
-      icon={
-        <Icon
-          icon={isFullscreen ? FullscreenExitGlyph : FullscreenEnterGlyph}
-        />
-      }
+      icon={icon}
       variant="ghost"
       size={size}
-      onClick={() => store.actions.toggleFullscreen()}
+      onClick={composeEventHandlers(onClick, () =>
+        store.actions.toggleFullscreen(),
+      )}
       {...mergeProps(themeProps('media-fullscreen-button'), {className, style})}
       xstyle={xstyle}
     />
@@ -499,48 +592,79 @@ export function MediaFullscreenButton({
 
 MediaFullscreenButton.displayName = 'MediaFullscreenButton';
 
-export interface MediaPlaybackRateButtonProps extends MediaButtonPartProps {
-  /** Rates a press cycles through, in order. Defaults to 1, 1.25, 1.5, 2, 0.75. */
+export interface MediaPlaybackRateMenuProps extends Omit<
+  MediaButtonPartProps,
+  'onClick' | 'ref'
+> {
+  /**
+   * Speeds the menu offers, in order. Defaults to 0.5, 0.75, 1, 1.25, 1.5,
+   * 1.75, and 2, the same speeds the `<` and `>` shortcuts step through.
+   */
   rates?: readonly number[];
 }
 
-/** Shows the playback rate and moves to the next rate on each press. */
-export function MediaPlaybackRateButton({
-  rates = DEFAULT_RATES,
-  size = 'md',
+/**
+ * Shows the playback speed and opens a menu of speeds, with the current one
+ * checked. The menu keeps the controls visible while it is open.
+ *
+ * @example
+ * ```
+ * <MediaPlaybackRateMenu rates={[0.75, 1, 1.25, 1.5, 2]} />
+ * ```
+ */
+export function MediaPlaybackRateMenu({
+  rates = DEFAULT_PLAYBACK_RATES,
+  size,
   xstyle,
   className,
   style,
-}: MediaPlaybackRateButtonProps) {
-  const {store} = useMediaPlayerContext('MediaPlaybackRateButton');
+  ...rest
+}: MediaPlaybackRateMenuProps) {
+  const {store, holdControls} = useMediaPlayerContext('MediaPlaybackRateMenu');
   const rate = useMediaSelector(
-    'MediaPlaybackRateButton',
+    'MediaPlaybackRateMenu',
     state => state.playbackRate,
   );
   const t = useTranslator();
   const locale = useLocale();
-  const formatted = new Intl.NumberFormat(locale, {
-    maximumFractionDigits: 2,
-  }).format(rate);
-  const handleClick = () => {
-    const index = rates.indexOf(rate);
-    const next = rates[(index + 1) % rates.length] ?? 1;
-    store.actions.setPlaybackRate(next);
-  };
+  const numberFormat = useMemo(
+    () => new Intl.NumberFormat(locale, {maximumFractionDigits: 2}),
+    [locale],
+  );
+  const formatRate = (value: number) =>
+    t('@astryx.mediaPlayer.playbackRate', {rate: numberFormat.format(value)});
   return (
-    <Button
-      label={t('@astryx.mediaPlayer.playbackRate', {rate: formatted})}
-      tooltip={t('@astryx.mediaPlayer.playbackSpeed')}
-      variant="ghost"
-      size={size}
-      onClick={handleClick}
-      {...mergeProps(themeProps('media-playback-rate-button'), {
-        className,
-        style,
-      })}
-      xstyle={xstyle}
-    />
+    <DropdownMenu
+      button={{
+        ...rest,
+        label: formatRate(rate),
+        'aria-label': t('@astryx.mediaPlayer.playbackSpeedValue', {
+          rate: numberFormat.format(rate),
+        }),
+        tooltip: t('@astryx.mediaPlayer.playbackSpeed'),
+        variant: 'ghost',
+        size,
+        xstyle,
+        ...mergeProps(themeProps('media-playback-rate-menu'), {
+          className,
+          style,
+        }),
+      }}
+      onOpenChange={isOpen => holdControls('menu', isOpen)}>
+      <DropdownMenuRadioGroup
+        label={t('@astryx.mediaPlayer.playbackSpeed')}
+        value={String(rate)}
+        onChange={value => store.actions.setPlaybackRate(Number(value))}>
+        {rates.map(option => (
+          <DropdownMenuRadioItem
+            key={option}
+            value={String(option)}
+            label={formatRate(option)}
+          />
+        ))}
+      </DropdownMenuRadioGroup>
+    </DropdownMenu>
   );
 }
 
-MediaPlaybackRateButton.displayName = 'MediaPlaybackRateButton';
+MediaPlaybackRateMenu.displayName = 'MediaPlaybackRateMenu';

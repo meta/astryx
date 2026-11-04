@@ -643,8 +643,8 @@
       "aliases": []
     },
     {
-      "name": "component-lab-media-playback-rate-button",
-      "path": "components/lab/media-playback-rate-button",
+      "name": "component-lab-media-playback-rate-menu",
+      "path": "components/lab/media-playback-rate-menu",
       "aliases": []
     },
     {
@@ -1290,6 +1290,11 @@
     {
       "name": "example-aspect-ratio-square-image",
       "path": "examples/aspect-ratio/square-image",
+      "aliases": []
+    },
+    {
+      "name": "example-audio-player-voice-memo",
+      "path": "examples/audio-player/voice-memo",
       "aliases": []
     },
     {
@@ -2569,6 +2574,11 @@
     {
       "name": "example-markdown-rich-content",
       "path": "examples/markdown/rich-content",
+      "aliases": []
+    },
+    {
+      "name": "example-media-player-inline-voice-note",
+      "path": "examples/media-player/inline-voice-note",
       "aliases": []
     },
     {
@@ -3862,6 +3872,11 @@
       "aliases": []
     },
     {
+      "name": "example-video-player-muted-autoplay-loop",
+      "path": "examples/video-player/muted-autoplay-loop",
+      "aliases": []
+    },
+    {
       "name": "example-visually-hidden-live-region",
       "path": "examples/visually-hidden/live-region",
       "aliases": []
@@ -4209,6 +4224,11 @@
     {
       "name": "showcase-aspect-ratio-default",
       "path": "showcases/aspect-ratio/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-audio-player-podcast-episode",
+      "path": "showcases/audio-player/podcast-episode",
       "aliases": []
     },
     {
@@ -4692,6 +4712,11 @@
       "aliases": []
     },
     {
+      "name": "showcase-media-player-custom-layout",
+      "path": "showcases/media-player/custom-layout",
+      "aliases": []
+    },
+    {
       "name": "showcase-media-theme-media-overlay",
       "path": "showcases/media-theme/media-overlay",
       "aliases": []
@@ -5054,6 +5079,11 @@
     {
       "name": "showcase-v-stack-default",
       "path": "showcases/v-stack/default",
+      "aliases": []
+    },
+    {
+      "name": "showcase-video-player-default",
+      "path": "showcases/video-player/default",
       "aliases": []
     },
     {

@@ -2457,15 +2457,15 @@
   },
   "@astryx.mediaPlayer.playbackSpeed": {
     "defaultMessage": "Playback speed",
-    "description": "Tooltip of the button that changes how fast a lab media player plays; the button itself shows the current speed."
+    "description": "Tooltip of the button that opens the playback speed menu of a lab media player, and the name of the list of speeds in that menu."
+  },
+  "@astryx.mediaPlayer.playbackSpeedValue": {
+    "defaultMessage": "Playback speed, {rate}×",
+    "description": "Accessible name of the button that opens the playback speed menu of a lab media player. {rate} is the current speed as a number, such as 1.5; × means times normal speed."
   },
   "@astryx.mediaPlayer.playbackRate": {
     "defaultMessage": "{rate}×",
-    "description": "Label of the playback speed button in a lab media player. `rate` is the current speed, already formatted as a number, e.g. \"1.5\"; × means times normal speed."
-  },
-  "@astryx.mediaPlayer.loading": {
-    "defaultMessage": "Loading",
-    "description": "Accessible name of the spinner a lab video player shows while playback waits for data."
+    "description": "Visible label of the playback speed menu button in a lab media player, and of each speed in its menu. `rate` is the speed, already formatted as a number, e.g. \"1.5\"; × means times normal speed."
   },
   "@astryx.mediaPlayer.error": {
     "defaultMessage": "This media can't be played.",

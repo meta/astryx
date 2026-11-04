@@ -13,12 +13,13 @@
 
 import {
   useCallback,
-  type ComponentProps,
-  type CSSProperties,
+  type AudioHTMLAttributes,
+  type ReactNode,
   type Ref,
+  type VideoHTMLAttributes,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import type {StyleXStyles} from '@stylexjs/stylex';
+import type {BaseProps} from '@astryxdesign/core';
 import {useMergedRefs} from '@astryxdesign/core/hooks';
 import {colorVars} from '@astryxdesign/core/theme/tokens.stylex';
 import {mergeProps, themeProps} from '@astryxdesign/core/utils';
@@ -34,22 +35,40 @@ const styles = stylex.create({
   },
 });
 
-type NativeMediaProps<T extends 'video' | 'audio'> = Omit<
-  ComponentProps<T>,
-  'controls' | 'className' | 'style' | 'ref'
+type VideoAttributes = Pick<
+  VideoHTMLAttributes<HTMLVideoElement>,
+  | 'src'
+  | 'poster'
+  | 'preload'
+  | 'crossOrigin'
+  | 'autoPlay'
+  | 'muted'
+  | 'loop'
+  | 'playsInline'
+  | 'width'
+  | 'height'
+  | 'disablePictureInPicture'
+  | 'disableRemotePlayback'
 >;
 
-export interface MediaPlayerVideoProps extends NativeMediaProps<'video'> {
-  /** StyleX styles for the video element. */
-  xstyle?: StyleXStyles;
-  className?: string;
-  style?: CSSProperties;
+type AudioAttributes = Pick<
+  AudioHTMLAttributes<HTMLAudioElement>,
+  'src' | 'preload' | 'crossOrigin' | 'autoPlay' | 'muted' | 'loop'
+>;
+
+export interface MediaPlayerVideoProps
+  extends BaseProps<HTMLVideoElement>, VideoAttributes {
+  /** Caption and subtitle `<track>` elements. */
+  children?: ReactNode;
+  /** Ref to the video element. */
   ref?: Ref<HTMLVideoElement>;
 }
 
-export interface MediaPlayerAudioProps extends NativeMediaProps<'audio'> {
-  className?: string;
-  style?: CSSProperties;
+export interface MediaPlayerAudioProps
+  extends BaseProps<HTMLAudioElement>, AudioAttributes {
+  /** `<source>` elements for alternative formats. */
+  children?: ReactNode;
+  /** Ref to the audio element. */
   ref?: Ref<HTMLAudioElement>;
 }
 
@@ -67,6 +86,16 @@ function useAttachMedia<T extends HTMLMediaElement>(part: string) {
  * The native video element of a MediaPlayer. The browser's own controls stay
  * off; the player's control parts drive it. Pass caption tracks as `<track>`
  * children.
+ *
+ * @example
+ * ```
+ * <MediaPlayer label="Product tour">
+ *   <MediaPlayerVideo src="/media/tour.mp4" poster="/media/tour.jpg">
+ *     <track kind="captions" src="/media/tour.en.vtt" srcLang="en" label="English" />
+ *   </MediaPlayerVideo>
+ *   <MediaPlayButton />
+ * </MediaPlayer>
+ * ```
  */
 export function MediaPlayerVideo({
   xstyle,
@@ -101,8 +130,17 @@ MediaPlayerVideo.displayName = 'MediaPlayerVideo';
 /**
  * The native audio element of a MediaPlayer. It renders nothing visible; the
  * player's control parts drive it.
+ *
+ * @example
+ * ```
+ * <MediaPlayer label="Episode 12">
+ *   <MediaPlayerAudio src="/media/episode-12.mp3" />
+ *   <MediaPlayButton />
+ * </MediaPlayer>
+ * ```
  */
 export function MediaPlayerAudio({
+  xstyle,
   className,
   style,
   ref,
@@ -116,7 +154,12 @@ export function MediaPlayerAudio({
       {...rest}
       ref={mergedRef}
       controls={false}
-      {...mergeProps(themeProps('media-player-audio'), className, style)}>
+      {...mergeProps(
+        themeProps('media-player-audio'),
+        stylex.props(xstyle),
+        className,
+        style,
+      )}>
       {children}
     </audio>
   );

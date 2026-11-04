@@ -31,11 +31,13 @@ import type {BaseProps} from '@astryxdesign/core';
 import {useAnnounce, useMergedRefs} from '@astryxdesign/core/hooks';
 import {useLocale, useTranslator} from '@astryxdesign/core/i18n';
 import {
+  composeEventHandlers,
   focusOutlineProps,
   mergeProps,
   themeProps,
 } from '@astryxdesign/core/utils';
 import {
+  DEFAULT_PLAYBACK_RATES,
   MediaPlayerContext,
   formatSpokenTime,
   type MediaControlsHold,
@@ -50,7 +52,8 @@ import {
 /** Idle time, in milliseconds, before playing media hides its controls. */
 const IDLE_DELAY_MS = 2000;
 
-const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
+/** Volume change, from 0 to 1, for one Up or Down key press. */
+const VOLUME_STEP = 0.05;
 
 const styles = stylex.create({
   root: {
@@ -119,6 +122,11 @@ function isFocusVisible(element: Element): boolean {
   }
 }
 
+/**
+ * Decides when the controls show. A mouse or keyboard shows them and an idle
+ * timer hides them while the media plays. After touch input there is no
+ * timer: a tap shows the controls and the next tap hides them.
+ */
 function useControlsVisibility(store: MediaStore) {
   const isPlaying = useSyncExternalStore(
     store.subscribe,
@@ -131,6 +139,7 @@ function useControlsVisibility(store: MediaStore) {
   const [isIdle, setIsIdle] = useState(false);
   const holdsRef = useRef(new Set<MediaControlsHold>());
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isTouchRef = useRef(false);
 
   const clearTimer = useCallback(() => {
     if (timerRef.current != null) {
@@ -141,6 +150,9 @@ function useControlsVisibility(store: MediaStore) {
 
   const scheduleIdle = useCallback(() => {
     clearTimer();
+    if (isTouchRef.current) {
+      return;
+    }
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
       if (holdsRef.current.size === 0) {
@@ -150,9 +162,15 @@ function useControlsVisibility(store: MediaStore) {
   }, [clearTimer]);
 
   const wakeControls = useCallback(() => {
+    isTouchRef.current = false;
     setIsIdle(false);
     scheduleIdle();
   }, [scheduleIdle]);
+
+  const markTouch = useCallback(() => {
+    isTouchRef.current = true;
+    clearTimer();
+  }, [clearTimer]);
 
   const holdControls = useCallback(
     (hold: MediaControlsHold, isHeld: boolean) => {
@@ -175,15 +193,15 @@ function useControlsVisibility(store: MediaStore) {
   }, [clearTimer]);
 
   const toggleControls = useCallback(() => {
-    setIsIdle(wasIdle => {
-      if (wasIdle) {
-        scheduleIdle();
-        return false;
-      }
-      clearTimer();
-      return holdsRef.current.size === 0;
-    });
-  }, [clearTimer, scheduleIdle]);
+    const state = store.getState();
+    if (state.isPaused || state.isEnded) {
+      // Paused media keeps its controls; a tap does not hide them.
+      setIsIdle(false);
+      return;
+    }
+    clearTimer();
+    setIsIdle(wasIdle => (wasIdle ? false : holdsRef.current.size === 0));
+  }, [store, clearTimer]);
 
   // Syncs the idle timer with playback: it runs only while the media plays.
   useEffect(() => {
@@ -198,6 +216,7 @@ function useControlsVisibility(store: MediaStore) {
   return {
     isControlsVisible: !isPlaying || !isIdle,
     wakeControls,
+    markTouch,
     holdControls,
     hideControls,
     toggleControls,
@@ -208,6 +227,18 @@ function useControlsVisibility(store: MediaStore) {
  * The root of one media player. It owns the playback state of the media
  * element inside it, scopes keyboard shortcuts to itself, announces changes
  * those shortcuts make, and decides when the controls show.
+ *
+ * @example
+ * ```
+ * <MediaPlayer label="Voice memo">
+ *   <MediaPlayerAudio src="/media/memo.m4a" />
+ *   <HStack gap={2} vAlign="center">
+ *     <MediaPlayButton />
+ *     <MediaTimeSlider />
+ *     <MediaTime display="remaining" />
+ *   </HStack>
+ * </MediaPlayer>
+ * ```
  */
 export function MediaPlayer({
   label,
@@ -230,10 +261,15 @@ export function MediaPlayer({
 }: MediaPlayerProps) {
   const [store] = useState(createMediaStore);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const mergedRef = useMergedRefs(ref, containerRef);
+  const attachContainer = useCallback(
+    (element: HTMLDivElement | null) => store.attachContainer(element),
+    [store],
+  );
+  const mergedRef = useMergedRefs(ref, containerRef, attachContainer);
   const [scrubTime, setScrubTime] = useState<number | null>(null);
   const visibility = useControlsVisibility(store);
-  const {wakeControls, holdControls, hideControls, toggleControls} = visibility;
+  const {wakeControls, markTouch, holdControls, hideControls, toggleControls} =
+    visibility;
   const announce = useAnnounce({hasReplace: true});
   const t = useTranslator();
   const locale = useLocale();
@@ -243,12 +279,6 @@ export function MediaPlayer({
   useLayoutEffect(() => {
     callbacksRef.current = {onPlay, onPause, onEnded, onError};
   });
-
-  // Syncs the root element into the store, which makes it the fullscreen target.
-  useLayoutEffect(() => {
-    store.attachContainer(containerRef.current);
-    return () => store.attachContainer(null);
-  }, [store]);
 
   // Syncs media element events to the playback callbacks. The listener runs
   // inside the media event, so each callback fires once per transition.
@@ -274,6 +304,10 @@ export function MediaPlayer({
     });
   }, [store, announce, t]);
 
+  const focusPlayer = useCallback(() => {
+    containerRef.current?.focus({preventScroll: true});
+  }, []);
+
   const contextValue = useMemo<MediaPlayerContextValue>(
     () => ({
       store,
@@ -281,6 +315,7 @@ export function MediaPlayer({
       wakeControls,
       holdControls,
       toggleControls,
+      focusPlayer,
       scrubTime,
       setScrubTime,
     }),
@@ -290,19 +325,14 @@ export function MediaPlayer({
       wakeControls,
       holdControls,
       toggleControls,
+      focusPlayer,
       scrubTime,
     ],
   );
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    onKeyDown?.(event);
     wakeControls();
-    if (
-      event.defaultPrevented ||
-      event.altKey ||
-      event.ctrlKey ||
-      event.metaKey
-    ) {
+    if (event.altKey || event.ctrlKey || event.metaKey) {
       return;
     }
     const target = event.target as HTMLElement;
@@ -339,13 +369,16 @@ export function MediaPlayer({
       );
     };
     const stepRate = (direction: 1 | -1) => {
-      const index = PLAYBACK_RATES.findIndex(
+      const index = DEFAULT_PLAYBACK_RATES.findIndex(
         rate => rate >= state.playbackRate,
       );
-      const current = index === -1 ? PLAYBACK_RATES.length - 1 : index;
+      const current = index === -1 ? DEFAULT_PLAYBACK_RATES.length - 1 : index;
       const next =
-        PLAYBACK_RATES[
-          Math.min(Math.max(current + direction, 0), PLAYBACK_RATES.length - 1)
+        DEFAULT_PLAYBACK_RATES[
+          Math.min(
+            Math.max(current + direction, 0),
+            DEFAULT_PLAYBACK_RATES.length - 1,
+          )
         ];
       if (next != null) {
         actions.setPlaybackRate(next);
@@ -426,13 +459,13 @@ export function MediaPlayer({
         if (isOnSlider) {
           return;
         }
-        setVolume(0.05);
+        setVolume(VOLUME_STEP);
         break;
       case 'ArrowDown':
         if (isOnSlider) {
           return;
         }
-        setVolume(-0.05);
+        setVolume(-VOLUME_STEP);
         break;
       case '<':
         stepRate(-1);
@@ -453,33 +486,30 @@ export function MediaPlayer({
   };
 
   const handlePointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    onPointerMove?.(event);
     if (event.pointerType === 'mouse') {
       wakeControls();
     }
   };
 
   const handlePointerDown = (event: PointerEvent<HTMLDivElement>) => {
-    onPointerDown?.(event);
-    if (event.pointerType !== 'touch') {
+    if (event.pointerType === 'touch') {
+      markTouch();
+    } else {
       wakeControls();
     }
   };
 
   const handlePointerLeave = (event: PointerEvent<HTMLDivElement>) => {
-    onPointerLeave?.(event);
     if (event.pointerType === 'mouse') {
       hideControls();
     }
   };
 
   const handleFocus = (event: FocusEvent<HTMLDivElement>) => {
-    onFocus?.(event);
     holdControls('focus', isFocusVisible(event.target));
   };
 
   const handleBlur = (event: FocusEvent<HTMLDivElement>) => {
-    onBlur?.(event);
     const next = event.relatedTarget;
     if (!(next instanceof Node) || !event.currentTarget.contains(next)) {
       holdControls('focus', false);
@@ -494,12 +524,15 @@ export function MediaPlayer({
         role="group"
         aria-label={label}
         tabIndex={0}
-        onKeyDown={handleKeyDown}
-        onPointerMove={handlePointerMove}
-        onPointerDown={handlePointerDown}
-        onPointerLeave={handlePointerLeave}
-        onFocus={handleFocus}
-        onBlur={handleBlur}
+        onKeyDown={composeEventHandlers(onKeyDown, handleKeyDown)}
+        onPointerMove={composeEventHandlers(onPointerMove, handlePointerMove)}
+        onPointerDown={composeEventHandlers(onPointerDown, handlePointerDown)}
+        onPointerLeave={composeEventHandlers(
+          onPointerLeave,
+          handlePointerLeave,
+        )}
+        onFocus={composeEventHandlers(onFocus, handleFocus)}
+        onBlur={composeEventHandlers(onBlur, handleBlur)}
         {...mergeProps(
           themeProps('media-player', {
             controls: visibility.isControlsVisible ? 'visible' : 'hidden',

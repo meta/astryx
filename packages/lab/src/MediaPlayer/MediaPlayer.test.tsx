@@ -2,13 +2,14 @@
 
 import {act, fireEvent, render, screen, within} from '@testing-library/react';
 import {renderHook} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import type * as CoreHooks from '@astryxdesign/core/hooks';
 import {AudioPlayer} from './AudioPlayer';
 import {MediaPlayer} from './MediaPlayer';
 import {useMediaPlayer} from './MediaPlayerContext';
 import {MediaTimeSlider} from './MediaPlayerControls';
-import {MediaPlayerVideo} from './MediaPlayerMedia';
+import {MediaPlayerAudio, MediaPlayerVideo} from './MediaPlayerMedia';
 import {VideoPlayer} from './VideoPlayer';
 
 const announce = vi.hoisted(() => vi.fn());
@@ -139,6 +140,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe('VideoPlayer', () => {
@@ -170,25 +172,28 @@ describe('VideoPlayer', () => {
     ).toBeGreaterThan(0);
   });
 
-  it('runs keyboard shortcuts scoped to the player and announces the change', () => {
+  it('runs keyboard shortcuts scoped to the player and announces the change', async () => {
+    const user = userEvent.setup();
     const {player, video} = renderVideoPlayer();
     const playback = fakePlayback(video);
-    fireEvent.keyDown(player, {key: 'k'});
+    act(() => player.focus());
+    await user.keyboard('k');
     expect(playback.play).toHaveBeenCalledTimes(1);
-    fireEvent.keyDown(player, {key: 'm'});
+    await user.keyboard('m');
     expect(video.muted).toBe(true);
     expect(announce).toHaveBeenLastCalledWith('Muted');
-    fireEvent.keyDown(player, {key: 'ArrowRight'});
+    await user.keyboard('{ArrowRight}');
     expect(playback.getCurrentTime()).toBe(5);
-    fireEvent.keyDown(player, {key: 'l'});
+    await user.keyboard('l');
     expect(playback.getCurrentTime()).toBe(15);
-    fireEvent.keyDown(player, {key: '5'});
+    await user.keyboard('5');
     expect(playback.getCurrentTime()).toBe(60);
-    fireEvent.keyDown(player, {key: '>'});
+    await user.keyboard('>');
     expect(playback.getPlaybackRate()).toBe(1.25);
   });
 
-  it('leaves shortcut keys alone while a person types in a field inside the player', () => {
+  it('leaves shortcut keys alone while a person types in a field inside the player', async () => {
+    const user = userEvent.setup();
     const {container} = render(
       <MediaPlayer label="Annotated clip">
         <MediaPlayerVideo src="/clip.mp4" />
@@ -196,8 +201,65 @@ describe('VideoPlayer', () => {
       </MediaPlayer>,
     );
     const playback = fakePlayback(container.querySelector('video')!);
-    fireEvent.keyDown(screen.getByRole('textbox', {name: 'Note'}), {key: 'k'});
+    await user.click(screen.getByRole('textbox', {name: 'Note'}));
+    await user.keyboard('k');
     expect(playback.play).not.toHaveBeenCalled();
+    expect(screen.getByRole('textbox', {name: 'Note'})).toHaveValue('k');
+  });
+
+  it('keeps the large play button out of the tab order and moves focus to the player when it starts playback', async () => {
+    const user = userEvent.setup();
+    const {player, video, container} = renderVideoPlayer();
+    const playback = fakePlayback(video);
+    await user.tab();
+    expect(player).toHaveFocus();
+    await user.tab();
+    expect(document.activeElement).toHaveAccessibleName('Play');
+    expect(document.activeElement).not.toHaveAttribute('aria-hidden');
+    const largePlay = container.querySelector('button[aria-hidden="true"]');
+    expect(largePlay).toHaveAttribute('tabindex', '-1');
+    await user.click(largePlay!);
+    expect(playback.play).toHaveBeenCalledTimes(1);
+    expect(player).toHaveFocus();
+    await user.keyboard('k');
+    expect(playback.pause).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports playback through its callbacks once per change', async () => {
+    const user = userEvent.setup();
+    const onPlay = vi.fn();
+    const onPause = vi.fn();
+    const onEnded = vi.fn();
+    const onError = vi.fn();
+    const {video} = renderVideoPlayer({onPlay, onPause, onEnded, onError});
+    const playback = fakePlayback(video);
+    await user.click(screen.getByRole('button', {name: 'Play'}));
+    expect(onPlay).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole('button', {name: 'Pause'}));
+    expect(onPause).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole('button', {name: 'Play'}));
+    playback.end();
+    expect(onEnded).toHaveBeenCalledTimes(1);
+    expect(onPause).toHaveBeenCalledTimes(1);
+    expect(onPlay).toHaveBeenCalledTimes(2);
+    act(() => {
+      video.dispatchEvent(new Event('error'));
+    });
+    expect(onError).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the loading spinner out of the accessibility tree', () => {
+    const {video} = renderVideoPlayer();
+    fakePlayback(video);
+    const statusCount = screen.queryAllByRole('status').length;
+    act(() => {
+      void video.play();
+      video.dispatchEvent(new Event('waiting'));
+    });
+    expect(screen.queryAllByRole('status')).toHaveLength(statusCount);
+    expect(screen.queryAllByRole('status', {hidden: true}).length).toBe(
+      statusCount + 1,
+    );
   });
 
   it('hides the controls after two idle seconds of playback and shows them on pointer movement', () => {
@@ -245,6 +307,34 @@ describe('VideoPlayer', () => {
     fireEvent.click(screen.getByRole('button', {name: 'Try again'}));
     expect(video.load).toHaveBeenCalledTimes(1);
     expect(playback.play).not.toHaveBeenCalled();
+    expect(screen.getByRole('group', {name: 'Product tour'})).toHaveFocus();
+  });
+
+  it('on touch, shows the controls on a tap and hides them on the next tap only', () => {
+    vi.useFakeTimers();
+    const {player, video, container} = renderVideoPlayer();
+    fakePlayback(video);
+    const bar = () => container.querySelector('[data-visible]');
+    const surface = player.querySelector(':scope > div[aria-hidden="true"]')!;
+    const tap = () => {
+      fireEvent.pointerDown(surface, {pointerType: 'touch'});
+      fireEvent.click(surface);
+    };
+    act(() => {
+      void video.play();
+    });
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(bar()).toHaveAttribute('data-visible', 'false');
+    tap();
+    expect(bar()).toHaveAttribute('data-visible', 'true');
+    act(() => {
+      vi.advanceTimersByTime(10000);
+    });
+    expect(bar()).toHaveAttribute('data-visible', 'true');
+    tap();
+    expect(bar()).toHaveAttribute('data-visible', 'false');
   });
 
   it('shows the captions toggle only when the media has a caption track', () => {
@@ -288,10 +378,8 @@ describe('MediaTimeSlider', () => {
   }
 
   it('runs left to right inside a right-to-left page', () => {
-    const {container} = renderTimeline();
-    expect(
-      container.querySelector('.astryx-media-time-slider'),
-    ).toHaveAttribute('dir', 'ltr');
+    const {slider} = renderTimeline();
+    expect(slider.closest('[dir]')).toHaveAttribute('dir', 'ltr');
   });
 
   it('keeps the control row and the time readout left to right in a right-to-left page', () => {
@@ -315,13 +403,15 @@ describe('MediaTimeSlider', () => {
     expect(slider.getAttribute('aria-valuetext')).toMatch(/ of /);
   });
 
-  it('skips five seconds per arrow key and ten per page key', () => {
+  it('skips five seconds per arrow key and ten per page key', async () => {
+    const user = userEvent.setup();
     const {slider, playback} = renderTimeline();
-    fireEvent.keyDown(slider, {key: 'ArrowRight'});
+    act(() => slider.focus());
+    await user.keyboard('{ArrowRight}');
     expect(playback.getCurrentTime()).toBe(5);
-    fireEvent.keyDown(slider, {key: 'PageUp'});
+    await user.keyboard('{PageUp}');
     expect(playback.getCurrentTime()).toBe(15);
-    fireEvent.keyDown(slider, {key: 'ArrowLeft'});
+    await user.keyboard('{ArrowLeft}');
     expect(playback.getCurrentTime()).toBe(10);
   });
 });
@@ -351,6 +441,15 @@ describe('AudioPlayer', () => {
     expect(within(player).getByText('The Interface Show')).toBeInTheDocument();
   });
 
+  it('sits in a Section container and offers a volume slider', () => {
+    const {container} = renderAudioPlayer();
+    const player = screen.getByRole('group', {
+      name: 'Designing for every screen',
+    });
+    expect(container.querySelector('.astryx-section')).toContainElement(player);
+    expect(screen.getByRole('slider', {name: 'Volume'})).toBeInTheDocument();
+  });
+
   it('skips back 15 seconds and forward 30 seconds by default', () => {
     const {audio} = renderAudioPlayer();
     const playback = fakePlayback(audio, {duration: 600});
@@ -360,12 +459,24 @@ describe('AudioPlayer', () => {
     expect(playback.getCurrentTime()).toBe(15);
   });
 
-  it('moves to the next playback rate on each press', () => {
+  it('sets the playback speed from a menu that checks the current speed', async () => {
+    // jsdom has no popover API.
+    vi.spyOn(HTMLElement.prototype, 'showPopover').mockImplementation(() => {});
+    vi.spyOn(HTMLElement.prototype, 'hidePopover').mockImplementation(() => {});
+    const user = userEvent.setup();
     const {audio} = renderAudioPlayer();
     const playback = fakePlayback(audio, {duration: 600});
-    fireEvent.click(screen.getByRole('button', {name: '1×'}));
-    expect(playback.getPlaybackRate()).toBe(1.25);
-    expect(screen.getByRole('button', {name: '1.25×'})).toBeInTheDocument();
+    await user.click(screen.getByRole('button', {name: 'Playback speed, 1×'}));
+    expect(
+      screen.getByRole('menuitemradio', {name: '1×', hidden: true}),
+    ).toHaveAttribute('aria-checked', 'true');
+    await user.click(
+      screen.getByRole('menuitemradio', {name: '1.5×', hidden: true}),
+    );
+    expect(playback.getPlaybackRate()).toBe(1.5);
+    expect(
+      screen.getByRole('button', {name: 'Playback speed, 1.5×'}),
+    ).toBeInTheDocument();
   });
 
   it('hands its metadata to the system media controls once it plays', () => {
@@ -408,6 +519,46 @@ describe('AudioPlayer', () => {
 });
 
 describe('useMediaPlayer', () => {
+  function Readout() {
+    const {state, seek, setVolume, togglePaused} = useMediaPlayer();
+    return (
+      <>
+        <output aria-label="Position">{Math.round(state.currentTime)}</output>
+        <output aria-label="Level">{state.volume}</output>
+        <output aria-label="Status">
+          {state.isPaused ? 'paused' : 'playing'}
+        </output>
+        <button type="button" onClick={() => seek(42)}>
+          Jump
+        </button>
+        <button type="button" onClick={() => setVolume(0.5)}>
+          Half
+        </button>
+        <button type="button" onClick={() => togglePaused()}>
+          Toggle
+        </button>
+      </>
+    );
+  }
+
+  it('reads the player state and drives the player through its actions', async () => {
+    const user = userEvent.setup();
+    const {container} = render(
+      <MediaPlayer label="Memo">
+        <MediaPlayerAudio src="/memo.m4a" />
+        <Readout />
+      </MediaPlayer>,
+    );
+    const playback = fakePlayback(container.querySelector('audio')!);
+    await user.click(screen.getByRole('button', {name: 'Jump'}));
+    expect(screen.getByLabelText('Position')).toHaveTextContent('42');
+    await user.click(screen.getByRole('button', {name: 'Half'}));
+    expect(screen.getByLabelText('Level')).toHaveTextContent('0.5');
+    await user.click(screen.getByRole('button', {name: 'Toggle'}));
+    expect(playback.play).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText('Status')).toHaveTextContent('playing');
+  });
+
   it('throws outside a MediaPlayer', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(() => renderHook(() => useMediaPlayer())).toThrow(

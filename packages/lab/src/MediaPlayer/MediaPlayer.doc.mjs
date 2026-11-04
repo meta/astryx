@@ -12,7 +12,8 @@
 const sizeProp = {
   name: 'size',
   type: "'sm' | 'md' | 'lg'",
-  description: 'Control height on the element-size scale: 28, 32, or 36px.',
+  description:
+    'Control height on the element-size scale: 28, 32, or 36px. Without it, the part follows the surrounding size.',
   default: "'md'",
 };
 
@@ -20,7 +21,8 @@ const styleProps = [
   {
     name: 'xstyle',
     type: 'StyleXStyles',
-    description: 'StyleX styles for the part’s root element.',
+    description:
+      'StyleX styles for the part’s root element: a `stylex.create()` value, not an inline style object.',
   },
   {
     name: 'className',
@@ -83,7 +85,7 @@ export const docs = {
     'Video and audio players with themed controls over the browser’s native media element. VideoPlayer and AudioPlayer are ready-made layouts; MediaPlayer, its parts, and useMediaPlayer build custom ones. The native element plays the media, so formats the browser plays need no extra library.',
   usage: {
     description:
-      'Use VideoPlayer for a video with controls, and AudioPlayer for an episode, recording, or track. For a different layout, put a MediaPlayerVideo or MediaPlayerAudio and the control parts you need inside a MediaPlayer; every part reads the player around it. Keyboard shortcuts work while focus is inside the player: Space or K plays and pauses, M mutes, F toggles fullscreen, C toggles captions, the arrow keys skip 5 seconds and change the volume, J and L skip 10 seconds, 0 to 9 jump to that tenth of the media, and < and > change the speed. Shortcut changes are announced to screen readers. Streaming formats the browser cannot play, such as DASH, need a streaming library; that library is not part of Lab.',
+      'Use VideoPlayer for a video with controls, and AudioPlayer for an episode, recording, or track. For a different layout, put a MediaPlayerVideo or MediaPlayerAudio and the control parts you need inside a MediaPlayer; every part reads the player around it. Keyboard shortcuts work while focus is inside the player: Space or K plays and pauses, M mutes, F toggles fullscreen, C toggles captions, the arrow keys skip 5 seconds and change the volume, J and L skip 10 seconds, 0 to 9 jump to that tenth of the media, and < and > change the speed. Shortcut changes are announced to screen readers. The timeline and volume follow the WAI-ARIA Slider pattern and its Media Seek Slider example; the buttons follow the Button pattern, Captions is a toggle button, and the speed control follows the Menu Button pattern. Streaming formats the browser cannot play, such as DASH, need a streaming library; that library is not part of Lab.',
     bestPractices: [
       {
         guidance: true,
@@ -99,6 +101,11 @@ export const docs = {
         guidance: true,
         description:
           'Keep autoplay for muted, short, or ambient video, and keep a visible pause control for anything that moves longer than five seconds.',
+      },
+      {
+        guidance: true,
+        description:
+          'Put the control parts in their own MediaPlayer for a custom layout, and keep one play control in the tab order; a second, pointer-only play control takes `tabIndex={-1}` and `aria-hidden`.',
       },
       {
         guidance: false,
@@ -128,7 +135,7 @@ export const docs = {
         name: 'Control bar',
         required: false,
         description:
-          'In VideoPlayer, a frosted bar inset over the video that holds play, the timeline, time, volume, captions, and fullscreen. It shows on hover, pointer movement, and keyboard focus, and hides after two idle seconds while the video plays.',
+          'In VideoPlayer, a frosted bar 8px from the edges of the video that holds play, the timeline, time, volume, captions, and fullscreen. It shows on hover, pointer movement, and keyboard focus, and hides after two idle seconds while the video plays. On touch, a tap shows it and the next tap hides it. The volume slider appears while the volume control is hovered or focused, and always on touch.',
       },
       {
         name: 'Timeline',
@@ -148,8 +155,16 @@ export const docs = {
     targets: [
       {className: 'astryx-media-player', visualProps: ['controls']},
       {className: 'astryx-media-player-video'},
+      {className: 'astryx-media-player-audio'},
+      {className: 'astryx-media-play-button'},
+      {className: 'astryx-media-seek-button'},
+      {className: 'astryx-media-mute-button'},
+      {className: 'astryx-media-volume-slider'},
       {className: 'astryx-media-time-slider'},
       {className: 'astryx-media-time', visualProps: ['display']},
+      {className: 'astryx-media-captions-button'},
+      {className: 'astryx-media-fullscreen-button'},
+      {className: 'astryx-media-playback-rate-menu'},
     ],
   },
   components: [
@@ -157,7 +172,7 @@ export const docs = {
       name: 'VideoPlayer',
       displayName: 'Video Player',
       description:
-        'A ready-made video player. Controls float in a frosted bar inset over the video; a tap on touch screens shows and hides them, and a click plays and pauses.',
+        'A ready-made video player. Controls float in a frosted bar inset over the video, whose corners nest around the bar. A click plays and pauses; on touch, a tap shows the controls and the next tap hides them.',
       props: [
         {
           name: 'src',
@@ -221,7 +236,7 @@ export const docs = {
       name: 'AudioPlayer',
       displayName: 'Audio Player',
       description:
-        'A ready-made player for episodes, recordings, and music: title and artwork, a timeline, skip back and forward, playback speed, and mute. It follows the page theme and hands its title and artwork to the system media controls once it plays.',
+        'A ready-made player for episodes, recordings, and music: title and artwork, a timeline, skip back and forward, a playback speed menu, and volume. It sits in a Section container, so its background and padding follow the theme, and `xstyle`, `className`, and `style` style that container. It hands its title and artwork to the system media controls once it plays.',
       props: [
         {
           name: 'src',
@@ -420,16 +435,17 @@ export const docs = {
       props: [sizeProp, ...styleProps],
     },
     {
-      name: 'MediaPlaybackRateButton',
-      displayName: 'Media Playback Rate Button',
+      name: 'MediaPlaybackRateMenu',
+      displayName: 'Media Playback Rate Menu',
       description:
-        'Shows the playback rate and moves to the next rate on each press.',
+        'Shows the playback speed and opens a menu of speeds with the current one checked. It keeps the controls visible while the menu is open.',
       props: [
         {
           name: 'rates',
           type: 'readonly number[]',
-          description: 'Rates a press cycles through, in order.',
-          default: '[1, 1.25, 1.5, 2, 0.75]',
+          description:
+            'Speeds the menu offers, in order. The `<` and `>` shortcuts step through the default list.',
+          default: '[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]',
         },
         sizeProp,
         ...styleProps,
@@ -481,6 +497,22 @@ export const docs = {
   ],
   examples: [
     {
+      label: 'Video player',
+      code: `<VideoPlayer
+  src="/media/flower.webm"
+  label="Bee on a flower"
+/>`,
+    },
+    {
+      label: 'Muted autoplay loop',
+      code: `<VideoPlayer
+  src="/media/flower.webm"
+  label="Bee on a flower"
+  hasAutoPlay
+  isLooping
+/>`,
+    },
+    {
       label: 'Video with captions',
       code: `<VideoPlayer
   src="/media/product-tour.mp4"
@@ -501,12 +533,31 @@ export const docs = {
 />`,
     },
     {
+      label: 'Voice memo',
+      code: `<AudioPlayer
+  src="/media/memo.mp3"
+  title="Voice memo"
+  skipBackSeconds={5}
+  skipForwardSeconds={10}
+/>`,
+    },
+    {
+      label: 'Inline voice note',
+      code: `<MediaPlayer label="Voice note">
+  <MediaPlayerAudio src="/media/note.mp3" />
+  <HStack gap={1} vAlign="center">
+    <MediaPlayButton size="sm" />
+    <MediaTime display="remaining" />
+  </HStack>
+</MediaPlayer>`,
+    },
+    {
       label: 'Custom layout',
       code: `function CompactPlayer({src}: {src: string}) {
   return (
     <MediaPlayer label="Voice memo">
       <MediaPlayerAudio src={src} />
-      <HStack gap={2} align="center">
+      <HStack gap={2} vAlign="center">
         <MediaPlayButton />
         <MediaTimeSlider />
         <MediaTime display="remaining" />

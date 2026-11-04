@@ -6,12 +6,13 @@
  * @output Exports neutralIconRegistry for the neutral theme
  * @position Icon configuration for the neutral theme; consumed by index.ts
  *
- * Maps semantic icon names to Lucide icon components.
- * These icons are bundled with the theme, not with @astryxdesign/core.
+ * Maps semantic icon names, and the `media:*` keys of the media player, to
+ * Lucide icon components. These icons are bundled with the theme, not with
+ * @astryxdesign/core.
  */
 
-import React from 'react';
-import type {IconRegistry} from '@astryxdesign/core/Icon';
+import React, {type ReactNode} from 'react';
+import type {IconRegistry, NamespacedIconName} from '@astryxdesign/core/Icon';
 
 import {
   X,
@@ -43,6 +44,16 @@ import {
   Wrench,
   Square,
   Mic,
+  Play,
+  Pause,
+  RotateCcw,
+  RotateCw,
+  Volume2,
+  Volume1,
+  VolumeX,
+  Maximize,
+  Minimize,
+  Captions,
 } from 'lucide-react';
 
 const iconProps = {
@@ -50,7 +61,8 @@ const iconProps = {
   'aria-hidden': true as const,
 };
 
-export const neutralIconRegistry: IconRegistry = {
+export const neutralIconRegistry: IconRegistry &
+  Partial<Record<NamespacedIconName, ReactNode>> = {
   close: <X {...iconProps} />,
   chevronDown: <ChevronDown {...iconProps} />,
   chevronLeft: <ChevronLeft {...iconProps} />,
@@ -80,4 +92,16 @@ export const neutralIconRegistry: IconRegistry = {
   wrench: <Wrench {...iconProps} />,
   stop: <Square {...iconProps} />,
   microphone: <Mic {...iconProps} />,
+  // Media player glyphs, by the keys the media controls ask for.
+  'media:play': <Play {...iconProps} />,
+  'media:pause': <Pause {...iconProps} />,
+  'media:replay': <RotateCcw {...iconProps} />,
+  'media:skip-back': <RotateCcw {...iconProps} />,
+  'media:skip-forward': <RotateCw {...iconProps} />,
+  'media:volume-high': <Volume2 {...iconProps} />,
+  'media:volume-low': <Volume1 {...iconProps} />,
+  'media:volume-off': <VolumeX {...iconProps} />,
+  'media:fullscreen-enter': <Maximize {...iconProps} />,
+  'media:fullscreen-exit': <Minimize {...iconProps} />,
+  'media:captions': <Captions {...iconProps} />,
 };

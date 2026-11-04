@@ -7,7 +7,7 @@
 ### Values
 
 ```text
-const neutralIconRegistry: IconRegistry
+const neutralIconRegistry: IconRegistry & Partial<Record<NamespacedIconName, ReactNode>>
 const neutralPalettes: object
   neutral: { readonly name: 'Neutral'; readonly light: { readonly "0": '#000000'; readonly "5": '#111111'; readonly "10": '#1b1b1b'; readonly "15": '#262626'; readonly "20 … #90025b72
   red: { readonly name: 'Red'; readonly light: { readonly "0": '#000000'; readonly "5": '#2c0000'; readonly "10": '#3e0002'; readonly "15": '#500004'; readonly "20": ' … #23dde683

@@ -7,13 +7,15 @@
  * @input An audio source, a title with optional subtitle and artwork, skip
  *   intervals, playback options, and root style props
  * @output Exports AudioPlayer, a ready-made player for spoken audio and music
- *   with skip, speed, and system media controls
+ *   with skip, speed, volume, and system media controls
  * @position Lab media preset; composes MediaPlayer with its audio and control
- *   parts
+ *   parts inside a Section container
  */
 
 import {useEffect} from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {useContainerReveal} from '@astryxdesign/core/hooks';
+import {Section} from '@astryxdesign/core/Section';
 import {
   colorVars,
   fontWeightVars,
@@ -21,29 +23,25 @@ import {
   spacingVars,
   typeScaleVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
+import {mergeProps} from '@astryxdesign/core/utils';
 import {MediaPlayer, type MediaPlayerProps} from './MediaPlayer';
 import {useMediaPlayerContext} from './MediaPlayerContext';
 import {
   MediaMuteButton,
   MediaPlayButton,
-  MediaPlaybackRateButton,
+  MediaPlaybackRateMenu,
   MediaSeekButton,
   MediaTime,
   MediaTimeSlider,
+  MediaVolumeSlider,
 } from './MediaPlayerControls';
 import {MediaPlayerAudio} from './MediaPlayerMedia';
 
 const styles = stylex.create({
-  root: {
+  player: {
     display: 'flex',
     flexDirection: 'column',
     gap: spacingVars['--spacing-2'],
-    padding: spacingVars['--spacing-4'],
-    borderWidth: 1,
-    borderStyle: 'solid',
-    borderColor: colorVars['--color-border'],
-    borderRadius: radiusVars['--radius-container'],
-    backgroundColor: colorVars['--color-background-surface'],
     color: colorVars['--color-text-primary'],
   },
   header: {
@@ -96,8 +94,20 @@ const styles = stylex.create({
   controlsStart: {
     justifySelf: 'start',
   },
-  controlsEnd: {
+  volume: {
     justifySelf: 'end',
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+    // The hidden slider leaves the flow; clipping keeps its box from
+    // covering, and catching the pointer over, the controls beside it.
+    overflow: 'clip',
+    overflowClipMargin: spacingVars['--spacing-1'],
+  },
+  // While hidden, the slider sits past the start of the volume control, inside
+  // the clipped area, so it never covers Mute.
+  volumeSlot: {
+    insetInlineEnd: `calc(100% + ${spacingVars['--spacing-2']})`,
   },
 });
 
@@ -162,14 +172,14 @@ function useMediaSession({
     }
     const session = navigator.mediaSession;
     const {actions} = store;
-    let isOwner = false;
+    let metadata: MediaMetadata | null = null;
     const claim = () => {
-      isOwner = true;
-      session.metadata = new MediaMetadata({
+      metadata = new MediaMetadata({
         title,
         artist: subtitle ?? '',
         artwork: artworkSrc != null ? [{src: artworkSrc}] : [],
       });
+      session.metadata = metadata;
       const handlers: Record<
         (typeof SESSION_ACTIONS)[number],
         MediaSessionActionHandler
@@ -194,18 +204,20 @@ function useMediaSession({
         }
       }
     };
+    // Another player that claims the session afterwards owns it from then on.
+    const isOwner = () => metadata != null && session.metadata === metadata;
     const unsubscribe = store.subscribe(() => {
       const state = store.getState();
-      if (!state.isPaused && !isOwner) {
+      if (!state.isPaused && !isOwner()) {
         claim();
       }
-      if (isOwner) {
+      if (isOwner()) {
         session.playbackState = state.isPaused ? 'paused' : 'playing';
       }
     });
     return () => {
       unsubscribe();
-      if (isOwner) {
+      if (isOwner()) {
         session.metadata = null;
         for (const action of SESSION_ACTIONS) {
           try {
@@ -239,6 +251,7 @@ function AudioPlayerLayout({
     skipBackSeconds,
     skipForwardSeconds,
   });
+  const volumeReveal = useContainerReveal();
   return (
     <>
       <div {...stylex.props(styles.header)}>
@@ -258,11 +271,25 @@ function AudioPlayerLayout({
         <MediaTime display="remaining" xstyle={styles.secondaryTime} />
       </div>
       <div dir="ltr" {...stylex.props(styles.controls)}>
-        <MediaPlaybackRateButton xstyle={styles.controlsStart} />
+        <MediaPlaybackRateMenu xstyle={styles.controlsStart} />
         <MediaSeekButton offset={-skipBackSeconds} />
         <MediaPlayButton size="lg" variant="primary" />
         <MediaSeekButton offset={skipForwardSeconds} />
-        <MediaMuteButton xstyle={styles.controlsEnd} />
+        {/* The slider opens toward the center, so Mute keeps its place. */}
+        <div
+          {...mergeProps(
+            volumeReveal.getContainerProps(),
+            stylex.props(styles.volume),
+          )}>
+          <span
+            {...mergeProps(
+              volumeReveal.getContentRevealProps(),
+              stylex.props(styles.volumeSlot),
+            )}>
+            <MediaVolumeSlider width={72} />
+          </span>
+          <MediaMuteButton />
+        </div>
       </div>
     </>
   );
@@ -270,8 +297,18 @@ function AudioPlayerLayout({
 
 /**
  * A ready-made audio player for episodes, recordings, and music: title and
- * artwork, a timeline, skip back and forward, playback speed, and mute. It
- * follows the page theme. Queues and playlists belong to the product.
+ * artwork, a timeline, skip back and forward, a playback speed menu, and
+ * volume. It sits in a Section container, so its background and padding
+ * follow the theme. Queues and playlists belong to the product.
+ *
+ * @example
+ * ```
+ * <AudioPlayer
+ *   src="/media/episode-12.mp3"
+ *   title="Designing for every screen"
+ *   subtitle="The Interface Show · Episode 12"
+ * />
+ * ```
  */
 export function AudioPlayer({
   src,
@@ -284,22 +321,27 @@ export function AudioPlayer({
   preload = 'metadata',
   crossOrigin,
   xstyle,
+  className,
+  style,
   ...rest
 }: AudioPlayerProps) {
   return (
-    <MediaPlayer
-      {...rest}
-      label={label ?? title}
-      xstyle={[styles.root, xstyle]}>
-      <MediaPlayerAudio src={src} preload={preload} crossOrigin={crossOrigin} />
-      <AudioPlayerLayout
-        title={title}
-        subtitle={subtitle}
-        artworkSrc={artworkSrc}
-        skipBackSeconds={skipBackSeconds}
-        skipForwardSeconds={skipForwardSeconds}
-      />
-    </MediaPlayer>
+    <Section xstyle={xstyle} className={className} style={style}>
+      <MediaPlayer {...rest} label={label ?? title} xstyle={styles.player}>
+        <MediaPlayerAudio
+          src={src}
+          preload={preload}
+          crossOrigin={crossOrigin}
+        />
+        <AudioPlayerLayout
+          title={title}
+          subtitle={subtitle}
+          artworkSrc={artworkSrc}
+          skipBackSeconds={skipBackSeconds}
+          skipForwardSeconds={skipForwardSeconds}
+        />
+      </MediaPlayer>
+    </Section>
   );
 }
 

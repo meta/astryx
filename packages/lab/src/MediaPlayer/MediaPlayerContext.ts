@@ -21,6 +21,14 @@ import {
 /** A reason that keeps the controls visible while playback runs. */
 export type MediaControlsHold = 'focus' | 'scrub' | 'menu';
 
+/**
+ * Playback speeds the speed menu offers and the `<` and `>` shortcuts step
+ * through.
+ */
+export const DEFAULT_PLAYBACK_RATES: readonly number[] = [
+  0.5, 0.75, 1, 1.25, 1.5, 1.75, 2,
+];
+
 export interface MediaPlayerContextValue {
   store: MediaStore;
   isControlsVisible: boolean;
@@ -28,8 +36,16 @@ export interface MediaPlayerContextValue {
   wakeControls: () => void;
   /** Keeps the controls visible until the same hold is released. */
   holdControls: (hold: MediaControlsHold, isHeld: boolean) => void;
-  /** Shows hidden controls or hides visible ones, for a tap on the media. */
+  /**
+   * Shows hidden controls or hides visible ones, for a tap on the media.
+   * Controls a tap shows stay until the next tap.
+   */
   toggleControls: () => void;
+  /**
+   * Moves keyboard focus to the player root, for a control that is about to
+   * unmount while it has focus.
+   */
+  focusPlayer: () => void;
   /** The time a pointer drags the timeline to, before the seek commits. */
   scrubTime: number | null;
   setScrubTime: (time: number | null) => void;
@@ -70,6 +86,15 @@ export interface UseMediaPlayerResult extends MediaPlayerActions {
 /**
  * Reads the nearest MediaPlayer's playback state and returns the actions
  * that drive it. Use it to build custom controls inside a MediaPlayer.
+ *
+ * @example
+ * ```
+ * function ElapsedPercent() {
+ *   const {state} = useMediaPlayer();
+ *   const percent = state.duration > 0 ? state.currentTime / state.duration : 0;
+ *   return <Text type="supporting">{Math.round(percent * 100)}%</Text>;
+ * }
+ * ```
  */
 export function useMediaPlayer(): UseMediaPlayerResult {
   const {store} = useMediaPlayerContext('useMediaPlayer');

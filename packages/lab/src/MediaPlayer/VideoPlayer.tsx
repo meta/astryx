@@ -15,10 +15,12 @@
 import {useEffect, useRef, type RefObject} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {Button} from '@astryxdesign/core/Button';
+import {useContainerReveal} from '@astryxdesign/core/hooks';
 import {useTranslator} from '@astryxdesign/core/i18n';
 import {Spinner} from '@astryxdesign/core/Spinner';
 import {Text} from '@astryxdesign/core/Text';
 import {MediaTheme} from '@astryxdesign/core/theme';
+import {mergeProps} from '@astryxdesign/core/utils';
 import {
   colorVars,
   durationVars,
@@ -41,7 +43,7 @@ import {MediaPlayerVideo} from './MediaPlayerMedia';
 
 const FROSTED_SURFACE = `color-mix(in srgb, ${colorVars['--color-background-surface']} 80%, transparent)`;
 const FROSTED_SURFACE_HIGH_CONTRAST = `color-mix(in srgb, ${colorVars['--color-background-surface']} 95%, transparent)`;
-const BAR_INSET = spacingVars['--spacing-3'];
+const BAR_INSET = spacingVars['--spacing-2'];
 const BAR_RADIUS = radiusVars['--radius-container'];
 // The player's corners nest around the bar's corners: the outer radius is the
 // bar radius plus the bar inset. A square bar keeps the player square.
@@ -49,6 +51,9 @@ const PLAYER_RADIUS = `calc(${BAR_RADIUS} + min(${BAR_INSET}, ${BAR_RADIUS} * 10
 
 const styles = stylex.create({
   root: {
+    // A size container has no intrinsic width, so the player fills its
+    // container instead of collapsing in a shrink-to-fit parent.
+    inlineSize: '100%',
     containerType: 'inline-size',
     overflow: 'clip',
     borderRadius: PLAYER_RADIUS,
@@ -108,7 +113,10 @@ const styles = stylex.create({
     opacity: 1,
     translate: '0 0',
     transitionProperty: 'opacity, translate',
-    transitionDuration: durationVars['--duration-medium'],
+    transitionDuration: {
+      default: durationVars['--duration-medium'],
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
   },
   barHidden: {
@@ -117,11 +125,21 @@ const styles = stylex.create({
     pointerEvents: 'none',
   },
   volume: {
+    position: 'relative',
     display: {
       default: 'flex',
       '@container (max-width: 480px)': 'none',
     },
     alignItems: 'center',
+    // The hidden slider leaves the flow; clipping keeps its box from
+    // covering, and catching the pointer over, the controls beside it.
+    overflow: 'clip',
+    overflowClipMargin: spacingVars['--spacing-1'],
+  },
+  // While hidden, the slider sits past the end of the volume control, inside
+  // the clipped area, so it never covers Mute.
+  volumeSlot: {
+    insetInlineStart: `calc(100% + ${spacingVars['--spacing-2']})`,
   },
   time: {
     display: {
@@ -174,7 +192,8 @@ export interface VideoPlayerProps extends Omit<
 }
 
 function VideoStatusLayer() {
-  const {store, toggleControls} = useMediaPlayerContext('VideoPlayer');
+  const {store, toggleControls, focusPlayer} =
+    useMediaPlayerContext('VideoPlayer');
   const hasStarted = useMediaSelector('VideoPlayer', state => state.hasStarted);
   const isEnded = useMediaSelector('VideoPlayer', state => state.isEnded);
   const isWaiting = useMediaSelector('VideoPlayer', state => state.isWaiting);
@@ -217,16 +236,16 @@ function VideoStatusLayer() {
             <Button
               label={t('@astryx.mediaPlayer.retry')}
               variant="secondary"
-              onClick={() => store.actions.reload()}
+              onClick={() => {
+                // The message and this button leave once the media reloads.
+                focusPlayer();
+                store.actions.reload();
+              }}
             />
           </div>
         ) : isWaiting && hasStarted ? (
           <div {...stylex.props(styles.center)}>
-            <Spinner
-              size="lg"
-              shade="onMedia"
-              aria-label={t('@astryx.mediaPlayer.loading')}
-            />
+            <Spinner size="lg" shade="onMedia" aria-hidden />
           </div>
         ) : !hasStarted || isEnded ? (
           <div {...stylex.props(styles.center)}>
@@ -236,7 +255,14 @@ function VideoStatusLayer() {
                 styles.bigPlay,
                 styles.centerInteractive,
               )}>
-              <MediaPlayButton size="lg" />
+              <MediaPlayButton
+                size="lg"
+                // The bar's play control does the same job, so this one stays
+                // out of the tab order and the accessibility tree.
+                tabIndex={-1}
+                aria-hidden
+                onClick={focusPlayer}
+              />
             </div>
           </div>
         ) : null}
@@ -347,6 +373,7 @@ function VideoControlBar({
 }) {
   const {isControlsVisible} = useMediaPlayerContext('VideoPlayer');
   const barRef = useRef<HTMLDivElement | null>(null);
+  const volumeReveal = useContainerReveal();
   useCueClearance(videoRef, barRef, isControlsVisible);
   return (
     <MediaTheme mode="dark">
@@ -362,9 +389,19 @@ function VideoControlBar({
         <MediaPlayButton />
         <MediaTimeSlider />
         <MediaTime xstyle={styles.time} />
-        <div {...stylex.props(styles.volume)}>
+        <div
+          {...mergeProps(
+            volumeReveal.getContainerProps(),
+            stylex.props(styles.volume),
+          )}>
           <MediaMuteButton />
-          <MediaVolumeSlider width={72} />
+          <span
+            {...mergeProps(
+              volumeReveal.getContentRevealProps(),
+              stylex.props(styles.volumeSlot),
+            )}>
+            <MediaVolumeSlider width={72} />
+          </span>
         </div>
         <MediaCaptionsButton />
         <MediaFullscreenButton />
@@ -376,7 +413,17 @@ function VideoControlBar({
 /**
  * A ready-made video player. Its controls float in a frosted bar inset over
  * the video. The bar shows on hover, pointer movement, and keyboard focus,
- * and hides after two idle seconds while the video plays.
+ * and hides after two idle seconds while the video plays. On touch, a tap
+ * shows the bar and the next tap hides it.
+ *
+ * @example
+ * ```
+ * <VideoPlayer
+ *   src="/media/product-tour.mp4"
+ *   poster="/media/product-tour.jpg"
+ *   label="Product tour"
+ * />
+ * ```
  */
 export function VideoPlayer({
   src,
