@@ -136,10 +136,26 @@ export interface TextInputProps extends Omit<
    *
    * @example
    * ```
-   * const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
+   * const [query, setQuery] = useState('');
+   * const [isOpen, setIsOpen] = useState(false);
    *
-   * <Popover placement="below" alignment="start" content={<Results />}>
-   *   {({ref}) => <TextInput label="Search" controlRef={ref} />}
+   * <Popover
+   *   isOpen={isOpen}
+   *   onOpenChange={setIsOpen}
+   *   role="none"
+   *   hasAutoFocus={false}
+   *   content={<Results />}>
+   *   {({ref}) => (
+   *     <TextInput
+   *       label="Search"
+   *       value={query}
+   *       onChange={value => {
+   *         setQuery(value);
+   *         setIsOpen(value !== '');
+   *       }}
+   *       controlRef={ref}
+   *     />
+   *   )}
    * </Popover>
    * ```
    */
