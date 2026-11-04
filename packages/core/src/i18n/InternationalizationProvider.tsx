@@ -22,10 +22,7 @@
 import {useMemo, type ReactNode} from 'react';
 import {InternationalizationContext} from './InternationalizationContext';
 import {getLocaleDirection} from './getLocaleDirection';
-import {
-  getExplicitLocaleCalendar,
-  resolveCalendarSystem,
-} from './useCalendarSystem';
+import {resolveCalendarSystem} from './useCalendarSystem';
 import type {CalendarSystem} from '../utils/calendarSystem';
 import type {
   Locale,
@@ -108,15 +105,15 @@ export interface InternationalizationProviderProps {
    */
   dir?: 'ltr' | 'rtl';
   /**
-   * The calendar system of this subtree, such as `'persian'` or `'hebrew'`.
-   * The provider resolves it and exposes it on the context as `calendar`.
-   * Astryx date components show Gregorian dates. Values stay Gregorian ISO
-   * dates. When omitted, a `-u-ca-` keyword in `locale` selects the calendar,
-   * else Gregorian; a locale's default calendar never applies. Calendars
-   * other than `gregory`, `iso8601`, `buddhist`, `roc`, and `japanese` need
-   * `Temporal`. The context keeps the requested calendar; where `Temporal` is
-   * missing, a date component that resolves it shows Gregorian dates and
-   * warns once in development.
+   * The calendar system of this subtree, such as `'persian'` or `'hebrew'`. The
+   * provider resolves it and exposes it on the context as `calendar`. Astryx
+   * date components show Gregorian dates. Values stay Gregorian ISO dates. When
+   * omitted, the calendar is Gregorian: a locale never selects it, neither by
+   * its default calendar nor by a `-u-ca-` keyword. Calendars other than
+   * `gregory`, `iso8601`, `buddhist`, `roc`, and `japanese` need `Temporal`.
+   * The context keeps the requested calendar; where `Temporal` is missing, a
+   * date component that resolves it shows Gregorian dates and warns once in
+   * development.
    *
    * @example
    * ```
@@ -144,8 +141,8 @@ export function InternationalizationProvider({
     () =>
       calendarProp != null
         ? resolveCalendarSystem(calendarProp, PROVIDER_NAME)
-        : (getExplicitLocaleCalendar(locale, PROVIDER_NAME) ?? 'gregory'),
-    [calendarProp, locale],
+        : 'gregory',
+    [calendarProp],
   );
   const value = useMemo(() => {
     const providedMessages = messages ?? {};

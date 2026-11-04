@@ -5,26 +5,20 @@
 /**
  * @file useCalendarSystem.ts
  * @input InternationalizationContext, an optional component `calendar`
- * @output The calendar system a date component shows, and the helpers that
- *   normalize a calendar identifier and read one from a locale tag
+ * @output The calendar system a date component shows, and the helper that
+ *   normalizes a calendar identifier
  * @position Internal i18n hook; read by InternationalizationProvider and date
  *   components. Not re-exported from the i18n barrel.
  */
 
 import {use} from 'react';
 import {InternationalizationContext} from './InternationalizationContext';
-import type {Locale} from './types';
 import {
   type CalendarSystem,
   isCalendarSystem,
   isCalendarSystemAvailable,
 } from '../utils/calendarSystem';
 import {warnOnce} from '../utils/devWarning';
-
-// ECMA-402 resolves the observational `islamic` calendar to `islamic-tbla`.
-const CALENDAR_ALIASES: Readonly<Record<string, CalendarSystem>> = {
-  islamic: 'islamic-tbla',
-};
 
 /**
  * Normalizes a calendar identifier. An identifier outside `CalendarSystem`
@@ -34,9 +28,8 @@ export function resolveCalendarSystem(
   id: string,
   source: string,
 ): CalendarSystem {
-  const normalized = CALENDAR_ALIASES[id] ?? id;
-  if (isCalendarSystem(normalized)) {
-    return normalized;
+  if (isCalendarSystem(id)) {
+    return id;
   }
   warnOnce(
     `calendar-unsupported:${id}`,
@@ -44,26 +37,6 @@ export function resolveCalendarSystem(
     `The calendar "${id}" is not supported; showing Gregorian dates.`,
   );
   return 'gregory';
-}
-
-/**
- * The calendar that a locale tag names with a `-u-ca-` keyword, such as
- * `th-TH-u-ca-buddhist`. A locale without the keyword names no calendar, so
- * `fa-IR` returns `undefined` and its default calendar never applies.
- */
-export function getExplicitLocaleCalendar(
-  locale: Locale,
-  source: string,
-): CalendarSystem | undefined {
-  let requested: string | undefined;
-  try {
-    requested = new Intl.Locale(locale).calendar;
-  } catch {
-    return undefined;
-  }
-  return requested == null
-    ? undefined
-    : resolveCalendarSystem(requested, source);
 }
 
 /**
