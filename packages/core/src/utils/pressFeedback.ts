@@ -47,6 +47,8 @@ import {
   pressGestureStep,
 } from './pressGesture';
 import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
+import {parseMotionRoleValue} from '../motion/roles';
 import {subscribeInput} from './inputStream';
 import {isInsideScrollView} from './scrollView';
 import {TOUCH_QUERY} from './touchPresentation';
@@ -156,19 +158,24 @@ const TIMER_MS: Record<NonNullable<PressStep['timer']>, number> = {
 
 /**
  * The release fade's clock on `element`, read once, at the release, from the
- * property its stylesheet reads: the theme's `--_astryx-motion-tempo`. Under
- * Reduce Motion a tempo may shorten the fade, never lengthen it past 200 ms.
+ * token its stylesheet reads: the theme's `--duration-exit`. Without a
+ * readable value it is the token's default. Under Reduce Motion it is no
+ * longer than the Reduce Motion fade, as in the stylesheet.
  */
 export function pressFadeMs(element: Element): number {
-  const style = getComputedStyle(element);
-  const value = style.getPropertyValue('--_astryx-motion-tempo').trim();
-  const read = value === '' ? Number.NaN : Number(value);
-  const tempo = Number.isFinite(read) && read > 0 ? read : 1;
-  const scaled = PRESS_FADE_MS * tempo;
+  const exit =
+    parseMotionRoleValue(
+      'duration',
+      getComputedStyle(element).getPropertyValue('--duration-exit'),
+    ) ?? PRESS_FADE_MS;
   const reduced =
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  return reduced ? Math.min(scaled, PRESS_FADE_MS) : scaled;
+  const bound = parseMotionRoleValue(
+    'duration',
+    reducedMotionFadeConsts.duration,
+  );
+  return reduced && bound != null ? Math.min(exit, bound) : exit;
 }
 
 /**

@@ -229,6 +229,10 @@ a measured, sourced difference exists.
   and MUST keep advancing at display rate through a main-thread block. It MUST
   NOT animate layout properties, and MUST NOT step a frame from script when the
   compositor can run the curve.
+  A press shows at once. Every press release that fades does so on the
+  theme's exit motion tokens (`--duration-exit`, `--ease-exit`), on every
+  device and pointer, by the owner's decision (2026-11-03); under Reduce
+  Motion, `design:reduced-motion` DR2 applies.
 - **FR6 — Motion is interruptible.** A finger MUST be able to catch any
   animation mid-flight at the value on screen. That value and its velocity
   MUST come from the curve, not from a layout read. A new target MUST keep the

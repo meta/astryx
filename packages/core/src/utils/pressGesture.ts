@@ -28,7 +28,8 @@
 // The constants were measured against native apps. The machine knows nothing
 // of the DOM, so {@link pressGestureStep}'s cases are the state diagram.
 
-import {pressConsts} from './interactionOverlay.stylex';
+import {resolveTokenReferences} from '../theme/tokenReferences';
+import {durationDefaults} from '../theme/tokens.stylex';
 
 /**
  * How long a finger must stay put before the surface believes it.
@@ -63,14 +64,16 @@ export const PRESS_SLOP_PX = 10;
 export const PRESS_FLASH_MS = 100;
 
 /**
- * How long the paint takes to leave after a release: UIKit's deselect
- * crossfade. The one number, shared with the stylesheet: the release
- * animation in interactionOverlay.stylex.ts runs on the same constant, so the
- * controller's release clock and the fade cannot drift apart. When the clock
- * runs out, the controller waits for a release animation that still runs,
- * then removes the attribute.
+ * How long the paint takes to leave after a release when no theme sets
+ * `--duration-exit`: that token's default. The release plays the theme's
+ * exit motion tokens, so the controller reads the token on
+ * the pressed element (`pressFadeMs` in pressFeedback.ts) and falls back to
+ * this. When the clock runs out, the controller waits for a release
+ * animation that still runs, then removes the attribute.
  */
-export const PRESS_FADE_MS: number = pressConsts.releaseMs;
+export const PRESS_FADE_MS: number = Number.parseFloat(
+  resolveTokenReferences(durationDefaults)['--duration-exit'],
+);
 
 /**
  * How recently a scroller must have moved for a touch on it to be a BRAKE

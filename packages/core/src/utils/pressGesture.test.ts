@@ -50,9 +50,10 @@ describe('the clocks are the native ones', () => {
     expect(PRESS_ONSET_MS).toBe(150);
   });
 
-  it("uses the scroller's own slop, the release's own fade, and a flash for a quick tap", () => {
+  it("uses the scroller's own slop and a flash for a quick tap, and without a theme the exit token's fade", () => {
     expect(PRESS_SLOP_PX).toBe(10);
-    expect(PRESS_FADE_MS).toBe(200);
+    // `--duration-exit` is `var(--duration-fast)`, 175 ms by default.
+    expect(PRESS_FADE_MS).toBe(175);
     expect(PRESS_FLASH_MS).toBe(100);
   });
 
