@@ -142,7 +142,7 @@ export const docs = {
       name: 'timezoneID',
       type: 'string',
       description:
-        'IANA zone a date-only date_absolute value, and each absolute part of a date_range, is read and written in: the day shows, edits and stores (as that midnight) in it; unset, a day is its UTC day. A date_absolute with isDateOnly: false formats its label in it. E.g. "America/New_York".',
+        'IANA zone a date-only date_absolute value, and each absolute part of a date_range, is read and written in: the day shows, edits and stores (as that midnight) in it; unset, a day is its UTC day. A date_absolute with isDateOnly: false shows and edits its date and time in it; unset, in the viewer\'s zone. E.g. "America/New_York".',
     },
     {
       name: 'handleRef',
@@ -450,7 +450,7 @@ export const docsZh = {
       name: 'timezoneID',
       type: 'string',
       description:
-        '仅日期的 date_absolute 值及 date_range 的每个绝对端点读写所用的 IANA 时区：该日在此时区显示、编辑并以其午夜存储；未设置时为 UTC 日。isDateOnly: false 的 date_absolute 值的标签也在此时区格式化。例如 "America/New_York"。',
+        '仅日期的 date_absolute 值及 date_range 的每个绝对端点读写所用的 IANA 时区：该日在此时区显示、编辑并以其午夜存储；未设置时为 UTC 日。isDateOnly: false 的 date_absolute 值在此时区显示并编辑其日期和时间；未设置时为查看者所在时区。例如 "America/New_York"。',
     },
     {
       name: 'handleRef',

@@ -66,6 +66,13 @@ export interface CheckboxListProps extends Omit<
    */
   description?: string;
   /**
+   * Whether the group is optional. Shows the optional indicator after the
+   * group label, unless a surrounding `FormLayout` already makes fields
+   * optional by default.
+   * @default false
+   */
+  isOptional?: boolean;
+  /**
    * Status indicator for the checkbox group.
    * When set with a message, displays a colored message box below the group.
    */
@@ -153,6 +160,7 @@ export function CheckboxList({
   label,
   isLabelHidden = false,
   description,
+  isOptional = false,
   status,
   value,
   onChange,
@@ -270,6 +278,7 @@ export function CheckboxList({
       inputID={inputID}
       labelID={labelID}
       isGroupLabel
+      isOptional={isOptional}
       descriptionID={description ? descriptionID : undefined}
       isDisabled={isDisabled}
       status={

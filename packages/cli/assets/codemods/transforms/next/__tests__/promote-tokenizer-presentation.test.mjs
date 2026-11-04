@@ -54,7 +54,7 @@ const a = <Core.Tokenizer label="Tags" experimental={{presentation: 'adaptive', 
     );
   });
 
-  it('leaves a TODO and the deprecated spelling where it cannot prove the rewrite', async () => {
+  it('leaves a TODO and the call unchanged where it cannot prove the rewrite', async () => {
     const source = `import {Tokenizer} from '@astryxdesign/core';
 const a = <Tokenizer label="Tags" experimental={options} />;
 const b = <Tokenizer label="Tags" experimental={{presentation: 'adaptive'}} {...rest} />;
@@ -64,17 +64,40 @@ const d = <Tokenizer label="Tags" experimental={{...base, presentation: 'adaptiv
     expect(output.match(/TODO\(astryx upgrade\)/g)).toHaveLength(4);
     expect(flat(output)).toContain("experimental={{presentation: 'adaptive'}}");
     expect(flat(output)).toContain('experimental={options}');
+    // Each case names its own reason.
+    const text = flat(output);
+    expect(text).toContain('because the value is not a literal object.');
+    expect(text).toContain('because a spread may also set presentation.');
+    expect(text).toContain(
+      'presentation is already set; remove experimental.presentation.',
+    );
+    expect(text).toContain(
+      'because the object has a spread or a computed key.',
+    );
   });
 
-  it('moves the value past a spread that comes before experimental', async () => {
+  it('names a repeated presentation key in its TODO', async () => {
     const output = flat(
       await applyTransform(`import {Tokenizer} from '@astryxdesign/core';
-const a = <Tokenizer {...args} label="Tags" experimental={{presentation: 'bottom-sheet'}} />;`),
+const a = <Tokenizer label="Tags" experimental={{presentation: 'adaptive', 'presentation': 'popover'}} />;`),
     );
     expect(output).toContain(
-      '<Tokenizer {...args} label="Tags" presentation="bottom-sheet" />',
+      'because the object sets presentation more than once.',
     );
-    expect(output).not.toContain('TODO');
+    expect(output).not.toContain('presentation="');
+  });
+
+  it('leaves a TODO for a spread on either side of experimental, because the spread can set presentation', async () => {
+    const source = `import {Tokenizer} from '@astryxdesign/core';
+const a = <Tokenizer {...args} label="Tags" experimental={{presentation: 'bottom-sheet'}} />;
+const b = <Tokenizer label="Tags" experimental={{presentation: 'bottom-sheet'}} {...args} />;`;
+    const output = await applyTransform(source);
+    expect(output.match(/TODO\(astryx upgrade\)/g)).toHaveLength(2);
+    expect(
+      flat(output).match(/because a spread may also set presentation\./g),
+    ).toHaveLength(2);
+    expect(flat(output)).not.toContain('presentation="bottom-sheet"');
+    expect(await applyTransform(output)).toBe(output);
   });
 
   it('changes nothing without an experimental presentation or outside core', async () => {
