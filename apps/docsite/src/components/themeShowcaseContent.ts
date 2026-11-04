@@ -24,7 +24,6 @@ export interface ThemeShowcaseContent {
   inventory: InventoryRow[];
 }
 
-
 // Matcha café — matcha-drink photos.
 const MATCHA_IMAGES: Record<string, string> = {
   watch: '/images/matcha/preview-watch.png',

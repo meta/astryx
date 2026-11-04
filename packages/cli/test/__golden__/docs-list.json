@@ -37,7 +37,7 @@
       },
       {
         "topic": "internationalization",
-        "description": "Set the active locale, load catalogs, coexist with your own i18n library, handle RTL, and test translations.",
+        "description": "Set the active locale, load catalogs, coexist with your own i18n library, show other calendars, handle RTL, and test translations.",
         "package": "@astryxdesign/cli"
       },
       {

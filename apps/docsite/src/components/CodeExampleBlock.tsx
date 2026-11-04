@@ -13,7 +13,5 @@ import {CodeBlock, type CodeBlockProps} from '@astryxdesign/core/CodeBlock';
 import {stripCodeExampleCopyrightHeader} from '../lib/codeExamples';
 
 export function CodeExampleBlock({code, ...props}: CodeBlockProps) {
-  return (
-    <CodeBlock {...props} code={stripCodeExampleCopyrightHeader(code)} />
-  );
+  return <CodeBlock {...props} code={stripCodeExampleCopyrightHeader(code)} />;
 }
