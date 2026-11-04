@@ -155,16 +155,19 @@ const sortStyles = stylex.create({
   buttonAlignEnd: {
     justifyContent: 'flex-end',
   },
-  iconWrapperUnsorted: {
+  // The wrapper takes no block size, so a theme's larger glyph overflows it
+  // instead of growing the Sort control or the header row.
+  iconWrapper: {
     display: 'inline-flex',
+    alignItems: 'center',
+    blockSize: 0,
+  },
+  iconWrapperUnsorted: {
     opacity: {
       default: 0.35,
       ':is(th:hover *)': 1,
       ':focus-visible': 1,
     },
-  },
-  iconWrapperActive: {
-    display: 'inline-flex',
   },
   rank: {
     fontSize: 10,
@@ -301,9 +304,8 @@ function SortHeaderButton<T extends Record<string, unknown>>({
         <span>{children}</span>
         <span
           {...stylex.props(
-            direction != null
-              ? sortStyles.iconWrapperActive
-              : sortStyles.iconWrapperUnsorted,
+            sortStyles.iconWrapper,
+            direction == null && sortStyles.iconWrapperUnsorted,
           )}>
           <ComponentIcon
             slot="table-sort-indicator"
