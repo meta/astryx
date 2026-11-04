@@ -218,9 +218,11 @@ entry: in WebKit, with the popover above BottomSheet's open modal dialog, the
 sheet's dim held for 155 to 225 ms into a block while the control moved, and
 inside the dialog it moves in step with the sheet. `waitForAnimation` and
 `blockMainThread`'s `during` never count the control's own animation, so on
-a dialog they still wait for the backdrop's. Track it from the
-same screencast (`trackMarker(page, frames, {rgb: CONTROL_RGB})`) and pass it
-as `control`: the component passes when it moved on every frame the control
+a dialog they still wait for the backdrop's. Track a top-layer control from
+the same screencast with `trackControl(page, frames)` (`trackMarker` with
+`CONTROL_RGB`, searching only the top strip it crosses). A control mounted
+`within` a dialog moves with it, so track that one with `trackMarker(page,
+frames, {rgb: CONTROL_RGB})`. Pass either as `control`: the component passes when it moved on every frame the control
 moved and its longest stall is no longer than the control's. Both are read from
 the same screencast frames, so a compositor animation misses none. A window in
 which the control moved on fewer than four frames fails, since the machine
@@ -244,6 +246,13 @@ to show a new position on at least four of the control's frames. The cast step (
 is read from the value's changes in the judged part, so a position the page
 commits off the grid once the block ends does not shrink it.
 A main-thread animation still fails: the control moves and it does not.
+
+`controlClock(control)` reads the compositor's own time in each frame off the
+control's position, for a proof that judges motion against time, not against
+the screencast's stamps. A loaded machine stamps frames late, and
+`inPresentationOrder` can then put a frame after frames that came after it.
+The clock takes the cycle origin that most frames agree with, so such a frame
+moves only its own reading. A frame within 36 px of a turn gets no reading.
 
 An animation that lasts a fraction of a second, such as a 0.2 s fade, leaves a
 block only a few frames to judge: in WebKit, or on a loaded machine, the control
@@ -279,7 +288,12 @@ Layout or Paint there; a layout-property animation does one per frame. Its
 (`waitForAnimation` describing keyframes, `blockMainThread` without `during`)
 is in `devtoolsTasks` instead, and only when no page script ran inside it. A
 test's own `page.evaluate` stays a long task, whether it calls page code
-directly or sets it off.
+directly or sets it off. Each long task carries its wall time (`durationMs`)
+and the main thread's own run time (`threadMs`, from the trace's thread
+clock). A busy machine stretches the first but not the second, so a claim
+about the page's own work judges `threadMs`. A thread that waits (a
+synchronous request, `Atomics.wait`) gains wall time but no thread time, so a
+claim about a blocking wait judges `durationMs`.
 
 **Storyboards.** Deterministic: frames come from seeking held animations or
 from stepping scripted input, never from wall-clock capture. The JSON trace

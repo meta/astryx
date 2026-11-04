@@ -267,6 +267,10 @@
     "defaultMessage": "No filters applied",
     "description": "Heading of the PowerSearch Filters sheet empty state when no filter is active (experimental bottom-sheet presentation). Neutral tone."
   },
+  "@astryx.powersearch.sheet.noFiltersInDraft": {
+    "defaultMessage": "No filters",
+    "description": "Heading of the PowerSearch Filters sheet empty state while the sheet's draft is empty but the field still has applied filters, which Done replaces. Must not say the filters are applied or removed yet. Neutral tone."
+  },
   "@astryx.powersearch.sheet.noFiltersDescription": {
     "defaultMessage": "Add a filter to narrow your results and find what you need faster.",
     "description": "Guidance line under the PowerSearch Filters sheet empty state, above its Add filter action. One short sentence."
@@ -293,7 +297,23 @@
   },
   "@astryx.powersearch.sheet.done": {
     "defaultMessage": "Done",
-    "description": "Primary button label in the PowerSearch Filters sheet footer that closes the sheet. Short; marks the end of the filtering task."
+    "description": "Primary button label in the PowerSearch Filters sheet footer that commits the sheet's filter draft and closes the sheet. Short; marks the end of the filtering task."
+  },
+  "@astryx.powersearch.sheet.discardTitle": {
+    "defaultMessage": "Discard changes?",
+    "description": "Title of the confirmation dialog shown when someone tries to dismiss the PowerSearch filter sheet after changing its filter draft. A question."
+  },
+  "@astryx.powersearch.sheet.discardDescription": {
+    "defaultMessage": "Your changes to the filters haven't been applied.",
+    "description": "Body of the dirty-dismiss confirmation inside the PowerSearch filter sheet. Done applies the draft; a dismissal would drop it."
+  },
+  "@astryx.powersearch.sheet.keepEditing": {
+    "defaultMessage": "Keep editing",
+    "description": "Label of the safe cancel action in the PowerSearch dirty-dismiss confirmation. It closes the confirmation and returns to the unchanged draft."
+  },
+  "@astryx.powersearch.sheet.discardConfirm": {
+    "defaultMessage": "Discard changes",
+    "description": "Label of the destructive action in the PowerSearch dirty-dismiss confirmation. It closes the sheet without applying its filter draft."
   },
   "@astryx.powersearch.sheet.search": {
     "defaultMessage": "Search",
@@ -366,14 +386,6 @@
   "@astryx.powersearch.sheet.labelValue": {
     "defaultMessage": "{label} {value}",
     "description": "A Filters row's \"field operator\" text joined with its value, as the removal announcement reads it (for example \"Status is Open\"). Translators may reorder the two parts."
-  },
-  "@astryx.powersearch.sheet.filtersClearedWithCount": {
-    "defaultMessage": "All filters removed. {resultCount}",
-    "description": "Polite screen-reader announcement after Clear all in the PowerSearch touch sheet when the result count changed with it; resultCount is the field's already formatted result count (for example \"240 results\"). Live-region text, never shown on screen."
-  },
-  "@astryx.powersearch.sheet.editableFiltersClearedWithCount": {
-    "defaultMessage": "Editable filters removed. {resultCount}",
-    "description": "Polite screen-reader announcement after Clear all in the PowerSearch touch sheet removes the editable filters, keeps read-only ones, and the result count changed with it; resultCount is the field's already formatted result count (for example \"240 results\"). Live-region text, never shown on screen."
   },
   "@astryx.alertDialog.cancel": {
     "defaultMessage": "Cancel",

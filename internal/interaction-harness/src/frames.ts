@@ -353,6 +353,8 @@ export function colorBlockPx(
 /**
  * Finds the marker in every frame. Decoding runs in a scratch page of the same
  * browser, so neither the page under test nor Node needs an image decoder.
+ * With `region` (CSS px), only that part of each frame is searched. On a
+ * loaded machine, a search of every pixel can take longer than the test.
  */
 export async function trackMarker(
   page: Page,
@@ -360,7 +362,12 @@ export async function trackMarker(
   {
     rgb = MARKER_RGB,
     tolerance = 40,
-  }: {rgb?: readonly [number, number, number]; tolerance?: number} = {},
+    region,
+  }: {
+    rgb?: readonly [number, number, number];
+    tolerance?: number;
+    region?: Box;
+  } = {},
 ): Promise<TrackedFrame[]> {
   const isDefaultMarker = rgb.every((value, i) => value === MARKER_RGB[i]);
   const scratch = await page.context().newPage();
@@ -370,7 +377,7 @@ export async function trackMarker(
     for (let i = 0; i < frames.length; i += 12) {
       const batch = frames.slice(i, i + 12);
       const boxes = await scratch.evaluate(
-        async ({batch: items, color, tol}) => {
+        async ({batch: items, color, tol, area}) => {
           const results: {
             box: {x: number; y: number; width: number; height: number} | null;
             pixels: number;
@@ -387,11 +394,28 @@ export async function trackMarker(
               throw new Error('no 2d context');
             }
             context.drawImage(bitmap, 0, 0);
+            const scale = bitmap.width / item.viewportWidth;
+            const left = area == null ? 0 : Math.floor(area.x * scale);
+            const top = area == null ? 0 : Math.floor(area.y * scale);
+            const right =
+              area == null
+                ? bitmap.width
+                : Math.min(
+                    bitmap.width,
+                    Math.ceil((area.x + area.width) * scale),
+                  );
+            const bottom =
+              area == null
+                ? bitmap.height
+                : Math.min(
+                    bitmap.height,
+                    Math.ceil((area.y + area.height) * scale),
+                  );
             const {data, width, height} = context.getImageData(
-              0,
-              0,
-              bitmap.width,
-              bitmap.height,
+              left,
+              top,
+              right - left,
+              bottom - top,
             );
             let minX = Infinity;
             let minY = Infinity;
@@ -422,14 +446,13 @@ export async function trackMarker(
                 }
               }
             }
-            const scale = width / item.viewportWidth;
             results.push({
               box:
                 pixels === 0
                   ? null
                   : {
-                      x: minX / scale,
-                      y: minY / scale,
+                      x: (left + minX) / scale,
+                      y: (top + minY) / scale,
                       width: (maxX - minX + 1) / scale,
                       height: (maxY - minY + 1) / scale,
                     },
@@ -447,6 +470,7 @@ export async function trackMarker(
           })),
           color: [...rgb],
           tol: tolerance,
+          area: region ?? null,
         },
       );
       boxes.forEach((result, k) => {

@@ -95,6 +95,19 @@ function headOfLetters(term, name) {
 const FAMILY_MEMBERS = 3;
 
 /**
+ * A derived name's score for a term: 60 for the same word, 40 for a word the
+ * term starts, else 0.
+ * @param {string} term - Lowercased search term.
+ * @param {string} kw - The derived name as authored.
+ * @returns {number}
+ */
+function weakKeywordScore(term, kw) {
+  const kwLower = String(kw).toLowerCase();
+  if (kwLower === term || sameWord(term, kwLower)) return 60;
+  return startsAWordOf(term, kw) ? 40 : 0;
+}
+
+/**
  * Score a single candidate against the search term across name, keywords,
  * and prose signals. Returns the best (highest) score plus a human reason,
  * or null if nothing matched above the floor.
@@ -107,6 +120,8 @@ const FAMILY_MEMBERS = 3;
  *   also matches typed as words: `command palette` is CommandPalette.
  * @param {string[]} [candidate.keywords] - Authored intent (componentsUsed, category words).
  * @param {string[]} [candidate.weakKeywords] - Derived signal (components a page renders).
+ * @param {string[]} [candidate.weakKeywordBound] - Every name `weakKeywords`
+ *   can hold, when reading them is costly: they are read only if one matches.
  * @param {string} [candidate.description]
  * @param {string[]} [candidate.prose] - Extra free-text blobs (doc section text, best practices).
  * @param {string[]} [candidate.guidance] - Usage guidance (features, best practices) — scored a tier below description.
@@ -118,20 +133,20 @@ const FAMILY_MEMBERS = 3;
  */
 export function scoreCandidate(
   term,
-  {
+  candidate,
+  {fuzzy = true, joins = true, part = false, synonym = false} = {},
+) {
+  const {
     name,
     aliases = [],
     domain,
     keywords = [],
-    weakKeywords = [],
     description = '',
     prose = [],
     guidance = [],
     _family,
     _familyIndex,
-  },
-  {fuzzy = true, joins = true, part = false, synonym = false} = {},
-) {
+  } = candidate;
   let best = 0;
   let reason = '';
   /** @type {'partial' | 'keyword' | false} */
@@ -277,13 +292,14 @@ export function scoreCandidate(
   // confident-match gate on its own; it still counts toward multi-term
   // coverage, which is where "this page renders that" is real evidence.
   // No Levenshtein tier — fuzzy matching a derived signal is pure noise.
-  for (const kw of weakKeywords) {
-    const kwLower = String(kw).toLowerCase();
-    if (kwLower === term || sameWord(term, kwLower)) {
-      consider(60, `renders ${kw}`);
-      continue;
+  // A bound skips the read when no name the page can yield matches the term,
+  // and then no weak keyword can match it either.
+  const bound = candidate.weakKeywordBound;
+  if (!bound || bound.some(kw => weakKeywordScore(term, kw) > 0)) {
+    for (const kw of candidate.weakKeywords ?? []) {
+      const score = weakKeywordScore(term, kw);
+      if (score > 0) consider(score, `renders ${kw}`);
     }
-    if (startsAWordOf(term, kw)) consider(40, `renders ${kw}`);
   }
 
   // ── Prose / description / guidance signals (stem-tolerant whole word) ──

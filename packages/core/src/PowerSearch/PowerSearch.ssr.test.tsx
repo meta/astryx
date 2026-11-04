@@ -18,6 +18,12 @@ import {hydrateRoot} from 'react-dom/client';
 import {renderToString} from 'react-dom/server';
 import type {PowerSearchConfig, PowerSearchFilter} from './types';
 
+// The first import of PowerSearch transforms its whole module graph, which
+// takes seconds on an idle machine. This import does that work while the file
+// loads, outside the time limit of each test. Each test still evaluates a
+// fresh graph.
+await import('./PowerSearch');
+
 const config: PowerSearchConfig = {
   name: 'Issues',
   fields: [
