@@ -61,12 +61,17 @@ export const docs = {
       type: '(event: MouseEvent<HTMLElement>) => void',
       description: 'Mouse up handler to attach to the container (handles middle-click navigation for href).',
     },
+    {
+      name: 'onPointerDown',
+      type: '(event: PointerEvent<HTMLElement>) => void',
+      description: 'Pointer down handler to attach to the container. On a container that paints its press with usePressFeedback, it drops a touch press that starts on a nested interactive element, which does not activate the container. A mouse :active press paint is unchanged. Without it, the container keeps its click rules and its pressed state for every press.',
+    },
   ],
   usage: {
     description:
       'Makes a container element clickable while preserving nested interactive element behavior. Solves the "nested interactive elements" problem: when a card is clickable but contains buttons/links, clicking those should NOT trigger the card\'s action. Detects interactive ancestors between the click target and the container, and ignores text selections. Supports href navigation (including middle-click and Ctrl/Cmd+click for new tabs).',
     bestPractices: [
-      { guidance: true, description: 'Attach both onClick and onMouseUp to the container element for full click handling including middle-click.' },
+      { guidance: true, description: 'Attach onClick, onMouseUp and onPointerDown to the container element: full click handling including middle-click, and no touch pressed state for a press on a nested control.' },
       { guidance: true, description: 'Use inside ClickableCard or SelectableCard for the standard card interaction pattern.' },
       { guidance: false, description: 'Use when the entire container is a single interactive element; just use a <button> or <a> directly.' },
     ],
@@ -93,12 +98,13 @@ export const docsDense = {
   returnDescriptions: {
     onClick: 'click handler for container element.',
     onMouseUp: 'mouse up handler for container (handles middle-click navigation for href).',
+    onPointerDown: 'pointer down handler for container: drops usePressFeedback touch press starting on nested interactive element; mouse :active paint unchanged.',
   },
   usage: {
     description:
       'Makes container element clickable while preserving nested interactive element behavior. Solves "nested interactive elements" problem: when card is clickable but contains buttons/links, clicking those must NOT trigger card\'s action. Detects interactive ancestors between click target + container, ignores text selections. Supports href navigation (incl. middle-click + Ctrl/Cmd+click for new tabs).',
     bestPractices: [
-      { guidance: true, description: 'Attach both onClick + onMouseUp to container element for full click handling incl. middle-click.' },
+      { guidance: true, description: 'Attach onClick + onMouseUp + onPointerDown to container element: full click handling incl. middle-click, no touch pressed state for press on nested control.' },
       { guidance: true, description: 'Use inside ClickableCard / SelectableCard for standard card interaction pattern.' },
       { guidance: false, description: 'Use when entire container is single interactive element; just use <button> / <a> directly.' },
     ],

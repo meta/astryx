@@ -480,11 +480,12 @@ export function TreeListItem({
   // a plain element and both hook instances stay inert on it.
   const forwardsToLink = href != null && handleClick == null;
   const linkRowRef = useRef<HTMLDivElement>(null);
-  const {onClick: delegateToLink} = useClickableContainer({
-    containerRef: linkRowRef,
-    interactiveRef: linkRef,
-    disabled: isDisabled || !forwardsToLink,
-  });
+  const {onClick: delegateToLink, onPointerDown: pressOnLinkRow} =
+    useClickableContainer({
+      containerRef: linkRowRef,
+      interactiveRef: linkRef,
+      disabled: isDisabled || !forwardsToLink,
+    });
   const {onMouseUp: openLinkOnMiddleClick} = useClickableContainer({
     containerRef: linkRowRef,
     href,
@@ -732,7 +733,8 @@ export function TreeListItem({
           )}
           ref={forwardsToLink ? linkRowRef : undefined}
           onClick={forwardsToLink ? delegateToLink : handleClick}
-          onMouseUp={forwardsToLink ? openLinkOnMiddleClick : undefined}>
+          onMouseUp={forwardsToLink ? openLinkOnMiddleClick : undefined}
+          onPointerDown={forwardsToLink ? pressOnLinkRow : undefined}>
           <div {...stylex.props(styles.indentedContent)}>{innerContent}</div>
         </div>
       </div>
