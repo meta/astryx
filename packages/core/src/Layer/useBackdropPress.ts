@@ -11,6 +11,7 @@
  */
 
 import {useCallback, useRef, type PointerEvent, type MouseEvent} from 'react';
+import {outsideDismissalCount} from './outsidePress';
 
 export interface BackdropPressHandlers {
   onPointerDownCapture: (event: PointerEvent<HTMLElement>) => void;
@@ -28,11 +29,10 @@ function isPopoverShowing(element: Element): boolean {
   }
 }
 
-/** The popovers showing in the host's document, other than the host and what holds it. */
-function popoversShowingAbove(host: HTMLElement): ReadonlyArray<Element> {
-  return Array.from(host.ownerDocument.querySelectorAll('[popover]')).filter(
-    element => !element.contains(host) && isPopoverShowing(element),
-  );
+function showingAutoPopovers(host: HTMLElement): ReadonlyArray<Element> {
+  return Array.from(
+    host.ownerDocument.querySelectorAll('[popover="auto"], [popover=""]'),
+  ).filter(element => !element.contains(host) && isPopoverShowing(element));
 }
 
 /**
@@ -45,8 +45,10 @@ function popoversShowingAbove(host: HTMLElement): ReadonlyArray<Element> {
  * A press that light-dismisses a layer open above the host, such as a menu
  * open in the dialog, is that layer's: the host stays open, and the next
  * backdrop press dismisses it, as a second Escape does. The press counts as
- * the layer's when a popover that showed at pointer-down no longer shows at
- * the click.
+ * the layer's when it light-dismissed a layer: a `popover="auto"` layer that
+ * showed at pointer-down no longer shows at the click, or an outside-press
+ * watch closed a layer. A layer that hides for another reason, such as a
+ * Tooltip whose trigger lost focus, does not count.
  *
  * The pointer handlers run in the capture phase. A nested layer, such as a
  * popover open in the dialog, stops its presses at its own root, so a
@@ -58,16 +60,20 @@ export function useBackdropPress(
 ): BackdropPressHandlers {
   const startedOnBackdropRef = useRef(false);
   const endedOnBackdropRef = useRef(false);
-  const layersAboveRef = useRef<ReadonlyArray<Element>>([]);
+  const autoPopoversRef = useRef<ReadonlyArray<Element>>([]);
+  const dismissalCountRef = useRef(0);
 
   const onPointerDownCapture = useCallback(
     (event: PointerEvent<HTMLElement>) => {
       const isOnBackdrop = event.target === event.currentTarget;
       startedOnBackdropRef.current = isOnBackdrop;
       endedOnBackdropRef.current = false;
-      layersAboveRef.current = isOnBackdrop
-        ? popoversShowingAbove(event.currentTarget)
+      autoPopoversRef.current = isOnBackdrop
+        ? showingAutoPopovers(event.currentTarget)
         : [];
+      dismissalCountRef.current = outsideDismissalCount(
+        event.currentTarget.ownerDocument,
+      );
     },
     [],
   );
@@ -81,18 +87,19 @@ export function useBackdropPress(
   const onPointerCancelCapture = useCallback(() => {
     startedOnBackdropRef.current = false;
     endedOnBackdropRef.current = false;
-    layersAboveRef.current = [];
+    autoPopoversRef.current = [];
   }, []);
 
   const onClick = useCallback(
     (event: MouseEvent<HTMLElement>) => {
       const pressWasOnBackdrop = endedOnBackdropRef.current;
-      const dismissedALayerAbove = layersAboveRef.current.some(
-        layer => !isPopoverShowing(layer),
-      );
+      const dismissedALayerAbove =
+        autoPopoversRef.current.some(layer => !isPopoverShowing(layer)) ||
+        outsideDismissalCount(event.currentTarget.ownerDocument) !==
+          dismissalCountRef.current;
       startedOnBackdropRef.current = false;
       endedOnBackdropRef.current = false;
-      layersAboveRef.current = [];
+      autoPopoversRef.current = [];
       if (
         isEnabled &&
         pressWasOnBackdrop &&

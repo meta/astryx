@@ -6,7 +6,9 @@
  * @file outsidePress.ts
  * @input Listens for pointerdown, pointerup and pointercancel on a document
  * @output Exports watchOutsidePress and useOutsidePress, which owns one watch
- *   for a component: start on show, stop on hide, stop on unmount; and the
+ *   for a component: start on show, stop on hide, stop on unmount;
+ *   noteOutsideDismissal and outsideDismissalCount, which count the layers an
+ *   outside press closed in each document; and the
  *   inside tests a text field's owner runs: isPressInsideOwnedLayer for a
  *   press, isFocusInsideOwnedLayer for a blur
  * @position Internal to Layer; the outside-press dismissal for a manual
@@ -22,6 +24,21 @@
  */
 
 import {useCallback, useEffect, useMemo, useRef} from 'react';
+
+// How many layers an outside press has closed in each document. A modal
+// host's backdrop press reads it: a press that closed a layer above the host
+// is that layer's, so the host stays open.
+const outsideDismissals = new WeakMap<Document, number>();
+
+/** Records that an outside press in `doc` is closing a layer. */
+export function noteOutsideDismissal(doc: Document): void {
+  outsideDismissals.set(doc, (outsideDismissals.get(doc) ?? 0) + 1);
+}
+
+/** How many layers an outside press has closed in `doc` so far. */
+export function outsideDismissalCount(doc: Document): number {
+  return outsideDismissals.get(doc) ?? 0;
+}
 
 /**
  * Watch the owner's document for a press outside, until the returned function
@@ -49,6 +66,7 @@ export function watchOutsidePress(
     const wasOutside = startedOutside;
     startedOutside = false;
     if (wasOutside && !isInside(event.composedPath())) {
+      noteOutsideDismissal(doc);
       onOutside();
     }
   };

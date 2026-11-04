@@ -53,6 +53,7 @@ import {
   type RefObject,
 } from 'react';
 import {currentGesture} from './gestureCounter';
+import {noteOutsideDismissal} from './outsidePress';
 import {
   innermostInteractive,
   matchesInteractiveSelectors,
@@ -436,6 +437,9 @@ export function useTouchTriggerInternal(
         }
       }
       disarmOutsideDismiss();
+      if (target != null) {
+        noteOutsideDismissal(target.ownerDocument ?? document);
+      }
       hideRef.current();
     };
 

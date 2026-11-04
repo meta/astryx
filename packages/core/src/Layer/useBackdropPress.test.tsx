@@ -192,9 +192,14 @@ describe.each([
 // pointer-up.
 function PopoverInside() {
   return (
-    <div data-testid="inner-popover" popover="auto" data-open="">
-      <button type="button">Rename</button>
-    </div>
+    <>
+      <div data-testid="inner-popover" popover="auto" data-open="">
+        <button type="button">Rename</button>
+      </div>
+      <div data-testid="inner-tip" popover="manual" data-open="">
+        Help text
+      </div>
+    </>
   );
 }
 
@@ -251,6 +256,18 @@ describe.each([
         expect(onOpenChange).toHaveBeenCalledWith(false);
       });
     }
+
+    it('closes the host when a tooltip hides during the press for another reason', () => {
+      const onOpenChange = vi.fn();
+      render(renderMember(onOpenChange));
+      const backdrop = backdropOf();
+      fireEvent.pointerDown(backdrop, {pointerType: 'mouse'});
+      // A tooltip whose trigger lost focus hides on its own delay.
+      screen.getByTestId('inner-tip').removeAttribute('data-open');
+      fireEvent.pointerUp(backdrop, {pointerType: 'mouse'});
+      fireEvent.click(backdrop);
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
 
     it('closes the host when the press dismisses no layer above it', () => {
       const onOpenChange = vi.fn();
