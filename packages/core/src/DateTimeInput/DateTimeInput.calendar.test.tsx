@@ -75,8 +75,10 @@ describe('DateTimeInput typed date entry with a calendar', () => {
   it('rejects a date the calendar does not have and names the calendar', () => {
     const {input, onChange, container} = renderField('en', {
       calendar: 'hebrew',
+      status: {type: 'warning', message: 'Check the date'},
     });
     fireEvent.change(input, {target: {value: '1 Adar I 5785'}});
+    fireEvent.blur(input);
     expect(onChange).not.toHaveBeenCalled();
     expect(input).toHaveAttribute('aria-invalid', 'true');
     expectShown(
@@ -84,7 +86,6 @@ describe('DateTimeInput typed date entry with a calendar', () => {
       container,
       'This date does not exist in the Hebrew Calendar',
     );
-    fireEvent.blur(input);
     expect(input).toHaveValue('1 Adar I 5785');
   });
 

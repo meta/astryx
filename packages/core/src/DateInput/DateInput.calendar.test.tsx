@@ -126,6 +126,7 @@ describe('DateInput typed entry with a calendar', () => {
     const {input, onChange, container} = renderField('en', {
       calendar: 'persian',
       value: '2026-11-02',
+      status: {type: 'warning', message: 'Check the date'},
     });
     fireEvent.change(input, {target: {value: '12/30/1404 AP'}});
     expectShown(

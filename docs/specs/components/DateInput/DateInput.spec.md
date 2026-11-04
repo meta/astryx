@@ -252,8 +252,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   alone; rejected typed input uses an assertive alert and native rejection remains
   described to assistive technology. Unreadable text, a date the calendar does not
   have, and an out-of-range date each announce a different catalog message
-  (`spec:AST-111` AR3); the last two also show it as the field's error status
-  unless the caller sets `status`.
+  (`spec:AST-111` AR3); the last two also show it as the field's error status,
+  in place of a caller `status` while the rejected text stays.
 - **AR4 — Disabled and busy focus.** A disabled or busy field remains focusable and
   exposes its state on the focused control (`spec:AST-085/FR1, FR5`); a disabled
   reason, when given, describes the field's focusable controls while all value

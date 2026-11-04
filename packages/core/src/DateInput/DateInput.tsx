@@ -640,12 +640,10 @@ function PointerDateField({
     (typedError !== 'unreadable' || isRejectionCommitted)
       ? {type: 'error', message: typedErrorMessage}
       : undefined;
-  const fieldStatus = status ?? typedStatus;
+  const fieldStatus = typedStatus ?? status;
   // Field announces a status it shows; the alert carries any other rejection.
   const alertMessage =
-    status == null && typedStatus != null && !inputGroup
-      ? ''
-      : (typedErrorMessage ?? '');
+    typedStatus != null && !inputGroup ? '' : (typedErrorMessage ?? '');
 
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
     useInputStatusIcon({
@@ -1070,8 +1068,8 @@ function PointerDateField({
         )}
       />
       {/*
-          Live region announcing rejected typed input to assistive technology,
-          with one message for each kind of rejection (WCAG 3.3.1).
+          Announces a typed rejection that the field status does not announce.
+          The field status announces the rest.
         */}
       <VisuallyHidden as="div" role="alert" aria-live="assertive">
         {alertMessage}

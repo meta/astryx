@@ -808,12 +808,10 @@ function PointerDateTimeField({
     (dateTypedError !== 'unreadable' || isDateRejectionCommitted)
       ? {type: 'error', message: dateTypedErrorMessage}
       : undefined;
-  const fieldStatus = status ?? dateTypedStatus;
+  const fieldStatus = dateTypedStatus ?? status;
   // Field announces a status it shows; the alert carries any other rejection.
   const dateAlertMessage =
-    status == null && dateTypedStatus != null
-      ? ''
-      : (dateTypedErrorMessage ?? '');
+    dateTypedStatus != null ? '' : (dateTypedErrorMessage ?? '');
 
   // DateTimeInput fixes its status presentation to the detached message box,
   // so the shared helper suppresses the on-field icon (the message box carries
@@ -1900,9 +1898,8 @@ function PointerDateTimeField({
                 )}
               />
               {/*
-            Live region announcing rejected typed date input to assistive
-            technology, with one message for each kind of rejection (WCAG
-            3.3.1).
+            Announces a typed rejection that the field status does not
+            announce. The field status announces the rest.
           */}
               <VisuallyHidden as="div" role="alert" aria-live="assertive">
                 {dateAlertMessage}
