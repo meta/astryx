@@ -73,7 +73,7 @@ import {
   fontWeightVars,
 } from '../theme/tokens.stylex';
 import {useSize} from '../SizeContext/SizeContext';
-import {isFocusDetached} from '../utils/focusReturn';
+import {isFocusDetached} from '../utils/isFocusDetached';
 import {isRenderable} from '../utils/isRenderable';
 import {useInternalConfig} from './useInternalConfig';
 import {usePowerSearchSource} from './usePowerSearchSource';
