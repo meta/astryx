@@ -21,6 +21,8 @@ import {
   releaseLayoutExit,
   reportLayoutChange,
 } from './animatedLayout';
+import {resolveSettleMs} from './resolveMotion';
+import {springs} from './uikit/springs';
 
 interface Played {
   element: Element;
@@ -379,6 +381,16 @@ describe('one shared motion (spec:AST-105 FR4)', () => {
       Number(follower?.options.duration) / Number(atOne?.options.duration);
     expect(Math.abs(ratio - 1.5)).toBeLessThan(0.01);
     expect(own?.options.duration).toBe(follower?.options.duration);
+  });
+
+  it('lasts what a CSS part timed from springs.settle lasts in the same theme, so the two land together', async () => {
+    await changeOnce('--_astryx-motion-tempo: 1.2');
+    const area = document.getElementById('area') as HTMLElement;
+    const follower = played.find(p => (p.element as HTMLElement).id === 'a');
+    expect(Number(follower?.options.duration)).toBeCloseTo(
+      resolveSettleMs(area, springs.settle),
+      6,
+    );
   });
 
   it('cross-fades with no travel under Reduce Motion on a coarse pointer', async () => {

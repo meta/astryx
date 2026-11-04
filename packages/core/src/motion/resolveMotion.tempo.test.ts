@@ -8,15 +8,21 @@
  *   spring keeps its shape and takes tempo times as long in each of its
  *   forms. A duration scales. A curve, a part that follows a finger and a
  *   busy loop stay as measured. A role resolves to one object per tempo and
- *   is never scaled twice. The animator plays the slowed spring
+ *   is never scaled twice. The animator plays the slowed spring. A CSS part
+ *   timed from a spring lasts the resolved spring's settling duration
  * @position Testing for /packages/core/src/motion/resolveMotion.ts (the
  *   browser proof: themeTempo.interaction.browser.spec.ts)
  */
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {createMotionAnimator} from './animator';
-import {resolveMotion} from './resolveMotion';
-import {solveSpring, toSpring} from './spring';
+import {resolveMotion, resolveSettleMs} from './resolveMotion';
+import {
+  settlingDuration,
+  solveSpring,
+  toSpring,
+  type SpringDescription,
+} from './spring';
 import {
   progressBar,
   registerProgressBarTable,
@@ -161,6 +167,44 @@ describe("resolveMotion at the theme's tempo (spec:AST-108 FR3)", () => {
     expect(resolveMotion(document.body, timing.press, 'scrollBrakeMs')).toBe(
       timing.press.scrollBrakeMs,
     );
+  });
+});
+
+describe('a CSS part timed from its spring', () => {
+  const settleMs = (spring: SpringDescription) =>
+    settlingDuration(toSpring(spring)) * 1000;
+
+  it("lasts the role's settling duration where no theme sets a tempo", () => {
+    const target = element();
+    expect(resolveSettleMs(target, springs.settle)).toBe(
+      settleMs(springs.settle),
+    );
+    // SwiftUI's smooth spring (0.5 s, no bounce) settles in about 0.6 s.
+    expect(resolveSettleMs(target, springs.settle)).toBeGreaterThan(400);
+    expect(resolveSettleMs(target, springs.settle)).toBeLessThan(900);
+  });
+
+  it('takes tempo times as long with the spring it plays with', () => {
+    const target = element();
+    const plain = resolveSettleMs(target, springs.settle);
+    tempo = '1.5';
+    expect(resolveSettleMs(target, springs.settle)).toBeCloseTo(
+      plain * 1.5,
+      6,
+    );
+    expect(resolveSettleMs(target, springs.settle)).toBe(
+      settleMs(resolveMotion(target, springs.settle)),
+    );
+  });
+
+  it('stays as measured for a finger-following role, and for a spring that is not a role', () => {
+    tempo = '1.5';
+    const target = element();
+    expect(resolveSettleMs(target, springs.fingerTracking)).toBe(
+      settleMs(springs.fingerTracking),
+    );
+    const inline = {response: 0.4, dampingRatio: 0.9};
+    expect(resolveSettleMs(target, inline)).toBe(settleMs(inline));
   });
 });
 

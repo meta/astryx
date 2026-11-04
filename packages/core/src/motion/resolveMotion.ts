@@ -5,7 +5,9 @@
  * @input A motion role: a spring or curve of a registered motion table, or a
  *   table group and the key of one of its values. The element the motion
  *   plays on, for its theme's tempo (themeTempo.ts)
- * @output resolveMotion: the role's value at the theme's tempo
+ * @output resolveMotion: the role's value at the theme's tempo.
+ *   resolveSettleMs: how long a spring role takes to settle there, for a CSS
+ *   part that plays with it
  * @position Motion foundation; the animator resolves every spring and curve
  *   it is handed with it, and components resolve the durations they time
  *   with it
@@ -29,7 +31,7 @@
 import {motionRoleIn, motionRoleOf} from './roles';
 import {isSpring} from './roleValue';
 import type {MotionCurvePoints} from './roles';
-import type {SpringDescription} from './spring';
+import {settlingDuration, toSpring, type SpringDescription} from './spring';
 import {themeTempo} from './themeTempo';
 
 /**
@@ -136,4 +138,24 @@ export function resolveMotion(
     return value * tempo;
   }
   return isSpring(value) ? springAtTempo(value, tempo) : value;
+}
+
+/**
+ * How long `spring` takes to settle, in milliseconds, at the tempo of the
+ * theme `element` is in. A CSS part that plays with the spring takes this
+ * duration, such as a scrim's fade under a sheet. Then the two start and land
+ * together on one clock. It is the resolved spring's settling duration, the
+ * length the layout glide plays for the same role. A fixed role, or a spring
+ * that is not a role, gives its own.
+ *
+ * @example
+ * ```
+ * scrim.style.transitionDuration = `${resolveSettleMs(sheet, springs.settle)}ms`;
+ * ```
+ */
+export function resolveSettleMs(
+  element: Element | null | undefined,
+  spring: SpringDescription,
+): number {
+  return settlingDuration(toSpring(resolveMotion(element, spring))) * 1000;
 }
