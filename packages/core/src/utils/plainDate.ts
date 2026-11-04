@@ -557,6 +557,20 @@ export function dateTimeFormatFor(
 }
 
 /**
+ * @internal `dateTimeFormatFor`, except that without `options.timeZone` it
+ * builds a formatter for the call. A cached formatter keeps the host zone it
+ * was built in.
+ */
+export function dateTimeFormatAtCall(
+  locale: Locale,
+  options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  return options.timeZone === undefined
+    ? new Intl.DateTimeFormat(locale, options)
+    : dateTimeFormatFor(locale, options);
+}
+
+/**
  * The locale's name for the "week of year" date field ("week", "Woche", "週"),
  * from CLDR through `Intl.DisplayNames`. Calendar names its week-number
  * column header with it, so no catalog string is needed for a word the

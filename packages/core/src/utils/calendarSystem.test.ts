@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import 'temporal-polyfill/full/global';
-import {describe, expect, it} from 'vitest';
+import {afterEach, describe, expect, it} from 'vitest';
 import {
   CALENDAR_SYSTEMS,
   type CalendarMonth,
@@ -328,6 +328,36 @@ describe('iso8601 labels', () => {
     const dateTime = {...longDate, hour: 'numeric', minute: '2-digit'} as const;
     expect(formatCalendarInstant('iso8601', end, dateTime, 'en', 'UTC')).toBe(
       formatCalendarInstant('gregory', end, dateTime, 'en', 'UTC'),
+    );
+  });
+});
+
+describe('instants in the host zone', () => {
+  const originalTZ = process.env.TZ;
+  afterEach(() => {
+    if (originalTZ === undefined) {
+      delete process.env.TZ;
+    } else {
+      process.env.TZ = originalTZ;
+    }
+  });
+
+  it('follows a host zone change between calls', () => {
+    const instant = new Date('2026-10-30T20:00:00Z');
+    const options = {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    } as const;
+    process.env.TZ = 'UTC';
+    expect(formatCalendarInstant('persian', instant, options, 'en')).toMatch(
+      /^Aban 8, 1405 AP.* 8:00\sPM$/,
+    );
+    process.env.TZ = 'Asia/Tokyo';
+    expect(formatCalendarInstant('persian', instant, options, 'en')).toMatch(
+      /^Aban 9, 1405 AP.* 5:00\sAM$/,
     );
   });
 });

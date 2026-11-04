@@ -14,6 +14,7 @@
 import type {Locale} from '../i18n/types';
 import type {PlainDate} from './dateTypes';
 import {
+  dateTimeFormatAtCall,
   dateTimeFormatFor,
   plainDateAddDays,
   plainDateAddMonths,
@@ -419,7 +420,7 @@ function instantLabel(
   locale: Locale,
   timeZone: string | undefined,
 ) {
-  const format = dateTimeFormatFor(locale, {
+  const format = dateTimeFormatAtCall(locale, {
     ...options,
     ...(timeZone === undefined ? {} : {timeZone}),
     calendar: labelCalendar(calendar),
