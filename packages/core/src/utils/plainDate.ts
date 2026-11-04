@@ -359,13 +359,36 @@ export function plainDateFormatStandaloneMonthYear(
 
 // e.g. "Sun" (locale-dependent) — the weekday on its own, abbreviated.
 //
-// This is CLDR's `abbreviated` width, which `Intl` reaches natively. Note
-// that Calendar's 2-letter header ("Su") is CLDR's *short* width, a
-// different thing that `Intl` cannot express at all — which is why that one
-// needs the generated lookup table beside it and this one does not.
+// This is CLDR's `abbreviated` width. Weekday headers prefer a generated
+// table, because `Intl` has no short width.
 export const DATE_FORMAT_WEEKDAY_ONLY: Intl.DateTimeFormatOptions = {
   weekday: 'short',
 };
+
+/**
+ * The platform's weekday names for a locale, Sunday first, in `Intl`'s
+ * `short` width (CLDR's abbreviated) or its `narrow` width. Returns `null`
+ * when the platform has no data for the locale's language, so a caller uses
+ * its own fallback instead of the host's default locale.
+ */
+export function plainDateWeekdayNames(
+  locale: Locale,
+  width: 'short' | 'narrow' = 'short',
+): string[] | null {
+  const options: Intl.DateTimeFormatOptions = {weekday: width};
+  // A language the platform lacks resolves to the host's default locale.
+  const resolved = dateTimeFormatFor(locale, {
+    ...options,
+    calendar: 'gregory',
+  }).resolvedOptions().locale;
+  if (new Intl.Locale(resolved).language !== new Intl.Locale(locale).language) {
+    return null;
+  }
+  // January 4, 1970 was a Sunday.
+  return Array.from({length: 7}, (_, day) =>
+    plainDateFormat({year: 1970, month: 1, day: 4 + day}, options, locale),
+  );
+}
 
 // e.g. "January" (locale-dependent) — the month on its own, for a control
 // that shows a list of months and carries the year separately.
