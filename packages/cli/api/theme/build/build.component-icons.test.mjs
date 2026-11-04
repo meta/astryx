@@ -404,16 +404,24 @@ export default defineTheme({
 });
 `,
     );
+    write('constants/sizes.mjs', `export const COMPACT = 'xsm';\n`);
     write(
       'constants/source.mjs',
       `import {defineTheme} from '@astryxdesign/core/theme';
 import {baseTheme} from '../base/source.mjs';
 import {copySlot} from '../base/slots.mjs';
+import {COMPACT} from './sizes.mjs';
 const SIZE = 'xsm';
-const DISMISS = {icon: 'close', size: SIZE};
+const SIZES = {compact: SIZE, icons: {dismiss: 'close'}};
+const DISMISS = {icon: SIZES.icons.dismiss, size: SIZE};
 export default defineTheme({
   name: 'slots-constants', extends: baseTheme, tokens: {},
-  componentIcons: {'parity-panel-dismiss': DISMISS, 'parity-tab-close': {size: SIZE}, 'parity-copy-again': copySlot},
+  componentIcons: {
+    'parity-panel-dismiss': DISMISS,
+    'parity-tab-close': {size: SIZES.compact},
+    'parity-nav-leading': {size: COMPACT},
+    'parity-copy-again': copySlot,
+  },
 });
 `,
     );
@@ -436,6 +444,16 @@ export default defineTheme({
     ]) {
       await buildAndCheck(file);
     }
+    // A runtime theme extends the built root and the source root alike.
+    write(
+      'spread-undefined/child.mjs',
+      `import {defineTheme} from '@astryxdesign/core/theme';
+import {slotsSpreadUndefinedTheme} from './slots-spread-undefined.js';
+import source from './source.mjs';
+export const fromBuilt = defineTheme({name: 'from-built', extends: slotsSpreadUndefinedTheme, tokens: {}});
+export const fromSource = defineTheme({name: 'from-source', extends: source, tokens: {}});
+`,
+    );
 
     const result = inspect([
       {
@@ -454,6 +472,11 @@ export default defineTheme({
           './spread-undefined/slots-spread-undefined.js#slotsSpreadUndefinedTheme',
         runtime: './spread-undefined/source.mjs#default',
       },
+      {
+        label: 'extendsBuiltRoot',
+        built: './spread-undefined/child.mjs#fromBuilt',
+        runtime: './spread-undefined/child.mjs#fromSource',
+      },
     ]);
     for (const {built, runtime} of Object.values(result)) {
       expect(built).toEqual(runtime);
@@ -464,7 +487,13 @@ export default defineTheme({
     expect(result.constants.built.componentIcons).toMatchObject({
       'parity-panel-dismiss': {icon: 'close', size: 'xsm'},
       'parity-tab-close': {size: 'xsm'},
+      'parity-nav-leading': {size: 'xsm'},
     });
+    expect(
+      Object.keys(result.extendsBuiltRoot.built.componentIcons ?? {}),
+    ).toEqual(
+      Object.keys(result.extendsBuiltRoot.runtime.componentIcons ?? {}),
+    );
     expect(
       result.spreadUndefined.built.resolved['code-block-copy|{"copied":true}'],
     ).toEqual({icon: 'copy', size: 'sm'});
@@ -501,6 +530,28 @@ export default defineTheme({name: 'bound-slots', tokens: {}, componentIcons: ${b
 });
 
 describe('a slot function the build cannot carry fails the build', () => {
+  it('names a value that is neither static nor imported', async () => {
+    write('slots.mjs', SLOT_FUNCTIONS);
+    write(
+      'computed.mjs',
+      `import {defineTheme} from '@astryxdesign/core/theme';
+import {baseSlots} from './slots.mjs';
+const big = Math.random() > 2;
+export default defineTheme({name: 'computed-slots', tokens: {},
+  componentIcons: {...baseSlots, 'parity-tab-close': {size: big ? 'lg' : 'sm'}}});
+`,
+    );
+
+    await expect(
+      themeBuild('computed.mjs', {}, {cwd: tmpDir}),
+    ).rejects.toMatchObject({
+      code: 'ERR_THEME_INVALID',
+      message: expect.stringContaining(
+        'The value for "parity-tab-close" is neither a static value nor an imported binding.',
+      ),
+    });
+  });
+
   it.each([
     [
       'an inline slot function',

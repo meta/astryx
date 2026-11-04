@@ -33,10 +33,10 @@ import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
  * (node-valued `icons`, or the static `componentIcons` view) merged with the
  * `__` field that holds its functions, if any. `object` is an inline
  * `componentIcons` object: each slot is a static value or an imported one.
- * @typedef {{literal: unknown} | {ref: RegistryReference}} SlotValue
+ * @typedef {{json: unknown} | {ref: RegistryReference} | {object: Array<[string, SlotData]>}} SlotData
  * A `merge` with `theme` set merges a theme's own values over its base's;
  * any other merge is a spread inside one object.
- * @typedef {{kind: 'registry', ref: RegistryReference, preferredName: string, override?: boolean, entries?: boolean} | {kind: 'merge', base: RegistryPlan, own: RegistryPlan, theme?: boolean} | {kind: 'object', entries: Array<[string, SlotValue]>}} RegistryPlan
+ * @typedef {{kind: 'registry', ref: RegistryReference, preferredName: string, override?: boolean, entries?: boolean} | {kind: 'merge', base: RegistryPlan, own: RegistryPlan, theme?: boolean} | {kind: 'object', entries: Array<[string, SlotData]>}} RegistryPlan
  */
 
 /** Marks a node that is not a static JSON value. */
@@ -100,11 +100,10 @@ function registryError(name, reason = '', field = 'icons') {
   if (field === 'componentIcons') {
     const value = name ? `\`componentIcons: ${name}\`` : 'componentIcons';
     throw new AstryxError(
-      `Theme sets ${value} but the build cannot carry its slot functions. ` +
-        'The generated module keeps a slot function only through an import; ' +
-        'it cannot copy a function defined in the theme file. ' +
+      `Theme sets ${value} but the build cannot carry it. ` +
         (reason ? `${reason} ` : '') +
-        'Move the slot functions to their own module and import them into the theme file.',
+        'A built theme carries names, null, and requests made of static values, ' +
+        'constants, or imported bindings, and slot functions imported from their own module.',
       undefined,
       ERROR_CODES.ERR_THEME_INVALID,
     );
@@ -575,83 +574,112 @@ export async function resolveIconImports(
     invalidRegistry(preferredName ?? rootIdentifier(node) ?? undefined);
   }
 
-  /**
-   * The JSON value of a static node: a string, number, boolean, `null`,
-   * `undefined`, or an object of those, directly or through an unmutated
-   * `const`. Anything else is NOT_STATIC.
-   * @param {any} module @param {any} node @param {Set<string>} [seen]
-   * @returns {unknown}
-   */
-  function staticValue(module, node, seen = new Set()) {
-    node = unwrap(node);
+  /** @param {any} item @returns {string | null} A plain property's static key. */
+  function plainKey(item) {
     if (
-      node?.type === 'Identifier' &&
-      module.bindings.get(node.name)?.kind === 'const' &&
-      !module.mutated.has(node.name) &&
-      !seen.has(node.name)
-    ) {
-      seen.add(node.name);
-      return staticValue(module, module.bindings.get(node.name).node, seen);
-    }
-    if (node?.type === 'NullLiteral') return null;
+      !['ObjectProperty', 'Property'].includes(item.type) ||
+      item.method ||
+      (item.kind && item.kind !== 'init')
+    )
+      return null;
+    if (!item.computed) return propertyName(item.key);
+    return typeof item.key?.value === 'string' ? item.key.value : null;
+  }
+
+  /**
+   * A slot value as data the module can write: a JSON value, an imported
+   * binding (with any member reads), or an object of those. Unmutated `const`
+   * bindings and member reads on them are followed. Anything else, a function
+   * defined in the theme file included, is NOT_STATIC.
+   * @param {any} module @param {any} node @param {Set<string>} [path] - The
+   *   `const` names on the current path, which a cycle would revisit.
+   * @returns {Promise<SlotData | typeof NOT_STATIC>}
+   */
+  async function slotData(module, node, path = new Set()) {
+    node = unwrap(node);
+    if (node?.type === 'NullLiteral') return {json: null};
     if (
       ['StringLiteral', 'NumericLiteral', 'BooleanLiteral', 'Literal'].includes(
         node?.type,
       ) &&
       (node.value === null || typeof node.value !== 'object')
     )
-      return node.value;
+      return {json: node.value};
     if (node?.type === 'TemplateLiteral' && node.expressions.length === 0)
-      return node.quasis[0].value.cooked;
+      return {json: node.quasis[0].value.cooked};
     if (
       (node?.type === 'Identifier' &&
         node.name === 'undefined' &&
         !module.bindings.has(node.name)) ||
       (node?.type === 'UnaryExpression' && node.operator === 'void')
     )
-      return undefined;
-    if (node?.type !== 'ObjectExpression') return NOT_STATIC;
-    /** @type {Record<string, unknown>} */
-    const value = {};
-    for (const item of node.properties) {
-      const key =
-        ['ObjectProperty', 'Property'].includes(item.type) &&
-        !item.method &&
-        (!item.kind || item.kind === 'init')
-          ? item.computed
-            ? typeof item.key?.value === 'string'
-              ? item.key.value
-              : null
-            : propertyName(item.key)
-          : null;
-      if (key === null) return NOT_STATIC;
-      const entry = staticValue(module, item.value, seen);
-      if (entry === NOT_STATIC) return NOT_STATIC;
-      if (entry !== undefined) value[key] = entry;
+      return {json: undefined};
+    if (node?.type === 'Identifier') {
+      const binding = module.bindings.get(node.name);
+      if (!binding || module.mutated.has(node.name) || path.has(node.name))
+        return NOT_STATIC;
+      if (binding.kind === 'import')
+        return {ref: importedReference(module, binding)};
+      if (binding.kind !== 'const') return NOT_STATIC;
+      return slotData(module, binding.node, new Set([...path, node.name]));
     }
-    return value;
+    if (node?.type === 'MemberExpression' && !node.optional) {
+      const name = node.computed
+        ? typeof node.property.value === 'string'
+          ? node.property.value
+          : null
+        : propertyName(node.property);
+      if (name === null) return NOT_STATIC;
+      const object = await slotData(module, node.object, path);
+      if (object === NOT_STATIC) return NOT_STATIC;
+      if ('ref' in object)
+        return {ref: {...object.ref, members: [...object.ref.members, name]}};
+      if ('object' in object) {
+        // The last property with a name wins, as in the object literal.
+        const entry = [...object.object]
+          .reverse()
+          .find(([key]) => key === name);
+        return entry ? entry[1] : {json: undefined};
+      }
+      return NOT_STATIC;
+    }
+    if (node?.type !== 'ObjectExpression') return NOT_STATIC;
+    /** @type {Array<[string, SlotData]>} */
+    const entries = [];
+    for (const item of node.properties) {
+      const key = plainKey(item);
+      if (key === null) return NOT_STATIC;
+      const value = await slotData(module, item.value, path);
+      if (value === NOT_STATIC) return NOT_STATIC;
+      entries.push([key, value]);
+    }
+    return {object: entries};
   }
 
-  /** @param {any} module @param {any} node @param {string} slot @returns {Promise<SlotValue>} */
-  async function slotValue(module, node, slot) {
-    const literal = staticValue(module, node);
-    if (literal !== NOT_STATIC) return {literal};
+  /** @param {any} module @param {any} node @param {Set<string>} [seen] @returns {boolean} */
+  function isLocalFunction(module, node, seen = new Set()) {
     node = unwrap(node);
-    if (node?.type === 'Identifier') {
-      return guarded(`${module.filename}:slot:${node.name}`, async () => {
-        const binding = checkedBinding(module, node.name);
-        if (binding.kind === 'const')
-          return slotValue(module, binding.node, slot);
-        return {ref: importedReference(module, binding)};
-      });
+    if (node?.type === 'Identifier' && !seen.has(node.name)) {
+      seen.add(node.name);
+      const binding = module.bindings.get(node.name);
+      return (
+        binding?.kind === 'const' && isLocalFunction(module, binding.node, seen)
+      );
     }
-    if (node?.type === 'MemberExpression') {
-      const ref = await reference(module, node);
-      if (ref) return {ref};
-    }
+    return ['ArrowFunctionExpression', 'FunctionExpression'].includes(
+      node?.type,
+    );
+  }
+
+  /** @param {any} module @param {any} node @param {string} slot @returns {Promise<SlotData>} */
+  async function slotValue(module, node, slot) {
+    const data = await slotData(module, node);
+    if (data !== NOT_STATIC) return data;
     invalidRegistry(
       undefined,
-      `The value for "${slot}" is neither a static value nor an imported binding.`,
+      isLocalFunction(module, node)
+        ? `The slot function for "${slot}" is defined in the theme file.`
+        : `The value for "${slot}" is neither a static value nor an imported binding.`,
     );
   }
 
@@ -663,7 +691,7 @@ export async function resolveIconImports(
   async function slotObject(module, node) {
     /** @type {RegistryPlan | null} */
     let result = null;
-    /** @type {Array<[string, SlotValue]> | null} */
+    /** @type {Array<[string, SlotData]> | null} */
     let entries = null;
     /** @param {RegistryPlan | null} next */
     const add = next => {
@@ -677,16 +705,7 @@ export async function resolveIconImports(
         add(await registry(module, item.argument));
         continue;
       }
-      const key =
-        ['ObjectProperty', 'Property'].includes(item.type) &&
-        !item.method &&
-        (!item.kind || item.kind === 'init')
-          ? item.computed
-            ? typeof item.key?.value === 'string'
-              ? item.key.value
-              : null
-            : propertyName(item.key)
-          : null;
+      const key = plainKey(item);
       if (key === null)
         invalidRegistry(
           undefined,
@@ -795,6 +814,15 @@ export async function resolveIconImports(
         ? iconField.plan
         : await registry(iconField.module, iconField.node)
       : null;
+    // A root's own slot values pass through the theme merge too, so an
+    // `undefined` slot is dropped as `defineTheme` drops it.
+    if (staticSlots && own && !base)
+      return {
+        kind: 'merge',
+        base: {kind: 'object', entries: []},
+        own,
+        theme: true,
+      };
     return base && own
       ? {kind: 'merge', base, own, theme: true}
       : (own ?? base);
@@ -876,6 +904,16 @@ export async function resolveIconImports(
     };
   }
 
+  /** @param {SlotData} data @returns {string} */
+  function renderData(data) {
+    if ('ref' in data) return importedTarget(data.ref).target;
+    if ('object' in data)
+      return `{${data.object
+        .map(([key, entry]) => `${JSON.stringify(key)}: ${renderData(entry)}`)
+        .join(', ')}}`;
+    return data.json === undefined ? 'void 0' : JSON.stringify(data.json);
+  }
+
   /** @param {RegistryPlan} value @returns {{expression: string, preferredName: string, overridePath?: string, overrideLocalName?: string}} */
   function render(value) {
     if (value.kind === 'merge') {
@@ -895,12 +933,8 @@ export async function resolveIconImports(
     if (value.kind === 'object') {
       // An `undefined` slot stays in the object, as in the source, so the
       // theme merge leaves the inherited slot in place.
-      const properties = value.entries.map(
-        ([slot, entry]) =>
-          `${JSON.stringify(slot)}: ${'ref' in entry ? importedTarget(entry.ref).target : entry.literal === undefined ? 'void 0' : JSON.stringify(entry.literal)}`,
-      );
       return {
-        expression: `{${properties.join(', ')}}`,
+        expression: renderData({object: value.entries}),
         preferredName: defaultName,
       };
     }
