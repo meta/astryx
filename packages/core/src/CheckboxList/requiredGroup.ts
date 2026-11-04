@@ -2,7 +2,8 @@
 
 /**
  * @file requiredGroup.ts
- * @input The checkbox inputs of a required CheckboxList and each box's state
+ * @input The checkbox inputs of a required CheckboxList and each box's state;
+ *   Core's shared mutation observer
  * @output Exports createRequiredGroup, RequiredGroup, and RequiredGroupBox
  * @position Internal to CheckboxList; CheckboxList creates one for an
  *   `isRequired` group and CheckboxListItem registers its checkbox with it
@@ -12,6 +13,8 @@
  * then blocks submit and moves focus to that box with its own message. Once
  * any box is checked, no box carries `required`.
  */
+
+import {observeMutations} from '../utils/sharedMutationObserver';
 
 /** The state of one box that decides which box carries `required`. */
 export interface RequiredGroupBox {
@@ -34,6 +37,8 @@ export interface RequiredGroup {
    */
   observe: (container: HTMLElement) => () => void;
 }
+
+const MOVE_OPTIONS: MutationObserverInit = {childList: true, subtree: true};
 
 function byDocumentOrder(a: HTMLInputElement, b: HTMLInputElement): number {
   return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING
@@ -66,9 +71,7 @@ export function createRequiredGroup(): RequiredGroup {
       };
     },
     observe(container) {
-      const observer = new MutationObserver(update);
-      observer.observe(container, {childList: true, subtree: true});
-      return () => observer.disconnect();
+      return observeMutations(container, MOVE_OPTIONS, update);
     },
   };
 }
