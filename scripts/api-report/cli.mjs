@@ -36,7 +36,11 @@ import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {expandWorkspaceDirs} from '../lib/workspace-globs.mjs';
 import {isStableReleasePackage} from '../release/active-release.mjs';
-import {computeChanges, renderChanges} from './changes.mjs';
+import {
+  computeChanges,
+  renderChanges,
+  staleReportWarnings,
+} from './changes.mjs';
 import {generateReport} from './generate.mjs';
 
 export const REPORT_FILE = 'api-report.md';
@@ -312,6 +316,9 @@ async function main() {
         2,
       ) + '\n',
     );
+    const fileOf = new Map(results.map(r => [r.pkg, r.file]));
+    for (const warning of staleReportWarnings(changes, pkg => fileOf.get(pkg)))
+      console.log(warning);
     const total = changes.reduce((n, c) => n + c.rows.length, 0);
     const stale = changes.filter(c => c.stale || c.missing).map(c => c.pkg);
     console.log(

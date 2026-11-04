@@ -21,6 +21,7 @@ import {
   diffReports,
   parseReport,
   renderChanges,
+  staleReportWarnings,
   usageFor,
 } from './changes.mjs';
 import {chooseBase, publishedPackages} from './cli.mjs';
@@ -283,6 +284,97 @@ describe('API changes', () => {
     );
     expect(md).toContain('<details><summary>1 API change (advisory)</summary>');
     expect(md).not.toContain("prop size?: ChipSize = 'sm'");
+  });
+
+  describe('a warning when this pull request leaves its own rows out of the report', () => {
+    const file = () => 'packages/demo/api-report.md';
+    const warn = input => staleReportWarnings(computeChanges([input]), file);
+
+    it('warns when the pull request changes a row and does not regenerate the report', () => {
+      const [change] = computeChanges([
+        {
+          pkg: '@astryxdesign/demo',
+          base: report,
+          head: resize(report),
+          committed: report,
+          baseSource: 'build',
+        },
+      ]);
+      expect(change.staleOwnRows).toBe(1);
+      expect(staleReportWarnings([change], file)).toEqual([
+        '::warning file=packages/demo/api-report.md,title=API report not regenerated::' +
+          "This pull request changes 1 row of @astryxdesign/demo's public API " +
+          'that its committed api-report.md does not show. Run pnpm api:report and commit the report.',
+      ]);
+    });
+
+    it('counts only its own rows when the report was already behind main', () => {
+      const [change] = computeChanges([
+        {
+          pkg: '@astryxdesign/demo',
+          base: resize(report),
+          head: addTone(resize(report)),
+          committed: report,
+          baseSource: 'main',
+        },
+      ]);
+      expect(change).toMatchObject({
+        stale: true,
+        staleRows: 2,
+        staleOwnRows: 1,
+      });
+      expect(staleReportWarnings([change], file)[0]).toContain(
+        'changes 1 row of',
+      );
+    });
+
+    it('does not warn for a report that was stale before the pull request', () => {
+      expect(
+        warn({
+          pkg: '@astryxdesign/demo',
+          base: resize(report),
+          head: resize(report),
+          committed: report,
+          baseSource: 'build',
+        }),
+      ).toEqual([]);
+    });
+
+    it('does not warn when the pull request regenerated its report', () => {
+      expect(
+        warn({
+          pkg: '@astryxdesign/demo',
+          base: report,
+          head: resize(report),
+          committed: resize(report),
+          baseSource: 'build',
+        }),
+      ).toEqual([]);
+    });
+
+    it("does not warn against the merge base's committed report, which cannot tell the rows apart", () => {
+      expect(
+        warn({
+          pkg: '@astryxdesign/demo',
+          base: report,
+          head: resize(report),
+          committed: report,
+          baseSource: 'committed',
+        }),
+      ).toEqual([]);
+    });
+
+    it('does not warn for a new package with no report at the merge base', () => {
+      expect(
+        warn({
+          pkg: '@astryxdesign/demo',
+          base: null,
+          head: report,
+          committed: null,
+          baseSource: 'build',
+        }),
+      ).toEqual([]);
+    });
   });
 
   it('renders a stale report with no API change as one line', () => {

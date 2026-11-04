@@ -186,6 +186,30 @@ export function usageFor(pkg, row) {
 const rowCount = ({added, changed, removed}) =>
   added.length + changed.length + removed.length;
 
+/** The key of every row two reports differ in, members included. */
+function differingKeys(from, to) {
+  const a = parseReport(from);
+  const b = parseReport(to);
+  const keys = new Set();
+  for (const [k, row] of b) if (a.get(k)?.line !== row.line) keys.add(k);
+  for (const k of a.keys()) if (!b.has(k)) keys.add(k);
+  return keys;
+}
+
+/**
+ * How many rows the pull request changed that its committed report does not
+ * show. Rows a report on main already lacked are not the pull request's, and
+ * only a built surface of the merge base tells the two apart: against the
+ * merge base's committed report, this counts none.
+ */
+function staleOwnRowCount({base, head, committed, baseSource, stale}) {
+  if (!stale || base == null || baseSource === 'committed') return 0;
+  const behind = differingKeys(committed, head);
+  let n = 0;
+  for (const k of differingKeys(base, head)) if (behind.has(k)) n++;
+  return n;
+}
+
 /**
  * @param {Array<{pkg: string, base: string|null, head: string,
  *   committed: string|null, baseSource?: 'build'|'head'|'committed'}>} packages
@@ -207,6 +231,13 @@ export function computeChanges(packages) {
         stale,
         // A stale report is one line in the PR report, not its rows.
         staleRows: stale ? rowCount(diffReports(committed, head)) : 0,
+        staleOwnRows: staleOwnRowCount({
+          base,
+          head,
+          committed,
+          baseSource,
+          stale,
+        }),
         missing: committed == null,
         counts: {
           added: d.added.length,
@@ -221,6 +252,26 @@ export function computeChanges(packages) {
       };
     })
     .sort((x, y) => (x.pkg < y.pkg ? -1 : x.pkg > y.pkg ? 1 : 0));
+}
+
+/**
+ * A GitHub Actions warning for each package whose public API this pull
+ * request changed while its committed report stayed behind. It never fails
+ * the job (architecture:public-component-api INV24); a report that was stale
+ * before this pull request gets only the pull request report's line.
+ * @param {ReturnType<typeof computeChanges>} changes
+ * @param {(pkg: string) => string} reportFile the package's committed report path
+ * @returns {string[]}
+ */
+export function staleReportWarnings(changes, reportFile) {
+  return changes
+    .filter(c => c.staleOwnRows > 0)
+    .map(
+      c =>
+        `::warning file=${reportFile(c.pkg)},title=API report not regenerated::` +
+        `This pull request changes ${plural(c.staleOwnRows, 'row')} of ${c.pkg}'s public API ` +
+        `that its committed api-report.md does not show. Run pnpm api:report and commit the report.`,
+    );
 }
 
 // The pull request comment has a size limit; a wide change lists its first rows.
