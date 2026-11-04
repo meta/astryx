@@ -1264,6 +1264,29 @@ describe('DateInput — calendar surface', () => {
     },
   );
 
+  it('keeps seven aligned columns when repeated narrow names rotate in an open sheet', () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const ui = (weekStartsOn: 0 | 1) => (
+        <InternationalizationProvider locale="sw-KE">
+          <Controlled initial="2026-03-21" weekStartsOn={weekStartsOn} />
+        </InternationalizationProvider>
+      );
+      withLayout(() => {
+        const {rerender} = render(ui(0));
+        fireEvent.click(field());
+        expect(weekdayNames()).toEqual(['S', 'M', 'T', 'W', 'T', 'F', 'S']);
+        rerender(ui(1));
+      });
+      expect(weekdayNames()).toEqual(['M', 'T', 'W', 'T', 'F', 'S', 'S']);
+      expect(
+        errors.mock.calls.some(call => String(call[0]).includes('same key')),
+      ).toBe(false);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
   it('rotates the weekday header with weekStartsOn', () => {
     renderAndOpen(<Controlled initial="2026-03-21" weekStartsOn={1} />);
     expect(weekdayNames()).toEqual([

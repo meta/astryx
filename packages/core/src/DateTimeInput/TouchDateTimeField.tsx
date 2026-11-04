@@ -658,8 +658,13 @@ export function TouchDateTimeField({
   const canStepBack = monthIndex > minMonthIndex;
   const canStepForward = monthIndex < maxMonthIndex;
 
-  const dayNames = useMemo(
-    () => getWeekdayHeaderNames(locale, weekStartsOn),
+  // Each name carries its day of week for a key: narrow names repeat.
+  const weekdayHeaders = useMemo(
+    () =>
+      getWeekdayHeaderNames(locale, weekStartsOn).map((name, offset) => ({
+        dayOfWeek: (weekStartsOn + offset) % 7,
+        name,
+      })),
     [locale, weekStartsOn],
   );
   const monthYearLabel = plainDateFormatStandaloneMonthYear(
@@ -1136,8 +1141,8 @@ export function TouchDateTimeField({
                 isWheelOpen && styles.touchDateSurfaceHidden,
               )}>
               <div aria-hidden="true" {...stylex.props(styles.touchWeekdays)}>
-                {dayNames.map(name => (
-                  <div key={name} {...stylex.props(styles.touchWeekday)}>
+                {weekdayHeaders.map(({dayOfWeek, name}) => (
+                  <div key={dayOfWeek} {...stylex.props(styles.touchWeekday)}>
                     {name}
                   </div>
                 ))}

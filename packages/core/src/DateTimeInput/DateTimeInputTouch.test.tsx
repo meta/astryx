@@ -238,6 +238,39 @@ describe('DateTimeInput touch surface', () => {
     },
   );
 
+  it('keeps seven aligned date sheet columns when repeated narrow names rotate', () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const readRow = () =>
+      [
+        ...([...document.querySelectorAll('[aria-hidden="true"]')].find(
+          el => el.children.length === 7,
+        )?.children ?? []),
+      ].map(c => c.textContent?.trim());
+    try {
+      const ui = (weekStartsOn: 0 | 1) => (
+        <InternationalizationProvider locale="sw-KE">
+          <DateTimeInput
+            label="Meeting"
+            onChange={() => {}}
+            weekStartsOn={weekStartsOn}
+          />
+        </InternationalizationProvider>
+      );
+      withMonthLayout(() => {
+        const {rerender} = render(ui(0));
+        openDateSheet();
+        expect(readRow()).toEqual(['S', 'M', 'T', 'W', 'T', 'F', 'S']);
+        rerender(ui(1));
+      });
+      expect(readRow()).toEqual(['M', 'T', 'W', 'T', 'F', 'S', 'S']);
+      expect(
+        errors.mock.calls.some(call => String(call[0]).includes('same key')),
+      ).toBe(false);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
   it('uses intrinsic wrapping for the closed touch segments', () => {
     const {container} = render(
       <DateTimeInput label="Meeting" onChange={() => {}} />,

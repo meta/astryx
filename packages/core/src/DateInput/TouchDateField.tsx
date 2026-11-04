@@ -720,8 +720,13 @@ export function TouchDateField({
 
   const {year, month} = fromMonthIndex(monthIndex);
 
-  const dayNames = useMemo(
-    () => getWeekdayHeaderNames(locale, weekStartsOn),
+  // Each name carries its day of week for a key: narrow names repeat.
+  const weekdayHeaders = useMemo(
+    () =>
+      getWeekdayHeaderNames(locale, weekStartsOn).map((name, offset) => ({
+        dayOfWeek: (weekStartsOn + offset) % 7,
+        name,
+      })),
     [locale, weekStartsOn],
   );
   const monthYearLabel = plainDateFormatStandaloneMonthYear(
@@ -1081,8 +1086,8 @@ export function TouchDateField({
           styles.weekdays,
           isWheelOpen && styles.weekdaysHidden,
         )}>
-        {dayNames.map(name => (
-          <div key={name} {...stylex.props(styles.weekday)}>
+        {weekdayHeaders.map(({dayOfWeek, name}) => (
+          <div key={dayOfWeek} {...stylex.props(styles.weekday)}>
             {name}
           </div>
         ))}
