@@ -32,8 +32,9 @@ type Story =
   | 'with-error-status'
   | 'disabled'
   | 'with-prefix'
-  | 'with-description';
-type Interaction = 'none' | 'focus-addon' | 'focus-input';
+  | 'with-description'
+  | 'adjacent-inputs';
+type Interaction = 'none' | 'focus-first' | 'focus-second';
 
 type GroupSpec = {label: string; size: string; description?: string};
 
@@ -79,6 +80,7 @@ const STORY: Record<Story, {groups: GroupSpec[]; state?: string}> = {
     state: 'disabled',
   },
   'with-prefix': {groups: [{label: 'Price', size: 'md'}]},
+  'adjacent-inputs': {groups: [{label: 'Phone', size: 'md'}]},
   'with-description': {
     groups: [
       {label: 'Username', size: 'md', description: 'Your public display name'},
@@ -125,11 +127,11 @@ function add(
 add('action-button-combinations');
 add('action-button-combinations', {theme: 'butter', modes: ['light']});
 add('action-button-combinations', {
-  interaction: 'focus-addon',
+  interaction: 'focus-first',
   modes: ['light'],
 });
 add('action-button-combinations', {
-  interaction: 'focus-input',
+  interaction: 'focus-second',
   modes: ['light'],
 });
 add('with-prefix-and-suffix');
@@ -143,6 +145,8 @@ add('with-prefix', {
   modes: ['light'],
 });
 add('with-description', {modes: ['light']});
+add('adjacent-inputs', {modes: ['light']});
+add('adjacent-inputs', {interaction: 'focus-first'});
 
 test.describe.configure({retries: 0});
 let server: StaticServer;
@@ -356,11 +360,11 @@ for (const item of cases) {
       }, item.args);
       await settle(page);
     }
-    // The first group in the story is [Button "Paste"][TextInput "Code"].
-    if (item.interaction === 'focus-addon') {
+    // Tab reaches the first group's first member, then its second.
+    if (item.interaction === 'focus-first') {
       await page.keyboard.press('Tab');
     }
-    if (item.interaction === 'focus-input') {
+    if (item.interaction === 'focus-second') {
       await page.keyboard.press('Tab');
       await page.keyboard.press('Tab');
     }
@@ -504,7 +508,7 @@ for (const item of cases) {
 
     if (item.interaction !== 'none') {
       const members = observed.groups[0]?.members ?? [];
-      const focusedIndex = item.interaction === 'focus-addon' ? 0 : 1;
+      const focusedIndex = item.interaction === 'focus-first' ? 0 : 1;
       const focused = members[focusedIndex];
       const z = (value: string | undefined) =>
         value == null || value === 'auto' ? 0 : Number(value);

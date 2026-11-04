@@ -96,10 +96,8 @@ export const groupStyles = stylex.create({
       default: 0,
       [IS_LAST_ITEM]: radiusVars['--radius-element'],
     },
-    // Input wrappers already sit at z-index 1. A focused member goes one
-    // higher, so an unfocused input beside it cannot cover its focus ring.
     ':focus-within': {
-      zIndex: 2,
+      zIndex: 1,
     },
   },
 });
