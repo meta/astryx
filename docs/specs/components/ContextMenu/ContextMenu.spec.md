@@ -57,9 +57,12 @@ cursor-positioned pointer menu or a BottomSheet-hosted touch action list.
 
 - Released default preserved: `no` under a finger: the omitted `presentation`
   follows `spec:AST-094` FR31–FR33 (FR5); `presentation="popover"` keeps the
-  released menu (`spec:AST-094` FR25)
-- Compatibility class: records shipped behavior; no public prop, export, or
-  DOM change
+  released menu (`spec:AST-094` FR25); and `no` for disabled rows on every
+  pointer: the keyboard reaches a disabled row and the row carries
+  `tabindex="-1"` (FR8, `component:DropdownMenu` FR17), a defect fix under
+  `component:DropdownMenu` DEC-11 (owner decision, 2026-11-04)
+- Compatibility class: records shipped behavior; no public prop or export
+  change; a disabled row gains `tabindex="-1"` (FR8)
 - Controlled/uncontrolled behavior: internally managed open state
 - Migration decision: `spec:AST-094` FR25
 
