@@ -502,7 +502,13 @@ describe('InputGroup', () => {
         screen.getByRole('group').getAttribute('aria-labelledby') ?? '',
       );
     expect(label()).toHaveTextContent('Optional');
-    expect(label()?.querySelector('.astryx-icon')).not.toBeNull();
+    const tooltipTrigger = label()?.querySelector('.astryx-icon');
+    expect(tooltipTrigger).not.toBeNull();
+    expect(
+      document.getElementById(
+        tooltipTrigger?.getAttribute('aria-describedby') ?? '',
+      ),
+    ).toHaveTextContent('Before tax');
 
     rerender(
       <InputGroup label="Price" isRequired>

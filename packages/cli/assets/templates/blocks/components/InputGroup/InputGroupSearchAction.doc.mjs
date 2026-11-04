@@ -7,8 +7,8 @@ export const doc = {
   name: 'InputGroup — Search Action',
   displayName: 'InputGroup — Search Action',
   description:
-    'A search field with a Button addon. The Button joins the row at full height, square toward the input, and the group description reaches the input.',
+    'A search field with a Button addon. The Button joins the row at full height, square toward the input; Enter or the Button runs the search, and the group description reaches the input.',
   isReady: true,
   aspectRatio: 16 / 9,
-  componentsUsed: ['InputGroup', 'TextInput', 'Button'],
+  componentsUsed: ['InputGroup', 'TextInput', 'Button', 'VStack', 'Text'],
 };

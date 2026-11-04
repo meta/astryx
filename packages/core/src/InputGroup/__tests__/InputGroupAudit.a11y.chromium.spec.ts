@@ -433,14 +433,14 @@ for (const item of cases) {
         group.members.length >= 2 && marked.length >= 1,
         `${where} has ${group.members.length} members, ${marked.length} joined`,
       );
-      // FR3, FR4: every joined member fills the row height.
+      // Every joined member fills the row height.
       for (const member of marked) {
         check(
           near(member.box.height, group.box.height),
           `${where} ${member.className} height ${member.box.height} vs row ${group.box.height}`,
         );
       }
-      // FR4 and the grouped adaptation: only the row's outer corners round.
+      // Only the row's outer corners round.
       const rtl = item.direction === 'rtl';
       group.members.forEach((member, position) => {
         if (!member.marked) {
@@ -506,18 +506,22 @@ for (const item of cases) {
       const members = observed.groups[0]?.members ?? [];
       const focusedIndex = item.interaction === 'focus-addon' ? 0 : 1;
       const focused = members[focusedIndex];
-      const neighbour = members[focusedIndex === 0 ? 1 : 0];
       const z = (value: string | undefined) =>
         value == null || value === 'auto' ? 0 : Number(value);
+      // An unfocused member anywhere in the story: the neighbour, and every
+      // input in the other groups, which an adjacent input would match.
+      const unfocused = observed.groups
+        .flatMap(group => group.members)
+        .filter(member => member.marked && member !== focused);
       check(
         focused != null && focused.focusWithin && focused.focusVisible,
         `member ${focusedIndex} is not keyboard focused`,
       );
       check(
         focused != null &&
-          neighbour != null &&
-          z(focused.zIndex) > z(neighbour.zIndex),
-        `focused member z-index ${focused?.zIndex} is not above its neighbour ${neighbour?.zIndex}`,
+          unfocused.length > 0 &&
+          unfocused.every(member => z(focused.zIndex) > z(member.zIndex)),
+        `focused member z-index ${focused?.zIndex} is not above every unfocused member: ${unfocused.map(member => `${member.className}=${member.zIndex}`).join(', ')}`,
       );
     }
 
@@ -577,7 +581,7 @@ for (const item of cases) {
         geometry:
           'every joined member fills the row height; only the outer start corners of the first member and the outer end corners of the last member round, mirrored in RTL; row heights grow sm < md < lg',
         state:
-          'focus: the keyboard-focused member is above its neighbour; error: data-status error and the message below the row, in the description; disabled: aria-disabled, half opacity, default cursor, members unavailable; hidden label: no visible box, still the group name',
+          'focus: the keyboard-focused member is above every unfocused member, inputs included; error: data-status error and the message below the row, in the description; disabled: aria-disabled, half opacity, default cursor, members unavailable; hidden label: no visible box, still the group name',
       },
       observed: {
         build: storybookSha,
