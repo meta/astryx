@@ -79,7 +79,8 @@ extension keys. Some component-owned artwork uses those extension keys directly.
 This record does not invalidate or require migration of that shipped behavior.
 
 The target model adds one rule for future component roles: new semantic component
-slots use `componentIcons`. No Core slot has shipped. Selector's selected-option
+slots use `componentIcons`. Core's slots are the members of `ComponentIconSlotMap`,
+each listed in its owning component's docs. Selector's selected-option
 mark is drawn by the `check` indicator, so it is not a component icon slot. Shipped extension keys remain supported until a
 separate compatibility decision changes them. This record does not decide the
 outcome for any existing component.
