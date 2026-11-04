@@ -1976,6 +1976,41 @@ export async function findShowcase(componentName, cwd, options) {
 /** The npm scope of every Astryx package. */
 const ASTRYX_PACKAGE_SCOPE = '@astryxdesign/';
 
+/** A JSX opening tag; componentsInSource says why the pattern looks so. */
+const JSX_TAG = /(?<![\w$.])<(XDS)?([A-Z]\w+)/g;
+
+/** Comments and line breaks that may sit between two words of an import. */
+// A block comment ends at its first `*/`, and a line comment at its line's
+// end. So each comment has one reading, and a failed match cannot backtrack
+// through every split of a comment run.
+const SPACE_OR_COMMENT = String.raw`\s|\/\*(?:[^*]|\*(?!\/))*\*\/|\/\/[^\n\r\u2028\u2029]*(?![^\n\r\u2028\u2029])`;
+const BETWEEN = `(?:${SPACE_OR_COMMENT})*`;
+const GAP = new RegExp(`(?:${SPACE_OR_COMMENT})+`, 'g');
+// The pair scan can start again at each word of a run of spaces and
+// comments, so a run costs up to its length squared. The longest run in the
+// bundled templates is about 10 KB.
+const MAX_GAP = 16 * 1024;
+
+/**
+ * One `imported as local` pair. The imported name is an identifier (group 1)
+ * or a string (group 3); the local name is group 4.
+ */
+const ALIAS = new RegExp(
+  String.raw`(?:(?<![\p{ID_Continue}$])([\p{ID_Start}$_][\p{ID_Continue}$\u200C\u200D]*)|(['"])((?:\\[\s\S]|(?!\2)[^\\\n])*)\2)` +
+    BETWEEN +
+    String.raw`\bas\b` +
+    BETWEEN +
+    String.raw`([\p{ID_Start}$_][\p{ID_Continue}$\u200C\u200D]*)`,
+  'gu',
+);
+// What follows each `as`: the pair scan reads the same text after its `as`.
+const AS_LOCAL = new RegExp(
+  String.raw`\bas\b` +
+    BETWEEN +
+    String.raw`([\p{ID_Start}$_][\p{ID_Continue}$\u200C\u200D]*)`,
+  'gu',
+);
+
 const UBIQUITOUS = new Set([
   'Text',
   'Heading',
@@ -2079,7 +2114,7 @@ export function componentsInSource(src) {
   // and `Record<string, Phase>` no longer do. Those were being indexed as
   // rendered components, putting type names like `Record`, `SVGProps` and
   // `ReadonlySet` into template keyword and "components used" output.
-  const tagRegex = /(?<![\w$.])<(XDS)?([A-Z]\w+)/g;
+  const tagRegex = new RegExp(JSX_TAG);
   /** @type {string[]} */
   const matches = [];
   let m;
@@ -2093,11 +2128,23 @@ export function componentsInSource(src) {
   // strings and type annotations cannot add or hide a name.
   const {declared: localDeclNames, astryxImports} = topLevelBindings(src);
 
+  return catalogNames(
+    matches
+      .filter(n => !localDeclNames.has(n))
+      .map(n => astryxImports.get(n) ?? n),
+  );
+}
+
+/**
+ * Rendered component names as the catalog lists them: without theme wrappers
+ * and ubiquitous parts, each part suffix stripped, each name once, sorted.
+ * @param {string[]} names
+ * @returns {string[]}
+ */
+function catalogNames(names) {
   return [
     ...new Set(
-      matches
-        .filter(n => !localDeclNames.has(n))
-        .map(n => astryxImports.get(n) ?? n)
+      names
         .filter(n => !['Theme', 'ThemeProvider'].includes(n))
         .filter(n => !UBIQUITOUS.has(n))
         .map(n =>
@@ -2111,4 +2158,47 @@ export function componentsInSource(src) {
         .filter(Boolean),
     ),
   ].sort();
+}
+
+/**
+ * Every name componentsInSource can return for `src`, read without parsing
+ * it, or null when it cannot be bounded so. It keeps the tag names a parse
+ * would drop as page-local. It adds each name an `imported as local` pair
+ * makes a tag stand for, wherever that text appears. An escaped name in an
+ * identifier or a string defeats the reading, so then it is null.
+ * @param {string} src
+ * @returns {string[] | null}
+ */
+export function componentNameBound(src) {
+  if (src.includes('\\u')) return null;
+  for (const gap of src.matchAll(GAP)) {
+    if (gap[0].length > MAX_GAP) return null;
+  }
+  const tags = Array.from(src.matchAll(JSX_TAG), m => m[2]);
+  const local = new Set(tags);
+  // A pair adds a name only when its local name is a tag. Most sources have
+  // no `as` before a tag's name, so they skip the slower pair scan. Each
+  // match restarts one character on: a `/*` in a comment can hide a pair.
+  const asLocal = new RegExp(AS_LOCAL);
+  let pairs = false;
+  for (let m = asLocal.exec(src); m && !pairs; m = asLocal.exec(src)) {
+    asLocal.lastIndex = m.index + 1;
+    pairs = local.has(m[1]);
+  }
+  if (!pairs) return catalogNames(tags);
+  /** @type {string[]} */
+  const imported = [];
+  // Each match restarts one character on, so no pair hides inside another.
+  const alias = new RegExp(ALIAS);
+  for (let m = alias.exec(src); m; m = alias.exec(src)) {
+    // Step one code point: a `u` regex moves an index inside a surrogate
+    // pair back to the pair's start.
+    alias.lastIndex =
+      m.index + ((src.codePointAt(m.index) ?? 0) > 0xffff ? 2 : 1);
+    if (!local.has(m[4])) continue;
+    const name = m[1] ?? m[3];
+    if (name.includes('\\')) return null;
+    imported.push(name);
+  }
+  return catalogNames([...tags, ...imported]);
 }
