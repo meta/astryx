@@ -162,6 +162,9 @@ export function readRange(base, head) {
   // shows its added lines too. Renames are found, so a moved file shows only
   // the lines its move changed.
   const diff = git([
+    // Paths come unquoted, so a non-ASCII path reads as it is.
+    '-c',
+    'core.quotePath=false',
     'diff',
     '--text',
     '--no-textconv',
@@ -172,6 +175,8 @@ export function readRange(base, head) {
     base,
     head,
   ]);
+  if (readDiff(diff).unreadable)
+    throw new Error('a changed file has a path the check cannot read');
   return {commits, diff};
 }
 

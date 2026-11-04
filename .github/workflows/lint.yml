@@ -99,8 +99,14 @@ jobs:
           HEAD_SHA=$(git rev-parse HEAD^2)
           BASE_TIP=$(git rev-parse HEAD^1)
           MERGE_BASE=$(git merge-base "$BASE_TIP" "$HEAD_SHA" 2>/dev/null || true)
+          # A branch far behind its base: deepen only the base branch and the
+          # pull request head, then, rarely, take the whole history.
           if [ -z "$MERGE_BASE" ]; then
-            git fetch --no-tags --unshallow origin > /dev/null 2>&1 || true
+            git fetch --no-tags --deepen=500 origin "$BASE_REF" "refs/pull/$PR_NUMBER/head" > /dev/null 2>&1 || true
+            MERGE_BASE=$(git merge-base "$BASE_TIP" "$HEAD_SHA" 2>/dev/null || true)
+          fi
+          if [ -z "$MERGE_BASE" ]; then
+            git fetch --no-tags --unshallow origin "$BASE_REF" "refs/pull/$PR_NUMBER/head" > /dev/null 2>&1 || true
             MERGE_BASE=$(git merge-base "$BASE_TIP" "$HEAD_SHA" 2>/dev/null || true)
           fi
           if [ -z "$MERGE_BASE" ]; then

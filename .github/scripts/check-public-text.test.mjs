@@ -232,6 +232,18 @@ describe('the script on a real repository', () => {
     }
   });
 
+  it.each(['My notes.md', 'café.md'])(
+    'reads %j when it comes first in the diff',
+    name => {
+      const {commit, run} = repo();
+      const base = commit('z.md', 'z\n', 'base');
+      const head = commit(name, `uses ${FAKE_NAME}\n`, 'add notes');
+      const result = run(base, head);
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain(`file=${name},line=1,`);
+    },
+  );
+
   it('reads a path marked binary as text', () => {
     const {commit, run} = repo();
     commit('.gitattributes', '*.dat binary\n', 'mark dat files binary');
@@ -339,6 +351,18 @@ describe('Lint runs the check (spec:AST-030 FR27)', () => {
     expect(skip).not.toContain('public-text-hashes.json');
     // A missing digest file is removed, so the check itself fails on it.
     expect(step.run).toContain('|| rm -f "$CHECK_DIR/public-text-hashes.json"');
+  });
+
+  it('deepens only the base branch and the pull request head before any whole fetch', () => {
+    const deepen = step.run.indexOf(
+      'git fetch --no-tags --deepen=500 origin "$BASE_REF" "refs/pull/$PR_NUMBER/head"',
+    );
+    const whole = step.run.indexOf(
+      'git fetch --no-tags --unshallow origin "$BASE_REF" "refs/pull/$PR_NUMBER/head"',
+    );
+    expect(deepen).toBeGreaterThan(-1);
+    expect(whole).toBeGreaterThan(deepen);
+    expect(step.run).not.toMatch(/--unshallow origin >/);
   });
 
   it('checks the pull request head from its merge base, and fails without one', () => {

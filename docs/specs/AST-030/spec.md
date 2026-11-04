@@ -43,7 +43,9 @@ affects_consumer_docs: []
     ".github/scripts/ci-pr-gate.*",
     ".github/scripts/perf-*",
     "apps/sandbox/perf/**",
-    "playwright.perf.config.ts"
+    "playwright.perf.config.ts",
+    ".github/scripts/check-public-text.*",
+    ".github/public-text-hashes.json"
   ]
 }
 ```
