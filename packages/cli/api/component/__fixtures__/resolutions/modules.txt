@@ -134,7 +134,7 @@ generateThemeRules generateThemeRules theme/MediaTheme.doc.mjs theme/generateThe
 gestureCounter gestureCounter Layer/Layer.doc.mjs Layer/gestureCounter.ts
 getInitialFocusDate getInitialFocusDate Calendar/Calendar.doc.mjs Calendar/getInitialFocusDate.ts
 getLocaleDirection getLocaleDirection i18n/InternationalizationProvider.doc.mjs i18n/getLocaleDirection.ts
-getStandaloneShortWeekdayNames getStandaloneShortWeekdayNames Calendar/Calendar.doc.mjs Calendar/getStandaloneShortWeekdayNames.ts
+getWeekdayHeaderNames getWeekdayHeaderNames Calendar/Calendar.doc.mjs Calendar/getWeekdayHeaderNames.ts
 glidingDivider glidingDivider Table/Table.doc.mjs Table/glidingDivider.ts
 globalIconRegistry globalIconRegistry Icon/Icon.doc.mjs Icon/globalIconRegistry.tsx
 grammar grammar CodeBlock/CodeBlock.doc.mjs CodeBlock/grammar.ts
@@ -270,7 +270,7 @@ useInternalConfig useInternalConfig PowerSearch/PowerSearch.doc.mjs PowerSearch/
 useIsHydrating useIsHydrating hooks/useAnimatedLayout.doc.mjs hooks/useIsHydrating.ts
 useIsomorphicLayoutEffect useIsomorphicLayoutEffect hooks/useAnimatedLayout.doc.mjs hooks/useIsomorphicLayoutEffect.ts
 useLayerDismissal useLayerDismissal Layer/Layer.doc.mjs Layer/useLayerDismissal.ts
-useLightbox useLightbox Lightbox/Lightbox.doc.mjs Lightbox/useLightbox.tsx
+useLightbox useLightbox Lightbox/useLightbox.doc.mjs Lightbox/useLightbox.tsx
 useLinkComponent useLinkComponent Link/Link.doc.mjs Link/useLinkComponent.ts
 useLinkify useLinkify Link/Link.doc.mjs Link/useLinkify.tsx
 useListFormatter useListFormatter i18n/InternationalizationProvider.doc.mjs i18n/useListFormatter.ts
@@ -285,7 +285,6 @@ usePager usePager hooks/useAnimatedLayout.doc.mjs hooks/usePager.ts
 usePointerDragScroll usePointerDragScroll DateInput/DateInput.doc.mjs DateInput/usePointerDragScroll.ts
 usePowerSearchConfig usePowerSearchConfig PowerSearch/PowerSearch.doc.mjs PowerSearch/usePowerSearchConfig.ts
 usePowerSearchSource usePowerSearchSource PowerSearch/PowerSearch.doc.mjs PowerSearch/usePowerSearchSource.ts
-usePressPin usePressPin Layer/Layer.doc.mjs Layer/usePressPin.ts
 useRenamedProp useRenamedProp hooks/useAnimatedLayout.doc.mjs hooks/useRenamedProp.ts
 useResolvedRequired useResolvedRequired hooks/useAnimatedLayout.doc.mjs hooks/useResolvedRequired.ts
 useScrollSettle useScrollSettle DateInput/DateInput.doc.mjs DateInput/useScrollSettle.ts

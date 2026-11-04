@@ -49,6 +49,17 @@ export declare function useChipState(
 ): readonly [boolean, (next: boolean) => void];
 export declare function formatChip(label: string): string;
 export declare function formatChip(label: string, size: ChipSize): string;
+export declare function useChipMode(mode: 'a'): string;
+/** @deprecated Pass a mode. */
+export declare function useChipMode(): string;
+export declare function useChipMode(mode: 'b'): number;
+/** @deprecated Pass a size. */
+export declare function parseChip(label: string, legacy: true): string;
+export declare function parseChip(label: string): string;
+/** @deprecated Use formatChip. */
+export declare function legacyChip(label: string): string;
+/** @deprecated Use formatChip. */
+export declare function legacyChip(label: string, size: ChipSize): string;
 export declare const CHIP_SIZES: readonly ChipSize[];
 /** @internal */
 export declare function resetChips(): void;

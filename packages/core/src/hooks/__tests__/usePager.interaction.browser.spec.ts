@@ -40,7 +40,12 @@ import {
   type TouchDriver,
   type TouchScript,
 } from '@astryxdesign/interaction-harness';
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {build} from 'esbuild';
 import type * as PagerBundle from './pagerBundle';
 

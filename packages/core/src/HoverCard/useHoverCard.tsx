@@ -401,7 +401,12 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
   // Tap-to-open on touch; on a mouse this does nothing and hover still rules.
   const handlePointerDown = useCallback(
     (event: PointerEvent) => {
-      handleTouchPointerDown(event);
+      // A pen in range starts the hover show before it lands. Left pending,
+      // that show opens the card during the press. The tap then closes it.
+      if (handleTouchPointerDown(event) && showTimeoutRef.current) {
+        clearTimeout(showTimeoutRef.current);
+        showTimeoutRef.current = null;
+      }
     },
     [handleTouchPointerDown],
   );

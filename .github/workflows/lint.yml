@@ -139,9 +139,11 @@ jobs:
             > "$TRUSTED_POLICY/scripts/lib/workspace-globs.mjs"
           VALIDATOR="$TRUSTED_POLICY/scripts/release/active-release.mjs"
           ACTIVE_BRANCHES=$(node "$VALIDATOR" list-active --root "$GITHUB_WORKSPACE")
+          # The merge commit's first parent: the main commit it was built on.
+          # A main that moved since would read its new files as deletions.
           node "$VALIDATOR" validate-merge-back \
             --root "$GITHUB_WORKSPACE" \
-            --base origin/main \
+            --base HEAD^1 \
             --release-ref "v$VERSION" \
             --active-branches "$ACTIVE_BRANCHES"
 
