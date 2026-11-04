@@ -76,10 +76,8 @@ const styles = stylex.create({
     outline: 'none',
     WebkitTapHighlightColor: 'transparent',
   },
-  // The rows fade toward the column's edges, from the scrolling column's 0.3
-  // to fully opaque at the band and back. The scrolling column fades them the
-  // same way under reduced motion. A static mask: nothing paints it again as
-  // the strip moves. It sits inside the column, so it never clips the
+  // The rows fade toward the column's edges. A static mask: nothing paints it
+  // again as the strip moves. It sits inside the column, so it never clips the
   // column's focus ring.
   fade: {
     position: 'absolute',

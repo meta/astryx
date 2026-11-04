@@ -42,7 +42,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import {expect, test, type Page} from '@playwright/test';
+import {
+  expect,
+  keepRequestsLocal,
+  test,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import type {CastFrame, TrackedFrame} from './frames';
 import {
   advanceFrozenPage,
@@ -64,6 +69,7 @@ import {
   freezePageOn,
   freezePageWhen,
   freezeTimers,
+  HARNESS_READ,
   holdAnimations,
   installInputLog,
   type InputRecord,
@@ -1197,7 +1203,9 @@ test.describe('frame evidence', () => {
         env: {...process.env, MESA_SHADER_CACHE_DIR: fresh},
       });
       try {
-        const page = await own.newPage();
+        const context = await own.newContext();
+        await keepRequestsLocal(context);
+        const page = await context.newPage();
         await page.setContent(
           '<div id="glass" style="width:120px;height:80px;backdrop-filter:blur(16px) saturate(180%)"></div>',
         );
@@ -1257,7 +1265,9 @@ test.describe('frame evidence', () => {
     );
     await fixture(page);
     const box = page.locator('#box');
-    // Count the animation's steady middle: starting and ending it may lay out once each.
+    // Count the animation's steady middle: starting and ending it may lay out
+    // once each. The page also records when it drew each frame (its rAF
+    // times), so the frames are counted in the same window.
     const animate = async (property: 'transform' | 'top') => {
       let started = 0;
       const trace = await traceRendering(page, async () => {
@@ -1269,19 +1279,38 @@ test.describe('frame evidence', () => {
                   {transform: 'translateY(200px)'},
                 ]
               : [{top: '360px'}, {top: '560px'}];
-          el.animate(keyframes, {duration: 600});
+          const animation = el.animate(keyframes, {duration: 600});
+          const drawn: number[] = [];
+          (window as unknown as {drawn: number[]}).drawn = drawn;
+          const frame = (time: number) => {
+            drawn.push(performance.timeOrigin + time);
+            if (animation.playState === 'running') {
+              requestAnimationFrame(frame);
+            }
+          };
+          requestAnimationFrame(frame);
           return performance.timeOrigin + performance.now();
         }, property);
         await page.waitForTimeout(700);
       });
-      return countBetween(trace, started + 100, started + 500);
+      const drawn = await page.evaluate(
+        () => (window as unknown as {drawn: number[]}).drawn,
+      );
+      return {
+        counts: countBetween(trace, started + 100, started + 500),
+        frames: drawn.filter(t => t >= started + 100 && t <= started + 500)
+          .length,
+      };
     };
     const transform = await animate('transform');
     const top = await animate('top');
-    expect(transform.Layout ?? 0).toBe(0);
-    expect(transform.Paint ?? 0).toBe(0);
-    // ~24 frames in 400 ms: one layout per frame.
-    expect(top.Layout ?? 0).toBeGreaterThan(18);
+    expect(transform.counts.Layout ?? 0).toBe(0);
+    expect(transform.counts.Paint ?? 0).toBe(0);
+    // One layout per frame the page drew: 24 in 400 ms at 60 Hz, fewer on a
+    // loaded runner, which draws fewer frames; at least 4 to judge. The
+    // window's end can fall between a frame's start and its layout.
+    expect(top.frames).toBeGreaterThanOrEqual(4);
+    expect(top.counts.Layout ?? 0).toBeGreaterThanOrEqual(top.frames - 1);
   });
 
   test('the compositor record refuses another open page, whose frames it could not tell apart', async ({
@@ -2839,17 +2868,38 @@ test.describe('animation state', () => {
   }) => {
     await fixture(page);
     const box = page.locator('#box');
-    await box.evaluate(el => {
-      el.style.transition = 'transform 300ms linear 200ms';
+    await box.evaluate((el, read) => {
+      // The transition's time at each of the wait's own reads (it marks
+      // them), so the check reads what the wait judged, not a later frame.
+      const w = window as unknown as {__reads: (number | null)[]};
+      w.__reads = [];
+      const timeStamp = console.timeStamp.bind(console);
+      console.timeStamp = (label?: string) => {
+        if (label === read) {
+          const run = el.getAnimations()[0];
+          w.__reads.push(run == null ? null : Number(run.currentTime));
+        }
+        timeStamp(label);
+      };
+      // It runs for the whole test, so the wait finds it running however
+      // late it first looks: the claim is about its 200 ms delay.
+      el.style.transition = 'transform 60s linear 200ms';
       void (el as HTMLElement).offsetWidth;
       el.style.transform = 'translateY(100px)';
-    });
-    await waitForAnimation(box, {minProgressMs: 50});
-    // 50 ms along the curve: past the 200 ms delay, not inside it.
-    const currentTime = await box.evaluate(el =>
-      Number(el.getAnimations()[0]?.currentTime),
+    }, HARNESS_READ);
+    const [found] = await waitForAnimation(box, {minProgressMs: 50});
+    expect(found.finishedAt).toBeNull();
+    // 50 ms along the curve at the read the wait answered on: past the
+    // 200 ms delay, not inside it.
+    const reads = await page.evaluate(
+      () => (window as unknown as {__reads: (number | null)[]}).__reads,
     );
-    expect(currentTime).toBeGreaterThanOrEqual(250);
+    expect(reads.at(-1)).toBeGreaterThanOrEqual(250);
+    await box.evaluate(el => {
+      for (const run of el.getAnimations()) {
+        run.finish();
+      }
+    });
     await waitForRest(box);
   });
 

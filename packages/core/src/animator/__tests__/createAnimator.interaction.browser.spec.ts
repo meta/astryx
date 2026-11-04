@@ -16,7 +16,7 @@
  */
 
 import {fileURLToPath} from 'node:url';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {build} from 'esbuild';
 import type * as Bundle from './animatorBundle';
 import type {Animator} from '../createAnimator';
