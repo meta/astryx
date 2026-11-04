@@ -145,7 +145,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   floating surfaces through the browser top layer.
 - **A swiped toast can tint Safari's toolbar.** While other toasts remain, a
   swiped toast's exit can tint iOS Safari's bottom toolbar until the last
-  toast leaves.
+  toast leaves. Once the last toast's exit ends, Safari restores the toolbar's
+  color about 0.25 s later.
 
 FR4's first-move rule has two accepted tradeoffs, which are not gaps:
 
