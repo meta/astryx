@@ -3702,6 +3702,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-image-mode-photo-caption",
+      "path": "examples/use-image-mode/photo-caption",
+      "aliases": []
+    },
+    {
       "name": "example-use-input-status-icon-coupon-code-status",
       "path": "examples/use-input-status-icon/coupon-code-status",
       "aliases": []

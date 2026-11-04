@@ -792,6 +792,7 @@
     "/templates/useFocusTrapHookUsage/",
     "/templates/useGridFocusHookUsage/",
     "/templates/useHotkeysHookUsage/",
+    "/templates/useImageModeHookUsage/",
     "/templates/useInputStatusIconHookUsage/",
     "/templates/useKeyboardHintHookUsage/",
     "/templates/useListFocusHookUsage/",
