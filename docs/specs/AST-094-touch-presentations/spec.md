@@ -210,10 +210,12 @@ a measured, sourced difference exists.
   `timing.curves.move`) stay as the measured native reference. No motion that a
   tap, a hold, a key or the program starts in a component whose main interaction
   is a tap plays them: that motion plays the theme's duration and easing tokens
-  (FR45), and an exit plays the theme's exit duration and easing (FR7). Three
-  approved motions keep their springs until their own records change: the layout
-  glide (`spec:AST-105` FR4), the animator's `animate` (`spec:AST-107` FR3), and
-  `useDragToSnapPoints`'s `settleTo` (`spec:AST-107`). Reduce Motion
+  (FR45), and an exit plays the theme's exit duration and easing (FR7). Two
+  approved motions keep their springs until their own records change: the
+  animator's `animate` (`spec:AST-107` FR3) and `useDragToSnapPoints`'s
+  `settleTo` (`spec:AST-107`). AST-105's glide, swap and edge reveal are
+  tap-started layout motion and play the theme's curve tokens (`spec:AST-105`
+  FR4). Reduce Motion
   substitutions and continuous busy loops (such as ProgressBar's indeterminate
   pulse, `component:ProgressBar` FR6) keep their named roles; they are neither
   gesture- nor interaction-started motion. A component's own record states which
@@ -304,10 +306,11 @@ a measured, sourced difference exists.
   main interaction is a tap, every other motion, which a tap, a click, a hold, a
   key or the program starts, MUST play the theme's motion tokens, its duration
   and easing tokens scaled by `tempo` (`architecture:theme-tokens`,
-  `spec:AST-108` FR2), under every pointer, a finger included. Three approved
-  motions keep their springs until their own records change: the layout glide
-  (`spec:AST-105` FR4), the animator's `animate` (`spec:AST-107` FR3), and
-  `useDragToSnapPoints`'s `settleTo` (`spec:AST-107`). Reduce Motion
+  `spec:AST-108` FR2), under every pointer, a finger included. Two approved
+  motions keep their springs until their own records change: the animator's
+  `animate` (`spec:AST-107` FR3) and `useDragToSnapPoints`'s `settleTo`
+  (`spec:AST-107`). AST-105's glide, swap and edge reveal are tap-started layout
+  motion and play the theme's curve tokens (`spec:AST-105` FR4). Reduce Motion
   substitutions and continuous busy loops (such as ProgressBar's indeterminate
   pulse, `component:ProgressBar` FR6) keep their named roles; they are neither
   gesture- nor interaction-started motion. A tap has no velocity, so it is not a
@@ -332,15 +335,16 @@ a measured, sourced difference exists.
   gesture component, or from the main curve's duration and easing in a tap
   component, and never runs on independent timing.
 
-  | Main interaction                                | Motion                                                                                                                                                             | Components                                                                                                                                 |
-  | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
-  | Gesture                                         | Springs                                                                                                                                                            | BottomSheet, Drawer, swipeable List rows, Lightbox, the pager and Carousel, ContextMenu's long-press presentation, Slider, pull-to-refresh |
-  | Gesture                                         | Springs: a tap, key or program turn plays `springs.settle` from rest; the flick coast keeps UIKit's measured deceleration; the slow-release snap stays as recorded | the DateInput and TimeInput wheels                                                                                                         |
-  | Tap                                             | Curve tokens                                                                                                                                                       | Accordion, Disclosure, Collapsible, DropdownMenu, Popover, Tooltip, HoverCard, Dialog, AlertDialog, Tabs, Checkbox, press feedback         |
-  | As their records state today (springs recorded) | As recorded                                                                                                                                                        | Switch, SegmentedControl, Toast                                                                                                            |
+  | Main interaction                              | Motion                                                                                                                                                             | Components                                                                                                                                 |
+  | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
+  | Gesture                                       | Springs                                                                                                                                                            | BottomSheet, Drawer, swipeable List rows, Lightbox, the pager and Carousel, ContextMenu's long-press presentation, Slider, pull-to-refresh |
+  | Gesture                                       | Springs: a tap, key or program turn plays `springs.settle` from rest; the flick coast keeps UIKit's measured deceleration; the slow-release snap stays as recorded | the DateInput and TimeInput wheels                                                                                                         |
+  | Tap                                           | Curve tokens                                                                                                                                                       | Accordion, Disclosure, Collapsible, DropdownMenu, Popover, Tooltip, HoverCard, Dialog, AlertDialog, Tabs, Checkbox, press feedback         |
+  | Gesture-capable                               | Springs: the thumb drags, so a tap-started toggle or selection settles on the same spring (owner decision, 2026-11-04)                                             | Switch, SegmentedControl                                                                                                                   |
+  | As its record states today (springs recorded) | As recorded                                                                                                                                                        | Toast                                                                                                                                      |
 
-  Switch, SegmentedControl and Toast keep the motion their records state today,
-  which records springs; which main interaction classifies each is open.
+  Toast keeps the motion its record states today, which records springs; which
+  main interaction classifies it is open.
 
   | Spring roles                                                                                                                                                                                                        | Timing tier                                     |
   | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
