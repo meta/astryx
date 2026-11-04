@@ -21,6 +21,10 @@
 // primary pointer, so a mouse, trackpad or Space press on such a device comes
 // here as `buttonDown`: painted at once and faded on release.
 //
+// Only a finger inside a scroller waits. The controller tells the machine
+// which touch waits (`down`'s `delayed`), and a touch that does not wait goes
+// straight to `pressed`. After that the machine is the same.
+//
 // The constants were measured against native apps. The machine knows nothing
 // of the DOM, so {@link pressGestureStep}'s cases are the state diagram.
 
@@ -105,7 +109,17 @@ export interface PressGesture {
 }
 
 export type PressEvent =
-  | {kind: 'down'; x: number; y: number}
+  | {
+      kind: 'down';
+      x: number;
+      y: number;
+      /**
+       * Whether this touch waits {@link PRESS_ONSET_MS} before it paints:
+       * a surface inside a scroller. Defaults to
+       * `true`.
+       */
+      delayed?: boolean;
+    }
   /**
    * A mouse button or the Space key went down on the surface. The
    * controller sends this only where the stylesheet has dropped `:active`
@@ -167,6 +181,15 @@ export function pressGestureStep(
   event: PressEvent,
 ): PressStep {
   if (event.kind === 'down') {
+    // A surface with no scroller above it: nothing can turn this touch into a
+    // scroll, so it paints in the frame it lands, as a UIControl highlights.
+    if (event.delayed === false) {
+      return {
+        gesture: {originX: event.x, originY: event.y, phase: 'pressed'},
+        paint: 'on',
+        timer: null,
+      };
+    }
     // A new touch always starts armed and painting nothing, whatever the last
     // gesture ended as. This is the only way out of `dead`.
     return {

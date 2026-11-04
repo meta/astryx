@@ -1963,11 +1963,11 @@ test.describe('where the primary pointer is fine', () => {
       page,
       [12, 12, 12, 12, 11, 10, 9, 8, 7, 6, 5, 4],
     );
-    // The splitter starts a new gesture at a momentum pause of 50 ms or more.
-    // A loaded page can deliver one, and the proof then judges the wheels
-    // before it. Each wheel logs itself after the host handled it. WebKit's
-    // injected wheels carry only real dispatch time, so a harness that cannot
-    // keep pace can still stall the finger phase and fail this proof.
+    // A loaded page can deliver the momentum after a pause of 50 ms or more,
+    // and the proof then judges the wheels before it. Each wheel logs itself
+    // after the host handled it. WebKit's injected wheels carry only real
+    // dispatch time, so a harness that cannot keep pace can still stall the
+    // finger phase and fail this proof.
     const pause = times.findIndex(
       (time, i) => i > lift && time - times[i - 1] >= 50,
     );

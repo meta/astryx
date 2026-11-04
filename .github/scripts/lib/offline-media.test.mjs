@@ -80,24 +80,18 @@ describe.runIf(chromiumInstalled)('routeRemoteImages in a real browser', () => {
   let server;
   let stalled;
   let origin;
-  let chromium;
+  let browser;
+  let stalledConnections = 0;
   // The remote image host resolves to a local server that accepts the
   // connection and never answers: a host that stalls, on every machine.
   const REMOTE_HOST = 'photos.example.test';
-  const launch = () =>
-    chromium.launch({
-      args: [
-        `--host-resolver-rules=MAP ${REMOTE_HOST} 127.0.0.1:${stalled.address().port}`,
-        // A local sandboxed shell cannot start Chromium's own sandbox; CI can.
-        ...(process.env.ASTRYX_NO_BROWSER_SANDBOX === '1'
-          ? ['--no-sandbox', '--single-process', '--no-zygote']
-          : []),
-      ],
-    });
 
   beforeAll(async () => {
-    ({chromium} = require('playwright'));
+    const {chromium} = require('playwright');
     stalled = http.createServer(() => {});
+    stalled.on('connection', () => {
+      stalledConnections += 1;
+    });
     await new Promise(resolve => stalled.listen(0, '127.0.0.1', resolve));
     // A story page whose only image lives on the stalling host.
     server = http.createServer((request, response) => {
@@ -115,82 +109,115 @@ describe.runIf(chromiumInstalled)('routeRemoteImages in a real browser', () => {
     });
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     origin = `http://127.0.0.1:${server.address().port}`;
+    // One browser serves every case, and each case opens its own context.
+    browser = await chromium.launch({
+      args: [
+        `--host-resolver-rules=MAP ${REMOTE_HOST} 127.0.0.1:${stalled.address().port}`,
+        // A local sandboxed shell cannot start Chromium's own sandbox; CI can.
+        ...(process.env.ASTRYX_NO_BROWSER_SANDBOX === '1'
+          ? ['--no-sandbox', '--single-process', '--no-zygote']
+          : []),
+      ],
+    });
   });
 
   afterAll(async () => {
+    await browser?.close();
     stalled?.closeAllConnections();
     await new Promise(resolve => stalled?.close(resolve));
     await new Promise(resolve => server?.close(resolve));
   });
 
+  /** Resolves with the response to the stalling host's next request for `path`. */
+  const nextRequest = path =>
+    new Promise(resolve => {
+      const onRequest = (request, response) => {
+        if (request.url !== path) {
+          return;
+        }
+        stalled.off('request', onRequest);
+        resolve(response);
+      };
+      stalled.on('request', onRequest);
+    });
+
   it('a page whose image host is unreachable still loads at once, with the image drawn locally', async () => {
-    const browser = await launch();
+    const context = await browser.newContext();
     try {
-      const context = await browser.newContext();
       await routeRemoteImages(context, origin);
       const page = await context.newPage();
-      const started = Date.now();
-      await page.goto(`${origin}/`, {waitUntil: 'load', timeout: 10_000});
-      const elapsed = Date.now() - started;
+      const connectionsBefore = stalledConnections;
+      await page.goto(`${origin}/`, {waitUntil: 'load'});
       const image = await page.evaluate(() => {
         const element = document.getElementById('photo');
         return {complete: element.complete, width: element.naturalWidth};
       });
-      expect(elapsed).toBeLessThan(5_000);
+      // No request reached the stalling host, so the load waited on nothing.
+      expect(stalledConnections).toBe(connectionsBefore);
       expect(image).toEqual({complete: true, width: 400});
     } finally {
-      await browser.close();
+      await context.close();
     }
   }, 30_000);
 
   it('with abortOther, a remote script fails at once and the page still loads', async () => {
-    const browser = await launch();
+    const context = await browser.newContext();
     try {
-      const context = await browser.newContext();
       await routeRemoteImages(context, origin, {abortOther: true});
       const page = await context.newPage();
       const failed = [];
       page.on('requestfailed', request => failed.push(request.url()));
-      const started = Date.now();
-      await page.goto(`${origin}/with-script`, {
-        waitUntil: 'load',
-        timeout: 10_000,
-      });
-      const elapsed = Date.now() - started;
+      const connectionsBefore = stalledConnections;
+      await page.goto(`${origin}/with-script`, {waitUntil: 'load'});
       const width = await page.evaluate(
         () => document.getElementById('photo').naturalWidth,
       );
-      expect(elapsed).toBeLessThan(5_000);
+      expect(stalledConnections).toBe(connectionsBefore);
       expect(width).toBe(400);
       expect(failed).toEqual([`http://${REMOTE_HOST}/app.js`]);
     } finally {
-      await browser.close();
+      await context.close();
     }
   }, 30_000);
 
   it('without abortOther, the remote script still holds the page', async () => {
-    const browser = await launch();
+    const context = await browser.newContext();
     try {
-      const context = await browser.newContext();
       await routeRemoteImages(context, origin);
       const page = await context.newPage();
-      await expect(
-        page.goto(`${origin}/with-script`, {waitUntil: 'load', timeout: 3_000}),
-      ).rejects.toThrow(/Timeout/);
+      const held = nextRequest('/app.js');
+      const navigation = page.goto(`${origin}/with-script`, {
+        waitUntil: 'load',
+      });
+      const response = await held;
+      // The script blocks the parser while the host holds its request.
+      expect(await page.evaluate(() => document.readyState)).toBe('loading');
+      // The page loads once the host answers.
+      response.end();
+      await navigation;
+      expect(await page.evaluate(() => document.readyState)).toBe('complete');
     } finally {
-      await browser.close();
+      await context.close();
     }
   }, 30_000);
 
   it('without the route, the same page waits on the unreachable host', async () => {
-    const browser = await launch();
+    const context = await browser.newContext();
     try {
-      const page = await (await browser.newContext()).newPage();
-      await expect(
-        page.goto(`${origin}/`, {waitUntil: 'load', timeout: 3_000}),
-      ).rejects.toThrow(/Timeout/);
+      const page = await context.newPage();
+      const held = nextRequest('/photo.jpg');
+      const navigation = page.goto(`${origin}/`, {waitUntil: 'load'});
+      const response = await held;
+      // The document is parsed, and its load waits for the image the host holds.
+      await page.waitForFunction(() => document.readyState !== 'loading');
+      expect(await page.evaluate(() => document.readyState)).toBe(
+        'interactive',
+      );
+      response.end();
+      await navigation;
+      expect(await page.evaluate(() => document.readyState)).toBe('complete');
     } finally {
-      await browser.close();
+      await context.close();
     }
   }, 30_000);
 });

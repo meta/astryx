@@ -4,7 +4,8 @@
 
 /**
  * @file MobileNav.tsx
- * @input Uses React, useEffect, useRef, useCallback, ReactNode, StyleX
+ * @input Uses React, useEffect, useRef, useCallback, ReactNode, StyleX and
+ *   the Layer module's entrance hold
  * @output Exports MobileNav component and MobileNavProps
  * @position Core implementation; consumed by index.ts
  *
@@ -38,6 +39,7 @@
  * - /packages/core/src/MobileNav/index.ts (exports if types change)
  * - /packages/core/src/Layer/useLayerDismissal.ts (dismissal stack)
  * - /packages/core/src/hooks/useScrollLock.ts (the page's scroll lock)
+ * - /packages/core/src/MobileNav/MobileNavTouchPresentation.test.tsx (touch)
  * - /packages/cli/assets/templates/blocks/components/MobileNav/ (showcase blocks)
  */
 
@@ -63,6 +65,7 @@ import {Button} from '../Button';
 import {Icon} from '../Icon';
 import {Heading} from '../Heading/Heading';
 import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {holdEntranceInput} from '../Layer/holdEntranceInput';
 import {mergeProps, composeEventHandlers} from '../utils';
 import {layerTextReset} from '../Layer/layerTextReset.stylex';
 import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
@@ -282,6 +285,14 @@ const dynamicStyles = stylex.create({
  * own scheduled `dialog.close()` has a chance to run (#5701).
  */
 export const MAX_CLOSE_DELAY_MS = 250;
+/**
+ * Longest the drawer slides in or out for, in ms. Both run for the theme's
+ * `--duration-medium`: 410 ms by default, and at most 545 ms on the default
+ * scale (`--duration-medium-max`). The slide-out keeps playing after the
+ * dialog closes, while the dialog's `display` transition keeps it rendered.
+ * The touch hold on the slide-in ends by this time.
+ */
+export const MAX_EXIT_MS = 550;
 /** Fraction of the hold to close at, so the close never lands on its boundary. */
 const CLOSE_WITHIN_HOLD = 0.6;
 
@@ -504,7 +515,11 @@ export function MobileNav({
   );
 
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout>>(null);
+  // The input hold on the drawer's layer while it slides in under a coarse
+  // primary pointer. It is null under a fine one and once the slide-in ends.
+  const releaseHoldRef = useRef<(() => void) | null>(null);
   // Element that was focused when the drawer opened; focus goes back to it
   // once the native dialog has closed (see closeAndRestoreFocus).
   const triggerElementRef = useRef<HTMLElement | null>(null);
@@ -569,6 +584,8 @@ export function MobileNav({
     }
 
     if (isOpen) {
+      releaseHoldRef.current?.();
+      releaseHoldRef.current = null;
       if (!dialog.open) {
         // Capture the opener before showModal() pulls focus into the top
         // layer. Only on the transition into open: a reopen while the delayed
@@ -578,7 +595,16 @@ export function MobileNav({
           document.activeElement as HTMLElement | null;
         dialog.showModal();
       }
+      // Under a coarse primary pointer, nothing takes a touch until the
+      // slide-in ends, at most MAX_EXIT_MS in. A close holds nothing, because
+      // only an entrance is held. Under a fine one, nothing is held.
+      releaseHoldRef.current = holdEntranceInput(dialog, {
+        entrance: drawerRef.current,
+        capMs: MAX_EXIT_MS,
+      });
     } else if (dialog.open) {
+      releaseHoldRef.current?.();
+      releaseHoldRef.current = null;
       closeTimeoutRef.current = setTimeout(() => {
         closeAndRestoreFocus(dialog, triggerElementRef);
         setIsCloseHeld(false);
@@ -594,6 +620,10 @@ export function MobileNav({
         clearTimeout(closeTimeoutRef.current);
         closeTimeoutRef.current = null;
       }
+      // The hold this run took ends with it: a reopen, a close or an
+      // unmount mid-slide never leaves input blocked.
+      releaseHoldRef.current?.();
+      releaseHoldRef.current = null;
     };
   }, [isOpen]);
 
@@ -613,6 +643,8 @@ export function MobileNav({
   useEffect(() => {
     const dialog = dialogRef.current;
     return () => {
+      releaseHoldRef.current?.();
+      releaseHoldRef.current = null;
       if (dialog?.open) {
         closeAndRestoreFocus(dialog, triggerElementRef);
       }
@@ -704,6 +736,7 @@ export function MobileNav({
           <LayerContentBoundary>
             {/* Drawer panel — tabIndex so showModal() focuses the drawer, not the close button */}
             <div
+              ref={drawerRef}
               tabIndex={-1}
               {...stylex.props(
                 styles.drawer,
