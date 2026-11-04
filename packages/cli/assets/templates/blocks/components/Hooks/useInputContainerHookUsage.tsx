@@ -9,10 +9,10 @@ import {useInputContainer} from '@astryxdesign/core/hooks';
 import {Icon} from '@astryxdesign/core/Icon';
 import {
   colorVars,
+  focusVars,
   radiusVars,
   spacingVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
-import {focusOutlineStyles} from '@astryxdesign/core/utils';
 import {MagnifyingGlassIcon, XMarkIcon} from '@heroicons/react/24/outline';
 
 const styles = stylex.create({
@@ -28,6 +28,22 @@ const styles = stylex.create({
     borderColor: colorVars['--color-border-emphasized'],
     borderRadius: radiusVars['--radius-element'],
     cursor: 'text',
+    outlineWidth: {
+      default: 0,
+      ':has(> input:focus-visible)': focusVars['--focus-outline-width'],
+    },
+    outlineStyle: {
+      default: 'none',
+      ':has(> input:focus-visible)': focusVars['--focus-outline-style'],
+    },
+    outlineColor: {
+      default: null,
+      ':has(> input:focus-visible)': focusVars['--focus-outline-color'],
+    },
+    outlineOffset: {
+      default: 0,
+      ':has(> input:focus-visible)': focusVars['--focus-outline-offset'],
+    },
   },
   input: {
     flexGrow: 1,
@@ -52,7 +68,7 @@ export default function UseInputContainerHookUsage() {
       ref={containerRef}
       onClick={onClick}
       onMouseUp={onMouseUp}
-      {...stylex.props(styles.field, focusOutlineStyles.focusWithin)}>
+      {...stylex.props(styles.field)}>
       <Icon icon={MagnifyingGlassIcon} color="secondary" />
       <input
         ref={inputRef}
