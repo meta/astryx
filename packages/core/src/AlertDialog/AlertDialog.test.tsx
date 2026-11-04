@@ -336,12 +336,93 @@ describe('AlertDialog', () => {
       }
     });
 
-    it('uses the same stacked layout on a mobile touch screen', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    /**
+     * jsdom lays nothing out and resolves no `var()`. So these are a
+     * browser's lengths for a 320 px alert's action row. The row is 288 px
+     * wide with an 8 px column gap. Each action has 12 px of padding on each
+     * side and no border. Each label is `labelWidth(text)` px wide on one line.
+     */
+    function stubActionRow(labelWidth: (text: string) => number): void {
+      const isRow = (element: Element) =>
+        element.querySelectorAll(':scope > button').length === 2;
+      vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(
+        function (this: HTMLElement) {
+          return isRow(this) ? 288 : 0;
+        },
+      );
+      vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(
+        function (this: HTMLElement) {
+          return this.children.length === 0
+            ? labelWidth(this.textContent?.trim() ?? '')
+            : 0;
+        },
+      );
+      const computed = window.getComputedStyle.bind(window);
+      vi.spyOn(window, 'getComputedStyle').mockImplementation(
+        (element, pseudoElement) => {
+          const style = computed(element, pseudoElement);
+          const lengths: Record<string, string> | null = isRow(element)
+            ? {columnGap: '8px'}
+            : element.tagName === 'BUTTON'
+              ? {
+                  paddingLeft: '12px',
+                  paddingRight: '12px',
+                  borderLeftWidth: '0px',
+                  borderRightWidth: '0px',
+                }
+              : null;
+          // The rest of the computed style stays jsdom's own.
+          for (const [property, value] of Object.entries(lengths ?? {})) {
+            Object.defineProperty(style, property, {value});
+          }
+          return style;
+        },
+      );
+    }
+
+    /** Each label 50 px wide: each fits its 140 px half of the row. */
+    const fittingLabels = () => 50;
+
+    it('under a finger on a compact screen puts two short actions in a row, Cancel leading, each taking half', () => {
       stubAlertDialogMedia({
         smallScreen: true,
         coarsePointer: true,
         noHover: true,
       });
+      stubActionRow(fittingLabels);
+      render(<AlertDialog {...defaultProps} />);
+
+      const dialog = screen.getByRole('alertdialog');
+      const buttons = within(dialog).getAllByRole('button');
+      // DOM and tab order are the visual order: Cancel leads the row.
+      expect(buttons.map(button => button.textContent)).toEqual([
+        'Cancel',
+        'Delete',
+      ]);
+      const footerStack = buttons[0].parentElement as HTMLElement;
+      expect(getComputedStyle(footerStack).flexDirection).toBe('row');
+      expect(getComputedStyle(footerStack).flexWrap).toBe('nowrap');
+      for (const button of buttons) {
+        expect(getComputedStyle(button).flexGrow).toBe('1');
+        expect(getComputedStyle(button).flexBasis).toBe('0px');
+      }
+      expect(screen.getByRole('button', {name: 'Cancel'})).toHaveAttribute(
+        'data-autofocus',
+      );
+    });
+
+    it('under a finger on a compact screen stacks the actions when one label is wider than its half, the action above Cancel', () => {
+      stubAlertDialogMedia({
+        smallScreen: true,
+        coarsePointer: true,
+        noHover: true,
+      });
+      // Cancel fits its half; the action's label does not.
+      stubActionRow(text => (text === 'Keep this workspace' ? 110 : 160));
       render(
         <AlertDialog
           {...defaultProps}
@@ -350,11 +431,6 @@ describe('AlertDialog', () => {
         />,
       );
 
-      // The layout reads the width alone. The pointer query only picks the
-      // motion and the width (UIKit's under a finger), never the order or the
-      // stacking.
-      expect(window.matchMedia).toHaveBeenCalledWith('(max-width: 640px)');
-      expect(window.matchMedia).not.toHaveBeenCalledWith('(hover: none)');
       const dialog = screen.getByRole('alertdialog');
       const buttons = within(dialog).getAllByRole('button');
       expect(dialog.getAttribute('style')).toContain('--x-width: 320px');
@@ -362,10 +438,76 @@ describe('AlertDialog', () => {
         'Permanently delete workspace',
         'Keep this workspace',
       ]);
-      expect(getComputedStyle(buttons[0]).whiteSpace).toBe('nowrap');
-      expect(getComputedStyle(buttons[0]).width).toBe('100%');
-      expect(getComputedStyle(buttons[1]).whiteSpace).toBe('nowrap');
-      expect(getComputedStyle(buttons[1]).width).toBe('100%');
+      const footerStack = buttons[0].parentElement as HTMLElement;
+      expect(getComputedStyle(footerStack).flexDirection).toBe('column');
+      for (const button of buttons) {
+        expect(getComputedStyle(button).whiteSpace).toBe('nowrap');
+        expect(getComputedStyle(button).width).toBe('100%');
+      }
+    });
+
+    it('under a finger on a compact screen lays the actions out again when a label changes while the alert is open', () => {
+      stubAlertDialogMedia({
+        smallScreen: true,
+        coarsePointer: true,
+        noHover: true,
+      });
+      stubActionRow(text => (text === 'Delete every message' ? 180 : 50));
+      const view = render(<AlertDialog {...defaultProps} />);
+      const labels = () =>
+        within(screen.getByRole('alertdialog'))
+          .getAllByRole('button')
+          .map(button => button.textContent);
+      expect(labels()).toEqual(['Cancel', 'Delete']);
+      view.rerender(
+        <AlertDialog {...defaultProps} actionLabel="Delete every message" />,
+      );
+      expect(labels()).toEqual(['Delete every message', 'Cancel']);
+      view.rerender(<AlertDialog {...defaultProps} />);
+      expect(labels()).toEqual(['Cancel', 'Delete']);
+    });
+
+    it('with a mouse on a small screen keeps the stack even when the labels fit', () => {
+      stubAlertDialogMedia({
+        smallScreen: true,
+        coarsePointer: false,
+        noHover: false,
+      });
+      stubActionRow(fittingLabels);
+      render(<AlertDialog {...defaultProps} />);
+      // A fine pointer, before anything is checked.
+      expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+
+      const dialog = screen.getByRole('alertdialog');
+      const buttons = within(dialog).getAllByRole('button');
+      expect(buttons.map(button => button.textContent)).toEqual([
+        'Delete',
+        'Cancel',
+      ]);
+      const footerStack = buttons[0].parentElement as HTMLElement;
+      expect(getComputedStyle(footerStack).flexDirection).toBe('column');
+    });
+
+    it('under a finger on a wider touch screen keeps the wide row, as with a mouse', () => {
+      stubAlertDialogMedia({
+        smallScreen: false,
+        coarsePointer: true,
+        noHover: true,
+      });
+      stubActionRow(fittingLabels);
+      render(<AlertDialog {...defaultProps} />);
+
+      const dialog = screen.getByRole('alertdialog');
+      const buttons = within(dialog).getAllByRole('button');
+      expect(buttons.map(button => button.textContent)).toEqual([
+        'Cancel',
+        'Delete',
+      ]);
+      const footerStack = buttons[0].parentElement as HTMLElement;
+      expect(getComputedStyle(footerStack).flexWrap).toBe('wrap');
+      for (const button of buttons) {
+        expect(getComputedStyle(button).flexGrow).not.toBe('1');
+      }
     });
 
     it('keeps narrow visual, DOM, and tab order aligned while autofocus stays on cancel', async () => {

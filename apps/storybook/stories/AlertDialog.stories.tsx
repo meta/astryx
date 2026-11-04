@@ -92,6 +92,9 @@ export const Async: Story = {
 /**
  * Wide reference state. In a wide viewport, Dialog preserves AlertDialog's
  * preferred 400px surface and AlertDialog renders a horizontal action row.
+ * Under a finger on a compact screen, its two short actions share a row in
+ * equal halves, Cancel leading. The theme defines compact: by default
+ * narrower than 768px or shorter than 500px.
  */
 export const DesktopFinePointer: Story = {
   args: {
@@ -107,8 +110,10 @@ export const DesktopFinePointer: Story = {
 };
 
 /**
- * Narrow reference state. Use a <=640px viewport to see Dialog's width clamp
- * with AlertDialog's destructive-above-Cancel stacked action order.
+ * Narrow reference state. With a mouse, use a <=640px viewport to see
+ * Dialog's width clamp with AlertDialog's destructive-above-Cancel stacked
+ * action order. Under a finger on a compact screen these labels stack too:
+ * each one is too long for its half of the row.
  */
 export const NarrowFinePointer: Story = {
   args: {
@@ -125,8 +130,9 @@ export const NarrowFinePointer: Story = {
 };
 
 /**
- * Mobile reference state. Use a <=640px mobile viewport to verify the same
- * stacked action order; this story does not emulate pointer or hover capability.
+ * Mobile reference state. On a compact touch screen these long labels keep
+ * the destructive-above-Cancel stack; this story does not emulate pointer or
+ * hover capability.
  */
 export const MobileTouch: Story = {
   args: NarrowFinePointer.args,

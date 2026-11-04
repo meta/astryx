@@ -315,21 +315,29 @@ function progressAt(look: Look, from: Look, to: Look) {
 }
 
 /**
- * The mean luminance of `region` (CSS px) in each screencast frame. Decoding
- * runs in a scratch page of the same browser, as `trackMarker`'s does.
+ * How much `region` (CSS px) changes in each screencast frame. It is the mean
+ * absolute change of its pixels' luminance from the frame before, or -1 on
+ * the first frame. The region's mean luminance can stand still in a frame
+ * where its content moves. Decoding runs in a scratch page of the same
+ * browser, as `trackMarker`'s does.
  */
-async function trackLuma(
+async function trackChange(
   page: Page,
   castFrames: ReadonlyArray<CastFrame>,
   region: {x: number; y: number; width: number; height: number},
-): Promise<{t: number; luma: number}[]> {
+): Promise<{t: number; change: number}[]> {
   const scratch = await page.context().newPage();
   try {
-    const out: {t: number; luma: number}[] = [];
+    const out: {t: number; change: number}[] = [];
     for (let i = 0; i < castFrames.length; i += 12) {
       const batch = castFrames.slice(i, i + 12);
       const values = await scratch.evaluate(
         async ({items, box}) => {
+          // The previous frame's luminance stays on the scratch page from
+          // one batch to the next.
+          const scratchWindow = window as unknown as {
+            __previous?: Float32Array;
+          };
           const results: number[] = [];
           for (const item of items) {
             const blob = await (
@@ -349,12 +357,22 @@ async function trackLuma(
               Math.max(1, Math.round(box.width * scale)),
               Math.max(1, Math.round(box.height * scale)),
             );
-            let sum = 0;
+            const luma = new Float32Array(data.length / 4);
             for (let o = 0; o < data.length; o += 4) {
-              sum +=
+              luma[o / 4] =
                 0.2126 * data[o] + 0.7152 * data[o + 1] + 0.0722 * data[o + 2];
             }
-            results.push(sum / (data.length / 4));
+            const previous = scratchWindow.__previous;
+            if (previous == null || previous.length !== luma.length) {
+              results.push(-1);
+            } else {
+              let sum = 0;
+              for (let p = 0; p < luma.length; p += 1) {
+                sum += Math.abs(luma[p] - previous[p]);
+              }
+              results.push(sum / luma.length);
+            }
+            scratchWindow.__previous = luma;
           }
           return results;
         },
@@ -367,7 +385,7 @@ async function trackLuma(
           box: region,
         },
       );
-      values.forEach((luma, k) => out.push({t: batch[k].t, luma}));
+      values.forEach((change, k) => out.push({t: batch[k].t, change}));
     }
     return out;
   } finally {
@@ -384,7 +402,7 @@ async function trackLuma(
  * rate is no reference there.
  */
 function judgeAgainstControl(
-  alert: ReadonlyArray<{t: number; luma: number}>,
+  alert: ReadonlyArray<{t: number; change: number}>,
   control: ReadonlyArray<TrackedFrame>,
   window: {from: number; to: number},
 ) {
@@ -402,7 +420,7 @@ function judgeAgainstControl(
     const now = control[i].box;
     const controlMoves =
       before != null && now != null && Math.abs(now.x - before.x) > 0.5;
-    const alertMoves = Math.abs(alert[i].luma - alert[i - 1].luma) > 0.05;
+    const alertMoves = alert[i].change > 0.05;
     controlStall = controlMoves ? 0 : controlStall + 1;
     alertStall = alertMoves ? 0 : alertStall + 1;
     longestControlStall = Math.max(longestControlStall, controlStall);
@@ -689,7 +707,7 @@ test.describe('under a finger', () => {
         height: rest.height * 0.4,
       };
       proofs[phase] = judgeAgainstControl(
-        await trackLuma(page, castFrames, region),
+        await trackChange(page, castFrames, region),
         await trackMarker(page, castFrames, {rgb: CONTROL_RGB}),
         {
           from: block.from + 20,

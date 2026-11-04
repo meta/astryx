@@ -8,7 +8,8 @@
  *   touch presentation resolver. Also the action-group tracking
  *   (hooks/useActionGroupTracking), the press-group marker
  *   (privateAttributes/pressGroupItem.stylex), its touch motion
- *   (useAlertMotion) and the alert entries of the UIKit constants table
+ *   (useAlertMotion), its compact touch action layout
+ *   (useAlertActionLayout) and the alert entries of the UIKit constants table
  * @output Exports AlertDialog component, AlertDialogProps type
  * @position Core implementation; consumed by index.ts, tested by AlertDialog.test.tsx
  *
@@ -18,6 +19,7 @@
  * - /packages/core/src/AlertDialog/index.ts (exports if types change)
  * - /packages/core/src/AlertDialog/__tests__/AlertDialog.interaction.browser.spec.ts (touch tracking)
  * - /packages/core/src/AlertDialog/__tests__/AlertDialog.motion.interaction.browser.spec.ts (touch motion)
+ * - /packages/core/src/AlertDialog/__tests__/AlertDialog.layout.interaction.browser.spec.ts (compact touch action layout)
  * - /apps/storybook/stories/AlertDialog.stories.tsx (storybook stories)
  * - /packages/cli/assets/templates/blocks/components/AlertDialog/ (showcase blocks)
  */
@@ -50,6 +52,7 @@ import {alertController} from '../motion/uikit/alert';
 import {pressGroupItemProps} from '../privateAttributes/pressGroupItem.stylex';
 import {durationVars, easeVars} from '../theme/tokens.stylex';
 import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
+import {useAlertActionLayout} from './useAlertActionLayout';
 import {useAlertMotion} from './useAlertMotion';
 
 registerEnglishFallback(english);
@@ -130,6 +133,10 @@ const styles = stylex.create({
   },
   stackedAction: {
     width: '100%',
+  },
+  equalHalfAction: {
+    flexGrow: 1,
+    flexBasis: 0,
   },
 });
 
@@ -252,17 +259,18 @@ export function AlertDialog({
   const cancelLabel = cancelLabelFromProps ?? t('@astryx.alertDialog.cancel');
   const titleId = useId();
   const descriptionId = useId();
-  // Width stays delegated to Dialog: this query exists only so AlertDialog can
-  // keep narrow visual, DOM, and tab order aligned for its destructive/cancel
-  // semantics without coupling action order to pointer or hover capability.
+  // Width stays delegated to Dialog. This query exists only so AlertDialog can
+  // keep narrow visual, DOM and tab order aligned for its destructive/cancel
+  // semantics. With a mouse the actions stack at 640px and below.
   const isSmallScreen = useMediaQuery(SMALL_SCREEN_QUERY);
 
   const touch = useTouchPresentation();
   const isTouch = touch.isTouch;
+  // Under a finger on a compact window: the phone width and the shared row.
+  const isCompactTouch = isTouch && touch.isCompact;
   // On a phone the alert is iOS's 320 px wide in every theme, so its 1.2
   // start stays on screen. A caller's width wins; elsewhere it stays 400.
-  const width =
-    widthProp ?? (isTouch && touch.isCompact ? alertController.width : 400);
+  const width = widthProp ?? (isCompactTouch ? alertController.width : 400);
   const motion = useAlertMotion({
     isOpen,
     isEnabled: isTouch && isInline !== true,
@@ -301,10 +309,22 @@ export function AlertDialog({
   );
   const mergedRef = useMergedRefs(ref, motion.ref);
   const actionTrackingProps = isTracking ? ACTION_TRACKING_PROPS : undefined;
+  // Under a finger on a compact window, two actions share a row, Cancel
+  // leading, when each label fits its half. Otherwise they stack.
+  const {layout: actionLayout, watchRef: titleRef} = useAlertActionLayout(
+    actionsRef,
+    {
+      isCompact: isCompactTouch,
+      itemSelector: 'button',
+      labels: [cancelLabel, actionLabel],
+    },
+  );
+  const isStacked = isCompactTouch ? actionLayout === 'stack' : isSmallScreen;
+  const isFullWidth = isCompactTouch || isSmallScreen;
 
   const buttonActionStyle = [
     styles.action,
-    isSmallScreen && styles.stackedAction,
+    isFullWidth && (isStacked ? styles.stackedAction : styles.equalHalfAction),
   ];
   const cancelButton = (
     <Button
@@ -361,7 +381,7 @@ export function AlertDialog({
       <Layout
         content={
           <LayoutContent>
-            <Heading level={2} id={titleId}>
+            <Heading level={2} id={titleId} ref={titleRef}>
               {title}
             </Heading>
             <Text type="body" color="secondary" id={descriptionId}>
@@ -372,18 +392,19 @@ export function AlertDialog({
         footer={
           <LayoutFooter>
             {/* Generic Dialog footers should wrap, but their consumers own
-                action semantics and order. AlertDialog keeps this
-                destructive-above-Cancel narrow order because confirmation
-                actions have component-specific meaning here. */}
+                action semantics and order. AlertDialog keeps Cancel leading
+                in a row and the destructive action above Cancel in a stack,
+                because confirmation actions have component-specific meaning
+                here. */}
             <Stack
               ref={actionsRef}
               xstyle={isTracking && styles.trackingRow}
-              direction={isSmallScreen ? 'vertical' : 'horizontal'}
+              direction={isStacked ? 'vertical' : 'horizontal'}
               gap={2}
-              hAlign={isSmallScreen ? 'stretch' : 'end'}
-              wrap={isSmallScreen ? 'nowrap' : 'wrap'}>
+              hAlign={isFullWidth ? 'stretch' : 'end'}
+              wrap={isFullWidth ? 'nowrap' : 'wrap'}>
               <PressGroupContext value={isTracking}>
-                {isSmallScreen
+                {isStacked
                   ? [actionButton, cancelButton]
                   : [cancelButton, actionButton]}
               </PressGroupContext>

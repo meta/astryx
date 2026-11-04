@@ -4,8 +4,9 @@
  * @file alert.ts
  * @input Nothing: plain data
  * @output Exports `alertController`: how UIAlertController (`.alert`)
- *   appears, how wide it is, and how it tracks a finger across its actions.
- *   None of it is a motion role: the alert plays the theme's dialog motion
+ *   appears, how wide it is, how it lays out its actions, and how it tracks
+ *   a finger across them. None of it is a motion role: the alert plays the
+ *   theme's dialog motion
  * @position The alert domain of the UIKit constants table (motion/uikit)
  *
  * Every value was read from UIKit on the iOS 26.2 simulator. A host app
@@ -46,6 +47,20 @@ export const alertController = {
     scaleFrom: 1.2,
   },
   actions: {
+    /**
+     * Two actions share a row when each title fits its share on one line.
+     * The share is this fraction of the row, less the gap. They stack when
+     * one does not. The rule is per title, never the sum: titles 114 and
+     * 111 pt wide share a row, and 137.6 and 53.7 pt stack. Cancel leads a
+     * row, mirrored right to left, and ends a stack. Three or more actions
+     * always stack.
+     * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+     *   iPhone 17 Pro, two-action alerts with growing titles (a row up to a
+     *   115.0 pt title next to Cancel, a stack from 119.0 pt; 140 pt capsules
+     *   in a 288 pt row with an 8 pt gap), add orders swapped, forced right
+     *   to left, Oct 23 2026
+     */
+    rowShare: 0.5,
     /**
      * How long after touch-down the touched action highlights: none, it is
      * highlighted in the touch-down frame (a tap and a 300 ms hold alike).
