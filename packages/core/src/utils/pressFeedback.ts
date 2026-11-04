@@ -3,10 +3,10 @@
 /**
  * @file pressFeedback.ts
  * @input The press state machine (pressGesture.ts), the menu-press and
- *   press-group markers and the document's pointer, keyboard, scroll and
+ *   press-group markers, the scroll-view test (scrollView.ts) and the document's pointer, keyboard, scroll and
  *   visibility events
  * @output PRESSABLE_ATTRIBUTE, PRESSED_ATTRIBUTE, pressableProps,
- *   pressFadeMs and installPressFeedback
+ *   pressFadeMs, installPressFeedback and cancelPress
  * @position The DOM half of the touch press model. usePressFeedback installs
  *   it, and the CSS arms live in interactionOverlay.stylex.ts.
  *
@@ -23,9 +23,13 @@
 // Where the primary pointer is fine, the controller ignores the mouse and the
 // keyboard, and CSS `:active` keeps their press. Under a coarse primary
 // pointer the CSS drops `:active`, so the controller paints every press. A
-// finger's press paints after the delay. A mouse, trackpad or Space press
-// paints at once. The controller reads the same query as the stylesheet, so
-// they agree.
+// mouse, trackpad or Space press paints at once. The controller reads the
+// same query as the stylesheet, so they agree.
+//
+// A finger waits only inside a scroller. Outside one, a surface highlights in
+// the frame the finger lands, as a UIControl does. Inside one, it waits the
+// content-touch delay, because the touch can become a scroll. Rows follow the
+// same rule.
 //
 // A surface's hold does nothing, so it keeps the browser's long-press text
 // selection (AST-094). Only an element whose hold does something suppresses
@@ -44,6 +48,7 @@ import {
 } from './pressGesture';
 import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
 import {subscribeInput} from './inputStream';
+import {isInsideScrollView} from './scrollView';
 import {TOUCH_QUERY} from './touchPresentation';
 import {holdsPressThroughDrag} from '../privateAttributes/pressHoldsDrag.stylex';
 import {isTrackedByGroup} from '../privateAttributes/pressGroupItem.stylex';
@@ -247,7 +252,11 @@ function paintElement(element: HTMLElement, paint: PressPaint): void {
     element.removeAttribute(PRESSED_ATTRIBUTE);
     return;
   }
-  element.setAttribute(PRESSED_ATTRIBUTE, paint);
+  // A step that keeps the paint writes nothing, so the element sees one
+  // change per paint.
+  if (element.getAttribute(PRESSED_ATTRIBUTE) !== paint) {
+    element.setAttribute(PRESSED_ATTRIBUTE, paint);
+  }
 }
 
 function clearTimer(slot: Slot): void {
@@ -378,6 +387,21 @@ function finish(slot: Slot): void {
   slot.live = null;
   if (slot === button) {
     holdKey(false);
+  }
+}
+
+/**
+ * Ends the press the controller follows on `element`, and its paint, at once.
+ * A clickable container calls it when a press starts on an interactive
+ * element inside it: that press does not activate the container, so the
+ * container shows no press.
+ */
+export function cancelPress(element: Element): void {
+  if (finger.live?.element === element) {
+    finish(finger);
+  }
+  if (button.live?.element === element) {
+    finish(button);
   }
 }
 
@@ -521,6 +545,7 @@ function onPointerDown(event: PointerEvent): void {
       kind: 'down',
       x: event.clientX,
       y: event.clientY,
+      delayed: isInsideScrollView(element),
     }),
   );
 }

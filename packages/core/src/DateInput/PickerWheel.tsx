@@ -4,7 +4,8 @@
 
 /**
  * @file PickerWheel.tsx
- * @input Wheel's props (wheelOptions.ts): options, value and change callback
+ * @input Wheel's props (wheelOptions.ts): options, value and change callback;
+ *   optionally a ref for programmatic turns
  * @output PickerWheel: one picker column that moves like UIPickerView
  * @position Internal component; the Wheel under a finger (Wheel.tsx picks it)
  *
@@ -15,7 +16,14 @@
  * DateInputTouch.test.tsx, DateInput.doc.mjs and TimeInput.doc.mjs.
  */
 
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {scrollTypeOf} from '../gestures/GestureHost';
 import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
@@ -50,6 +58,7 @@ import {
   type WheelLayout,
 } from './wheelPhysics';
 import {
+  canSpinTo,
   endIndex,
   nearestEnabledIndex,
   steppedIndex,
@@ -63,6 +72,12 @@ const ROW_HEIGHT = WHEEL_ROW_HEIGHT;
 const UIKIT_SCALE = ROW_HEIGHT / picker.geometry.rowHeight;
 /** UIKit's rubber band dimension for the picker's table, at that pitch. */
 const RUBBER_BAND_DIMENSION = picker.geometry.rubberBandDimension * UIKIT_SCALE;
+
+/**
+ * The rows' opacity at the column's edges. At 0.7 the row four from the band
+ * keeps 5:1 or more in every shipped theme, a margin over WCAG AA's 4.5:1.
+ */
+const FADE_FLOOR = 0.7;
 
 const styles = stylex.create({
   // The scrolling column's box, band and rows (Wheel.tsx), moved by the
@@ -83,8 +98,7 @@ const styles = stylex.create({
     position: 'absolute',
     inset: 0,
     pointerEvents: 'none',
-    maskImage:
-      'linear-gradient(to bottom, rgb(0 0 0 / 0.3), rgb(0 0 0) 50%, rgb(0 0 0 / 0.3))',
+    maskImage: `linear-gradient(to bottom, rgb(0 0 0 / ${FADE_FLOOR}), rgb(0 0 0) 50%, rgb(0 0 0 / ${FADE_FLOOR}))`,
   },
   /**
    * The selection band: a centred row-height plate behind the rows.
@@ -197,6 +211,7 @@ export function PickerWheel({
   value,
   onChange,
   isActive = true,
+  ref,
 }: WheelProps) {
   const columnRef = useRef<HTMLDivElement | null>(null);
   const rowsRef = useRef<HTMLDivElement | null>(null);
@@ -583,6 +598,31 @@ export function PickerWheel({
     isEnabled: isActive,
     isPointerKept: true,
   });
+
+  // A spin turns only onto an enabled row (canSpinTo). So its arrival commits
+  // that row, and nothing turns on past it. It reports the row it was asked
+  // for, as the scrolling column does.
+  const spinTo = useCallback(
+    async (index: number): Promise<boolean> =>
+      new Promise(resolve => {
+        if (!canSpinTo(latestRef.current.options, index)) {
+          resolve(false);
+          return;
+        }
+        const offset = motion.offset();
+        move(turnCurve(columnRef.current, offset, index * ROW_HEIGHT), {
+          onEnd: (outcome, end) => {
+            if (outcome === 'arrived') {
+              arrive(end);
+            }
+            resolve(outcome === 'arrived');
+          },
+        });
+      }),
+    [motion, move, arrive],
+  );
+
+  useImperativeHandle(ref, () => ({spinTo}), [spinTo]);
 
   const turnToPosition = useCallback(
     (position: number, offset: number) => {

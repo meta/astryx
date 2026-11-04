@@ -31,6 +31,7 @@ import {getGestureHost} from '../gestures/GestureHost';
 import {isTrackedByGroup} from '../privateAttributes/pressGroupItem.stylex';
 import {AlertDialog} from './AlertDialog';
 import {useImperativeAlertDialog} from './useImperativeAlertDialog';
+import {getFocusableElements} from '../hooks/useFocusTrap';
 
 // The gesture host reads `(pointer: coarse)` once per document and keeps that
 // query for the document's life: it gets this live one (see beforeAll), whose
@@ -551,13 +552,14 @@ describe('AlertDialog action tracking', () => {
     type: 'pointerdown' | 'pointermove' | 'pointerup',
     target: Element,
     point: {x: number; y: number},
+    pointerType: 'mouse' | 'pen' = 'mouse',
   ): void {
     touchClock += 16;
     const event = new PointerEvent(type, {
       bubbles: true,
       cancelable: true,
-      pointerId: 1,
-      pointerType: 'mouse',
+      pointerId: pointerType === 'pen' ? 41 : 1,
+      pointerType,
       isPrimary: true,
       button: 0,
       buttons: type === 'pointerup' ? 0 : 1,
@@ -625,6 +627,49 @@ describe('AlertDialog action tracking', () => {
       expect(isTrackedByGroup(button)).toBe(false);
       expect(button).toHaveAttribute('data-astryx-pressable');
     }
+  });
+
+  it("keeps the selection that the action's own click makes when a pen press lifts on it (spec:AST-094 FR41)", async () => {
+    stubAlertDialogMedia({
+      smallScreen: true,
+      coarsePointer: true,
+      noHover: true,
+    });
+    const page = document.createElement('p');
+    page.textContent = 'Text the page selected';
+    const made = document.createElement('p');
+    made.textContent = 'Text the action selects';
+    document.body.append(page, made);
+    const selectText = (element: Element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      const selection = getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    };
+    render(
+      <AlertDialog
+        isOpen
+        onOpenChange={() => {}}
+        title="Delete item?"
+        description="This cannot be undone."
+        actionLabel="Delete"
+        onAction={() => selectText(made)}
+      />,
+    );
+    const action = screen.getByRole('button', {name: 'Delete'});
+    place(action, 16, 100);
+    place(screen.getByRole('button', {name: 'Cancel'}), 16, 140);
+    selectText(page);
+    mouse('pointerdown', action, {x: 60, y: 116}, 'pen');
+    mouse('pointerup', action, {x: 60, y: 116}, 'pen');
+    await Promise.resolve();
+    // The press's own mouseup would put the press's selection back.
+    document.dispatchEvent(new Event('selectionchange'));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(String(getSelection())).toBe('Text the action selects');
+    page.remove();
+    made.remove();
   });
 
   it('leaves a mouse press to the native button under the touch presentation: one slid from the action to Cancel runs nothing (family:action-groups FR1)', () => {
@@ -777,5 +822,39 @@ describe('useImperativeAlertDialog', () => {
     await user.click(screen.getByRole('button', {name: 'Open'}));
     expect(screen.getByRole('alertdialog')).toBeInTheDocument();
     expect(screen.getByTestId('is-open')).toHaveTextContent('true');
+  });
+});
+
+// Tab from the last tabbable control wraps to the first and Shift+Tab from the
+// first wraps to the last, so focus never leaves the modal for the browser's
+// own UI.
+function expectTabWrapsInside(modal: HTMLElement) {
+  const tabbables = getFocusableElements(modal);
+  expect(tabbables.length).toBeGreaterThan(0);
+  const first = tabbables[0];
+  const last = tabbables[tabbables.length - 1];
+
+  last.focus();
+  expect(last).toHaveFocus();
+  expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+  expect(first).toHaveFocus();
+
+  expect(fireEvent.keyDown(first, {key: 'Tab', shiftKey: true})).toBe(false);
+  expect(last).toHaveFocus();
+}
+
+describe('AlertDialog focus region (Dialog DEC-2)', () => {
+  it('wraps Tab and Shift+Tab inside the open modal', () => {
+    render(
+      <AlertDialog
+        isOpen
+        onOpenChange={() => {}}
+        title="Delete item?"
+        description="This action cannot be undone."
+        actionLabel="Delete"
+        onAction={() => {}}
+      />,
+    );
+    expectTabWrapsInside(screen.getByRole('alertdialog'));
   });
 });

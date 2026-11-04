@@ -13,6 +13,7 @@ import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
+import {resetAuditEvidence} from '@astryxdesign/a11y-spec/evidence';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -20,7 +21,9 @@ import {
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 
-const OUTPUT = path.resolve('hover-card-audit-evidence');
+const EVIDENCE = path.resolve('hover-card-audit-evidence');
+// This copy's evidence folder, set in beforeAll (one per --repeat-each copy).
+let OUTPUT = EVIDENCE;
 const OPEN_STORY_ID = 'core-hovercard--open-states';
 const INTERACTIVE_STORY_ID = 'core-hovercard--interactive-content';
 const WIDE = {width: 1024, height: 900};
@@ -224,8 +227,7 @@ function writeReceipt(key: string, png: Buffer, receipt: object) {
 }
 
 test.beforeAll(async () => {
-  fs.rmSync(OUTPUT, {recursive: true, force: true});
-  fs.mkdirSync(OUTPUT, {recursive: true});
+  OUTPUT = resetAuditEvidence(EVIDENCE, test.info());
   checkoutSha = execFileSync('git', ['rev-parse', 'HEAD'], {
     encoding: 'utf8',
   }).trim();

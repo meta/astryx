@@ -28,6 +28,8 @@ affects_consumer_docs: []
 ```json
 {
   "paths": [
+    "packages/core/src/Layer/holdEntranceInput.ts",
+    "packages/core/src/Layer/inputHold.ts",
     "packages/core/src/motion/uikit/segmented.ts",
     "packages/core/src/motion/uikit/slider.ts"
   ]
@@ -660,8 +662,9 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   that grows only with its text, such as a Button whose label follows the
   16 px reading base:
   the 16 px mobile reading base (`design:mobile-typography` DR1, DR3) and the
-  16 px text-entry floor (`family:input-fields` FR9) are unaffected. Under a
-  coarse pointer, touch targets meet 44 px through an invisible hit area. A
+  16 px text-entry floor (`family:input-fields` FR9) are unaffected.
+  Under a coarse pointer, the touch target grows toward 44 × 44 px, up to halfway to a neighboring target, and is never smaller than the control's own box (owner decision, 2026-11-04; `spec:AST-094` FR42).
+  It grows through an invisible hit area. A
   hit-area expansion never overlaps a neighboring interactive element's own
   target: where neighbors are closer than 44 px, the expansion is clamped to
   half the gap, or skipped, so each element stays reachable; an expansion a
@@ -696,7 +699,9 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   of a shrinking run, once the run has lost a fifth of its size; momentum after
   the lift never moves a surface or continues a gesture; and during momentum a
   reversal, a delta that rises against the decay, or a 50 ms gap starts a new
-  gesture without a pointer move. While the splitter has not yet decided
+  gesture without a pointer move; a late, coalesced wheel event that continues
+  the glide's deceleration belongs to the same flick. While the splitter has
+  not yet decided
   between a lift and fingers still moving, the surface keeps moving at the
   fingers' last speed, never farther than that speed carries it over the held
   deltas; a lift then continues without a stop, and fingers that keep moving
@@ -827,7 +832,13 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   let a scrim or overlay tap close at any time (`spec:AST-003` FR10 and
   `architecture:layer-runtime` INV14 leave dismissal to the component). Toast and a non-modal sheet (`component:BottomSheetSwitcher` FR5 and its
   Non-modal state) do not hold the page: the page behind them stays live, and
-  only the sheet itself holds a tap or a drag while it enters.
+  only the sheet itself holds a tap or a drag while it enters. Dialog, Drawer
+  and MobileNav hold an entrance only under a coarse primary pointer: where
+  the primary pointer is fine and the screen also takes touch (a touchscreen
+  laptop), a finger's tap or drag during the entrance is not held. After a
+  finger, the first press of a mouse that has not moved since lands on the
+  entering presentation's shield and does nothing, where FR35 keeps today's
+  behavior for a mouse (DEC-16); a move of the mouse lowers the shield first.
 - BottomSheet, Toast, Lightbox, NavigationStack and keyboard dismissal: a
   drag that commits follows FR36–FR40.
 - `spec:AST-100` owns release velocity, which FR17 reads.

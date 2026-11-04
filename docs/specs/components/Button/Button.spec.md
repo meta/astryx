@@ -210,6 +210,9 @@ Consumer migration instructions belong in consumer docs and release notes.
   `width` or a theme icon-only aspect that makes a Button narrower than 24 CSS
   pixels leaves its target size to that caller or theme.
 
+Implementation gap: Button's hover and pressed overlays on the dark accent give
+its label 4.35:1 and 4.02:1, under 4.5:1.
+
 ## Design relationships
 
 | Anatomy or state    | Design requirement                                                                                                | Representation authority                    | Hierarchy role | Component contract |

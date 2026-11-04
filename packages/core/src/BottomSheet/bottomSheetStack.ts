@@ -1881,7 +1881,7 @@ export function getBottomSheetBeneath(
 
 // preventScroll on both: presenting a sheet must not scroll the page to reveal
 // what it just focused. For an autofocused field that reveal is the mobile
-// keyboard's, and it moves the document under a fixed sheet; useMobileKeyboard
+// keyboard's, and it moves the document under a fixed sheet. useMobileKeyboard
 // brings the field into view within the sheet instead.
 /**
  * Move focus into a sheet panel. Focus already inside the sheet stays put:

@@ -6,11 +6,13 @@
  */
 
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 import {render} from './render.mjs';
 import {runCli} from '../../test-utils/run-cli.mjs';
+import {makeLinkedFixture, removeLinkedFixture} from '../../test-utils/linked-fixture.mjs';
 
 const CLI_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -66,7 +68,7 @@ export default function Page() {
 `;
 
 beforeAll(async () => {
-  dir = fs.mkdtempSync(path.join(CLI_DIR, '.astryx-render-test-'));
+  dir = makeLinkedFixture('astryx-render-test-', ['@astryxdesign', '@stylexjs', 'react', 'react-dom']);
   put('dot.png', PNG);
   put('page.tsx', PAGE);
   put('plain.html', '<!doctype html><html><body><h1>Hello</h1><p class="lead">Hi</p></body></html>');
@@ -75,7 +77,7 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(() => {
-  fs.rmSync(dir, {recursive: true, force: true});
+  removeLinkedFixture(dir);
 });
 
 describe('render(): page to one HTML file', () => {
@@ -951,7 +953,7 @@ describe('render(): every write stays inside the current folder', () => {
     expect(await codeOf(() => render('page.html', {cwd: dir, reverse: true, out: '../escaped.tsx'}))).toBe(
       'ERR_PATH_TRAVERSAL',
     );
-    const outside = fs.mkdtempSync(path.join(CLI_DIR, '.astryx-render-outside-'));
+    const outside = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-render-outside-')));
     try {
       fs.symlinkSync(outside, path.join(dir, 'link-out'));
       expect(
