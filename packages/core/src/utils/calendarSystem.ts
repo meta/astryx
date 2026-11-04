@@ -326,9 +326,9 @@ function monthPartsKey(parts: Intl.DateTimeFormatPart[]): string {
 /**
  * Formats a Gregorian date in the calendar, such as "Friday, Aban 8, 1405 AP".
  * The label always names the month and day that the grid shows. Intl and the
- * runtime's Temporal can disagree on a Chinese or Korean month start; the
- * label then takes its month and year from the middle of the Temporal month,
- * its day from Temporal, and its weekday from the date.
+ * runtime's Temporal can disagree on where a month of the Chinese or Dangi
+ * calendar starts; the label then takes its month and year from the middle of
+ * the Temporal month, its day from Temporal, and its weekday from the date.
  */
 export function formatCalendarDate(
   calendar: CalendarSystem,
