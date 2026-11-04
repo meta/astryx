@@ -42,12 +42,17 @@ import {MediaPlayerVideo} from './MediaPlayerMedia';
 
 const FROSTED_SURFACE = `color-mix(in srgb, ${colorVars['--color-background-surface']} 80%, transparent)`;
 const FROSTED_SURFACE_HIGH_CONTRAST = `color-mix(in srgb, ${colorVars['--color-background-surface']} 95%, transparent)`;
+const BAR_INSET = spacingVars['--spacing-3'];
+const BAR_RADIUS = radiusVars['--radius-container'];
+// The player's corners nest around the bar's corners: the outer radius is the
+// bar radius plus the bar inset. A square bar keeps the player square.
+const PLAYER_RADIUS = `calc(${BAR_RADIUS} + min(${BAR_INSET}, ${BAR_RADIUS} * 1000))`;
 
 const styles = stylex.create({
   root: {
     containerType: 'inline-size',
     overflow: 'clip',
-    borderRadius: radiusVars['--radius-container'],
+    borderRadius: PLAYER_RADIUS,
     backgroundColor: colorVars['--color-background-inverted'],
   },
   aspectRatio: (ratio: number) => ({
@@ -93,15 +98,15 @@ const styles = stylex.create({
   },
   bar: {
     position: 'absolute',
-    insetInlineStart: spacingVars['--spacing-3'],
-    insetInlineEnd: spacingVars['--spacing-3'],
-    insetBlockEnd: spacingVars['--spacing-3'],
+    insetInlineStart: BAR_INSET,
+    insetInlineEnd: BAR_INSET,
+    insetBlockEnd: BAR_INSET,
     display: 'flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-2'],
     paddingBlock: spacingVars['--spacing-1'],
     paddingInline: spacingVars['--spacing-2'],
-    borderRadius: radiusVars['--radius-container'],
+    borderRadius: BAR_RADIUS,
     color: colorVars['--color-text-primary'],
     opacity: 1,
     translate: '0 0',
