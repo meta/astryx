@@ -154,8 +154,8 @@ interface RenderedSet {
 /**
  * The rows a set fills at `availableWidth`, up to `maxRows`, or `null` when
  * they are not known. The measured indicator holds every item, so the
- * rendered one can be narrower: when the rows with and without the measured
- * indicator differ, the rows are not known.
+ * rendered one can be narrower. When the rows with and without it differ,
+ * the rows are not known.
  */
 function rowsFilled(
   set: RenderedSet,
@@ -178,9 +178,8 @@ function rowsFilled(
 }
 
 /**
- * Tells whether replacing the rendered set `now` with `next` can change the
- * list's own height: its tallest child, or for a multi-row list the rows it
- * fills.
+ * The list's height follows its tallest child and, in a multi-row list, the
+ * rows it fills.
  */
 function canChangeListHeight(
   now: RenderedSet,
