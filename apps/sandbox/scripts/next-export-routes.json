@@ -784,6 +784,7 @@
     "/templates/table/",
     "/templates/theme-showcase/",
     "/templates/useAnnounceHookUsage/",
+    "/templates/useClipboardHookUsage/",
     "/templates/useCollatorHookUsage/",
     "/templates/useComboboxHookUsage/",
     "/templates/useContainerRevealHookUsage/",
