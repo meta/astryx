@@ -138,7 +138,7 @@ export const docs = {
       name: 'isRequired',
       type: 'boolean',
       description:
-        'Whether the group needs at least one checked box. Shows the required indicator after the group label by the same rules as every input field. While no box is checked, the browser blocks submit and moves focus to the first enabled box with its own message. Show your own error text through status. Mutually exclusive with isOptional.',
+        'Whether the group needs at least one checked box. Shows the required indicator after the group label by the same rules as every input field. While no box is checked, the browser blocks submit and moves focus to the first box that is neither disabled nor read-only, with its own message. A disabled or read-only group requires nothing. Show your own error text through status. Mutually exclusive with isOptional.',
       default: 'false',
     },
     {

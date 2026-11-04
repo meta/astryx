@@ -77,7 +77,9 @@ export interface CheckboxListProps extends Omit<
    * Whether the group needs at least one checked box. Shows the required
    * indicator after the group label by the same rules as every input field.
    * While no box is checked, the browser blocks submit and moves focus to
-   * the first enabled box. Show your own error text through `status`.
+   * the first box that is neither disabled nor read-only. A disabled or
+   * read-only group requires nothing. Show your own error text through
+   * `status`.
    * Mutually exclusive with isOptional.
    * @default false
    */
