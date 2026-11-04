@@ -3179,7 +3179,7 @@ const WIDTH_BREAKPOINT_NAMES: readonly ["sm", "md", "lg", "xl", "2xl"]
 const borderDefaults: { readonly '--border-width': "1px" }
 const borderVars: stylex.VarGroup<Readonly<{ readonly '--border-width': "1px" }>, symbol>
 const colorDefaults: object
-  --color-accent: 'light-dark(#0064E0, #2694FE)'
+  --color-accent: 'light-dark(#0064E0, #0171E3)'
   --color-accent-muted: 'light-dark(#0082FB33, #0082FB3F)'
   --color-on-accent: 'light-dark(#FFFFFF, #FFFFFF)'
   --color-neutral: 'light-dark(rgba(5, 54, 89, 0.1), rgba(223, 226, 229, 0.2))'
@@ -3277,7 +3277,7 @@ const colorDefaults: object
   --color-border-yellow: 'light-dark(#C58600, #B47700)'
   --color-icon-yellow: 'light-dark(#FBC02D, #FFEE58)'
   --color-text-yellow: 'light-dark(#753F07, #FBCE03)'
-const colorVars: stylex.VarGroup<Readonly<{ readonly '--color-accent': "light-dark(#0064E0, #2694FE)"; readonly '--color-accent-muted': "light-dark(#0082FB33, #0082FB3F)"; reado … #a042f923
+const colorVars: stylex.VarGroup<Readonly<{ readonly '--color-accent': "light-dark(#0064E0, #0171E3)"; readonly '--color-accent-muted': "light-dark(#0082FB33, #0082FB3F)"; reado … #a042f923
 const dataTokenDefaults: object
   --color-data-categorical-blue: 'light-dark(#0171E3, #0171E3)'
   --color-data-categorical-orange: 'light-dark(#EB6E00, #EB6E00)'

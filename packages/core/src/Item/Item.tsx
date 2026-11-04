@@ -58,7 +58,10 @@ import {ItemMarkerColumnsContext} from './ItemMarkerColumnsContext';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {useLinkComponent} from '../Link/useLinkComponent';
-import {useClickableContainer} from '../hooks/useClickableContainer';
+import {
+  cancelNestedTouchPress,
+  useClickableContainer,
+} from '../hooks/useClickableContainer';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
@@ -620,7 +623,11 @@ export function Item({
   // the router link component, which may require a live href. The element type
   // then changes with `isDisabled`, so focus follows the swap (FR4).
   const RowAnchor = isDisabled ? 'a' : LinkComponent;
-  const anchorRef = useFocusAcrossSwap<HTMLAnchorElement>();
+  // The row's own action, its invisible link or button: a press on it
+  // activates the row.
+  const actionLinkRef = useRef<HTMLAnchorElement | null>(null);
+  const actionButtonRef = useRef<HTMLButtonElement | null>(null);
+  const anchorRef = useFocusAcrossSwap<HTMLAnchorElement>(actionLinkRef);
 
   // Delegation mode: the row is an enlarged click/tap target for a nested
   // control (e.g. a checkbox) that owns the keyboard access and action. The
@@ -654,6 +661,18 @@ export function Item({
   // component means the root itself is the anchor, so the address rides it
   // and the invisible anchor below is not rendered.
   const isLinkRoot = typeof Component !== 'string' && href != null;
+  // A press on a nested control does not run this row's action, so the row
+  // shows no touch press. A row with a parent role or a link root runs it, so
+  // it keeps the press. Such a row is not a clickable container: an enclosing
+  // card still treats it as part of its own surface.
+  const hasOwnAction =
+    (onClick != null || href != null) && !hasParentRole && !isLinkRoot;
+  const pressOnRow = (event: React.PointerEvent<HTMLElement>) =>
+    cancelNestedTouchPress(
+      event,
+      event.currentTarget,
+      href != null ? actionLinkRef.current : actionButtonRef.current,
+    );
 
   // Swipe actions exist where the row's role permits interactive descendants
   // (a swipe panel's buttons are such descendants): a `listitem`, or no role
@@ -812,6 +831,7 @@ export function Item({
         </RowAnchor>
       ) : onClick != null ? (
         <button
+          ref={actionButtonRef}
           type="button"
           onClick={onClick}
           disabled={isDisabled}
@@ -906,7 +926,14 @@ export function Item({
               delegatedOnPointerDown,
             ),
           }
-        : null)}
+        : hasOwnAction && !isDisabled
+          ? {
+              onPointerDown: chainEventHandlers(
+                swipeHandlers?.onPointerDown ?? restProps.onPointerDown,
+                pressOnRow,
+              ),
+            }
+          : null)}
       aria-selected={(allowsAriaSelected && isSelected) || undefined}
       // aria-selected is invalid on roles that don't permit it (listitem, a
       // bare div, etc.). For those, convey selection via aria-current — valid
