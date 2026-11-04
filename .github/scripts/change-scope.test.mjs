@@ -649,6 +649,41 @@ describe('Lab entry files (spec:AST-030 FR26)', () => {
     expect(entry(routes(route(lines)))).toBe(false);
   });
 
+  it('matches a route name and path exactly, not by prefix', () => {
+    const swap = (from, to) => ownRoute.map(line => line.replace(from, to));
+    expect(
+      entry(
+        routes(
+          route(
+            swap('component-lab-comment-pin"', 'component-lab-comment-pin-x"'),
+          ),
+        ),
+      ),
+    ).toBe(false);
+    expect(
+      entry(
+        routes(
+          route(
+            swap('components/lab/comment-pin"', 'components/lab/comment-pinx"'),
+          ),
+        ),
+      ),
+    ).toBe(false);
+  });
+
+  it("matches an example or showcase path only under the component's own folder", () => {
+    for (const prefix of ['examples', 'showcases']) {
+      const item = [
+        '+    {',
+        `+      "name": "${prefix === 'examples' ? 'example' : 'showcase'}-comment-pin-basic",`,
+        `+      "path": "${prefix}/comment-pinx/basic",`,
+        '+      "aliases": []',
+        '+    },',
+      ];
+      expect(entry(routes(route(item))), prefix).toBe(false);
+    }
+  });
+
   it('refuses an alias outside the Lab components, and a Lab alias for another component', () => {
     const withAlias = alias => [
       '+    {',
@@ -723,6 +758,30 @@ describe('Lab entry files (spec:AST-030 FR26)', () => {
         base,
       ),
     ).toBe(false);
+  });
+
+  it("refuses an edit in the package that follows Lab's part of the base", () => {
+    const baseWithNext = base.replace(
+      '    }\n  ]\n}',
+      [
+        '    },',
+        '    {',
+        '      "package": "@astryxdesign/richtext",',
+        '      "contributions": [',
+        '        {',
+        '          "kind": "component",',
+        '          "name": "RichText"',
+        '        }',
+        '      ]',
+        '    }',
+        '  ]',
+        '}',
+      ].join('\n'),
+    );
+    expect(baseWithNext.split('\n')[21]).toContain('@astryxdesign/richtext');
+    // Inside Lab's part: accepted; inside the next package's part: refused.
+    expect(entry(discovery(ownEntry), baseWithNext)).toBe(true);
+    expect(entry(discovery(ownEntry, 25), baseWithNext)).toBe(false);
   });
 
   it("refuses the discovery list when the base's copy is missing", () => {

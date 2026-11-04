@@ -989,10 +989,6 @@ jobs:
           fi
         if: steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true'
 
-      # Theme-family compilation is owned by `theme-build`, not Build. Until
-      # that surface has an admitted dedicated lane, broad CI keeps its browser
-      # contract inside the existing Node test owner rather than `test-build`.
-      # One leg runs it.
       # A Lab-only change may carry a Lab component's CLI discovery entry; the
       # committed list must match its generator (spec:AST-030 FR26).
       - name: 'Lab-only: CLI official-packages check'
@@ -1000,6 +996,10 @@ jobs:
         # One Node-project test file: Vitest finds its project from the path.
         run: pnpm exec vitest run scripts/check-cli-official-packages.test.mjs --maxWorkers=1
 
+      # Theme-family compilation is owned by `theme-build`, not Build. Until
+      # that surface has an admitted dedicated lane, broad CI keeps its browser
+      # contract inside the existing Node test owner rather than `test-build`.
+      # One leg runs it.
       - name: Install Playwright for theme-family contract
         if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         run: npx playwright install chromium

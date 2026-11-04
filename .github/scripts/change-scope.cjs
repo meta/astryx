@@ -11,7 +11,9 @@ const {
 } = require('./knowledge-paths.cjs');
 
 /**
- * Classifies changed paths without reading PR-controlled content.
+ * Classifies changed paths. It reads no pull-request content as code: the
+ * only content it reads is GitHub's patch text for a Lab component's three
+ * entry files, as data (spec:AST-030 FR26).
  *
  * A spec-only PR may change only spec records. Templates, schemas, indexes,
  * architecture, guidance, audits, workflows, and code deliberately do not

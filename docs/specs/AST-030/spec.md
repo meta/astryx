@@ -539,7 +539,8 @@ they are separately named.
   `internal/shadcn-registry/routes.lock.json`, its entry in the Lab package's
   part of `packages/cli/assets/discover/official-packages.json`, and a new
   story `apps/storybook/stories/<Name>.stories.tsx` that imports from
-  `@astryxdesign/lab`, for a Lab component whose folder the change touches.
+  `@astryxdesign/lab`, for a Lab component named for its own folder, which
+  the change touches. A component in a family folder keeps the full suite.
   The classifier reads those files' diffs as data and never runs them; a diff
   it cannot read, or a line naming anything else, makes the change mixed. A
   Lab-only change also runs the CLI official-packages check on the first Node
