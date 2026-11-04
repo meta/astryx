@@ -3697,6 +3697,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-lightbox-gallery-grid",
+      "path": "examples/use-lightbox/gallery-grid",
+      "aliases": []
+    },
+    {
       "name": "example-use-list-focus-recent-files",
       "path": "examples/use-list-focus/recent-files",
       "aliases": []
@@ -3949,6 +3954,11 @@
     {
       "name": "hook-use-layer",
       "path": "hooks/use-layer",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-lightbox",
+      "path": "hooks/use-lightbox",
       "aliases": []
     },
     {

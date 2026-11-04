@@ -192,38 +192,11 @@ describe('Tokenizer presentation (FR16)', () => {
 
   it('keeps the inline combobox with presentation="popover" on a compact coarse-pointer screen', () => {
     stubMatchMedia(() => true);
-    const {unmount} = render(<Harness presentation="popover" />);
+    render(<Harness presentation="popover" />);
     expect(screen.getByRole('combobox')).toBeInTheDocument();
     expect(
       screen.queryByRole('button', {name: 'Tags'}),
     ).not.toBeInTheDocument();
-    unmount();
-    // An empty experimental object leaves the default in place.
-    render(plain({experimental: {}}));
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-  });
-
-  it('still honors the deprecated experimental.presentation, and presentation wins over it with one development warning', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const {unmount} = render(
-      plain({experimental: {presentation: 'bottom-sheet'}}),
-    );
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-    expect(openTrigger()).toBeInTheDocument();
-    expect(warn).not.toHaveBeenCalled();
-    unmount();
-    render(
-      plain({
-        presentation: 'popover',
-        experimental: {presentation: 'bottom-sheet'},
-      }),
-    );
-    expect(screen.getByRole('combobox')).toBeInTheDocument();
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(String(warn.mock.calls[0][0])).toContain(
-      '`presentation` and `experimental.presentation` are both set',
-    );
-    warn.mockRestore();
   });
 
   it('forces the sheet trigger for bottom-sheet on every device', async () => {
@@ -1838,7 +1811,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           value={[]}
           onChange={() => {}}
           debounceMs={0}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       </StrictMode>,
     );
