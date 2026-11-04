@@ -279,7 +279,7 @@ leading clock glyph uses `date-time-input-clock-icon`.
   (`spec:AST-111` FR19).
 - **Preserved obligations:** `spec:AST-013` FR7 and FR8, and FR9 outside that
   `chinese` and `dangi` case. The Gregorian date and time segments keep every
-  interaction, label, and announcement, and Buddhist, ROC, and Japanese entry
+  interaction, label, and announcement, and Buddhist, Minguo, and Japanese entry
   works without `Temporal`.
 - **Evidence:** real Chromium and Firefox typing in calendar fields with native
   `Temporal`, with `Temporal` removed and a polyfill loaded, and with

@@ -323,7 +323,7 @@ function CalendarField({
  * digits or Latin digits; the field reports a date only when it is complete,
  * and names a date the calendar does not have. The Buddhist field sets `min`
  * and `max`, so a Gregorian year typed by mistake is caught. Calendars other
- * than Gregorian, Buddhist, ROC, and Japanese need `Temporal`.
+ * than Gregorian, Buddhist, Minguo, and Japanese need `Temporal`.
  */
 export const CalendarSystems: Story = {
   render: () => (
