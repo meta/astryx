@@ -2883,9 +2883,9 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
       .fade { display: inline-block; transition: opacity 1000ms linear; }
       .fade.out { opacity: 0; }
       @keyframes copy-enter { from { translate: 0 20px; } to { translate: 0 0; } }
-      .entered { display: inline-block; animation: copy-enter 100ms linear both; }
-      .entered-backwards { display: inline-block; animation: copy-enter 100ms linear backwards; }
-      .entered-unfilled { display: inline-block; animation: copy-enter 100ms linear; }
+      .entered { display: inline-block; animation: copy-enter 100s linear both; }
+      .entered-backwards { display: inline-block; animation: copy-enter 100s linear backwards; }
+      .entered-unfilled { display: inline-block; animation: copy-enter 100s linear; }
       .arrived { display: inline-block; transition: opacity 1000ms linear; }
       @starting-style { .arrived { opacity: 0; } }`,
     );
@@ -2904,6 +2904,8 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
       // The old state runs a looping animation 400 ms in, and a transition
       // 400 ms into its second. Three entrances have played. One holds its
       // end, and two (backwards-filled and unfilled) have left the element.
+      // Each entrance lasts 100 s, so it still runs here on a loaded machine,
+      // and finish() ends it.
       const [pulse] = pick(panel, 'pulse').getAnimations();
       pulse.currentTime = 400;
       pick(panel, 'fade').classList.add('out');
