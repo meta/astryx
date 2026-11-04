@@ -789,6 +789,7 @@
     "/templates/useContainerRevealHookUsage/",
     "/templates/useFocusTrapHookUsage/",
     "/templates/useGridFocusHookUsage/",
+    "/templates/useHotkeysHookUsage/",
     "/templates/useKeyboardHintHookUsage/",
     "/templates/useListFocusHookUsage/",
     "/templates/useLocaleHookUsage/",
