@@ -395,8 +395,9 @@ reach the bound.
 
 Under a finger, each sheet wheel in DateInput, TimeInput, and DateTimeInput lays
 its rows flat at the scrolling column's pitch and fades them toward its edges,
-without tipping or shrinking. Under a mouse, the scrolling column tips and fades
-its rows on a scroll timeline.
+without tipping or shrinking. The fade stops at 70% opacity at the edges, so
+every row in view meets WCAG AA contrast in every shipped theme. Under a mouse,
+the scrolling column tips and fades its rows on a scroll timeline.
 
 Rejected: a UIPickerView-style cylinder look.
 

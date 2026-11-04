@@ -64,6 +64,12 @@ const UIKIT_SCALE = ROW_HEIGHT / picker.geometry.rowHeight;
 /** UIKit's rubber band dimension for the picker's table, at that pitch. */
 const RUBBER_BAND_DIMENSION = picker.geometry.rubberBandDimension * UIKIT_SCALE;
 
+/**
+ * The rows' opacity at the column's edges. At 0.7 the row four from the band
+ * keeps 5:1 or more in every shipped theme, a margin over WCAG AA's 4.5:1.
+ */
+const FADE_FLOOR = 0.7;
+
 const styles = stylex.create({
   // The scrolling column's box, band and rows (Wheel.tsx), moved by the
   // gesture system and the compositor instead of a native scroller.
@@ -83,8 +89,7 @@ const styles = stylex.create({
     position: 'absolute',
     inset: 0,
     pointerEvents: 'none',
-    maskImage:
-      'linear-gradient(to bottom, rgb(0 0 0 / 0.3), rgb(0 0 0) 50%, rgb(0 0 0 / 0.3))',
+    maskImage: `linear-gradient(to bottom, rgb(0 0 0 / ${FADE_FLOOR}), rgb(0 0 0) 50%, rgb(0 0 0 / ${FADE_FLOOR}))`,
   },
   /**
    * The selection band: a centred row-height plate behind the rows.
