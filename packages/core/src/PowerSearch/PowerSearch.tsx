@@ -73,7 +73,7 @@ import {
   fontWeightVars,
 } from '../theme/tokens.stylex';
 import {useSize} from '../SizeContext/SizeContext';
-import {isFocusDetached} from '../utils/focusReturn';
+import {isFocusDetached} from '../utils/isFocusDetached';
 import {isRenderable} from '../utils/isRenderable';
 import {useInternalConfig} from './useInternalConfig';
 import {usePowerSearchSource} from './usePowerSearchSource';
@@ -385,8 +385,8 @@ export interface PowerSearchProps extends Omit<
    * IANA zone a date-only `date_absolute` value, and each absolute part of a
    * `date_range`, is read and written in: the token, the label and the editor
    * show its day there, and a picked day stores as that midnight. Unset, a
-   * day is its UTC day. A `date_absolute` with `isDateOnly: false` formats
-   * its label in it.
+   * day is its UTC day. A `date_absolute` with `isDateOnly: false` shows and
+   * edits its date and time in it; unset, in the viewer's zone.
    */
   timezoneID?: string;
   /**
@@ -430,8 +430,10 @@ export interface PowerSearchProps extends Omit<
    *   above it with the fields (or the content search with inline
    *   suggestions), and a value step opens above that, stages operator →
    *   value, and confirms from its footer. Dismissing a step reveals the
-   *   one beneath. Suited to compact touch screens, where the editor
-   *   popover competes with the software keyboard.
+   *   one beneath. The flow edits a draft: `onChange` is called when Done
+   *   applies it, once per edit in order, and a dismissal with a changed
+   *   draft asks before discarding it. Suited to compact touch screens,
+   *   where the editor popover competes with the software keyboard.
    * - `'adaptive'`: the bottom sheet on compact coarse-pointer screens,
    *   otherwise the popover — the same resolution Selector uses. The server
    *   render and the hydrating render are the popover.

@@ -222,6 +222,30 @@ describe('InfoTip press-to-pin (component:InfoTip FR2)', () => {
     expect(shows(TIP)).toBe(false);
   });
 
+  it('a pen held on a hover preview pins it without hiding it first', () => {
+    vi.useFakeTimers();
+    render(<InfoTooltip />);
+    const trigger = screen.getByRole('button', {name: 'About billing'});
+    fireEvent.pointerEnter(trigger, {pointerType: 'pen'});
+    fireEvent.mouseEnter(trigger);
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(shows(TIP)).toBe(true);
+    vi.mocked(HTMLElement.prototype.hidePopover).mockClear();
+    fireEvent.pointerDown(trigger, {pointerType: 'pen'});
+    // The pen stays down past the hover delay, then lifts.
+    act(() => {
+      vi.advanceTimersByTime(300);
+    });
+    expect(shows(TIP)).toBe(true);
+    fireEvent.pointerUp(trigger, {pointerType: 'pen'});
+    fireEvent.click(trigger, {detail: 1});
+    expect(shows(TIP)).toBe(true);
+    expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    expect(HTMLElement.prototype.hidePopover).not.toHaveBeenCalled();
+  });
+
   it('after a press on a preview that ends off the button, Enter and Space still pin and close it', () => {
     vi.useFakeTimers();
     render(<InfoTooltip />);

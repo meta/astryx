@@ -16,7 +16,7 @@
  *   device has already disagreed with jsdom once on this gesture.
  */
 
-import {expect, test, type Locator} from '@playwright/test';
+import {expect, test, type Locator} from '@astryxdesign/a11y-spec/playwright';
 // @ts-expect-error -- pngjs ships no declarations; runtime support is pinned.
 import {PNG} from 'pngjs';
 import {

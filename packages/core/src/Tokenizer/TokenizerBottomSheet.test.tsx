@@ -771,7 +771,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     expect(screen.getAllByText('Design')).toHaveLength(1);
   });
 
-  it('mounts the Clear all confirmation only from the press until it closes: no alertdialog while none is pending, focus placed on cancel and on confirm (FR24; INV7)', async () => {
+  it('mounts the Clear all confirmation only from the press until it closes: no alertdialog while none is pending, focus back on Clear all on cancel and on confirm (FR24; INV7)', async () => {
     const matches = Element.prototype.matches;
     const modalSpy = vi
       .spyOn(Element.prototype, 'matches')
@@ -803,15 +803,15 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       expect(clearAll).toHaveFocus();
       expect(screen.getByRole('checkbox', {name: 'Design'})).toBeChecked();
 
-      // Confirm: the confirmation goes, the search field takes focus, the
-      // clear is announced inside the sheet.
+      // Confirm: the confirmation goes, Clear all keeps focus (now
+      // aria-disabled), the clear is announced inside the sheet.
       fireEvent.click(clearAll);
       const second = await screen.findByRole('alertdialog');
       fireEvent.click(
         within(second).getByRole('button', {name: 'Clear selection'}),
       );
       await waitFor(noConfirmation);
-      expect(screen.getByLabelText('Search Tags')).toHaveFocus();
+      expect(screen.getByRole('button', {name: 'Clear all'})).toHaveFocus();
       await waitFor(() =>
         expect(
           sheet.querySelector(
@@ -886,7 +886,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     expect(document.querySelector('[data-total-count]')).toBeNull();
   });
 
-  it('moves focus to the search field after a confirmed Clear all, since Clear all is disabled by then (FR24; AST-085 FR4)', async () => {
+  it('keeps focus on Clear all after a confirmed Clear all — aria-disabled, in the focus order — and never moves it to the search field, which would raise the keyboard (FR24; AST-085 FR4)', async () => {
     render(<Harness />);
     fireEvent.click(openTrigger());
     await screen.findByRole('dialog', {name: 'Tags'});
@@ -903,7 +903,8 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     const clearAllAfter = screen.getByRole('button', {name: 'Clear all'});
     expect(clearAllAfter).toHaveAttribute('aria-disabled', 'true');
     expect(clearAllAfter).not.toBeDisabled();
-    expect(screen.getByLabelText('Search Tags')).toHaveFocus();
+    expect(clearAllAfter).toHaveFocus();
+    expect(screen.getByLabelText('Search Tags')).not.toHaveFocus();
     expect(document.activeElement).not.toBe(document.body);
   });
 
@@ -1811,7 +1812,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           value={[]}
           onChange={() => {}}
           debounceMs={0}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       </StrictMode>,
     );
@@ -3104,9 +3105,11 @@ describe('Tokenizer sheet under the BottomSheet stack (component:BottomSheet FR8
     await waitFor(() =>
       expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument(),
     );
-    // Back in the field's sheet: focus on its search field, the sheet the
+    // Back in the field's sheet: focus on its Clear all, the sheet the
     // outlet again, the host still covered beneath.
-    expect(screen.getByLabelText('Search Tags')).toHaveFocus();
+    expect(
+      within(sheet).getByRole('button', {name: 'Clear all'}),
+    ).toHaveFocus();
     expect(getActiveModalOutlet()).toBe(sheet);
     expect(stackSummary()).toEqual(['Value:covered:1', 'Tags:top:0']);
   });

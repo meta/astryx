@@ -14,11 +14,7 @@
 import type {OperatorValue, FilterValue, EnumItem} from './types';
 import type {Locale, TranslatorFn} from '../i18n';
 import {truncateCharacters} from '../utils/characters';
-import {
-  formatDateAbsolute,
-  formatDateAbsoluteCompact,
-  formatSharedNumber,
-} from './formatFilterValue';
+import {formatDateAbsolute, formatSharedNumber} from './formatFilterValue';
 import {registerEnglishFallback} from '../i18n/englishFallback';
 import english from '../i18n/generated-english/PowerSearch/formatTokenValue.generated';
 
@@ -178,13 +174,15 @@ export function formatTokenValueText(
       return filterValue.value;
 
     case 'date_absolute':
-      // A date-only value reads in the zone its editor uses. An
-      // `isDateOnly: false` value reads its day in the viewer's zone.
+      // The token reads a value in the zone its editor uses.
       return truncateString(
-        operatorValue.type === 'date_absolute' &&
-          operatorValue.isDateOnly === false
-          ? formatDateAbsoluteCompact(filterValue.unixSeconds, locale)
-          : formatDateAbsolute(filterValue.unixSeconds, locale, timezoneID),
+        formatDateAbsolute(
+          filterValue.unixSeconds,
+          locale,
+          timezoneID,
+          operatorValue.type !== 'date_absolute' ||
+            operatorValue.isDateOnly !== false,
+        ),
         maxLength,
       );
 

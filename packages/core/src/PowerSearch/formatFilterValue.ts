@@ -59,8 +59,8 @@ export function formatSharedNumber(
  * zone `resolveDateZone` names. The token text and the accessible label share
  * it; the editors read the same zone through `resolveDateZone`, so a value
  * never reads as two days in one field. A value whose operator sets
- * `isDateOnly: false` is not a calendar day: it keeps its date and time in
- * `timezoneID`, else the viewer's zone.
+ * `isDateOnly: false` is an instant: its date and time in `timezoneID`,
+ * else the viewer's zone, the time its editor reads and writes.
  */
 export function formatDateAbsolute(
   unixSeconds: number,
@@ -86,22 +86,6 @@ export function formatDateAbsolute(
         calendar: 'gregory',
       };
   return new Intl.DateTimeFormat(locale, options).format(unixSeconds * 1000);
-}
-
-/**
- * The released token text for a value with a time of day: its day in the
- * viewer's zone, as the token has always shown it.
- */
-export function formatDateAbsoluteCompact(
-  unixSeconds: number,
-  locale: Locale,
-): string {
-  return new Intl.DateTimeFormat(locale, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    calendar: 'gregory',
-  }).format(unixSeconds * 1000);
 }
 
 function formatRelativeDate(value: string): string {
