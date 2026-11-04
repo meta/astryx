@@ -3812,6 +3812,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-tree-focus-keyboard-file-tree",
+      "path": "examples/use-tree-focus/keyboard-file-tree",
+      "aliases": []
+    },
+    {
       "name": "example-use-typeahead-type-to-focus-a-country",
       "path": "examples/use-typeahead/type-to-focus-a-country",
       "aliases": []
