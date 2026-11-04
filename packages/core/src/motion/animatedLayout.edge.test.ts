@@ -15,7 +15,8 @@
  *   extent it shows, and Reduce Motion by pointer; and a resized element's
  *   reveal with no copy (a resize controller's pane): held at the extent it
  *   was laid out at while it conceals, its edge's margin freeing the
- *   difference, clipped to its new extent, riding the content beside it
+ *   difference, its padding, overflow and scroll offset kept as laid out,
+ *   clipped to its new extent, riding the content beside it
  * @position Testing; the real geometry is proven in
  *   __tests__/animatedLayout.interaction.browser.spec.ts and, for the SideNav
  *   rail's two-state form, SideNav's rail-motion specs
@@ -643,11 +644,15 @@ function paneSetup({
     handle,
     pane: paneEl,
     grip,
-    /** Collapses or opens the pane, as the controller does, around the report. */
-    resize(next: number, edge: LayoutEdge) {
+    /**
+     * Collapses or opens the pane, as the controller does, around the report.
+     * `commit` changes what else the new size changes in the same commit.
+     */
+    resize(next: number, edge: LayoutEdge, commit?: () => void) {
       const report = reportLayoutEdge(handle, () => paneEl, {edge});
       report.measureBefore();
       width = next;
+      commit?.();
       report.animate();
       return report;
     },
@@ -676,6 +681,48 @@ describe('the edge reveal of a resized element, with no copy (spec:AST-105 FR9)'
     clip.finish?.();
     expect(pane.style.getPropertyValue('inline-size')).toBe('');
     expect(pane.style.getPropertyValue('margin-inline-end')).toBe('');
+  });
+
+  it('keeps the padding and overflow it was laid out with while it conceals, and puts back its own once the motion ends', () => {
+    const {pane, resize} = paneSetup();
+    pane.style.setProperty('padding-inline-start', '16px');
+    pane.style.setProperty('padding-inline-end', '16px');
+    pane.style.setProperty('overflow-y', 'auto');
+    resize(0, 'inline-end', () => {
+      // A LayoutPanel at width 0 drops its padding and stops scrolling.
+      pane.style.setProperty('padding-inline-start', '0px');
+      pane.style.setProperty('padding-inline-end', '0px');
+      pane.style.setProperty('overflow-y', 'clip');
+    });
+    expect(pane.style.getPropertyValue('padding-inline-start')).toBe('16px');
+    expect(pane.style.getPropertyValue('padding-inline-end')).toBe('16px');
+    expect(pane.style.getPropertyValue('overflow-y')).toBe('auto');
+    clipsOf(pane)[0].finish?.();
+    expect(pane.style.getPropertyValue('padding-inline-start')).toBe('0px');
+    expect(pane.style.getPropertyValue('padding-inline-end')).toBe('0px');
+    expect(pane.style.getPropertyValue('overflow-y')).toBe('clip');
+  });
+
+  it('keeps the scroll offset it was laid out at while it conceals, and a reveal that reverses it scrolls back there', () => {
+    const {pane, resize} = paneSetup();
+    let scrollTop = 120;
+    Object.defineProperty(pane, 'scrollTop', {
+      configurable: true,
+      get: () => scrollTop,
+      set: (value: number) => {
+        scrollTop = value;
+      },
+    });
+    // A pane that stops scrolling in the commit loses its offset.
+    resize(48, 'inline-end', () => {
+      scrollTop = 0;
+    });
+    expect(scrollTop).toBe(120);
+    // Releasing the hold to reverse loses it again.
+    resize(260, 'inline-end', () => {
+      scrollTop = 0;
+    });
+    expect(scrollTop).toBe(120);
   });
 
   it('conceals entirely to a size of 0', () => {
