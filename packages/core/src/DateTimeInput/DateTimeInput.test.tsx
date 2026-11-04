@@ -991,6 +991,35 @@ describe('DateTimeInput', () => {
       },
     );
 
+    it.each(
+      locks.flatMap(lock => [
+        [lock, 'blur'],
+        [lock, 'Enter'],
+      ]),
+    )(
+      'keeps a reported date in the focused field when %s ends, until %s',
+      async (lock, commit) => {
+        const {user, onChange, input, setProps} =
+          renderField('2026-01-12T09:00');
+        await user.clear(input);
+        await user.type(input, '3/15/2026');
+        expect(onChange).toHaveBeenCalledExactlyOnceWith('2026-03-15T09:00');
+
+        setProps(lock);
+        setProps();
+        expect(input).toHaveFocus();
+        expect(input).toHaveValue('3/15/2026');
+
+        if (commit === 'blur') {
+          await user.tab();
+        } else {
+          await user.keyboard('{Enter}');
+        }
+        expect(input).toHaveValue('January 12, 2026');
+        expect(onChange).toHaveBeenCalledTimes(1);
+      },
+    );
+
     it.each(locks)(
       'shows the new value once a %s change that took a typed date ends',
       async lock => {

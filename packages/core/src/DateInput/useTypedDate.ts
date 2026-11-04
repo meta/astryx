@@ -354,14 +354,15 @@ export function useTypedDateField({
     }
   }
 
-  // Typing already committed a reported date through `onChange`. When the
-  // change that locked the field settles, the field shows the resulting value,
-  // whether the change took or not, and a retyped date reports again.
+  // Typing already reported this date through `onChange`. Once the field is
+  // editable, it shows its value, and a retyped date reports again. A focused
+  // field keeps the text until Enter or blur, which end the typing session.
   const wasDisabledRef = useRef(isDisabled);
   if (isDisabled !== wasDisabledRef.current) {
     wasDisabledRef.current = isDisabled;
     if (
       !isDisabled &&
+      !isFocused &&
       typedResult?.kind === 'value' &&
       plainDateToISO(typedResult.date) === lastFiredRef.current
     ) {
