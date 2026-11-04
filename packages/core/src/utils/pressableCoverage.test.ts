@@ -102,10 +102,9 @@ function styleExports(file: string): string[] {
   );
 }
 
-/** Whether `user` imports at least one of `names` from `file`. */
-function importsAnyOf(user: string, file: string, names: string[]): boolean {
+/** Whether `text` imports at least one of `names` from the module `file`. */
+function importsAnyOf(text: string, file: string, names: string[]): boolean {
   const stem = path.basename(file).replace(/\.tsx?$/, '');
-  const text = source.get(user) ?? '';
   for (const m of text.matchAll(/import\s*\{([^}]*)\}\s*from\s+'([^']+)'/g)) {
     if (!m[2].endsWith(stem)) {
       continue;
@@ -149,6 +148,26 @@ describe('every surface that paints a press is reachable by the touch press cont
     expect(pressArmFiles.length).toBeGreaterThan(25);
   });
 
+  it('counts a file that imports a style export, and not one that imports only a function', () => {
+    const module = 'privateAttributes/nestedPress.stylex.ts';
+    const names = styleExports(module);
+    expect(names).toContain('nestedPressStyles');
+    expect(
+      importsAnyOf(
+        "import {nestedPressStyles} from '../privateAttributes/nestedPress.stylex';",
+        module,
+        names,
+      ),
+    ).toBe(true);
+    expect(
+      importsAnyOf(
+        "import {markNestedPress} from '../privateAttributes/nestedPress.stylex';",
+        module,
+        names,
+      ),
+    ).toBe(false);
+  });
+
   it.each(pressArmFiles)(
     '%s carries the marker, or its scope owners do',
     file => {
@@ -164,7 +183,9 @@ describe('every surface that paints a press is reachable by the touch press cont
         // it, so each importer must be a marked surface.
         const styles = styleExports(file);
         const users = importers(file).filter(
-          user => styles.length === 0 || importsAnyOf(user, file, styles),
+          user =>
+            styles.length === 0 ||
+            importsAnyOf(source.get(user) ?? '', file, styles),
         );
         expect(users, `${file} is composed by nobody`).not.toHaveLength(0);
         for (const user of users) {
