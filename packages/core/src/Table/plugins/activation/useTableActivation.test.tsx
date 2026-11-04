@@ -138,9 +138,13 @@ describe('controlled active state', () => {
       );
     }
     render(<Harness />);
-    for (const row of bodyRows()) {
-      expect(row.getAttribute('aria-selected')).toBeNull();
+    const rows = bodyRows();
+    expect(rows[0].getAttribute('aria-current')).toBe('true');
+    for (const row of rows.slice(1)) {
       expect(row.getAttribute('aria-current')).toBeNull();
+    }
+    for (const row of rows) {
+      expect(row.getAttribute('aria-selected')).toBeNull();
       // Native row semantics are kept: no button or link role.
       expect(row.getAttribute('role')).toBeNull();
     }

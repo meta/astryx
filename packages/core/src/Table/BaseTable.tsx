@@ -145,10 +145,12 @@ interface TableRowProps<T extends Record<string, unknown>> {
   rowIndex: number;
   rowKey: string | number;
   /**
-   * The resolved canonical key for plugin consumption (`transformBodyRow`'s
-   * fourth argument). `undefined` when the table has no explicit `idKey` —
-   * index-keyed rows carry no stable identity, so identity-dependent plugins
-   * stay inert instead of keying by position.
+   * The resolved canonical key for first-party plugin consumption. Passed as
+   * an internal fourth `transformBodyRow` argument until the parent
+   * `TableRowContext` protocol lands; external transforms keep three args.
+   * `undefined` when the table has no explicit `idKey` — index-keyed rows
+   * carry no stable identity, so identity-dependent plugins stay inert
+   * instead of keying by position.
    */
   resolvedRowKey: string | number | undefined;
   columns: TableColumn<T>[];
@@ -247,9 +249,20 @@ function TableRowInner<T extends Record<string, unknown>>({
   // Apply plugin transforms for row (with pre-rendered children).
   // Seed `aria-rowindex` (when the table opts into ARIA row indexing) as a
   // base htmlProp so plugins compose over it and can still override.
+  // First-party transforms may read a fourth argument, the resolved canonical
+  // key, which stays out of the public `transformBodyRow` type until the
+  // parent `TableRowContext` protocol lands.
   const rowRenderProps = applyPlugins(
     plugins,
-    p => p.transformBodyRow,
+    p =>
+      p.transformBodyRow as
+        | ((
+            props: BodyRowRenderProps,
+            item: T,
+            index: number,
+            rowKey: string | number | undefined,
+          ) => BodyRowRenderProps)
+        | undefined,
     {
       htmlProps: ariaRowIndex == null ? {} : {'aria-rowindex': ariaRowIndex},
       xstyle: [],

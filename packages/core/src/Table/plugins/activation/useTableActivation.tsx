@@ -15,11 +15,13 @@
  * existing row anatomy.
  *
  * Activation is not selection, navigation, or focus ownership: the plugin
- * never emits aria-selected or aria-current, and it never moves focus or
- * loads detail content. Those stay with their respective owners.
+ * never emits aria-selected, and it never moves focus or
+ * loads detail content. Those stay with their respective owners. It owns
+ * only `aria-current="true"` on the eligible active row.
  *
- * Row identity comes from Table's resolved canonical key (delivered as
- * `transformBodyRow`'s fourth argument), compared with `activeKey` by strict
+ * Row identity comes from Table's resolved canonical key (an internal fourth
+ * `transformBodyRow` argument until the parent `TableRowContext` protocol
+ * lands), compared with `activeKey` by strict
  * equality. The plugin adds no key extractor of its own. Without an explicit
  * `idKey` on the Table, rows carry no stable identity and activation stays
  * inert with one development warning.
@@ -36,6 +38,7 @@ import {colorVars} from '../../../theme/tokens.stylex';
 import {focusOutlineStyles} from '../../../utils/focusOutline.stylex';
 import {mergeRefs} from '../../../utils/mergeRefs';
 import {warnOnce} from '../../../utils/devWarning';
+import {isRtlElement} from '../../../hooks/isRtlElement';
 import {
   hasInteractiveAncestor,
   hasTextSelection,
@@ -133,55 +136,81 @@ const ACTIVE_BAR_WIDTH_PX = 3;
 /**
  * Apply or remove active styling on a `<tr>` element.
  *
- * Active state is a `data-active` attribute plus paint on the existing row
- * anatomy: an accent wash class and a leading-edge accent bar on the first
- * cell. The wash rides the shared row-overlay variable so pinned cells
- * replay it through the freeze line. The bar is an inset shadow on the
- * first cell; a pinned column's opaque overlay covers it, so pinned cells
- * keep only the wash cue. No selection or navigation semantics are
- * inferred: `aria-selected` and `aria-current` are never written here.
+ * Active state is a `data-active` attribute, `aria-current="true"`, plus
+ * paint on the existing row anatomy: an accent wash class and a leading-edge
+ * accent bar on the first cell. The wash rides the shared row-overlay
+ * variable so pinned cells replay it through the freeze line. The bar is an
+ * inset shadow on the first cell; under forced colors the shadow maps to
+ * nothing and the pinned overlay covers the cell, so there the marker is an
+ * outline, which draws over the cell in a system color. No selection
+ * semantics are inferred: `aria-selected` is never written here.
  */
 function applyRowActivationStyle(
   row: HTMLTableRowElement,
   isActive: boolean,
 ): void {
   if (isActive) {
+    // A pre-existing current-state owner keeps its semantics: activation
+    // stays off this row rather than overwriting navigation or selection
+    // state it does not own.
+    const current = row.getAttribute('aria-current');
+    if (current != null && current !== 'true') {
+      warnOnce(
+        'table-activation-current-owner',
+        'useTableActivation',
+        'Table row already exposes its own aria-current state, so row activation stays inert for it. ' +
+          'Remove the competing state or the activation plugin for this row.',
+      );
+      return;
+    }
     row.setAttribute('data-active', 'true');
+    row.setAttribute('aria-current', 'true');
     row.classList.add(...getActiveWashClassNames());
   } else {
     clearRowActivationStyle(row);
     return;
   }
   // The bar lives on the first cell rather than the row: box-shadow does not
-  // paint reliably on `<tr>`. A pinned column's opaque overlay covers it, so
-  // on pinned tables the wash above remains the visible cue. Logical side
-  // resolves from the row's direction at apply time.
+  // paint reliably on `<tr>`. Direction reads the row's own computed style,
+  // not the nearest ancestor that names one.
   const firstCell = row.cells[0];
   const previousBarCell = row.querySelector<HTMLTableCellElement>(
     '[data-activation-bar="true"]',
   );
   if (previousBarCell != null && previousBarCell !== firstCell) {
-    previousBarCell.style.boxShadow = '';
+    clearBarCell(previousBarCell);
     previousBarCell.removeAttribute('data-activation-bar');
   }
   if (firstCell == null) {
     return;
   }
-  const isRTL = row.closest('[dir="rtl"]') != null;
-  const bar = `inset ${isRTL ? '-' : ''}${ACTIVE_BAR_WIDTH_PX}px 0 0 ${activeBarColor}`;
-  if (firstCell.style.boxShadow !== bar) {
-    firstCell.style.boxShadow = bar;
+  if (forcedColorsActive()) {
+    firstCell.style.boxShadow = '';
+    firstCell.style.outline = `${ACTIVE_BAR_WIDTH_PX}px solid CanvasText`;
+    firstCell.style.outlineOffset = `-${ACTIVE_BAR_WIDTH_PX}px`;
+  } else {
+    firstCell.style.outline = '';
+    firstCell.style.outlineOffset = '';
+    const bar = `inset ${isRtlElement(row) ? '-' : ''}${ACTIVE_BAR_WIDTH_PX}px 0 0 ${activeBarColor}`;
+    if (firstCell.style.boxShadow !== bar) {
+      firstCell.style.boxShadow = bar;
+    }
   }
   firstCell.setAttribute('data-activation-bar', 'true');
 }
 /**
  * Remove everything this module wrote on a `<tr>`: the active attribute and
- * wash, plus the bar from whichever cell carries it. Cleanup paths call this
- * rather than only unsubscribing, so a row that becomes ineligible, loses its
- * plugin, or loses `idKey` while mounted never keeps stale active paint.
+ * current-state exposure, the wash, plus the bar from whichever cell carries
+ * it. Cleanup paths call this rather than only unsubscribing, so a row that
+ * becomes ineligible, loses its plugin, or loses `idKey` while mounted never
+ * keeps stale active paint. Only the `aria-current="true"` this module wrote
+ * is removed; a competing owner's value stays untouched.
  */
 function clearRowActivationStyle(row: HTMLTableRowElement): void {
   row.removeAttribute('data-active');
+  if (row.getAttribute('aria-current') === 'true') {
+    row.removeAttribute('aria-current');
+  }
   if (activeWashClassNames != null && activeWashClassNames.length > 0) {
     row.classList.remove(...activeWashClassNames);
   }
@@ -189,9 +218,25 @@ function clearRowActivationStyle(row: HTMLTableRowElement): void {
     '[data-activation-bar="true"]',
   );
   if (barCell != null) {
-    barCell.style.boxShadow = '';
+    clearBarCell(barCell);
     barCell.removeAttribute('data-activation-bar');
   }
+}
+
+/** Clear every bar style the module may have written on a bar cell. */
+function clearBarCell(cell: HTMLTableCellElement): void {
+  cell.style.boxShadow = '';
+  cell.style.outline = '';
+  cell.style.outlineOffset = '';
+}
+
+/** Whether the forced-colors media query currently matches. */
+function forcedColorsActive(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(forced-colors: active)').matches
+  );
 }
 
 // =============================================================================
