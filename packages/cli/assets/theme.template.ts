@@ -352,7 +352,7 @@ export const myTheme = defineTheme({
    * pure function of the slot's state that returns one.
    * Reference: `astryx docs icons`; each component's docs list its slots.
    */
-  // componentIcons: {'code-block-copy': 'clock'},
+  // componentIcons: {'code-block-copy': ({copied}) => ({icon: copied ? 'checkDouble' : 'copy'})},
 
   /**
    * Replace the small components that DRAW control state — the checkbox box,
