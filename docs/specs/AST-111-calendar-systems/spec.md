@@ -119,7 +119,7 @@ import 'temporal-polyfill/full/global';
 optional `calendar` argument that defaults to `gregory` (FR18). The public
 `useCalendarDays` and `useCalendarNavigation` hooks in
 `@astryxdesign/core/Calendar` take an optional `calendar` that defaults to
-`gregory` and do not read the provider (FR20).
+`gregory` and never read the provider's calendar (FR20).
 
 ## Requirements
 
@@ -270,8 +270,9 @@ These requirements apply to the text fields of `DateInput` and
   `calendar` argument. Astryx call sites pass the resolved calendar.
 - **FR20 — The public calendar hooks take an explicit calendar.**
   `useCalendarDays` and `useCalendarNavigation` take an optional `calendar` that
-  defaults to `gregory`; they never read the provider, so a caller's numbers
-  keep their meaning when the application adds a provider calendar. With a
+  defaults to `gregory`; they never read the provider's calendar, so a caller's
+  numbers keep their meaning when the application adds a provider calendar.
+  Weekday names and `monthYearLabel` still use the provider's locale. With a
   calendar, `useCalendarDays` reads `year` and `month` as the calendar's year
   and the month's position in that year, as `Temporal.PlainDate` numbers them (1
   through 13 in a Hebrew leap year), and each day keeps its Gregorian date while
@@ -413,7 +414,7 @@ These requirements apply to the text fields of `DateInput` and
 | FR15–FR17    | Presentation tests and touch interaction tests                                                               | `adaptive-native` and `native` with `persian`; month counts in Hebrew leap and common years; era year labels; `DateRangeInput` trigger text                                                                                          | A native date input renders for a non-Gregorian calendar under any presentation, or a wheel shows 12 months for a 13-month year                                                  |
 | FR18         | Formatter tests                                                                                              | Timestamp date formats, PowerSearch values, Schedule labels, and chart dates in `persian`                                                                                                                                            | A built-in date format ignores the provider's calendar, or a `system_*` format changes                                                                                           |
 | FR19         | Documentation review                                                                                         | The internationalization guide and date component docs                                                                                                                                                                               | The caveat is missing                                                                                                                                                            |
-| FR20         | Hook tests                                                                                                   | `useCalendarDays` without `calendar` matches released output; `persian` and a Hebrew leap year (month 13) with `calendar`; `useCalendarNavigation` steps and labels calendar months; a provider calendar does not change either hook | A hook reads the provider, changes released Gregorian output, or assumes 12 months when given a calendar                                                                         |
+| FR20         | Hook tests                                                                                                   | `useCalendarDays` without `calendar` matches released output; `persian` and a Hebrew leap year (month 13) with `calendar`; `useCalendarNavigation` steps and labels calendar months; a provider calendar does not change either hook | A hook reads the provider's calendar, changes released Gregorian output, or assumes 12 months when given a calendar                                                              |
 | AR1–AR3      | Accessibility-tree and announcement assertions                                                               | Day buttons and announcements in `persian`; each rejection kind                                                                                                                                                                      | A spoken date uses another calendar than the grid, or two rejection kinds share a message                                                                                        |
 
 Known verification gap: none of these suites exist on `main`.
