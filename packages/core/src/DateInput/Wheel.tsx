@@ -4,7 +4,8 @@
 
 /**
  * @file Wheel.tsx
- * @input Option list, selected value and change callback
+ * @input Option list, selected value and change callback; a ref for
+ *   programmatic turns
  * @output Exports Wheel (one picker column), ScrollWheel (the scrolling
  *   column) and the shared types of wheelOptions.ts
  * @position Internal component; consumed by MonthYearWheels.tsx,
@@ -27,7 +28,13 @@
  * - /packages/core/src/DateInput/DateInputTouch.test.tsx
  */
 
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -51,6 +58,7 @@ import {usePointerDragScroll} from './usePointerDragScroll';
 import {useScrollSettle} from './useScrollSettle';
 import {useWheelListbox} from './useWheelListbox';
 import {
+  canSpinTo,
   endIndex,
   nearestEnabledIndex,
   steppedIndex,
@@ -59,6 +67,7 @@ import {
 
 export {
   nearestEnabledIndex,
+  type WheelHandle,
   type WheelOption,
   type WheelProps,
 } from './wheelOptions';
@@ -299,7 +308,26 @@ export function ScrollWheel({
   value,
   onChange,
   isActive = true,
+  ref,
 }: WheelProps) {
+  // A spin commits the row at once. The new value then scrolls the column
+  // there, as any new value does.
+  useImperativeHandle(
+    ref,
+    () => ({
+      spinTo: async index => {
+        if (!canSpinTo(options, index)) {
+          return false;
+        }
+        const option = options[index];
+        if (option.value !== value) {
+          onChange(option.value);
+        }
+        return true;
+      },
+    }),
+    [options, value, onChange],
+  );
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const selectedIndex = Math.max(
     0,
@@ -532,7 +560,6 @@ export function ScrollWheel({
   // there is no way to share — it takes every touch that lands on it.
   useOwnScrollGesture(scrollerRef, 'all', {isEnabled: isActive});
 
-  // A key commits the row it moves to and scrolls the column there.
   const moveTo = useCallback(
     (row: number | null) => {
       const option = row == null ? undefined : options[row];
