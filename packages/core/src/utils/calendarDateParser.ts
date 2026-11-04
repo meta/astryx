@@ -228,8 +228,11 @@ export function normalizeDateText(text: string, locale: Locale): string {
   const folded = text
     .normalize('NFKC')
     .replace(INVISIBLE_CHARS, '')
-    // People type an ASCII apostrophe or quote for Hebrew geresh and gershayim.
-    .replace(/[\u05f3\u2018\u2019\u02bc`]/g, "'")
+    // Pasted text can carry bidi embeddings.
+    .replace(/[\u202a-\u202e]/g, '')
+    // People type an ASCII apostrophe or quote for Hebrew geresh and
+    // gershayim, and for the ʻ of Islamic month names such as Dhuʻl-Hijjah.
+    .replace(/[\u05f3\u2018\u2019\u02bb\u02bc\u02bf`]/g, "'")
     .replace(/[\u05f4\u201c\u201d]/g, '"');
   let result = (toAsciiDigits(folded) ?? folded).toLocaleLowerCase(locale);
   if (/[\u00c0-\u024f\u1e00-\u1eff]/.test(result)) {
@@ -1087,8 +1090,11 @@ function isLastFieldClosed(
   return value * 10 > monthsInYear;
 }
 
+/**
+ * Resolves a two-digit year to the century that puts it at most 80 years
+ * before and 19 years after the current year.
+ */
 function windowedYear(twoDigits: number, current: number): number {
-  // Eighty years back and nineteen ahead of the calendar's current year.
   let year = current - (current % 100) + twoDigits;
   if (year > current + 19) {
     year -= 100;

@@ -82,6 +82,17 @@ describe('reading dates written in the calendar (FR9)', () => {
     expect(
       iso('ar-SA', 'islamic-umalqura', '\u200f٢٢\u200f/٥\u200f/١٤٤٨ هـ'),
     ).toBe('2026-11-02');
+    expect(iso('ar-SA', 'islamic-umalqura', '\u202b٢٢/٥/١٤٤٨ هـ\u202c')).toBe(
+      '2026-11-02',
+    );
+  });
+
+  it('reads an apostrophe for the ʻ of Islamic month names', () => {
+    for (const mark of ["'", '\u2019', '\u02bb']) {
+      expect(
+        iso('en', 'islamic-umalqura', `Dhu${mark}l-Hijjah 10, 1447 AH`),
+      ).toBe('2026-05-27');
+    }
   });
 
   it("follows the locale's numeric field order", () => {
