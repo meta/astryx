@@ -18,22 +18,20 @@ import {
   type CalendarSystem,
   type CalendarDateFields,
   calendarDateFromFields,
-  calendarDayOfMonth,
   calendarMonthOf,
   calendarMonthsInYear,
+  formatCalendarDate,
   isCalendarSystemAvailable,
   isGregorianAligned,
 } from './calendarSystem';
 import {
   type SharedDateFormat,
   SHARED_DATE_FORMAT_OPTIONS,
-  dateTimeFormatFor,
   formatSharedDate,
   getDaysInMonth,
   plainDateAddDays,
   plainDateDiffDays,
   plainDateFormat,
-  plainDateFormatDayNumber,
   plainDateFormatToParts,
   plainDateToday,
 } from './plainDate';
@@ -223,7 +221,8 @@ function partsOf(
 export function normalizeDateText(text: string, locale: Locale): string {
   // Most typed text is printable ASCII; skip the Unicode passes it does not need.
   if (/^[\u0020-\u007e]*$/.test(text)) {
-    return /[A-Z]/.test(text) ? text.toLocaleLowerCase(locale) : text;
+    const ascii = text.replaceAll('`', "'");
+    return /[A-Z]/.test(ascii) ? ascii.toLocaleLowerCase(locale) : ascii;
   }
   const folded = text
     .normalize('NFKC')
@@ -425,7 +424,6 @@ function buildLexicon(
     }
   }
 
-  // Literals, weekday names and year names: words to read past.
   const literalFormats: Intl.DateTimeFormatOptions[] = [];
   for (const options of [
     NUMERIC,
@@ -491,7 +489,6 @@ function buildLexicon(
     }
   }
 
-  // Eras, era arithmetic, and year words such as Japanese 元 for year 1.
   const eraArithmetic = new Map<string, EraArithmetic>();
   const eraWidths: ReadonlyArray<'long' | 'short' | 'narrow'> =
     calendar === 'japanese' ? ['long', 'short', 'narrow'] : ['long', 'short'];
@@ -521,6 +518,7 @@ function buildLexicon(
       month: 12,
       day: 31,
     };
+    // Some locales write era year 1 as a word, such as Japanese 元.
     if (isGregorianAligned(calendar) && firstYear.year > 0) {
       const text = partsOf(locale, calendar, LONG_WITH_ERA, firstYear).find(
         p => p.type === 'year',
@@ -1233,52 +1231,6 @@ function displayOptions(
   return result;
 }
 
-/**
- * Text in the Chinese and Dangi calendars from Temporal's day and Intl's
- * names. Intl and a polyfilled Temporal can start a month one day apart, so the
- * month's name comes from its middle day and the day number from Temporal.
- */
-function formatLunisolar(
-  pd: PlainDate,
-  options: Intl.DateTimeFormatOptions,
-  locale: Locale,
-  calendar: CalendarSystem,
-): string {
-  const month = calendarMonthOf(calendar, pd);
-  const mid = plainDateAddDays(month.start, Math.floor(month.length / 2));
-  const parts = partsOf(locale, calendar, options, mid);
-  const {numberingSystem} = dateTimeFormatFor(locale, {
-    ...options,
-    calendar,
-    timeZone: 'UTC',
-  }).resolvedOptions();
-  const weekday = partsOf(locale, calendar, options, pd).find(
-    p => p.type === 'weekday',
-  )?.value;
-  // Some locales write the year as its place in the 60-year cycle, which
-  // does not read back. The related Gregorian year does.
-  const hasRelatedYear = parts.some(p => partType(p) === 'relatedYear');
-  return parts
-    .map(part => {
-      if (part.type === 'day') {
-        return plainDateFormatDayNumber(
-          calendarDayOfMonth(calendar, pd),
-          locale,
-          numberingSystem,
-        );
-      }
-      if (part.type === 'weekday') {
-        return weekday ?? part.value;
-      }
-      if (!hasRelatedYear && /^year(Name)?$/.test(partType(part))) {
-        const year = calendarYearOf(calendar, mid);
-        return plainDateFormatDayNumber(year, locale, numberingSystem);
-      }
-      return part.value;
-    })
-    .join('');
-}
-
 function formatInCalendar(
   pd: PlainDate,
   options: Intl.DateTimeFormatOptions,
@@ -1286,7 +1238,9 @@ function formatInCalendar(
   calendar: CalendarSystem,
 ): string {
   if (LUNISOLAR.has(calendar)) {
-    return formatLunisolar(pd, options, locale, calendar);
+    return formatCalendarDate(calendar, pd, options, locale, {
+      relatedYear: true,
+    });
   }
   return plainDateFormat(
     pd,

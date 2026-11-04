@@ -88,7 +88,7 @@ describe('reading dates written in the calendar (FR9)', () => {
   });
 
   it('reads an apostrophe for the ʻ of Islamic month names', () => {
-    for (const mark of ["'", '\u2019', '\u02bb']) {
+    for (const mark of ["'", '`', '\u2019', '\u02bb']) {
       expect(
         iso('en', 'islamic-umalqura', `Dhu${mark}l-Hijjah 10, 1447 AH`),
       ).toBe('2026-05-27');
@@ -326,10 +326,12 @@ describe('committed text (FR13)', () => {
     );
   });
 
-  it('includes the related Gregorian year in Chinese text', () => {
-    const text = formatCalendarDateText(TODAY, 'date', 'ja', 'chinese');
-    expect(text).toContain('2026');
-    expect(iso('ja', 'chinese', text)).toBe('2026-11-02');
+  it.each(['de-DE', 'ja'])('writes Chinese and Dangi years in %s', locale => {
+    for (const calendar of ['chinese', 'dangi'] as const) {
+      const text = formatCalendarDateText(TODAY, 'date_long', locale, calendar);
+      expect(text).toContain('2026');
+      expect(iso(locale, calendar, text)).toBe('2026-11-02');
+    }
   });
 
   it('writes the format hint in the numeric pattern', () => {
