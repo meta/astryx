@@ -17,9 +17,8 @@ import {fileURLToPath} from 'node:url';
 import {isStableReleasePackage} from '../release/active-release.mjs';
 import {
   DEFAULT_REGISTRY,
+  fetchDistTags,
   fetchVersionDocument,
-  packageKey,
-  registryUrl,
 } from './registry.mjs';
 
 const DEFAULT_ATTEMPTS = 41;
@@ -43,7 +42,6 @@ export async function verifyRegistryEntry({
   registry = DEFAULT_REGISTRY,
   fetchImpl = fetch,
 }) {
-  const encoded = packageKey(name);
   const versionDocument = await jsonResponse(
     await fetchVersionDocument({name, version, registry, fetchImpl}),
     `${name}@${version} version document`,
@@ -54,13 +52,8 @@ export async function verifyRegistryEntry({
     );
   }
 
-  const tagsUrl = registryUrl(registry, `-/package/${encoded}/dist-tags`);
   const tags = await jsonResponse(
-    await fetchImpl(tagsUrl, {
-      cache: 'no-store',
-      headers: {accept: 'application/json'},
-      signal: AbortSignal.timeout(30_000),
-    }),
+    await fetchDistTags({name, registry, fetchImpl}),
     `${name} dist-tags`,
   );
   if (tags[tag] !== version) {

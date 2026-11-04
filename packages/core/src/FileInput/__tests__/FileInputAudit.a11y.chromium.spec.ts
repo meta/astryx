@@ -13,6 +13,7 @@ import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
+import {resetAuditEvidence} from '@astryxdesign/a11y-spec/evidence';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -20,7 +21,9 @@ import {
   type StaticServer,
 } from '@astryxdesign/a11y-spec/storybook';
 
-const OUTPUT = path.resolve('file-input-audit-evidence');
+const EVIDENCE = path.resolve('file-input-audit-evidence');
+// This copy's evidence folder, set in beforeAll (one per --repeat-each copy).
+let OUTPUT = EVIDENCE;
 const STORY_ID = 'core-fileinput--audit-matrix';
 const WIDE = {width: 1280, height: 1100};
 const NARROW = {width: 320, height: 2600};
@@ -517,8 +520,7 @@ function checkCases(
 }
 
 test.beforeAll(async () => {
-  fs.rmSync(OUTPUT, {recursive: true, force: true});
-  fs.mkdirSync(OUTPUT, {recursive: true});
+  OUTPUT = resetAuditEvidence(EVIDENCE, test.info());
   checkoutSha = execFileSync('git', ['rev-parse', 'HEAD'], {
     encoding: 'utf8',
   }).trim();

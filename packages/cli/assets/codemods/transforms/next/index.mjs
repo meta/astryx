@@ -7,14 +7,4 @@
  * this file into the resolved version folder.
  */
 
-import promoteTokenizerPresentation, {
-  meta as promoteTokenizerPresentationMeta,
-} from './promote-tokenizer-presentation.mjs';
-
-export default [
-  {
-    name: 'promote-tokenizer-presentation',
-    transform: promoteTokenizerPresentation,
-    meta: promoteTokenizerPresentationMeta,
-  },
-];
+export default [];

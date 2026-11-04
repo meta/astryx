@@ -754,7 +754,14 @@ export function FileInput({
     (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if (!isSelectionDisabled && mode === 'dropzone') {
+      if (isSelectionDisabled) {
+        // A cancelled dragover with the default effect makes the zone a drop
+        // target.
+        // The 'none' effect shows the no-drop cursor and stops the drop.
+        if (e.dataTransfer) {
+          e.dataTransfer.dropEffect = 'none';
+        }
+      } else if (mode === 'dropzone') {
         setIsDragOver(true);
       }
     },
@@ -765,7 +772,14 @@ export function FileInput({
     (e: DragEvent) => {
       e.preventDefault();
       e.stopPropagation();
-      if (!isSelectionDisabled && mode === 'dropzone') {
+      if (isSelectionDisabled) {
+        // A cancelled dragover with the default effect makes the zone a drop
+        // target.
+        // The 'none' effect shows the no-drop cursor and stops the drop.
+        if (e.dataTransfer) {
+          e.dataTransfer.dropEffect = 'none';
+        }
+      } else if (mode === 'dropzone') {
         setIsDragOver(true);
       }
     },
