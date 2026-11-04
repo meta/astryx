@@ -414,6 +414,50 @@ describe('MediaTimeSlider', () => {
     await user.keyboard('{ArrowLeft}');
     expect(playback.getCurrentTime()).toBe(10);
   });
+
+  it('speaks the chapter and the marker at the position with the time', () => {
+    const {container} = render(
+      <MediaPlayer label="Clip">
+        <MediaPlayerVideo src="/clip.mp4" />
+        <MediaTimeSlider
+          chapters={[
+            {start: 0, title: 'Intro'},
+            {start: 20, title: 'Pollen'},
+          ]}
+          markers={[{time: 25, label: 'Lin: hold on this'}]}
+        />
+      </MediaPlayer>,
+    );
+    const video = container.querySelector('video')!;
+    fakePlayback(video, {duration: 60});
+    const slider = screen.getByRole('slider', {name: 'Seek'});
+    act(() => {
+      video.currentTime = 25;
+    });
+    expect(slider.getAttribute('aria-valuetext')).toMatch(
+      /, Pollen, Lin: hold on this$/,
+    );
+    act(() => {
+      video.currentTime = 5;
+    });
+    expect(slider.getAttribute('aria-valuetext')).toMatch(/, Intro$/);
+  });
+
+  it('draws a dot for each marker once the duration is known', () => {
+    const {container} = render(
+      <VideoPlayer
+        src="/clip.mp4"
+        label="Clip"
+        markers={[
+          {time: 10, label: 'Ana: love this'},
+          {time: 30, label: 'Lin: hold on this'},
+        ]}
+      />,
+    );
+    expect(container.querySelectorAll('[data-media-marker]')).toHaveLength(0);
+    fakePlayback(container.querySelector('video')!, {duration: 60});
+    expect(container.querySelectorAll('[data-media-marker]')).toHaveLength(2);
+  });
 });
 
 describe('AudioPlayer', () => {
@@ -432,6 +476,47 @@ describe('AudioPlayer', () => {
     }
     return {...result, audio};
   }
+
+  it('shows an audio file icon in front of the title when there is no artwork', () => {
+    const {container} = render(
+      <AudioPlayer src="/episode.mp3" title="Voice memo" />,
+    );
+    const artwork = container.querySelector('.astryx-media-artwork');
+    expect(artwork).not.toBeNull();
+    expect(artwork?.querySelector('img')).toBeNull();
+    expect(artwork?.querySelector('svg')).not.toBeNull();
+  });
+
+  it('shows the artwork image when there is one', () => {
+    const {container} = renderAudioPlayer();
+    expect(
+      container.querySelector('.astryx-media-artwork img'),
+    ).toHaveAttribute('src', '/cover.jpg');
+  });
+
+  it('offers previous and next track controls only when their handlers are set', async () => {
+    const user = userEvent.setup();
+    const onPreviousTrack = vi.fn();
+    const onNextTrack = vi.fn();
+    const {rerender} = render(
+      <AudioPlayer src="/episode.mp3" title="Episode" />,
+    );
+    expect(
+      screen.queryByRole('button', {name: 'Previous track'}),
+    ).not.toBeInTheDocument();
+    rerender(
+      <AudioPlayer
+        src="/episode.mp3"
+        title="Episode"
+        onPreviousTrack={onPreviousTrack}
+        onNextTrack={onNextTrack}
+      />,
+    );
+    await user.click(screen.getByRole('button', {name: 'Previous track'}));
+    await user.click(screen.getByRole('button', {name: 'Next track'}));
+    expect(onPreviousTrack).toHaveBeenCalledTimes(1);
+    expect(onNextTrack).toHaveBeenCalledTimes(1);
+  });
 
   it('names the player by its title and shows the subtitle', () => {
     renderAudioPlayer();

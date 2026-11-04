@@ -30,6 +30,9 @@ export const MEDIA_ICON_KEYS = {
   fullscreenEnter: 'media:fullscreen-enter',
   fullscreenExit: 'media:fullscreen-exit',
   captions: 'media:captions',
+  previousTrack: 'media:previous-track',
+  nextTrack: 'media:next-track',
+  audioFile: 'media:audio-file',
 } as const;
 
 export type MediaIconName = keyof typeof MEDIA_ICON_KEYS;
@@ -122,6 +125,26 @@ const FALLBACK_ICONS: Record<MediaIconName, ReactNode> = {
     <svg {...svgProps}>
       <rect width="18" height="14" x="3" y="5" rx="2" ry="2" />
       <path d="M7 15h4M15 15h2M7 11h2M13 11h4" />
+    </svg>
+  ),
+  previousTrack: (
+    <svg {...svgProps}>
+      <path d="M17.971 4.285A2 2 0 0 1 21 6v12a2 2 0 0 1-3.029 1.715l-9.997-5.998a2 2 0 0 1-.003-3.432z" />
+      <path d="M3 20V4" />
+    </svg>
+  ),
+  nextTrack: (
+    <svg {...svgProps}>
+      <path d="M21 4v16" />
+      <path d="M6.029 4.285A2 2 0 0 0 3 6v12a2 2 0 0 0 3.029 1.715l9.997-5.998a2 2 0 0 0 .003-3.432z" />
+    </svg>
+  ),
+  audioFile: (
+    <svg {...svgProps}>
+      <path d="M11.65 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v10.35" />
+      <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+      <path d="M8 20v-7l3 1.474" />
+      <circle cx="6" cy="20" r="2" />
     </svg>
   ),
 };

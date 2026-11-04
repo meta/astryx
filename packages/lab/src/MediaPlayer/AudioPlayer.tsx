@@ -12,9 +12,12 @@
  *   parts inside a Section container
  */
 
-import {useEffect} from 'react';
+import {useEffect, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {AspectRatio} from '@astryxdesign/core/AspectRatio';
 import {useContainerReveal} from '@astryxdesign/core/hooks';
+import {useTranslator} from '@astryxdesign/core/i18n';
+import {IconButton} from '@astryxdesign/core/IconButton';
 import {Section} from '@astryxdesign/core/Section';
 import {
   colorVars,
@@ -25,7 +28,7 @@ import {
   spacingVars,
   typeScaleVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
-import {mergeProps} from '@astryxdesign/core/utils';
+import {mergeProps, themeProps} from '@astryxdesign/core/utils';
 import {MediaPlayer, type MediaPlayerProps} from './MediaPlayer';
 import {useMediaPlayerContext} from './MediaPlayerContext';
 import {
@@ -37,8 +40,14 @@ import {
   MediaTime,
   MediaTimeSlider,
   MediaVolumeSlider,
+  type MediaTimelineChapter,
+  type MediaTimelineMarker,
 } from './MediaPlayerControls';
 import {MediaPlayerAudio} from './MediaPlayerMedia';
+import {useMediaIcon} from './mediaIcons';
+
+/** Height of the artwork, the same as the title and subtitle lines. */
+const ARTWORK_HEIGHT = 48;
 
 const styles = stylex.create({
   player: {
@@ -54,12 +63,21 @@ const styles = stylex.create({
     gap: spacingVars['--spacing-3'],
     minWidth: 0,
   },
-  artwork: {
+  // The artwork is as tall as the two title lines; its width follows the
+  // aspect ratio.
+  artwork: (ratio: number) => ({
     flexShrink: 0,
-    width: 48,
-    height: 48,
-    objectFit: 'cover',
+    width: ARTWORK_HEIGHT * ratio,
+    overflow: 'hidden',
     borderRadius: radiusVars['--radius-element'],
+    backgroundColor: colorVars['--color-background-muted'],
+  }),
+  artworkPlaceholder: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: colorVars['--color-text-secondary'],
+    fontSize: 24,
   },
   titles: {
     display: 'flex',
@@ -91,7 +109,12 @@ const styles = stylex.create({
   },
   controls: {
     display: 'grid',
-    gridTemplateColumns: '1fr auto auto auto 1fr',
+    gridTemplateColumns: '1fr auto 1fr',
+    alignItems: 'center',
+    gap: spacingVars['--spacing-2'],
+  },
+  transport: {
+    display: 'flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-2'],
   },
@@ -99,6 +122,9 @@ const styles = stylex.create({
     justifySelf: 'start',
     display: 'grid',
     alignItems: 'center',
+    // While the column animates, the tracks hug the start, so the button holds
+    // still.
+    justifyContent: 'start',
     // The slider's column opens while the speed control is hovered or holds
     // focus, and stays open on touch, matching the container reveal.
     gridTemplateColumns: {
@@ -120,6 +146,8 @@ const styles = stylex.create({
     justifySelf: 'end',
     display: 'grid',
     alignItems: 'center',
+    // While the column animates, the tracks hug the end, so Mute holds still.
+    justifyContent: 'end',
     // The slider's column opens while the volume control is hovered or holds
     // focus, and stays open on touch, matching the container reveal.
     gridTemplateColumns: {
@@ -166,8 +194,19 @@ export interface AudioPlayerProps extends Omit<
   title: string;
   /** Show, artist, or other supporting line. */
   subtitle?: string;
-  /** Square artwork URL. Also offered to the system media controls. */
+  /**
+   * Artwork image URL, such as cover art. The player shows it in front of
+   * the title and offers it to the system media controls.
+   */
   artworkSrc?: string;
+  /**
+   * Media in front of the title, such as a video still. It takes the place of
+   * `artworkSrc` on screen; `artworkSrc` still goes to the system media
+   * controls. Without either, the player shows a generic audio file icon.
+   */
+  artwork?: ReactNode;
+  /** Width divided by height of the artwork. Defaults to 1, a square. */
+  artworkAspectRatio?: number;
   /** Accessible name of the player. Defaults to `title`. */
   label?: string;
   /** Seconds the skip-back control moves. Defaults to 15. */
@@ -178,6 +217,20 @@ export interface AudioPlayerProps extends Omit<
   preload?: 'none' | 'metadata' | 'auto';
   /** CORS mode for the audio. */
   crossOrigin?: 'anonymous' | 'use-credentials';
+  /**
+   * Goes to the previous track in the product's queue. The previous-track
+   * control and the matching system media action appear when it is set.
+   */
+  onPreviousTrack?: () => void;
+  /**
+   * Goes to the next track in the product's queue. The next-track control
+   * and the matching system media action appear when it is set.
+   */
+  onNextTrack?: () => void;
+  /** Chapters, drawn as segments of the timeline and named in its preview. */
+  chapters?: readonly MediaTimelineChapter[];
+  /** Points of interest, such as timestamped comments, drawn on the timeline. */
+  markers?: readonly MediaTimelineMarker[];
 }
 
 const SESSION_ACTIONS = [
@@ -192,20 +245,34 @@ const SESSION_ACTIONS = [
  * Hands the title, artwork, and transport actions to the system media
  * controls, such as the lock screen, once this player starts playback.
  */
+interface TrackHandlers {
+  onPreviousTrack?: () => void;
+  onNextTrack?: () => void;
+}
+
 function useMediaSession({
   title,
   subtitle,
   artworkSrc,
   skipBackSeconds,
   skipForwardSeconds,
+  onPreviousTrack,
+  onNextTrack,
 }: {
   title: string;
   subtitle?: string;
   artworkSrc?: string;
   skipBackSeconds: number;
   skipForwardSeconds: number;
-}) {
+} & TrackHandlers) {
   const {store} = useMediaPlayerContext('AudioPlayer');
+  const trackHandlersRef = useRef<TrackHandlers>({});
+  const hasPreviousTrack = onPreviousTrack != null;
+  const hasNextTrack = onNextTrack != null;
+  // Syncs the latest track handlers for the system media actions.
+  useEffect(() => {
+    trackHandlersRef.current = {onPreviousTrack, onNextTrack};
+  });
   // Syncs the system media session with this player while it owns playback.
   useEffect(() => {
     if (
@@ -248,6 +315,20 @@ function useMediaSession({
           // Browsers that do not support an action throw; the others still work.
         }
       }
+      try {
+        session.setActionHandler(
+          'previoustrack',
+          hasPreviousTrack
+            ? () => trackHandlersRef.current.onPreviousTrack?.()
+            : null,
+        );
+        session.setActionHandler(
+          'nexttrack',
+          hasNextTrack ? () => trackHandlersRef.current.onNextTrack?.() : null,
+        );
+      } catch {
+        // See above.
+      }
     };
     // Another player that claims the session afterwards owns it from then on.
     const isOwner = () => metadata != null && session.metadata === metadata;
@@ -264,7 +345,11 @@ function useMediaSession({
       unsubscribe();
       if (isOwner()) {
         session.metadata = null;
-        for (const action of SESSION_ACTIONS) {
+        for (const action of [
+          ...SESSION_ACTIONS,
+          'previoustrack',
+          'nexttrack',
+        ] as const) {
           try {
             session.setActionHandler(action, null);
           } catch {
@@ -273,21 +358,96 @@ function useMediaSession({
         }
       }
     };
-  }, [store, title, subtitle, artworkSrc, skipBackSeconds, skipForwardSeconds]);
+  }, [
+    store,
+    title,
+    subtitle,
+    artworkSrc,
+    skipBackSeconds,
+    skipForwardSeconds,
+    hasPreviousTrack,
+    hasNextTrack,
+  ]);
+}
+
+function TrackButton({
+  direction,
+  onClick,
+}: {
+  direction: 'previous' | 'next';
+  onClick: () => void;
+}) {
+  const t = useTranslator();
+  const icon = useMediaIcon(
+    direction === 'previous' ? 'previousTrack' : 'nextTrack',
+  );
+  const label = t(
+    direction === 'previous'
+      ? '@astryx.mediaPlayer.previousTrack'
+      : '@astryx.mediaPlayer.nextTrack',
+  );
+  return (
+    <IconButton
+      label={label}
+      tooltip={label}
+      icon={icon}
+      variant="ghost"
+      onClick={onClick}
+      {...themeProps('media-track-button')}
+    />
+  );
+}
+
+function AudioArtwork({
+  artwork,
+  artworkSrc,
+  ratio,
+}: {
+  artwork?: ReactNode;
+  artworkSrc?: string;
+  ratio: number;
+}) {
+  const placeholderIcon = useMediaIcon('audioFile');
+  return (
+    <AspectRatio
+      ratio={ratio}
+      fit="cover"
+      xstyle={styles.artwork(ratio)}
+      {...themeProps('media-artwork')}>
+      {artwork ??
+        (artworkSrc != null ? (
+          <img src={artworkSrc} alt="" />
+        ) : (
+          <span {...stylex.props(styles.artworkPlaceholder)}>
+            {placeholderIcon}
+          </span>
+        ))}
+    </AspectRatio>
+  );
 }
 
 function AudioPlayerLayout({
   title,
   subtitle,
   artworkSrc,
+  artwork,
+  artworkAspectRatio,
   skipBackSeconds,
   skipForwardSeconds,
-}: {
+  onPreviousTrack,
+  onNextTrack,
+  chapters,
+  markers,
+}: TrackHandlers & {
   title: string;
   subtitle?: string;
   artworkSrc?: string;
+  artwork?: ReactNode;
+  artworkAspectRatio: number;
   skipBackSeconds: number;
   skipForwardSeconds: number;
+  chapters?: readonly MediaTimelineChapter[];
+  markers?: readonly MediaTimelineMarker[];
 }) {
   useMediaSession({
     title,
@@ -295,14 +455,18 @@ function AudioPlayerLayout({
     artworkSrc,
     skipBackSeconds,
     skipForwardSeconds,
+    onPreviousTrack,
+    onNextTrack,
   });
   const reveal = useContainerReveal();
   return (
     <>
       <div {...stylex.props(styles.header)}>
-        {artworkSrc != null ? (
-          <img src={artworkSrc} alt="" {...stylex.props(styles.artwork)} />
-        ) : null}
+        <AudioArtwork
+          artwork={artwork}
+          artworkSrc={artworkSrc}
+          ratio={artworkAspectRatio}
+        />
         <div {...stylex.props(styles.titles)}>
           <span {...stylex.props(styles.title)}>{title}</span>
           {subtitle != null ? (
@@ -310,7 +474,7 @@ function AudioPlayerLayout({
           ) : null}
         </div>
       </div>
-      <MediaTimeSlider />
+      <MediaTimeSlider chapters={chapters} markers={markers} />
       <div dir="ltr" {...stylex.props(styles.times)}>
         <MediaTime display="current" xstyle={styles.secondaryTime} />
         <MediaTime display="remaining" xstyle={styles.secondaryTime} />
@@ -331,9 +495,17 @@ function AudioPlayerLayout({
             <MediaPlaybackRateSlider xstyle={styles.speedGap} />
           </span>
         </div>
-        <MediaSeekButton offset={-skipBackSeconds} />
-        <MediaPlayButton size="lg" variant="primary" />
-        <MediaSeekButton offset={skipForwardSeconds} />
+        <div {...stylex.props(styles.transport)}>
+          {onPreviousTrack != null ? (
+            <TrackButton direction="previous" onClick={onPreviousTrack} />
+          ) : null}
+          <MediaSeekButton offset={-skipBackSeconds} />
+          <MediaPlayButton size="lg" variant="primary" />
+          <MediaSeekButton offset={skipForwardSeconds} />
+          {onNextTrack != null ? (
+            <TrackButton direction="next" onClick={onNextTrack} />
+          ) : null}
+        </div>
         {/* The slider opens toward the center, so Mute keeps its place. */}
         <div
           {...mergeProps(
@@ -374,11 +546,17 @@ export function AudioPlayer({
   title,
   subtitle,
   artworkSrc,
+  artwork,
+  artworkAspectRatio = 1,
   label,
   skipBackSeconds = 15,
   skipForwardSeconds = 30,
   preload = 'metadata',
   crossOrigin,
+  onPreviousTrack,
+  onNextTrack,
+  chapters,
+  markers,
   xstyle,
   className,
   style,
@@ -396,8 +574,14 @@ export function AudioPlayer({
           title={title}
           subtitle={subtitle}
           artworkSrc={artworkSrc}
+          artwork={artwork}
+          artworkAspectRatio={artworkAspectRatio}
           skipBackSeconds={skipBackSeconds}
           skipForwardSeconds={skipForwardSeconds}
+          onPreviousTrack={onPreviousTrack}
+          onNextTrack={onNextTrack}
+          chapters={chapters}
+          markers={markers}
         />
       </MediaPlayer>
     </Section>

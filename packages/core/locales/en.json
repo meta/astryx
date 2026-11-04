@@ -2439,6 +2439,18 @@
     "defaultMessage": "{current} of {duration}",
     "description": "Spoken value of the timeline slider in a lab media player. `current` is the playback position and `duration` the total length, both already written as words, e.g. \"1 minute, 5 seconds\"."
   },
+  "@astryx.mediaPlayer.timeValueContext": {
+    "defaultMessage": "{value}, {context}",
+    "description": "Spoken value of the timeline slider in a lab media player when the position is inside a chapter or at a marker. `value` is the spoken time, e.g. \"1 minute, 5 seconds of 3 minutes\", and `context` is the chapter title or the marker label, e.g. \"Pollen\"."
+  },
+  "@astryx.mediaPlayer.previousTrack": {
+    "defaultMessage": "Previous track",
+    "description": "Name and tooltip of the button in a lab audio player that goes to the previous track or episode in the product's queue."
+  },
+  "@astryx.mediaPlayer.nextTrack": {
+    "defaultMessage": "Next track",
+    "description": "Name and tooltip of the button in a lab audio player that goes to the next track or episode in the product's queue."
+  },
   "@astryx.mediaPlayer.live": {
     "defaultMessage": "Live",
     "description": "Shown instead of the playback time in a lab media player when the media is a live stream."

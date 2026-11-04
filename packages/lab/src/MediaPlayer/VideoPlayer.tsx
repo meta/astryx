@@ -38,6 +38,8 @@ import {
   MediaTime,
   MediaTimeSlider,
   MediaVolumeSlider,
+  type MediaTimelineChapter,
+  type MediaTimelineMarker,
 } from './MediaPlayerControls';
 import {MediaPlayerVideo} from './MediaPlayerMedia';
 
@@ -132,6 +134,8 @@ const styles = stylex.create({
     // The timeline gives up the space, so the open slider is never cut.
     flexShrink: 0,
     alignItems: 'center',
+    // While the column animates, the tracks hug the end, so Mute holds still.
+    justifyContent: 'end',
     // The slider's column opens while the volume control is hovered or holds
     // focus, and stays open on touch, matching the container reveal.
     gridTemplateColumns: {
@@ -206,6 +210,10 @@ export interface VideoPlayerProps extends Omit<
   preload?: 'none' | 'metadata' | 'auto';
   /** CORS mode for the video and its caption files. */
   crossOrigin?: 'anonymous' | 'use-credentials';
+  /** Chapters, drawn as segments of the timeline and named in its preview. */
+  chapters?: readonly MediaTimelineChapter[];
+  /** Points of interest, such as timestamped comments, drawn on the timeline. */
+  markers?: readonly MediaTimelineMarker[];
 }
 
 function VideoStatusLayer() {
@@ -385,8 +393,12 @@ function useCueLayout(
 
 function VideoControlBar({
   videoRef,
+  chapters,
+  markers,
 }: {
   videoRef: RefObject<HTMLVideoElement | null>;
+  chapters?: readonly MediaTimelineChapter[];
+  markers?: readonly MediaTimelineMarker[];
 }) {
   const {isControlsVisible} = useMediaPlayerContext('VideoPlayer');
   const barRef = useRef<HTMLDivElement | null>(null);
@@ -404,7 +416,7 @@ function VideoControlBar({
           !isControlsVisible && styles.barHidden,
         )}>
         <MediaPlayButton />
-        <MediaTimeSlider />
+        <MediaTimeSlider chapters={chapters} markers={markers} />
         <MediaTime xstyle={styles.time} />
         <div
           {...mergeProps(
@@ -453,6 +465,8 @@ export function VideoPlayer({
   isLooping = false,
   preload = 'metadata',
   crossOrigin,
+  chapters,
+  markers,
   xstyle,
   ...rest
 }: VideoPlayerProps) {
@@ -483,7 +497,11 @@ export function VideoPlayer({
         ))}
       </MediaPlayerVideo>
       <VideoStatusLayer />
-      <VideoControlBar videoRef={videoRef} />
+      <VideoControlBar
+        videoRef={videoRef}
+        chapters={chapters}
+        markers={markers}
+      />
     </MediaPlayer>
   );
 }

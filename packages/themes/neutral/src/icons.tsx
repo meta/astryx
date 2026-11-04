@@ -55,6 +55,9 @@ import {
   Maximize,
   Minimize,
   Captions,
+  SkipBack,
+  SkipForward,
+  FileMusic,
 } from 'lucide-react';
 
 const iconProps = {
@@ -105,4 +108,7 @@ export const neutralIconRegistry: IconRegistry &
   'media:fullscreen-enter': <Maximize {...iconProps} />,
   'media:fullscreen-exit': <Minimize {...iconProps} />,
   'media:captions': <Captions {...iconProps} />,
+  'media:previous-track': <SkipBack {...iconProps} />,
+  'media:next-track': <SkipForward {...iconProps} />,
+  'media:audio-file': <FileMusic {...iconProps} />,
 };

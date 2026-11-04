@@ -360,6 +360,8 @@ export {
   type MediaTextTrackInfo,
   type MediaTimeProps,
   type MediaTimeSliderProps,
+  type MediaTimelineChapter,
+  type MediaTimelineMarker,
   type MediaVolumeSliderProps,
   type UseMediaPlayerResult,
   type VideoPlayerCaptionTrack,

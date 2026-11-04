@@ -125,7 +125,7 @@ export function formatClock(seconds: number, hasHours = false): string {
 interface DurationFormatConstructor {
   new (
     locale: string,
-    options: {style: 'long'},
+    options: {style: 'long'; secondsDisplay?: 'always' | 'auto'},
   ): {
     format: (duration: {
       hours?: number;
@@ -152,9 +152,17 @@ export function formatSpokenTime(seconds: number, locale: string): string {
   const minutes = Math.floor((total % 3600) / 60);
   const rest = total % 60;
   try {
-    return new DurationFormat(locale, {style: 'long'}).format(
-      total === 0 ? {seconds: 0} : {hours, minutes, seconds: rest},
-    );
+    // DurationFormat leaves out zero units, so zero needs its seconds shown.
+    return total === 0
+      ? new DurationFormat(locale, {
+          style: 'long',
+          secondsDisplay: 'always',
+        }).format({seconds: 0})
+      : new DurationFormat(locale, {style: 'long'}).format({
+          hours,
+          minutes,
+          seconds: rest,
+        });
   } catch {
     return formatClock(total);
   }

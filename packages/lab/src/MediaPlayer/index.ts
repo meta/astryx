@@ -33,6 +33,8 @@ export {
   type MediaSeekButtonProps,
   type MediaTimeProps,
   type MediaTimeSliderProps,
+  type MediaTimelineChapter,
+  type MediaTimelineMarker,
   type MediaVolumeSliderProps,
 } from './MediaPlayerControls';
 export {

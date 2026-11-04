@@ -36,6 +36,21 @@ const styleProps = [
   },
 ];
 
+const timelineProps = [
+  {
+    name: 'chapters',
+    type: 'readonly {start: number; title: string}[]',
+    description:
+      'Chapters, drawn as segments of the timeline with a small gap between them. The pointer preview shows the chapter title, and the timeline speaks it with the time.',
+  },
+  {
+    name: 'markers',
+    type: 'readonly {time: number; label: string}[]',
+    description:
+      'Points of interest, such as timestamped comments, drawn as dots on the timeline. The pointer preview shows the nearest label, and the timeline speaks it when its value reaches the marker.',
+  },
+];
+
 const playbackCallbacks = [
   {
     name: 'onPlay',
@@ -167,6 +182,8 @@ export const docs = {
       {className: 'astryx-media-playback-rate-button'},
       {className: 'astryx-media-playback-rate-slider'},
       {className: 'astryx-media-playback-rate-menu'},
+      {className: 'astryx-media-track-button'},
+      {className: 'astryx-media-artwork'},
     ],
   },
   components: [
@@ -230,6 +247,7 @@ export const docs = {
           type: "'anonymous' | 'use-credentials'",
           description: 'CORS mode for the video and its caption files.',
         },
+        ...timelineProps,
         ...playbackCallbacks,
         ...styleProps,
       ],
@@ -261,7 +279,32 @@ export const docs = {
         {
           name: 'artworkSrc',
           type: 'string',
-          description: 'Square artwork URL.',
+          description:
+            'Artwork image URL, such as cover art. The player shows it in front of the title and offers it to the system media controls.',
+        },
+        {
+          name: 'artwork',
+          type: 'ReactNode',
+          description:
+            'Media in front of the title, such as a video still. It takes the place of `artworkSrc` on screen. Without either, the player shows a generic audio file icon.',
+        },
+        {
+          name: 'artworkAspectRatio',
+          type: 'number',
+          description: 'Width divided by height of the artwork.',
+          default: '1',
+        },
+        {
+          name: 'onPreviousTrack',
+          type: '() => void',
+          description:
+            "Goes to the previous track in the product's queue. The previous-track control and the matching system media action appear when it is set.",
+        },
+        {
+          name: 'onNextTrack',
+          type: '() => void',
+          description:
+            "Goes to the next track in the product's queue. The next-track control and the matching system media action appear when it is set.",
         },
         {
           name: 'label',
@@ -292,6 +335,7 @@ export const docs = {
           type: "'anonymous' | 'use-credentials'",
           description: 'CORS mode for the audio.',
         },
+        ...timelineProps,
         ...playbackCallbacks,
         ...styleProps,
       ],
@@ -404,8 +448,8 @@ export const docs = {
       name: 'MediaTimeSlider',
       displayName: 'Media Time Slider',
       description:
-        'The timeline. Dragging previews the time and seeks on release; arrow keys skip 5 seconds and Page Up and Page Down skip 10. It runs left to right in every direction.',
-      props: styleProps,
+        'The timeline. Dragging previews the time and seeks on release; arrow keys skip 5 seconds and Page Up and Page Down skip 10. It runs left to right in every direction. The track shows the buffered range, and optional chapters and markers; a pointer over it previews the time, the chapter, and the nearest marker.',
+      props: [...timelineProps, ...styleProps],
     },
     {
       name: 'MediaTime',
