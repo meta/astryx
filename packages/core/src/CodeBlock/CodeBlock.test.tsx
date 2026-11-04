@@ -213,9 +213,14 @@ describe('CodeBlock', () => {
     // Theme seam: a design system can restyle the copy control via this class
     // without turning the button off and re-implementing it.
     expect(copyButton).toHaveClass('astryx-code-block-copy-button');
-    // The button carries a visible "Copy code" hover/focus hint (tooltip),
-    // wired through aria-describedby — a bare <button> could not.
-    expect(copyButton).toHaveAttribute('aria-describedby');
+    // The button carries a visible "Copy code" hover/focus hint (tooltip). It
+    // repeats the name, so it adds no description (Button FR12).
+    expect(
+      screen
+        .getAllByRole('tooltip', {hidden: true})
+        .some(el => el.textContent === 'Copy code'),
+    ).toBe(true);
+    expect(copyButton).not.toHaveAttribute('aria-describedby');
   });
 
   it('keeps the copy button tooltip as "Copy code" after copying', async () => {

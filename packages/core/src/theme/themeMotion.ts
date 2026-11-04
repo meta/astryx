@@ -87,6 +87,13 @@ function msOf(value: string): number {
  */
 export const MOTION_TEMPO_PROPERTY = '--_astryx-motion-tempo';
 
+/**
+ * The custom property a theme whose `reducedMotion` resolves to `'always'`
+ * sets to `1` on its root, and the root theme on `<html>`: styles that cannot
+ * key a selector on the mark read it in a value.
+ */
+export const REDUCED_MOTION_PROPERTY = '--_astryx-reduced-motion';
+
 /** The duration tokens at `tempo`: today's values times it, to the ms. */
 export function durationTokensAt(tempo: number): Record<string, string> {
   const tokens: Record<string, string> = {};

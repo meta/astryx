@@ -949,6 +949,80 @@ describe('ComplexSelector onOpenChange', () => {
     expect(onOpenChange.mock.calls).toEqual([[false]]);
   });
 
+  describe('focus on close', () => {
+    function lightDismiss(): void {
+      const popover = screen
+        .getByRole('dialog', {hidden: true})
+        .closest('[popover]') as HTMLElement;
+      act(() => {
+        popover.dispatchEvent(
+          Object.assign(new Event('toggle'), {
+            oldState: 'open',
+            newState: 'closed',
+          }),
+        );
+      });
+    }
+
+    it('Escape and a close from the content return focus to the trigger', async () => {
+      const user = userEvent.setup();
+      const trigger = renderSelector(() => {});
+      await user.click(trigger);
+      await user.keyboard('{Escape}');
+      expect(trigger).toHaveFocus();
+      await user.click(trigger);
+      await user.click(screen.getByRole('button', {name: 'Apply', ...h}));
+      expect(trigger).toHaveFocus();
+    });
+
+    it('a light dismiss onto another control leaves focus there; onto nothing focusable it returns to the trigger', async () => {
+      const user = userEvent.setup();
+      render(
+        <>
+          <ComplexSelector label="View options" value={[]}>
+            {() => <button type="button">Apply</button>}
+          </ComplexSelector>
+          <input aria-label="Notes" />
+        </>,
+      );
+      const trigger = screen.getByRole('combobox', {name: 'View options'});
+      const notes = screen.getByRole('textbox', {name: 'Notes'});
+      await user.click(trigger);
+      act(() => notes.focus());
+      lightDismiss();
+      expect(notes).toHaveFocus();
+
+      await user.click(trigger);
+      act(() => (document.activeElement as HTMLElement | null)?.blur());
+      lightDismiss();
+      expect(trigger).toHaveFocus();
+    });
+
+    it('a caller-rendered control gets focus back even after a light dismiss onto another control', async () => {
+      const user = userEvent.setup();
+      render(
+        <>
+          <ComplexSelector
+            label="View options"
+            value={[]}
+            renderTrigger={props => (
+              <button type="button" {...props}>
+                Options
+              </button>
+            )}>
+            {() => <button type="button">Apply</button>}
+          </ComplexSelector>
+          <input aria-label="Notes" />
+        </>,
+      );
+      const opener = screen.getByRole('combobox', {name: 'View options'});
+      await user.click(opener);
+      act(() => screen.getByRole('textbox', {name: 'Notes'}).focus());
+      lightDismiss();
+      expect(opener).toHaveFocus();
+    });
+  });
+
   it('reports opens and closes driven through the imperative handle', () => {
     const onOpenChange = vi.fn();
     const handleRef = React.createRef<ComplexSelectorHandle>();

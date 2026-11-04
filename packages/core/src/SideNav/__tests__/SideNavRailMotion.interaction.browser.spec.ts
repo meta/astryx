@@ -13,7 +13,8 @@
  *   stays continuous, an expand whose old wrap is not copied keeps the edges
  *   together, and Reduce Motion cross-fades under a finger (DR2) and changes at
  *   once under a mouse (DR3), also on a loaded machine: those two cases read
- *   the motion by its own start and end, never at a fixed time
+ *   the motion by its own start and end, never at a fixed time. A second press
+ *   after a long task starts its fades where the glide carries on.
  * @position Testing; the components' unit cases are
  *   SideNav/SideNavRailMotion.test.tsx
  *
@@ -64,7 +65,14 @@ async function openStory(page: Page, story: string): Promise<void> {
 
 /** What the frames of one motion showed, sampled every animation frame. */
 interface Frames {
-  readonly frames: number;
+  /**
+   * Positions of the content's glide judged on its own clock, one every 50 ms.
+   * The sampler holds the page's animations and seeks them to each position.
+   * The count does not depend on how many frames a loaded runner draws.
+   */
+  readonly heldPositions: number;
+  /** The content glide's end on its own clock, in ms. */
+  readonly glideEndMs: number;
   /** The largest distance between the rail's shown edge and the content's. */
   readonly maxGap: number;
   /** Whether any running animation changed a width. */
@@ -95,7 +103,9 @@ async function sampleMotion(
 ): Promise<Frames> {
   await page.evaluate(() => {
     const state = {
-      frames: 0,
+      heldPositions: 0,
+      glideEndMs: 0,
+      held: false,
       maxGap: 0,
       animatesWidth: false,
       copiesHidden: true,
@@ -126,15 +136,86 @@ async function sampleMotion(
         element.getBoundingClientRect().right - (inset ? Number(inset[1]) : 0)
       );
     };
+    const railCopies = () =>
+      [...document.querySelectorAll('[inert]')].filter(
+        element => element.querySelector('nav') != null,
+      );
+    // The sampler judges the glide once, on its own clock, as soon as it
+    // rides. It holds every running animation and seeks each one by its own
+    // start. Their offsets then match what a frame at that time shows.
+    const holdAndRead = () => {
+      if (state.held || !state.running) {
+        return;
+      }
+      const glide = column
+        .getAnimations()
+        .find(
+          animation =>
+            animation.playState === 'running' && animation.startTime != null,
+        );
+      const end = Number(glide?.effect?.getComputedTiming().endTime);
+      if (glide == null || !Number.isFinite(end)) {
+        return;
+      }
+      state.held = true;
+      state.glideEndMs = end;
+      const start = Number(glide.startTime);
+      // A script pause overrides a CSS animation's play state permanently, so
+      // the hold skips CSS animations and transitions.
+      const held = document
+        .getAnimations()
+        .filter(
+          animation =>
+            animation.playState === 'running' &&
+            animation.startTime != null &&
+            !('animationName' in animation) &&
+            !('transitionProperty' in animation),
+        )
+        .map(animation => ({
+          animation,
+          startTime: Number(animation.startTime),
+        }));
+      for (const {animation} of held) {
+        animation.pause();
+      }
+      for (let time = 0; time <= end; time += 50) {
+        for (const {animation, startTime} of held) {
+          animation.currentTime = start + time - startTime;
+        }
+        const edge = Math.max(
+          shownRight(panel),
+          ...railCopies().map(shownRight),
+        );
+        state.maxGap = Math.max(
+          state.maxGap,
+          Math.abs(edge - column.getBoundingClientRect().left),
+        );
+        state.heldPositions++;
+      }
+      // Each animation gets its own start time back, so it plays on where it
+      // would have been. The hold does not delay it.
+      for (const {animation, startTime} of held) {
+        animation.startTime = startTime;
+      }
+    };
+    // Read the glide in the press's own task, once the change's animations
+    // ride. On a loaded runner, the collapse's work can hold the main thread
+    // for the whole glide, so the page draws no frame of it. If the glide is
+    // not riding yet, the next frame reads it.
+    window.addEventListener(
+      'click',
+      () => {
+        queueMicrotask(holdAndRead);
+      },
+      {once: true},
+    );
     const glides = new WeakSet<Animation>();
     const sample = () => {
       if (!state.running) {
         return;
       }
-      state.frames++;
-      const copies = [...document.querySelectorAll('[inert]')].filter(
-        element => element.querySelector('nav') != null,
-      );
+      holdAndRead();
+      const copies = railCopies();
       state.copiesSeen = Math.max(state.copiesSeen, copies.length);
       state.wrapCopiesSeen = Math.max(
         state.wrapCopiesSeen,
@@ -222,11 +303,13 @@ async function sampleMotion(
       }
     ).railFrames;
     state.running = false;
-    const {frames, maxGap, animatesWidth, copiesHidden, copiesSeen} = state;
+    const {heldPositions, glideEndMs, maxGap, animatesWidth} = state;
+    const {copiesHidden, copiesSeen} = state;
     const {wrapCopiesSeen} = state;
     const edges = state.edges.size;
     return {
-      frames,
+      heldPositions,
+      glideEndMs,
       maxGap,
       animatesWidth,
       copiesHidden,
@@ -237,9 +320,14 @@ async function sampleMotion(
   });
 }
 
-/** The rail's width and whether its labels show, at rest. */
+/**
+ * The rail's width, whether its labels show, and what still runs, at rest.
+ * Animations on the toggle element itself are its press feedback, not the
+ * rail's motion, as in `sampleMotion` and `recordMotion`. On a loaded runner,
+ * that feedback can still run after the rail's motion ends.
+ */
 async function railAtRest(page: Page) {
-  return page.evaluate(() => {
+  return toggleButton(page).evaluate(toggle => {
     const panel = document.querySelector('.astryx-layout-panel') as HTMLElement;
     const label = [...panel.querySelectorAll('span, div')].find(
       element =>
@@ -258,7 +346,12 @@ async function railAtRest(page: Page) {
       width: Math.round(panel.getBoundingClientRect().width),
       labelsShown: shown,
       copies: document.querySelectorAll('[inert]').length,
-      running: document.getAnimations().length,
+      running: document
+        .getAnimations()
+        .filter(
+          animation =>
+            (animation.effect as KeyframeEffect | null)?.target !== toggle,
+        ).length,
     };
   });
 }
@@ -422,7 +515,12 @@ test.describe('component:SideNav FR6 and component:AppShell FR17 under a finger'
     const collapse = await sampleMotion(page, async () => {
       await toggleButton(page).tap();
     });
-    expect(collapse.frames).toBeGreaterThan(20);
+    // The sampler judges the whole glide on its own clock, every 50 ms. It
+    // also judges every frame the page draws, however many the runner gets.
+    expect(collapse.glideEndMs).toBeGreaterThan(0);
+    expect(collapse.heldPositions).toBe(
+      Math.floor(collapse.glideEndMs / 50) + 1,
+    );
     expect(collapse.maxGap).toBeLessThanOrEqual(1);
     expect(collapse.edges).toBeGreaterThan(5);
     expect(collapse.animatesWidth).toBe(false);
@@ -570,6 +668,104 @@ test.describe('component:SideNav FR6 and component:AppShell FR17 under a mouse',
       labelsShown: true,
       copies: 0,
     });
+  });
+
+  test('a second click after a long task starts the fades where the glide carries on, as the same click without the task does', async ({
+    page,
+  }) => {
+    await openStory(page, DESKTOP_STORY);
+    // A collapse, then a click that reverses it 1150 ms later, its handler
+    // busy for `blockMs` first. Returns the reversal's fades' first keyframes.
+    const reverse = async (blockMs: number) =>
+      page.evaluate(async blockMs => {
+        const toggle = () =>
+          [...document.querySelectorAll('button')].find(button =>
+            /^(Collapse|Expand) sidebar$/.test(
+              button.getAttribute('aria-label') ?? button.textContent ?? '',
+            ),
+          ) as HTMLElement;
+        const frame = async () =>
+          new Promise<void>(resolve => {
+            requestAnimationFrame(() => resolve());
+          });
+        toggle().click();
+        const collapsed = performance.now();
+        while (performance.now() - collapsed < 1150 - blockMs) {
+          await frame();
+        }
+        await new Promise<void>(resolve => {
+          setTimeout(resolve, 0);
+        });
+        // A press's own feedback reads the timeline first. That holds its time
+        // for the rest of this task, as on a real page.
+        void document.timeline.currentTime;
+        const busy = performance.now() + blockMs;
+        while (performance.now() < busy) {
+          // the click handler's own work
+        }
+        const before = new Set(document.getAnimations());
+        toggle().click();
+        await new Promise<void>(resolve => {
+          setTimeout(resolve, 0);
+        });
+        const main = document.querySelector('[role="main"]');
+        const first = (match: (target: Element) => boolean) => {
+          const animation = document.getAnimations().find(candidate => {
+            const effect = candidate.effect as KeyframeEffect | null;
+            const target = effect?.target;
+            return (
+              !before.has(candidate) &&
+              target instanceof Element &&
+              match(target) &&
+              effect?.getKeyframes().some(frame => frame.opacity != null)
+            );
+          });
+          const opacity = (
+            animation?.effect as KeyframeEffect | undefined
+          )?.getKeyframes()[0]?.opacity;
+          return opacity == null ? null : Number(opacity);
+        };
+        const copyOf = (target: Element) => target.closest('[inert]');
+        return {
+          // The content's old wrap, held as its copy, and the new wrap.
+          wrapCopy: first(
+            target =>
+              copyOf(target) === target && target.querySelector('nav') == null,
+          ),
+          newWrap: first(
+            target => copyOf(target) == null && target.parentElement === main,
+          ),
+          // The rail's old state, held as its copy.
+          railCopy: first(
+            target =>
+              copyOf(target) === target && target.querySelector('nav') != null,
+          ),
+        };
+      }, blockMs);
+    const settle = async () => {
+      await expect
+        .poll(async () => {
+          const rest = await railAtRest(page);
+          return rest.copies + rest.running;
+        })
+        .toBe(0);
+    };
+    const free = await reverse(0);
+    await settle();
+    const blocked = await reverse(1000);
+    await settle();
+    test.info().annotations.push({
+      type: 'reversal fades (free, blocked)',
+      description: JSON.stringify({free, blocked}),
+    });
+    for (const key of ['wrapCopy', 'newWrap', 'railCopy'] as const) {
+      expect(free[key], key).not.toBeNull();
+      expect(blocked[key], key).not.toBeNull();
+      expect(
+        Math.abs(Number(blocked[key]) - Number(free[key])),
+        key,
+      ).toBeLessThan(0.1);
+    }
   });
 
   for (const load of LOADS) {

@@ -103,7 +103,11 @@ export interface FormLayoutProps extends BaseProps<HTMLDivElement> {
    *   shows an indicator (the "required" one).
    * - `'required'` — fields read as required; only a field with `isOptional`
    *   shows an indicator (the "optional" one). Fields without `isOptional`
-   *   expose `aria-required` even though they show no indicator.
+   *   expose `aria-required` even though they show no indicator. Checkboxes,
+   *   switches and checkbox groups are the exception: an unchecked box, an off
+   *   switch or an empty group is an answer, so they take no required state
+   *   from the default. A checkbox or switch is required only through its own
+   *   `isRequired`.
    * - unset — today's behavior: `isRequired` and `isOptional` each show their
    *   own indicator independently.
    *

@@ -40,6 +40,7 @@ export default function TokenizerEndContent() {
           value={value}
           onChange={items => setValue(items)}
           endContent={<Button label="Apply" variant="primary" size="sm" />}
+          presentation="popover"
         />
       </Stack>
     </div>

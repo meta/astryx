@@ -72,7 +72,7 @@ import {
   SideNavCollapseContext,
 } from './SideNavCollapseContext';
 import {useSideNavRenderMode} from './SideNavRenderContext';
-import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOnActivate';
 import {themeProps} from '../utils/themeProps';
 import {disabledInteractionProps} from '../utils/disabledInteraction';
 
@@ -535,8 +535,8 @@ export function SideNavItem({
   const t = useComponentTranslator();
   const {isCollapsed} = useSideNavCollapse();
   const renderMode = useSideNavRenderMode();
-  const {closeMobileNav} = useAppShellMobile();
   const isInDrawer = renderMode === 'drawer' || renderMode === 'drawer-content';
+  const closeDrawerAfter = useCloseMobileDrawerOnActivate(isInDrawer);
   const id = useId();
   const hasChildren = !!children;
   const depth = use(SideNavItemDepthContext);
@@ -625,11 +625,7 @@ export function SideNavItem({
       toggleItemCollapse();
       return;
     }
-    onClick?.(e);
-    // Close the mobile nav when a nav item is activated inside the drawer
-    if (isInDrawer) {
-      closeMobileNav();
-    }
+    closeDrawerAfter(onClick)?.(e);
   };
 
   const handleToggleClick = (e: React.MouseEvent) => {

@@ -157,6 +157,31 @@ describe('BottomSheetPanel', () => {
     expect(onMotionComplete).toHaveBeenLastCalledWith('exiting');
   });
 
+  it('keeps exiting when the engine replaces the exit transition mid-flight', () => {
+    const onMotionComplete = vi.fn();
+    renderPanel({kind: 'exiting'}, {onMotionComplete});
+    const panel = getPanel();
+    // Chromium cancels a running transition whose end value changes, and
+    // starts one from where it was. The exit's percentage transform changes
+    // when the closing frame moves the sheet's height by a fraction of a pixel.
+    panel.getAnimations = () =>
+      [{transitionProperty: 'transform', playState: 'running'}] as never;
+    fireEvent.transitionCancel(panel, {propertyName: 'transform'});
+    expect(onMotionComplete).not.toHaveBeenCalled();
+    panel.getAnimations = () => [];
+    fireEvent.transitionEnd(panel, {propertyName: 'transform'});
+    expect(onMotionComplete).toHaveBeenCalledWith('exiting');
+  });
+
+  it('ends the exit when its transition is cancelled with nothing running on', () => {
+    const onMotionComplete = vi.fn();
+    renderPanel({kind: 'exiting'}, {onMotionComplete});
+    const panel = getPanel();
+    panel.getAnimations = () => [];
+    fireEvent.transitionCancel(panel, {propertyName: 'transform'});
+    expect(onMotionComplete).toHaveBeenCalledWith('exiting');
+  });
+
   it('completes immediately when the rendered transition is disabled', () => {
     // The stylesheet decides reduced motion (its transform transition
     // collapses under the preference); the gesture hook no longer pins an
@@ -297,6 +322,22 @@ describe('BottomSheetPanel', () => {
     expect(handleBar![1]).toContain("position: 'absolute'");
     expect(handleBar![1]).toContain('linear-gradient(to bottom');
     expect(handleBar![1]).toContain("colorVars['--color-background-surface']");
+  });
+
+  // While the sheet's transform animates between detents, WebKit can draw the
+  // bar under the scrolling body. The pill then vanishes until the sheet rests.
+  // This is asserted on the style definition, as the test above is.
+  it('gives the floating handle bar a compositing layer of its own', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const source = fs.readFileSync(
+      path.resolve(__dirname, './BottomSheetPanel.tsx'),
+      'utf-8',
+    );
+
+    const handleBar = source.match(/handleBar: \{([\s\S]*?)\n {2}\},/);
+    expect(handleBar).not.toBeNull();
+    expect(handleBar![1]).toContain("willChange: 'transform'");
   });
 
   // In dark mode the surface fill and the scrim sit a few RGB steps apart and

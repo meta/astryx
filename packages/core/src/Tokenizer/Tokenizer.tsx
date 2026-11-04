@@ -6,16 +6,10 @@
  * @file Tokenizer.tsx
  * @input Uses React, BaseTypeahead, Field, Token, useAnnounce,
  *   useAdaptivePresentation, and TokenizerBottomSheet (lazy)
- * @output Exports Tokenizer multi-select typeahead component, and the
- *   internal TokenizerWithPresentation signature the `internal/tokenizer-presentation`
- *   entry re-exports
+ * @output Exports Tokenizer multi-select typeahead component
  * @position Composed component; forwards DOM ref and exposes focus control via
- *   handleRef. The sheet presentation — a trigger that opens
- *   TokenizerBottomSheet — is implemented but not exposed: `TokenizerProps`
- *   offers no `experimental.presentation` while its user experience is being
- *   finished (`component:Tokenizer` DEC-3, implementation gap), and only
- *   Astryx's own packages reach it through the internal entry
- *   (`architecture:react-component-runtime` INV13).
+ *   handleRef. The `presentation` prop swaps the inline combobox for a
+ *   trigger that opens TokenizerBottomSheet.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Tokenizer/index.ts
@@ -55,8 +49,12 @@ import {
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {TokenizerClearAllMessageContext} from './TokenizerClearAllMessageContext';
+import {TokenizerItemRemovableContext} from './TokenizerItemRemovableContext';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
-import {useAdaptivePresentation} from '../hooks/useAdaptivePresentation';
+import {
+  type AdaptivePresentation,
+  useAdaptivePresentation,
+} from '../hooks/useAdaptivePresentation';
 import {useIsHydrating} from '../hooks/useIsHydrating';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {warnOnce} from '../utils/devWarning';
@@ -95,6 +93,7 @@ import {composeEventHandlers, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
 import {isFocusDetached} from '../utils/focusReturn';
 import {themeProps} from '../utils/themeProps';
+import type {SheetDraftChange} from '../internal/sheetDraft';
 import type {TokenizerBottomSheetProps} from './TokenizerBottomSheet';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
@@ -103,6 +102,7 @@ import {
   useComponentTranslator,
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Tokenizer/Tokenizer.generated';
+import {isRenderable} from '../utils/isRenderable';
 
 registerEnglishFallback(english);
 
@@ -144,36 +144,6 @@ export interface TokenizerHandle {
   focus(): void;
   /** Blur the typeahead input. */
   blur(): void;
-}
-
-/**
- * The presentation options the sheet-capable signature admits. Not public:
- * `TokenizerProps` has no `experimental` while the sheet's user experience is
- * being finished; Astryx's own packages reach the sheet through
- * `@astryxdesign/core/internal/tokenizer-presentation`.
- */
-export interface TokenizerPresentationOptions {
-  /**
-   * How the field presents its choices.
-   * - `'popover'`: the inline combobox with its anchored suggestion menu —
-   *   the stable behavior.
-   * - `'bottom-sheet'`: a trigger showing the selected tokens that opens one
-   *   tall modal sheet: a search row on top, full-width checkbox rows that
-   *   keep their place while the sheet is open, a create row with
-   *   `hasCreate`, and a footer with a confirmed Clear all and Done. Suited
-   *   to compact touch screens, where the inline combobox competes with the
-   *   software keyboard.
-   * - `'adaptive'`: the bottom sheet on compact coarse-pointer screens,
-   *   otherwise the popover — the same resolution Selector uses.
-   *
-   * In the sheet presentation the trigger is the control: `ref`, `id`,
-   * `aria-*`, and `data-*` reach it. `renderItem`, `renderToken`,
-   * `endContent`, `hasClear`, `hasEntriesOnFocus`, `menuWidth`,
-   * `tokenOverflowBehavior`, and `hasAutoFocus` have no surface to act on
-   * and warn once in development.
-   * @default 'popover'
-   */
-  presentation?: 'popover' | 'bottom-sheet' | 'adaptive';
 }
 
 export interface TokenizerProps<T extends SearchableItem> extends Omit<
@@ -329,27 +299,57 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
   onFocus?: (e: React.FocusEvent) => void;
   /** Fires when focus leaves the tokenizer entirely. */
   onBlur?: (e: React.FocusEvent) => void;
-  /** Ref forwarded to the combobox input. */
+  /**
+   * How the field presents its choices.
+   * - `'popover'`: the inline combobox with its anchored suggestion menu, on
+   *   every device.
+   * - `'bottom-sheet'`: a trigger showing the selected tokens that opens one
+   *   tall modal sheet: a search row on top, full-width checkbox rows that
+   *   keep their place while the sheet is open, a create row with
+   *   `hasCreate`, and a footer pinned in every state with a confirmed Clear
+   *   all and Save. The sheet edits a draft: `onChange` fires once, when Save
+   *   commits it, and a swipe, scrim or Escape close of a changed draft asks
+   *   before discarding. Suited to compact touch screens, where the inline
+   *   combobox competes with the software keyboard.
+   * - `'adaptive'`: the bottom sheet on compact coarse-pointer screens,
+   *   otherwise the popover — the same resolution Selector uses. The server
+   *   render and the hydrating render are the popover.
+   *
+   * In the sheet presentation the trigger is the control: `ref`, `id`,
+   * `aria-*`, and `data-*` reach it. `renderItem`, `renderToken`,
+   * `endContent`, `hasClear`, `hasEntriesOnFocus`, `menuWidth`,
+   * `tokenOverflowBehavior`, and `hasAutoFocus` have no surface to act on
+   * and warn once in development. Pass `'popover'` to keep the inline field
+   * and those props on every device.
+   * @default 'adaptive'
+   */
+  presentation?: TokenizerPresentation;
+  /**
+   * Ref forwarded to the control: the combobox input in the popover
+   * presentation, the trigger button in the sheet presentation. This type
+   * keeps its released input element; the component itself also accepts a
+   * `Ref<HTMLInputElement | HTMLButtonElement>`, the type to use where the
+   * sheet can present.
+   */
   ref?: React.Ref<HTMLInputElement>;
   /** Imperative handle ref for focus/blur control. */
   handleRef?: React.Ref<TokenizerHandle>;
 }
 
+/** How Tokenizer presents its choices; see `TokenizerProps.presentation`. */
+export type TokenizerPresentation = AdaptivePresentation;
+
 /**
- * The props of the sheet-capable signature: `TokenizerProps` plus the
- * presentation options and a `ref` that also accepts the sheet presentation's
- * trigger button, the control it stands for there. Not public: reached only
- * as `TokenizerWithPresentation` through the internal entry, so the released
- * `TokenizerProps` — an interface, so `interface X extends TokenizerProps<T>`,
- * `Omit<TokenizerProps<T>, …>` and `ComponentProps<typeof Tokenizer>` keep
- * their released shapes — names no presentation.
+ * The props the component accepts: `TokenizerProps`, whose `ref` keeps its
+ * released input type, with a `ref` that also accepts the sheet
+ * presentation's trigger button. `TokenizerProps` stays the declared props
+ * type, so `interface X extends TokenizerProps<T>`, `Omit<TokenizerProps<T>,
+ * …>` and `ComponentProps<typeof Tokenizer>` keep their released shapes.
  */
-export type TokenizerWithPresentationProps<T extends SearchableItem> = Omit<
+type TokenizerAcceptedProps<T extends SearchableItem> = Omit<
   TokenizerProps<T>,
   'ref'
 > & {
-  /** How the field presents its choices; see `TokenizerPresentationOptions`. */
-  experimental?: TokenizerPresentationOptions;
   /**
    * Ref forwarded to the control: the combobox input in the popover
    * presentation, the trigger button in the sheet presentation.
@@ -722,10 +722,13 @@ function EndLane({
   );
 }
 
-// The public signature names no presentation: `ComponentProps<typeof
-// Tokenizer>` and every public call resolve against `TokenizerProps`. The
-// implementation also reads the presentation options, reached only through
-// `TokenizerWithPresentation` below.
+// Keep this overload first. TypeScript resolves `ComponentProps<typeof
+// Tokenizer>` against the last overload, so that type stays the released
+// props. Every call matches this one, so a ref typed for both controls is
+// accepted.
+export function Tokenizer<T extends SearchableItem>(
+  props: TokenizerAcceptedProps<T>,
+): React.JSX.Element;
 export function Tokenizer<T extends SearchableItem>(
   props: TokenizerProps<T>,
 ): React.JSX.Element;
@@ -774,12 +777,12 @@ export function Tokenizer<T extends SearchableItem>({
   ref,
   handleRef,
   onKeyDown,
-  experimental,
+  presentation = 'adaptive',
   id: idProp,
   'aria-describedby': ariaDescribedByProp,
   'aria-labelledby': ariaLabelledByProp,
   ...restProps
-}: TokenizerWithPresentationProps<T>): React.JSX.Element {
+}: TokenizerProps<T> | TokenizerAcceptedProps<T>): React.JSX.Element {
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const {rest, container} = useFieldInputStyling('Tokenizer', restProps, {
     containerXstyle,
@@ -805,11 +808,9 @@ export function Tokenizer<T extends SearchableItem>({
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  // Experimental presentation (`component:Tokenizer` DEC-3). `adaptive`
-  // resolves through the policy the selection controls share; an open sheet
-  // keeps its presentation until it closes, so a resolution change mid-task
-  // cannot pull the surface out from under the person.
-  const presentation = experimental?.presentation ?? 'popover';
+  // `adaptive` resolves through the policy the selection controls share. An
+  // open sheet keeps its presentation until it closes. A resolution change
+  // during a task does not replace the open surface.
   const resolvedPresentation = useAdaptivePresentation(presentation);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   // Latched for the sheet's lifetime: a sheet stays presented after it closes
@@ -841,6 +842,17 @@ export function Tokenizer<T extends SearchableItem>({
       onChangeQuery?.(query);
     },
     [onChangeQuery],
+  );
+  // Save's one report. The sheet announced each edit as it happened, so
+  // nothing is announced here; a field that is disabled at Save reports
+  // nothing.
+  const handleSheetCommit = useCallback(
+    (items: T[], change: SheetDraftChange<T>) => {
+      if (!isDisabled) {
+        onChange(items, change);
+      }
+    },
+    [isDisabled, onChange],
   );
   // Set around a focus move the field makes itself — a presentation swap
   // handing focus from one control to the other — so the receiving control
@@ -918,7 +930,7 @@ export function Tokenizer<T extends SearchableItem>({
         inertSheetProps.length === 1 ? 'has' : 'have'
       } no surface in the bottom-sheet presentation and ${
         inertSheetProps.length === 1 ? 'is' : 'are'
-      } not rendered there.`,
+      } not rendered there. Pass \`presentation="popover"\` to keep the inline field on every device.`,
     );
     // eslint-disable-next-line @eslint-react/exhaustive-deps -- keyed by the joined names
   }, [inertSheetPropsKey]);
@@ -1007,11 +1019,18 @@ export function Tokenizer<T extends SearchableItem>({
   // `endContent`, a clear button, or all three — so its width is measured
   // rather than assumed, and the input reserves it.
   const [laneRef, laneReserve] = useEndLaneReserve(END_LANE_INSET);
+  // A composing component can lock tokens (PowerSearch's read-only filters
+  // and read-only field). No remove path removes a locked token.
+  const isItemRemovable = use(TokenizerItemRemovableContext);
+  const canRemoveItem = useCallback(
+    (item: T) => isItemRemovable?.(item) ?? true,
+    [isItemRemovable],
+  );
   // The half of the lane's contents this component knows about. The busy half
   // is the leaf's own business — folding it in here would mean reading the
   // busy state during this render, which is exactly the re-render the store
   // exists to avoid.
-  const hasClearButton = hasClear && value.length > 0 && !isDisabled;
+  const hasClearButton = hasClear && !isDisabled && value.some(canRemoveItem);
   const hasStaticEndLane = Boolean(endContent || hasClearButton);
   const [isFocusedWithin, setIsFocusedWithin] = useState(false);
   const isTruncated =
@@ -1263,7 +1282,7 @@ export function Tokenizer<T extends SearchableItem>({
   // announcement covers both.
   const handleRemove = useCallback(
     (item: T, options?: {silent?: boolean}): boolean => {
-      if (isDisabled) {
+      if (isDisabled || !canRemoveItem(item)) {
         return false;
       }
       const newItems = value.filter(v => v.id !== item.id);
@@ -1274,22 +1293,25 @@ export function Tokenizer<T extends SearchableItem>({
       inputRef.current?.focus();
       return true;
     },
-    [value, onChange, isDisabled, announce, t],
+    [value, onChange, isDisabled, canRemoveItem, announce, t],
   );
 
-  // Handle clearing all items
   // A composing component that words its own Clear all (PowerSearch) provides
   // its words; otherwise the field's own (component:Tokenizer AR7).
   const clearAllMessage =
     use(TokenizerClearAllMessageContext) ?? t('@astryx.tokenizer.allRemoved');
   const handleClearAll = useCallback(
     (options?: {silent?: boolean}) => {
-      if (isDisabled || value.length === 0) {
+      const removedItems = value.filter(canRemoveItem);
+      if (isDisabled || removedItems.length === 0) {
         return;
       }
-      // Report the last item as removed (convention)
-      const lastItem = value[value.length - 1];
-      onChange([], {item: lastItem, type: 'remove'});
+      // onChange names one item. Clear all names the last one it removes.
+      const lastRemovedItem = removedItems[removedItems.length - 1];
+      onChange(
+        value.filter(item => !canRemoveItem(item)),
+        {item: lastRemovedItem, type: 'remove'},
+      );
       // Focus moves to the input, so the emptied selection is announced, in
       // the sheet's words (WCAG 4.1.3). The sheet announces its own Clear all.
       if (!options?.silent) {
@@ -1297,7 +1319,7 @@ export function Tokenizer<T extends SearchableItem>({
       }
       inputRef.current?.focus();
     },
-    [value, onChange, isDisabled, announce, clearAllMessage],
+    [value, onChange, isDisabled, canRemoveItem, announce, clearAllMessage],
   );
 
   // Handle backspace on empty input — remove last token
@@ -1360,7 +1382,7 @@ export function Tokenizer<T extends SearchableItem>({
         key={item.id}
         label={item.label}
         size={size}
-        onRemove={isDisabled ? undefined : onRemoveItem}
+        onRemove={isDisabled || !canRemoveItem(item) ? undefined : onRemoveItem}
         isDisabled={isDisabled}
         xstyle={styles.token}
       />
@@ -1414,7 +1436,7 @@ export function Tokenizer<T extends SearchableItem>({
         controlClassName,
         controlStyle,
       )}>
-      {startIcon && (
+      {isRenderable(startIcon as ReactNode) && (
         <span {...stylex.props(value.length > 0 && styles.startIconWithTokens)}>
           {renderIconSlot(startIcon, {size: 'sm', color: 'secondary'})}
         </span>
@@ -1443,8 +1465,8 @@ export function Tokenizer<T extends SearchableItem>({
               {...rest}
               ref={useMergedRefs(
                 inputRef,
-                // With `experimental`, the ref type admits the trigger too; in
-                // this presentation it receives the input.
+                // The ref type admits the sheet's trigger too; in this
+                // presentation it receives the input.
                 ref as React.Ref<HTMLInputElement> | undefined,
                 handOffFocusRef,
               )}
@@ -1647,7 +1669,7 @@ export function Tokenizer<T extends SearchableItem>({
             controlClassName,
             controlStyle,
           )}>
-          {startIcon && (
+          {isRenderable(startIcon as ReactNode) && (
             <span
               {...stylex.props(value.length > 0 && styles.startIconWithTokens)}>
               {renderIconSlot(startIcon, {size: 'sm', color: 'secondary'})}
@@ -1705,15 +1727,13 @@ export function Tokenizer<T extends SearchableItem>({
               label={label}
               searchSource={searchSource}
               value={value}
-              isAtMax={isAtMax}
+              maxEntries={maxEntries}
               hasCreate={hasCreate}
               maxMenuItems={maxMenuItems ?? 10}
               minQueryLength={minQueryLength ?? 1}
               debounceMs={debounceMs ?? 150}
               emptySearchText={emptySearchText}
-              onAdd={handleAdd}
-              onRemove={handleRemove}
-              onClearAll={() => handleClearAll({silent: true})}
+              onCommit={handleSheetCommit}
               onChangeQuery={handleSheetQueryChange}
             />
           )}
@@ -1751,7 +1771,7 @@ export function Tokenizer<T extends SearchableItem>({
           )}>
           {isTruncated && (
             <>
-              {startIcon &&
+              {isRenderable(startIcon as ReactNode) &&
                 renderIconSlot(startIcon, {
                   size: 'sm',
                   color: 'secondary',
@@ -1820,19 +1840,3 @@ export function Tokenizer<T extends SearchableItem>({
 }
 
 Tokenizer.displayName = 'Tokenizer';
-
-/**
- * The same component with the sheet presentation reachable: `experimental`
- * (`presentation: 'popover' | 'bottom-sheet' | 'adaptive'`) and a `ref` that
- * also takes the trigger button. Not public — re-exported only by
- * `@astryxdesign/core/internal/tokenizer-presentation`, the entry reserved
- * for Astryx's own packages (`architecture:react-component-runtime` INV13),
- * while the sheet's user experience is being finished (`component:Tokenizer`
- * DEC-3). The public `Tokenizer` renders the popover presentation for every
- * field.
- */
-export const TokenizerWithPresentation = Tokenizer as <
-  T extends SearchableItem,
->(
-  props: TokenizerWithPresentationProps<T>,
-) => React.JSX.Element;

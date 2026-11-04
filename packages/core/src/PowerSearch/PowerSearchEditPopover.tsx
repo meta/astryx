@@ -5,7 +5,8 @@
 /**
  * @file PowerSearchEditPopover.tsx
  * @input InternalConfig, PartialFilter
- * @output Edit popover content with field/operator selectors and value editor
+ * @output Edit popover content with field/operator selectors and value editor;
+ *   the built-in NestedEditor the sheet presentation's value step shares
  * @position Sub-component; consumed by PowerSearch
  *
  * SYNC: When modified, update:
@@ -117,6 +118,7 @@ export interface PowerSearchEditPopoverProps {
   saveButtonLabel?: string;
   /** Max suggestions in string and entity value typeaheads. */
   maxMenuItems?: number;
+  timezoneID?: string;
   /** Whether the filter is read-only. */
   isReadOnly?: boolean;
 }
@@ -260,6 +262,7 @@ interface NestedSubFilterRowProps {
   subFilter: EditablePartialFilter;
   onChange: (subFilter: EditablePartialFilter) => void;
   maxMenuItems?: number;
+  timezoneID?: string;
   isReadOnly: boolean;
 }
 
@@ -268,6 +271,7 @@ function NestedSubFilterRow({
   subFilter,
   onChange,
   maxMenuItems,
+  timezoneID,
   isReadOnly,
 }: NestedSubFilterRowProps) {
   const t = useComponentTranslator();
@@ -372,6 +376,7 @@ function NestedSubFilterRow({
             onChange={handleValueChange}
             config={config}
             maxMenuItems={maxMenuItems}
+            timezoneID={timezoneID}
             isDisabled={isReadOnly}
           />
         </div>
@@ -384,24 +389,44 @@ function NestedSubFilterRow({
 // Nested editor
 // =============================================================================
 
-interface NestedEditorProps {
+export interface NestedEditorProps {
   config: InternalConfig;
   partialFilter: PartialFilter;
   operatorOptions: {value: string; label: string}[];
   onOperatorChange: (operatorKey: string) => void;
   onPartialFilterChange: (filter: PartialFilter) => void;
   maxMenuItems?: number;
+  timezoneID?: string;
   isReadOnly: boolean;
+  /** Styles for the editor's tree root (the sheet makes it a query container). */
+  xstyle?: stylex.StyleXStyles;
+  /**
+   * Whether the tree root offers the group-operator picker when the field has
+   * several operators. The popover shows it; the sheet presentation's value
+   * step owns the operator choice in its own Operator group and hides it.
+   * @default true
+   */
+  hasRootOperatorPicker?: boolean;
 }
 
-function NestedEditor({
+/**
+ * The built-in editor for a `nested` value: a tree of sub-filters with Add,
+ * field/operator/value rows and removal. The popover renders it below its
+ * field selector; the sheet presentation's value step renders the same editor
+ * in its body, so a `nested` filter is created
+ * and edited the same way in both presentations.
+ */
+export function NestedEditor({
   config,
   partialFilter,
   operatorOptions,
   onOperatorChange,
   onPartialFilterChange,
   maxMenuItems,
+  timezoneID,
   isReadOnly,
+  xstyle,
+  hasRootOperatorPicker = true,
 }: NestedEditorProps) {
   const t = useComponentTranslator();
   const [subFilters, setSubFilters] = useState<EditablePartialFilter[]>(() => {
@@ -523,6 +548,7 @@ function NestedEditor({
               subFilter={sf}
               onChange={updated => handleUpdate(itemPath, updated)}
               maxMenuItems={maxMenuItems}
+              timezoneID={timezoneID}
               isReadOnly={isReadOnly}
             />
           ),
@@ -550,6 +576,7 @@ function NestedEditor({
             subFilter={sf}
             onChange={updated => handleUpdate(itemPath, updated)}
             maxMenuItems={maxMenuItems}
+            timezoneID={timezoneID}
             isReadOnly={isReadOnly}
           />
         ),
@@ -587,7 +614,7 @@ function NestedEditor({
 
   const rootLabel = (
     <div {...stylex.props(styles.nestedRootLabel)}>
-      {operatorOptions.length > 1 ? (
+      {hasRootOperatorPicker && operatorOptions.length > 1 ? (
         <div {...stylex.props(styles.operatorSelector)}>
           <Selector
             label={t('@astryx.powersearch.editor.groupOperator')}
@@ -600,7 +627,10 @@ function NestedEditor({
           />
         </div>
       ) : (
-        (operatorOptions[0]?.label ?? t('@astryx.powersearch.editor.group'))
+        (operatorOptions.find(option => option.value === partialFilter.operator)
+          ?.label ??
+        operatorOptions[0]?.label ??
+        t('@astryx.powersearch.editor.group'))
       )}
     </div>
   );
@@ -614,7 +644,7 @@ function NestedEditor({
     },
   ];
 
-  return <TreeList items={items} density="balanced" />;
+  return <TreeList items={items} density="balanced" xstyle={xstyle} />;
 }
 
 // =============================================================================
@@ -665,6 +695,7 @@ export function PowerSearchEditPopover({
   onCancel,
   saveButtonLabel: saveButtonLabelFromProps,
   maxMenuItems,
+  timezoneID,
   isReadOnly = false,
 }: PowerSearchEditPopoverProps) {
   const t = useComponentTranslator();
@@ -848,6 +879,7 @@ export function PowerSearchEditPopover({
               onOperatorChange={handleOperatorChange}
               onPartialFilterChange={setPartialFilter}
               maxMenuItems={maxMenuItems}
+              timezoneID={timezoneID}
               isReadOnly={isReadOnly}
             />
           </VStack>
@@ -922,6 +954,7 @@ export function PowerSearchEditPopover({
               onEnter={handleSave}
               config={config}
               maxMenuItems={maxMenuItems}
+              timezoneID={timezoneID}
               isDisabled={isReadOnly}
             />
           )}

@@ -56,7 +56,7 @@ committed: a pull request links or attaches it.
 | `scripts.ts`    | Touch scripts as data: `tap`, `drag` (hold, rest), `flick` (exact final-move speed, velocity profiles), `holdThenDrag`, `pinch`, `rotate`, `path`, `merge` (a second finger mid-gesture), `releaseVelocity`, `toTouchEvents`.                                                |
 | `touch.ts`      | `touchDriver(page).play(script)`: the script as real engine input. `installInputLog` / `readInputLog`: what the page received.                                                                                                                                               |
 | `frames.ts`     | `startScreencast` (timestamped composited frames), `markElement` (a marker chip or outline), `trackMarker` (marker box per frame), `sampleRects` (per-rAF rects), `frameStats`.                                                                                              |
-| `busy.ts`       | `blockMainThread(page, ms)` and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall, a verdict; `presented` adds the compositor's own frames.                                                                                             |
+| `busy.ts`       | `blockMainThread(page, ms)`, which returns the window it held and the span its loop measured, and `busyWindowProof(tracked, window)`: frames presented, frames that moved, longest stall, a verdict; `presented` adds the compositor's own frames.                           |
 | `webInput.ts`   | `webInputDriver(page)`: `wheel({x, y, dx, dy, ctrl})` and `pen(points)` as real engine input, for proofs across pointers (`spec:AST-100` FR4); `wheel` resolves once the page has the step; read back through the input log.                                                 |
 | `trace.ts`      | `traceRendering(page, body)`: main-thread counts of UpdateLayoutTree / Layout / PrePaint / Paint / Layerize / UpdateLayer / ScrollLayer / HitTest, `countBetween`, long tasks; `installLongTaskLog` / `readLongTasks`; `startCompositorTrace`: when the compositor presents. |
 | `curves.ts`     | `holdAnimations`, `armHold`, `seekAnimations`, `sampleCurve` (presented transform / opacity at any t), `waitForAnimation`, `watchAnimations`, `waitForRest`, `releaseAnimations`, `releaseAnimationLog` (frees what the recorder kept, before a heap or listener count).     |
@@ -144,9 +144,17 @@ new position every frame of the block, and a main-thread animation shows none
 (nothing changed, so no frame is sent at all: `busyWindowProof` counts the
 whole window as one stall). `settledWithin` (2 px) stops judging at the easing
 tail: the screencast rounds to whole pixels, so a tail that still moves shows
-plateaus within a pixel or two of rest. A judged part shorter than four of the
+plateaus within a pixel or two of rest. `settledWithinSteps` counts that bound
+in the cast's own position steps, read from the cast (`castStep`, from the
+`step` `trackMarker` gives each frame of the default marker; a control tracked
+by another color carries none, and `castStep` refuses it): 1 px in Chromium's PNG cast and 2 px in
+WebKit's JPEG cast, whose 4:2:0 chroma holds the marker's color in 2 by 2
+pixel blocks and so makes the tail's plateaus longer. Two steps stop at the
+same tail in either engine while a freeze further from rest is still judged. A judged part shorter than four of the
 screencast's intervals fails: the animation under test was not moving during
-the block. With
+the block. One that had already settled when the judged part began (nothing in
+the window to judge) throws `BusyWindowTooLateError`, with the numbers: the
+block ran too late, which is no reading of the component. With
 `during`, `blockMainThread` starts the loop from a task queued in the frame
 that saw the animation, after that frame's rendering update: WebKit hands a
 newly started animation to its compositor there, and a loop inside the rAF
@@ -154,7 +162,12 @@ callback would freeze even a compositor animation. Call it before the release
 that starts a settle and await it after, so the page is already waiting when
 the settle begins. An animation counts once it is no longer pending and has
 run at least one frame: a `minProgressMs` under 16 is raised to 16, since one
-created in the frame the page looks is not on the compositor yet. The `verdict` judges the
+created in the frame the page looks is not on the compositor yet. It counts
+only before its curve's held tail (keyframes that end in a run of identical
+values, read as `waitForRest` reads them): when the only animation running
+there started while the page waited, or the wait times out with only such
+animations, the page looked too late, and the wait rejects with
+`BusyWindowTooLateError`. The `verdict` judges the
 frames the screencast delivered, whatever its rate (a loaded machine's can
 deliver one frame in five or six), and tolerates nothing a frozen animation
 does: at least one frame in the judged part, no stall longer than three of the
@@ -182,9 +195,9 @@ late on a loaded runner, too late to wait on before blocking. Only a hold that
 starts before the block, on two frames at least, is excused, and every frame
 after its first change is judged, so a freeze later in the block still fails.
 Any other element already moving is judged from the block's start. WebKit's
-casts are 2 px quantized: the frames come at the
-viewport's size, but the page in them is captured at half resolution, so
-positions move in 2 CSS px steps (Chromium's in 1). With under two steps of
+casts are 2 px quantized: their JPEG frames hold the
+marker's color in 2 by 2 pixel chroma blocks (4:2:0, which the frame header
+reports), so positions move in 2 CSS px steps (Chromium's in 1). With under two steps of
 motion per frame, a frame delivered a few ms early shows no step and reads as
 not moved. The proof reports `stepPx` and `pxPerFrame` and notes each stretch
 that moves under two steps per frame, read over four frames at a time so a
@@ -215,10 +228,16 @@ presented too little to judge. A run of frames with no new position counts as
 moved when the change that ends it is a single cast step: the component moves
 under one step a frame there, as on an easing tail, which the cast cannot show
 on every frame. Where it moved under two steps a frame over the frames just
-before the run (a spring's slow tail inside a fast window), a frame delivered
-early can show no step too, so the change may carry the motion of every frame
+before the run (a spring's slow tail inside a fast window), or across the run
+itself (its catch-up over the frames it spans) where the curve slows faster
+than those frames show, a frame delivered early can show no step too, so the change may carry the motion of every frame
 the run held at that pace, to the nearest step. The run must also read as a
-slowing curve, at most one frame longer than the component's run before it. A
+slowing curve, at most one frame longer than the component's run before it.
+Under `settledWithinSteps`, a run under one cast step a frame may instead last
+ceil(step ÷ travel) frames, whatever the run before it. The travel is the
+slower moving pace around the run, never less than its own catch-up per frame.
+The run also lasts at most one frame more than the pace into it allows:
+ceil(step ÷ max(pace before, catch-up per frame)) + 1. A
 freeze ends in a catch-up of more than that, a stall in a frame-counted animation is longer than its runs
 before it, and a run that no change ends stays a miss. The component still has
 to show a new position on at least four of the control's frames. The cast step (`stepPx`)
@@ -281,6 +300,67 @@ cannot show such a gesture; record it in real time instead, with
 the page's surface right after it changes ("Unable to capture screenshot"); a
 storyboard takes that photograph again two frames later, up to three attempts
 in all, and lists each retake under `recaptures` in the trace.
+
+## Page freeze
+
+A proof that must act on a component mid-animation (a second tap mid-slide, a
+finger that lands before the last lift reaches the app) races the test
+process: on a loaded runner the motion has moved on, or ended, before the next
+command reaches the page. The page freeze (`src/freeze.ts`) stops the scene
+instead, and the proof acts at an instant of the scene's own time.
+
+- `installPageFreeze(page)` installs the page clock, before the page loads
+  (before `openStory`); then `installTimerGate` as usual. A page that never
+  calls it keeps its own clock. Code that kept a bound `performance.now`
+  before the install keeps the real clock.
+- `freezePage` and `thawPage` stop and start the scene in one page task.
+- `freezePageOn(page, type)` freezes on the next `type` event, in that
+  event's own task and before any page listener for it: the install adds one
+  window capture listener for each pointer, touch, mouse, key, wheel and
+  scroll event before any page script runs, and the call arms it. Any other
+  type throws.
+  A freeze armed on `scroll` lands when the scroll event fires, after the
+  scroll position has already moved.
+- `freezePageWhen(page, predicate, arg)` freezes on the first real frame the
+  predicate holds, and rejects after its timeout.
+- `advanceFrozenPage(page, ms)` moves the page's clock and every held
+  animation on together by `ms`; timers and frame callbacks stay held.
+
+While frozen, every animation in the document is paused where it stands (Web
+Animations, CSS animations and transitions), and so is any the page starts
+meanwhile, at its start. The timer gate holds the page's timers and frame
+callbacks. These clocks stand still: `performance.now()`, `Date.now()`,
+`event.timeStamp`, frame callback times, `document.timeline.currentTime`
+and `Animation.startTime`. `new Date()` keeps the real clock. Timeouts the
+page set before the freeze stop counting too, and come due on the page's clock
+after the thaw. An interval keeps the real clock and skips its ticks while
+frozen. The harness's own waits keep the real clock, so they still sample,
+hold and time out on a frozen page. Only animations on the document timeline are held: one on a
+scroll or view timeline follows its scroller, frozen or not. Input still
+arrives, and its handlers run, each reading the frozen instant. An animation
+reads as it did before the freeze (`playState` stays `running`).
+
+At the thaw every held animation plays on from where it stood, dated on the
+timeline's own time, so it is drawn where it stood in the thaw frame. That
+includes one whose start the page wrote while frozen: the timeline reads the
+current frame's time, which trails the page's clock by however far into the
+frame the thaw runs, so a start dated from now would sit before its start for
+the rest of that frame. After a thaw the page's times run again, behind real
+time by every frozen span so far, so the page's clock and its animations on
+the compositor agree as they did before the freeze.
+
+Not held yet: a run the page reverses, or a finished run it plays again,
+while frozen. A freeze holds the top document; a frame's content keeps running.
+A CSS animation a freeze held no longer follows `animation-play-state` after
+the thaw. A freeze in which no frame starts ends at the frame before it, so the page's
+clock and its runs come out of it up to a frame ahead.
+
+The clock lives in script because no engine has a native freeze that holds
+animations. Chromium's `Emulation.setVirtualTimePolicy` stops
+`performance.now()` and timers but not Web Animations or frame callbacks in
+the headless shell (300 ms into a pause the timeline had advanced 300 ms and a
+compositor animation 45 px), and its `advance` policy cannot return to real
+time: it fast-forwards whenever the page is idle.
 
 ## Engine limits (measured with Playwright 1.61)
 

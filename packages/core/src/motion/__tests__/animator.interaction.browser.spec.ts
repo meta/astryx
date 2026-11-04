@@ -24,7 +24,7 @@
 import {fileURLToPath} from 'node:url';
 import {
   blockMainThread,
-  type BusyWindow,
+  type BlockedWindow,
   busyWindowProof,
   CONTROL_RGB,
   countBetween,
@@ -109,7 +109,7 @@ async function open(page: Page) {
 </style>
 <div id="box"></div>
 <script>${script}</script>
-<script>window.animator = Motion.createAnimator(document.getElementById('box'));</script>`;
+<script>window.animator = Motion.createMotionAnimator(document.getElementById('box'));</script>`;
   await page.route('http://motion.test/', async route =>
     route.fulfill({contentType: 'text/html', body: html}),
   );
@@ -174,7 +174,7 @@ test('a spring keeps advancing every frame through a 1 s main-thread block, on i
     type: 'busy window',
     description: `${proof.summary} | without the control: ${alone.verdict.failures.join('; ') || 'pass'}`,
   });
-  expect(busy.to - busy.from).toBeGreaterThanOrEqual(1000);
+  expect(busy.spanMs).toBeGreaterThanOrEqual(1000);
   // The harness's verdict against the control: the spring moved on every
   // frame the control moved, and stalled no longer than it (what a
   // main-thread animation never does; see the next test).
@@ -290,14 +290,15 @@ test('a move driven from the main thread freezes through the same block, and the
       frames += 1;
       if (frames === 8) {
         setTimeout(() => {
-          const from = performance.timeOrigin + performance.now();
-          const until = performance.now() + 1000;
-          while (performance.now() < until) {
-            // Busy: nothing else runs.
+          const blockStart = performance.now();
+          let now = blockStart;
+          while (now - blockStart < 1000) {
+            now = performance.now();
           }
-          (window as unknown as {busy: BusyWindow}).busy = {
-            from,
-            to: performance.timeOrigin + performance.now(),
+          (window as unknown as {busy: BlockedWindow}).busy = {
+            from: performance.timeOrigin + blockStart,
+            to: performance.timeOrigin + now,
+            spanMs: now - blockStart,
           };
         }, 0);
       }
@@ -308,12 +309,12 @@ test('a move driven from the main thread freezes through the same block, and the
     requestAnimationFrame(step);
   }, TRAVEL);
   const signal = await page.waitForFunction(
-    () => (window as unknown as {busy?: BusyWindow}).busy,
+    () => (window as unknown as {busy?: BlockedWindow}).busy,
     undefined,
     {polling: 50, timeout: 0},
   );
-  const busy = (await signal.jsonValue()) as BusyWindow;
-  expect(busy.to - busy.from).toBeGreaterThanOrEqual(1000);
+  const busy = (await signal.jsonValue()) as BlockedWindow;
+  expect(busy.spanMs).toBeGreaterThanOrEqual(1000);
   await page.waitForTimeout(200);
   const frames = await cast.stop();
   const tracked = await trackMarker(page, frames);
@@ -373,7 +374,7 @@ test('a frame painted before the compositor has the curve shows the element wher
         document.body.append(element);
         return {
           element,
-          animator: Motion.createAnimator(element, now ? {now} : {}),
+          animator: Motion.createMotionAnimator(element, now ? {now} : {}),
         };
       };
       const x = (element: HTMLElement) =>
@@ -909,7 +910,7 @@ test('a role variable set on a scope changes nothing while touch motion stays in
     const report: Record<string, {worst: number; lowest: number}> = {};
     for (const id of ['plain', 'themed'] as const) {
       const element = document.getElementById(id) as HTMLElement;
-      const animator = Motion.createAnimator(element);
+      const animator = Motion.createMotionAnimator(element);
       animator.set({y: 300});
       const handle = animator.animate({y: 0}, {spring: Motion.springs.settle});
       await handle.started;
@@ -1013,7 +1014,7 @@ test('a fade-in on an element its stylesheet hides stays visible once it retires
       element.style.cssText =
         'position:absolute;top:120px;left:0;width:48px;height:48px;background:#c63';
       document.body.append(element);
-      const animator = Motion.createAnimator(element);
+      const animator = Motion.createMotionAnimator(element);
       animator.set({opacity: 0});
       animator.animate({opacity: 1}, {spring});
       await new Promise<void>(resolve => {
@@ -1085,7 +1086,7 @@ test('a dialog\u2019s ::backdrop plays the curve and holds its end state', async
     const dialog = document.createElement('dialog');
     document.body.append(dialog);
     dialog.showModal();
-    const backdrop = Motion.createAnimator(dialog, {
+    const backdrop = Motion.createMotionAnimator(dialog, {
       pseudoElement: '::backdrop',
     });
     backdrop.set({opacity: 0});

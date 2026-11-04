@@ -66,6 +66,13 @@ export interface CheckboxListProps extends Omit<
    */
   description?: string;
   /**
+   * Whether the group is optional. Shows the optional indicator after the
+   * group label, unless a surrounding `FormLayout` already makes fields
+   * optional by default.
+   * @default false
+   */
+  isOptional?: boolean;
+  /**
    * Status indicator for the checkbox group.
    * When set with a message, displays a colored message box below the group.
    */
@@ -153,6 +160,7 @@ export function CheckboxList({
   label,
   isLabelHidden = false,
   description,
+  isOptional = false,
   status,
   value,
   onChange,
@@ -246,6 +254,7 @@ export function CheckboxList({
         ? disabledMessageTooltip.describedBy
         : undefined,
       isReadOnly,
+      isInvalid: status?.type === 'error',
       loadingValues,
     }),
     [
@@ -256,6 +265,7 @@ export function CheckboxList({
       showsDisabledMessage,
       disabledMessageTooltip.describedBy,
       isReadOnly,
+      status?.type,
       loadingValues,
     ],
   );
@@ -268,6 +278,7 @@ export function CheckboxList({
       inputID={inputID}
       labelID={labelID}
       isGroupLabel
+      isOptional={isOptional}
       descriptionID={description ? descriptionID : undefined}
       isDisabled={isDisabled}
       status={
@@ -298,6 +309,10 @@ export function CheckboxList({
             controlStyle,
           )}
           role="group"
+          // Screen readers announce the whole group as unavailable. Its dimmed
+          // label then labels a disabled control. An enabled list keeps a
+          // caller's own value.
+          aria-disabled={isDisabled || rest['aria-disabled']}
           // A caller aria-labelledby names the group together with its label.
           aria-labelledby={joinAriaIDs(labelID, ariaLabelledByProp)}
           aria-describedby={
