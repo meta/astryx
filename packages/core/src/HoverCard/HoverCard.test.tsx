@@ -170,6 +170,118 @@ describe('useHoverCard closing while the pointer is on the card', () => {
   });
 });
 
+describe('useHoverCard — focusTrigger="auto" decides when focus arrives', () => {
+  it('opens on focus of a trigger that was tabindex="-1" when it attached', async () => {
+    const onShow = vi.fn();
+    function RovingMember() {
+      const card = useHoverCard({onShow, delay: 0});
+      return (
+        <div>
+          {/* A roving-tabindex member that is not the tab stop when the
+              card attaches. */}
+          <button type="button" tabIndex={-1} ref={card.ref}>
+            Filter
+          </button>
+          {card.renderHoverCard(<span>Card</span>)}
+        </div>
+      );
+    }
+    render(<RovingMember />);
+    const member = screen.getByRole('button', {name: 'Filter'});
+    // The roving hook moves the tab stop, then focus, as an arrow key does.
+    member.setAttribute('tabindex', '0');
+    fireEvent.focusIn(member);
+    await waitFor(() => expect(onShow).toHaveBeenCalledTimes(1));
+  });
+
+  it('opens on focus of a focusable trigger it does not list, such as a summary', async () => {
+    const onShow = vi.fn();
+    function SummaryTrigger() {
+      const card = useHoverCard({onShow, delay: 0});
+      return (
+        <details>
+          <summary ref={card.ref}>More</summary>
+          {card.renderHoverCard(<span>Card</span>)}
+        </details>
+      );
+    }
+    render(<SummaryTrigger />);
+    fireEvent.focusIn(screen.getByText('More'));
+    await waitFor(() => expect(onShow).toHaveBeenCalledTimes(1));
+  });
+
+  it('ignores focus inside a plain wrapper trigger', async () => {
+    const onShow = vi.fn();
+    function WrapperTrigger() {
+      const card = useHoverCard({onShow, delay: 0});
+      return (
+        <div>
+          <div ref={card.ref}>
+            <input aria-label="Amount" />
+          </div>
+          {card.renderHoverCard(<span>Card</span>)}
+        </div>
+      );
+    }
+    render(<WrapperTrigger />);
+    fireEvent.focusIn(screen.getByRole('textbox', {name: 'Amount'}));
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 20));
+    });
+    expect(onShow).not.toHaveBeenCalled();
+  });
+
+  it('hides on blur from inside a focusable trigger that left the tab order', async () => {
+    const onShow = vi.fn();
+    const onHide = vi.fn();
+    function FocusableRow() {
+      const card = useHoverCard({onShow, onHide, delay: 0, hideDelay: 0});
+      return (
+        <div>
+          <div tabIndex={0} ref={card.ref} data-testid="row">
+            <button type="button">Inside</button>
+          </div>
+          {card.renderHoverCard(<span>Card</span>)}
+        </div>
+      );
+    }
+    render(<FocusableRow />);
+    const inside = screen.getByRole('button', {name: 'Inside'});
+    // Focus inside a focusable trigger counts.
+    fireEvent.focusIn(inside);
+    await waitFor(() => expect(onShow).toHaveBeenCalledTimes(1));
+    // The trigger leaves the tab order before focus moves on: the focus that
+    // counted still hides the card.
+    screen.getByTestId('row').setAttribute('tabindex', '-1');
+    fireEvent.focusOut(inside);
+    await waitFor(() => expect(onHide).toHaveBeenCalledTimes(1));
+  });
+
+  it('hides on blur of a trigger that left the tab order while focused', async () => {
+    const onShow = vi.fn();
+    const onHide = vi.fn();
+    function RovingMember() {
+      const card = useHoverCard({onShow, onHide, delay: 0, hideDelay: 0});
+      return (
+        <div>
+          <button type="button" ref={card.ref}>
+            Filter
+          </button>
+          {card.renderHoverCard(<span>Card</span>)}
+        </div>
+      );
+    }
+    render(<RovingMember />);
+    const member = screen.getByRole('button', {name: 'Filter'});
+    fireEvent.focusIn(member);
+    await waitFor(() => expect(onShow).toHaveBeenCalledTimes(1));
+    // The roving hook takes the tab stop away before focus moves on.
+    member.setAttribute('tabindex', '-1');
+    fireEvent.focusOut(member);
+    await waitFor(() => expect(onHide).toHaveBeenCalledTimes(1));
+  });
+});
+
 describe('HoverCard', () => {
   it('renders trigger element', () => {
     render(
@@ -744,6 +856,91 @@ describe('HoverCard', () => {
       await waitFor(() => {
         expect(onOpenChange).toHaveBeenCalledWith(false);
       });
+    });
+  });
+
+  describe('text written around an expression', () => {
+    it('wraps several text children in one focusable trigger', async () => {
+      const when = '2 hours ago';
+      const onOpenChange = vi.fn();
+      render(
+        <HoverCard
+          content={<span>Edited by Kai</span>}
+          onOpenChange={onOpenChange}
+          delay={0}>
+          Edited {when}
+        </HoverCard>,
+      );
+      const trigger = screen.getByText('Edited 2 hours ago');
+      expect(trigger.tagName).toBe('SPAN');
+      expect(trigger).toHaveAttribute('tabindex', '0');
+      expect(trigger).toHaveAttribute('aria-describedby');
+      fireEvent.mouseEnter(trigger);
+      await waitFor(() => expect(onOpenChange).toHaveBeenLastCalledWith(true));
+    });
+
+    it('ignores holes that render nothing', () => {
+      const isDraft = false;
+      render(
+        <HoverCard label="History" content={<span>Card</span>}>
+          Edited {isDraft && 'draft'} {null}today
+        </HoverCard>,
+      );
+      expect(screen.getByText(/Edited/)).toHaveAttribute(
+        'aria-haspopup',
+        'dialog',
+      );
+    });
+
+    // The auto hover cue (FR8) is a class on the text trigger; a single
+    // string's trigger is the reference.
+    function cueClassOf(
+      children: ComponentProps<typeof HoverCard>['children'],
+    ) {
+      const {unmount} = render(
+        <HoverCard content={<span>Card</span>}>{children}</HoverCard>,
+      );
+      const className = (
+        document.querySelector('span[tabindex="0"]') as HTMLElement
+      ).className;
+      unmount();
+      return className;
+    }
+
+    it('gives several text children the same hover cue as one string', () => {
+      const when = 'today';
+      const single = cueClassOf('Edited today');
+      // JSX passes `Edited {when}` as this array.
+      expect(cueClassOf(['Edited ', when])).toBe(single);
+      const {unmount} = render(
+        <HoverCard content={<span>Card</span>} hasHoverIndication={false}>
+          Edited today
+        </HoverCard>,
+      );
+      expect(
+        (document.querySelector('span[tabindex="0"]') as HTMLElement).className,
+      ).not.toBe(single);
+      unmount();
+    });
+
+    it('keeps the hover cue when holes render nothing', () => {
+      const isDraft = false;
+      const single = cueClassOf('Edited today');
+      expect(cueClassOf(['Edited ', isDraft && 'draft', null, 'today'])).toBe(
+        single,
+      );
+    });
+
+    it('still attaches to the first element when one is present', () => {
+      render(
+        <HoverCard label="History" content={<span>Card</span>}>
+          Edited <time dateTime="2026-11-02">today</time>
+        </HoverCard>,
+      );
+      expect(screen.getByText('today')).toHaveAttribute(
+        'aria-haspopup',
+        'dialog',
+      );
     });
   });
 

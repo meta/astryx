@@ -812,6 +812,36 @@ const alive = pid => {
   }
 };
 
+/**
+ * Whether `pid` no longer runs: gone, or killed and not yet reaped. A killed
+ * process stays a zombie until its new parent reaps it, which a loaded
+ * machine can hold off for seconds, and it no longer runs once it is one.
+ * Where there is no /proc (macOS), only a reaped process reads as ended.
+ * @param {number} pid
+ */
+const ended = pid => {
+  if (!fs.existsSync('/proc/self/stat')) return !alive(pid);
+  try {
+    // The state is the first field after the command name's parenthesis.
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf-8');
+    const state = stat.slice(stat.lastIndexOf(')') + 2)[0];
+    return state === 'Z' || state === 'X';
+  } catch {
+    return true;
+  }
+};
+
+/**
+ * Polls until `done` holds. Only the test's own time limit bounds it: it
+ * waits for an event the code under test produces, not for a clock.
+ * @param {() => boolean} done
+ */
+const eventually = async done => {
+  while (!done()) {
+    await new Promise(r => setTimeout(r, 50));
+  }
+};
+
 /** @param {() => boolean} done @param {number} ms */
 const waitFor = async (done, ms) => {
   const end = Date.now() + ms;
@@ -839,9 +869,10 @@ describe('runNpm time limit', () => {
     });
     expect(/** @type {any} */ (result.error)?.code).toBe('ETIMEDOUT');
     const pid = Number(fs.readFileSync(pidFile, 'utf-8'));
-    // The guard sends SIGKILL and exits at once; the killed process can still
-    // exist for a moment (the signal in flight, or awaiting reaping).
-    expect(await waitFor(() => !alive(pid), 5_000)).toBe(true);
+    // The guard sent npm's group SIGKILL before it exited, so npm stops
+    // running: the signal can still be in flight, and its new parent reaps
+    // it when it gets to it, which a loaded machine can hold off for seconds.
+    await eventually(() => ended(pid));
   });
 });
 
@@ -860,9 +891,13 @@ describe('no install outlives its run', () => {
     const npmPid = Number(fs.readFileSync(pidFile, 'utf-8'));
     expect(alive(npmPid)).toBe(true);
     cli.kill('SIGKILL');
-    expect(await waitFor(() => !alive(npmPid), 5_000)).toBe(true);
-    // A later takeover finds no id that could now name another process.
-    expect(await waitFor(() => !fs.existsSync(record), 5_000)).toBe(true);
+    // The guard ends npm's group, then removes the record: the removal is the
+    // guard's own sign that it acted, however late its next check runs on a
+    // loaded machine. A later takeover then finds no id that could now name
+    // another process.
+    await eventually(() => !fs.existsSync(record));
+    // npm no longer runs: gone, or killed and not yet reaped.
+    await eventually(() => ended(npmPid));
   }, 30_000);
 
   it('ends npm, which ignores Ctrl-C, when the run gets Ctrl-C', async () => {
@@ -880,7 +915,9 @@ describe('no install outlives its run', () => {
     const npmPid = Number(fs.readFileSync(pidFile, 'utf-8'));
     const exited = new Promise(resolve => cli.on('exit', resolve));
     process.kill(-(/** @type {number} */ (cli.pid)), 'SIGINT');
-    expect(await waitFor(() => !alive(npmPid), 5_000)).toBe(true);
+    // The guard ends npm's group on Ctrl-C: npm stops running, however late
+    // its new parent reaps it.
+    await eventually(() => ended(npmPid));
     await exited;
   }, 30_000);
 

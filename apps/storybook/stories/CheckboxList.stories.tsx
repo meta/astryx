@@ -331,6 +331,25 @@ export const DisabledItem: Story = {
   },
 };
 
+export const Optional: Story = {
+  render: args => {
+    const [value, setValue] = useState<string[]>([]);
+    const {value: _value, onChange: _onChange, ...restArgs} = args;
+    return (
+      <CheckboxList {...restArgs} value={value} onChange={setValue}>
+        <CheckboxListItem label="Email" value="email" />
+        <CheckboxListItem label="SMS" value="sms" />
+        <CheckboxListItem label="Push notification" value="push" />
+      </CheckboxList>
+    );
+  },
+  args: {
+    label: 'Notification preferences',
+    description: 'Leave all unchecked to receive no notifications.',
+    isOptional: true,
+  },
+};
+
 export const WithErrorStatus: Story = {
   render: args => {
     const [value, setValue] = useState<string[]>([]);

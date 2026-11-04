@@ -18,7 +18,7 @@
  */
 
 import * as stylex from '@stylexjs/stylex';
-import {overlayPaddingReset} from './padding.stylex';
+import {overlayPaddingReset} from './overlayPaddingReset.stylex';
 
 const resetBeyondOverlays = stylex.create({
   root: {

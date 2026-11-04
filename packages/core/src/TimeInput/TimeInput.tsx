@@ -491,6 +491,8 @@ function TimeField({
   // region mounted together with its content is not reliably announced.
   // Ungrouped mode delegates to Field -> FieldStatus, which announces itself.
   const announce = useAnnounce();
+  // Syncs the live region with `status.message` when the field is in an
+  // InputGroup.
   useEffect(() => {
     if (inputGroup && status?.message) {
       announce(

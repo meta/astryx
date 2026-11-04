@@ -5,8 +5,8 @@
  * @input The press state machine (pressGesture.ts), the menu-press and
  *   press-group markers and the document's pointer, keyboard, scroll and
  *   visibility events
- * @output PRESSABLE_ATTRIBUTE, PRESSED_ATTRIBUTE, pressableProps and
- *   installPressFeedback
+ * @output PRESSABLE_ATTRIBUTE, PRESSED_ATTRIBUTE, pressableProps,
+ *   pressFadeMs and installPressFeedback
  * @position The DOM half of the touch press model. usePressFeedback installs
  *   it, and the CSS arms live in interactionOverlay.stylex.ts.
  *
@@ -154,7 +154,7 @@ const TIMER_MS: Record<NonNullable<PressStep['timer']>, number> = {
  * property its stylesheet reads: the theme's `--_astryx-motion-tempo`. Under
  * Reduce Motion a tempo may shorten the fade, never lengthen it past 200 ms.
  */
-function fadeMs(element: Element): number {
+export function pressFadeMs(element: Element): number {
   const style = getComputedStyle(element);
   const value = style.getPropertyValue('--_astryx-motion-tempo').trim();
   const read = value === '' ? Number.NaN : Number(value);
@@ -302,7 +302,11 @@ function apply(slot: Slot, step: PressStep): void {
     if (kind === 'fade') {
       // The release fade follows the theme's tempo (AST-108). It ends when
       // its animation ends, however late a busy main thread let it start.
-      live.timer = endAfterRelease(live.element, fadeMs(live.element), fire);
+      live.timer = endAfterRelease(
+        live.element,
+        pressFadeMs(live.element),
+        fire,
+      );
     } else {
       // A TIMER, never `requestAnimationFrame`: iOS throttles frame callbacks
       // while a scroll runs, so a frame-based delay would fire late, after the
@@ -412,8 +416,8 @@ function buttonSurfaceAt(
   if (element == null || element.closest(MENU_PRESS_ROOT) != null) {
     return null;
   }
-  // A group's tracker follows pointers only, so a key's press stays here.
-  if (pointerId != null && isTrackedByGroup(element)) {
+  // A tracker that follows a mouse paints a mouse press on its own actions.
+  if (pointerId != null && isTrackedByGroup(element, 'mouse')) {
     return null;
   }
   if (pointerId == null && element !== target) {
@@ -494,9 +498,14 @@ function onPointerDown(event: PointerEvent): void {
   const braking = element != null && scrollerIsBraking(element);
   lastTouchAt = Date.now();
   lastTouchTarget = event.target instanceof Node ? event.target : null;
-  // A group's tracker paints a tracked action, so two writers would erase each
-  // other's paint. The touch still counts for the brake above.
-  if (element == null || braking || isTrackedByGroup(element)) {
+  // A group's tracker that follows this pointer paints its action, so two
+  // writers would erase each other's paint. The touch still counts for the
+  // brake above.
+  if (
+    element == null ||
+    braking ||
+    isTrackedByGroup(element, event.pointerType)
+  ) {
     return;
   }
   takeOver(button, element);

@@ -187,7 +187,10 @@ describe('overlayPaddingReset', () => {
     // this; assert it where it is decided instead. (Verified in a browser: a
     // theme's 20px still reaches a Section inside a Dialog nested under a
     // 40px page Section.)
-    const source = readFileSync(join(__dirname, 'padding.stylex.ts'), 'utf8');
+    const source = readFileSync(
+      join(__dirname, 'overlayPaddingReset.stylex.ts'),
+      'utf8',
+    );
     const reset = source.slice(
       source.indexOf('export const overlayPaddingReset'),
     );
