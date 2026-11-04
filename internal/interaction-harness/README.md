@@ -219,8 +219,8 @@ sheet's dim held for 155 to 225 ms into a block while the control moved, and
 inside the dialog it moves in step with the sheet. `waitForAnimation` and
 `blockMainThread`'s `during` never count the control's own animation, so on
 a dialog they still wait for the backdrop's. Track it from the
-same screencast (`trackMarker(page, frames, {rgb: CONTROL_RGB})`) and pass it
-as `control`: the component passes when it moved on every frame the control
+same screencast with `trackControl(page, frames)` (`trackMarker` with
+`CONTROL_RGB`, searching only the strip it crosses) and pass it as `control`: the component passes when it moved on every frame the control
 moved and its longest stall is no longer than the control's. Both are read from
 the same screencast frames, so a compositor animation misses none. A window in
 which the control moved on fewer than four frames fails, since the machine
@@ -244,6 +244,13 @@ to show a new position on at least four of the control's frames. The cast step (
 is read from the value's changes in the judged part, so a position the page
 commits off the grid once the block ends does not shrink it.
 A main-thread animation still fails: the control moves and it does not.
+
+`controlClock(control)` reads the compositor's own time in each frame off the
+control's position, for a proof that judges motion against time, not against
+the screencast's stamps. A loaded machine stamps frames late, and
+`inPresentationOrder` can then put a frame after frames that came after it.
+The clock takes the cycle origin that most frames agree with, so such a frame
+moves only its own reading. A frame within 36 px of a turn gets no reading.
 
 An animation that lasts a fraction of a second, such as a 0.2 s fade, leaves a
 block only a few frames to judge: in WebKit, or on a loaded machine, the control

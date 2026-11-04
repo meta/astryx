@@ -11,6 +11,8 @@
  *   read from its frames, `pooledBusyProof`, which judges several short
  *   blocks as one, and `BusyWindowTooLateError`, for a block that began
  *   after the motion it was meant to catch had ended.
+ *   `trackControl` and `controlClock` read the control's box and its own
+ *   clock from the screencast.
  * @position The busy-main-thread proof: an animation that runs on the
  *   compositor keeps advancing at display rate while JavaScript holds the main
  *   thread; one driven from the main thread (rAF, style writes, layout
@@ -188,55 +190,91 @@ export async function startBusyControl(
   };
 }
 
+/** How far a frame's stamp may run late and still agree with the others, ms. */
+const CONTROL_AGREE_MS = 20;
+/**
+ * Frames this near a turn get no reading. There the two times that a position
+ * gives are under 120 ms apart, and a stamp 60 ms late could pick either.
+ */
+const CONTROL_EDGE = 36;
+
 /**
  * The compositor's clock in each frame of `control` (`startBusyControl`'s box,
- * tracked with `CONTROL_RGB`), ms from the start of the first leg seen. The
- * box moves `CONTROL_TRAVEL` px every `CONTROL_LEG_MS`, back and forth, so its
- * position and direction say how far its animation has run. The compositor
- * samples every animation at one time in a frame. So a component can be
- * judged against this clock, not the screencast's stamps. A loaded machine
- * can set those a frame or more after the frame's own time.
+ * tracked with `trackControl`), ms. The compositor samples every animation at
+ * one time in a frame. So a component can be judged against this clock, not
+ * the screencast's stamps. A loaded machine can stamp a frame late, and
+ * `inPresentationOrder` then puts it after frames that it came before.
  *
- * A frame beside a turn could be on either leg, so it gets no reading, and
- * neither does a frame without the box. Two readings a whole leg or more
- * apart could hide two turns, so that throws: the compositor presented too
- * little there to count the turns.
+ * The box's position gives two times a cycle, on the way out and on the way
+ * back. The cycle's origin is the one that the most frames agree with, each
+ * within `CONTROL_AGREE_MS` of one of its two times. So no single frame sets
+ * it. Each frame's stamp, measured from that origin, then picks its own time.
+ * A late or reordered frame moves only its own reading, and a gap moves none.
+ *
+ * A frame without the box gets no reading, and so does a frame within
+ * `CONTROL_EDGE` px of a turn. A frame that repeats the position before it
+ * shows no new time, so it gets none either. Readings count up from the
+ * origin a whole cycle or less before the first reading.
  */
 export function controlClock(
   control: readonly TrackedFrame[],
 ): Map<number, number> {
-  const seen = control.flatMap(f =>
-    f.box == null ? [] : [{t: f.t, x: f.box.x}],
-  );
-  const step = (from: number, to: number) =>
-    Math.abs(to - from) > 0.25 ? Math.sign(to - from) : 0;
-  const clock = new Map<number, number>();
-  let leg = -1;
-  let way = 0;
-  let last: number | null = null;
-  seen.forEach((frame, i) => {
-    const back = i > 0 ? step(seen[i - 1].x, frame.x) : 0;
-    const ahead = i + 1 < seen.length ? step(frame.x, seen[i + 1].x) : 0;
-    if (back !== 0 && ahead !== 0 && back !== ahead) {
-      return;
+  const cycle = 2 * CONTROL_LEG_MS;
+  const usable = control.flatMap((frame, i) => {
+    const x = frame.box?.x;
+    const before = i > 0 ? control[i - 1].box?.x : undefined;
+    if (
+      x == null ||
+      x < CONTROL_EDGE ||
+      x > CONTROL_TRAVEL - CONTROL_EDGE ||
+      (before != null && Math.abs(x - before) <= 0.25)
+    ) {
+      return [];
     }
-    const direction = back || ahead;
-    if (direction === 0) {
-      return;
-    }
-    if (last != null && frame.t - last >= CONTROL_LEG_MS) {
-      throw new Error(
-        `controlClock: no reading for ${(frame.t - last).toFixed(0)} ms, a whole leg or more, so the control's turns cannot be counted`,
-      );
-    }
-    if (direction !== way) {
-      leg = leg < 0 ? (direction > 0 ? 0 : 1) : leg + 1;
-      way = direction;
-    }
-    const along = direction > 0 ? frame.x : CONTROL_TRAVEL - frame.x;
-    clock.set(frame.t, (leg + along / CONTROL_TRAVEL) * CONTROL_LEG_MS);
-    last = frame.t;
+    const out = (x / CONTROL_TRAVEL) * CONTROL_LEG_MS;
+    return [{t: frame.t, out, back: cycle - out}];
   });
+  const clock = new Map<number, number>();
+  if (usable.length === 0) {
+    return clock;
+  }
+  const onCycle = (a: number, b: number) => {
+    const d = Math.abs(a - b) % cycle;
+    return Math.min(d, cycle - d);
+  };
+  let origin = 0;
+  let agreeing = -1;
+  let spread = Number.POSITIVE_INFINITY;
+  for (let candidate = 0; candidate < cycle; candidate += 1) {
+    let count = 0;
+    let sum = 0;
+    for (const frame of usable) {
+      const phase = frame.t - candidate;
+      const d = Math.min(onCycle(phase, frame.out), onCycle(phase, frame.back));
+      if (d <= CONTROL_AGREE_MS) {
+        count += 1;
+        sum += d;
+      }
+    }
+    if (count > agreeing || (count === agreeing && sum < spread)) {
+      origin = candidate;
+      agreeing = count;
+      spread = sum;
+    }
+  }
+  const first = Math.min(...usable.map(frame => frame.t));
+  const anchored = origin + Math.floor((first - origin) / cycle) * cycle;
+  for (const frame of usable) {
+    const expected = frame.t - anchored;
+    const nearest = (ms: number) =>
+      ms + Math.round((expected - ms) / cycle) * cycle;
+    const out = nearest(frame.out);
+    const back = nearest(frame.back);
+    clock.set(
+      frame.t,
+      Math.abs(out - expected) <= Math.abs(back - expected) ? out : back,
+    );
+  }
   return clock;
 }
 

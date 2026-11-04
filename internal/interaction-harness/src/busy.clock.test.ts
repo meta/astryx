@@ -4,14 +4,15 @@
  * @file busy.clock.test.ts
  * @input Synthetic control frames (no browser)
  * @output The control's clock. Its readings follow the control's animation
- *   time across turns, whatever the stamps say. A frame beside a turn gets no
- *   reading. A gap of a whole leg throws.
+ *   time across turns and gaps, whatever the stamps say, also for frames
+ *   stamped late and put out of order. A frame near a turn, or one that
+ *   repeats the position before it, gets no reading.
  * @position Unit test of ./busy's controlClock
  */
 
 import {describe, expect, it} from 'vitest';
 import {controlClock} from './busy';
-import type {TrackedFrame} from './frames';
+import {inPresentationOrder, type TrackedFrame} from './frames';
 
 const FRAME = 1000 / 60;
 
@@ -43,6 +44,30 @@ function frameTimes(from: number, to: number): number[] {
   return out;
 }
 
+/** Each frame's animation time, by its stamp (frames as `control` made them). */
+function timesByStamp(
+  times: readonly number[],
+  frames: readonly TrackedFrame[],
+): Map<number, number> {
+  return new Map(frames.map((frame, i) => [frame.t, times[i]]));
+}
+
+/**
+ * Expects every reading to equal its frame's animation time, both measured
+ * from the earliest frame read, and returns the readings.
+ */
+function expectAnimationTimes(
+  clock: Map<number, number>,
+  times: Map<number, number>,
+): {ms: number; at: number}[] {
+  const read = [...clock].map(([t, at]) => ({ms: times.get(t) ?? NaN, at}));
+  read.sort((a, b) => a.ms - b.ms);
+  for (const reading of read) {
+    expect(reading.at - read[0].at).toBeCloseTo(reading.ms - read[0].ms, 6);
+  }
+  return read;
+}
+
 describe('controlClock', () => {
   it('reads the animation time across turns, whatever the stamps say', () => {
     // Three turns, at 400, 800 and 1200 ms; every other frame stamped 12 ms
@@ -50,33 +75,64 @@ describe('controlClock', () => {
     const times = frameTimes(250, 1450);
     const frames = control(times, i => (i % 2) * 12);
     const clock = controlClock(frames);
-    const read = frames.flatMap((frame, i) => {
-      const at = clock.get(frame.t);
-      return at == null ? [] : [{ms: times[i], at}];
-    });
-    // Only the frames beside the three turns go unread.
-    expect(read.length).toBeGreaterThanOrEqual(times.length - 6);
-    for (const reading of read) {
-      expect(reading.at - read[0].at).toBeCloseTo(reading.ms - read[0].ms, 6);
+    expectAnimationTimes(clock, timesByStamp(times, frames));
+    // Every frame at least 36 px from both ends is read, and no other.
+    for (const frame of frames) {
+      const x = frame.box?.x ?? -1;
+      expect(clock.has(frame.t)).toBe(x >= 36 && x <= 204);
     }
   });
 
-  it('gives no reading to a frame beside a turn', () => {
-    // The turn is at 400 ms. At 410 ms the box is 6 px back from the end. It
-    // is ahead of the frame before and behind the frame after, so either leg
-    // could hold it.
-    const frames = control([340, 360, 380, 410, 430]);
+  it('gives no reading to a frame near a turn', () => {
+    // The turn is at 400 ms. At 360 and 410 ms the box is 24 and 6 px from
+    // the end, where the two times that its position gives are close.
+    const frames = control([300, 360, 410, 470]);
     const clock = controlClock(frames);
-    expect(clock.has(frames[3].t)).toBe(false);
-    expect(clock.get(frames[4].t)! - clock.get(frames[2].t)!).toBeCloseTo(
-      50,
+    expect(clock.has(frames[1].t)).toBe(false);
+    expect(clock.has(frames[2].t)).toBe(false);
+    expect(clock.get(frames[3].t)! - clock.get(frames[0].t)!).toBeCloseTo(
+      170,
       6,
     );
   });
 
-  it('throws when two readings are a whole leg apart', () => {
-    expect(() => controlClock(control([100, 120, 540, 560]))).toThrow(
-      /whole leg/,
+  it('reads across a gap of a whole leg or more', () => {
+    const times = [100, 120, 540, 560, 1300];
+    const frames = control(times);
+    const read = expectAnimationTimes(
+      controlClock(frames),
+      timesByStamp(times, frames),
+    );
+    expect(read).toHaveLength(times.length);
+  });
+
+  it('reads late frames that inPresentationOrder put out of order at their own time', () => {
+    // Frames one frame apart across the turn at 400 ms. Their stamps run 20
+    // to 50 ms late in turn, so a frame can land after later frames.
+    const times = frameTimes(50, 750);
+    const late = [0, 45, 22, 0, 30, 50, 0, 20];
+    const made = control(times, i => late[i % late.length]);
+    const byStamp = timesByStamp(times, made);
+    const frames = inPresentationOrder(made);
+    // The stamps did reorder the frames.
+    expect(
+      frames.some(
+        (frame, i) =>
+          i > 0 && byStamp.get(frame.t)! < byStamp.get(frames[i - 1].t)!,
+      ),
+    ).toBe(true);
+    const read = expectAnimationTimes(controlClock(frames), byStamp);
+    expect(read.length).toBeGreaterThan(frames.length / 2);
+  });
+
+  it('gives no reading to a frame that repeats the position before it', () => {
+    // The second frame shows the first frame's position, stamped a frame later.
+    const frames = control([100, 100, 150], i => (i === 1 ? FRAME : 0));
+    const clock = controlClock(frames);
+    expect(clock.has(frames[1].t)).toBe(false);
+    expect(clock.get(frames[2].t)! - clock.get(frames[0].t)!).toBeCloseTo(
+      50,
+      6,
     );
   });
 });
