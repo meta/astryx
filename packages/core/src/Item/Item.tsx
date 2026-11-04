@@ -57,7 +57,10 @@ import {ItemMarkerColumnsContext} from './ItemMarkerColumnsContext';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {useLinkComponent} from '../Link/useLinkComponent';
-import {useClickableContainer} from '../hooks/useClickableContainer';
+import {
+  cancelNestedTouchPress,
+  useClickableContainer,
+} from '../hooks/useClickableContainer';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
@@ -632,11 +635,12 @@ export function Item({
   const containerRef = useRef<HTMLElement | null>(null);
   // Only onClick is needed: onMouseUp handles middle-click href navigation,
   // which delegation mode never has (href is ignored here).
-  const {onClick: delegatedOnClick} = useClickableContainer({
-    containerRef,
-    interactiveRef: interactiveRef ?? undefined,
-    disabled: isDisabled,
-  });
+  const {onClick: delegatedOnClick, onPointerDown: delegatedOnPointerDown} =
+    useClickableContainer({
+      containerRef,
+      interactiveRef: interactiveRef ?? undefined,
+      disabled: isDisabled,
+    });
 
   useDevWarning(
     'Item',
@@ -656,21 +660,18 @@ export function Item({
   // component means the root itself is the anchor, so the address rides it
   // and the invisible anchor below is not rendered.
   const isLinkRoot = typeof Component !== 'string' && href != null;
-  // A row that runs only its own action: a press on a nested control does not
-  // activate it, so the row shows no touch press for one. A row with a parent
-  // role or a link root activates on such a press, so it keeps its press.
-  const hasOwnActionOnly =
-    isDelegate ||
-    ((onClick != null || href != null) && !hasParentRole && !isLinkRoot);
-  const {onPointerDown: pressOnRow} = useClickableContainer({
-    containerRef,
-    interactiveRef: isDelegate
-      ? interactiveRef
-      : href != null
-        ? actionLinkRef
-        : actionButtonRef,
-    disabled: isDisabled || !hasOwnActionOnly,
-  });
+  // A press on a nested control does not run this row's action, so the row
+  // shows no touch press. A row with a parent role or a link root runs it, so
+  // it keeps the press. Such a row is not a clickable container: an enclosing
+  // card still treats it as part of its own surface.
+  const hasOwnAction =
+    (onClick != null || href != null) && !hasParentRole && !isLinkRoot;
+  const pressOnRow = (event: React.PointerEvent<HTMLElement>) =>
+    cancelNestedTouchPress(
+      event,
+      event.currentTarget,
+      href != null ? actionLinkRef.current : actionButtonRef.current,
+    );
 
   // Swipe actions exist where the row's role permits interactive descendants
   // (a swipe panel's buttons are such descendants): a `listitem`, or no role
@@ -866,7 +867,7 @@ export function Item({
 
   const mergedRef = useMergedRefs(ref, containerRef);
   const rootRef = useMergedRefs(
-    (hasOwnActionOnly ? mergedRef : ref) as React.Ref<HTMLElement>,
+    (isDelegate ? mergedRef : ref) as React.Ref<HTMLElement>,
     hasSwipe ? swipeRootRef : undefined,
   );
 
@@ -917,14 +918,21 @@ export function Item({
       {...restProps}
       {...swipeHandlers}
       {...linkRootProps}
-      {...(hasOwnActionOnly && !isDisabled
+      {...(isDelegate
         ? {
             onPointerDown: chainEventHandlers(
-              swipeHandlers?.onPointerDown ?? restProps.onPointerDown,
-              pressOnRow,
+              restProps.onPointerDown,
+              delegatedOnPointerDown,
             ),
           }
-        : null)}
+        : hasOwnAction && !isDisabled
+          ? {
+              onPointerDown: chainEventHandlers(
+                swipeHandlers?.onPointerDown ?? restProps.onPointerDown,
+                pressOnRow,
+              ),
+            }
+          : null)}
       aria-selected={(allowsAriaSelected && isSelected) || undefined}
       // aria-selected is invalid on roles that don't permit it (listitem, a
       // bare div, etc.). For those, convey selection via aria-current — valid

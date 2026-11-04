@@ -128,8 +128,7 @@ function belongsToSomethingElse(element: Element): boolean {
 }
 
 /**
- * The touch half of a container's press rule, for a container that cannot
- * hold refs: a finger press that starts on a nested interactive element
+ * The touch half of a container's press rule: a finger press that starts on a nested interactive element
  * other than the container's own action does not activate the container, so
  * it ends the press controller's paint on `container`. A mouse or pen press,
  * and a press on the container's surface or on `ownAction`, are left alone.

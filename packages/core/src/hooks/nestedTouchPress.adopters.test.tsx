@@ -22,6 +22,7 @@ import {TreeList} from '../TreeList/TreeList';
 import {List} from '../List/List';
 import {ListItem} from '../List/ListItem';
 import {Token} from '../Token/Token';
+import {ClickableCard} from '../ClickableCard/ClickableCard';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -193,5 +194,26 @@ describe('the Chevron of a TreeList row', () => {
       />,
     );
     expect(fingerPaints(chevron())).toBe(false);
+  });
+});
+
+describe('a row with its own action inside a clickable card', () => {
+  it('stays part of the card surface: a mouse click on its start content opens the card', () => {
+    const openCard = vi.fn();
+    render(
+      <ClickableCard label="Card" onClick={openCard}>
+        <List>
+          <ListItem
+            label="Row"
+            onClick={() => {}}
+            startContent={<span>Lead</span>}
+          />
+        </List>
+      </ClickableCard>,
+    );
+    const lead = screen.getByText('Lead');
+    expect(lead.closest('[data-pressable-container]')?.tagName).not.toBe('LI');
+    fireEvent.click(lead);
+    expect(openCard).toHaveBeenCalledTimes(1);
   });
 });
