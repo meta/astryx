@@ -385,8 +385,8 @@ export interface PowerSearchProps extends Omit<
    * IANA zone a date-only `date_absolute` value, and each absolute part of a
    * `date_range`, is read and written in: the token, the label and the editor
    * show its day there, and a picked day stores as that midnight. Unset, a
-   * day is its UTC day. A `date_absolute` with `isDateOnly: false` formats
-   * its label in it.
+   * day is its UTC day. A `date_absolute` with `isDateOnly: false` shows and
+   * edits its date and time in it; unset, in the viewer's zone.
    */
   timezoneID?: string;
   /**
