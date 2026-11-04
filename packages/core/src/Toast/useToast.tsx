@@ -7,6 +7,7 @@ import {createRoot} from 'react-dom/client';
 import {dataAttr} from '../naming';
 import {ToastContext, type ToastContextValue} from './ToastContext';
 import {ToastViewport} from './ToastViewport';
+import {ThemeNestingContext} from '../theme/Theme';
 import {warnOnce} from '../utils/devWarning';
 import type {
   ToastOptions,
@@ -90,6 +91,7 @@ function getFallbackContext(): ToastContextValue {
   const FallbackCapture = () => {
     const ctx = use(ToastContext);
     const doneRef = useRef(false);
+    // Syncs the module-level fallback with the first toast context that mounts.
     useEffect(() => {
       if (ctx && !doneRef.current) {
         doneRef.current = true;
@@ -101,10 +103,14 @@ function getFallbackContext(): ToastContextValue {
   };
 
   fallbackRoot = createRoot(container);
+  // This root sits inside the app, so a <Theme> in toast content is nested:
+  // it themes its own subtree and leaves the app's <html> sync alone.
   fallbackRoot.render(
-    <ToastViewport>
-      <FallbackCapture />
-    </ToastViewport>,
+    <ThemeNestingContext value={true}>
+      <ToastViewport>
+        <FallbackCapture />
+      </ToastViewport>
+    </ThemeNestingContext>,
   );
 
   // Proxy that queues calls until real context is captured

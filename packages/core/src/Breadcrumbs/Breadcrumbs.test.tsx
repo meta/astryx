@@ -2,6 +2,8 @@
 
 import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {render, screen, waitFor, fireEvent, act} from '@testing-library/react';
+import {__resetMenuPressForTest} from '../hooks/useMenuPress';
+import {expectNativeLinkClicks} from '../hooks/__tests__/menuLinkClicks';
 import userEvent from '@testing-library/user-event';
 import {Breadcrumbs} from './Breadcrumbs';
 import {BreadcrumbItem} from './BreadcrumbItem';
@@ -15,6 +17,15 @@ import {
 } from './index';
 import type {BreadcrumbMenuDividerProps, BreadcrumbMenuOption} from './index';
 import {LinkProvider} from '../Link/LinkProvider';
+import {AppShellMobileContext} from '../AppShell/AppShellMobileContext';
+import {
+  SideNavRenderContext,
+  type SideNavRenderMode,
+} from '../SideNav/SideNavRenderContext';
+import {
+  TopNavRenderContext,
+  type TopNavRenderMode,
+} from '../TopNav/TopNavRenderContext';
 
 function CustomLink({
   children,
@@ -369,6 +380,122 @@ describe('BreadcrumbItem', () => {
   });
 });
 
+describe('BreadcrumbItem in the AppShell mobile drawer', () => {
+  function renderInDrawer(
+    crumbs: React.ReactNode,
+    {
+      topNavMode = 'drawer',
+      sideNavMode = 'default',
+    }: {
+      topNavMode?: TopNavRenderMode;
+      sideNavMode?: SideNavRenderMode;
+    } = {},
+  ) {
+    const calls: string[] = [];
+    const closeMobileNav = vi.fn(() => calls.push('close'));
+    render(
+      <AppShellMobileContext
+        value={{
+          isMobile: true,
+          isMobileNavOpen: true,
+          toggleMobileNav: () => {},
+          openMobileNav: () => {},
+          closeMobileNav,
+          isMobileNavEnabled: true,
+          hasAutoToggle: true,
+        }}>
+        <SideNavRenderContext value={sideNavMode}>
+          <TopNavRenderContext value={topNavMode}>
+            <Breadcrumbs>{crumbs}</Breadcrumbs>
+          </TopNavRenderContext>
+        </SideNavRenderContext>
+      </AppShellMobileContext>,
+    );
+    return {calls, closeMobileNav};
+  }
+
+  it('a crumb link calls onClick and then closes the drawer', () => {
+    const {calls} = renderInDrawer(
+      <>
+        <BreadcrumbItem
+          href="#/projects"
+          onClick={event => {
+            event.preventDefault();
+            calls.push('onClick');
+          }}>
+          Projects
+        </BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Detail</BreadcrumbItem>
+      </>,
+    );
+    fireEvent.click(screen.getByRole('link', {name: 'Projects'}));
+    expect(calls).toEqual(['onClick', 'close']);
+  });
+
+  it('a crumb button calls onClick and then closes the drawer', () => {
+    const {calls} = renderInDrawer(
+      <>
+        <BreadcrumbItem onClick={() => calls.push('onClick')}>
+          Projects
+        </BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Detail</BreadcrumbItem>
+      </>,
+    );
+    fireEvent.click(screen.getByRole('button', {name: 'Projects'}));
+    expect(calls).toEqual(['onClick', 'close']);
+  });
+
+  it('a crumb marked isCurrent leaves the drawer open', () => {
+    const {closeMobileNav} = renderInDrawer(
+      <>
+        <BreadcrumbItem href="#/projects">Projects</BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Detail</BreadcrumbItem>
+      </>,
+    );
+    fireEvent.click(screen.getByText('Detail'));
+    expect(closeMobileNav).not.toHaveBeenCalled();
+  });
+
+  it('a last crumb that is current only by position is still a link and closes the drawer', () => {
+    const {closeMobileNav} = renderInDrawer(
+      <>
+        <BreadcrumbItem href="#/projects">Projects</BreadcrumbItem>
+        <BreadcrumbItem
+          href="#/projects/detail"
+          onClick={e => e.preventDefault()}>
+          Detail
+        </BreadcrumbItem>
+      </>,
+    );
+    const last = screen.getByRole('link', {name: 'Detail'});
+    expect(last).toHaveAttribute('aria-current', 'page');
+    fireEvent.click(last);
+    expect(closeMobileNav).toHaveBeenCalledTimes(1);
+  });
+
+  it('a crumb link in the side navigation drawer closes it too', () => {
+    const {closeMobileNav} = renderInDrawer(
+      <BreadcrumbItem href="#/projects" onClick={e => e.preventDefault()}>
+        Projects
+      </BreadcrumbItem>,
+      {topNavMode: 'default', sideNavMode: 'drawer-content'},
+    );
+    fireEvent.click(screen.getByRole('link', {name: 'Projects'}));
+    expect(closeMobileNav).toHaveBeenCalledTimes(1);
+  });
+
+  it('a crumb outside the drawer does not touch it', () => {
+    const {closeMobileNav} = renderInDrawer(
+      <BreadcrumbItem href="#/projects" onClick={e => e.preventDefault()}>
+        Projects
+      </BreadcrumbItem>,
+      {topNavMode: 'mobile-bar'},
+    );
+    fireEvent.click(screen.getByRole('link', {name: 'Projects'}));
+    expect(closeMobileNav).not.toHaveBeenCalled();
+  });
+});
+
 describe('BreadcrumbItem menu', () => {
   // Mock the native Popover API — jsdom doesn't implement showPopover/
   // hidePopover or the :popover-open match. Mirrors DropdownMenu's test setup.
@@ -435,6 +562,62 @@ describe('BreadcrumbItem menu', () => {
     );
   });
 
+  it('leaves a Ctrl-, Cmd-, Shift- or middle click on a link item in its menu to the browser', async () => {
+    __resetMenuPressForTest();
+    const user = userEvent.setup();
+    render(
+      <Breadcrumbs>
+        <BreadcrumbItem
+          menu={[
+            {label: 'Design', href: '/design'},
+            {label: 'Engineering', href: '/engineering'},
+          ]}>
+          Teams
+        </BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Overview</BreadcrumbItem>
+      </Breadcrumbs>,
+    );
+    await user.click(screen.getByRole('button', {name: 'Teams'}));
+    const row = screen.getByRole('menuitem', {name: 'Design', hidden: true});
+    expectNativeLinkClicks(row.closest('a') ?? row);
+  });
+
+  it('acts on the menu item a press slid across the menu lifts on, once (family:action-groups FR1, FR2, FR5)', async () => {
+    __resetMenuPressForTest();
+    const user = userEvent.setup();
+    const onFirst = vi.fn();
+    const onSecond = vi.fn();
+    render(
+      <Breadcrumbs>
+        <BreadcrumbItem
+          menu={[
+            {label: 'Design', onClick: onFirst},
+            {label: 'Engineering', onClick: onSecond},
+          ]}>
+          Teams
+        </BreadcrumbItem>
+        <BreadcrumbItem isCurrent>Overview</BreadcrumbItem>
+      </Breadcrumbs>,
+    );
+    await user.click(screen.getByRole('button', {name: 'Teams'}));
+    const FIRST = 'Design';
+    const SECOND = 'Engineering';
+    const item = (name: string) =>
+      screen.getByRole('menuitem', {name, hidden: true});
+    for (const pointer of [
+      {pointerType: 'touch', pointerId: 1},
+      {pointerType: 'mouse', pointerId: 2, button: 0},
+    ]) {
+      onFirst.mockClear();
+      onSecond.mockClear();
+      fireEvent.pointerDown(item(FIRST), pointer);
+      fireEvent.pointerMove(item(SECOND), pointer);
+      fireEvent.pointerUp(item(SECOND), pointer);
+      expect(onSecond).toHaveBeenCalledTimes(1);
+      expect(onFirst).not.toHaveBeenCalled();
+    }
+  });
+
   it('portability: a DropdownMenuOption[] renders its items on open', async () => {
     const user = userEvent.setup();
     render(
@@ -469,10 +652,20 @@ describe('BreadcrumbItem menu', () => {
       </Breadcrumbs>,
     );
     await user.click(screen.getByRole('button', {name: 'Teams'}));
+    // The open focuses the first row in the next frame; let it land first,
+    // so the row the mouse moves onto is one that does not have focus yet.
+    await act(async () => {
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    });
     const design = screen.getByRole('menuitem', {name: 'Design', hidden: true});
-    const focusSpy = vi.spyOn(design, 'focus');
-    fireEvent.pointerMove(design, {pointerType: 'mouse'});
     expect(design).toHaveFocus();
+    const engineering = screen.getByRole('menuitem', {
+      name: 'Engineering',
+      hidden: true,
+    });
+    const focusSpy = vi.spyOn(engineering, 'focus');
+    fireEvent.pointerMove(engineering, {pointerType: 'mouse'});
+    expect(engineering).toHaveFocus();
     expect(focusSpy).toHaveBeenCalledWith({
       preventScroll: true,
       focusVisible: false,

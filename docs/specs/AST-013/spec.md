@@ -175,8 +175,7 @@ page paints, the hydrating render produces entry-animation classes the server di
 not send, and the hook's consumer documentation says it does not support server
 rendering.
 
-Other known FR9 and FR13 gaps: a Dialog rendered open in server markup plays its
-entry animation on page load; CodeBlock's collapse chevron plays its reveal
+Other known FR9 and FR13 gaps: CodeBlock's collapse chevron plays its reveal
 animation on page load; and CodeBlock chooses between token-span and Highlight
 API markup from browser capability and user-agent checks during render, so the
 hydrating render can differ from the server's markup.

@@ -166,7 +166,7 @@ export const docs = {
         category: 'Content',
         criterion: '4.1.3 Status Messages',
         description:
-          'Failures show in alert Banners next to the thing that failed, each with Retry when the action can be repeated. A failed delete is announced once, assertively, as the confirmation dialog changes its text.',
+          'Failures show in error Banners next to the thing that failed, each with Retry when the action can be repeated. A Banner carries no live role of its own: its failure is announced once, assertively, through the shared announcement channel, unless it sits inside the chat log, which delivers it. The progress label of a comment still being written follows the same rule, politely. The edit-history dialog announces its failure through an alert region inside the dialog. A failed delete is announced once, assertively, as the confirmation dialog changes its text.',
       },
     ],
   },

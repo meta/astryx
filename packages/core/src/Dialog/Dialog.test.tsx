@@ -9,11 +9,19 @@
  * SYNC: When Dialog.tsx changes, update tests to match new behavior
  */
 
-import {useState, type SyntheticEvent} from 'react';
+import {StrictMode, useState, type SyntheticEvent} from 'react';
 import {readFileSync} from 'node:fs';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import type {MockInstance} from 'vitest';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {
+  act,
+  render,
+  screen,
+  fireEvent,
+  within,
+  cleanup,
+} from '@testing-library/react';
+import {createPortal} from 'react-dom';
 import {
   Dialog,
   dialogFullscreenSafeAreaPaddingContract,
@@ -21,7 +29,10 @@ import {
 } from './Dialog';
 import {DialogHeader} from './DialogHeader';
 import {defineTheme, generateThemeCSS} from '../theme';
-import {__resetInteractionModalityForTest} from '../utils/interactionModality';
+import {
+  __resetInteractionModalityForTest,
+  getInteractionModality,
+} from '../utils/interactionModality';
 
 function generateThemeTestCSS(
   theme: Parameters<typeof generateThemeCSS>[0],
@@ -110,6 +121,283 @@ beforeEach(() => {
 });
 
 describe('Dialog', () => {
+  // AR2: a dialog that unmounts while open (rendered only while open, or
+  // removed with the rest of a view) returns focus to its opener, as a close
+  // does.
+  describe('unmounting while open', () => {
+    function Editor({unmountWith}: {unmountWith: 'save' | 'view'}) {
+      const [isEditing, setIsEditing] = useState(false);
+      const [showView, setShowView] = useState(true);
+      return (
+        <>
+          <button type="button" onClick={() => setIsEditing(true)}>
+            Edit
+          </button>
+          {showView && isEditing ? (
+            <Dialog
+              isOpen
+              onOpenChange={setIsEditing}
+              aria-label="Edit profile">
+              <button
+                type="button"
+                onClick={() =>
+                  unmountWith === 'save'
+                    ? setIsEditing(false)
+                    : setShowView(false)
+                }>
+                Save
+              </button>
+            </Dialog>
+          ) : null}
+        </>
+      );
+    }
+
+    it.each([['save'], ['view']] as const)(
+      'returns focus to the opener when the dialog unmounts (%s)',
+      async unmountWith => {
+        render(<Editor unmountWith={unmountWith} />);
+        const edit = screen.getByRole('button', {name: 'Edit'});
+        edit.focus();
+        fireEvent.click(edit);
+        const save = screen.getByRole('button', {name: 'Save'});
+        save.focus();
+
+        fireEvent.click(save);
+        await Promise.resolve();
+
+        expect(screen.queryByRole('button', {name: 'Save'})).toBeNull();
+        expect(document.activeElement).toBe(edit);
+      },
+    );
+
+    it('keeps focus inside an open dialog through StrictMode effects, then returns it on unmount', async () => {
+      render(
+        <StrictMode>
+          <Editor unmountWith="save" />
+        </StrictMode>,
+      );
+      const edit = screen.getByRole('button', {name: 'Edit'});
+      edit.focus();
+      fireEvent.click(edit);
+      const save = screen.getByRole('button', {name: 'Save'});
+      save.focus();
+      await Promise.resolve();
+      expect(document.activeElement).toBe(save);
+
+      fireEvent.click(save);
+      await Promise.resolve();
+
+      expect(document.activeElement).toBe(edit);
+    });
+
+    // The case table for a dialog that disappears while it is open. Focus
+    // goes back to the opener only when the removal lost it: it was inside
+    // the dialog, or nowhere. A control the user pressed outside the dialog
+    // (or outside the frame that holds it) keeps its focus, and an opener
+    // that left with a removed frame gets nothing.
+    type Place = 'page' | 'frame';
+    type Row = {
+      dialogIn: Place;
+      openerIn: Place;
+      removed: 'dialog' | 'frame';
+      focusBefore: 'inside' | 'pageControl' | 'nowhere';
+      expected: 'opener' | 'pageControl' | 'nothing';
+    };
+    const rows: Row[] = [
+      {
+        dialogIn: 'page',
+        openerIn: 'page',
+        removed: 'dialog',
+        focusBefore: 'inside',
+        expected: 'opener',
+      },
+      {
+        dialogIn: 'page',
+        openerIn: 'page',
+        removed: 'dialog',
+        focusBefore: 'nowhere',
+        expected: 'opener',
+      },
+      {
+        dialogIn: 'page',
+        openerIn: 'page',
+        removed: 'dialog',
+        focusBefore: 'pageControl',
+        expected: 'pageControl',
+      },
+      {
+        dialogIn: 'frame',
+        openerIn: 'page',
+        removed: 'dialog',
+        focusBefore: 'inside',
+        expected: 'opener',
+      },
+      {
+        dialogIn: 'frame',
+        openerIn: 'page',
+        removed: 'dialog',
+        focusBefore: 'nowhere',
+        expected: 'opener',
+      },
+      {
+        dialogIn: 'frame',
+        openerIn: 'page',
+        removed: 'dialog',
+        focusBefore: 'pageControl',
+        expected: 'pageControl',
+      },
+      {
+        dialogIn: 'frame',
+        openerIn: 'page',
+        removed: 'frame',
+        focusBefore: 'inside',
+        expected: 'opener',
+      },
+      {
+        dialogIn: 'frame',
+        openerIn: 'page',
+        removed: 'frame',
+        focusBefore: 'pageControl',
+        expected: 'pageControl',
+      },
+      {
+        dialogIn: 'frame',
+        openerIn: 'frame',
+        removed: 'dialog',
+        focusBefore: 'inside',
+        expected: 'opener',
+      },
+      {
+        dialogIn: 'frame',
+        openerIn: 'frame',
+        removed: 'dialog',
+        focusBefore: 'pageControl',
+        expected: 'pageControl',
+      },
+      {
+        dialogIn: 'frame',
+        openerIn: 'frame',
+        removed: 'frame',
+        focusBefore: 'inside',
+        expected: 'nothing',
+      },
+      {
+        dialogIn: 'frame',
+        openerIn: 'frame',
+        removed: 'frame',
+        focusBefore: 'pageControl',
+        expected: 'pageControl',
+      },
+    ];
+
+    it.each(rows)(
+      'dialog in $dialogIn, opener in $openerIn, $removed removed, focus $focusBefore: focus goes to $expected',
+      async ({dialogIn, openerIn, removed, focusBefore, expected}) => {
+        const needsFrame = dialogIn === 'frame' || openerIn === 'frame';
+        const frame = needsFrame ? document.createElement('iframe') : null;
+        if (frame != null) {
+          document.body.append(frame);
+          // jsdom gives each document its own HTMLDialogElement prototype.
+          const {prototype} =
+            frame.contentDocument!.defaultView!.HTMLDialogElement;
+          prototype.showModal = HTMLDialogElement.prototype.showModal;
+          prototype.close = HTMLDialogElement.prototype.close;
+        }
+        const into = (place: Place, node: React.ReactNode): React.ReactNode =>
+          place === 'frame'
+            ? createPortal(node, frame!.contentDocument!.body)
+            : node;
+        let setOpen: (isOpen: boolean) => void = () => {};
+        function Harness() {
+          const [isOpen, setIsOpen] = useState(false);
+          setOpen = setIsOpen;
+          return (
+            <>
+              {into(
+                openerIn,
+                <button type="button" onClick={() => setIsOpen(true)}>
+                  Opener
+                </button>,
+              )}
+              {isOpen
+                ? into(
+                    dialogIn,
+                    <Dialog isOpen onOpenChange={setIsOpen} aria-label="Case">
+                      <button type="button">Inside</button>
+                    </Dialog>,
+                  )
+                : null}
+              <button type="button">Page control</button>
+            </>
+          );
+        }
+        // Focus in a frame is also the frame element's focus in the page,
+        // as in a browser.
+        const focusIn = (element: HTMLElement) => {
+          if (frame != null && element.ownerDocument !== document) {
+            frame.focus();
+          }
+          element.focus();
+        };
+        const findIn = (place: Place, name: string) =>
+          Array.from(
+            (place === 'frame'
+              ? frame!.contentDocument!
+              : document
+            ).querySelectorAll('button'),
+          ).find(button => button.textContent === name)!;
+
+        const {unmount} = render(<Harness />);
+        const opener = findIn(openerIn, 'Opener');
+        focusIn(opener);
+        act(() => setOpen(true));
+        const pageControl = findIn('page', 'Page control');
+        if (focusBefore === 'inside') {
+          focusIn(findIn(dialogIn, 'Inside'));
+        } else if (focusBefore === 'pageControl') {
+          pageControl.focus();
+        } else {
+          (document.activeElement as HTMLElement | null)?.blur();
+          (frame?.contentDocument?.activeElement as HTMLElement | null)?.blur();
+        }
+
+        // The dialog unmounts; a removed frame goes in the same task,
+        // before the focus check runs.
+        act(() => setOpen(false));
+        if (removed === 'frame') {
+          frame!.remove();
+          // A browser drops a removed frame's window; jsdom keeps it.
+          Object.defineProperty(frame!.contentDocument ?? {}, 'defaultView', {
+            configurable: true,
+            get: () => null,
+          });
+        }
+        await Promise.resolve();
+
+        if (expected === 'opener') {
+          expect(opener.ownerDocument.activeElement).toBe(opener);
+        } else if (expected === 'pageControl') {
+          expect(document.activeElement).toBe(pageControl);
+        } else {
+          expect(opener.isConnected).toBe(false);
+          expect(document.activeElement).not.toBe(opener);
+        }
+
+        try {
+          unmount();
+        } catch (error) {
+          // jsdom empties a removed frame's document, so React can no longer
+          // take a portal out of it; a browser keeps the nodes.
+          if (removed !== 'frame' || !String(error).includes('not a child')) {
+            throw error;
+          }
+        }
+        frame?.remove();
+      },
+    );
+  });
+
   it('restores focus to the opener when content mounts in the open commit', () => {
     function Harness({
       open,
@@ -555,6 +843,210 @@ describe('Dialog', () => {
       }).not.toThrow();
       expect(dialog).not.toHaveAttribute('open');
     });
+
+    describe('in a second document', () => {
+      // An app can render a Dialog into a same-origin iframe or a Document
+      // Picture-in-Picture window through a portal. The control that opens it
+      // is focused in that document; the page's document reports only the
+      // iframe element.
+      let frame: HTMLIFrameElement;
+      let secondDocument: Document;
+
+      beforeEach(() => {
+        frame = document.createElement('iframe');
+        document.body.appendChild(frame);
+        secondDocument = frame.contentDocument!;
+        // The showModal/close stand-ins above, on the second window's own
+        // prototype.
+        const {prototype} = secondDocument.defaultView!.HTMLDialogElement;
+        prototype.showModal = HTMLDialogElement.prototype.showModal;
+        prototype.close = HTMLDialogElement.prototype.close;
+      });
+
+      afterEach(() => {
+        // Unmount before the frame goes, or React removes nodes from a
+        // document that no longer exists.
+        cleanup();
+        frame.remove();
+      });
+
+      function SecondDocumentDialog({isOpen}: {isOpen: boolean}) {
+        return createPortal(
+          <>
+            <button type="button">Open dialog</button>
+            <Dialog isOpen={isOpen} onOpenChange={() => {}} aria-label="Review">
+              <button type="button">Inside</button>
+            </Dialog>
+          </>,
+          secondDocument.body,
+        );
+      }
+
+      function PageOpensSecondDocumentDialog({isOpen}: {isOpen: boolean}) {
+        return (
+          <>
+            <button type="button">Open from the page</button>
+            {createPortal(
+              <Dialog
+                isOpen={isOpen}
+                onOpenChange={() => {}}
+                aria-label="Review">
+                <button type="button">Inside</button>
+              </Dialog>,
+              secondDocument.body,
+            )}
+          </>
+        );
+      }
+
+      function SecondDocumentFieldDialog({isOpen}: {isOpen: boolean}) {
+        return createPortal(
+          <>
+            <input aria-label="Search" />
+            <Dialog isOpen={isOpen} onOpenChange={() => {}} aria-label="Review">
+              <button type="button">Inside</button>
+            </Dialog>
+          </>,
+          secondDocument.body,
+        );
+      }
+
+      function SecondDocumentDialogs({count}: {count: number}) {
+        return createPortal(
+          <>
+            {count > 0 && (
+              <Dialog isOpen={false} onOpenChange={() => {}} aria-label="First">
+                First
+              </Dialog>
+            )}
+            {count > 1 && (
+              <Dialog
+                isOpen={false}
+                onOpenChange={() => {}}
+                aria-label="Second">
+                Second
+              </Dialog>
+            )}
+          </>,
+          secondDocument.body,
+        );
+      }
+
+      it('returns focus to the control that opened it, in its own document', () => {
+        const {rerender} = render(<SecondDocumentDialog isOpen={false} />);
+        const view = within(secondDocument.body);
+        const opener = view.getByRole('button', {name: 'Open dialog'});
+        opener.focus();
+        expect(document.activeElement).toBe(frame);
+
+        rerender(<SecondDocumentDialog isOpen={true} />);
+        view.getByRole('button', {name: 'Inside', hidden: true}).focus();
+
+        rerender(<SecondDocumentDialog isOpen={false} />);
+        expect(opener).toHaveFocus();
+      });
+
+      it('returns focus to a control in the page that opened it', () => {
+        const {rerender} = render(
+          <PageOpensSecondDocumentDialog isOpen={false} />,
+        );
+        const opener = screen.getByRole('button', {name: 'Open from the page'});
+        opener.focus();
+
+        rerender(<PageOpensSecondDocumentDialog isOpen={true} />);
+        within(secondDocument.body)
+          .getByRole('button', {name: 'Inside', hidden: true})
+          .focus();
+
+        rerender(<PageOpensSecondDocumentDialog isOpen={false} />);
+        expect(opener).toHaveFocus();
+      });
+
+      it('takes the ring from the last input in its own document', () => {
+        __resetInteractionModalityForTest();
+        const {rerender} = render(<SecondDocumentDialog isOpen={false} />);
+        const opener = within(secondDocument.body).getByRole('button', {
+          name: 'Open dialog',
+        });
+        // The page's last input was a pointer press (say, on the control that
+        // popped the window out); the dialog then closes from the keyboard in
+        // its own document.
+        fireEvent.pointerDown(document.body);
+        opener.focus();
+        rerender(<SecondDocumentDialog isOpen={true} />);
+        fireEvent.keyDown(secondDocument.body, {key: 'Escape'});
+        const focus = vi.spyOn(
+          secondDocument.defaultView!.HTMLElement.prototype,
+          'focus',
+        );
+
+        rerender(<SecondDocumentDialog isOpen={false} />);
+        expect(opener).toHaveFocus();
+        expect(
+          focus.mock.calls.filter(
+            (_call, index) => focus.mock.contexts[index] === opener,
+          ),
+        ).toEqual([[]]);
+        focus.mockRestore();
+      });
+
+      it('keeps plain focus on a text field that opened it after a pointer close', () => {
+        const {rerender} = render(<SecondDocumentFieldDialog isOpen={false} />);
+        const field = within(secondDocument.body).getByRole('textbox', {
+          name: 'Search',
+        });
+        field.focus();
+        rerender(<SecondDocumentFieldDialog isOpen={true} />);
+        const inside = within(secondDocument.body).getByRole('button', {
+          name: 'Inside',
+          hidden: true,
+        });
+        inside.focus();
+        fireEvent.pointerDown(inside);
+        // The field's own window's prototype: a field there is never an
+        // instance of the page's constructors.
+        const {prototype} = secondDocument.defaultView!.HTMLElement;
+        const focus = vi.spyOn(prototype, 'focus');
+        const blur = vi.spyOn(prototype, 'blur');
+
+        rerender(<SecondDocumentFieldDialog isOpen={false} />);
+        expect(field).toHaveFocus();
+        expect(
+          focus.mock.calls.filter(
+            (_call, index) => focus.mock.contexts[index] === field,
+          ),
+        ).toEqual([[]]);
+        expect(blur.mock.contexts).not.toContain(field);
+        focus.mockRestore();
+        blur.mockRestore();
+      });
+
+      it('tracks its document while any Dialog there is mounted, and releases it after the last', () => {
+        const removeEventListener = vi.spyOn(
+          secondDocument,
+          'removeEventListener',
+        );
+        const removedModalityListeners = () =>
+          removeEventListener.mock.calls
+            .map(([type]) => type)
+            .filter(type => type === 'pointerdown' || type === 'keydown')
+            .sort();
+        const {rerender} = render(<SecondDocumentDialogs count={2} />);
+        fireEvent.pointerDown(secondDocument.body);
+        expect(getInteractionModality(secondDocument)).toBe('pointer');
+
+        rerender(<SecondDocumentDialogs count={1} />);
+        fireEvent.keyDown(secondDocument.body, {key: 'Tab'});
+        expect(getInteractionModality(secondDocument)).toBe('keyboard');
+        expect(removedModalityListeners()).toEqual([]);
+
+        rerender(<SecondDocumentDialogs count={0} />);
+        expect(removedModalityListeners()).toEqual(['keydown', 'pointerdown']);
+        fireEvent.pointerDown(secondDocument.body);
+        expect(getInteractionModality(secondDocument)).toBe('keyboard');
+        removeEventListener.mockRestore();
+      });
+    });
   });
 
   // jsdom draws no focus ring, so these prove only which focus call Dialog
@@ -606,12 +1098,14 @@ describe('Dialog', () => {
       const focus = vi.spyOn(HTMLElement.prototype, 'focus');
 
       fireEvent.pointerDown(invoker);
+      fireEvent.pointerUp(invoker);
       fireEvent.click(invoker);
       const cancel = screen.getByRole('button', {name: 'Cancel'});
       expect(cancel).toHaveFocus();
       expect(focusCallsOn(focus, cancel)).toEqual([[{focusVisible: false}]]);
 
       fireEvent.pointerDown(cancel);
+      fireEvent.pointerUp(cancel);
       fireEvent.click(cancel);
       expect(invoker).toHaveFocus();
       expect(focusCallsOn(focus, invoker)).toEqual([[{focusVisible: false}]]);
@@ -639,6 +1133,7 @@ describe('Dialog', () => {
       const invoker = screen.getByRole('button', {name: 'Open dialog'});
       invoker.focus();
       fireEvent.pointerDown(invoker);
+      fireEvent.pointerUp(invoker);
       fireEvent.click(invoker);
 
       // WebKit's native close restores focus to the invoker with a ring before
@@ -663,6 +1158,7 @@ describe('Dialog', () => {
 
       const cancel = screen.getByRole('button', {name: 'Cancel'});
       fireEvent.pointerDown(cancel);
+      fireEvent.pointerUp(cancel);
       fireEvent.click(cancel);
 
       expect(blur).toHaveBeenCalledTimes(1);
@@ -1134,6 +1630,8 @@ describe('Dialog', () => {
       </Dialog>,
     );
 
+    fireEvent.pointerDown(screen.getByTestId('click-dialog'));
+    fireEvent.pointerUp(screen.getByTestId('click-dialog'));
     fireEvent.click(screen.getByTestId('click-dialog'));
 
     expect(onClick).toHaveBeenCalledTimes(1);

@@ -54,6 +54,21 @@ describe('MobileNav', () => {
     expect(dialog).not.toHaveAttribute('open');
   });
 
+  it('stays open when a file picker inside it is dismissed', () => {
+    const handleClose = vi.fn();
+    render(
+      <MobileNav isOpen={true} onOpenChange={handleClose}>
+        <input type="file" aria-label="Picture" />
+      </MobileNav>,
+    );
+    // A dismissed picker fires a bubbling `cancel` at the input; it is not a
+    // close request for the navigation.
+    const fromPicker = new Event('cancel', {bubbles: true, cancelable: true});
+    screen.getByLabelText('Picture').dispatchEvent(fromPicker);
+    expect(handleClose).not.toHaveBeenCalled();
+    expect(fromPicker.defaultPrevented).toBe(false);
+  });
+
   it('calls onOpenChange(false) on native cancel event (Escape)', () => {
     const handleClose = vi.fn();
     render(

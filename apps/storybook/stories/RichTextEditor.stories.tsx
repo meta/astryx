@@ -19,6 +19,9 @@ import {$getRoot} from 'lexical';
 import {
   LONG_DOCUMENT_COPIES,
   MarkdownParitySandbox,
+  WideNumberMarkerParity,
+  MixedNumberMarkerParity,
+  TaskParentNumberMarkerParity,
   type MarkdownParitySandboxProps,
 } from './RichTextEditor.markdownParity';
 import {MarkdownPluginsImportExport as MarkdownPluginsImportExportStory} from './RichTextEditor.markdownPluginsImportExport';
@@ -561,6 +564,24 @@ export const MarkdownParity: MarkdownParityStory = {
     hasPlugins: true,
     hostWidth: 'fill',
   },
+};
+
+export const MarkdownParityWideNumberMarkers: Story = {
+  name: 'Markdown parity: wide number markers at 16px',
+  tags: ['!autodocs'],
+  render: () => <WideNumberMarkerParity />,
+};
+
+export const MarkdownParityMixedNumberMarkers: Story = {
+  name: 'Markdown parity: mixed nested number markers at 16px',
+  tags: ['!autodocs'],
+  render: () => <MixedNumberMarkerParity />,
+};
+
+export const MarkdownParityTaskParentNumberMarkers: Story = {
+  name: 'Markdown parity: pure task-parent number markers at 16px',
+  tags: ['!autodocs'],
+  render: () => <TaskParentNumberMarkerParity />,
 };
 
 export const MarkdownParityToggle: MarkdownParityStory = {

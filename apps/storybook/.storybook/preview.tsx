@@ -2,6 +2,7 @@
 
 import type {Preview, Decorator} from '@storybook/react';
 import * as React from 'react';
+import type {RtlAuditParameters} from '../rtl-audit/story-parameters';
 import {
   Theme,
   LayerProvider,
@@ -101,6 +102,22 @@ const withTheme: Decorator = (Story, context) => {
   );
 };
 
+const withRtlAuditMetadata: Decorator = (Story, context) => {
+  const rtlAudit = context.parameters.rtlAudit as
+    RtlAuditParameters | undefined;
+  React.useEffect(() => {
+    const root = document.getElementById('storybook-root');
+    if (root == null) {
+      return;
+    }
+    root.dataset.astryxRtlAudit = JSON.stringify(rtlAudit ?? {});
+    return () => {
+      delete root.dataset.astryxRtlAudit;
+    };
+  }, [rtlAudit]);
+  return <Story />;
+};
+
 const preview: Preview = {
   parameters: {
     controls: {
@@ -164,7 +181,7 @@ const preview: Preview = {
     colorMode: 'light',
     direction: 'ltr',
   },
-  decorators: [withTheme],
+  decorators: [withTheme, withRtlAuditMetadata],
 };
 
 export default preview;

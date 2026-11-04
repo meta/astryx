@@ -9,6 +9,8 @@
  * @position Shared vocabulary of packages/core/src/gestures; no runtime code
  */
 
+import type {SelectionLock} from './GestureRecognizer';
+
 /**
  * UIGestureRecognizer.State. A discrete recognizer goes straight from
  * `possible` to `ended` (UIKit's `.recognized` is the same value).
@@ -18,6 +20,14 @@ export type GestureState =
 
 /** What made the contact. A pen on an iPad is `pen`, not `touch`. */
 export type PointerKind = 'touch' | 'mouse' | 'pen';
+
+/**
+ * Scroll input a recognizer can take, as UIKit's `UIScrollTypeMask`: a
+ * trackpad's two-finger scroll or pinch (`continuous`), or a mouse wheel's
+ * notches (`discrete`). A pan takes only a trackpad's; a pinch takes a
+ * ctrl-wheel of either.
+ */
+export type ScrollType = 'continuous' | 'discrete';
 
 export interface Point {
   readonly x: number;
@@ -46,13 +56,6 @@ export interface NativeScrollProbe {
    * lets the browser pan that axis).
    */
   canScroll(dx: number, dy: number): boolean;
-  /**
-   * How much further (px) the scroller that would move for a finger moving
-   * by (dx, dy) can scroll before it reaches its edge; 0 when none would.
-   * Lets a reader place the point where the content runs out between two
-   * samples instead of at the next one.
-   */
-  distanceToEdge?(dx: number, dy: number): number;
   /** Whether any element under the touch can scroll natively at all. */
   readonly isInsideScroller: boolean;
   /**
@@ -90,6 +93,8 @@ export interface GestureTouch {
   readonly target: unknown;
   /** The native scrollers under the contact, when the host knows them. */
   readonly scroll: NativeScrollProbe | null;
+  /** Set for a wheel's or a trackpad's scroll input, which is no contact. */
+  readonly scrollType?: ScrollType;
   /** The browser took this contact for its own pan or zoom. */
   takenByBrowser: boolean;
 }
@@ -109,6 +114,8 @@ export interface TouchBeganInput extends TouchInput {
   readonly pointerType: PointerKind;
   readonly target: unknown;
   readonly scroll?: NativeScrollProbe | null;
+  /** Set for a wheel's or a trackpad's scroll input. */
+  readonly scrollType?: ScrollType;
 }
 
 /** What a recognizer is told alongside the touches that changed. */
@@ -127,6 +134,17 @@ export interface GestureEventContext {
 export interface GestureEnvironment {
   viewportSize(): {readonly width: number; readonly height: number};
   isRtl(view: unknown): boolean;
+  /**
+   * The box of a recognizer's view in viewport coordinates, or null when it
+   * has none to measure. A screen-edge pan reads it to tell a view within
+   * its edge band from any other.
+   */
+  viewRect?(view: unknown): {
+    readonly left: number;
+    readonly top: number;
+    readonly width: number;
+    readonly height: number;
+  } | null;
 }
 
 export const DEFAULT_ENVIRONMENT: GestureEnvironment = {
@@ -136,8 +154,18 @@ export const DEFAULT_ENVIRONMENT: GestureEnvironment = {
     }
     return {width: window.innerWidth, height: window.innerHeight};
   },
-  isRtl() {
-    return false;
+  isRtl(view) {
+    if (typeof window === 'undefined' || !(view instanceof Element)) {
+      return false;
+    }
+    return window.getComputedStyle(view).direction === 'rtl';
+  },
+  viewRect(view) {
+    if (typeof Element === 'undefined' || !(view instanceof Element)) {
+      return null;
+    }
+    const {left, top, width, height} = view.getBoundingClientRect();
+    return {left, top, width, height};
   },
 };
 
@@ -158,4 +186,33 @@ export interface TouchConsumer {
    * (attached above this consumer) from beginning for a touch on it.
    */
   allowsAncestorRecognizer?(recognizer: unknown): boolean;
+  /**
+   * Whether the consumer holds this touch now (a control whose press was
+   * delivered for that touch): the host cancels the browser's pan for that
+   * finger only, as UIKit's `touchesShouldCancel(in:)` is false for a
+   * tracking control. A move before the press is delivered, and another
+   * finger the consumer is not tracking, still scroll.
+   */
+  keepsTouch?(touchId: number): boolean;
+  /**
+   * A control whose own record defines a hold action (a stepper's
+   * hold-repeat) brings the lock that turns text selection and the callout
+   * off for that press only, as a recognizer created with one does
+   * (`spec:AST-094` FR41). A control whose hold does nothing leaves it
+   * undefined and keeps the browser's long-press selection.
+   */
+  readonly selectionLock?: SelectionLock;
+  /**
+   * Whether this touch's press holds the browser's context menu closed now.
+   * A control whose hold acts uses it (a switch's hold toggles it). The host
+   * then cancels the menu, as for a claimed touch.
+   */
+  holdsContextMenu?(touchId: number): boolean;
+  /**
+   * Whether the consumer takes touches now (a disabled control does not).
+   * The host listens only while something enabled is attached
+   * (`spec:AST-094` FR24); after this changes, call `host.update(element)`.
+   * @default true
+   */
+  isEnabled?(): boolean;
 }

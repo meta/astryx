@@ -4,8 +4,13 @@
 
 /**
  * @file Item.tsx
- * @input Uses React, ReactNode, StyleXStyles, theme tokens, useClickableContainer
- * @output Exports Item component, ItemProps type; publishes the shared inline inset
+ * @input Uses React, ReactNode, StyleXStyles, theme tokens, useClickableContainer,
+ *   the shared press overlays and the compositor press layer
+ * @output Exports Item component, ItemProps type; publishes the shared inline inset.
+ *   Only numbered composing rows keep their start/label/end slots in one flex
+ *   group, through Item's private exact-marker scope; other marked rows keep
+ *   their flat children. This lets List share a counter track without changing
+ *   those slots' own layout.
  * @position Core layout primitive; consumed by index.ts, tested by Item.test.tsx
  *
  * The swipe actions live in ItemSwipeLayer, reached only through a dynamic
@@ -28,6 +33,7 @@
 import {
   lazy,
   Suspense,
+  use,
   useCallback,
   useId,
   useRef,
@@ -43,16 +49,24 @@ import {
   typeScaleVars,
 } from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
-import {isRenderable, mergeProps} from '../utils';
+import {isRenderable} from '../utils/isRenderable';
+import {mergeProps} from '../utils/mergeProps';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
+import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import {ItemDescriptionContext} from './ItemDescriptionContext';
+import {ItemMarkerColumnsContext} from './ItemMarkerColumnsContext';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {computeTargetAndRel} from '../Link/computeTargetAndRel';
 import {useLinkComponent} from '../Link/useLinkComponent';
-import {useClickableContainer} from '../hooks/useClickableContainer';
+import {
+  cancelNestedTouchPress,
+  useClickableContainer,
+} from '../hooks/useClickableContainer';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import type {ItemSwipeBridge} from './ItemSwipeLayer';
 
@@ -352,6 +366,22 @@ const styles = stylex.create({
     textAlign: 'start',
     borderRadius: radiusVars['--radius-element'],
   },
+  // One content cell beside the marker. Its slots retain the row's flex
+  // alignment and gap, including first-line alignment and tall start content.
+  // A numbered List can then subgrid the row into marker/content columns.
+  markerContent: {
+    display: 'flex',
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'inherit',
+    alignSelf: 'stretch',
+    gap: 'inherit',
+  },
+  markerContentFirstLine: {
+    // A tall start/end slot moves the first text baseline down. The marker
+    // must follow that baseline, not the stretched group's top edge.
+    alignSelf: 'baseline',
+  },
   alignStart: {
     alignItems: 'flex-start',
   },
@@ -508,7 +538,6 @@ const styles = stylex.create({
   // zoomable (WCAG 1.4.4). The hover transition keeps its own clock beside
   // the transform's.
   swipeRoot: {
-    isolation: 'isolate',
     touchAction: 'pan-y pinch-zoom',
     transform: `translate3d(${SWIPE_TRAVEL}, 0, 0)`,
     transitionProperty: 'background-color, transform',
@@ -586,7 +615,19 @@ export function Item({
   ...restProps
 }: ItemProps) {
   const pressable = usePressFeedback();
+  const columnMarker = use(ItemMarkerColumnsContext);
   const LinkComponent = useLinkComponent();
+  // A disabled row's anchor has no destination, so no activation path (a
+  // screen reader's click, Enter, a link context menu) can navigate
+  // (spec:AST-085 FR2). Like a disabled Link, it keeps the link role and skips
+  // the router link component, which may require a live href. The element type
+  // then changes with `isDisabled`, so focus follows the swap (FR4).
+  const RowAnchor = isDisabled ? 'a' : LinkComponent;
+  // The row's own action, its invisible link or button: a press on it
+  // activates the row.
+  const actionLinkRef = useRef<HTMLAnchorElement | null>(null);
+  const actionButtonRef = useRef<HTMLButtonElement | null>(null);
+  const anchorRef = useFocusAcrossSwap<HTMLAnchorElement>(actionLinkRef);
 
   // Delegation mode: the row is an enlarged click/tap target for a nested
   // control (e.g. a checkbox) that owns the keyboard access and action. The
@@ -595,11 +636,12 @@ export function Item({
   const containerRef = useRef<HTMLElement | null>(null);
   // Only onClick is needed: onMouseUp handles middle-click href navigation,
   // which delegation mode never has (href is ignored here).
-  const {onClick: delegatedOnClick} = useClickableContainer({
-    containerRef,
-    interactiveRef: interactiveRef ?? undefined,
-    disabled: isDisabled,
-  });
+  const {onClick: delegatedOnClick, onPointerDown: delegatedOnPointerDown} =
+    useClickableContainer({
+      containerRef,
+      interactiveRef: interactiveRef ?? undefined,
+      disabled: isDisabled,
+    });
 
   useDevWarning(
     'Item',
@@ -619,6 +661,18 @@ export function Item({
   // component means the root itself is the anchor, so the address rides it
   // and the invisible anchor below is not rendered.
   const isLinkRoot = typeof Component !== 'string' && href != null;
+  // A press on a nested control does not run this row's action, so the row
+  // shows no touch press. A row with a parent role or a link root runs it, so
+  // it keeps the press. Such a row is not a clickable container: an enclosing
+  // card still treats it as part of its own surface.
+  const hasOwnAction =
+    (onClick != null || href != null) && !hasParentRole && !isLinkRoot;
+  const pressOnRow = (event: React.PointerEvent<HTMLElement>) =>
+    cancelNestedTouchPress(
+      event,
+      event.currentTarget,
+      href != null ? actionLinkRef.current : actionButtonRef.current,
+    );
 
   // Swipe actions exist where the row's role permits interactive descendants
   // (a swipe panel's buttons are such descendants): a `listitem`, or no role
@@ -686,7 +740,7 @@ export function Item({
 
   // Inline rows are one line by definition, so the description always
   // ellipsizes there — a ReactNode description cannot wrap the row open.
-  const isInline = layout === 'inline' && description != null;
+  const isInline = layout === 'inline' && hasRenderableDescription;
 
   const descriptionTruncateStyle =
     descriptionLines != null
@@ -710,9 +764,9 @@ export function Item({
         )}>
         {label}
       </span>
-      {description != null && (
+      {hasRenderableDescription && (
         <span
-          id={hasRenderableDescription ? descriptionID : undefined}
+          id={descriptionID}
           {...stylex.props(
             styles.description,
             isInline && styles.inlineDescription,
@@ -738,10 +792,9 @@ export function Item({
     onClick?.(e);
   };
 
-  const innerContent = (
+  const content = (
     <>
-      {marker}
-      {startContent != null && (
+      {isRenderable(startContent) && (
         <span
           {...stylex.props(
             styles.startContent,
@@ -764,21 +817,21 @@ export function Item({
           {labelAndDescription}
         </span>
       ) : href != null && !isLinkRoot ? (
-        <LinkComponent
-          href={href}
-          target={target}
-          rel={rel}
-          aria-disabled={isDisabled || undefined}
-          tabIndex={isDisabled ? -1 : undefined}
+        <RowAnchor
+          ref={anchorRef}
+          {...(isDisabled
+            ? {role: 'link', 'aria-disabled': true, tabIndex: -1}
+            : {href, target, rel})}
           {...stylex.props(
             styles.invisibleAnchor,
             isInline && styles.inlineContent,
             isDisabled && styles.disabledContent,
           )}>
           {labelAndDescription}
-        </LinkComponent>
+        </RowAnchor>
       ) : onClick != null ? (
         <button
+          ref={actionButtonRef}
           type="button"
           onClick={onClick}
           disabled={isDisabled}
@@ -800,7 +853,7 @@ export function Item({
         </span>
       )}
 
-      {endContent != null && (
+      {isRenderable(endContent) && (
         <span
           {...stylex.props(
             styles.endContent,
@@ -866,6 +919,21 @@ export function Item({
       {...restProps}
       {...swipeHandlers}
       {...linkRootProps}
+      {...(isDelegate
+        ? {
+            onPointerDown: chainEventHandlers(
+              restProps.onPointerDown,
+              delegatedOnPointerDown,
+            ),
+          }
+        : hasOwnAction && !isDisabled
+          ? {
+              onPointerDown: chainEventHandlers(
+                swipeHandlers?.onPointerDown ?? restProps.onPointerDown,
+                pressOnRow,
+              ),
+            }
+          : null)}
       aria-selected={(allowsAriaSelected && isSelected) || undefined}
       // aria-selected is invalid on roles that don't permit it (listitem, a
       // bare div, etc.). For those, convey selection via aria-current — valid
@@ -886,6 +954,10 @@ export function Item({
           align === 'first-line' && styles.alignFirstLine,
           isInteractive && styles.interactive,
           isInteractive && interactionOverlayStyles.backgroundColor,
+          // The touch press on a compositor layer (after the overlay, whose
+          // own touch paint it turns off): the release keeps fading while
+          // script runs.
+          isInteractive && rowPressLayerStyles.cell,
           isLinkRoot && styles.linkRoot,
           isHighlighted && styles.highlighted,
           isSelected && styles.selected,
@@ -900,7 +972,18 @@ export function Item({
       onClick={rootOnClick}>
       <ItemDescriptionContext
         value={hasRenderableDescription ? descriptionID : null}>
-        {innerContent}
+        {isRenderable(marker) && marker}
+        {isRenderable(marker) && columnMarker === marker ? (
+          <span
+            {...stylex.props(
+              styles.markerContent,
+              align === 'first-line' && styles.markerContentFirstLine,
+            )}>
+            {content}
+          </span>
+        ) : (
+          content
+        )}
       </ItemDescriptionContext>
       {hasSwipe && (
         // The panels: out-of-flow children of this root, so the DOM is the one

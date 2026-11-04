@@ -87,7 +87,10 @@ wrapper, or a header-like visual treatment.
   painted surface, variant, and selected divider edges to Section.
 - `architecture:container-padding` owns inherited inset and bleed mechanics.
 - useResizable and ResizeHandle own resize state and interaction. LayoutPanel
-  only accepts their current size as an alternative width owner.
+  accepts their current size as an alternative width owner, lends its element
+  to the resize controller for the edge reveal on collapse and open, and owns
+  the focus move and inert state of a collapsing panel
+  (`component:LayoutPanel` FR7, AR2).
 
 ## Canonical concepts
 
@@ -107,7 +110,9 @@ wrapper, or a header-like visual treatment.
 
 - **FR1 — A region owns structure, not product meaning.** A member establishes a
   spatial boundary and renders caller content without adopting the content's
-  product semantics, state, or component contracts.
+  product semantics, state, or component contracts. Toolbar's press
+  tracking across its buttons (`family:action-groups` FR5) is the one
+  exception.
 - **FR2 — Region direction is logical.** Start and end follow writing direction.
   Divider placement and panel adjacency use the same logical region position.
 - **FR3 — Layout selects geometry from slot presence.** Header, Content, Footer,
@@ -176,7 +181,8 @@ wrapper, or a header-like visual treatment.
 - **AV4 — Size model.** Layout owns fill/auto container height and content-width
   propagation; individual regions own applicable height, width, padding, and
   scroll props; Section owns its box-size props.
-- **AV5 — Interaction.** Toolbar owns roving focus and keyboard hints. Other
+- **AV5 — Interaction.** Toolbar owns roving focus, keyboard hints, and the
+  press tracking `family:action-groups` FR5 gives it across its buttons. Other
   members add no toolbar behavior. Resizable owns resize interaction.
 - **AV6 — Composition mechanism.** Members may use Stack utilities, direct CSS
   layout, contexts, or component composition. The observable region contract is
@@ -202,7 +208,7 @@ wrapper, or a header-like visual treatment.
 | -------------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Section              | Generic region and container-padding publisher                    | Its nested escape is always inline but only first/last child on the block axis                                                                                                                                                                                                                                                                                              |
 | Layout container     | Five-slot region owner with slot contexts                         | Content-only LayoutContent stays full width and aligns direct children through insets. With exactly one panel, the panel remains aligned while content extends to the opposite open edge. With both panels or intrinsic content widths, the middle composition stays constrained. Tests cover topology; browser evidence covers mirrored alignment and scrollbar placement. |
-| LayoutContent        | Reads slot presence and applies outer/inner inset                 | Its no-start path writes the outer value to both inline geometry variables, while no-end changes padding without the matching variable update                                                                                                                                                                                                                               |
+| LayoutContent        | Reads slot presence and applies outer/inner inset                 | Its no-start path writes the outer value to both inline geometry variables, so with only an end panel the inline-end variable differs from the applied inner inset; beside a header or footer without a divider the block edge applies zero but publishes the inner inset                                                                                                   |
 | LayoutPanel          | Applies position-aware padding and may accept resize-driven width | Automatic Layout-edge padding leaves baseline inner geometry variables; an adjacent `ResizeHandle hasDivider` can double the line unless the caller sets panel `hasDivider={false}`                                                                                                                                                                                         |
 | LayoutHeader/Footer  | Region-specific inset, boundary, and landmarks                    | Cross-region computed-style parity is not covered by one browser matrix                                                                                                                                                                                                                                                                                                     |
 | Toolbar              | Section-backed surface plus toolbar behavior                      | Inline inset and edge compensation follow the composed Section's current padding context                                                                                                                                                                                                                                                                                    |

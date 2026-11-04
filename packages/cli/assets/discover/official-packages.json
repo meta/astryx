@@ -134,23 +134,11 @@
         },
         {
           "kind": "component",
-          "name": "InfoTip"
-        },
-        {
-          "kind": "component",
           "name": "ListInput"
         },
         {
           "kind": "component",
           "name": "LogStream"
-        },
-        {
-          "kind": "component",
-          "name": "MobilePowerSearch"
-        },
-        {
-          "kind": "component",
-          "name": "MobileTokenizer"
         },
         {
           "kind": "component",
@@ -163,6 +151,10 @@
         {
           "kind": "component",
           "name": "Schedule"
+        },
+        {
+          "kind": "component",
+          "name": "SelectableCardGroup"
         },
         {
           "kind": "component",

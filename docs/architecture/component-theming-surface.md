@@ -405,7 +405,7 @@ how themes become output, or the design rationale for a component's appearance.
 - Component `.doc.mjs` `theming.vars[]` owns documented custom properties and
   marks private implementation variables; `theming.derived[]` records checked
   public-property expansion metadata.
-- A colocated component `.spec.md` `### Theming anatomy` block owns the exact,
+- A component record's (`docs/specs/components/`) `### Theming anatomy` block owns the exact,
   machine-readable anatomy-to-target dispositions. It is optional during
   migration, checked against consumer anatomy, and excluded from generated
   consumer docs. Nearby component-spec prose owns non-obvious rationale,

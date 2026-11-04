@@ -10,7 +10,11 @@
  *
  * Navigation item with icon, selected state, row-level actions, and nesting.
  * Collapsed icon-only controls use a meaningful consumer `aria-label` when
- * provided and fall back to `label` when it is missing or blank.
+ * provided and fall back to `label` when it is missing or blank. Their label
+ * tooltip binds to the interactive control through a callback ref, so hover,
+ * keyboard focus, and `aria-describedby` follow the control from the first
+ * collapsed render. A disabled control takes no pointer, so its row listens
+ * for the tooltip instead, while the control keeps focus and the description.
  *
  * Collapsed items with children open their submenu flyout through
  * `useMenuHover`, the shared hover-intent hook (same one `SideNavHeading` and
@@ -36,7 +40,6 @@ import {
   useCallback,
   useId,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from 'react';
@@ -58,7 +61,7 @@ import {usePopover} from '../Popover/usePopover';
 import {useMenuHover} from '../hooks/useMenuHover';
 import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
-import {Tooltip} from '../Tooltip';
+import {useTooltip} from '../Tooltip';
 import {navItemStyles, type NavItemSize} from '../NavItem/navItemStyles.stylex';
 import {SizeProvider} from '../SizeContext/SizeContext';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
@@ -69,11 +72,20 @@ import {
   SideNavCollapseContext,
 } from './SideNavCollapseContext';
 import {useSideNavRenderMode} from './SideNavRenderContext';
-import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOnActivate';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
+import {disabledInteractionProps} from '../utils/disabledInteraction';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {SideNavFocusTargetsContext} from './SideNavFocusTargetsContext';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/SideNav/SideNavItem.generated';
+import {isRenderable} from '../utils/isRenderable';
+
+registerEnglishFallback(english);
 // =============================================================================
 // Styles
 // =============================================================================
@@ -321,6 +333,8 @@ interface NavItemElementProps {
 /**
  * Renders `<a>` (via LinkComponent) when `href` is set, otherwise `<button>`.
  * Centralizes the link-vs-button decision used across all SideNavItem paths.
+ * A disabled item is a `<button>` that keeps its tab stop and exposes
+ * `aria-disabled`, but is inert (spec:AST-085 FR1, FR2).
  */
 function NavItemElement({
   href,
@@ -348,11 +362,25 @@ function NavItemElement({
       ref={ref as React.Ref<HTMLButtonElement>}
       type="button"
       onClick={onClick}
-      disabled={isDisabled}
-      {...rest}>
+      {...rest}
+      {...(isDisabled
+        ? {
+            'aria-disabled': true,
+            ...disabledInteractionProps(
+              rest.onKeyDown as
+                React.KeyboardEventHandler<HTMLButtonElement> | undefined,
+            ),
+          }
+        : null)}>
       {children}
     </button>
   );
+}
+
+/** Joins the non-empty ids into one `aria-describedby` value. */
+function joinIds(...ids: (string | null | undefined)[]): string | undefined {
+  const joined = ids.filter(Boolean).join(' ');
+  return joined === '' ? undefined : joined;
 }
 
 // =============================================================================
@@ -504,14 +532,13 @@ export function SideNavItem({
   // The row (or, collapsed, the trigger/link/button) is the pressable; the
   // expand toggle inside it is its own.
   const pressable = usePressFeedback();
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const {isCollapsed} = useSideNavCollapse();
   const renderMode = useSideNavRenderMode();
-  const {closeMobileNav} = useAppShellMobile();
   const isInDrawer = renderMode === 'drawer' || renderMode === 'drawer-content';
+  const closeDrawerAfter = useCloseMobileDrawerOnActivate(isInDrawer);
   const id = useId();
   const hasChildren = !!children;
-  const itemRef = useRef<HTMLDivElement>(null);
   const depth = use(SideNavItemDepthContext);
 
   // Popover for collapsed items with children
@@ -522,6 +549,38 @@ export function SideNavItem({
     dialogLabel: t('@astryx.sideNavItem.submenuLabel', {label}),
   });
   const mergedTriggerRef = useMergedRefs(ref, popover.triggerRef);
+
+  // Label tooltip for a collapsed leaf. It binds through a callback ref and
+  // its id renders as an `aria-describedby` prop, so both follow the element
+  // they describe across re-renders. The hook outlives the collapsed branch,
+  // so it is held shut whenever the item is not a collapsed leaf: a tooltip
+  // open when the rail expands must not come back on the next collapse.
+  const isRailLeaf = isCollapsed && !hasChildren;
+  const railTooltip = useTooltip({
+    placement: 'end',
+    // A disabled leaf's row is the trigger (see the collapsed path). It is not
+    // focusable itself, so `auto` would never hear the focus that bubbles up
+    // from its control.
+    focusTrigger: 'always',
+    isEnabled: isRailLeaf,
+    isOpen: isRailLeaf ? undefined : false,
+  });
+  const railLeafRef = useMergedRefs(ref, railTooltip.ref);
+
+  // The row's root registers with its SideNav, so a collapse that removes the
+  // focused row can hand focus to the toggle or the nearest row still in the
+  // rail (`component:SideNav` AR3).
+  const focusTargets = use(SideNavFocusTargetsContext);
+  // The collapsed rail renders a top-level row with an icon (FR2).
+  const isKeptInRail = !!icon && depth === 0;
+  const rowRef = useCallback(
+    (element: HTMLDivElement | null) =>
+      element == null || focusTargets == null
+        ? undefined
+        : focusTargets.registerRow(element, isKeptInRail),
+    [focusTargets, isKeptInRail],
+  );
+  const rowTooltipRef = useMergedRefs(rowRef, railTooltip.ref);
 
   // Collapse state for items with children
   const itemCollapsibleConfig = useMemo(
@@ -566,11 +625,7 @@ export function SideNavItem({
       toggleItemCollapse();
       return;
     }
-    onClick?.(e);
-    // Close the mobile nav when a nav item is activated inside the drawer
-    if (isInDrawer) {
-      closeMobileNav();
-    }
+    closeDrawerAfter(onClick)?.(e);
   };
 
   const handleToggleClick = (e: React.MouseEvent) => {
@@ -648,7 +703,7 @@ export function SideNavItem({
     // Items with children: popover trigger + popover
     if (hasChildren) {
       return (
-        <div {...stylex.props(styles.root, xstyle)}>
+        <div ref={rowRef} {...stylex.props(styles.root, xstyle)}>
           <button
             ref={mergedTriggerRef}
             type="button"
@@ -679,9 +734,19 @@ export function SideNavItem({
       );
     }
 
-    // Items without children: icon-only link/button with tooltip
+    // Items without children: icon-only link or button, its label in a
+    // tooltip. The control is the trigger, so the element that takes focus is
+    // the one described. A disabled control takes no pointer
+    // (`navItemStyles.disabled`), so its row listens for the tooltip instead;
+    // the control still takes focus (focusin reaches the row) and stays the
+    // element described (spec:AST-085 FR5).
+    const isRowTrigger = isDisabled;
     const collapsedAriaProps = {
       'aria-current': isSelected ? ('page' as const) : undefined,
+      'aria-describedby': joinIds(
+        rest['aria-describedby'],
+        railTooltip.describedBy,
+      ),
       'aria-disabled': isDisabled || undefined,
       'aria-label': collapsedAccessibleLabel,
       'data-testid': testId,
@@ -689,7 +754,7 @@ export function SideNavItem({
 
     const collapsedElement = (
       <NavItemElement
-        ref={ref}
+        ref={isRowTrigger ? ref : railLeafRef}
         href={href}
         as={as}
         isDisabled={isDisabled}
@@ -702,9 +767,11 @@ export function SideNavItem({
     );
 
     return (
-      <div ref={itemRef} {...stylex.props(styles.root, xstyle)}>
+      <div
+        ref={isRowTrigger ? rowTooltipRef : rowRef}
+        {...stylex.props(styles.root, xstyle)}>
         {collapsedElement}
-        <Tooltip content={label} placement="end" anchorRef={itemRef} />
+        {railTooltip.renderTooltip(label)}
       </div>
     );
   }
@@ -718,7 +785,7 @@ export function SideNavItem({
           color: isSelected ? 'inherit' : isDisabled ? 'disabled' : 'secondary',
         })}
       {!isCollapsed && <span {...stylex.props(styles.label)}>{label}</span>}
-      {!isCollapsed && endContent && (
+      {!isCollapsed && isRenderable(endContent) && (
         <span {...stylex.props(styles.endContent)}>{endContent}</span>
       )}
       {!isCollapsed && isItemCollapsible && !hasIndependentToggle && (
@@ -894,7 +961,7 @@ export function SideNavItem({
   }
 
   const item = (
-    <div ref={itemRef} {...stylex.props(styles.root, xstyle)}>
+    <div ref={rowRef} {...stylex.props(styles.root, xstyle)}>
       {itemElement}
       {hasChildren && !isCollapsed && (
         <div

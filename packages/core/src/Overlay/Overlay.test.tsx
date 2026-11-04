@@ -10,9 +10,15 @@
  * update tests to match new behavior
  */
 
-import {describe, it, expect, beforeEach, afterEach} from 'vitest';
-import {render, screen, renderHook} from '@testing-library/react';
-import {createRef} from 'react';
+import {describe, it, expect, beforeEach, afterEach, vi} from 'vitest';
+import {
+  act,
+  render,
+  screen,
+  renderHook,
+  fireEvent,
+} from '@testing-library/react';
+import {Activity, createRef} from 'react';
 import {Overlay} from './Overlay';
 import {useOverlay} from './useOverlay';
 
@@ -31,7 +37,7 @@ function getScrim(container: HTMLElement): HTMLElement {
  */
 function mockHoverNone(matches: boolean): () => void {
   const original = window.matchMedia;
-  window.matchMedia = ((query: string) => ({
+  window.matchMedia = (query: string) => ({
     matches: query.includes('hover: none') ? matches : false,
     media: query,
     onchange: null,
@@ -40,7 +46,7 @@ function mockHoverNone(matches: boolean): () => void {
     addEventListener: () => {},
     removeEventListener: () => {},
     dispatchEvent: () => false,
-  }));
+  });
   return () => {
     window.matchMedia = original;
   };
@@ -243,6 +249,144 @@ describe('Overlay', () => {
       );
       const root = container.firstElementChild as HTMLElement;
       expect(root.style.opacity).toBe('0.5');
+    });
+
+    it('takes the corner radius of its first child', () => {
+      const {container} = render(
+        <Overlay content={<span>c</span>}>
+          <div style={{borderRadius: '12px'}}>b</div>
+        </Overlay>,
+      );
+      const root = container.firstElementChild as HTMLElement;
+      expect(root.style.borderRadius).toBe('12px');
+    });
+
+    it('sets no radius when its first child has none', () => {
+      const {container} = render(
+        <Overlay content={<span>c</span>}>
+          <div>b</div>
+        </Overlay>,
+      );
+      const root = container.firstElementChild as HTMLElement;
+      expect(root.style.borderRadius).toBe('');
+    });
+
+    it('gives a callback ref the root that took the radius', () => {
+      const ref = vi.fn();
+      const {container} = render(
+        <Overlay ref={ref} content={<span>c</span>}>
+          <div style={{borderRadius: '8px'}}>b</div>
+        </Overlay>,
+      );
+      const root = container.firstElementChild as HTMLElement;
+      expect(ref).toHaveBeenCalledWith(root);
+      expect(root.style.borderRadius).toBe('8px');
+    });
+
+    it('keeps a later radius when an inline callback ref re-renders', () => {
+      const overlay = (label: string) => (
+        <Overlay ref={element => void element} content={<span>{label}</span>}>
+          <div style={{borderRadius: '12px'}}>b</div>
+        </Overlay>
+      );
+      const {container, rerender} = render(overlay('first'));
+      const root = container.firstElementChild as HTMLElement;
+      expect(root.style.borderRadius).toBe('12px');
+
+      root.style.borderRadius = '40px';
+      rerender(overlay('second'));
+      expect(container.firstElementChild).toBe(root);
+      expect(root.style.borderRadius).toBe('40px');
+    });
+
+    it('reads the radius again when a hidden Activity shows it', async () => {
+      const overlay = (mode: 'visible' | 'hidden') => (
+        <Activity mode={mode}>
+          <Overlay content={<span>c</span>}>
+            <div data-testid="media" style={{borderRadius: '12px'}}>
+              b
+            </div>
+          </Overlay>
+        </Activity>
+      );
+      const {container, rerender} = render(overlay('visible'));
+      const root = container.firstElementChild as HTMLElement;
+      expect(root.style.borderRadius).toBe('12px');
+
+      rerender(overlay('hidden'));
+      await act(async () => Promise.resolve());
+      screen.getByTestId('media').style.borderRadius = '48px';
+      rerender(overlay('visible'));
+      expect(container.firstElementChild).toBe(root);
+      expect(root.style.borderRadius).toBe('48px');
+    });
+  });
+
+  describe('host attributes', () => {
+    // architecture:public-component-api INV5: host attributes reach the root
+    // element that owns the ref, the theme target and the styling props.
+    it('forwards data, ARIA and id attributes to the root div', () => {
+      const ref = createRef<HTMLDivElement>();
+      render(
+        <Overlay
+          ref={ref}
+          content={<span>c</span>}
+          id="hero-overlay"
+          data-testid="hero"
+          data-analytics-id="hero-card"
+          aria-describedby="hero-caption">
+          <div>b</div>
+        </Overlay>,
+      );
+      const root = screen.getByTestId('hero');
+      expect(root).toBe(ref.current);
+      expect(root).toHaveAttribute('data-analytics-id', 'hero-card');
+      expect(root).toHaveAttribute('id', 'hero-overlay');
+      expect(root).toHaveAttribute('aria-describedby', 'hero-caption');
+      expect(root).toHaveClass('astryx-overlay');
+    });
+
+    describe('on a touch device', () => {
+      let restore: () => void;
+      beforeEach(() => {
+        restore = mockHoverNone(true);
+      });
+      afterEach(() => restore());
+
+      it('runs a caller onClick and still toggles the hover overlay on tap', () => {
+        const onClick = vi.fn((event: {preventDefault: () => void}) => {
+          event.preventDefault();
+        });
+        const {container} = render(
+          <Overlay
+            showOn="hover"
+            content={<span>c</span>}
+            data-testid="hero"
+            onClick={onClick}>
+            <div>b</div>
+          </Overlay>,
+        );
+        expect(getScrim(container).hasAttribute('inert')).toBe(true);
+        fireEvent.click(screen.getByTestId('hero'));
+        expect(onClick).toHaveBeenCalledTimes(1);
+        // A caller preventDefault() does not cancel the built-in toggle.
+        expect(getScrim(container).hasAttribute('inert')).toBe(false);
+      });
+
+      it('runs a caller onMouseUp alongside the built-in handler', () => {
+        const onMouseUp = vi.fn();
+        render(
+          <Overlay
+            showOn="hover"
+            content={<span>c</span>}
+            data-testid="hero"
+            onMouseUp={onMouseUp}>
+            <div>b</div>
+          </Overlay>,
+        );
+        fireEvent.mouseUp(screen.getByTestId('hero'));
+        expect(onMouseUp).toHaveBeenCalledTimes(1);
+      });
     });
   });
 });
