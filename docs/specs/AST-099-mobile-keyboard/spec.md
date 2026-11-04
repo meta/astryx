@@ -97,13 +97,12 @@ app to turn on.
   or a maximum height, so layout is correct with no animation running: the chat
   composer, a search field placed at the bottom, and tab bar search position
   from it, and a fully expanded sheet extends its own scroll range by it. FR9's
-  docked ride is the one exception: Core moves an app's bottom-docked container
-  by the distance from the bar's drawn bottom to the keyboard's top (FR9). How
-  the value reaches styles is `architecture:react-component-runtime` INV11.
-  Riding the keyboard's motion layers on top of that layout, so layout never
-  depends on it; FR8 requires it where it applies. When surfaces ride it, such
-  as a composer, a scroll view, and a header, they all move in sync along the
-  same motion to the resting value with no per-frame layout work, and each
+  docked ride is the one exception: Core moves an app's docked bar as FR9 sets
+  out. How the value reaches styles is `architecture:react-component-runtime`
+  INV11. Riding the keyboard's motion layers on top of that layout, so layout
+  never depends on it; FR8 requires it where it applies. When surfaces ride it,
+  such as a composer, a scroll view, and a header, they all move in sync along
+  the same motion to the resting value with no per-frame layout work, and each
   commits the resting value once to layout, as an offset, a padding, or a
   spacer, so nothing is hidden or unscrollable. How the motion is shared is
   `architecture:react-component-runtime` INV11; no public API or CSS custom
