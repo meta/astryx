@@ -5786,6 +5786,7 @@ interface UseCalendarConstraintsReturn
   maxDate: PlainDate | null
   minDate: PlainDate | null
 interface UseCalendarDaysOptions
+  calendar?: CalendarSystem = 'gregory'
   hasVariableRowCount?: boolean
   month: number
   weekStartsOn?: DayOfWeek
@@ -5796,6 +5797,7 @@ interface UseCalendarDaysReturn
   totalCells: number
   weeks: CalendarDay[][]
 interface UseCalendarNavigationOptions
+  calendar?: CalendarSystem = 'gregory'
   focusDate?: ISODateString
   initialValue?: ISODateString
   numberOfMonths?: 1 | 2
@@ -5806,6 +5808,7 @@ interface UseCalendarNavigationReturn
   monthYearLabel: string
   navigateMonth: (delta: number, focusedDate?: ISODateString, offset?: number) => void
   pendingFocus: ISODateString | null
+  visibleCalendarMonths: Array<{ year: number; month: number }>
   visibleMonths: PlainDate[]
 interface UseChatComposerTokensOptions
   editableRef: React.RefObject<HTMLDivElement | null>

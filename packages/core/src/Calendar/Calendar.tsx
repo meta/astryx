@@ -32,7 +32,7 @@ import {Button} from '../Button';
 import {Icon} from '../Icon';
 import {useAnnounce, useGridFocus} from '../hooks';
 import {useCalendarConstraints, type CalendarDay} from './hooks';
-import {useCalendarMonthDays} from './hooks/useCalendarDays';
+import {useCalendarDays} from './hooks/useCalendarDays';
 import {
   calendarStyles,
   monthGridStyles,
@@ -62,6 +62,7 @@ import {
   calendarMonthOf,
   calendarShiftMonths,
   calendarShiftYears,
+  calendarYearMonthOf,
   formatCalendarDate,
   formatCalendarMonthLabel,
   isInCalendarMonth,
@@ -864,8 +865,13 @@ function MonthGrid({
   const locale = useLocale();
 
   // Use hooks for days generation and constraints
-  const {days, weeks} = useCalendarMonthDays({
-    month,
+  const yearMonth = useMemo(
+    () => calendarYearMonthOf(calendar, month),
+    [calendar, month],
+  );
+  const {days, weeks} = useCalendarDays({
+    year: yearMonth.year,
+    month: yearMonth.month,
     calendar,
     weekStartsOn,
     hasVariableRowCount,

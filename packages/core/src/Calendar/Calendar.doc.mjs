@@ -40,6 +40,11 @@ export const docs = {
           'Show two months side by side when the user frequently selects dates that span a month boundary.',
       },
       {
+        guidance: true,
+        description:
+          'For a custom month view, use useCalendarNavigation and useCalendarDays from @astryxdesign/core/Calendar. To show another calendar system, pass the same calendar to both and feed visibleCalendarMonths into useCalendarDays. The hooks default to gregory and never read the InternationalizationProvider calendar.',
+      },
+      {
         guidance: false,
         description:
           'Use a calendar for dates far in the past or future like a birth date. A text input is faster for open-ended entry.',
@@ -195,6 +200,41 @@ export const docs = {
       default: 'the InternationalizationProvider calendar, else gregory',
     },
   ],
+  examples: [
+    {
+      label: 'A custom month view in the Persian calendar',
+      code: `import {Button} from '@astryxdesign/core/Button';
+import {
+  useCalendarDays,
+  useCalendarNavigation,
+} from '@astryxdesign/core/Calendar';
+
+function PersianMonth() {
+  const {monthYearLabel, visibleCalendarMonths, navigateMonth} =
+    useCalendarNavigation({initialValue: '2026-10-30', calendar: 'persian'});
+  // visibleCalendarMonths[0] is {year: 1405, month: 8}: Aban 1405.
+  const {weeks} = useCalendarDays({
+    ...visibleCalendarMonths[0],
+    calendar: 'persian',
+  });
+  return (
+    <section aria-label={monthYearLabel}>
+      <Button label="Previous month" onClick={() => navigateMonth(-1)} />
+      <Button label="Next month" onClick={() => navigateMonth(1)} />
+      {weeks.map(week => (
+        <div key={week[0].iso}>
+          {week.map(day => (
+            <span key={day.iso} data-date={day.iso}>
+              {day.isOutside ? '' : day.dayNumber}
+            </span>
+          ))}
+        </div>
+      ))}
+    </section>
+  );
+}`,
+    },
+  ],
   theming: {
     targets: [
       {className: 'astryx-calendar', visualProps: ['mode']},
@@ -238,6 +278,11 @@ export const docsZh = {
         guidance: true,
         description:
           'Show two months side by side when the user frequently selects dates that span a month boundary.',
+      },
+      {
+        guidance: true,
+        description:
+          'For a custom month view, use useCalendarNavigation and useCalendarDays from @astryxdesign/core/Calendar. To show another calendar system, pass the same calendar to both and feed visibleCalendarMonths into useCalendarDays. The hooks default to gregory and never read the InternationalizationProvider calendar.',
       },
       {
         guidance: false,
@@ -390,6 +435,11 @@ export const docsDense = {
         guidance: true,
         description:
           'Show two months side by side when user frequently selects dates spanning a month boundary.',
+      },
+      {
+        guidance: true,
+        description:
+          'Custom month view: useCalendarNavigation + useCalendarDays; pass the same calendar to both, feed visibleCalendarMonths into useCalendarDays. Default gregory; never read the provider calendar.',
       },
       {
         guidance: false,

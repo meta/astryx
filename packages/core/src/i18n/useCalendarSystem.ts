@@ -5,10 +5,11 @@
 /**
  * @file useCalendarSystem.ts
  * @input InternationalizationContext, an optional component `calendar`
- * @output The calendar system a date component shows, and the helper that
- *   normalizes a calendar identifier
- * @position Internal i18n hook; read by InternationalizationProvider and date
- *   components. Not re-exported from the i18n barrel.
+ * @output The calendar system a date component shows, and the helpers that
+ *   normalize a calendar identifier
+ * @position Internal i18n hook; read by InternationalizationProvider, date
+ *   components, and the public calendar hooks. Not re-exported from the i18n
+ *   barrel.
  */
 
 import {use} from 'react';
@@ -63,6 +64,21 @@ function availableCalendarOrGregorian(
 }
 
 /**
+ * The calendar that a caller names, without the provider: an unknown
+ * identifier, or one this runtime cannot show, becomes `gregory` and warns
+ * once in development.
+ */
+export function resolveShownCalendar(
+  calendar: string,
+  source: string,
+): CalendarSystem {
+  return availableCalendarOrGregorian(
+    resolveCalendarSystem(calendar, source),
+    source,
+  );
+}
+
+/**
  * The calendar a date component shows: its own `calendar`, else the
  * provider's resolved calendar, else `gregory`. It resolves during render, so
  * the server and the browser agree when both have `Temporal` or both lack it.
@@ -72,9 +88,8 @@ export function useCalendarSystem(
   source: string,
 ): CalendarSystem {
   const context = use(InternationalizationContext);
-  const requested =
-    calendar != null
-      ? resolveCalendarSystem(calendar, source)
-      : (context.calendar ?? 'gregory');
-  return availableCalendarOrGregorian(requested, source);
+  return resolveShownCalendar(
+    calendar ?? context.calendar ?? 'gregory',
+    source,
+  );
 }
