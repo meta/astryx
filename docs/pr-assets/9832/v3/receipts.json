@@ -1,0 +1,1752 @@
+[
+  {
+    "frame": "VideoPlayer__default__rest__neutral-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--video",
+    "theme": "neutral",
+    "mode": "light",
+    "viewport": {
+      "width": 900,
+      "height": 620,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "rest, before playback",
+    "geometry": {
+      "x": 90,
+      "y": 108,
+      "w": 720,
+      "h": 405,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "10px",
+      "rootBackground": "rgb(10, 19, 23)",
+      "colorScheme": "light",
+      "controls": "visible",
+      "media": {
+        "paused": true,
+        "ended": false,
+        "currentTime": 0,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Play",
+        "Play"
+      ],
+      "focused": "body",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "VideoPlayer__default__rest__neutral-dark.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--video",
+    "theme": "neutral",
+    "mode": "dark",
+    "viewport": {
+      "width": 900,
+      "height": 620,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "rest, before playback",
+    "geometry": {
+      "x": 90,
+      "y": 108,
+      "w": 720,
+      "h": 405,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "10px",
+      "rootBackground": "rgb(255, 255, 255)",
+      "colorScheme": "dark",
+      "controls": "visible",
+      "media": {
+        "paused": true,
+        "ended": false,
+        "currentTime": 0,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Play",
+        "Play"
+      ],
+      "focused": "body",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "VideoPlayer__default__rest__y2k-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--video",
+    "theme": "y2k",
+    "mode": "light",
+    "viewport": {
+      "width": 900,
+      "height": 620,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "rest, before playback",
+    "geometry": {
+      "x": 90,
+      "y": 108,
+      "w": 720,
+      "h": 405,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "0px",
+      "rootBackground": "rgb(45, 36, 27)",
+      "colorScheme": "light",
+      "controls": "visible",
+      "media": {
+        "paused": true,
+        "ended": false,
+        "currentTime": 0,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Play",
+        "Play"
+      ],
+      "focused": "body",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "VideoPlayer__default__rest__matcha-dark.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--video",
+    "theme": "matcha",
+    "mode": "dark",
+    "viewport": {
+      "width": 900,
+      "height": 620,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "rest, before playback",
+    "geometry": {
+      "x": 90,
+      "y": 108,
+      "w": 720,
+      "h": 405,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "12px",
+      "rootBackground": "rgb(192, 203, 169)",
+      "colorScheme": "dark",
+      "controls": "visible",
+      "media": {
+        "paused": true,
+        "ended": false,
+        "currentTime": 0,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Play",
+        "Play"
+      ],
+      "focused": "body",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "VideoPlayer__default__rest__probe-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--video",
+    "theme": "probe",
+    "mode": "light",
+    "viewport": {
+      "width": 900,
+      "height": 620,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "rest, before playback",
+    "geometry": {
+      "x": 90,
+      "y": 108,
+      "w": 720,
+      "h": 405,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "13px",
+      "rootBackground": "rgb(10, 19, 23)",
+      "colorScheme": "light",
+      "controls": "visible",
+      "media": {
+        "paused": true,
+        "ended": false,
+        "currentTime": 0,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Play",
+        "Play"
+      ],
+      "focused": "body",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "VideoPlayer__default__playing-active__neutral-dark.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--video",
+    "theme": "neutral",
+    "mode": "dark",
+    "viewport": {
+      "width": 900,
+      "height": 620,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "playing, controls shown",
+    "geometry": {
+      "x": 90,
+      "y": 108,
+      "w": 720,
+      "h": 405,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "10px",
+      "rootBackground": "rgb(255, 255, 255)",
+      "colorScheme": "dark",
+      "controls": "visible",
+      "media": {
+        "paused": false,
+        "ended": false,
+        "currentTime": 3.22,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Pause"
+      ],
+      "focused": "div Bee on a flower",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "VideoPlayer__default__playing-idle__neutral-dark.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--video",
+    "theme": "neutral",
+    "mode": "dark",
+    "viewport": {
+      "width": 900,
+      "height": 620,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "playing, pointer left the player",
+    "geometry": {
+      "x": 90,
+      "y": 108,
+      "w": 720,
+      "h": 405,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "10px",
+      "rootBackground": "rgb(255, 255, 255)",
+      "colorScheme": "dark",
+      "controls": "hidden",
+      "media": {
+        "paused": false,
+        "ended": false,
+        "currentTime": 4.27,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Pause"
+      ],
+      "focused": "div Bee on a flower",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "VideoPlayer__white-footage__playing-active__neutral-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--video",
+    "theme": "neutral",
+    "mode": "light",
+    "viewport": {
+      "width": 900,
+      "height": 620,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "playing white footage, controls shown",
+    "geometry": {
+      "x": 90,
+      "y": 108,
+      "w": 720,
+      "h": 405,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "10px",
+      "rootBackground": "rgb(10, 19, 23)",
+      "colorScheme": "light",
+      "controls": "visible",
+      "media": {
+        "paused": false,
+        "ended": false,
+        "currentTime": 1.84,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Pause"
+      ],
+      "focused": "div Bee on a flower",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "VideoPlayer__default__volume-hidden__neutral-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--video",
+    "theme": "neutral",
+    "mode": "light",
+    "viewport": {
+      "width": 900,
+      "height": 620,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "rest: volume slider hidden",
+    "geometry": {
+      "x": 90,
+      "y": 108,
+      "w": 720,
+      "h": 405,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "10px",
+      "rootBackground": "rgb(10, 19, 23)",
+      "colorScheme": "light",
+      "controls": "visible",
+      "media": {
+        "paused": true,
+        "ended": false,
+        "currentTime": 0,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Play",
+        "Play"
+      ],
+      "focused": "body",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "VideoPlayer__default__hover-mute__neutral-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--video",
+    "theme": "neutral",
+    "mode": "light",
+    "viewport": {
+      "width": 900,
+      "height": 620,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "hover on mute: volume slider revealed",
+    "geometry": {
+      "x": 90,
+      "y": 108,
+      "w": 720,
+      "h": 405,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "10px",
+      "rootBackground": "rgb(10, 19, 23)",
+      "colorScheme": "light",
+      "controls": "visible",
+      "media": {
+        "paused": true,
+        "ended": false,
+        "currentTime": 0,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Play",
+        "Play"
+      ],
+      "focused": "body",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "VideoPlayer__default__hover-big-play__neutral-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--video",
+    "theme": "neutral",
+    "mode": "light",
+    "viewport": {
+      "width": 900,
+      "height": 620,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "hover on large play",
+    "geometry": {
+      "x": 90,
+      "y": 108,
+      "w": 720,
+      "h": 405,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "10px",
+      "rootBackground": "rgb(10, 19, 23)",
+      "colorScheme": "light",
+      "controls": "visible",
+      "media": {
+        "paused": true,
+        "ended": false,
+        "currentTime": 0,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Play",
+        "Play"
+      ],
+      "focused": "body",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "VideoPlayer__default__pressed-play__neutral-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--video",
+    "theme": "neutral",
+    "mode": "light",
+    "viewport": {
+      "width": 900,
+      "height": 620,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "pointer down on bar play",
+    "geometry": {
+      "x": 90,
+      "y": 108,
+      "w": 720,
+      "h": 405,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "10px",
+      "rootBackground": "rgb(10, 19, 23)",
+      "colorScheme": "light",
+      "controls": "visible",
+      "media": {
+        "paused": true,
+        "ended": false,
+        "currentTime": 0,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Play",
+        "Play"
+      ],
+      "focused": "button Play",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "VideoPlayer__default__focus-root__neutral-dark.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--video",
+    "theme": "neutral",
+    "mode": "dark",
+    "viewport": {
+      "width": 900,
+      "height": 620,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "Tab 1: player root",
+    "geometry": {
+      "x": 90,
+      "y": 108,
+      "w": 720,
+      "h": 405,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "10px",
+      "rootBackground": "rgb(255, 255, 255)",
+      "colorScheme": "dark",
+      "controls": "visible",
+      "media": {
+        "paused": true,
+        "ended": false,
+        "currentTime": 0,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Play",
+        "Play"
+      ],
+      "focused": "div Bee on a flower",
+      "focusVisible": true,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "VideoPlayer__default__focus-bar-play__neutral-dark.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--video",
+    "theme": "neutral",
+    "mode": "dark",
+    "viewport": {
+      "width": 900,
+      "height": 620,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "Tab 2: bar play (large play is pointer-only)",
+    "geometry": {
+      "x": 90,
+      "y": 108,
+      "w": 720,
+      "h": 405,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "10px",
+      "rootBackground": "rgb(255, 255, 255)",
+      "colorScheme": "dark",
+      "controls": "visible",
+      "media": {
+        "paused": true,
+        "ended": false,
+        "currentTime": 0,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Play",
+        "Play"
+      ],
+      "focused": "button Play",
+      "focusVisible": true,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "VideoPlayer__default__after-large-play__neutral-dark.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--video",
+    "theme": "neutral",
+    "mode": "dark",
+    "viewport": {
+      "width": 900,
+      "height": 620,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "after a click on large play, then K",
+    "geometry": {
+      "x": 90,
+      "y": 108,
+      "w": 720,
+      "h": 405,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "10px",
+      "rootBackground": "rgb(255, 255, 255)",
+      "colorScheme": "dark",
+      "controls": "visible",
+      "media": {
+        "paused": true,
+        "ended": false,
+        "currentTime": 0.93,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Play"
+      ],
+      "focused": "div Bee on a flower",
+      "focusVisible": true,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "VideoPlayer__default__waiting__neutral-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--video",
+    "theme": "neutral",
+    "mode": "light",
+    "viewport": {
+      "width": 900,
+      "height": 620,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "play pressed before the media loaded",
+    "geometry": {
+      "x": 90,
+      "y": 108,
+      "w": 720,
+      "h": 405,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "10px",
+      "rootBackground": "rgb(10, 19, 23)",
+      "colorScheme": "light",
+      "controls": "visible",
+      "media": {
+        "paused": false,
+        "ended": false,
+        "currentTime": 0,
+        "readyState": 0,
+        "error": null
+      },
+      "playLabels": [
+        "Pause"
+      ],
+      "focused": "div Bee on a flower",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 1,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "VideoPlayer__default__error__neutral-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--video",
+    "theme": "neutral",
+    "mode": "light",
+    "viewport": {
+      "width": 900,
+      "height": 620,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "media request failed",
+    "geometry": {
+      "x": 90,
+      "y": 108,
+      "w": 720,
+      "h": 405,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "10px",
+      "rootBackground": "rgb(10, 19, 23)",
+      "colorScheme": "light",
+      "controls": "visible",
+      "media": {
+        "paused": true,
+        "ended": false,
+        "currentTime": 0,
+        "readyState": 0,
+        "error": 4
+      },
+      "playLabels": [
+        "Play"
+      ],
+      "focused": "body",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 1,
+      "consoleSample": [
+        "Failed to load resource: net::ERR_FAILED"
+      ]
+    }
+  },
+  {
+    "frame": "VideoPlayer__captions__on__neutral-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--video-with-captions",
+    "theme": "neutral",
+    "mode": "light",
+    "viewport": {
+      "width": 900,
+      "height": 620,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "captions on, controls shown",
+    "geometry": {
+      "x": 90,
+      "y": 108,
+      "w": 720,
+      "h": 405,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "10px",
+      "rootBackground": "rgb(10, 19, 23)",
+      "colorScheme": "light",
+      "controls": "visible",
+      "media": {
+        "paused": false,
+        "ended": false,
+        "currentTime": 2,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Pause"
+      ],
+      "focused": "div Bee on a flower",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "VideoPlayer__rtl__rest__neutral-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--right-to-left",
+    "theme": "neutral",
+    "mode": "light",
+    "viewport": {
+      "width": 900,
+      "height": 620,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "rest in a right-to-left page",
+    "geometry": {
+      "x": 90,
+      "y": 122,
+      "w": 720,
+      "h": 405,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "rtl",
+      "rootRadius": "10px",
+      "rootBackground": "rgb(10, 19, 23)",
+      "colorScheme": "light",
+      "controls": "visible",
+      "media": {
+        "paused": true,
+        "ended": false,
+        "currentTime": 0,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Play",
+        "Play"
+      ],
+      "focused": "body",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "VideoPlayer__narrow__rest-320__neutral-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--video",
+    "theme": "neutral",
+    "mode": "light",
+    "viewport": {
+      "width": 320,
+      "height": 520,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "rest at a 320px viewport",
+    "geometry": {
+      "x": 32,
+      "y": 58,
+      "w": 720,
+      "h": 405,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "10px",
+      "rootBackground": "rgb(10, 19, 23)",
+      "colorScheme": "light",
+      "controls": "visible",
+      "media": {
+        "paused": true,
+        "ended": false,
+        "currentTime": 0,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Play",
+        "Play"
+      ],
+      "focused": "body",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "VideoPlayer__touch__playing-idle__neutral-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--video",
+    "theme": "neutral",
+    "mode": "light",
+    "viewport": {
+      "width": 412,
+      "height": 700,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "coarse",
+      "reducedMotion": "no-preference"
+    },
+    "state": "touch, playing, idle",
+    "geometry": {
+      "x": 32,
+      "y": 148,
+      "w": 720,
+      "h": 405,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "10px",
+      "rootBackground": "rgb(10, 19, 23)",
+      "colorScheme": "light",
+      "controls": "visible",
+      "media": {
+        "paused": false,
+        "ended": false,
+        "currentTime": 2.99,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Pause"
+      ],
+      "focused": "div Bee on a flower",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 2,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "VideoPlayer__touch__after-tap__neutral-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--video",
+    "theme": "neutral",
+    "mode": "light",
+    "viewport": {
+      "width": 412,
+      "height": 700,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "coarse",
+      "reducedMotion": "no-preference"
+    },
+    "state": "touch, one tap on the video",
+    "geometry": {
+      "x": 32,
+      "y": 148,
+      "w": 720,
+      "h": 405,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "10px",
+      "rootBackground": "rgb(10, 19, 23)",
+      "colorScheme": "light",
+      "controls": "hidden",
+      "media": {
+        "paused": false,
+        "ended": false,
+        "currentTime": 3.87,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Pause"
+      ],
+      "focused": "div Bee on a flower",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "VideoPlayer__default__forced-colors__neutral-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--video",
+    "theme": "neutral",
+    "mode": "light",
+    "viewport": {
+      "width": 900,
+      "height": 620,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "reduce"
+    },
+    "state": "forced colors",
+    "geometry": {
+      "x": 90,
+      "y": 108,
+      "w": 720,
+      "h": 405,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "10px",
+      "rootBackground": "rgb(255, 255, 255)",
+      "colorScheme": "light dark",
+      "controls": "visible",
+      "media": {
+        "paused": true,
+        "ended": false,
+        "currentTime": 0,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Play",
+        "Play"
+      ],
+      "focused": "body",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "AudioPlayer__default__rest__neutral-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--audio",
+    "theme": "neutral",
+    "mode": "light",
+    "viewport": {
+      "width": 760,
+      "height": 400,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "rest",
+    "geometry": {
+      "x": 44,
+      "y": 126,
+      "w": 696,
+      "h": 148,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "0px",
+      "rootBackground": "rgba(0, 0, 0, 0)",
+      "colorScheme": "light",
+      "controls": "visible",
+      "media": {
+        "paused": true,
+        "ended": false,
+        "currentTime": 0,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Play"
+      ],
+      "focused": "body",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "AudioPlayer__default__rest__neutral-dark.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--audio",
+    "theme": "neutral",
+    "mode": "dark",
+    "viewport": {
+      "width": 760,
+      "height": 400,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "rest",
+    "geometry": {
+      "x": 44,
+      "y": 126,
+      "w": 696,
+      "h": 148,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "0px",
+      "rootBackground": "rgba(0, 0, 0, 0)",
+      "colorScheme": "dark",
+      "controls": "visible",
+      "media": {
+        "paused": true,
+        "ended": false,
+        "currentTime": 0,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Play"
+      ],
+      "focused": "body",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "AudioPlayer__default__rest__y2k-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--audio",
+    "theme": "y2k",
+    "mode": "light",
+    "viewport": {
+      "width": 760,
+      "height": 400,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "rest",
+    "geometry": {
+      "x": 50,
+      "y": 115,
+      "w": 684,
+      "h": 170,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "0px",
+      "rootBackground": "rgba(0, 0, 0, 0)",
+      "colorScheme": "light",
+      "controls": "visible",
+      "media": {
+        "paused": true,
+        "ended": false,
+        "currentTime": 0,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Play"
+      ],
+      "focused": "body",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "AudioPlayer__default__rest__matcha-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--audio",
+    "theme": "matcha",
+    "mode": "light",
+    "viewport": {
+      "width": 760,
+      "height": 400,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "rest",
+    "geometry": {
+      "x": 50,
+      "y": 116,
+      "w": 684,
+      "h": 168,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "0px",
+      "rootBackground": "rgba(0, 0, 0, 0)",
+      "colorScheme": "light",
+      "controls": "visible",
+      "media": {
+        "paused": true,
+        "ended": false,
+        "currentTime": 0,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Play"
+      ],
+      "focused": "body",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "AudioPlayer__default__playing-hover-skip__neutral-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--audio",
+    "theme": "neutral",
+    "mode": "light",
+    "viewport": {
+      "width": 760,
+      "height": 640,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "playing, hover on skip forward",
+    "geometry": {
+      "x": 44,
+      "y": 246,
+      "w": 696,
+      "h": 148,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "0px",
+      "rootBackground": "rgba(0, 0, 0, 0)",
+      "colorScheme": "light",
+      "controls": "visible",
+      "media": {
+        "paused": false,
+        "ended": false,
+        "currentTime": 1.99,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Pause"
+      ],
+      "focused": "button Pause",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "AudioPlayer__default__speed-slider-drag__neutral-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--audio",
+    "theme": "neutral",
+    "mode": "light",
+    "viewport": {
+      "width": 760,
+      "height": 640,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "hover on speed opens its slider; dragging to 1.5x shows the speed in a tooltip",
+    "geometry": {
+      "x": 44,
+      "y": 246,
+      "w": 696,
+      "h": 148,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "0px",
+      "rootBackground": "rgba(0, 0, 0, 0)",
+      "colorScheme": "light",
+      "controls": "visible",
+      "media": {
+        "paused": false,
+        "ended": false,
+        "currentTime": 3.19,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Pause"
+      ],
+      "focused": "div slider",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "AudioPlayer__default__volume-revealed__neutral-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--audio",
+    "theme": "neutral",
+    "mode": "light",
+    "viewport": {
+      "width": 760,
+      "height": 640,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "speed 1.5x; hover on mute opens the volume slider to its left",
+    "geometry": {
+      "x": 44,
+      "y": 246,
+      "w": 696,
+      "h": 148,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "0px",
+      "rootBackground": "rgba(0, 0, 0, 0)",
+      "colorScheme": "light",
+      "controls": "visible",
+      "media": {
+        "paused": false,
+        "ended": false,
+        "currentTime": 4.18,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Pause"
+      ],
+      "focused": "div slider",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "AudioPlayer__default__focus__neutral-dark.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--audio",
+    "theme": "neutral",
+    "mode": "dark",
+    "viewport": {
+      "width": 760,
+      "height": 400,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "keyboard focus inside the player",
+    "geometry": {
+      "x": 44,
+      "y": 126,
+      "w": 696,
+      "h": 148,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "0px",
+      "rootBackground": "rgba(0, 0, 0, 0)",
+      "colorScheme": "dark",
+      "controls": "visible",
+      "media": {
+        "paused": true,
+        "ended": false,
+        "currentTime": 0,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Play"
+      ],
+      "focused": "button Previous track",
+      "focusVisible": true,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "AudioPlayer__default__loading-disabled__neutral-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--audio",
+    "theme": "neutral",
+    "mode": "light",
+    "viewport": {
+      "width": 760,
+      "height": 400,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "before metadata: skip and timeline disabled",
+    "geometry": {
+      "x": 44,
+      "y": 126,
+      "w": 696,
+      "h": 148,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "0px",
+      "rootBackground": "rgba(0, 0, 0, 0)",
+      "colorScheme": "light",
+      "controls": "visible",
+      "media": {
+        "paused": true,
+        "ended": false,
+        "currentTime": 0,
+        "readyState": 0,
+        "error": null
+      },
+      "playLabels": [
+        "Play"
+      ],
+      "focused": "body",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "AudioPlayer__narrow__rest-320__neutral-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--audio",
+    "theme": "neutral",
+    "mode": "light",
+    "viewport": {
+      "width": 320,
+      "height": 520,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "rest at a 320px viewport",
+    "geometry": {
+      "x": 44,
+      "y": 186,
+      "w": 696,
+      "h": 148,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "0px",
+      "rootBackground": "rgba(0, 0, 0, 0)",
+      "colorScheme": "light",
+      "controls": "visible",
+      "media": {
+        "paused": true,
+        "ended": false,
+        "currentTime": 0,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Play"
+      ],
+      "focused": "body",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  },
+  {
+    "frame": "MediaPlayer__custom__rest__neutral-light.png",
+    "build": "ce2afa9f231",
+    "story": "lab-mediaplayer--custom-layout",
+    "theme": "neutral",
+    "mode": "light",
+    "viewport": {
+      "width": 760,
+      "height": 240,
+      "dpr": 2
+    },
+    "media": {
+      "pointer": "fine",
+      "reducedMotion": "no-preference"
+    },
+    "state": "custom layout",
+    "geometry": {
+      "x": 32,
+      "y": 104,
+      "w": 720,
+      "h": 32,
+      "visible": true
+    },
+    "sensors": {
+      "direction": "ltr",
+      "rootRadius": "0px",
+      "rootBackground": "rgba(0, 0, 0, 0)",
+      "colorScheme": "light",
+      "controls": "visible",
+      "media": {
+        "paused": true,
+        "ended": false,
+        "currentTime": 0,
+        "readyState": 4,
+        "error": null
+      },
+      "playLabels": [
+        "Play"
+      ],
+      "focused": "body",
+      "focusVisible": false,
+      "fonts": "loaded",
+      "runningAnimations": 0,
+      "sbError": false
+    },
+    "errors": {
+      "page": 0,
+      "console": 0,
+      "consoleSample": []
+    }
+  }
+]
