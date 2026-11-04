@@ -36,7 +36,7 @@ const styles = stylex.create({
     borderRadius: radiusVars['--radius-container'],
     overflow: 'hidden',
   },
-  card: {cursor: 'grab'},
+  card: {cursor: 'grab', userSelect: 'none'},
   // A gentle release settles the card back, unless the person reduces motion.
   settle: {
     transition: {

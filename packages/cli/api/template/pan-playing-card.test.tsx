@@ -4,8 +4,7 @@
 /**
  * @file Behavior test for the playing-card pan blocks.
  * @input The shipped PanPlayingCard (usePanGesture) block, rendered in jsdom
- *   with the pan, StyleX, the announcer and the Astryx components stubbed,
- *   and PanPlayingCardVanilla (createPanGesture) for its teardown.
+ *   with the pan, StyleX, the announcer and the Astryx components stubbed.
  * @output Guards the keyboard path: a second Discard while the first throw
  *   still runs deals one card, not two. Guards a throw that a drag beginning
  *   during it leaves running. Guards the card's name and each discard's
@@ -19,7 +18,6 @@
 import {act, createElement, type ReactNode} from 'react';
 import {createRoot} from 'react-dom/client';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import PanPlayingCardVanilla from '../../assets/templates/blocks/components/createPanGesture/PanPlayingCardVanilla';
 import PanPlayingCard from '../../assets/templates/blocks/components/usePanGesture/PanPlayingCard';
 
 type PanEvent = {
@@ -27,7 +25,12 @@ type PanEvent = {
   translation: {x: number; y: number};
   velocity: {x: number; y: number};
 };
-type Styles = {translate?: string; opacity?: number; transition?: object};
+type Styles = {
+  translate?: string;
+  opacity?: number;
+  transition?: object;
+  userSelect?: string;
+};
 // The stubbed pan keeps the block's listener, so a case can drive a drag.
 const pan = vi.hoisted(() => ({
   onPan: null as null | ((event: PanEvent) => void),
@@ -115,20 +118,6 @@ vi.mock('@astryxdesign/core/hooks', () => ({
     stub.announced.push(message);
   },
 }));
-vi.mock('@astryxdesign/core', () => ({
-  createPanGesture: (
-    _element: unknown,
-    options: {onPan: (event: PanEvent) => void},
-  ) => {
-    pan.onPan = options.onPan;
-    return {
-      destroy: () => {
-        pan.destroyed += 1;
-      },
-    };
-  },
-}));
-
 const reactActEnvironment = globalThis as {IS_REACT_ACT_ENVIRONMENT?: boolean};
 
 beforeEach(() => {
@@ -163,24 +152,6 @@ beforeEach(() => {
 
 afterEach(() => {
   document.body.innerHTML = '';
-});
-
-describe('the plain-JavaScript pan block', () => {
-  it('mounts its deck with its wrapper and takes it down, pan included, when it unmounts', async () => {
-    const container = document.createElement('div');
-    document.body.append(container);
-    const root = createRoot(container);
-    await act(async () => {
-      root.render(createElement(PanPlayingCardVanilla));
-    });
-    expect(container.querySelector('[role="img"]')).not.toBeNull();
-    const destroyed = pan.destroyed;
-    await act(async () => {
-      root.unmount();
-    });
-    expect(container.querySelector('[role="img"]')).toBeNull();
-    expect(pan.destroyed).toBe(destroyed + 1);
-  });
 });
 
 describe('the playing-card pan block', () => {
@@ -283,6 +254,8 @@ describe('the playing-card pan block', () => {
       {state: 'changed', translation: at(20), velocity: at(0)},
     );
     expect(styles().translate).toBe('20px 0px');
+    // A mouse drag moves the card instead of selecting its face.
+    expect(styles().userSelect).toBe('none');
     // Discard, from another finger or the keyboard, mid-drag.
     await act(async () => {
       button.click();

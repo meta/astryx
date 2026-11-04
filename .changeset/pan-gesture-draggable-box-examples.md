@@ -1,7 +1,8 @@
 ---
+'@astryxdesign/core': patch
 '@astryxdesign/cli': patch
 ---
 
-[docs] The `usePanGesture` and `createPanGesture` pages open with a draggable box: a card that follows a drag and springs back, in about 20 lines styled with StyleX and Astryx tokens. The playing card follows as the advanced example.
+[docs] The `usePanGesture` page opens with a draggable box in two forms side by side: the hook and `createPanGesture`, which takes any element, with the same StyleX styles and Astryx tokens. The playing card follows as the advanced example. The `createPanGesture` page points to that example, and the `usePanGesture` guidance warns only against holding the drag offset in a large component's state.
 
 @vjeux

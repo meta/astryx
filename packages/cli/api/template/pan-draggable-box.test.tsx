@@ -2,21 +2,20 @@
 // @vitest-environment jsdom
 
 /**
- * @file Behavior test for the two draggable-box pan blocks.
- * @input The shipped PanDraggableBox (usePanGesture) and
- *   PanDraggableBoxVanilla (createPanGesture) blocks, rendered in jsdom with
- *   the pan, StyleX and the Astryx components stubbed.
- * @output Guards that the box follows a drag through its StyleX drag style and
- *   springs back when it is let go. A person who reduces motion gets no
- *   spring. The plain-JavaScript block takes its pan down with the box.
+ * @file Behavior test for the draggable-box pan block.
+ * @input The shipped PanDraggableBox block, rendered in jsdom with the pans,
+ *   StyleX and the Astryx components stubbed. It shows one box with
+ *   usePanGesture and one with createPanGesture.
+ * @output Guards that each box follows its own drag through its StyleX drag
+ *   style and springs back when it is let go. A person who reduces motion gets
+ *   no spring. The createPanGesture pan comes down with the block.
  * @position CLI template regression coverage; runs in the node test project,
  *   under jsdom for this file.
  */
 
-import {act, createElement, type ComponentType, type ReactNode} from 'react';
+import {act, createElement, type ReactNode} from 'react';
 import {createRoot} from 'react-dom/client';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import PanDraggableBoxVanilla from '../../assets/templates/blocks/components/createPanGesture/PanDraggableBoxVanilla';
 import PanDraggableBox from '../../assets/templates/blocks/components/usePanGesture/PanDraggableBox';
 
 type PanEvent = {
@@ -24,9 +23,11 @@ type PanEvent = {
   translation: {x: number; y: number};
   velocity: {x: number; y: number};
 };
-// The stubbed pan keeps the block's listener, so a case can drive a drag.
+type Listener = (event: PanEvent) => void;
+// The stubbed pans keep each form's listener, so a case can drive one drag.
 const pan = vi.hoisted(() => ({
-  onPan: null as null | ((event: PanEvent) => void),
+  hook: null as null | ((event: PanEvent) => void),
+  factory: null as null | ((event: PanEvent) => void),
   destroyed: 0,
 }));
 // This project does not compile StyleX. The stub merges a style list into one
@@ -51,11 +52,20 @@ vi.mock('@astryxdesign/core/Card', () => ({
     xstyle: unknown;
     children: ReactNode;
     ref: unknown;
-  }) => createElement('div', {ref, ...style.attribute(xstyle)}, children),
+  }) =>
+    createElement(
+      'div',
+      {ref, role: 'group', ...style.attribute(xstyle)},
+      children,
+    ),
 }));
 vi.mock('@astryxdesign/core/Center', () => ({
-  Center: ({children}: {children: ReactNode}) =>
-    createElement('div', null, children),
+  Center: (props: {children: ReactNode}) =>
+    createElement('div', null, props.children),
+}));
+vi.mock('@astryxdesign/core/HStack', () => ({
+  HStack: (props: {children: ReactNode}) =>
+    createElement('div', null, props.children),
 }));
 vi.mock('@astryxdesign/core/theme/tokens.stylex', () => ({
   colorVars: {},
@@ -64,19 +74,13 @@ vi.mock('@astryxdesign/core/theme/tokens.stylex', () => ({
   radiusVars: {},
 }));
 vi.mock('@astryxdesign/core/hooks', () => ({
-  usePanGesture: (
-    _ref: unknown,
-    options: {onPan: (event: PanEvent) => void},
-  ) => {
-    pan.onPan = options.onPan;
+  usePanGesture: (_ref: unknown, options: {onPan: Listener}) => {
+    pan.hook = options.onPan;
   },
 }));
 vi.mock('@astryxdesign/core', () => ({
-  createPanGesture: (
-    _element: unknown,
-    options: {onPan: (event: PanEvent) => void},
-  ) => {
-    pan.onPan = options.onPan;
+  createPanGesture: (_element: unknown, options: {onPan: Listener}) => {
+    pan.factory = options.onPan;
     return {
       destroy: () => {
         pan.destroyed += 1;
@@ -95,52 +99,78 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-async function mount(Block: ComponentType) {
+type Styles = {
+  translate?: string;
+  userSelect?: string;
+  transition?: {
+    default: string;
+    '@media (prefers-reduced-motion: reduce)': string;
+  };
+};
+
+async function mount() {
   const container = document.createElement('div');
   document.body.append(container);
   const root = createRoot(container);
   await act(async () => {
-    root.render(createElement(Block));
+    root.render(createElement(PanDraggableBox));
   });
-  // The box sits in its stage.
-  const box = container.firstElementChild?.firstElementChild as HTMLElement;
-  const styles = () =>
-    JSON.parse(box.getAttribute('data-style') ?? '{}') as {
-      translate?: string;
-      transition?: {
-        default: string;
-        '@media (prefers-reduced-motion: reduce)': string;
-      };
-    };
-  return {root, styles};
+  // The hook's box comes first, then the factory's.
+  const boxes = [...container.querySelectorAll<HTMLElement>('[role="group"]')];
+  const styles = (index: number) =>
+    JSON.parse(boxes[index]?.getAttribute('data-style') ?? '{}') as Styles;
+  return {root, boxes, styles};
 }
 
 const at = (x: number, y = 0) => ({x, y});
 
-async function send(event: PanEvent) {
+async function send(listener: Listener | null, event: PanEvent) {
   await act(async () => {
-    pan.onPan?.(event);
+    listener?.(event);
   });
 }
 
-describe('the draggable-box pan blocks', () => {
-  for (const [name, Block] of [
-    ['usePanGesture', PanDraggableBox],
-    ['createPanGesture', PanDraggableBoxVanilla],
-  ] as ReadonlyArray<[string, ComponentType]>) {
+describe('the draggable-box pan block', () => {
+  it('shows the same box twice, each named by the API that makes its pan', async () => {
+    const {root, boxes} = await mount();
+    expect(boxes.map(box => box.textContent)).toEqual([
+      'usePanGesture',
+      'createPanGesture',
+    ]);
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  for (const [name, index, listener] of [
+    ['usePanGesture', 0, () => pan.hook],
+    ['createPanGesture', 1, () => pan.factory],
+  ] as const) {
     it(`follows a drag, then springs back when it is let go (${name})`, async () => {
-      const {styles} = await mount(Block);
-      await send({state: 'began', translation: at(0), velocity: at(0)});
-      await send({
+      const {root, styles} = await mount();
+      await send(listener(), {
+        state: 'began',
+        translation: at(0),
+        velocity: at(0),
+      });
+      await send(listener(), {
         state: 'changed',
         translation: at(30, 12),
         velocity: at(400),
       });
-      const held = styles();
+      const held = styles(index);
       expect(held.translate).toBe('30px 12px');
+      // A mouse drag moves the box instead of selecting its text.
+      expect(held.userSelect).toBe('none');
       expect(held.transition).toBeUndefined();
-      await send({state: 'ended', translation: at(30, 12), velocity: at(0)});
-      const released = styles();
+      // The other box stays where it is.
+      expect(styles(1 - index).translate).toBe('0px 0px');
+      await send(listener(), {
+        state: 'ended',
+        translation: at(30, 12),
+        velocity: at(0),
+      });
+      const released = styles(index);
       expect(released.translate).toBe('0px 0px');
       // At the theme's duration and easing for a move.
       expect(released.transition?.default).toBe(
@@ -150,11 +180,14 @@ describe('the draggable-box pan blocks', () => {
       expect(
         released.transition?.['@media (prefers-reduced-motion: reduce)'],
       ).toBe('none');
+      await act(async () => {
+        root.unmount();
+      });
     });
   }
 
-  it('takes the plain-JavaScript pan down with the box', async () => {
-    const {root} = await mount(PanDraggableBoxVanilla);
+  it('takes the createPanGesture pan down with the block', async () => {
+    const {root} = await mount();
     const destroyed = pan.destroyed;
     await act(async () => {
       root.unmount();

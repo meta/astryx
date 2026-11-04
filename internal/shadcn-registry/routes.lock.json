@@ -1962,16 +1962,6 @@
       "aliases": []
     },
     {
-      "name": "example-create-pan-gesture-a-draggable-box-without-react",
-      "path": "examples/create-pan-gesture/a-draggable-box-without-react",
-      "aliases": []
-    },
-    {
-      "name": "example-create-pan-gesture-a-playing-card-without-react-advanced",
-      "path": "examples/create-pan-gesture/a-playing-card-without-react-advanced",
-      "aliases": []
-    },
-    {
       "name": "example-date-input-clearable",
       "path": "examples/date-input/clearable",
       "aliases": []
