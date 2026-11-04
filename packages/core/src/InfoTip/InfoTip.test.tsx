@@ -251,6 +251,7 @@ describe('InfoTip', () => {
         .getByTestId('reference')
         .querySelector('.astryx-icon');
       expect(icon).toHaveAttribute('data-size', expected);
+      expect(reference?.innerHTML).not.toBe('');
       expect(icon?.innerHTML).toBe(reference?.innerHTML);
       unmount();
     }

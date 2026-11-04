@@ -218,6 +218,7 @@ async function observe(page: Page) {
       dpr: devicePixelRatio,
       reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
       finePointer: matchMedia('(pointer: fine)').matches,
+      canHover: matchMedia('(hover: hover)').matches,
       fonts: document.fonts.status,
       storybookError:
         document.querySelector('.sb-show-errordisplay') != null ||
@@ -419,6 +420,7 @@ for (const item of cases) {
     check(observed.dpr === 2, `dpr ${observed.dpr}`);
     check(observed.reducedMotion, 'reduced motion not applied');
     check(observed.finePointer, 'primary pointer is not fine');
+    check(observed.canHover, 'primary pointer cannot hover');
     check(observed.fonts === 'loaded', `fonts ${observed.fonts}`);
     check(geometryStable, 'geometry changed between samples');
     check(
@@ -563,7 +565,7 @@ for (const item of cases) {
         anatomy:
           'one native type="button" per InfoTip, in the tab order, named by aria-label, described by its help, holding the decorative registry info icon centered in a round box; no growth under a fine pointer',
         target:
-          'a box under 24 by 24 CSS px passes only when a 24 px circle on its center clears every other target (WCAG 2.5.8 spacing exception); icon 12, 16, 20, 24 px per size at the neutral theme',
+          'a box under 24 by 24 CSS px passes only when a 24 px circle on its center clears every other InfoTip target in the story, the only targets the stories render (WCAG 2.5.8 spacing exception); icon 12, 16, 20, 24 px per size at the neutral theme',
         state:
           'rest: aria-expanded false, no aria-controls, no help; hover and focus: help shows with the content text, describes the button, aria-controls names it, aria-expanded stays false, hover changes the icon color; click or Enter: the same with aria-expanded true; Escape after a pin: help hidden, aria-expanded false, focus kept with an outline; icon and outline contrast recorded, not asserted',
       },

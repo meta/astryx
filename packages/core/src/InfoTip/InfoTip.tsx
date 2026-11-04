@@ -15,7 +15,7 @@
  * - /docs/specs/components/InfoTip/InfoTip.spec.md (contract)
  * - /packages/core/src/InfoTip/InfoTip.test.tsx (tests for new/changed behavior)
  * - /packages/core/src/InfoTip/index.ts (exports if types change)
- * - /packages/cli/assets/templates/blocks/components/InfoTip/ (showcase blocks)
+ * - /packages/cli/assets/templates/blocks/components/InfoTip/ (showcase and example blocks)
  */
 
 import {
