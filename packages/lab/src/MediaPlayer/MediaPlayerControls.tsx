@@ -13,6 +13,7 @@
  */
 
 import {
+  use,
   useEffect,
   useMemo,
   useRef,
@@ -34,6 +35,7 @@ import {IconButton, type IconButtonProps} from '@astryxdesign/core/IconButton';
 import {Popover} from '@astryxdesign/core/Popover';
 import {useLocale, useTranslator} from '@astryxdesign/core/i18n';
 import {Slider} from '@astryxdesign/core/Slider';
+import {Theme, ThemeContext} from '@astryxdesign/core/theme';
 import {
   colorVars,
   radiusVars,
@@ -158,12 +160,19 @@ const styles = stylex.create({
     inset: 0,
     pointerEvents: 'none',
   },
+  // Flex layout keeps the popover's trigger wrapper out of a line box, so no
+  // line-height space pushes the dot off the track's center.
   markerAnchor: (x: number) => ({
     position: 'absolute',
     top: '50%',
     insetInlineStart: x,
+    display: 'flex',
     transform: 'translate(-50%, -50%)',
     pointerEvents: 'auto',
+    // The popover below renders in the page's theme; the dot keeps the
+    // colors of the surface the timeline sits on.
+    '--_media-marker-fill': colorVars['--color-text-primary'],
+    '--_media-marker-ring': colorVars['--color-background-surface'],
   }),
   markerButton: {
     display: 'flex',
@@ -184,8 +193,8 @@ const styles = stylex.create({
     width: TIMELINE_MARKER_SIZE,
     height: TIMELINE_MARKER_SIZE,
     borderRadius: radiusVars['--radius-full'],
-    backgroundColor: colorVars['--color-text-primary'],
-    boxShadow: `0 0 0 2px ${colorVars['--color-background-surface']}`,
+    backgroundColor: 'var(--_media-marker-fill)',
+    boxShadow: '0 0 0 2px var(--_media-marker-ring)',
   },
   thumb: (x: number) => ({
     position: 'absolute',
@@ -528,6 +537,56 @@ function findMarker(
   return found;
 }
 
+/**
+ * A marker with content: a dot on the timeline that jumps to its time and
+ * opens its content in a popover.
+ */
+function MarkerButton({
+  marker,
+  x,
+  onPress,
+  onOpenChange,
+}: {
+  marker: MediaTimelineMarker;
+  x: number;
+  onPress: () => void;
+  onOpenChange: (isOpen: boolean) => void;
+}) {
+  // The popover shows page content, such as a comment thread, so it takes
+  // the page's theme instead of the media surface's.
+  const pageTheme = use(ThemeContext);
+  const popover = (
+    <Popover
+      label={marker.label}
+      content={marker.content}
+      placement="above"
+      alignment="center"
+      width={MARKER_POPOVER_WIDTH}
+      padding={0}
+      onOpenChange={onOpenChange}>
+      <button
+        type="button"
+        aria-label={marker.label}
+        data-media-marker=""
+        onClick={onPress}
+        {...focusOutlineProps.focusVisible(styles.markerButton)}>
+        <span aria-hidden {...stylex.props(styles.markerDot)} />
+      </button>
+    </Popover>
+  );
+  return (
+    <div {...stylex.props(styles.markerAnchor(x))}>
+      {pageTheme != null ? (
+        <Theme theme={pageTheme.theme} mode={pageTheme.mode}>
+          {popover}
+        </Theme>
+      ) : (
+        popover
+      )}
+    </div>
+  );
+}
+
 const TIMELINE_KEY_OFFSETS: Readonly<Record<string, number>> = {
   ArrowLeft: -5,
   ArrowDown: -5,
@@ -809,27 +868,13 @@ export function MediaTimeSlider({
           {markerList
             .filter(marker => marker.content != null)
             .map(marker => (
-              <div
+              <MarkerButton
                 key={`${marker.time}-${marker.label}`}
-                {...stylex.props(styles.markerAnchor(toX(marker.time)))}>
-                <Popover
-                  label={marker.label}
-                  content={marker.content}
-                  placement="above"
-                  alignment="center"
-                  width={MARKER_POPOVER_WIDTH}
-                  padding={0}
-                  onOpenChange={isOpen => holdControls('menu', isOpen)}>
-                  <button
-                    type="button"
-                    aria-label={marker.label}
-                    data-media-marker=""
-                    onClick={() => store.actions.seek(marker.time)}
-                    {...focusOutlineProps.focusVisible(styles.markerButton)}>
-                    <span aria-hidden {...stylex.props(styles.markerDot)} />
-                  </button>
-                </Popover>
-              </div>
+                marker={marker}
+                x={toX(marker.time)}
+                onPress={() => store.actions.seek(marker.time)}
+                onOpenChange={isOpen => holdControls('menu', isOpen)}
+              />
             ))}
         </div>
       ) : null}

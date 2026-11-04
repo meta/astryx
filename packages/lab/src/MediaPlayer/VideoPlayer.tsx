@@ -47,9 +47,7 @@ const FROSTED_SURFACE = `color-mix(in srgb, ${colorVars['--color-background-surf
 const FROSTED_SURFACE_HIGH_CONTRAST = `color-mix(in srgb, ${colorVars['--color-background-surface']} 95%, transparent)`;
 const BAR_INSET = spacingVars['--spacing-2'];
 const BAR_RADIUS = radiusVars['--radius-container'];
-// The player's corners nest around the bar's corners: the outer radius is the
-// bar radius plus the bar inset. A square bar keeps the player square.
-const PLAYER_RADIUS = `calc(${BAR_RADIUS} + min(${BAR_INSET}, ${BAR_RADIUS} * 1000))`;
+const PLAYER_RADIUS = radiusVars['--radius-element'];
 
 const styles = stylex.create({
   root: {
@@ -326,7 +324,16 @@ function useCueLayout(
     }
     const saved = new Map<VTTCue, SavedCuePosition>();
     const watched = new Set<TextTrack>();
+    const watchedElements = new Set<HTMLTrackElement>();
     const apply = () => {
+      // A track's cues arrive with its element's load event, which no
+      // text track event reports while the media is paused.
+      for (const element of video.querySelectorAll('track')) {
+        if (!watchedElements.has(element)) {
+          watchedElements.add(element);
+          element.addEventListener('load', apply);
+        }
+      }
       const bar = barRef.current;
       const height = video.clientHeight;
       if (bar == null || height <= 0) {
@@ -381,6 +388,9 @@ function useCueLayout(
       tracks.removeEventListener('addtrack', apply);
       for (const track of watched) {
         track.removeEventListener('cuechange', apply);
+      }
+      for (const element of watchedElements) {
+        element.removeEventListener('load', apply);
       }
       for (const [cue, original] of saved) {
         cue.snapToLines = original.snapToLines;

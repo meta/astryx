@@ -108,9 +108,7 @@ const COMMENT_THREADS = [
 const COMMENT_MARKERS = COMMENT_THREADS.map(({time, thread}) => ({
   time,
   label: `${thread.author.name}: ${thread.body}`,
-  content: (
-    <CommentThread comment={thread} currentUser={VIEWER} container="card" />
-  ),
+  content: <CommentThread comment={thread} currentUser={VIEWER} />,
 }));
 
 const FEED_CLIPS = ['Bee on a flower', 'Second clip', 'Third clip'];
