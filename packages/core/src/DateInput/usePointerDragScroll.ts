@@ -87,6 +87,7 @@ export function usePointerDragScroll(
 ): PointerDragScrollState {
   const isDraggingRef = useRef(false);
 
+  // Syncs pointer listeners with `isEnabled`. A mouse drag scrolls the element.
   useEffect(() => {
     const element = ref.current;
     if (element == null || !isEnabled) {

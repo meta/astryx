@@ -190,7 +190,7 @@ function treeItems(isExpanded: boolean): TreeListItemData[] {
 
 function TreeListScene() {
   useSceneReady();
-  const containerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLElement>(null);
   const animatedLayout = useAnimatedLayout({containerRef});
   const [isExpanded, setIsExpanded] = useState(false);
   const items = useMemo(() => treeItems(isExpanded), [isExpanded]);
@@ -203,14 +203,14 @@ function TreeListScene() {
           onClick={() => setIsExpanded(expanded => !expanded)}
         />
       </HStack>
-      <div ref={containerRef}>
+      <VStack ref={containerRef}>
         <TreeList
           items={items}
           animatedLayout={animatedLayout}
           header={<Text weight="semibold">Repository</Text>}
           xstyle={styles.treeFrame}
         />
-      </div>
+      </VStack>
     </VStack>
   );
 }

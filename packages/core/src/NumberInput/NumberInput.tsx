@@ -53,6 +53,7 @@ import {VisuallyHidden} from '../VisuallyHidden';
 import {useTooltip} from '../Tooltip';
 import {getInputARIA} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {inputDisabledFocusStyles} from '../Field/inputDisabledFocus';
@@ -231,10 +232,17 @@ import {
 } from '../Field/fieldParts';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator, useLocale} from '../i18n';
+import {useLocale} from '../i18n';
 import {formatEditableNumber} from './numberParser';
 import {parseNumberInput, resolveNumberInputCommit} from './numberInputCommit';
 import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/NumberInput/NumberInput.generated';
+
+registerEnglishFallback(english);
 
 interface NumberInputPropsBase extends Omit<
   FieldInputBaseProps,
@@ -598,7 +606,7 @@ export function NumberInput({
     containerStyle,
   });
   const pressable = usePressFeedback();
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const size = useSize(sizeProp, 'md');
@@ -626,13 +634,7 @@ export function NumberInput({
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   // A disabled field keeps its tab stop but, like a natively disabled one,
   // runs no caller event handler other than focus and blur (`spec:AST-085` FR2).
-  const fieldProps = isDisabled
-    ? Object.fromEntries(
-        Object.entries(rest).filter(
-          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
-        ),
-      )
-    : rest;
+  const fieldProps = withholdCallerHandlers(rest, isDisabled);
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
     // The container div is not naturally focusable; focusin bubbles up from

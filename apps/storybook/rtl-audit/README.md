@@ -192,8 +192,8 @@ spike this guard removed the single false positive.
 its parent's width** is skipped: a full-bleed strip spans the _entire_ parent,
 so it occupies both halves and has **no left/right side** to land on the wrong
 one. This catches `useResizable`'s **vertical** grab zone (`ResizeHandle`'s
-`hitAreaOffsetY`): a full-width strip anchored `insetInlineStart:0;
-insetInlineEnd:0` with a purely-visual centering `translate(-50%,…)`, so its
+`hitAreaCenteredY`): a full-width strip anchored `insetInlineStart:0;
+insetInlineEnd:0` and centred on the block axis only, so its
 geometric _center_ sits at the parent origin (relCenterX≈0) **identically in LTR
 and RTL**. The mirror assertion would otherwise compute `expected = parentW − 0
 = parentW` and fire a spurious `Δ = parentW`. The degenerate-parent guard misses
@@ -373,7 +373,7 @@ below), so the signal does not hard-block yet.
 
 ## Adding a curated target
 
-Edit `targets.json`. Each entry is:
+Edit `targets.json`, keeping it sorted by `component`, then `storyId`, so parallel pull requests add entries in different places. `node apps/storybook/rtl-audit/sort-targets.mjs --fix` sorts it; the RTL audit's node tests fail on an unsorted file. Each entry is:
 
 ```jsonc
 {

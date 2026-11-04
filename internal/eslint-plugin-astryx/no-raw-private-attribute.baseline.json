@@ -1,9 +1,5 @@
 {
-  "packages/core/src/Button/Button.tsx": [
-    "data-astryx-press",
-    "data-astryx-press",
-    "data-astryx-press"
-  ],
+  "packages/core/src/Button/Button.tsx": ["data-astryx-press"],
   "packages/core/src/Chat/ChatComposerInput.tsx": [
     "data-astryx-dictation-interim"
   ],
@@ -88,8 +84,6 @@
   ],
   "packages/core/src/Switch/Switch.tsx": [
     "data-astryx-press",
-    "data-astryx-press",
-    "data-astryx-press",
     "data-astryx-press"
   ],
   "packages/core/src/TabList/Tab.tsx": [
@@ -119,7 +113,6 @@
     "data-astryx-press",
     "data-astryx-press"
   ],
-  "packages/core/src/gestures/haptics.ts": ["data-astryx-haptic-switch"],
   "packages/core/src/gestures/touchActionRule.ts": ["data-astryx-touch-action"],
   "packages/core/src/hooks/useAnnounce.ts": [
     "data-astryx-live-region",

@@ -58,7 +58,6 @@
  * baseline lists, per file, each guarded value once per check that predates
  * enforcement. That many checks of the value stay allowed until migrated;
  * one more is reported.
- * `no-nullish-jsx-guard.baseline.mjs` writes it.
  *
  * Known limitations (intentional, to keep precision high):
  *   - Bare assignments like `const hasFoo = foo != null` are not flagged;
@@ -71,8 +70,7 @@
 import {baselineAllowance} from './rule-baseline.mjs';
 
 /**
- * Where the repository config enforces the rule with its baseline; the
- * baseline script lints the same files.
+ * Where the repository config enforces the rule.
  */
 export const scope = {
   files: [

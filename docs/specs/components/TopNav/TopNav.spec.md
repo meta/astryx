@@ -16,6 +16,7 @@ verified_by:
     packages/core/src/TopNav/__tests__/TopNavMobileLongHeading.a11y.chromium.spec.ts,
     packages/core/src/AppShell/AppShell.test.tsx,
     apps/storybook/stories/TopNav.stories.tsx,
+    apps/storybook/rtl-audit/targets.json,
   ]
 modules: []
 families: []
@@ -167,12 +168,13 @@ component's record names its own target.
 
 ## Verification map
 
-| Contract     | Verification                                    | Representative states                           | Mutation or failure expectation                            | Audit section                |
-| ------------ | ----------------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------- | ---------------------------- |
-| FR1, AR1     | `TopNav.test.tsx` landmark tests                | Default and mobile-bar; default and custom name | A missing role or name fails.                              | `audit:TopNav/accessibility` |
-| FR2–FR4, FR8 | `TopNav.test.tsx` slot tests                    | Each slot; all slots; center without start/end  | A dropped slot, wrong precedence, or positioned nav fails. | `audit:TopNav/layout`        |
-| FR5, FR6     | `AppShell.test.tsx` mobile suites               | Heading-only; items; items with side nav        | A missing toggle or duplicated items fails.                | `audit:TopNav/behavior`      |
-| AR2          | `TopNavMobileLongHeading.a11y.chromium.spec.ts` | Long heading at phone width                     | The toggle or close button leaves the viewport.            | `audit:TopNav/accessibility` |
+| Contract     | Verification                                                                                     | Representative states                           | Mutation or failure expectation                                             | Audit section                |
+| ------------ | ------------------------------------------------------------------------------------------------ | ----------------------------------------------- | --------------------------------------------------------------------------- | ---------------------------- |
+| FR1, AR1     | `TopNav.test.tsx` landmark tests                                                                 | Default and mobile-bar; default and custom name | A missing role or name fails.                                               | `audit:TopNav/accessibility` |
+| FR2–FR4, FR8 | `TopNav.test.tsx` slot tests                                                                     | Each slot; all slots; center without start/end  | A dropped slot, wrong precedence, or positioned nav fails.                  | `audit:TopNav/layout`        |
+| FR5, FR6     | `AppShell.test.tsx` mobile suites                                                                | Heading-only; items; items with side nav        | A missing toggle or duplicated items fails.                                 | `audit:TopNav/behavior`      |
+| AR2          | `TopNavMobileLongHeading.a11y.chromium.spec.ts`                                                  | Long heading at phone width                     | The toggle or close button leaves the viewport.                             | `audit:TopNav/accessibility` |
+| RTL relation | RTL audit curated D2 target (`apps/storybook/rtl-audit/targets.json`) on `TopNav / Full example` | Heading and first navigation item; LTR and RTL  | A heading that is not at the inline start of the navigation items fails D2. | `audit:TopNav/i18n-rtl`      |
 
 Read from source, with no focused test yet: the mobile bar's part order (FR5); the drawer's `heading` header (FR6); other DOM props reaching the `<nav>` (FR1); the auto-toggle condition (FR5); rendering nothing in `drawer` mode with no content (FR6); the `top-nav` target and its `mode` state (FR1); the flex and grid layout geometry (FR3, FR4); that start and center content do not render in the mobile bar (FR5); the drawer's content order and divider (FR6); FR7; and FR9.
 

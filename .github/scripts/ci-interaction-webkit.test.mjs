@@ -56,9 +56,15 @@ describe('WebKit interaction proof routing', () => {
   it('always reports, behind the same pull-request gate as the Chromium proofs', () => {
     expect(webkit.if).toBe(chromium.if);
     expect(ungated(webkit.if)).toBe(
-      "github.event_name != 'workflow_dispatch' && always() && !cancelled()",
+      "github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true'",
     );
-    expect(webkit.needs).toEqual(['build-storybook']);
+    // Admission too: the Storybook build starts beside it (spec:AST-030 FR16).
+    expect(webkit.needs).toEqual([
+      'room',
+      'admission',
+      'heavy-ci',
+      'build-storybook',
+    ]);
   });
 
   it('stays on a standard runner within the 15-minute budget', () => {
@@ -67,7 +73,8 @@ describe('WebKit interaction proof routing', () => {
   });
 
   it('decides its own scope first, skips visibly, and gates every later step on it', () => {
-    expect(webkit.steps[0].with['sparse-checkout']).toBe(
+    // The scope action first; the leg planner shares the checkout.
+    expect(webkit.steps[0].with['sparse-checkout'].trim().split('\n')[0]).toBe(
       '.github/actions/test-scope',
     );
     expect(decide(webkit).uses).toBe(
@@ -90,9 +97,10 @@ describe('WebKit interaction proof routing', () => {
     ]);
     for (const candidate of webkit.steps.slice(2)) {
       if (guards.has(candidate.name)) continue;
+      // A leg whose plan holds no spec file runs no proofs.
       expect(candidate.if, candidate.name ?? candidate.uses).toMatch(
         new RegExp(
-          `^(always\\(\\) && )?${applies.replace(/[.()|]/g, '\\$&')}$`,
+          `^(always\\(\\) && )?${applies.replace(/[.()|]/g, '\\$&')}( && steps\\.plan\\.outputs\\.files != '0')?$`,
         ),
       );
     }
@@ -152,11 +160,13 @@ describe('WebKit interaction proof routing', () => {
   });
 
   it('runs only the specs whose code its scope covers', () => {
-    const run = step(webkit, 'Run WebKit interaction proofs').run;
+    // Each leg plans its share from these paths and runs only that share.
+    const run = step(webkit, "Plan this leg's WebKit interaction proofs").run;
     const targets = [
       'packages/core/src/gestures/',
       'packages/core/src/motion/__tests__/animatedLayout.interaction',
       'packages/core/src/motion/__tests__/animator.interaction',
+      'packages/core/src/hooks/__tests__/usePager.interaction',
       'internal/interaction-harness/',
     ];
     for (const target of targets) {
@@ -168,6 +178,15 @@ describe('WebKit interaction proof routing', () => {
     // SideNav) stay with the Chromium proofs.
     expect(run).not.toContain('animatedLayoutAdopters');
     expect(run).not.toMatch(/motion\/ /);
+    // Carousel paging renders its Storybook story, so it stays there too, and
+    // its files start no WebKit run.
+    expect(run).not.toContain('CarouselPaging');
+    for (const file of [
+      'packages/core/src/Carousel/useCarouselPaging.ts',
+      'packages/core/src/Carousel/__tests__/CarouselPaging.interaction.browser.spec.ts',
+    ]) {
+      expect(inScope(file), file).toBe(false);
+    }
     for (const component of ['DateInput', 'TabList', 'TreeList', 'SideNav']) {
       expect(run).not.toContain(component);
     }
@@ -175,11 +194,7 @@ describe('WebKit interaction proof routing', () => {
 
   // Every source file the WebKit specs bundle into their pages is in scope,
   // so a change that reaches the run always runs it.
-  it.each([
-    'packages/core/src/gestures/__tests__/browser/fixture.ts',
-    'packages/core/src/motion/__tests__/animatedLayoutBundle.ts',
-    'packages/core/src/motion/__tests__/motionBundle.ts',
-  ])('keeps everything %s bundles in scope', async entry => {
+  async function expectBundleInScope(entry) {
     const {metafile} = await build({
       absWorkingDir: root,
       entryPoints: [entry],
@@ -200,7 +215,21 @@ describe('WebKit interaction proof routing', () => {
     for (const source of sources) {
       expect(inScope(source), source).toBe(true);
     }
-  });
+  }
+
+  it.each([
+    'packages/core/src/gestures/__tests__/browser/fixture.ts',
+    'packages/core/src/motion/__tests__/animatedLayoutBundle.ts',
+    'packages/core/src/motion/__tests__/motionBundle.ts',
+  ])('keeps everything %s bundles in scope', expectBundleInScope);
+
+  // The pager's page arrives with the pager; until then there is nothing to
+  // bundle, and from then on its next import is checked like the others.
+  const pagerBundle = 'packages/core/src/hooks/__tests__/pagerBundle.ts';
+  it.skipIf(!fs.existsSync(path.join(root, pagerBundle)))(
+    'keeps everything the pager bundle bundles in scope',
+    () => expectBundleInScope(pagerBundle),
+  );
 
   it('runs for gesture, motion, touch, press-feedback and menu-press code, and their harness', () => {
     for (const touched of [
@@ -215,10 +244,19 @@ describe('WebKit interaction proof routing', () => {
       'packages/core/src/utils/touchPresentation.ts',
       'packages/core/src/utils/primaryClick.ts',
       'packages/core/src/utils/isApplePlatform.ts',
+      // The gesture host asks the Layer module's input hold about each touch,
+      // so the gesture specs' fixture bundles it.
+      'packages/core/src/Layer/inputHold.ts',
       'packages/core/src/hooks/useMenuPress.ts',
       'packages/core/src/hooks/menuPressGesture.ts',
       'packages/core/src/hooks/useLongPress.ts',
       'packages/core/src/hooks/usePressFeedback.ts',
+      'packages/core/src/hooks/usePager.ts',
+      'packages/core/src/hooks/useIsomorphicLayoutEffect.ts',
+      'packages/core/src/hooks/useAttachment.ts',
+      'packages/core/src/utils/sharedResizeObserver.ts',
+      'packages/core/src/hooks/__tests__/usePager.interaction.browser.spec.ts',
+      'packages/core/src/hooks/__tests__/pagerBundle.ts',
       'internal/interaction-harness/src/webInput.ts',
       'playwright.interaction.config.ts',
       // Shared setup, as pr-interaction keeps (spec:AST-030 FR13): a
@@ -241,7 +279,7 @@ describe('WebKit interaction proof routing', () => {
     for (const untouched of [
       'packages/core/src/Toast/Toast.tsx',
       'packages/core/src/Selector/useSelectorPresentation.ts',
-      'packages/core/src/utils/clickGuard.ts',
+      'packages/core/src/utils/focusReturn.ts',
       'packages/core/src/internal/focus.ts',
       'packages/core/src/DateInput/DateInput.tsx',
       'packages/core/locales/en.json',

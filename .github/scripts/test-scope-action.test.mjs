@@ -11,6 +11,7 @@
  */
 
 import fs from 'node:fs';
+import os from 'node:os';
 import {createRequire} from 'node:module';
 import path from 'node:path';
 
@@ -171,6 +172,7 @@ describe('per-job scope step', () => {
         'has_components',
         'has_rtl_components',
         'has_rtl_harness',
+        'lab_only',
         'release_bump',
         'spec_only',
         'tooling_only',
@@ -293,6 +295,53 @@ describe('per-job scope step', () => {
       files: changed('docs/specs/AST-030/spec.md'),
     });
     expect(outputs).toMatchObject({spec_only: 'true', applies: 'false'});
+  });
+
+  it('does not apply on the Lab-only lane, and reports it (spec:AST-030 FR26)', async () => {
+    const {outputs} = await decide({
+      files: changed('packages/lab/src/Tour/Tour.tsx', '.changeset/tour.md'),
+      inputs: {paths: INTERACTION_PATHS},
+    });
+    expect(outputs).toMatchObject({
+      lab_only: 'true',
+      applies: 'false',
+      spec_only: 'false',
+    });
+    const mixed = await decide({
+      files: changed(
+        'packages/lab/src/Tour/Tour.tsx',
+        'packages/core/src/Button/Button.tsx',
+      ),
+    });
+    expect(mixed.outputs).toMatchObject({lab_only: 'false', applies: 'true'});
+  });
+
+  it('reports no Lab-only lane when the base classifier predates it', async () => {
+    const old = fs
+      .readFileSync(path.join(root, '.github/scripts/change-scope.cjs'), 'utf8')
+      .replace('\\nlab_only=${result.labOnly}', '');
+    expect(old).not.toContain('lab_only=');
+    const {outputs} = await decide({
+      files: changed('packages/lab/src/Tour/Tour.tsx'),
+      baseOverrides: {'.github/scripts/change-scope.cjs': old},
+    });
+    expect(outputs).toMatchObject({
+      lab_only: 'false',
+      applies: 'true',
+      decided: 'true',
+    });
+  });
+
+  it('reports no Lab-only lane outside a pull request or when undecidable', async () => {
+    const push = await decide({
+      context: {...pullRequestContext(), eventName: 'workflow_dispatch'},
+    });
+    expect(push.outputs.lab_only).toBe('false');
+    const broken = await decide({
+      files: changed('packages/lab/src/Tour/Tour.tsx'),
+      missingBase: ['.github/scripts/change-scope.cjs'],
+    });
+    expect(broken.outputs).toMatchObject({lab_only: 'false', decided: 'false'});
   });
 
   it('fails when the trusted classifier rejects the change', async () => {
@@ -511,6 +560,16 @@ describe('per-job scope step', () => {
       });
     });
 
+    it('keeps the component audits for a Lab-only change, so a label still runs its suite (spec:AST-030 FR26)', async () => {
+      const {outputs} = await decide({
+        files: changed('packages/lab/src/Tour/Tour.tsx'),
+        inputs,
+      });
+      expect(outputs.lab_only).toBe('true');
+      expect(outputs.applies).toBe('false');
+      expect(outputs.has_components).toBe('true');
+    });
+
     it('runs every audit in full when the base lacks the audit classifier', async () => {
       const {outputs, messages} = await decide({
         files: changed('packages/core/src/Button/Button.tsx'),
@@ -537,5 +596,76 @@ describe('per-job scope step', () => {
         expect.stringContaining('Component audit scope could not be decided'),
       ]);
     });
+  });
+});
+
+describe('the temporary policy folder', () => {
+  // os.tmpdir() reads TMPDIR on each call, so each case gets its own folder.
+  async function inFreshTemp(run) {
+    const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'scope-tmp-test-'));
+    const runnerTemp = fs.mkdtempSync(path.join(os.tmpdir(), 'scope-runner-'));
+    const saved = {
+      TMPDIR: process.env.TMPDIR,
+      RUNNER_TEMP: process.env.RUNNER_TEMP,
+    };
+    process.env.TMPDIR = temp;
+    process.env.RUNNER_TEMP = runnerTemp;
+    try {
+      const result = await run();
+      return {result, left: fs.readdirSync(temp)};
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      fs.rmSync(temp, {recursive: true, force: true});
+      fs.rmSync(runnerTemp, {recursive: true, force: true});
+    }
+  }
+
+  it('is removed after a decided scope', async () => {
+    const {result, left} = await inFreshTemp(() =>
+      decide({files: changed('packages/core/src/Button/Button.tsx')}),
+    );
+    expect(result.outputs.decided).toBe('true');
+    expect(left).toEqual([]);
+  });
+
+  it('is removed when a base policy file cannot be read', async () => {
+    const {result, left} = await inFreshTemp(() =>
+      decide({
+        files: changed('packages/core/src/Button/Button.tsx'),
+        truncated: ['scripts/component-packages.cjs'],
+      }),
+    );
+    expect(result.outputs.decided).toBe('false');
+    expect(left).toEqual([]);
+  });
+
+  it('is removed when the trusted classifier rejects the change', async () => {
+    const {result, left} = await inFreshTemp(() =>
+      decide({
+        files: changed('packages/core/src/Button/Button.tsx'),
+        baseOverrides: {
+          '.github/scripts/change-scope.cjs': 'process.exit(1);\n',
+        },
+      }),
+    );
+    expect(result.messages.failed).toHaveLength(1);
+    expect(left).toEqual([]);
+  });
+
+  it('is removed after a component-audit scope, while the changed-file list stays for later steps', async () => {
+    const {result, left} = await inFreshTemp(() =>
+      decide({
+        files: changed('packages/core/src/Button/Button.tsx'),
+        inputs: {'component-audit': 'true'},
+      }).then(r => ({
+        ...r,
+        listed: fs.existsSync(r.outputs.changed_files_path),
+      })),
+    );
+    expect(result.listed).toBe(true);
+    expect(left).toEqual([]);
   });
 });

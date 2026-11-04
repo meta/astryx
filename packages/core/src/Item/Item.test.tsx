@@ -19,15 +19,9 @@ import {
   expect,
   vi,
 } from 'vitest';
-import {
-  act,
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from '@testing-library/react';
+import {act, cleanup, fireEvent, render, screen} from '@testing-library/react';
 import {rulesDeclaredFor} from '../__tests__/pressState';
+import {swipeLayerLoaded} from './__tests__/swipeLayerLoaded';
 import userEvent from '@testing-library/user-event';
 import {LinkProvider} from '../Link/LinkProvider';
 import {Item} from './Item';
@@ -783,7 +777,7 @@ describe('Item', () => {
 
 describe('swipeActions', () => {
   // The panels and the gesture are loaded lazily (React.lazy + Suspense), so
-  // the first row with swipe actions renders them a tick after it mounts.
+  // the first row with swipe actions renders them once that module is in.
   // Mount one once up front: the resolved module is cached on the lazy
   // component, and every row below renders its panels synchronously.
   beforeAll(async () => {
@@ -794,11 +788,10 @@ describe('swipeActions', () => {
         swipeActions={{leading: [{label: 'Unread', onActivate: () => {}}]}}
       />,
     );
-    await waitFor(() => {
-      expect(
-        screen.getByTestId('warm').querySelector('[data-swipe-panel]'),
-      ).not.toBeNull();
-    });
+    await swipeLayerLoaded();
+    expect(
+      screen.getByTestId('warm').querySelector('[data-swipe-panel]'),
+    ).not.toBeNull();
     cleanup();
   });
 

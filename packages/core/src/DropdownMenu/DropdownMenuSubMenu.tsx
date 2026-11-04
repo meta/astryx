@@ -89,6 +89,7 @@ import {
   shadowVars,
   typographyVars,
   typeScaleVars,
+  focusVars,
 } from '../theme/tokens.stylex';
 import {
   composeEventHandlers,
@@ -98,6 +99,7 @@ import {
   rtlStyles,
 } from '../utils';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {menuPressLitRowStyle} from '../privateAttributes/menuPressLit.stylex';
 import {getInteractionModality} from '../utils/interactionModality';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useDevWarning} from '../hooks/useDevWarning';
@@ -119,7 +121,13 @@ import {
 } from './DropdownMenuContext';
 import {focusMenuItemOnHover} from './menuItemHover';
 import {DropdownMenuItem} from './DropdownMenuItem';
-import {useTranslator} from '../i18n';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/DropdownMenu/DropdownMenuSubMenu.generated';
+
+registerEnglishFallback(english);
 
 // The flyout's own lower cap on the placement axis; the viewport cap under
 // it and the inline gutter beside it are the layer runtime's (spec:AST-059).
@@ -139,7 +147,9 @@ const triggerStyles = stylex.create({
     color: colorVars['--color-text-primary'],
     backgroundColor: {
       default: 'transparent',
-      ':focus': colorVars['--color-overlay-hover'],
+      // menuPressLitRowStyle sets the variable on the row a held finger or pen
+      // lights.
+      ':focus': `var(--_menu-row-focus-paint, ${colorVars['--color-overlay-hover']})`,
     },
     borderWidth: 0,
     borderStyle: 'none',
@@ -148,7 +158,10 @@ const triggerStyles = stylex.create({
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
     textAlign: 'start',
-    outline: 'none',
+    // Rows show focus with a translucent overlay, which forced colors replace
+    // with the page color. The standard focus ring (focusOutlineStyles), drawn
+    // inside the row by its own width, marks the focused row in every mode.
+    outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
   },
   // While the flyout is open, keep the trigger visibly active so the open
   // branch reads as the current path even when focus has moved into the child.
@@ -502,7 +515,7 @@ export function DropdownMenuSubMenu(
     ...rest
   } = props;
 
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const menuCtx = useDropdownMenuContext();
   const rootSurface = use(DropdownMenuSurfaceContext);
   const rootHasRegions = use(MenuRegionsContext);
@@ -1144,7 +1157,7 @@ export function DropdownMenuSubMenu(
         ? // The flyout's frame paints its surface, so the menu target rides
           // on it; a drilled-in view sits inside the root's surface.
           mergeProps(
-            themeProps('dropdown-menu'),
+            themeProps('dropdown-menu', {presentation: 'popover'}),
             stylex.props(regionStyles.frame, regionStyles.flyoutSurface),
           )
         : stylex.props(
@@ -1231,7 +1244,9 @@ export function DropdownMenuSubMenu(
         onKeyDown={composeEventHandlers(handleTriggerKeyDown, onKeyDown)}
         isDisabled={isDisabled}
         xstyle={[
+          focusOutlineStyles.focusVisible,
           triggerStyles.root,
+          menuPressLitRowStyle,
           triggerSizeStyles[menuSize],
           isOpen && triggerStyles.open,
           isDisabled && triggerStyles.disabled,
@@ -1361,7 +1376,7 @@ export function DropdownMenuSubMenu(
                   data-testid={menuDataTestId}
                   {...menuPress.menuProps}
                   {...mergeProps(
-                    themeProps('dropdown-menu'),
+                    themeProps('dropdown-menu', {presentation: 'popover'}),
                     stylex.props(
                       flyoutStyles.menu,
                       hasOverflow

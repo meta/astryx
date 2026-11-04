@@ -18,7 +18,6 @@ import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {
-  durationToMs,
   hasReleaseFade,
   readsPressStrength,
   declaresPressPaint,
@@ -35,12 +34,17 @@ import {
   PRESSED_ATTRIBUTE,
 } from './pressFeedback';
 import {
+  isTrackedByGroup,
+  pressGroupItemProps,
+} from '../privateAttributes/pressGroupItem.stylex';
+import {
   PRESS_FADE_MS,
   PRESS_FLASH_MS,
   PRESS_ONSET_MS,
   PRESS_SCROLL_BRAKE_MS,
   PRESS_SLOP_PX,
 } from './pressGesture';
+import {pointerQuery} from '../gestures/__tests__/pointerQuery';
 
 let release: () => void = () => undefined;
 let scroller: HTMLElement;
@@ -73,6 +77,27 @@ function pressable(tag = 'div'): HTMLElement {
   return element;
 }
 
+/**
+ * The primary pointer is coarse (a phone, a tablet) until the returned
+ * restore runs: jsdom's matchMedia models a desktop, where touch work stays
+ * off (`spec:AST-094` FR19).
+ */
+function coarsePrimaryPointer(): () => void {
+  const matchMedia = window.matchMedia;
+  window.matchMedia = (query: string) => ({
+    ...matchMedia(query),
+    matches: query.includes('(pointer: coarse)') || matchMedia(query).matches,
+  });
+  const restore = (): void => {
+    window.matchMedia = matchMedia;
+  };
+  matchMediaRestorers.push(restore);
+  return restore;
+}
+
+/** Restores every pointer stub a test left, so none leaks into the next. */
+const matchMediaRestorers: (() => void)[] = [];
+
 beforeEach(() => {
   vi.useFakeTimers();
   document.body.innerHTML = '';
@@ -93,9 +118,96 @@ beforeEach(() => {
 afterEach(() => {
   release();
   vi.useRealTimers();
+  for (const restore of matchMediaRestorers.splice(0).reverse()) {
+    restore();
+  }
 });
 
 describe('the press reaches the surface the finger landed on', () => {
+  it('keeps native long-press selection on the row and its switch input while a finger is held: the hold does nothing (spec:AST-094 FR41)', () => {
+    coarsePrimaryPointer();
+    const row = pressable('label');
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.setAttribute('role', 'switch');
+    row.appendChild(input);
+    document.body.appendChild(row);
+    press(input, 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(600);
+    expect(row.style.getPropertyValue('user-select')).toBe('');
+    expect(input.style.getPropertyValue('user-select')).toBe('');
+    press(input, 'pointerup', 10, 10);
+    expect(row.style.getPropertyValue('user-select')).toBe('');
+    expect(input.style.getPropertyValue('user-select')).toBe('');
+    // A mouse never locks anything.
+    press(input, 'pointerdown', 10, 10, 'mouse');
+    expect(row.style.getPropertyValue('user-select')).toBe('');
+    press(input, 'pointerup', 10, 10, 'mouse');
+  });
+
+  it('writes no selection or callout lock on any surface: a link keeps its native menu and a row its long-press selection (spec:AST-094 FR41)', () => {
+    coarsePrimaryPointer();
+    // jsdom drops -webkit-touch-callout, so every 'none' write is recorded.
+    const written: string[] = [];
+    const setProperty = CSSStyleDeclaration.prototype.setProperty;
+    const spy = vi
+      .spyOn(CSSStyleDeclaration.prototype, 'setProperty')
+      .mockImplementation(function (
+        this: CSSStyleDeclaration,
+        name: string,
+        value: string | null,
+        priority?: string,
+      ) {
+        if (value === 'none') {
+          written.push(name);
+        }
+        setProperty.call(this, name, value, priority);
+      });
+    const link = pressable('a');
+    link.setAttribute('href', '/next');
+    link.textContent = 'Next';
+    document.body.appendChild(link);
+    for (const surface of [link, rows[0]]) {
+      press(surface, 'pointerdown', 10, 10);
+      vi.advanceTimersByTime(600);
+      press(surface, 'pointerup', 10, 10);
+    }
+    expect(written).toEqual([]);
+    spy.mockRestore();
+  });
+
+  it('keeps selection under a mouse, a pen and a finger where the primary pointer is fine, as on main (spec:AST-094 FR19, spec:AST-017 FR59)', () => {
+    const row = rows[2];
+    press(row, 'pointerdown', 10, 10, 'mouse');
+    vi.advanceTimersByTime(600);
+    expect(row.style.getPropertyValue('user-select')).toBe('');
+    press(row, 'pointerup', 10, 10, 'mouse');
+    // A desktop pen tablet: a fine primary pointer.
+    press(row, 'pointerdown', 10, 10, 'pen');
+    vi.advanceTimersByTime(600);
+    expect(row.style.getPropertyValue('user-select')).toBe('');
+    press(row, 'pointerup', 10, 10, 'pen');
+    vi.advanceTimersByTime(600);
+    // A finger on a touchscreen laptop: the primary pointer is still fine.
+    press(row, 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(600);
+    expect(row.style.getPropertyValue('user-select')).toBe('');
+    press(row, 'pointerup', 10, 10);
+    vi.advanceTimersByTime(600);
+    // On a touch device a pen keeps it too: a row's hold does nothing
+    // (spec:AST-094 FR41).
+    const restore = coarsePrimaryPointer();
+    try {
+      press(row, 'pointerdown', 10, 10, 'pen');
+      vi.advanceTimersByTime(600);
+      expect(row.style.getPropertyValue('user-select')).toBe('');
+      press(row, 'pointerup', 10, 10, 'pen');
+      expect(row.style.getPropertyValue('user-select')).toBe('');
+    } finally {
+      restore();
+    }
+  });
+
   it('paints the row after the delay, not before', () => {
     const label = rows[1].firstElementChild;
     if (label == null) {
@@ -106,6 +218,20 @@ describe('the press reaches the surface the finger landed on', () => {
     expect(pressedRow()).toBe(-1);
     vi.advanceTimersByTime(1);
     expect(pressedRow()).toBe(1);
+  });
+
+  it('keeps the press painted through a drag on a surface that holds its drag, and still ends it on a cancel', () => {
+    const row = rows[0];
+    row.setAttribute('data-astryx-press-holds-drag', '');
+    press(row, 'pointerdown', 10, 10);
+    press(row, 'pointermove', 40, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(row.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    press(row, 'pointermove', 80, 10);
+    expect(row.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    press(row, 'pointercancel', 80, 10);
+    expect(row.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    row.removeAttribute('data-astryx-press-holds-drag');
   });
 
   it('paints the innermost surface when they nest', () => {
@@ -125,6 +251,26 @@ describe('the press reaches the surface the finger landed on', () => {
     press(rows[0], 'pointerdown', 10, 10, 'mouse');
     vi.advanceTimersByTime(PRESS_ONSET_MS * 2);
     expect(pressedRow()).toBe(-1);
+  });
+
+  it('paints a Space press on a tracked action where the primary pointer is fine: a tracked action takes no `:active` paint', () => {
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+    const button = pressable('button');
+    for (const [name, value] of Object.entries(
+      pressGroupItemProps(['touch', 'pen']),
+    )) {
+      button.setAttribute(name, value);
+    }
+    rows[0].appendChild(button);
+    button.focus();
+    button.dispatchEvent(
+      new KeyboardEvent('keydown', {key: ' ', bubbles: true, cancelable: true}),
+    );
+    expect(button.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    button.dispatchEvent(
+      new KeyboardEvent('keyup', {key: ' ', bubbles: true, cancelable: true}),
+    );
+    expect(button.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
   });
 
   it('leaves a Space press to `:active` where the primary pointer is fine', () => {
@@ -158,6 +304,67 @@ describe('the press reaches the surface the finger landed on', () => {
     press(ariaDisabled, 'pointerdown', 10, 10);
     vi.advanceTimersByTime(PRESS_ONSET_MS);
     expect(document.querySelectorAll(`[${PRESSED_ATTRIBUTE}]`)).toHaveLength(0);
+  });
+});
+
+describe('an action group whose own tracker paints its actions', () => {
+  // The group's tracker follows a held pointer across its actions and paints
+  // them. The controller must not write the press attribute there too.
+  function group(): {actions: HTMLElement[]; field: HTMLElement} {
+    const root = document.createElement('div');
+    const actions = [pressable('button'), pressable('button')];
+    for (const action of actions) {
+      for (const [name, value] of Object.entries(
+        pressGroupItemProps(['touch', 'pen']),
+      )) {
+        action.setAttribute(name, value);
+      }
+      root.appendChild(action);
+    }
+    // A member the tracker skips (a menu trigger) carries no marker.
+    const field = pressable('button');
+    root.appendChild(field);
+    document.body.appendChild(root);
+    return {actions, field};
+  }
+
+  it('paints nothing on an action its group tracks', () => {
+    const {actions} = group();
+    expect(isTrackedByGroup(actions[0])).toBe(true);
+    press(actions[0], 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    press(actions[0], 'pointerup', 10, 10);
+    vi.advanceTimersByTime(PRESS_FLASH_MS);
+    expect(actions[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('leaves the paint the group writes on it alone', () => {
+    const {actions} = group();
+    actions[1].setAttribute(PRESSED_ATTRIBUTE, 'on');
+    press(actions[1], 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    press(actions[1], 'pointercancel', 10, 10);
+    expect(actions[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('still paints a member the group does not track', () => {
+    const {field} = group();
+    press(field, 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(field.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('still records the touch, so a scroll it drives brakes the next one', () => {
+    const {actions} = group();
+    scroller.appendChild(actions[0].parentElement as HTMLElement);
+    press(actions[0], 'pointerdown', 10, 10);
+    // The browser takes the touch to scroll: the cancel records nothing, so
+    // the touch-down alone must have recorded the finger.
+    press(actions[0], 'pointercancel', 10, 10);
+    scroller.dispatchEvent(new Event('scroll'));
+    press(rows[1], 'pointerdown', 10, 100);
+    vi.advanceTimersByTime(PRESS_ONSET_MS * 2);
+    expect(pressedRow()).toBe(-1);
   });
 });
 
@@ -449,6 +656,164 @@ describe('the release', () => {
   });
 });
 
+/**
+ * A CSS animation as a browser reports it from `getAnimations()` (jsdom runs
+ * none): by default the release the stylesheet starts on the surface's
+ * `::before` at the `fading` write, still waiting for its first frame.
+ * `end()` finishes it; `cancel()` cancels it, as unmounting or restyling the
+ * surface does.
+ */
+function cssAnimation(
+  element: Element,
+  {
+    target = element,
+    playState = 'running',
+    endTime = PRESS_FADE_MS,
+  }: {target?: Element; playState?: string; endTime?: number} = {},
+) {
+  let end: () => void = () => undefined;
+  let cancel: () => void = () => undefined;
+  const finished = new Promise<void>((resolve, reject) => {
+    end = resolve;
+    cancel = () => reject(new DOMException('cancelled', 'AbortError'));
+  });
+  finished.catch(() => undefined);
+  return {
+    animation: {
+      animationName: 'release',
+      playState,
+      finished,
+      effect: {
+        target,
+        pseudoElement: '::before',
+        getComputedTiming: () => ({endTime}),
+      },
+    },
+    end: () => end(),
+    cancel: () => cancel(),
+  };
+}
+
+/** The animations a browser would report running on `element` and its pseudo-elements. */
+function animate(element: Element, animations: ReadonlyArray<object>): void {
+  Object.defineProperty(element, 'getAnimations', {
+    configurable: true,
+    value: () => animations,
+  });
+}
+
+/** Let the callbacks a finished or cancelled animation queued run. */
+async function settled(): Promise<void> {
+  for (let i = 0; i < 4; i += 1) {
+    await Promise.resolve();
+  }
+}
+
+/** A finger's held press on the first row, lifted: the release is written. */
+function liftHeldPress(): void {
+  press(rows[0], 'pointerdown', 10, 10);
+  vi.advanceTimersByTime(PRESS_ONSET_MS);
+  press(rows[0], 'pointerup', 10, 10);
+  expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+}
+
+describe('the release ends with its animation, not its clock', () => {
+  it('keeps `fading` until the release animation ends, however late a busy main thread let its first frame come', async () => {
+    liftHeldPress();
+    // 150 ms of script held the main thread after the lift: the release
+    // started at the first frame after it, and is still running.
+    const release = cssAnimation(rows[0]);
+    animate(rows[0], [release.animation]);
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    await settled();
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+    release.end();
+    await settled();
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('waits for a release still waiting for its first frame when the clock ran out', async () => {
+    liftHeldPress();
+    const release = cssAnimation(rows[0], {playState: 'pending'});
+    animate(rows[0], [release.animation]);
+    vi.advanceTimersByTime(PRESS_FADE_MS * 3);
+    await settled();
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+    release.end();
+    await settled();
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('ends when the release animation is cancelled: the surface was unmounted or restyled', async () => {
+    liftHeldPress();
+    const release = cssAnimation(rows[0]);
+    animate(rows[0], [release.animation]);
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    release.cancel();
+    await settled();
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('ends on its clock where no release animation runs: an instant release, a surface without one, or an engine without Web Animations', async () => {
+    liftHeldPress();
+    animate(rows[0], []);
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    await settled();
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('waits for a release a component draws inside the surface, on a descendant whose nearest press owner is the surface', async () => {
+    liftHeldPress();
+    // The box wrapper's `::after` plays the release for the row's press,
+    // 50 ms longer than the row's clock.
+    const box = document.createElement('span');
+    rows[0].append(box);
+    const release = cssAnimation(rows[0], {
+      target: box,
+      endTime: PRESS_FADE_MS + 50,
+    });
+    animate(rows[0], [release.animation]);
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    await settled();
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+    release.end();
+    await settled();
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('waits for no animation that is not this press’s running release: a nested press owner’s (on it or inside it), an endless one, or one already finished', async () => {
+    liftHeldPress();
+    // A press owner inside the row: its release is its own press's, never
+    // the row's.
+    const nested = pressable('span');
+    const inside = document.createElement('span');
+    nested.append(inside);
+    rows[0].append(nested);
+    animate(rows[0], [
+      cssAnimation(rows[0], {target: nested}).animation,
+      cssAnimation(rows[0], {target: inside}).animation,
+      cssAnimation(rows[0], {endTime: Infinity}).animation,
+      cssAnimation(rows[0], {playState: 'finished'}).animation,
+    ]);
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    await settled();
+    expect(rows[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('a new press on the surface owns its paint: the old release ending later does not clear it', async () => {
+    liftHeldPress();
+    const release = cssAnimation(rows[0]);
+    animate(rows[0], [release.animation]);
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    press(rows[0], 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    release.end();
+    await settled();
+    expect(rows[0].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+});
+
 describe('two touches in a row', () => {
   it('answers the second tap while the first is still fading', () => {
     press(rows[0], 'pointerdown', 10, 10);
@@ -554,6 +919,43 @@ describe('a phone or tablet paints a mouse or Space press itself', () => {
       rows[1].classList.remove('slow-row');
       style.remove();
     }
+  });
+
+  function groupAction(
+    row: HTMLElement,
+    pointerTypes: ReadonlyArray<string> = ['touch', 'pen'],
+  ): HTMLButtonElement {
+    const action = focusedButton(row);
+    for (const [name, value] of Object.entries(
+      pressGroupItemProps(pointerTypes),
+    )) {
+      action.setAttribute(name, value);
+    }
+    return action;
+  }
+
+  it('leaves a mouse press to a tracker that follows a mouse: it paints its own action', () => {
+    const action = groupAction(rows[1], ['mouse', 'pen', 'touch']);
+    press(action, 'pointerdown', 10, 100, 'mouse');
+    expect(action.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    press(action, 'pointerup', 10, 100, 'mouse');
+    expect(action.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('paints a mouse press on an action whose tracker follows a finger and a pen only: that tracker takes no mouse press', () => {
+    const action = groupAction(rows[1]);
+    press(action, 'pointerdown', 10, 100, 'mouse');
+    expect(action.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    press(action, 'pointerup', 10, 100, 'mouse');
+    expect(action.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+  });
+
+  it('still paints a Space press on a focused action its group tracks: the group tracks pointers only', () => {
+    const action = groupAction(rows[1]);
+    key(action, 'keydown');
+    expect(action.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    key(action, 'keyup');
+    expect(action.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
   });
 
   it('keeps the paint while the mouse is dragged off the surface, as `:active` does', () => {
@@ -888,6 +1290,60 @@ describe('what the list pays for it', () => {
     press(row, 'pointerdown', 10, 10);
     vi.advanceTimersByTime(PRESS_ONSET_MS);
     expect(added).toEqual([]);
+  });
+
+  it('registers no touch listener on the window or the document where the primary pointer is fine (spec:AST-094 FR24)', () => {
+    release();
+    matchMediaRestorers.push(pointerQuery(false).restore);
+    const added = [
+      vi.spyOn(window, 'addEventListener'),
+      vi.spyOn(document, 'addEventListener'),
+    ];
+    try {
+      release = installPressFeedback();
+      // A finger lands, as on a touchscreen laptop: still none.
+      press(rows[0], 'pointerdown', 10, 10);
+      press(rows[0], 'pointerup', 10, 10);
+      const types = added.flatMap(spy => spy.mock.calls.map(([type]) => type));
+      expect(types.filter(type => type.startsWith('touch'))).toEqual([]);
+      expect(types).toContain('pointerdown');
+    } finally {
+      for (const spy of added) {
+        spy.mockRestore();
+      }
+    }
+  });
+
+  it('asks no media query when it installs: a page no one touches never reads the pointer', () => {
+    release();
+    const matchMedia = vi.spyOn(window, 'matchMedia');
+    try {
+      release = installPressFeedback();
+      expect(matchMedia).not.toHaveBeenCalled();
+    } finally {
+      matchMedia.mockRestore();
+    }
+  });
+
+  it('hears touchcancel only while the primary pointer is coarse, and follows it', () => {
+    release();
+    const pointer = pointerQuery(false);
+    matchMediaRestorers.push(pointer.restore);
+    release = installPressFeedback();
+    // A tablet undocks its mouse: the browser's touchcancel ends a press.
+    pointer.set(true);
+    press(rows[0], 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(pressedRow()).toBe(0);
+    window.dispatchEvent(new Event('touchcancel'));
+    expect(pressedRow()).toBe(-1);
+    // It docks one again: the touch listener comes down.
+    pointer.set(false);
+    press(rows[1], 'pointerdown', 10, 100);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(pressedRow()).toBe(1);
+    window.dispatchEvent(new Event('touchcancel'));
+    expect(pressedRow()).toBe(1);
   });
 
   it('installs once, however many times it is called, and stays while any holder remains', () => {

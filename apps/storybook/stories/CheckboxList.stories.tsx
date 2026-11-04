@@ -331,6 +331,53 @@ export const DisabledItem: Story = {
   },
 };
 
+export const Optional: Story = {
+  render: args => {
+    const [value, setValue] = useState<string[]>([]);
+    const {value: _value, onChange: _onChange, ...restArgs} = args;
+    return (
+      <CheckboxList {...restArgs} value={value} onChange={setValue}>
+        <CheckboxListItem label="Email" value="email" />
+        <CheckboxListItem label="SMS" value="sms" />
+        <CheckboxListItem label="Push notification" value="push" />
+      </CheckboxList>
+    );
+  },
+  args: {
+    label: 'Notification preferences',
+    description: 'Leave all unchecked to receive no notifications.',
+    isOptional: true,
+  },
+};
+
+export const Required: Story = {
+  render: args => {
+    const [value, setValue] = useState<string[]>([]);
+    const [submitted, setSubmitted] = useState(false);
+    const {value: _value, onChange: _onChange, ...restArgs} = args;
+    return (
+      <form
+        onSubmit={event => {
+          event.preventDefault();
+          setSubmitted(true);
+        }}>
+        <CheckboxList {...restArgs} value={value} onChange={setValue}>
+          <CheckboxListItem label="Design" value="design" />
+          <CheckboxListItem label="Engineering" value="eng" />
+          <CheckboxListItem label="Research" value="research" />
+        </CheckboxList>
+        <button type="submit">Submit</button>
+        {submitted ? <p>Submitted</p> : null}
+      </form>
+    );
+  },
+  args: {
+    label: 'Topics',
+    description: 'Choose at least one.',
+    isRequired: true,
+  },
+};
+
 export const WithErrorStatus: Story = {
   render: args => {
     const [value, setValue] = useState<string[]>([]);

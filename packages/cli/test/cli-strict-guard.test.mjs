@@ -19,7 +19,8 @@
  */
 
 import {describe, expect, it} from 'vitest';
-import {JSON_SUPPORTED, program} from '../clients/cli/index.mjs';
+import {JSON_SUPPORTED} from '../clients/cli/index.mjs';
+import {program} from '../clients/cli/program.mjs';
 import {buildManifest} from '../clients/cli/lib/manifest.mjs';
 
 /** The commands the CLI surface spec allows to fail on a warning. */

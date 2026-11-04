@@ -63,6 +63,69 @@ function expectResponsiveProbeClasses(
 }
 
 describe('DateTimeInput', () => {
+  it('Enter on a busy field does not submit the form', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <DateTimeInput
+          label="Starts"
+          value={'2026-01-12T09:00' as ISODateTimeString}
+          onChange={() => {}}
+          isLoading
+        />
+        <button type="submit">Save</button>
+      </form>,
+    );
+    screen.getAllByRole('combobox')[0].focus();
+    await user.keyboard('{Enter}');
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('Enter on a disabled field does not submit the form', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    render(
+      <form onSubmit={onSubmit}>
+        <DateTimeInput
+          label="Starts"
+          value={'2026-01-12T09:00' as ISODateTimeString}
+          onChange={() => {}}
+          isDisabled
+        />
+        <button type="submit">Save</button>
+      </form>,
+    );
+    screen.getAllByRole('combobox')[0].focus();
+    await user.keyboard('{Enter}');
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('Enter in the date segment submits the form when nothing is typed, and commits typed text without submitting', async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+    const onChange = vi.fn();
+    render(
+      <form onSubmit={onSubmit}>
+        <DateTimeInput
+          label="Starts"
+          value={'2026-01-12T09:00' as ISODateTimeString}
+          onChange={onChange}
+        />
+        <button type="submit">Save</button>
+      </form>,
+    );
+    const dateInput = screen.getAllByRole('combobox')[0];
+    dateInput.focus();
+    await user.keyboard('{Enter}');
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    await user.clear(dateInput);
+    await user.type(dateInput, '2026-02-03');
+    await user.keyboard('{Enter}');
+    expect(onChange).toHaveBeenLastCalledWith('2026-02-03T09:00');
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+  });
+
   it('renders with label', () => {
     render(<DateTimeInput label="Meeting time" onChange={() => {}} />);
     expect(screen.getByLabelText('Meeting time')).toBeInTheDocument();
@@ -1580,6 +1643,7 @@ describe('DateTimeInput', () => {
           .querySelector('[role="listbox"]')!
           .querySelectorAll('[role="option"]');
         fireEvent.mouseEnter(options[5]);
+        fireEvent.pointerMove(options[5], {screenX: 114, screenY: 114});
 
         expect(timeInput.getAttribute('aria-activedescendant')).toBe(
           options[5].id,
@@ -1759,9 +1823,50 @@ describe('DateTimeInput', () => {
       expect(timeInput).toHaveAttribute('aria-expanded', 'false');
     });
 
+    // architecture:layer-runtime: a press on the time field is inside its list.
+    it('keeps the time list open on a press in the time input, closes it on a press elsewhere', async () => {
+      const press = (target: Element) => {
+        fireEvent.pointerDown(target, {composed: true});
+        fireEvent.pointerUp(target, {composed: true});
+      };
+      render(
+        <>
+          <DateTimeInput
+            label="Meeting"
+            value={'2026-03-15T14:00' as ISODateTimeString}
+            timeOptionInterval={60}
+            onChange={() => {}}
+          />
+          <p>Elsewhere</p>
+        </>,
+      );
+      const timeInput = screen.getByLabelText('Meeting time');
+      fireEvent.keyDown(timeInput, {key: 'ArrowDown', altKey: true});
+      expect(timeInput).toHaveAttribute('aria-expanded', 'true');
+      const listbox = document.getElementById(
+        timeInput.getAttribute('aria-controls')!,
+      );
+      // The list is a manual popover, so the browser does not light-dismiss
+      // it on a press in the time input.
+      expect(listbox?.closest('[popover]')).toHaveAttribute(
+        'popover',
+        'manual',
+      );
+
+      press(timeInput);
+      expect(timeInput).toHaveAttribute('aria-expanded', 'true');
+      press(listbox!);
+      expect(timeInput).toHaveAttribute('aria-expanded', 'true');
+
+      press(screen.getByText('Elsewhere'));
+      await waitFor(() => {
+        expect(timeInput).toHaveAttribute('aria-expanded', 'false');
+      });
+    });
+
     it('closes the list when focus leaves the field entirely', () => {
-      // Light dismiss covers outside clicks and Escape, never a programmatic
-      // focus move. Without this the listbox is orphaned in the top layer.
+      // The outside-press watch covers outside presses and Escape stays on the
+      // layer stack, never a programmatic focus move. Without this the listbox is orphaned in the top layer.
       render(
         <>
           <DateTimeInput
@@ -2389,13 +2494,13 @@ describe('DateTimeInput', () => {
         <DateTimeInput label="When" onChange={() => {}} />,
       );
       expect(openAndReadWeekdays(container)).toEqual([
-        'Su',
-        'Mo',
-        'Tu',
-        'We',
-        'Th',
-        'Fr',
-        'Sa',
+        'Sun',
+        'Mon',
+        'Tue',
+        'Wed',
+        'Thu',
+        'Fri',
+        'Sat',
       ]);
     });
 
@@ -2404,13 +2509,13 @@ describe('DateTimeInput', () => {
         <DateTimeInput label="When" onChange={() => {}} weekStartsOn={1} />,
       );
       expect(openAndReadWeekdays(container)).toEqual([
-        'Mo',
-        'Tu',
-        'We',
-        'Th',
-        'Fr',
-        'Sa',
-        'Su',
+        'Mon',
+        'Tue',
+        'Wed',
+        'Thu',
+        'Fri',
+        'Sat',
+        'Sun',
       ]);
     });
 
@@ -2419,13 +2524,13 @@ describe('DateTimeInput', () => {
         <DateTimeInput label="When" onChange={() => {}} weekStartsOn="mon" />,
       );
       expect(openAndReadWeekdays(container)).toEqual([
-        'Mo',
-        'Tu',
-        'We',
-        'Th',
-        'Fr',
-        'Sa',
-        'Su',
+        'Mon',
+        'Tue',
+        'Wed',
+        'Thu',
+        'Fri',
+        'Sat',
+        'Sun',
       ]);
     });
   });
