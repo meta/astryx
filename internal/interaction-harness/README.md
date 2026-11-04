@@ -218,9 +218,11 @@ entry: in WebKit, with the popover above BottomSheet's open modal dialog, the
 sheet's dim held for 155 to 225 ms into a block while the control moved, and
 inside the dialog it moves in step with the sheet. `waitForAnimation` and
 `blockMainThread`'s `during` never count the control's own animation, so on
-a dialog they still wait for the backdrop's. Track it from the
-same screencast with `trackControl(page, frames)` (`trackMarker` with
-`CONTROL_RGB`, searching only the strip it crosses) and pass it as `control`: the component passes when it moved on every frame the control
+a dialog they still wait for the backdrop's. Track a top-layer control from
+the same screencast with `trackControl(page, frames)` (`trackMarker` with
+`CONTROL_RGB`, searching only the top strip it crosses). A control mounted
+`within` a dialog moves with it, so track that one with `trackMarker(page,
+frames, {rgb: CONTROL_RGB})`. Pass either as `control`: the component passes when it moved on every frame the control
 moved and its longest stall is no longer than the control's. Both are read from
 the same screencast frames, so a compositor animation misses none. A window in
 which the control moved on fewer than four frames fails, since the machine

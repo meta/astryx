@@ -6,7 +6,8 @@
  * @output The control's clock. Its readings follow the control's animation
  *   time across turns and gaps, whatever the stamps say, also for frames
  *   stamped late and put out of order. A frame near a turn, or one that
- *   repeats the position before it, gets no reading.
+ *   repeats the position before it, gets no reading. Includes the cases of
+ *   the animator spec's former clock.
  * @position Unit test of ./busy's controlClock
  */
 
@@ -123,6 +124,28 @@ describe('controlClock', () => {
     ).toBe(true);
     const read = expectAnimationTimes(controlClock(frames), byStamp);
     expect(read.length).toBeGreaterThan(frames.length / 2);
+  });
+
+  it('reads the first usable frame and the next one right when a turn lies between them', () => {
+    // At 338.3 ms the box is at 203 px on its way out, just inside the band.
+    // The frames after it sit within 36 px of the end until 466.3 ms. There
+    // the next usable frame is at 200.2 px, on its way back.
+    const times = Array.from({length: 60}, (_, i) => 338 + 1 / 3 + i * 16);
+    const frames = control(times);
+    const clock = controlClock(frames);
+    expect(clock.has(frames[0].t)).toBe(true);
+    expect(frames.slice(1, 8).some(frame => clock.has(frame.t))).toBe(false);
+    expect(clock.has(frames[8].t)).toBe(true);
+    expectAnimationTimes(clock, timesByStamp(times, frames));
+  });
+
+  it('reads every frame at its own time when the first frame is stamped 50 ms late', () => {
+    // The late first frame does not set the origin, so it moves no reading.
+    const times = Array.from({length: 60}, (_, i) => 100 + i * 16);
+    const frames = control(times, i => (i === 0 ? 50 : 0));
+    const clock = controlClock(frames);
+    expect(clock.has(frames[0].t)).toBe(true);
+    expectAnimationTimes(clock, timesByStamp(times, frames));
   });
 
   it('gives no reading to a frame that repeats the position before it', () => {
