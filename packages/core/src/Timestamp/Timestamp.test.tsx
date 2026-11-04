@@ -1685,6 +1685,16 @@ describe('Timestamp server rendering', () => {
     vi.useRealTimers();
   });
 
+  const originalTZ = process.env.TZ;
+
+  afterEach(() => {
+    if (originalTZ === undefined) {
+      delete process.env.TZ;
+    } else {
+      process.env.TZ = originalTZ;
+    }
+  });
+
   it.each(['date', 'date_time', 'time', 'unix_seconds'] as const)(
     'never reads the current time for the absolute %s format',
     format => {
@@ -1739,16 +1749,6 @@ describe('Timestamp server rendering', () => {
   });
 
   describe('across time zones', () => {
-    const originalTZ = process.env.TZ;
-
-    afterEach(() => {
-      if (originalTZ === undefined) {
-        delete process.env.TZ;
-      } else {
-        process.env.TZ = originalTZ;
-      }
-    });
-
     it('writes the same server markup whatever the server time zone', () => {
       const element = (
         <Timestamp value="2026-03-25T10:00:00Z" format="relative" />
