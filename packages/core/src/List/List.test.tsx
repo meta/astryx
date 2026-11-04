@@ -609,6 +609,23 @@ describe('List', () => {
     expect(anchor?.textContent).toContain('Link');
   });
 
+  it("follows a link row's link from its start content", () => {
+    render(
+      <List>
+        <ListItem
+          label="Ada Lovelace"
+          href="/candidates/1"
+          startContent={<span>AL</span>}
+        />
+      </List>,
+    );
+    const anchor = screen.getByRole('link', {name: /Ada Lovelace/});
+    const onClick = vi.fn((event: MouseEvent) => event.preventDefault());
+    anchor.addEventListener('click', onClick);
+    screen.getByText('AL').click();
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
   it('sets target on anchor when provided', () => {
     const {container} = render(
       <List>

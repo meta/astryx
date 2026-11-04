@@ -437,6 +437,142 @@ describe('Item', () => {
     expect(screen.getByRole('button', {name: 'Elsewhere'})).toHaveFocus();
   });
 
+  describe('a link row follows its link from the whole row', () => {
+    function renderLinkRow() {
+      const view = render(
+        <Item
+          label="Ada Lovelace"
+          description="Not applied"
+          href="/candidates/1"
+          startContent={<span>AL</span>}
+          endContent={
+            <>
+              <span>Yesterday</span>
+              <button type="button">Star</button>
+            </>
+          }
+        />,
+      );
+      const anchor = screen.getByRole('link', {name: /Ada Lovelace/});
+      const clicks: MouseEvent[] = [];
+      anchor.addEventListener('click', event => {
+        event.preventDefault();
+        clicks.push(event);
+      });
+      const root = view.container.firstElementChild as HTMLElement;
+      return {anchor, clicks, root};
+    }
+
+    it('a press on the start content, the end content or the row itself follows the link', () => {
+      const {clicks, root} = renderLinkRow();
+      fireEvent.click(screen.getByText('AL'));
+      fireEvent.click(screen.getByText('Yesterday'));
+      fireEvent.click(root);
+      expect(clicks).toHaveLength(3);
+    });
+
+    it('a press on the description follows the link once', () => {
+      const {clicks} = renderLinkRow();
+      fireEvent.click(screen.getByText('Not applied'));
+      expect(clicks).toHaveLength(1);
+    });
+
+    it('a press on a nested control does not follow the link', () => {
+      const {clicks} = renderLinkRow();
+      fireEvent.click(screen.getByRole('button', {name: 'Star'}));
+      expect(clicks).toHaveLength(0);
+    });
+
+    it('a press that ends a text selection does not follow the link', () => {
+      const {clicks} = renderLinkRow();
+      const start = screen.getByText('AL');
+      document.getSelection()?.selectAllChildren(start);
+      try {
+        fireEvent.click(start);
+      } finally {
+        document.getSelection()?.removeAllRanges();
+      }
+      expect(clicks).toHaveLength(0);
+    });
+
+    it('a press with a modifier key reaches the anchor with that key', () => {
+      const {clicks} = renderLinkRow();
+      fireEvent.click(screen.getByText('AL'), {metaKey: true});
+      fireEvent.click(screen.getByText('AL'), {ctrlKey: true});
+      fireEvent.click(screen.getByText('AL'), {shiftKey: true});
+      expect(
+        clicks.map(event => [event.metaKey, event.ctrlKey, event.shiftKey]),
+      ).toEqual([
+        [true, false, false],
+        [false, true, false],
+        [false, false, true],
+      ]);
+    });
+
+    it('a middle press on the row opens the link in a new tab', () => {
+      const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+      try {
+        renderLinkRow();
+        fireEvent.mouseUp(screen.getByText('AL'), {button: 1});
+        expect(open).toHaveBeenCalledWith(
+          '/candidates/1',
+          '_blank',
+          'noopener',
+        );
+      } finally {
+        open.mockRestore();
+      }
+    });
+
+    it("a press on the row reaches a router link component's own click handler", () => {
+      const navigate = vi.fn();
+      function RouterLink({
+        ref,
+        onClick,
+        ...props
+      }: React.ComponentPropsWithRef<'a'>) {
+        return (
+          <a
+            ref={ref}
+            {...props}
+            onClick={event => {
+              onClick?.(event);
+              event.preventDefault();
+              navigate(props.href);
+            }}
+          />
+        );
+      }
+      render(
+        <LinkProvider component={RouterLink}>
+          <Item
+            label="Ada Lovelace"
+            href="/candidates/1"
+            startContent={<span>AL</span>}
+          />
+        </LinkProvider>,
+      );
+      fireEvent.click(screen.getByText('AL'));
+      expect(navigate).toHaveBeenCalledWith('/candidates/1');
+    });
+
+    it('a disabled link row does not follow its link', () => {
+      render(
+        <Item
+          label="Ada Lovelace"
+          href="/candidates/1"
+          isDisabled
+          startContent={<span>AL</span>}
+        />,
+      );
+      const anchor = screen.getByRole('link', {name: /Ada Lovelace/});
+      const onClick = vi.fn();
+      anchor.addEventListener('click', onClick);
+      fireEvent.click(screen.getByText('AL'));
+      expect(onClick).not.toHaveBeenCalled();
+    });
+  });
+
   it('disables the invisible button when isDisabled', () => {
     const {container} = render(
       <Item label="Disabled" onClick={() => {}} isDisabled />,
