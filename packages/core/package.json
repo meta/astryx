@@ -838,6 +838,11 @@
       "source": "./src/internal/selectable-card.ts",
       "types": "./dist/internal/selectable-card.d.ts",
       "default": "./dist/internal/selectable-card.js"
+    },
+    "./internal/spinner-rotor": {
+      "source": "./src/internal/spinner-rotor.ts",
+      "types": "./dist/internal/spinner-rotor.d.ts",
+      "default": "./dist/internal/spinner-rotor.js"
     }
   },
   "files": [
