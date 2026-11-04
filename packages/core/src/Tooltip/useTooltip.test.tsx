@@ -25,6 +25,7 @@ import {render, screen, fireEvent, act} from '@testing-library/react';
 import {useTooltip, type TooltipOptions} from './useTooltip';
 import {useLayer} from '../Layer/useLayer';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import type {Ref} from 'react';
 
 // jsdom implements neither the Popover API nor `:popover-open`; mirror
 // Tooltip.test.tsx's shims so the layer can open.
@@ -250,10 +251,13 @@ function InlineRefHarness({
   );
 }
 
-/** A trigger whose ref merges a new inline ref on each render, as Button does. */
-function MergedRefHarness(options: TooltipOptions) {
+/** A trigger that merges its consumer's ref, as Button does. */
+function MergedRefHarness({
+  consumerRef,
+  ...options
+}: TooltipOptions & {consumerRef: Ref<HTMLButtonElement>}) {
   const tooltip = useTooltip(options);
-  const ref = useMergedRefs<HTMLButtonElement>(() => {}, tooltip.ref);
+  const ref = useMergedRefs<HTMLButtonElement>(consumerRef, tooltip.ref);
   return (
     <div>
       <button type="button" ref={ref} aria-describedby={tooltip.describedBy}>
@@ -267,19 +271,21 @@ function MergedRefHarness(options: TooltipOptions) {
 describe('useTooltip — a caller ref that changes on each render', () => {
   it('keeps a hovered tooltip open when the parent renders again', () => {
     const onHide = vi.fn();
-    const {rerender} = render(<MergedRefHarness onHide={onHide} />);
+    const {rerender} = render(
+      <MergedRefHarness consumerRef={() => {}} onHide={onHide} />,
+    );
     fireEvent.mouseEnter(trigger());
     tick(200);
     expect(tooltipElement().matches(':popover-open')).toBe(true);
 
-    rerender(<MergedRefHarness onHide={onHide} />);
-    rerender(<MergedRefHarness onHide={onHide} />);
+    rerender(<MergedRefHarness consumerRef={() => {}} onHide={onHide} />);
+    rerender(<MergedRefHarness consumerRef={() => {}} onHide={onHide} />);
     expect(tooltipElement().matches(':popover-open')).toBe(true);
     expect(onHide).not.toHaveBeenCalled();
   });
 
   it('keeps a tooltip dismissed with Escape closed when the parent renders again', () => {
-    const {rerender} = render(<MergedRefHarness />);
+    const {rerender} = render(<MergedRefHarness consumerRef={() => {}} />);
     const matches = trigger().matches.bind(trigger());
     vi.spyOn(trigger(), 'matches').mockImplementation(
       selector => selector === ':focus-visible' || matches(selector),
@@ -289,7 +295,7 @@ describe('useTooltip — a caller ref that changes on each render', () => {
     fireEvent.keyDown(trigger(), {key: 'Escape'});
     expect(tooltipElement().matches(':popover-open')).toBe(false);
 
-    rerender(<MergedRefHarness />);
+    rerender(<MergedRefHarness consumerRef={() => {}} />);
     expect(tooltipElement().matches(':popover-open')).toBe(false);
   });
 
