@@ -85,10 +85,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   `hasDivider` beside a ResizeHandle that draws the same line paints the
   boundary twice; nothing prevents it, so callers keep `hasDivider={false}`
   when the ResizeHandle owns the line (`family:layout-regions` FR5).
-- **A collapsing panel jumps and keeps focus (FR7, AR2).** A resizable panel
-  closes and opens at once, where `spec:AST-105` FR9 slides it, and a panel
-  collapsed by app code keeps focus inside it and its controls in the tab
-  order while it is out of sight.
+- **A collapsing panel jumps (FR7).** A resizable panel closes and opens at
+  once, where `spec:AST-105` FR9 slides it.
 
 ## Ownership boundary
 
@@ -169,8 +167,6 @@ Consumer migration instructions belong in consumer docs and release notes.
   until it opens (`spec:AST-105` FR9). Opening moves no focus. A collapse
   started from the Handle, or from a control outside the panel, leaves focus
   where it is. Only the slide (FR7) excludes the configuration-object form.
-  Implementation gap: focus stays in a collapsed panel, which stays reachable
-  (Current-state impact).
 - **AR3 — A scrolling panel is named.** While the panel scrolls, its
   scrolling element has `role="group"` (unless the caller sets a `role`) and
   an accessible name (the caller's `label`, or a translated "Content"), so a
