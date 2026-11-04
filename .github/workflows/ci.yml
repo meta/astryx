@@ -1023,6 +1023,18 @@ jobs:
         if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         run: npx playwright install chromium
 
+      # The Node tests above run before any browser is installed, so they skip
+      # offline-media's real-browser cases. This step runs them once Chromium
+      # is in place, under the install's own condition; with
+      # ASTRYX_OFFLINE_MEDIA_BROWSER set, a missing browser fails them.
+      # ci-offline-media-browser.test.mjs keeps this step after the install.
+      - name: Offline-media browser cases
+        if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
+        env:
+          ASTRYX_OFFLINE_MEDIA_BROWSER: '1'
+        # One Node-project test file: Vitest finds its project from the path.
+        run: pnpm exec vitest run .github/scripts/lib/offline-media.test.mjs --maxWorkers=1
+
       - name: Run the theme-family contract
         if: matrix.shard == 1 && steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true'
         run: pnpm test:theme-family
