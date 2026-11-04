@@ -91,6 +91,7 @@ function getFallbackContext(): ToastContextValue {
   const FallbackCapture = () => {
     const ctx = use(ToastContext);
     const doneRef = useRef(false);
+    // Syncs the module-level fallback with the first toast context that mounts.
     useEffect(() => {
       if (ctx && !doneRef.current) {
         doneRef.current = true;

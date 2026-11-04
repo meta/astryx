@@ -699,6 +699,8 @@ export function useSheetGestures({
   const sheetElRef = useRef<HTMLElement | null>(null);
   const bodyNodeRef = useRef<HTMLElement | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
+  // Syncs the browser layout with the transform reset, then ends the
+  // scroll-area reconcile one frame later.
   useLayoutEffect(() => {
     if (!isScrollAreaReconciling) {
       return;
@@ -758,6 +760,7 @@ export function useSheetGestures({
     },
     [recordSheetHeight],
   );
+  // Releases the height observer on unmount.
   useEffect(() => () => observerRef.current?.disconnect(), []);
 
   // Reset to the tallest detent each time the sheet re-opens.
@@ -909,6 +912,8 @@ export function useSheetGestures({
     resolveDetents,
   ]);
 
+  // Syncs window resize and orientation listeners with `isOpen`. Each event
+  // anchors the sheet to its settled detent again.
   useEffect(() => {
     if (!isOpen || typeof window === 'undefined') {
       return;
@@ -1026,6 +1031,8 @@ export function useSheetGestures({
     [prepareScrollAreaSettle, resolveDetents],
   );
 
+  // Syncs window blur and document visibilitychange listeners with `isOpen`. A
+  // blur or a hidden page cancels a drag.
   useEffect(() => {
     // Only an open sheet can be dragged; a closed one listens to nothing.
     if (!isOpen) {

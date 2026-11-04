@@ -585,7 +585,7 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
     [layerRef, interactionRef],
   );
 
-  // Cleanup on unmount
+  // Releases the hover-card timers on unmount.
   useEffect(() => {
     return () => {
       clearTimeouts();
@@ -600,7 +600,8 @@ export function useHoverCard(options: HoverCardOptions = {}): HoverCardReturn {
     // eslint-disable-next-line @eslint-react/exhaustive-deps -- intentionally only on mount
   }, []);
 
-  // Controlled open state — overrides hover/focus triggers
+  // Syncs the layer with the controlled `isOpen`. A close moves focus back to
+  // the trigger when the card holds it.
   useEffect(() => {
     if (isOpen === undefined) {
       return;

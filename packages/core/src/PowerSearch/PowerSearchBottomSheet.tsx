@@ -10,7 +10,7 @@
  *   RadioList, Text, TextInput, PowerSearchValueEditor, the internal sheet
  *   confirmation and search-drag owners, i18n
  * @output Exports PowerSearchBottomSheet — the touch surface of
- *   `PowerSearch experimental.presentation="bottom-sheet"`: a Filters sheet
+ *   `PowerSearch presentation="bottom-sheet"`: a Filters sheet
  *   with editable rows and trailing remove actions, Add filter in its fixed
  *   header and Clear all / Done in its fixed footer, an Add filter sheet with
  *   grouped field rows or the content search with inline suggestions, and a
@@ -195,6 +195,8 @@ export interface PowerSearchBottomSheetProps {
   isDisabled: boolean;
   hasClear: boolean;
   maxOperatorMenuItems?: number;
+  /** The zone a date-only value is read and written in; see PowerSearch. */
+  timezoneID?: string;
   maxSearchResults: number;
   /** The caller's confirm label; the step picks a default per mode. */
   saveButtonLabel?: string;
@@ -716,6 +718,7 @@ function SheetValueEditor({
   fieldLabel,
   isDisabled,
   maxMenuItems,
+  timezoneID,
   editors,
 }: {
   operatorValue: OperatorValue;
@@ -726,6 +729,7 @@ function SheetValueEditor({
   fieldLabel: string;
   isDisabled: boolean;
   maxMenuItems?: number;
+  timezoneID?: string;
   editors: PowerSearchSheetEditors;
 }) {
   const {buildRelativeDateOptions, PowerSearchValueEditor} = editors;
@@ -807,6 +811,7 @@ function SheetValueEditor({
             isDisabled={isDisabled}
             presentation="bottom-sheet"
             fieldLabel={fieldLabel}
+            timezoneID={timezoneID}
           />
         </div>
       );
@@ -837,6 +842,7 @@ export function PowerSearchBottomSheet({
   isDisabled,
   hasClear,
   maxOperatorMenuItems,
+  timezoneID,
   maxSearchResults,
   saveButtonLabel: saveButtonLabelFromProps,
   components: componentOverrides,
@@ -1350,10 +1356,11 @@ export function PowerSearchBottomSheet({
               locale,
               t,
               formatList,
+              timezoneID,
             );
       return {label, value};
     },
-    [config, editors, formatList, locale, t],
+    [config, editors, formatList, locale, t, timezoneID],
   );
   const describeFilter = useCallback(
     (filter: PowerSearchFilter): string => {
@@ -2004,6 +2011,7 @@ export function PowerSearchBottomSheet({
         onOperatorChange={() => {}}
         onPartialFilterChange={handleNestedDraftChange}
         maxMenuItems={maxOperatorMenuItems}
+        timezoneID={timezoneID}
         isReadOnly={isEditorDisabled}
         xstyle={styles.nestedEditorContainer}
       />
@@ -2018,6 +2026,7 @@ export function PowerSearchBottomSheet({
         fieldLabel={draftField.label}
         isDisabled={isEditorDisabled}
         maxMenuItems={maxOperatorMenuItems}
+        timezoneID={timezoneID}
         editors={editors}
       />
     ));
@@ -2421,6 +2430,7 @@ export function PowerSearchBottomSheet({
                 onCancel={returnFromValue}
                 saveButtonLabel={saveButtonLabel}
                 isReadOnly={isEditorDisabled}
+                timezoneID={timezoneID}
               />
             </div>
           ) : (

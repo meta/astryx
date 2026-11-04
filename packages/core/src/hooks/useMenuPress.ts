@@ -831,6 +831,8 @@ export function useMenuPress(options: UseMenuPressOptions): UseMenuPressReturn {
     endGesture();
   }, [endGesture, step]);
 
+  // Syncs the document listeners of the menu gesture counter with this mount.
+  // Unmount ends the gesture.
   useEffect(() => {
     // Install the gesture counter's listeners before the first press.
     currentGesture();
