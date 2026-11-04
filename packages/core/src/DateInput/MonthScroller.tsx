@@ -38,6 +38,7 @@ import {
   useRef,
   useState,
 } from 'react';
+import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
 import {useCalendarDays} from '../Calendar';
 import {useDirection, useLocale} from '../i18n';
@@ -50,7 +51,10 @@ import {
   borderVars,
 } from '../theme/tokens.stylex';
 import {focusOutlineStyles} from '../utils';
-import {plainDateFormatStandaloneMonthYear} from '../utils/plainDate';
+import {
+  plainDateFormatDayNumber,
+  plainDateFormatStandaloneMonthYear,
+} from '../utils/plainDate';
 import {
   type DayOfWeek,
   type ISODateString,
@@ -62,7 +66,11 @@ import {
   plainDateToISO,
   DATE_FORMAT_WITH_WEEKDAY,
 } from '../utils';
-import {reducedMotionFade} from '../motion/reducedMotion';
+import {
+  playReducedMotionDip,
+  reducedMotionFade,
+  type ReducedMotionDip,
+} from '../motion/reducedMotion';
 import {dateInputTouchSizes, dateInputTouchGeometry} from './tokens.stylex';
 import {useOwnScrollGesture} from './useOwnScrollGesture';
 import {useScrollSettle} from './useScrollSettle';
@@ -434,17 +442,12 @@ export function MonthScroller({
 
   // The Reduced Motion dip of a step on a touch screen, owned here so a
   // second step or the unmount clears it.
-  const dipRef = useRef<{animation: Animation; timer: number} | null>(null);
+  const dipRef = useRef<ReducedMotionDip | null>(null);
   const stopDip = useCallback(() => {
-    const dip = dipRef.current;
-    if (dip != null) {
-      window.clearTimeout(dip.timer);
-      dip.animation.cancel();
-      dipRef.current = null;
-    }
+    dipRef.current?.cancel();
+    dipRef.current = null;
   }, []);
-  // Synchronizes with the dip's timer and animation: neither outlives the
-  // scroller.
+  // Synchronizes with the dip's animations: they do not outlive the scroller.
   useEffect(() => stopDip, [stopDip]);
 
   const scrollToMonth = useCallback(
@@ -505,18 +508,14 @@ export function MonthScroller({
           land();
           return;
         }
-        // A second step within the dip has replaced the first (above): only
-        // its scroll lands, at its own dip's middle.
-        dipRef.current = {
-          animation: scroller.animate(
-            [{opacity: 1}, {opacity: 0}, {opacity: 1}],
-            {duration: fade.duration, easing: fade.easing},
-          ),
-          timer: window.setTimeout(() => {
-            dipRef.current = null;
-            land();
-          }, fade.duration / 2),
-        };
+        // A newer step replaces this one: only its scroll lands.
+        dipRef.current = playReducedMotionDip(scroller, fade, () => {
+          dipRef.current = null;
+          // The fade-in starts as soon as this returns. So render now: the
+          // scroll lands in the layout effect, before the fade-in.
+          // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the month must change before the dip's fade-in starts
+          flushSync(land);
+        });
         return;
       }
       steeredRowRef.current = row;
@@ -595,6 +594,7 @@ export function MonthScroller({
    * it cannot oscillate.
    */
   const settleFrameRef = useRef<number | undefined>(undefined);
+  // Releases the settle frame on unmount.
   useEffect(
     () => () => {
       if (settleFrameRef.current != null) {
@@ -667,6 +667,8 @@ export function MonthScroller({
   // rAF-throttled: a touch scroll fires far more scroll events than frames,
   // and all this does is move a label and widen a window.
   const frameRef = useRef<number | undefined>(undefined);
+  // Syncs scroll, touch and wheel listeners on the scroller with its measured
+  // height.
   useEffect(() => {
     const scroller = scrollerRef.current;
     // Not before the height is known. A listener attached while it was zero
@@ -1016,7 +1018,7 @@ function MonthPane({
                       isToday && styles.puckToday,
                       isSelected && styles.puckSelected,
                     )}>
-                    {day.dayNumber}
+                    {plainDateFormatDayNumber(day.dayNumber, locale)}
                   </span>
                 </button>
               </div>

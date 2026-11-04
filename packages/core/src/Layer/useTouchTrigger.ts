@@ -436,7 +436,9 @@ export function useTouchTriggerInternal(
     }
   }, [triggerRef, disarmOutsideDismiss]);
 
+  // Releases the outside-dismiss listener on unmount.
   useEffect(() => disarmOutsideDismiss, [disarmOutsideDismiss]);
+  // Releases a pending tap on unmount.
   useEffect(() => () => forgetPendingTapRef.current?.(), []);
 
   const isTouchInteraction = useCallback(

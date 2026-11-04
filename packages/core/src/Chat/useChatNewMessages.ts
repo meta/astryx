@@ -121,7 +121,7 @@ export function useChatNewMessages({
     [attach, detach],
   );
 
-  // Cleanup on unmount
+  // Releases the new-message tracking on unmount.
   useEffect(() => {
     return () => detach();
   }, [detach]);

@@ -331,7 +331,7 @@ describe('InfoTip', () => {
       const layer = screen.getByRole('tooltip', {hidden: true});
 
       // Revealing the help is the button's whole purpose, so a tap pins it
-      // (`triggerBehavior="toggle"`). Without that its content is unreachable on
+      // (Tooltip's press-to-pin path). Without that its content is unreachable on
       // a phone.
       tap(trigger);
 

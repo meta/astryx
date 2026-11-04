@@ -39,7 +39,7 @@ import type {BaseProps} from '../BaseProps';
 import {navItemStyles} from '../NavItem/navItemStyles.stylex';
 import {useTopNavSlot} from './TopNavContext';
 import {useTopNavRenderMode} from './TopNavRenderContext';
-import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOnActivate';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import {isSafeUrl} from '../utils/safeUrl';
 import {themeProps} from '../utils/themeProps';
@@ -363,7 +363,9 @@ export function TopNavMenu({
 }: TopNavMenuProps) {
   const pressable = usePressFeedback();
   const renderMode = useTopNavRenderMode();
-  const {closeMobileNav} = useAppShellMobile();
+  const closeDrawerAfter = useCloseMobileDrawerOnActivate(
+    renderMode === 'drawer',
+  );
   const LinkComponent = useLinkComponent();
   const [drawerExpanded, setDrawerExpanded] = useState(false);
   const menuId = useId();
@@ -524,10 +526,9 @@ export function TopNavMenu({
                 key={getMenuItemKey(item)}
                 href={item.href}
                 {...pressable}
-                onClick={(_e: React.MouseEvent) => {
+                onClick={closeDrawerAfter((_e: React.MouseEvent) => {
                   item.onClick?.();
-                  closeMobileNav();
-                }}
+                })}
                 {...focusOutlineProps.focusVisible(
                   navItemStyles.item,
                   interactionOverlayStyles.backgroundColor,

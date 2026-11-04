@@ -10,7 +10,7 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Spinner/Spinner.doc.mjs
- * - /packages/core/src/Spinner/Spinner.test.tsx
+ * - /packages/core/src/Spinner/Spinner.test.tsx and __tests__/SpinnerMotion.a11y.chromium.spec.ts (rotor timing)
  * - /packages/core/src/Spinner/index.ts
  * - /apps/storybook/stories/Spinner.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/Spinner/ (showcase blocks)
@@ -153,60 +153,57 @@ function registerSpinnerVars(): void {
 registerSpinnerVars();
 
 /**
- * Pin every ring's dash motion to the document timeline's origin instead of
- * its own start time, so spinners mounted seconds apart stay in phase.
+ * Pin every ring's rotation to the document timeline's origin instead of its
+ * own start time, so spinners mounted seconds apart stay in phase.
  *
- * Setting `startTime` is exact where arithmetic on a clock read is not: a
+ * Setting `startTime` is exact where arithmetic on a clock read is not. A
  * negative `animation-delay` computed at mount is only as good as the gap
- * between reading the clock and the frame the animation starts in, which at
- * 10x CPU throttling measured 116deg of drift (from when this animated a
- * literal rotation; the same drift risk applies to the dash offset now).
+ * between the clock read and the frame the animation starts in. At 10x CPU
+ * throttling that gap measured 116 degrees of drift.
  *
- * Rings are collected and pinned in one frame because `getAnimations()`
- * resolves style and `startTime` dirties it again, so pinning them one at a
- * time makes each mount re-force what the previous one invalidated — 53 style
- * recalcs for 38 spinners against 19 batched.
+ * Rotors are collected and pinned in one frame. `getAnimations()` resolves
+ * style, and `startTime` dirties it again. So pinning them one at a time makes
+ * each mount re-force what the previous one invalidated: 53 style recalcs for
+ * 38 spinners, against 19 batched.
  */
-const pendingRings = new Set<SVGSVGElement>();
+const pendingRotors = new Set<HTMLSpanElement>();
 let flushScheduled = false;
 
-function pinRingsToTimelineOrigin(): void {
+function pinRotorsToTimelineOrigin(): void {
   flushScheduled = false;
   const animations: Animation[] = [];
-  for (const svg of pendingRings) {
-    // The animation now runs on the arc <circle>, a descendant of the ring
-    // this ref sits on (#6253), so it needs subtree:true to be found here.
-    animations.push(...svg.getAnimations({subtree: true}));
+  for (const rotor of pendingRotors) {
+    animations.push(...rotor.getAnimations());
   }
-  pendingRings.clear();
+  pendingRotors.clear();
   for (const animation of animations) {
     animation.startTime = 0;
   }
 }
 
 /**
- * Ref callback for the ring: the one place a mounted ring touches the DOM.
+ * Ref callback for the rotor: the one place a mounted ring touches the DOM.
  *
  * It reads nothing back — the geometry is resolved by the cascade, not in JS.
  */
 function syncRotationPhase(
-  svg: SVGSVGElement | null,
+  rotor: HTMLSpanElement | null,
 ): (() => void) | undefined {
-  if (svg == null) {
+  if (rotor == null) {
     return undefined;
   }
   // jsdom implements no Web Animations, and this runs in every consumer's
   // component tests.
-  if (typeof svg.getAnimations !== 'function') {
+  if (typeof rotor.getAnimations !== 'function') {
     return undefined;
   }
-  pendingRings.add(svg);
+  pendingRotors.add(rotor);
   if (!flushScheduled) {
     flushScheduled = true;
-    requestAnimationFrame(pinRingsToTimelineOrigin);
+    requestAnimationFrame(pinRotorsToTimelineOrigin);
   }
   return () => {
-    pendingRings.delete(svg);
+    pendingRotors.delete(rotor);
   };
 }
 
@@ -215,19 +212,13 @@ function syncRotationPhase(
 // =============================================================================
 
 /**
- * Moves the dash around a stationary circle instead of rotating the whole
- * ring. WebKit re-antialiases a rotating stroked shape's rounded cap
- * (`strokeLinecap: 'round'`, below) slightly differently at each intermediate
- * angle, which reads as a visible wobble on iOS Safari independent of
- * compositing (#6253) — confirmed by a real-device test against this exact
- * fix, since `willChange`/layer promotion alone (the earlier fix for #3617)
- * only smooths the rotation's motion, not the per-frame stroke rasterization.
- * A static circle with an animated `stroke-dashoffset` never rotates, so
- * WebKit never re-rasterizes the cap at an intermediate angle at all.
+ * A `transform` animation runs on the compositor, so the ring keeps turning
+ * while a script runs. A `stroke-dashoffset` animation would repaint the arc
+ * on the main thread every frame, so it would stop while a script runs.
  */
-const dashMotion = stylex.keyframes({
-  '0%': {strokeDashoffset: '0px'},
-  '100%': {strokeDashoffset: `calc(var(${RESOLVED_DIAMETER}) * -${PI})`},
+const rotation = stylex.keyframes({
+  '0%': {transform: 'rotate(0deg)'},
+  '100%': {transform: 'rotate(360deg)'},
 });
 
 // =============================================================================
@@ -283,6 +274,8 @@ const styles = stylex.create({
   ring: {
     backfaceVisibility: 'hidden',
     display: 'block',
+    // The track and the rotor share the one grid cell, stacked and centred.
+    gridArea: '1 / 1',
     // The frame is the box, read from the same composed var the span is sized
     // from — not from the size constant, which a theme cannot reach, and not
     // from a percentage, which needs the grid area to be a definite size in
@@ -299,6 +292,27 @@ const styles = stylex.create({
     // diameter — an overflowing grid item aligns to start rather than centre,
     // which put the ring 1.5-3.3px off across the four sizes.
     overflow: 'visible',
+  },
+  // The rotor is the frame's size, so it turns about the ring's centre.
+  rotor: {
+    display: 'block',
+    gridArea: '1 / 1',
+    width: `var(${BOX_SIZE})`,
+    height: `var(${BOX_SIZE})`,
+    // Mobile Safari keeps a re-timed animation off the main thread only on an
+    // element with its own layer. So the rotor declares one before the start
+    // time is set (see `pinRotorsToTimelineOrigin`).
+    willChange: 'transform',
+    // Reduced motion slows the turn but never stops it: a still ring reads as
+    // broken. The status role and its name still say that work is busy.
+    animationDuration: {
+      // The loop reads the duration before a theme's tempo scales it.
+      default: `var(--_astryx-pre-tempo-duration-slow-min, ${durationVars['--duration-slow-min']})`,
+      '@media (prefers-reduced-motion: reduce)': '3s',
+    },
+    animationIterationCount: 'infinite',
+    animationName: rotation,
+    animationTimingFunction: 'linear',
   },
   circle: {
     fill: 'none',
@@ -336,18 +350,6 @@ const styles = stylex.create({
   // `0` the way the registered length pair guards against, so it needs no
   // registration.
   arc: {
-    // Slow the motion dramatically under reduced-motion rather than freezing
-    // it (a frozen spinner reads as broken), matching ProgressBar's approach.
-    // The role="status" + "Loading" label still convey busy state (obs-6).
-    animationDuration: {
-      // The loop reads the duration before a theme's tempo scales it
-      // (spec:AST-108 FR4).
-      default: `var(--_astryx-pre-tempo-duration-slow-min, ${durationVars['--duration-slow-min']})`,
-      '@media (prefers-reduced-motion: reduce)': '3s',
-    },
-    animationIterationCount: 'infinite',
-    animationName: dashMotion,
-    animationTimingFunction: 'linear',
     stroke: 'var(--spinner-color)',
     transform: 'rotate(-90deg)',
     strokeDasharray: `calc(var(${RESOLVED_DIAMETER}) * ${PI} * var(--spinner-arc-fraction)) calc(var(${RESOLVED_DIAMETER}) * ${PI} * (1 - var(--spinner-arc-fraction)))`,
@@ -569,10 +571,12 @@ export function Spinner({
           height: `var(${BOX_SIZE}, ${frameSize}px)`,
         },
       )}>
+      {/* The track is zero-sized by attribute. With no stylesheet, the
+          rotor's arc alone fills the box, instead of two discs side by side.
+          `ring` sizes both to the box. */}
       <svg
-        ref={syncRotationPhase}
-        width={frameSize}
-        height={frameSize}
+        width={0}
+        height={0}
         aria-hidden="true"
         {...stylex.props(styles.ring)}>
         <circle
@@ -586,18 +590,28 @@ export function Spinner({
             trackOpacityStyles[shade],
           )}
         />
-        <circle
-          cx="50%"
-          cy="50%"
-          r={diameter / 2}
-          strokeWidth={border}
-          // The size's own dash, for the render with no stylesheet. The rule
-          // above composes the same lengths from the resolved diameter, so a
-          // themed ring keeps this fraction of arc rather than this length.
-          strokeDasharray={`${arcLength} ${circumference - arcLength}`}
-          {...stylex.props(styles.circle, styles.arc)}
-        />
       </svg>
+      <span
+        ref={syncRotationPhase}
+        aria-hidden="true"
+        {...stylex.props(styles.rotor)}>
+        <svg
+          width={frameSize}
+          height={frameSize}
+          {...stylex.props(styles.ring)}>
+          <circle
+            cx="50%"
+            cy="50%"
+            r={diameter / 2}
+            strokeWidth={border}
+            // The size's own dash, for the render with no stylesheet. The rule
+            // above composes the same lengths from the resolved diameter, so a
+            // themed ring keeps this fraction of arc rather than this length.
+            strokeDasharray={`${arcLength} ${circumference - arcLength}`}
+            {...stylex.props(styles.circle, styles.arc)}
+          />
+        </svg>
+      </span>
     </span>
   );
 

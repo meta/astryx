@@ -55,6 +55,7 @@ import {
 } from '../i18n/useComponentTranslator';
 import english from '../i18n/generated-english/Lightbox/Lightbox.generated';
 import {isRenderable} from '../utils/isRenderable';
+import {prepareFocusReturnOnRemoval} from '../utils/focusReturn';
 
 registerEnglishFallback(english);
 /**
@@ -428,6 +429,7 @@ export function Lightbox({
   // Open/close dialog. The dialog renders only with an item, so a viewer
   // opened before its first item arrives opens when that item does.
   const hasItem = currentItem != null;
+  // Syncs the native dialog with `isOpen` through `showModal()` and `close()`.
   useIsomorphicLayoutEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog || !hasItem) {
@@ -444,6 +446,23 @@ export function Lightbox({
       }
     }
   }, [isOpen, hasItem]);
+
+  // A viewer that unmounts while open (rendered only while open, or removed
+  // with the rest of a view) never runs the close branch above. Focus the
+  // removal lost goes back to the opener while the opener is still on the
+  // page.
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (dialog == null) {
+      return;
+    }
+    const returnFocusOnRemoval = prepareFocusReturnOnRemoval(dialog);
+    return () => {
+      if (dialog.open) {
+        returnFocusOnRemoval(triggerElementRef.current);
+      }
+    };
+  }, [hasItem]);
 
   const handleClose = useCallback(() => {
     onOpenChange(false);

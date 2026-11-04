@@ -439,6 +439,8 @@ function PanelDividerModeWatch({
   const {mode} = useTheme();
   const themeName = useThemeName();
   const lastRef = useRef({mode, themeName});
+  // Syncs the panel dividers with the computed theme CSS after a color mode or
+  // theme change.
   useLayoutEffect(() => {
     const last = lastRef.current;
     if (last.mode === mode && last.themeName === themeName) {
@@ -703,6 +705,8 @@ export function useTableRowExpansion<T extends Record<string, unknown>>(
       }
     }
   }, []);
+  // Syncs the chevron transitions with the `animatedLayout` handle. Without a
+  // handle, the chevrons use the theme's turn.
   useLayoutEffect(() => {
     if (animatedLayout == null) {
       resetChevrons();

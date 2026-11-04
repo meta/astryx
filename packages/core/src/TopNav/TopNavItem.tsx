@@ -33,7 +33,7 @@ import type {LinkComponentType} from '../Link/types';
 import {useTopNavRenderMode} from './TopNavRenderContext';
 import {navItemStyles, type NavItemSize} from '../NavItem/navItemStyles.stylex';
 import {mergeProps} from '../utils';
-import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOnActivate';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
@@ -199,7 +199,9 @@ export function TopNavItem({
   const pressable = usePressFeedback();
   const LinkComponent = useLinkComponent(as);
   const renderMode = useTopNavRenderMode();
-  const {closeMobileNav} = useAppShellMobile();
+  const closeDrawerAfter = useCloseMobileDrawerOnActivate(
+    renderMode === 'drawer',
+  );
 
   // A disabled item renders as a plain <a> with no href: an href-less anchor
   // is not focusable and exposes no link affordance, so programmatic focus +
@@ -214,14 +216,13 @@ export function TopNavItem({
   // Drawer mode — render as a SideNavItem-style vertical list element
   // =========================================================================
   if (renderMode === 'drawer') {
+    const activate = closeDrawerAfter(onClick);
     const handleDrawerClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
       if (isDisabled) {
         preventDefaultClick(e);
         return;
       }
-      // Forward the original onClick if present
-      onClick?.(e);
-      closeMobileNav();
+      activate?.(e);
     };
 
     return (

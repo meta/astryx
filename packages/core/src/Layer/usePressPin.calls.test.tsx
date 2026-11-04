@@ -77,7 +77,7 @@ vi.mock('./useLayerDismissal', async importOriginal => {
   };
 });
 
-const {Tooltip} = await import('../Tooltip/Tooltip');
+const {TooltipWithTriggerBehavior} = await import('../Tooltip/Tooltip');
 
 beforeEach(() => {
   calls.pin = 0;
@@ -98,11 +98,11 @@ function expectOneCallPerRender() {
 describe('usePressPin is each layer’s one call (react-component-runtime INV16)', () => {
   it('Tooltip: one usePressPin call per render, the only path to the touch trigger', () => {
     render(
-      <Tooltip
+      <TooltipWithTriggerBehavior
         content="Billed on the first of each month"
         triggerBehavior="toggle">
         <button type="button">About billing</button>
-      </Tooltip>,
+      </TooltipWithTriggerBehavior>,
     );
     fireEvent.click(screen.getByRole('button', {name: 'About billing'}));
     expectOneCallPerRender();
