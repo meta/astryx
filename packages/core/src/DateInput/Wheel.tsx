@@ -4,41 +4,30 @@
 
 /**
  * @file Wheel.tsx
- * @input Option list, selected value, change callback
- * @output Exports Wheel — a snap-scrolling picker column
- * @position Internal component; consumed by MonthYearWheels.tsx
+ * @input Option list, selected value and change callback
+ * @output Exports Wheel (one picker column), ScrollWheel (the scrolling
+ *   column) and the shared types of wheelOptions.ts
+ * @position Internal component; consumed by MonthYearWheels.tsx,
+ *   TouchTimeField.tsx and TouchDateTimeField.tsx
  *
- * A wheel is a scroll container, not a custom gesture surface. Momentum,
- * rubber-banding, and the settle animation are the platform's; all this adds
- * is `scroll-snap-align: center` on each option, half a viewport of padding at
- * each end so the first and last option can reach the middle, and a commit
- * when the scrolling stops and no finger or mouse drag still holds it.
+ * Wheel picks its column by the primary pointer. Under a finger it is
+ * PickerWheel.tsx, the touch layer, imported here alone. Under a fine pointer
+ * it is the snap-scrolling column below.
  *
- * The falloff (rows fading and tipping away from the centre) is a CSS
- * scroll-driven animation on a `view()` timeline — the browser interpolates it
- * against each row's own position in the scrollport, so it stays glued to the
- * finger with no JS in the frame loop. It is guarded by `@supports`, because a
- * browser that does not understand `animation-timeline` would otherwise run
- * the same keyframes on the document timeline and simply play them once.
- *
- * Under Reduce Motion, the wheel's own scrolls (a step from a key or a click,
- * the travel to the nearest enabled row) land without travel. They cross-fade
- * on a touch screen and land at once otherwise. A finger's scroll and its
- * momentum stay the platform's.
- *
- * Accessibility: this is a listbox, not a novel widget. It is one tab stop
- * with arrow/Home/End/PageUp/PageDown keys, `aria-activedescendant` tracking
- * the active row, and every row reachable by tap — none of which depends on
- * the scroll-driven decoration.
+ * The scrolling column is a scroll container: momentum, rubber-banding and the
+ * settle are the platform's. Its rows fade and tip on a CSS `view()` timeline,
+ * behind `@supports`. Under Reduce Motion its own scrolls land without travel.
  *
  * SYNC: When modified, update:
+ * - /packages/core/src/DateInput/PickerWheel.tsx (the touch column)
+ * - /packages/core/src/DateInput/wheelOptions.ts
  * - /packages/core/src/DateInput/TouchDateField.tsx
  * - /packages/core/src/DateTimeInput/TouchDateTimeField.tsx
  * - /packages/core/src/DateInput/DateInput.doc.mjs
  * - /packages/core/src/DateInput/DateInputTouch.test.tsx
  */
 
-import {useCallback, useEffect, useId, useRef, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   colorVars,
@@ -54,10 +43,25 @@ import {
   reducedMotionFade,
   type ReducedMotionDip,
 } from '../motion/reducedMotion';
+import {useTouchPresentation} from '../utils/touchPresentation';
+import {PickerWheel} from './PickerWheel';
 import {dateInputTouchSizes, dateInputTouchGeometry} from './tokens.stylex';
 import {useOwnScrollGesture} from './useOwnScrollGesture';
 import {usePointerDragScroll} from './usePointerDragScroll';
 import {useScrollSettle} from './useScrollSettle';
+import {useWheelListbox} from './useWheelListbox';
+import {
+  endIndex,
+  nearestEnabledIndex,
+  steppedIndex,
+  type WheelProps,
+} from './wheelOptions';
+
+export {
+  nearestEnabledIndex,
+  type WheelOption,
+  type WheelProps,
+} from './wheelOptions';
 
 const ITEM_BLOCK_SIZE = dateInputTouchSizes.wheelItemSize;
 
@@ -67,23 +71,38 @@ const ITEM_BLOCK_SIZE = dateInputTouchSizes.wheelItemSize;
  * at the top — which is what a `view()` timeline over the `cover` range means,
  * and why this reads as a cylinder rotating under the finger.
  */
-const falloff = stylex.keyframes({
+const tip = stylex.keyframes({
+  '0%': {transform: 'rotateX(52deg) scale(0.86)'},
+  '50%': {transform: 'rotateX(0deg) scale(1)'},
+  '100%': {transform: 'rotateX(-52deg) scale(0.86)'},
+});
+
+/**
+ * Colour keeps every row at WCAG AA, which an opacity fade does not. The ends
+ * stop halfway to the secondary text colour, because that colour alone falls
+ * below AA in two shipped themes.
+ */
+const fade = stylex.keyframes({
   '0%': {
-    opacity: 0.3,
-    transform: 'rotateX(52deg) scale(0.86)',
+    color: `color-mix(in oklab, ${colorVars['--color-text-primary']}, ${colorVars['--color-text-secondary']})`,
   },
-  '50%': {
-    opacity: 1,
-    transform: 'rotateX(0deg) scale(1)',
-  },
+  '50%': {color: colorVars['--color-text-primary']},
   '100%': {
-    opacity: 0.3,
-    transform: 'rotateX(-52deg) scale(0.86)',
+    color: `color-mix(in oklab, ${colorVars['--color-text-primary']}, ${colorVars['--color-text-secondary']})`,
   },
 });
 
-/** Motion-free equivalent: the depth cue survives as opacity alone. */
-const fadeOnly = stylex.keyframes({
+/**
+ * A disabled row keeps its disabled colour and fades by opacity instead: WCAG
+ * 1.4.3 exempts inactive components from the contrast minimum.
+ */
+const tipAndDim = stylex.keyframes({
+  '0%': {opacity: 0.3, transform: 'rotateX(52deg) scale(0.86)'},
+  '50%': {opacity: 1, transform: 'rotateX(0deg) scale(1)'},
+  '100%': {opacity: 0.3, transform: 'rotateX(-52deg) scale(0.86)'},
+});
+
+const dim = stylex.keyframes({
   '0%': {opacity: 0.3},
   '50%': {opacity: 1},
   '100%': {opacity: 0.3},
@@ -111,7 +130,7 @@ const styles = stylex.create({
     overscrollBehavior: 'contain',
     // Room for row 0 and row n-1 to reach the centre.
     paddingBlock: dateInputTouchGeometry.wheelEdgePadding,
-    // Gives the rotateX falloff somewhere to recede to.
+    // Gives the rotateX tip somewhere to recede to.
     perspective: '520px',
     transformStyle: 'preserve-3d',
     scrollbarWidth: 'none',
@@ -140,7 +159,7 @@ const styles = stylex.create({
     whiteSpace: 'nowrap',
     // NO `overflow: hidden` here. It would make the row itself a scroll
     // container, and `view()` binds to the subject's nearest ancestor scroll
-    // container — the falloff would measure the row against itself and sit
+    // container — the tip would measure the row against itself and sit
     // frozen at 50% forever. Clipping belongs on the inner element.
     cursor: {
       default: 'pointer',
@@ -151,7 +170,7 @@ const styles = stylex.create({
     transitionDuration: durationVars['--duration-fast'],
   },
   /**
-   * The falloff rides an inner element, never the row itself.
+   * The tip rides an inner element, never the row itself.
    *
    * A snap area is the element's TRANSFORMED border box, so animating the row
    * would move the very positions the scroller is snapping to — the wheel
@@ -167,15 +186,14 @@ const styles = stylex.create({
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     // The wheel look. Held behind @supports so browsers without scroll-driven
-    // animations get a plain, fully legible list instead of these keyframes
-    // playing themselves out once on the document timeline. Under reduced
-    // motion the same timeline drives opacity only — the depth cue survives,
-    // the tipping does not.
+    // animations get a plain list instead of these keyframes playing
+    // themselves out once on the document timeline. Under reduced motion, the
+    // colour fade on the row keeps the depth cue.
     animationName: {
       default: null,
       '@supports (animation-timeline: view())': {
-        default: falloff,
-        '@media (prefers-reduced-motion: reduce)': fadeOnly,
+        default: tip,
+        '@media (prefers-reduced-motion: reduce)': 'none',
       },
     },
     animationTimeline: 'view(y)',
@@ -184,6 +202,31 @@ const styles = stylex.create({
     animationDuration: 'auto',
     animationTimingFunction: 'linear',
     backfaceVisibility: 'hidden',
+  },
+  itemInnerDisabled: {
+    animationName: {
+      default: null,
+      '@supports (animation-timeline: view())': {
+        default: tipAndDim,
+        '@media (prefers-reduced-motion: reduce)': dim,
+      },
+    },
+  },
+  /**
+   * The colour fade, on the row and not the tipped inner element: colour does
+   * not move a snap area. An animated colour outranks the selected and
+   * disabled colours, so those rows do not take this fade.
+   */
+  itemFade: {
+    animationName: {
+      default: null,
+      '@supports (animation-timeline: view())': fade,
+    },
+    animationTimeline: 'view(y)',
+    animationRange: 'cover 0% cover 100%',
+    animationFillMode: 'both',
+    animationDuration: 'auto',
+    animationTimingFunction: 'linear',
   },
   itemActive: {
     color: colorVars['--color-text-accent'],
@@ -214,76 +257,9 @@ const styles = stylex.create({
   },
 });
 
-export interface WheelOption {
-  /** Stable numeric identity of the row (a month 1-12, or a year). */
-  value: number;
-  /** Row text. */
-  label: string;
-  /**
-   * Rows outside min/max stay visible but cannot be committed: a wheel that
-   * stops on one travels on to the nearest enabled row.
-   */
-  isDisabled?: boolean;
-}
-
-export interface WheelProps {
-  /** Accessible name for the column, e.g. "Month". */
-  label: string;
-  /** Rows, top to bottom. */
-  options: ReadonlyArray<WheelOption>;
-  /** Committed value; must match one option's `value`. */
-  value: number;
-  /** Fired when the wheel comes to rest on a different, enabled row. */
-  onChange: (value: number) => void;
-  /**
-   * False while the wheel is hidden — scroll offsets of a display:none
-   * scroller are meaningless, so listeners and the initial scroll wait.
-   */
-  isActive?: boolean;
-}
-
 /**
- * The enabled row nearest `index`: `index` itself when it is enabled,
- * otherwise the closest enabled row on either side. A tie goes to the side of
- * `towardIndex` (the committed row), and a wheel with no enabled row stays on
- * `towardIndex`.
- *
- * @example
- * ```
- * // Hours 0-23 with 09:00-17:00 bounds: stopping on 7 rests on 9.
- * nearestEnabledIndex(hourOptions, 7, 10); // 9
- * ```
- */
-export function nearestEnabledIndex(
-  options: ReadonlyArray<WheelOption>,
-  index: number,
-  towardIndex: number,
-): number {
-  const isEnabled = (i: number) =>
-    i >= 0 && i < options.length && !options[i].isDisabled;
-  if (isEnabled(index)) {
-    return index;
-  }
-  for (let distance = 1; distance < options.length; distance++) {
-    const below = index - distance;
-    const above = index + distance;
-    const isBelowEnabled = isEnabled(below);
-    const isAboveEnabled = isEnabled(above);
-    if (isBelowEnabled && isAboveEnabled) {
-      return towardIndex < index ? below : above;
-    }
-    if (isBelowEnabled) {
-      return below;
-    }
-    if (isAboveEnabled) {
-      return above;
-    }
-  }
-  return towardIndex;
-}
-
-/**
- * One snap-scrolling picker column.
+ * One picker column: UIPickerView's motion with flat rows under a finger, the
+ * snap-scrolling column under a fine pointer.
  *
  * @example
  * ```
@@ -295,14 +271,35 @@ export function nearestEnabledIndex(
  * />
  * ```
  */
-export function Wheel({
+export function Wheel(props: WheelProps) {
+  // One touch model on every touch device: a finger gets UIPickerView's motion
+  // with flat rows, a fine pointer the scrolling column.
+  const {isTouch} = useTouchPresentation();
+  return isTouch ? <PickerWheel {...props} /> : <ScrollWheel {...props} />;
+}
+
+Wheel.displayName = 'Wheel';
+
+/**
+ * One snap-scrolling picker column, under a fine pointer.
+ *
+ * @example
+ * ```
+ * <ScrollWheel
+ *   label="Month"
+ *   options={monthOptions}
+ *   value={month}
+ *   onChange={setMonth}
+ * />
+ * ```
+ */
+export function ScrollWheel({
   label,
   options,
   value,
   onChange,
   isActive = true,
 }: WheelProps) {
-  const id = useId();
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const selectedIndex = Math.max(
     0,
@@ -462,6 +459,8 @@ export function Wheel({
   // useScrollSettle. The settle handler re-checks the position afterwards, so
   // a correction that is genuinely needed still happens, just at rest.
   const parkedRef = useRef(false);
+  // Syncs the wheel's scroll position with the selected index while the wheel
+  // is active.
   useEffect(() => {
     if (!isActive) {
       parkedRef.current = false;
@@ -492,6 +491,8 @@ export function Wheel({
   // Highlight follows the finger. rAF-throttled: a scroll can fire far more
   // often than the display refreshes, and this only feeds a repaint.
   const frameRef = useRef<number | undefined>(undefined);
+  // Syncs a scroll listener with the active wheel. It updates the highlighted
+  // row.
   useEffect(() => {
     const scroller = scrollerRef.current;
     if (scroller == null || !isActive) {
@@ -531,69 +532,64 @@ export function Wheel({
   // there is no way to share — it takes every touch that lands on it.
   useOwnScrollGesture(scrollerRef, 'all', {isEnabled: isActive});
 
-  const moveBy = useCallback(
-    (delta: number) => {
-      const next = Math.min(
-        options.length - 1,
-        Math.max(0, activeIndex + delta),
-      );
-      const option = options[next];
-      if (option == null || option.isDisabled) {
+  // A key commits the row it moves to and scrolls the column there.
+  const moveTo = useCallback(
+    (row: number | null) => {
+      const option = row == null ? undefined : options[row];
+      if (row == null || option == null || option.isDisabled) {
         return;
       }
-      setActiveIndex(next);
-      scrollToIndex(next, 'smooth');
+      setActiveIndex(row);
+      scrollToIndex(row, 'smooth');
       if (option.value !== value) {
         onChange(option.value);
       }
     },
-    [activeIndex, options, scrollToIndex, value, onChange],
+    [options, scrollToIndex, value, onChange],
   );
 
-  const handleKeyDown = useCallback(
-    (event: React.KeyboardEvent) => {
-      switch (event.key) {
-        case 'ArrowDown':
-          event.preventDefault();
-          moveBy(1);
-          break;
-        case 'ArrowUp':
-          event.preventDefault();
-          moveBy(-1);
-          break;
-        case 'PageDown':
-          event.preventDefault();
-          moveBy(10);
-          break;
-        case 'PageUp':
-          event.preventDefault();
-          moveBy(-10);
-          break;
-        case 'Home':
-          event.preventDefault();
-          moveBy(-activeIndex);
-          break;
-        case 'End':
-          event.preventDefault();
-          moveBy(options.length - 1 - activeIndex);
-          break;
-        default:
-          break;
+  const moveBy = useCallback(
+    (delta: number) => moveTo(steppedIndex(options, activeIndex, delta)),
+    [moveTo, options, activeIndex],
+  );
+
+  // Home and End: the first and the last enabled row.
+  const toEnd = useCallback(
+    (end: 'first' | 'last') => moveTo(endIndex(options, end)),
+    [moveTo, options],
+  );
+
+  const activate = useCallback(
+    (index: number) => {
+      const option = options[index];
+      if (option == null || option.isDisabled) {
+        return;
+      }
+      setActiveIndex(index);
+      scrollToIndex(index, 'smooth');
+      if (option.value !== value) {
+        onChange(option.value);
       }
     },
-    [moveBy, activeIndex, options.length],
+    [options, scrollToIndex, value, onChange],
   );
+
+  const {listboxProps, optionProps} = useWheelListbox({
+    label,
+    options,
+    value,
+    activeIndex,
+    stepBy: moveBy,
+    toEnd,
+    activate,
+  });
 
   return (
     <div {...stylex.props(styles.column)}>
       <div aria-hidden="true" {...stylex.props(styles.band)} />
       <div
         ref={scrollerRef}
-        role="listbox"
-        aria-label={label}
-        aria-activedescendant={`${id}-${options[activeIndex]?.value}`}
-        tabIndex={0}
-        onKeyDown={handleKeyDown}
+        {...listboxProps}
         // Read in the capture phase. usePointerDragScroll stops a primary
         // mouse press from bubbling, so that it does not reach BottomSheet's
         // drag. A bubbling handler would never see a mouse, and would keep the
@@ -608,26 +604,20 @@ export function Wheel({
         {options.map((option, index) => (
           <div
             key={option.value}
-            id={`${id}-${option.value}`}
-            role="option"
-            aria-selected={option.value === value}
-            aria-disabled={option.isDisabled || undefined}
-            onClick={() => {
-              if (option.isDisabled) {
-                return;
-              }
-              setActiveIndex(index);
-              scrollToIndex(index, 'smooth');
-              if (option.value !== value) {
-                onChange(option.value);
-              }
-            }}
+            {...optionProps(option, index)}
             {...stylex.props(
               styles.item,
+              index !== activeIndex && !option.isDisabled && styles.itemFade,
               index === activeIndex && styles.itemActive,
               option.isDisabled && styles.itemDisabled,
             )}>
-            <span {...stylex.props(styles.itemInner)}>{option.label}</span>
+            <span
+              {...stylex.props(
+                styles.itemInner,
+                option.isDisabled && styles.itemInnerDisabled,
+              )}>
+              {option.label}
+            </span>
           </div>
         ))}
       </div>
@@ -635,4 +625,4 @@ export function Wheel({
   );
 }
 
-Wheel.displayName = 'Wheel';
+ScrollWheel.displayName = 'ScrollWheel';

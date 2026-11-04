@@ -173,6 +173,38 @@ export function getTimeZoneParts(
   };
 }
 
+/** The wall-clock fields of an instant: in a zone, or in the viewer's. */
+export interface WallClock {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+}
+
+/**
+ * Wall-clock fields for an instant, in the named zone or in the viewer's
+ * zone (`undefined`, `null` or ""). The zone-less branch reads plain `Date`
+ * getters, so the default rendering needs no `Intl` zone data. The explicit
+ * return type keeps both branches on one shape.
+ */
+export function getWallClock(
+  date: Date,
+  timeZone: string | null | undefined,
+): WallClock {
+  return !timeZone
+    ? {
+        year: date.getFullYear(),
+        month: date.getMonth() + 1,
+        day: date.getDate(),
+        hour: date.getHours(),
+        minute: date.getMinutes(),
+        second: date.getSeconds(),
+      }
+    : getTimeZoneParts(date.getTime(), timeZone);
+}
+
 function getTimezoneOffsetMS(timezoneID: string, instant: number): number {
   const parts = getTimeZoneParts(instant, timezoneID);
   return (
@@ -359,13 +391,36 @@ export function plainDateFormatStandaloneMonthYear(
 
 // e.g. "Sun" (locale-dependent) — the weekday on its own, abbreviated.
 //
-// This is CLDR's `abbreviated` width, which `Intl` reaches natively. Note
-// that Calendar's 2-letter header ("Su") is CLDR's *short* width, a
-// different thing that `Intl` cannot express at all — which is why that one
-// needs the generated lookup table beside it and this one does not.
+// This is CLDR's `abbreviated` width. Weekday headers prefer a generated
+// table, because `Intl` has no short width.
 export const DATE_FORMAT_WEEKDAY_ONLY: Intl.DateTimeFormatOptions = {
   weekday: 'short',
 };
+
+/**
+ * The platform's weekday names for a locale, Sunday first, in `Intl`'s
+ * `short` width (CLDR's abbreviated) or its `narrow` width. Returns `null`
+ * when the platform has no data for the locale's language, so a caller uses
+ * its own fallback instead of the host's default locale.
+ */
+export function plainDateWeekdayNames(
+  locale: Locale,
+  width: 'short' | 'narrow' = 'short',
+): string[] | null {
+  const options: Intl.DateTimeFormatOptions = {weekday: width};
+  // A language the platform lacks resolves to the host's default locale.
+  const resolved = dateTimeFormatFor(locale, {
+    ...options,
+    calendar: 'gregory',
+  }).resolvedOptions().locale;
+  if (new Intl.Locale(resolved).language !== new Intl.Locale(locale).language) {
+    return null;
+  }
+  // January 4, 1970 was a Sunday.
+  return Array.from({length: 7}, (_, day) =>
+    plainDateFormat({year: 1970, month: 1, day: 4 + day}, options, locale),
+  );
+}
 
 // e.g. "January" (locale-dependent) — the month on its own, for a control
 // that shows a list of months and carries the year separately.
@@ -486,6 +541,27 @@ export function plainDateWeekFieldName(locale: Locale = 'en'): string {
     // Fall through to the English CLDR value.
   }
   return 'week';
+}
+
+const dayNumberFormats = new Map<Locale, Intl.NumberFormat>();
+
+/**
+ * A day of the month or a week number in the locale's own digits: `15` in
+ * English, `۱۵` in Persian, `١٥` in Egyptian Arabic. Only the digits follow the
+ * locale. The number stays the Gregorian day or ISO week that it names, so no
+ * other calendar applies, and no grouping separator or unit word is added.
+ * Internal: not re-exported from `utils/index.ts`.
+ */
+export function plainDateFormatDayNumber(
+  value: number,
+  locale: Locale,
+): string {
+  let format = dayNumberFormats.get(locale);
+  if (format == null) {
+    format = new Intl.NumberFormat(locale, {useGrouping: false});
+    dayNumberFormats.set(locale, format);
+  }
+  return format.format(value);
 }
 
 // =============================================================================

@@ -50,6 +50,8 @@ export function hasActiveFocusTrapEscape(): boolean {
  * second dismissal owner.
  */
 export function useFocusTrapEscapeCompatibilitySignal(isActive: boolean): void {
+  // Syncs the module count of active Escape traps with `isActive`. The
+  // compatibility signal reads this count.
   useEffect(() => {
     if (!isActive) {
       return;

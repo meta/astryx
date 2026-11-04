@@ -108,8 +108,6 @@ import {
   formatSharedDate,
   plainDateFromISO,
   plainDateToday,
-  plainDateFormat,
-  DATE_FORMAT_WEEKDAY_ONLY,
   type ISODateString,
 } from '../utils';
 import {plainDateFormatStandaloneMonthYear} from '../utils/plainDate';
@@ -117,6 +115,7 @@ import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {normalizeDayOfWeek} from '../utils/dateTypes';
+import {getWeekdayHeaders} from '../Calendar/getWeekdayHeaderNames';
 import {MonthScroller, type MonthScrollerHandle} from './MonthScroller';
 import {MonthYearWheels} from './MonthYearWheels';
 import {
@@ -676,6 +675,7 @@ export function TouchDateField({
   const scrollerHandleRef = useRef<MonthScrollerHandle | null>(null);
   // Pending focus handoff from the clear button; see handleClear.
   const clearFocusTimerRef = useRef<number | null>(null);
+  // Releases the focus timer on unmount.
   useEffect(
     () => () => {
       if (clearFocusTimerRef.current != null) {
@@ -720,34 +720,8 @@ export function TouchDateField({
 
   const {year, month} = fromMonthIndex(monthIndex);
 
-  /**
-   * Three-letter weekday names — "Sun", not Calendar's "Su".
-   *
-   * The sheet is full width and the columns are ~51px, so there is room for
-   * the form people actually read, and a picker operated by thumb should not
-   * make anyone decode "Tu" against "Th".
-   *
-   * This is CLDR's `abbreviated` width, which `Intl` produces natively — no
-   * truncation, so the 28 non-English locales stay correct rather than being
-   * sliced to three characters. (Verified against the CLDR tables for all 30
-   * locales in the catalog.) Calendar's 2-letter row is CLDR's *short* width,
-   * which `Intl` cannot express, which is exactly why that surface needs a
-   * generated table and this one does not.
-   *
-   * Built here rather than taken from `useCalendarDays`, which supplies the
-   * short form for Calendar's own header. The rotation matches: day 4 of
-   * January 1970 was a Sunday, so offsetting from it by `weekStartsOn` walks
-   * the week in the same order the panes lay out their columns.
-   */
-  const dayNames = useMemo(
-    () =>
-      Array.from({length: 7}, (_, offset) =>
-        plainDateFormat(
-          {year: 1970, month: 1, day: 4 + ((weekStartsOn + offset) % 7)},
-          DATE_FORMAT_WEEKDAY_ONLY,
-          locale,
-        ),
-      ),
+  const weekdayHeaders = useMemo(
+    () => getWeekdayHeaders(locale, weekStartsOn),
     [locale, weekStartsOn],
   );
   const monthYearLabel = plainDateFormatStandaloneMonthYear(
@@ -1107,8 +1081,8 @@ export function TouchDateField({
           styles.weekdays,
           isWheelOpen && styles.weekdaysHidden,
         )}>
-        {dayNames.map(name => (
-          <div key={name} {...stylex.props(styles.weekday)}>
+        {weekdayHeaders.map(({dayOfWeek, name}) => (
+          <div key={dayOfWeek} {...stylex.props(styles.weekday)}>
             {name}
           </div>
         ))}
