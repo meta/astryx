@@ -7,8 +7,9 @@
  *   takes the caller's element ref and returns one animator, the factory's
  *   handle and nothing more. An animator used before its element mounts does
  *   nothing and resolves at once. It follows the element behind the ref when
- *   the node is replaced, and the new node starts at rest. An unmount drops
- *   the values, and a remount starts at rest.
+ *   the node is replaced, and the new node starts at rest. A move into
+ *   another document keeps the values. An unmount drops the values, and a
+ *   remount starts at rest.
  *   Another hook can share the element through the same ref. Animating causes
  *   no re-render, and the hook module has no behavior of its own.
  * @position Testing; validates useAnimator.ts
@@ -155,6 +156,28 @@ describe('useAnimator', () => {
     );
     animator.set({x: 16});
     expect(getByTestId('second').style.translate).toBe('16px 0px');
+  });
+
+  it('keeps its values when its element moves to another document (spec:AST-107 FR3)', () => {
+    const box: {current: AnimatorHandle | null} = {current: null};
+    function Moved() {
+      const ref = useRef<HTMLDivElement>(null);
+      box.current = useAnimator(ref);
+      return (
+        <div>
+          <div data-testid="moved" ref={ref} />
+        </div>
+      );
+    }
+    const {rerender, getByTestId} = render(<Moved />);
+    const animator = box.current!;
+    animator.set({x: 8});
+    const node = getByTestId('moved');
+    const other = document.implementation.createHTMLDocument('other');
+    other.body.append(other.adoptNode(node));
+    rerender(<Moved />);
+    expect(animator.get()).toMatchObject({x: 8});
+    expect(node.style.translate).toBe('8px 0px');
   });
 
   it('shares its element with another hook through the same ref: a drag and an animation on one element', () => {

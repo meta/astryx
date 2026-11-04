@@ -2,17 +2,18 @@
 
 /**
  * @file useAttachmentPair.test.tsx
- * @input useAttachmentPair
- * @output Proof that an attachment of two nodes starts once both are there
- *   and follows either node and its key. A commit that changes neither does
- *   nothing, and the attachment is released when a node goes and at unmount
+ * @input useAttachment and useAttachmentPair
+ * @output Proof that an attachment starts once its nodes are there and
+ *   follows each node and its key, and its document only when asked. A commit
+ *   that changes none does nothing, and the attachment is released when a
+ *   node goes and at unmount
  * @position Testing for /packages/core/src/hooks/useAttachment.ts
  */
 
 import {render} from '@testing-library/react';
 import {createElement, useRef} from 'react';
 import {describe, expect, it} from 'vitest';
-import {useAttachmentPair} from '../useAttachment';
+import {useAttachment, useAttachmentPair} from '../useAttachment';
 
 interface PairProps {
   log: string[];
@@ -47,6 +48,57 @@ function Pair({log, first = 'a', second = 'b', attachKey = 0}: PairProps) {
   );
 }
 
+/** One node inside a wrapper, so it can move while React keeps the wrapper. */
+function Single({log, follows}: {log: string[]; follows?: boolean}) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useAttachment(
+    ref,
+    node => {
+      const where = node.ownerDocument === document ? 'page' : 'other';
+      log.push(`attach ${node.id} in ${where}`);
+      return () => log.push(`release ${node.id}`);
+    },
+    null,
+    {followsDocument: follows},
+  );
+  return createElement('div', null, createElement('span', {id: 'solo', ref}));
+}
+
+/** Moves the node with `id` into a new document of its own. */
+function moveToAnotherDocument(container: HTMLElement, id: string) {
+  const node = container.querySelector(`#${id}`)!;
+  const other = document.implementation.createHTMLDocument('other');
+  other.body.append(other.adoptNode(node));
+}
+
+describe('useAttachment', () => {
+  it('keeps the attachment when its node moves to another document, unless asked to follow it', () => {
+    const log: string[] = [];
+    const view = render(createElement(Single, {log}));
+    moveToAnotherDocument(view.container, 'solo');
+    view.rerender(createElement(Single, {log}));
+    expect(log).toEqual(['attach solo in page']);
+    view.unmount();
+    expect(log).toEqual(['attach solo in page', 'release solo']);
+  });
+
+  it('with followsDocument, attaches the node again in the document it moved to, and only then', () => {
+    const log: string[] = [];
+    const view = render(createElement(Single, {log, follows: true}));
+    view.rerender(createElement(Single, {log, follows: true}));
+    moveToAnotherDocument(view.container, 'solo');
+    view.rerender(createElement(Single, {log, follows: true}));
+    view.rerender(createElement(Single, {log, follows: true}));
+    expect(log).toEqual([
+      'attach solo in page',
+      'release solo',
+      'attach solo in other',
+    ]);
+    view.unmount();
+    expect(log.at(-1)).toBe('release solo');
+  });
+});
+
 describe('useAttachmentPair', () => {
   it('attaches once both nodes are there, and not before', () => {
     const log: string[] = [];
@@ -78,6 +130,15 @@ describe('useAttachmentPair', () => {
       'release c+b',
       'attach c+d',
     ]);
+    view.unmount();
+  });
+
+  it('keeps the pair attached when a node moves to another document', () => {
+    const log: string[] = [];
+    const view = render(createElement(Pair, {log}));
+    moveToAnotherDocument(view.container, 'a');
+    view.rerender(createElement(Pair, {log}));
+    expect(log).toEqual(['attach a+b']);
     view.unmount();
   });
 
