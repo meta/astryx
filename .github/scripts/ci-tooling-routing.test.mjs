@@ -455,6 +455,7 @@ describe('Node-tooling CI routing', () => {
       'test-native-swift',
       'pr-interaction',
       'pr-interaction-webkit',
+      'pr-component-a11y-contracts',
     ]);
     expect(ci.jobs.build.needs).toEqual([
       'room',
@@ -486,6 +487,8 @@ describe('Node-tooling CI routing', () => {
       TEST_NATIVE_SWIFT_RESULT: '${{ needs.test-native-swift.result }}',
       PR_INTERACTION_RESULT: '${{ needs.pr-interaction.result }}',
       PR_INTERACTION_WEBKIT_RESULT: '${{ needs.pr-interaction-webkit.result }}',
+      PR_COMPONENT_A11Y_CONTRACTS_RESULT:
+        '${{ needs.pr-component-a11y-contracts.result }}',
     });
     const buildJoin = step(
       ci.jobs.build,
