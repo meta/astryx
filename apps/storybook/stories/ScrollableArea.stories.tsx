@@ -341,10 +341,10 @@ export const ConditionalKeyboardAccess: Story = {
       expect(viewport).toHaveAttribute('tabindex', '0');
     });
 
-    // A focused native scroll container is the keyboard-scrolling contract;
-    // synthetic key events are untrusted and cannot drive native scrolling,
-    // so prove the live scroll machinery with a programmatic scroll and leave
-    // trusted arrow/PageDown verification to manual and AT passes (AST-009).
+    // A focused native scroll container is the keyboard-scrolling contract.
+    // Synthetic key events cannot drive native scrolling, so a programmatic
+    // scroll proves the live scroll machinery here; trusted arrow and PageDown
+    // keys belong to a real-browser spec (AST-009 FR7).
     viewport.focus();
     expect(document.activeElement).toBe(viewport);
     expect(viewport).toHaveAttribute('data-scroll-block-start', 'true');
@@ -362,7 +362,7 @@ export const ConditionalKeyboardAccess: Story = {
     });
     expect(document.activeElement).toBe(viewport);
 
-    // Blurring the fitting viewport drops the retained tab stop entirely.
+    // Blurring the fitting viewport removes the leftover tabindex.
     viewport.blur();
     await waitFor(() => {
       expect(viewport).not.toHaveAttribute('tabindex');

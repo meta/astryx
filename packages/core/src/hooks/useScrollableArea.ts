@@ -230,29 +230,36 @@ export function useScrollableArea({
 
   const viewportRef = useCallback((node: HTMLElement | null) => {
     setViewport(current => (current === node ? current : node));
+    if (node == null) {
+      return;
+    }
+    const syncFocus = () => {
+      // Only a viewport with no scrollable axis reads this state, and the
+      // measurement that ends its scrolling reads focus again, so a scrollable
+      // one can skip the render.
+      const {inline, block} = stateRef.current;
+      if (inline.isScrollable || block.isScrollable) {
+        return;
+      }
+      setViewportFocused(node.ownerDocument.activeElement === node);
+    };
+    syncFocus();
+    node.addEventListener('focusin', syncFocus);
+    node.addEventListener('focusout', syncFocus);
+    // React runs this cleanup instead of calling the ref with null, so the
+    // viewport state has to clear here as well.
+    return () => {
+      node.removeEventListener('focusin', syncFocus);
+      node.removeEventListener('focusout', syncFocus);
+      setViewportFocused(false);
+      setViewport(null);
+    };
   }, []);
   const contentRef = useCallback((node: HTMLElement | null) => {
     setContent(current => (current === node ? current : node));
   }, []);
   const getComposedViewportRef = useStableComposedRef(viewportRef);
   const getComposedContentRef = useStableComposedRef(contentRef);
-
-  useIsomorphicLayoutEffect(() => {
-    if (viewport == null) {
-      return;
-    }
-    const syncFocus = () => {
-      setViewportFocused(document.activeElement === viewport);
-    };
-    // eslint-disable-next-line @eslint-react/set-state-in-effect -- adopt focus that landed before the listeners attached
-    setViewportFocused(document.activeElement === viewport);
-    viewport.addEventListener('focusin', syncFocus);
-    viewport.addEventListener('focusout', syncFocus);
-    return () => {
-      viewport.removeEventListener('focusin', syncFocus);
-      viewport.removeEventListener('focusout', syncFocus);
-    };
-  }, [viewport]);
 
   useIsomorphicLayoutEffect(() => {
     if (viewport == null || content == null) {
@@ -291,6 +298,13 @@ export function useScrollableArea({
         block == null
       ) {
         return;
+      }
+
+      // Focus events do not always reach the viewport (Chromium fires none
+      // while the page lacks system focus), and this commit may drop the tab
+      // stop that keeps focus here. A scrollable viewport never reads it.
+      if (!inline.isScrollable && !block.isScrollable) {
+        setViewportFocused(viewport.ownerDocument.activeElement === viewport);
       }
 
       const nextOverflow = {
@@ -451,9 +465,13 @@ export function useScrollableArea({
           ),
         ),
       ) as ScrollableElementProps<E>;
-      const viewportIsKeyboardOwner = keyboardAccess.owner !== 'content';
-      const keepsProgrammaticFocus =
-        (!viewportIsKeyboardOwner || !hasEffectiveAxis) && isViewportFocused;
+      // Focus state is stale while an axis scrolls, so until an axis change is
+      // measured, the last measured scrolling keeps a focused viewport's
+      // tabindex. Dropping it there blurs the viewport in Chromium.
+      const mayHoldFocus =
+        isViewportFocused ||
+        measured.inline.isScrollable ||
+        measured.block.isScrollable;
       const behaviorStyle: CSSProperties = {...styledProps.style};
       const containInline =
         overscroll === 'contain' && state.inline.isScrollable;
@@ -477,12 +495,7 @@ export function useScrollableArea({
           ? {
               role: keyboardAccess.role ?? 'group',
               'aria-label': keyboardAccess.label,
-              tabIndex:
-                viewportIsKeyboardOwner && hasEffectiveAxis
-                  ? 0
-                  : keepsProgrammaticFocus
-                    ? -1
-                    : undefined,
+              tabIndex: hasEffectiveAxis ? 0 : mayHoldFocus ? -1 : undefined,
             }
           : {};
 
@@ -509,6 +522,7 @@ export function useScrollableArea({
       isViewportFocused,
       keyboardAccess,
       mapping,
+      measured,
       overflow,
       overscroll,
       state,

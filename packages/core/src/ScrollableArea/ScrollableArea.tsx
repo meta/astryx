@@ -97,7 +97,7 @@ export type ScrollableAreaStickyContainment = ScrollStickyContainment;
 
 export interface ScrollableAreaProps extends Omit<
   BaseProps<HTMLDivElement>,
-  'aria-label' | 'role' | 'tabIndex'
+  'aria-label' | 'children' | 'role' | 'tabIndex'
 > {
   /** Content rendered inside the observed content box. */
   children?: ReactNode;

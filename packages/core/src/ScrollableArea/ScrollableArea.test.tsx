@@ -5,7 +5,10 @@ import {act, render, screen} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import type {StyleXStyles} from '@stylexjs/stylex';
+import {getAllInjectedCss} from '../__tests__/forcedColors';
 import {
+  containerPaddingBlockEndVarStyles,
+  containerPaddingBlockStartVarStyles,
   containerPaddingInlineEndVarStyles,
   containerPaddingInlineStartVarStyles,
   paddingBlockEndStyles,
@@ -26,6 +29,14 @@ function classTokens(style: object): string[] {
     .split(' ')
     .filter(token => token && !token.includes('__'));
 }
+
+/** Each logical edge's applied padding atom and published inset variable. */
+const PADDING_EDGES = [
+  [paddingInlineStartStyles, containerPaddingInlineStartVarStyles],
+  [paddingInlineEndStyles, containerPaddingInlineEndVarStyles],
+  [paddingBlockStartStyles, containerPaddingBlockStartVarStyles],
+  [paddingBlockEndStyles, containerPaddingBlockEndVarStyles],
+] as const;
 
 function setGeometry(
   element: HTMLElement,
@@ -272,14 +283,43 @@ describe('ScrollableArea', () => {
     );
   });
 
-  it('applies edge-over-axis-over-uniform padding precedence on the content box', () => {
+  it.each([
+    {name: 'zero on every edge by default', props: {}, edges: [0, 0, 0, 0]},
+    {
+      name: 'uniform padding on every edge',
+      props: {padding: 4},
+      edges: [4, 4, 4, 4],
+    },
+    {
+      name: 'zero axis values over uniform',
+      props: {padding: 4, paddingInline: 0, paddingBlock: 0},
+      edges: [0, 0, 0, 0],
+    },
+    {
+      name: 'start edges over axis over uniform',
+      props: {
+        padding: 4,
+        paddingInline: 3,
+        paddingBlock: 2,
+        paddingInlineStart: 0,
+        paddingBlockStart: 0,
+      },
+      edges: [0, 3, 0, 2],
+    },
+    {
+      name: 'end edges over axis over uniform',
+      props: {
+        padding: 4,
+        paddingInline: 3,
+        paddingBlock: 2,
+        paddingInlineEnd: 0,
+        paddingBlockEnd: 0,
+      },
+      edges: [3, 0, 2, 0],
+    },
+  ] as const)('applies and publishes $name', ({props, edges}) => {
     render(
-      <ScrollableArea
-        label="Messages"
-        padding={4}
-        paddingInline={3}
-        paddingInlineEnd={2}
-        data-testid="viewport">
+      <ScrollableArea label="Messages" data-testid="viewport" {...props}>
         Messages
       </ScrollableArea>,
     );
@@ -287,51 +327,17 @@ describe('ScrollableArea', () => {
       .firstElementChild as HTMLElement;
     const contentClasses = new Set(content.className.split(' '));
 
-    // The winning atom per edge: edge (2) beats axis (3) beats uniform (4)
-    // on inline-end; axis (3) beats uniform (4) on inline-start; the block
-    // edges keep the uniform value (4).
-    for (const token of [
-      ...classTokens(paddingInlineEndStyles[2]),
-      ...classTokens(paddingInlineStartStyles[3]),
-      ...classTokens(paddingBlockStartStyles[4]),
-      ...classTokens(paddingBlockEndStyles[4]),
-    ]) {
-      expect(contentClasses).toContain(token);
-    }
-    // The overridden atoms must be dropped by the StyleX merge entirely.
-    for (const token of [
-      ...classTokens(paddingInlineEndStyles[3]),
-      ...classTokens(paddingInlineEndStyles[4]),
-      ...classTokens(paddingInlineStartStyles[4]),
-    ]) {
-      expect(contentClasses).not.toContain(token);
-    }
-  });
-
-  it('publishes container inset variables matching the applied per-edge padding', () => {
-    render(
-      <ScrollableArea
-        label="Messages"
-        padding={4}
-        paddingInlineEnd={2}
-        data-testid="viewport">
-        Messages
-      </ScrollableArea>,
-    );
-    const content = screen.getByTestId('viewport')
-      .firstElementChild as HTMLElement;
-    const contentClasses = new Set(content.className.split(' '));
-
-    // Published inset follows the applied edge value, not the uniform one.
-    for (const token of [
-      ...classTokens(containerPaddingInlineEndVarStyles[2]),
-      ...classTokens(containerPaddingInlineStartVarStyles[4]),
-    ]) {
-      expect(contentClasses).toContain(token);
-    }
-    for (const token of classTokens(containerPaddingInlineEndVarStyles[4])) {
-      expect(contentClasses).not.toContain(token);
-    }
+    // StyleX keeps one atom per property, so the winning atom being present
+    // means every overridden one was dropped.
+    PADDING_EDGES.forEach(([atoms, inset], index) => {
+      for (const style of [atoms[edges[index]], inset[edges[index]]]) {
+        const tokens = classTokens(style);
+        expect(tokens.length).toBeGreaterThan(0);
+        for (const token of tokens) {
+          expect(contentClasses).toContain(token);
+        }
+      }
+    });
   });
 
   it('keeps inherited container bleed opt-in on the viewport', () => {
@@ -362,17 +368,16 @@ describe('ScrollableArea', () => {
       </ScrollableArea>,
     );
     const viewport = screen.getByTestId('viewport');
-    const css = collectCssText();
+    const css = getAllInjectedCss();
     // Anchor every assertion to a class the rendered viewport carries --
     // runtime injection emits rules for unused styles too, so an unanchored
     // match would pass even if the viewport stopped composing these styles.
     const thumbRules = [
       ...css.matchAll(/\.([\w-]+)[^{]*\{[^{}]*scrollbar-color:([^;{}]*);/g),
     ].filter(match => viewport.classList.contains(match[1]));
-    // The thumb reads the neutral token rather than a literal colour.
     expect(
       thumbRules.some(
-        match => match[2].includes('var(') && match[2].includes('transparent'),
+        match => match[2].trim() === 'var(--color-neutral) transparent',
       ),
     ).toBe(true);
     const forcedRules = [
@@ -392,11 +397,9 @@ describe('ScrollableArea', () => {
       </ScrollableArea>,
     );
     const viewport = screen.getByTestId('viewport');
-    const css = collectCssText();
-    // The @supports condition guards the block...
-    expect(css).toMatch(/@supports \(container-type:\s*scroll-state\)/);
-    // ...and the guarded rule must declare `container-type: scroll-state`
-    // INSIDE the block (a mutated declaration keeps the condition text), on a
+    const css = getAllInjectedCss();
+    // The guarded rule must declare `container-type: scroll-state` INSIDE the
+    // @supports block (a mutated declaration keeps the condition text), on a
     // class the rendered viewport actually carries (runtime injection emits
     // rules for unused styles too).
     const guarded = [
@@ -404,35 +407,11 @@ describe('ScrollableArea', () => {
         /@supports \(container-type:\s*scroll-state\)\s*\{\s*\.([\w-]+)[^{]*\{[^{}]*container-type:\s*scroll-state\s*;/g,
       ),
     ];
-    expect(guarded.length).toBeGreaterThan(0);
     expect(guarded.some(match => viewport.classList.contains(match[1]))).toBe(
       true,
     );
   });
 });
-
-/**
- * Concatenate all StyleX-injected CSS (both CSSOM sheets and <style> text) so
- * tests can assert on compiled stylesheet rules — jsdom does not resolve the
- * @layer cascade or compute layout, so declaration-level assertions read the
- * generated rules directly.
- */
-function collectCssText(): string {
-  let out = '';
-  for (const sheet of Array.from(document.styleSheets)) {
-    try {
-      for (const rule of Array.from(sheet.cssRules)) {
-        out += rule.cssText + '\n';
-      }
-    } catch {
-      // ignore cross-origin sheets
-    }
-  }
-  out += Array.from(document.querySelectorAll('style'))
-    .map(s => s.textContent || '')
-    .join('\n');
-  return out;
-}
 
 function hookSource(): string {
   return readFileSync('packages/core/src/hooks/useScrollableArea.ts', 'utf8');

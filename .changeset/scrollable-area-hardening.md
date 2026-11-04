@@ -2,8 +2,8 @@
 '@astryxdesign/core': patch
 ---
 
-[fix] Harden ScrollableArea and useScrollableArea composition and focus behavior. (#6306)
+[fix] `getContentProps` from `useScrollableArea` now applies a caller's `xstyle` instead of leaking it to the DOM. (#6314)
 
-`getContentProps` now consumes caller `xstyle` instead of leaking it to the DOM, a focused viewport that lost overflow drops its retained tab stop as soon as it is blurred (focus is now tracked with events rather than read during render), and the viewport styles shed the obsolete `-webkit-overflow-scrolling` and initial-value scrollbar declarations.
+A viewport that lost overflow while focused drops its leftover `tabindex` as soon as it is blurred, and a focused viewport in another document keeps focus when it loses overflow. `ScrollableArea`'s viewport also sheds the obsolete `-webkit-overflow-scrolling` and initial-value scrollbar declarations.
 
 @AKnassa
