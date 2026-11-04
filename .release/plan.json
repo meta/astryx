@@ -1,0 +1,1747 @@
+{
+  "schemaVersion": 2,
+  "version": "0.7.8",
+  "branch": "release/v0.7.8",
+  "cutSha": "89824ae1ac284f237c448c751da26de778a1cf5a",
+  "changesets": [
+    {
+      "path": ".changeset/alertdialog-release-fade-tempo.md",
+      "sha256": "aed4ab72e664fe1ca0ceba8d699fbb9fe17ff26df6466491873641bd319eb4e7",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "AlertDialog: under the touch presentation, an action lifted while the alert stays open now ends its release fade on the theme's tempo-scaled clock, as the stylesheet's fade does, instead of at a fixed 200 ms.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/alertdialog-touch-action-tracking.md",
+      "sha256": "5bbf94ccbd80490f11c731c6ce78bb5338186afe52d9270a0988d5b2e5479981",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "AlertDialog: under the touch presentation, its two actions are tracked as one group for a finger and a pen, the way iOS tracks an alert's actions. A press that lands on one action and slides to the other runs the action it lifts on, and lifting off both runs nothing. The pressed action highlights at once, and the highlight follows the finger between the actions. A second finger or the window losing focus ends the press with nothing run. A press on the title or the message is not tracked. A mouse press stays the native button's, and the keyboard and assistive technology keep each button's own activation.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/animator-settle-tail-start.md",
+      "sha256": "851bb0849edf7b52ca54149f39d8e99fa805f8492361fc1382be1b30ceaa27af",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Motion: a call made while an animation settles, with the element already still on screen, waits for the browser's first frame as a call from rest does. A busy page no longer skips the start of the new motion, a jump of up to about 14 px at a Switch's return.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/bottom-sheet-exit-retarget.md",
+      "sha256": "7f6a0906689171f7b8eb05212dbb90019f99b7b85771ea0078fc7780862ca824",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "BottomSheet: a sheet whose height moves by a fraction of a pixel as it starts closing now slides off instead of vanishing. This happens in Chromium, for example, when a sheet that fits its content is dismissed by a drag. The browser replaces the exit's transform transition when that transition's end value changes mid-flight. The exit treated the cancelled transition as its end and closed the dialog before the sheet had moved. It now waits for the replacement transition to finish.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/bottom-sheet-grabber-layer.md",
+      "sha256": "89823bd6a1eb054eaffee8d12f16368ddef31ebc07d4bca35ed2078c02436e56",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "BottomSheet: on iOS Safari the grabber stays drawn while the sheet moves between detents, instead of vanishing until the sheet comes to rest.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/bottomsheet-open-no-forced-measure.md",
+      "sha256": "24f3733e52006543714f8d5d074f356b16d94fb1ba1e31d3dd881b0f0a519e20",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "perf",
+      "headline": "BottomSheet: opening a sheet no longer forces a layout to measure its height while it mounts; the sheet reads its height from the browser's own layout instead. On a phone-sized page with a 4× slowed CPU, a Selector's sheet shows its first frame about one frame sooner (about 110 ms to 94 ms after the tap) and the open does about 7 ms less forced layout. The open motion and the sheet's size are unchanged.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/bottomsheet-rides-gboard.md",
+      "sha256": "1afcce5eb114f925f84c9625488101effcee46643a1c34254e2c2a27c909270d",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        },
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "In Chrome on Android, on a touch screen, a Tall BottomSheet places the focused field just above the on-screen keyboard when Chrome reports it, then rides the rest of Gboard's slide; through the hide the sheet's scroll room stays while its content rides down, so nothing jumps while the keyboard is still on screen. Under Reduce Motion it cross-fades instead of moving. The browser-support guide says so.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/browser-support-on-screen-keyboard.md",
+      "sha256": "13c5c29e0b06318e52cf9dc7e1c9b2477acb0a63ff3108c1e02bdf6bcc5d11d3",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "The browser-support guide has a section on the on-screen keyboard: a fully expanded Tall BottomSheet measures it as the layout viewport's height minus the visual viewport's, and keeps the focused field above it in Safari on iOS, Firefox for Android and Chrome on Android. In Chrome, by default (`interactive-widget=resizes-visual`), the sheet adds its scroll room once Chrome reports the keyboard; with `interactive-widget=resizes-content` Chrome shrinks the page for the keyboard itself and the sheet changes nothing. Your app owns its viewport `<meta>` element; Astryx never sets it.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/calendar-day-locale-digits.md",
+      "sha256": "2daa643726227119e653d360bf504ece9bbebc3acab27b61464a09f639dc915d",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Calendar: day numbers and week numbers now use the locale's digits, the same as the month heading. Under `InternationalizationProvider locale=\"fa-IR\"` the days read `۱ ۲ ۳…`, and under `\"ar-EG\"` they read `١ ٢ ٣…`; English is unchanged. The month panes of DateInput's touch calendar follow the same rule. The dates themselves do not change: each number is still the Gregorian day.",
+      "contributors": [
+        "nynexman4464"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/calendar-shift-page-year.md",
+      "sha256": "d838fd4867a242c355c564766d349bd0283c33360fbcfec447a302f02fb61784",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Calendar: Shift+Page Up and Shift+Page Down now move the focused day to the same date one year earlier or later, as in the WAI-ARIA date picker pattern, instead of one month. A February 29 lands on February 28 in a year without one. The year step follows the same rules as Page Up and Page Down: it changes nothing past `min` or `max`, and on a day that `dateConstraints` disables it focuses that month's first enabled day.",
+      "contributors": [
+        "nynexman4464"
+      ],
+      "body": "`useGridFocus` now passes the key event to `onPageUp` and `onPageDown`, so a grid can read `event.shiftKey`; callbacks that take no argument keep working.\n\nFixes #8947."
+    },
+    {
+      "path": ".changeset/calendar-weekday-abbreviated-names.md",
+      "sha256": "f34de5d513f9f5b0cd3255fb7b9eef06b536ca7cc3c14c75d2d5fb68b3ef5f65",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "Calendar: weekday headers show the locale's abbreviated names where all seven fit in four characters, and keep the short names otherwise. English now reads `Sun Mon Tue` instead of `Su Mo Tu`; French reads `dim. lun. mar.`, and Spanish, Swedish, Norwegian, Romanian, Greek, Serbian, Turkish, German, and Traditional Chinese switch the same way. Portuguese (Portugal), Arabic, Hebrew, Polish, Danish, and Vietnamese, whose abbreviated names are longer, keep their short names. A locale Astryx ships no translations for shows its own names instead of English: the abbreviated names where they fit the same way (Indonesian `Min Sen Sel`), else the narrow ones (Swahili `S M T`). The popovers of DateInput, DateRangeInput, and DateTimeInput follow because they render Calendar. The touch bottom sheets of DateInput and DateTimeInput now show the same names as Calendar in every locale: Portuguese (Portugal) no longer runs whole words such as `domingo` together, and Polish, Danish, Vietnamese, Arabic, and Hebrew switch to their short names there.",
+      "contributors": [
+        "imdreamrunner"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/checkbox-list-is-optional.md",
+      "sha256": "7636bbf24ce26a0a1cee2d066eca27585b3225671e50f639a4a1f5a8c9920471",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "`CheckboxList` takes `isOptional`, as `RadioList` and `CheckboxInput` do. It shows the optional indicator after the group label, so an optional checkbox group can say so, including as the exception in a `FormLayout` with `defaultOptionality=\"required\"`. Under `defaultOptionality=\"optional\"` the indicator stays hidden, as for every field. A checkbox group takes no required state from a form default: with or without `isOptional`, its checkboxes carry no `aria-required` from it, and it adds no native `required`.",
+      "contributors": [
+        "ksying"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/checkbox-list-is-required.md",
+      "sha256": "150f37056f6eaf997feb67255e3da421036996d49b577ab28314b379332c6e86",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "`CheckboxList` takes `isRequired`. The group label shows the required indicator by the same rules as every input field. While no box is checked, the first box that is neither disabled nor read-only carries native `required`, so the browser blocks submit and moves focus to it with its own message. Once any box is checked, the form submits. A disabled or read-only group requires nothing. Show your own error text through `status`.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/checkbox-switch-no-required-from-form-default.md",
+      "sha256": "1f4da0f9bc1d92c502e1d0c818616a7fe6e3500fac36eb76ff8d9dff06f1af24",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "`CheckboxInput`, `Switch` and `CheckboxList`: in a `FormLayout` with `defaultOptionality=\"required\"`, an unchecked box, an off switch or an empty checkbox group no longer carries `aria-required`. A screen reader used to say \"required\", which on a checkbox means \"must be ticked\", while the form still submitted. Unchecked or off is an answer, so these controls take no required state from the form default. A `CheckboxInput` or `Switch` is required only through its own `isRequired`, which still sets `aria-required` and native `required`. The \"Optional\" and \"Required\" labels follow the same rules as on every other field. No code change is needed (WCAG 4.1.2).",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/clamp-time-whole-minute.md",
+      "sha256": "d8ef4fd3ca14b8465ad78fcac352972c4ab5a1ef1dc674e2577c4ccd76aa0191",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "`clampTime` without seconds now gives the nearest whole minute inside a bound that falls between minutes. Before, `clampTime('08:00', '09:00:30')` gave `09:00`, a time outside the range.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/cli-built-read-file-limit-option.md",
+      "sha256": "b442b0e071e577a723779fbf4876f2a4a6e037824e2e120f41ac1d2142bc1ec4",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: the file read behind `astryx doctor --built` takes its file limit as an option, 20,000 unless a caller passes one, and the checks' messages name the limit the read used. The command's checks and output are unchanged. Not exported from the package entry point.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/cli-component-case-spelling.md",
+      "sha256": "1ca6e5fcc801fa25f93beec4cbc3b13287b86be4bf82903c914f11bb98dcb545",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "`astryx component` takes a component's exact name in another case as that component's, never a module's that only shares the spelling. `tokenizer` opens Tokenizer's doc instead of CodeBlock's, which it reached through `CodeBlock/tokenizer.ts`. `--source` with `tokenizer`, `slider`, `switch` or `progressBar` no longer prints `CodeBlock/tokenizer.ts` or the motion tables in `motion/uikit/`, and answers `ERR_NO_SOURCE`, as `--source badge` does.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/cli-discover-lab-mobile-sheets-removed.md",
+      "sha256": "3020968e9b3aa647d44f1137d1db29659b4be7133bffb4700b13f36dea96e0e4",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "`astryx discover` no longer lists the Lab components `MobileTokenizer` and `MobilePowerSearch`, which are removed from `@astryxdesign/lab`; their touch flows are Core's Tokenizer and PowerSearch `presentation` sheets.",
+      "contributors": [
+        "imdreamrunner"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/cli-discovery-listing-reads.md",
+      "sha256": "8793ea2631c5cf0955d0a993323eefde8265da90210d69f87d4ed4610c726f57",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "perf",
+      "headline": "`integrationComponentConflicts()`, `integrationDocConflicts()` and `integrationCheck()` from `@astryxdesign/cli/api`, and `doctor integration components`, `doctor integration docs` and `integration check`, find Core's components from the folder listings they already read, with far fewer file system calls. Their results are unchanged.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/cli-load-only-the-named-command.md",
+      "sha256": "a141be77fa95eb11c0b09695ecf993124979b64f01d724182a6a381baa845821",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "perf",
+      "headline": "A run of `astryx` loads only the command it names, so it starts with less work: `astryx --version` uses about 0.31 s less CPU, and `astryx docs --json`, `astryx component --list` and `astryx theme build` about 0.25–0.3 s less. Help, the manifest and an unknown command still load every command. Output and exit codes are unchanged.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/cli-public-imports-shared.md",
+      "sha256": "5c91b1ac27285d9550162dbaf1d6bf23359872a01cf52f75a43d73bb7b70ad8e",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: the public-import check's `declaredTargets` and `missingNames` are exported from their foundation module, so the docsite's production registry judges a copied example's imports by the same rule. The CLI's checks and their output are unchanged. Not exported from the package entry point.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/cli-search-page-parse-on-need.md",
+      "sha256": "d092fe8027e78177e9dfde69811b004015b7b380292b9a68dfd7e48373349b5c",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "perf",
+      "headline": "`astryx search` and `astryx build` parse a page template's source for the components it renders only when the query could match one of them. A query no page renders parses only the few pages whose source holds an escape, and a first search for it uses about 20% less CPU. A query whose words name components on most pages still parses most of them and can take up to about 4% more. Results are unchanged.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/codeblock-adds-startlinenumber-so-code-excerpts--amwn.md",
+      "sha256": "1190c5ba14259d28aa1e5efca1a8a178a9c77205c2ed574e884f424632d00173",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "CodeBlock adds startLineNumber so code excerpts show real file line numbers",
+      "contributors": [
+        "nbozidarevic"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/complexselector-light-dismiss-focus.md",
+      "sha256": "d3486521e41f3c6dd82fcac620451ab7b1efbb7bd86084dc84dc744e9d52b7d4",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Closing a `ComplexSelector` by clicking into another control now leaves focus in that control instead of pulling it back to the selector, as `Selector` and `MultiSelector` already do. Escape, a close from the content, or a click on nothing focusable still returns focus to the trigger. A caller-rendered trigger (`renderTrigger`) still gets focus back on every close.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/component-deprecated-field.md",
+      "sha256": "38123a5e5db5d04ce922ceb81381e4801d3cef8a3d5373847cf374b0f11b3f81",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        },
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "A component doc can mark its component deprecated with `deprecated: {replacement, description}`: the `name` of the component to use instead and the modernization route. `astryx search` results and `astryx build` kit entries for that component carry the field as `deprecated` (a `deprecated:` line in their text output), and the docsite shows a Deprecated badge in the component's page header (beside any stability badge) and a notice at the top of its page that names and links the replacement, and labels it Deprecated on its components index tile and in site search. `BottomSheetSwitcher` sets it, naming `BottomSheet`; the component keeps working unchanged.",
+      "contributors": [
+        "imdreamrunner"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/core-effect-sync-notes.md",
+      "sha256": "fbc835999b78b94905a0d631bfab570fa6086c3920fc691c9df417edd96ebb02",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "Source comments above 88 kept Effects in Core now name the external system each one syncs. Nothing a consumer imports or renders changes.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/core-internal-touch-sheet-entry-removed.md",
+      "sha256": "76a0375f9cceea4255dfe5eab1536f8ae5053dcd6ccbabd9b155f31d0d3fb7e6",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: the undocumented `@astryxdesign/core/internal/touch-sheet` entry is removed. It re-exported the touch sheets' confirmation, search-drag dismissal and draft rules for the Lab prototypes of the Tokenizer and PowerSearch sheet presentations, which no longer exist; Core's sheets import the same modules by relative path. Internal entries are outside the public API and its compatibility promise.",
+      "contributors": [
+        "imdreamrunner"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/create-resizable-internal.md",
+      "sha256": "daa3a966fa3aeebfe57f5327c48689ea67a851dfba1bac6c66ec7755b12732b5",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "The configuration-object `useResizable` builds on one internal resize region, through the same size model as before, so the region's state has one implementation.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/create-resizable-plain-handle.md",
+      "sha256": "1bb915aae1aa243f06af833fcc7ada377f5b2b347432a15c3af4760eefe9c7f6",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "The internal resize factory can drive a plain handle element: it gives the element the separator's role, name, value and tab stop, and answers its pointer drag, keys, Enter and double-click. ResizeHandle and the factory derive the separator's attributes from one helper, with no behavior change.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/date-typing-no-month-first.md",
+      "sha256": "919f9dc46320cd2750f74633c1b8035246431dcf350f4a58f481bddc229b6377",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Typing a numeric date into `DateInput` or `DateTimeInput` no longer reports month-first dates on the way in day-first locales.",
+      "contributors": [
+        "duytbp"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/duration-exit-token.md",
+      "sha256": "2e1a9897bc3fee8065c0810e7497bb854cad9e8edd81a23e42cc75cadf284ce4",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        },
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "The theme token `--duration-exit`, the standard dismissal duration, now exists. It defaults to `var(--duration-fast)`, so it follows a theme's `tempo` through that token, and a theme can set it like any duration token. Before, a theme or component that read `var(--duration-exit)` found no value. The motion and token docs, and the theme template's token list, name it.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/gap-report-handler-budget-after-load.md",
+      "sha256": "1c768984e4bdfb293f5ed4901988e1877029f0bdbf9b5796ea36582fe1412350",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: a gap-report handler's time budget starts once its module has loaded. Starting its worker and loading the module have the default deadline, so a short budget in a contract test no longer covers a slow start on a busy machine. The 30-second handler budget is unchanged.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/gestures-kept-lift-selection.md",
+      "sha256": "7dc3f251e2f48dff75b14414c2edcef6c511de157387e4b6cb080423a023370a",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A text selection that an action's own handlers make when a claimed mouse or pen press lifts on it now stays. Before, the drag's selection hold put the press's selection back over it. When the handlers change nothing, the press's selection still comes back, as before.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/hook-doc-use-lightbox.md",
+      "sha256": "033a84d7135d6b95d5e7de430d72202fc7cf3f80f78bcdf0eefde9e2ca08940b",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        },
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "Hook docs for `useLightbox`, so `astryx hook useLightbox` and `astryx search` return it, and a `useLightbox — Gallery Grid` example block: a grid of photo thumbnails that opens a fullscreen gallery at the clicked item.",
+      "contributors": [
+        "Geervan"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/hovercard-focus-trigger-auto.md",
+      "sha256": "5648ecf4ba658d59791e73a5216107818b25cb73ed4326301bf7068e45a3113e",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Under `focusTrigger=\"auto\"`, a `HoverCard` now decides whether focus opens it when the focus arrives, as `Tooltip` does. A roving-tabindex trigger that was `tabindex=\"-1\"` when the card attached, such as a toolbar member, opens on arrow-key focus, and a focusable trigger such as a `<summary>` or an SVG link opens on focus.",
+      "contributors": [
+        "cixzhang",
+        "duytbp"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/hovercard-mixed-text.md",
+      "sha256": "1bc0f95ef73726ba7c4bdcc2390f07cf25af5d20bac3d349b9f997fdff38dbc5",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A `HoverCard` whose trigger is text written around an expression, such as `Edited {when}`, now wraps that text in its focusable trigger, so hover and keyboard focus open the card, the trigger carries its popup attributes or description, and it shows the same hover cue as a plain text trigger. Before, such text had no trigger at all.",
+      "contributors": [
+        "cixzhang",
+        "duytbp"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/hovercard-replaced-trigger.md",
+      "sha256": "3da8b1e2a96c33a8e956be7293b0b26abf95bb56ee7c88054b12d93a87932c10",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "When a `HoverCard`'s trigger element is replaced after mount, by new children or by a child component that swaps its own root element, the new element now gets the card's popup attributes or description and opens the card on hover and focus. Before, it stayed unwired until the card next opened or closed or its `label` changed.",
+      "contributors": [
+        "cixzhang",
+        "duytbp"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/icon-audit-docs.md",
+      "sha256": "0baafc9a8af1cf9d90bb1ed1d598be77d2839283e3ac60454115fda67391115a",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "Icon: list the ten palette `color` values and namespaced `icon` keys, and document `className`, `style`, and `ref` in every doc language.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/icon-button-audit-docs.md",
+      "sha256": "926950c9c061d0e4adcda8f186f101b9ae6f67a448c3f8a9bb977773ec94e420",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "IconButton: document `isInterruptible`, `width`, the form props (`type`, `name`, `value`, `form`), and the link props (`href`, `as`, `target`, `rel`), and say that a disabled IconButton with a tooltip stays focusable through `aria-disabled`.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/icon-color-doc-type.md",
+      "sha256": "74f701ee52bcf66674d8eec99cacadf4a8ecf832f3e863528a5dd5d1b51218a3",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "`Icon`'s documented `color` type now lists every value the component takes: the ten semantic colors and the ten palette colors (`blue`, `red`, `green`, `gray`, `cyan`, `teal`, `yellow`, `orange`, `pink`, `purple`). Before, the type listed only the semantic colors, though the description named the palette. Native platforms still draw only the semantic colors.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/icon-label-heroicons.md",
+      "sha256": "d51b5e62aa992bcd6e7f7f987c2db0eb978e501b8e9c82dd69858c3dab313689",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Icon: a labelled icon component that hides itself unless a prop replaces it, such as a Heroicons icon, is now exposed to assistive technology as an image with its `label`. Before, the component's own `aria-hidden=\"true\"` stayed on the SVG and hid the label. If a parent control already names the icon, remove `label` so the name is not announced twice.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/icon-ref-every-name.md",
+      "sha256": "5076c3ea2b387a9bd0a8bb1f78daef90009853131523f19fafa44150950eeb71",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "`Icon`'s `ref` now reaches the rendered `<svg>` for a semantic or namespaced name, as its type promises. Before, it reached the `<svg>` only when `icon` was a component; for a name, the ref stayed empty. For a name whose glyph has no `<svg>`, the ref is `null`.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/in-richtexteditor-cmd-a-ctrl-a-on-other-platform-vt3a.md",
+      "sha256": "a01cdef6cf590c21a36e64241431c3451a7a5cfbc46abbea17bb276bd227fa78",
+      "packages": [
+        {
+          "name": "@astryxdesign/richtext",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "In `RichTextEditor`, Cmd+A (Ctrl+A on other platforms) in a code block or a table cell now selects the code or the cell text first, and the whole document on the next press. Anywhere else it still selects the whole document at once.",
+      "contributors": [
+        "emilyhorsman",
+        "ernestt"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/indicator-own-press.md",
+      "sha256": "488339755e3895fc878ecc647b28a49d90451030549e6bc1600a340749a10bd3",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "CheckboxInput can leave its rounded-square press layer off over a first-party replacement indicator that paints its own press. Indicators in this release are unchanged.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/infotip-on-use-tooltip.md",
+      "sha256": "060c091a99a1aee6d2f0591157b15fae236995f87bcb604e4697b80aa24f6c23",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "InfoTip renders only its button and its help: the `display: contents` wrapper around the button is gone, and the button is the tooltip's trigger directly, built on `useTooltip`'s `show()` and `hide()`. Hover and keyboard focus still preview the help, and a click, tap, Enter, or Space still pins it until Escape, a second press, a press outside, or focus leaving. A mouse press on a previewed help keeps it in view as it pins, and a press that ends off the button does not pin it. A right-click on a previewed help now closes it at once, as it does on any tooltip trigger. Styles that reached the button through a wrapper selector now select the button itself.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/keyboard-one-source.md",
+      "sha256": "245c6fbb45e244149d6ee743c2060883a09825acc644e5d6a2a1e14c55cb5bc7",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "BottomSheet reads the on-screen keyboard from core's shared keyboard module. It now takes over focus moves into a fully expanded Tall sheet wherever a top-level document has a visual viewport and the primary pointer is coarse, Chrome and Firefox on Android included, instead of only under an iOS user agent. A pinch zoom no longer reads as a keyboard, and a pinch-zoomed page still reads the keyboard's full height. The sheet lays its keyboard room out through its own style rather than a CSS custom property. The browser-support guide documents Chrome on Android's `interactive-widget` viewport setting.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/lab-selectable-card-group-cli-discover.md",
+      "sha256": "fa5fdfb6abe7d6eb9638b7dea8df9caa36d7fb3b651981176b5146448e1626cd",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`astryx` discovery lists the lab's new `SelectableCardGroup`.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/layout-start-after-block.md",
+      "sha256": "00696d2066b336ce4dbce5dc87092ea7cea7d06ce6721ba22b3bf4f9cdd96e61",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A layout motion made late in a long main-thread task, such as a tap on a slow device, now plays instead of being skipped: under Reduce Motion the side navigation rail's cross-fade showed no fade at all after such a block. A layout change's animations start on the frame time the page last read only while that frame is at most 34 ms old; otherwise they start at the moment the change makes its first animation, so the block delays the motion. A glide such a change retargets carries on from where the compositor has it. An edge that rides such a glide, as the side navigation rail's does, moves with it. In Safari, a change that reverses such an edge mid-motion reads where the glide shows on the motion's own clock, so the edge no longer trails the content. Such a reversal also starts the rail's and the content area's fades from that moment, so the rail's icons no longer flash back. A change keeps one start from its first animation through the flush of its glides, and the parts riding those glides, however long the rest of the commit runs. A change that begins after a block since the last layout motion takes a fresh start, unless it joins an earlier change in the same area whose glides have not started yet. A side navigation collapse or expand made before the rail first paints, other than by its own toggle, lands at once, so a restored state never animates on load.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/lightbox-unmount-returns-focus.md",
+      "sha256": "526c78ec458413d29749ef97b95d50f65a717113a32dae6d79711887740d13be",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "`Lightbox`: a viewer that unmounts while it is open (rendered only while open, or removed with its view) now returns focus to the element that opened it, when that element is still on the page, instead of dropping it to the page. A control the user pressed to remove the viewer keeps its focus.",
+      "contributors": [
+        "cixzhang",
+        "duytbp"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/long-press-detector.md",
+      "sha256": "5ff6af4c760b220bca659fa3ea1772bde64c62cea1bbfeb4f936ddeadc5cd365",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: `useLongPress` runs its long-press detection through an internal detector with no React, so a press model that runs without React can share it. The hook and its handlers behave as before; `onLongPress` now also comes from the committed render. Not exported from the package entry point.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/long-press-event-clock.md",
+      "sha256": "adbec0acdb8f617508a33780dac97e010dac7743b868975eb0de5bf10d524fce",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "`useLongPress` times a hold on the touch events' own timestamps (`spec:AST-094` FR16). When a busy page handles the lift late, a finger held for the full delay still reports its long press before the lift acts, instead of losing it, so a ContextMenu's long press opens on a loaded page too. A touch the page handled late no longer lengthens the hold, and a lift stamped before the deadline still cancels the press when its timer ran late. `onTouchEnd` and `onTouchCancel` take the touch event, optionally; spreading the handlers passes it.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/motion-progress.md",
+      "sha256": "cc0f212f3f26039c13b70af424625e8b85e756588b4814549980cec8140bd99b",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: one progress module for the motion foundation. `progressCurve` gives a spring's progress from 0 to 1 as a closed-form curve, `mapProgress` maps any curve from another (a companion's dim following a sheet, a clamped range), `mapRange` is the clamped linear map they share, and `presentedProgressVelocity` reads the velocity an interrupted motion continues from. One velocity unit throughout: progress per second. Nothing public changes; no component imports it yet.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/overlay-eager-padding.md",
+      "sha256": "bbda49f6f210c8cd07e36f8cc47c795576d30be9fde1ddcb31a91aa2c7221741",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "perf",
+      "headline": "Popover, DropdownMenu, Carousel, ContextMenu, DateRangeInput, Markdown, MoreMenu and Table no longer load BottomSheet's container padding styles up front. Popover loads a BottomSheet on demand for its phone presentation, and a bundler that splits code put the padding module both of them use into one chunk that loads with the component, keeping every export either side uses. `paddingStyles` and `overlayPaddingReset` now have their own modules, still exported from `@astryxdesign/core/Layout/padding.stylex`, and `isFocusDetached` has its own module, still exported from `@astryxdesign/core/utils`. A component that uses BottomSheet's padding itself still loads it. Rendering is unchanged.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/overlay-radius-effect-note.md",
+      "sha256": "e297c576efcdb74b1e638913136595067ffb81948f59b27a6510b5839cb1238e",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "The source comment above the Effect that copies an `Overlay`'s first-child corner radius onto its wrapper now says why it stays an Effect. New tests pin when the radius is read. Nothing a consumer imports or renders changes.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/pen-hold-hover-show.md",
+      "sha256": "a4d546804a9025cf13b272f602bfa3bbd321e2eb50ee40984cf312cb7b989c9d",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Tooltip and HoverCard: a pen held on the trigger before it lifts no longer closes the tooltip or card it just opened.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/powersearch-date-zone.md",
+      "sha256": "9bc7b047b8ad23e8de1f137c4b848aa4ab92bf88d23dfe0cd1c823455e82d167",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "PowerSearch: a date-only `date_absolute` value (`isDateOnly` unset or `true`) reads as one day in one zone — on the token, in the accessible label and announcements, and in the edit popover's date editor — and the editor writes the day picked. Before, the token showed the device's day, the label showed a date and a time in `timezoneID`, and the editor read and wrote the UTC day without receiving `timezoneID`, so west of UTC a filter opened on the day after the one its token showed and re-picking that day moved the value a day earlier. Now a date-only value (`isDateOnly` unset or true) is a calendar day in `timezoneID`, else the UTC day: the token shows that day; the accessible label and `formatFilterValue` show that day with no time of day (UTC midnight March 9 in Los Angeles read \"Mar 8, 2024, 4:00 PM\" and reads \"Mar 9, 2024\"); the editor opens on it; and a picked day stores as that zone's midnight — with `timezoneID` set this is a different instant from the UTC midnight stored before, so a caller that derived the day from the instant's UTC date reads it in `timezoneID` instead, and a value the old editor stored as UTC midnight under a `timezoneID` west of UTC now reads the day before in the editor on every device, and on the token for a viewer at or east of UTC (UTC midnight March 9 under `America/Los_Angeles` reads March 8 everywhere; a Los Angeles viewer's token and the label already did), the day it would have stored — re-save such values, or read them as UTC days; with `timezoneID` unset no stored value changes. Each absolute `date_range` part is read and written as a calendar day the same way in the range editor. An operator with `isDateOnly: false` keeps its label; its token and editor change as its own entry describes. In the sheet presentation the rows and the value step read and write the same day. The exported `PowerSearchToken` and a `components` Token override receive `timezoneID` (a new optional prop on `PowerSearchTokenProps`), and `PowerSearchToken` shows that day too, where it showed the label's date and time. A `[fix]`, not a breaking change: the released popover read one value in three zones, so nothing valid relied on how a day was stored, and `timezoneID` is documented for date formatting. A `components` Editor override and `PowerSearchFilterEditor` receive `timezoneID`.",
+      "contributors": [
+        "imdreamrunner"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/powersearch-is-date-only-time.md",
+      "sha256": "9e6495aeb0fcab60755c9b4bb5fede8dbf01e4941cd984ad1d80628ba118b692",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "PowerSearch: a `date_absolute` operator with `isDateOnly: false` gets the time of day the option names. The edit popover shows a time field beside the date picker, the token shows the date and the time, and both read and write the instant in `timezoneID` when it is set, else the viewer's zone, so the time typed is the time shown. Before, `isDateOnly` was read nowhere: every `date_absolute` edited in the date picker and stored UTC midnight of the picked day. Only operators that set `isDateOnly: false` change: a value saved from their editor now carries the time entered where it carried midnight, and their token shows the time; `isDateOnly` unset or `true` is unchanged, and stored values are read as the instants they are.",
+      "contributors": [
+        "imdreamrunner"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/powersearch-presentation-stable.md",
+      "sha256": "fa3be2fd5b8df48ce2437e04457387fac9ecb6182f123cc86c3541a3a95cdf0a",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "PowerSearch gains a touch surface through a new `presentation` prop, `'popover' | 'bottom-sheet' | 'adaptive'`, typed by the new exported `PowerSearchPresentation`, with `'adaptive'` the default. `bottom-sheet` makes the whole field one trigger showing display-only filter tokens, and moves filter editing into a flow of tall modal sheets that stack: each step opens above the one that led to it, and dismissing a step reveals the one beneath, so no sheet has a Back action. A Filters sheet lists the active filters as rows that edit a filter, each with a trailing remove button, under a fixed header with Add filter and over a fixed footer with Clear all and Done; with no filter it shows one centered Add filter. The flow edits a draft of the filter list: adding, editing and removing a filter, and Clear all, change the draft, and Done applies it by calling `onChange` once per edit, in order, each with the list after that edit; a swipe, scrim or Escape close of a changed draft asks before discarding it, a clean one closes directly, and Done on a field that became read-only while the flow was open drops the draft. Clear all asks for confirmation, removes the editable filters, keeps read-only ones, and leaves Filters open. An Add filter sheet lists the fields grouped (searchable from eight fields), or the content search with the field typeahead's suggestions listed inline, and leaves its search unfocused until tapped; a field whose only operator takes no value adds at once. A value step stages operator → value and confirms from its footer, the editor on the sheet's surface, or in muted sections beside the operator choice. Closed vocabularies are full-width rows, numbers stage as typed, and `string_list` / `entity_list` values edit through the Tokenizer's own sheet presentation titled with the field label. `adaptive` uses the sheet on compact coarse-pointer screens and the popover otherwise, resolved the same way Selector resolves it. The sheet flow loads on demand, only when a field presents it. New `@astryx.powersearch.sheet.*` catalog keys for the sheets' strings; no new theming target.",
+      "contributors": [
+        "imdreamrunner"
+      ],
+      "body": "The API change is additive: the prop is new and optional, and no existing prop, type or export is removed or narrowed. The behavior changes only on compact coarse-pointer screens (phones), which is what `'adaptive'` is for: there a PowerSearch with no `presentation` shows the trigger and the sheet flow, a filter reaches `onChange` when Done applies the sheet's draft, and `menuWidth` and `tokenOverflowBehavior` have no surface, with a development warning that names them. With a mouse or trackpad, on a screen that is not compact, in the server render and while hydrating, nothing changes. Pass `presentation=\"popover\"` to keep the previous behavior on every device. Shipping this default in a patch is a product decision of the engineering owner, agreed with the owner of the compatibility policy."
+    },
+    {
+      "path": ".changeset/press-group-item-marker.md",
+      "sha256": "ee6282b0a11d1eba5aacb3dc87c0ba21abc0249244c25f86bdcc62f3cdee3228",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: the touch press controller leaves the press of an action that its group's own tracker paints (`data-astryx-press-group-item`) to that tracker, so one writer paints each press. A key's press on the action still paints as before.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/press-release-ends-with-its-animation.md",
+      "sha256": "9ffe07c1c07d78c1d0e65f67a809d8767c2eb5c5eab43f8a2c8b3df7f4619fa2",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Under a finger, a press's release now lasts until its fade has played. The touch press controller ended the release on a clock started at the lift, so when the page's script delayed the fade's first frame, the release was cut short mid-fade. It now ends when the press's release animation ends, on the surface or on a part inside it that a component draws the release on, or on its clock where no release animation runs (an instant release, a surface without one, or an engine without Web Animations). This applies to every surface the touch press controller drives: buttons, switches, checkboxes, cards, menu rows and list rows.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/press-tracker-press-clocks.md",
+      "sha256": "996b3b3d6e1bbe5c17d7d87c538a4636f3e2a90ce14015a909bff0625025dbe9",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: press tracking imports only the UIKit timing table's press clocks, so Switch, Slider, SegmentedControl and DateTimeInput, the controls built on press tracking, no longer ship the whole table. Nothing changes in how a press behaves.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/public-animator.md",
+      "sha256": "203813cc8dbd3e55818515c238ed18e09a6c7321bde7003c6ca93125ba6f6284",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        },
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "`createAnimator(element)` and its hook `useAnimator(ref)` animate one element with the motion Astryx's components use; the hook takes the element's ref, so a gesture hook can share the element. `animate` springs `x`, `y`, `scale`, `rotate` and `opacity` to a target on the state-change motion, `decay` coasts any of them from a release velocity, `set` jumps, `get` and `getVelocity` read, and `stop` halts; `animate` and `decay` return a promise. Reduce Motion is planned for every call. `createAnimator` is exported from the package root and `useAnimator` from `@astryxdesign/core/hooks`; the CLI's templates gain a playing-cards example of each.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/resizable-percentage-default-after-hydration.md",
+      "sha256": "eb591dc13de9888257e4b13a281da86b0a359c2cfd76009d1fddade1adbc0038",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A server-rendered `useResizable` region whose `defaultSize` is a percentage and that has no `containerRef` hydrates with the server's markup, then resolves the percentage against the window, instead of keeping the size the server resolved.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/resizable-saved-size-after-hydration.md",
+      "sha256": "a2c3443dedd77538f6a62525636fee31e251eb86f590d241d1785e564aa152c4",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A server-rendered `useResizable` region with an `autoSaveId` hydrates with the server's markup and takes its saved size in the next commit, so hydration no longer reports a mismatch and the handle announces the saved size.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/resize-handle-disabled-tab-stop.md",
+      "sha256": "c0bb297366667a6c249b26028ed7461b62508269557a60a441fa1d461ad45039",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A disabled `ResizeHandle` keeps its tab stop. Before, it left the tab order, so keyboard users could not reach it to hear that it is disabled. Now it stays in the tab order, as a disabled control keeps its tab stop, and it still ignores pointer and keyboard input and says so with `aria-disabled`.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/resize-handle-grab-zone-on-handle.md",
+      "sha256": "efc91732295ccfd37c734e54f907ff81aef4d9ade612d1973ab69e2a2f76ee01",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "`ResizeHandle`'s grab zone stays centred on the divider whatever `pillPlacement` says, which now moves only the pill. An inline zone takes at most half of a pane shorter than it, and an overlay Handle takes at most half of the pane it sits in. A short item, such as a 30-minute calendar event resized from its edge, keeps its own drag, and a drag on the pill still resizes wherever the pill is drawn.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/scroll-lock-keeps-the-page.md",
+      "sha256": "f0768747813d4e53c124950653d8d99a80ab1ebb991032f5f65afb7b735efbbf",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "`useScrollLock`, and so Dialog, BottomSheet, Drawer, Lightbox and MobileNav, keeps the page where it is while an overlay is open. The lock used to pin `<body>` with `position: fixed` at minus the scroll offset and scroll back on release: the page's offset read 0 for the whole lock, and on iOS Safari the jump to the top brought the toolbar back, where it stayed after the overlay closed. Now the page gets `overflow: hidden` (on the root, or on `<body>` when the body's own overflow is the one the viewport uses), and where the primary pointer is coarse (phones and tablets), a one-finger pan that would scroll the page is cancelled, which iOS Safari needs because it scrolls an `overflow: hidden` page under a finger. Pans that a scroller inside the overlay can take, drags on a native range input, pinch-zoom, and one-finger drags on a pinch-zoomed page (they pan the zoomed view) still work. The lock no longer pins `<body>`, and `window.scrollY` keeps its value while the lock holds. The lock cancels those pans itself, leaving a touch a gesture recognizer owns to it, and judges each pan after a small slop so a swipe's first wobble does not fix the wrong axis. It follows the browser's scroll chain, so an overlay rendered inside a scrolling container still holds the page: a modal dialog's pans go to the page, not to that container. It also sets `overscroll-behavior-y: none` on the root and `<body>`, which stops the page's overscroll bounce while an overlay is open. MobileNav now takes the same lock: while it is open, the page's bounce stops and one-finger pans are held as behind any other modal, and closing it while another modal holds the page keeps that modal's scrollbar gutter.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/scroll-lock-shared-edge-test.md",
+      "sha256": "db2c3637e36ad44bc5af8a2357b8b3747bb73032a0ee67e4f41e31d523afd883",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: the scroll lock's touch guard asks the gesture system's native-scroll test whether an element under a finger can scroll, instead of keeping its own copy. The copy left out `overflow: overlay`, which current Chromium and WebKit compute as `auto`, so pages there behave the same.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/selectable-card-internal-input.md",
+      "sha256": "7625f14b92b3515595bc8f13a93374a0376eaa37e63c4f8f35d794fb0698cc89",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: SelectableCard reads an internal input context that Lab's SelectableCardGroup uses to render its cards as a native radio group. SelectableCard's public props and behavior do not change.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/selector-listbox-named-by-label.md",
+      "sha256": "4b9dd103ab34e56c2bf2a05d36fb2d4063d7fe8c83e340655707225292ced58e",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A `Selector`'s open option list is now named by the field's label in every presentation. In the popover without search, the list was named by the trigger, so a screen reader announced the selected value, or the placeholder when nothing was selected (for example \"Banana\" instead of \"Fruit\"), against WCAG 2.2 SC 4.1.2. `getByLabelText(<label>)` now matches the list as well as the trigger.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/slider-disabled-caller-handlers.md",
+      "sha256": "8c8bef908ff40d7d070411e14380c19f732e7ca9f6e196591db85e7598d2eb85",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "A disabled `Slider` no longer runs a caller's `onPointerDown`, `onPointerMove`, `onPointerUp`, `onPointerCancel`, `onKeyDown`, `onClick` or any other `on*` prop. Before, a press, drag or key on a disabled slider still reached them, for both the single and the range form. Now a disabled `Slider` runs no caller handler other than `onFocus` and `onBlur`, as a disabled `TextInput` and `TextArea` do (`spec:AST-085` FR2). An enabled `Slider` is unchanged. No API changes.",
+      "contributors": [
+        "parinith-web"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/spinner-compositor-ring.md",
+      "sha256": "ff5043ea8be0a3fd729830f4df92cff6dd8e85e423e8df8a19ac6d8e100cd566",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Spinner keeps turning while a script runs. The ring used to move by repainting its arc on the main thread every frame, so it stopped for as long as the page ran JavaScript, which is exactly when a loading indicator is on screen. The arc now sits in its own layer that the browser turns on its compositor: through a 700 ms main-thread block it keeps turning at full rate, and it paints nothing per frame. The ring looks the same at rest and turns at the same speed; sizes, shades, the themeable vars and reduced motion are unchanged.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/stepper-root-observer-ref-cleanup.md",
+      "sha256": "68890406a7fba49c6c0bf777e6e310d4b0bde809f654162c5d130fe1f553f28b",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: a horizontal Stepper stops measuring its list from the cleanup that the list's ref callback returns, not from an Effect. It still measures before the first paint, and it still stops when the list detaches or the Stepper turns vertical. Nothing a consumer imports or renders changes.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/sync-api-types-temp-dir.md",
+      "sha256": "2d2973de1f5eb70504383bb6e06b572c846b72d5813560bb64284fa12e94c8e3",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: generating the CLI's type declarations no longer fails when builds in two checkouts run at once on one machine, and it no longer needs pnpm on PATH.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/table-resize-handle-header-name.md",
+      "sha256": "0b03e14aae13dd5cc2b9d5943411fc87fdb87d9c174a3f2974be128d7143a2ab",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "In a `Table` with resizable columns, the resize handle's name and width value no longer join the column header's name. Before, screen readers read \"Name 60\" with every cell in the column.",
+      "contributors": [
+        "duytbp"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/table-row-expansion-accessible-names.md",
+      "sha256": "5dbe832e7370e7984ed7d333dea1edce428fd2abc60fe45e09f8fa4324ceeb0e",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "Table: let row-expansion and tree plugins include row identities in localized expand and collapse labels.",
+      "contributors": [
+        "humbertovirtudes"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/theme-reduced-motion-mark-internal.md",
+      "sha256": "af538c2744ca6125dfa1cffad7e203b6fa450c5fd7603ef934d6bbc299b1c6c5",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: a theme's reduced-motion mark and its readers are in place for `reducedMotion: 'always'`. No theme can set it yet, so nothing changes for anyone.",
+      "contributors": [
+        "vjeux",
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/time-wheels-follow-uidatepicker.md",
+      "sha256": "f997f1285b1f25e7671ad3feae7fa31800e1cb11bcd8fae07cfb3328e08e4407",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Under a finger, the time wheels in the TimeInput and DateTimeInput bottom sheets now follow iOS's date picker:",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": "- The AM/PM column follows the hour. Turning the hour from 11 to 12 now gives 12 PM, not 12 AM, and the AM/PM column turns onto PM. From 12 PM to 1 it stays PM.\n- A bound that falls between whole minutes, such as `min=\"09:00:30\"` without a seconds column, now commits the nearest whole minute inside it, with a finger as with a mouse.\n\nWith a mouse, each column still turns on its own."
+    },
+    {
+      "path": ".changeset/toast-overwrite-in-place-focus.md",
+      "sha256": "ba7944a3b4b0ae7702a902b180aa2ead41e9cd5cc2f814e83c6a12a5f93681b7",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "`Toast`: a toast updated through `uniqueID` (`collisionBehavior: 'overwrite'`) now updates in place, so focus on its controls stays put instead of dropping to the page. If the update removes the focused control, focus moves to a control in the toasts (such as a dismiss button) or, with none, back to where it was before entering the toasts. Dismissing a focused toast when only toasts without controls remain also returns focus there. An update that makes a toast auto-hide keeps its timer held while focus is inside it. Outside a modal, toasts in a `ToastViewport` no longer carry their own live region, so each toast and each update is announced once, by the viewport; while a modal hosts the viewport, each toast announces itself, because the modal hides the viewport's channel.",
+      "contributors": [
+        "cixzhang",
+        "duytbp"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/tokenizer-experimental-presentation-removed.md",
+      "sha256": "c8f37e1bf6117f33ae5011d82b53d5090665810a3ef5f45f36644528f35f03d9",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "experimental",
+      "headline": "`experimental.presentation` is removed from Tokenizer, together with its `experimental` prop; use the stable `presentation` prop, which takes the same values. `astryx upgrade` rewrites static uses and leaves a TODO where it cannot prove the rewrite, such as on a Tokenizer that spreads props.",
+      "contributors": [
+        "imdreamrunner"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/tokenizer-presentation-codemod.md",
+      "sha256": "edefb1caa02c8626dbbadf510321ce902ac4d712830f2345e7f058234422227a",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "`astryx upgrade` gains the `promote-tokenizer-presentation` codemod. It rewrites a static `experimental={{presentation: x}}` on Tokenizer, the 0.7.7 spelling that Tokenizer no longer reads, to `presentation={x}`. Where it cannot prove the rewrite, including any Tokenizer that spreads props (a spread may also set `presentation`), it leaves the call unchanged with a TODO.",
+      "contributors": [
+        "imdreamrunner"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/tokenizer-presentation-stable.md",
+      "sha256": "b3ec1602899b443544ce5147143a107b4ffeab206eeb74773a8d9370b08e7f6a",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "Tokenizer's `presentation` prop is stable, and its default is `'adaptive'`. `presentation` takes `'popover' | 'bottom-sheet' | 'adaptive'`, typed by the new exported `TokenizerPresentation`. The API change is additive: the prop is new and optional, and no existing stable prop, type or export is removed or narrowed (`TokenizerProps['ref']` keeps its input type, and the component also accepts a ref typed `Ref<HTMLInputElement | HTMLButtonElement>`). The behavior changes only on compact coarse-pointer screens (phones), which is what `'adaptive'` is for: there a Tokenizer with no `presentation` shows a trigger that opens the bottom sheet, the sheet edits a draft so `onChange` reports once, on Save, `ref` receives the trigger button, and `renderItem`, `renderToken`, `endContent`, `hasClear`, `hasEntriesOnFocus`, `menuWidth`, `tokenOverflowBehavior` and `hasAutoFocus` are not rendered, with one development warning that names them. With a mouse or trackpad, on a screen that is not compact, in the server render and while hydrating, nothing changes. Pass `presentation=\"popover\"` to keep the previous behavior on every device. Shipping this default in a patch is a product decision of the engineering owner, agreed with the owner of the compatibility policy.",
+      "contributors": [
+        "imdreamrunner"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/tokenizer-presentation-template-pins.md",
+      "sha256": "84f21c55540898b636438d2cfd5aceaecdded91cd6fed99f1267e65d91812d37",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "The Tokenizer blocks and page templates that show a prop the bottom sheet does not render (`hasClear`, `endContent`, `tokenOverflowBehavior`, `hasEntriesOnFocus`, `renderToken`) pass `presentation=\"popover\"`, so they keep the inline field on phones under Tokenizer's new `'adaptive'` default.",
+      "contributors": [
+        "imdreamrunner"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/tokenizer-sheet-action-warning-render.md",
+      "sha256": "071c868ed45e480de347ac604a609cc9edadb3c2d722d27adf8528fa10407672",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: the Tokenizer bottom sheet checks its result rows for `action` while it renders, not in an Effect after the commit. The development warning, its text and the rows are unchanged. Not exported from the package entry point.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/tokenizer-sheet-clear-all-keeps-focus.md",
+      "sha256": "b1183df045b0cf82d640e87c14e7e1e73996db6ae83cea65d71570ff026d6918",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "Tokenizer's bottom-sheet presentation (`presentation=\"bottom-sheet\"`, and the default `adaptive` on compact touch screens): a confirmed Clear all keeps focus on the Clear all action, now disabled with its reason, instead of moving it to the search field, which raised the on-screen keyboard over the rows the person had just cleared. The inline presentation is unchanged.",
+      "contributors": [
+        "imdreamrunner"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/typeahead-discarded-source-busy.md",
+      "sha256": "6fa5e62686041b86076ccaef6ab36f96fb7fedca532f5f8c3bfce773774f2b7a",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "`Typeahead`, `Tokenizer`, `PowerSearch`: a search no longer stays busy forever when React renders a new search source and then discards that render, for example a transition that suspends and that a newer update replaces before it commits. The search of the source that stays now finishes: its results show, and the loading indicator and `aria-busy` clear.",
+      "contributors": [
+        "imdreamrunner"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/typeahead-item-group-docs.md",
+      "sha256": "5f885ad386bcbe9c6f4c4e744871aa1ac5334760ae4323b764526f421250fb20",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "TypeaheadItem: the docs say that the `group` prop has no effect, and that results are grouped through `item.auxiliaryData.group` on search-source items.",
+      "contributors": [
+        "korkt-kim"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/uikit-date-picker-values.md",
+      "sha256": "0501b8a6cedf02a0b7ff8c5d64a07730270955226c01ff510bb3042d95a16a57",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: the rules UIDatePicker adds to its wheels, measured on iOS 26.2, join the UIKit constants table: the month/year wheels changing the date, the AM/PM column following the hour, the turn back onto a bound, and the day clamped to the month. Each rule comes with its source. None is exported from the package entry point.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/use-announce-filter-count-example.md",
+      "sha256": "53f6032557fe59201217a91a7468adf14d7674d606cfacf90bce525d3a11510c",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "A new `useAnnounce — Filter Result Count` example block shows the hook on a product filter: once typing pauses for 500 ms, a screen reader hears the result count (\"3 results\", or \"No results\"). The count has its own `hasReplace` instance, as the hook's docs advise for a changing value. Copy it with `astryx template useAnnounceHookUsage <path>`.",
+      "contributors": [
+        "MannXo"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/use-clipboard-share-link-example.md",
+      "sha256": "fc6e7b15160eb6315694d9a979313c72cee84fea9a568489f53ac112c78fb1e3",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "A new `useClipboard — Share Link` example block shows the hook on a share card: Copy writes the invite link, the button reads \"Copied\" while `isCopied` is true and resets on the hook's timer, and a screen reader hears \"Link copied\". Copy it with `astryx template useClipboardHookUsage <path>`.",
+      "contributors": [
+        "MannXo"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/use-focus-trap-quick-edit-example.md",
+      "sha256": "a0e6d44e470fcef5271f9dc4a727d5d62a6d2f309e9939d62b25d7a5ccdcdc59",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "A new `useFocusTrap — Quick Edit Panel` example block traps focus in a custom quick-edit panel that is not built on Dialog: `focusFirst` moves focus to its field on open, Tab and Shift+Tab stay inside it, Escape closes it through `onEscape`, and closing returns focus to the Quick edit button. Copy it with `astryx template useFocusTrapHookUsage <path>`.",
+      "contributors": [
+        "MannXo"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/use-hotkeys-search-help-example.md",
+      "sha256": "fe8f803921554893ea0391450ab05abd7f10a93e228c74a0823e161c93278f1b",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "A new `useHotkeys — Search and Help Shortcuts` example block shows the hook on a page header: \"/\" focuses the search field and \"?\" opens the shortcut help, typing either character in the field does not trigger them, and a switch turns the single-key shortcuts off through `isDisabled`. Copy it with `astryx template useHotkeysHookUsage <path>`.",
+      "contributors": [
+        "MannXo"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/use-input-status-icon-coupon-example.md",
+      "sha256": "8946a14b88a1e6b6a711b1380a6d68ce1242cfacdc5c839ecddd1c8974013bbe",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "A new `useInputStatusIcon — Coupon Code Status` example block shows a custom bordered input that takes its status affordance from `useInputStatusIcon`: a wrong code shows the error status and the valid code shows success, and the variant switch moves between a glyph with a message below (attached), no icon on the field (detached), and a focusable button with a tooltip that keyboard and screen-reader users can reach (tooltip). Copy it with `astryx template useInputStatusIconHookUsage <path>`.",
+      "contributors": [
+        "10k11"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/use-keyboard-hint-star-rating-example.md",
+      "sha256": "222863d1c0d6dbcf1f69a7ff8cdfa624de7408ac69e7ecebf80d07cf2edd69cd",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "The `useKeyboardHint — Arrow-key Hint` example block now calls `useKeyboardHint` itself instead of relying on Toolbar, which calls the hook internally. It is a five-star rating with one Tab stop, where Left and Right change the rating: tabbing into it shows the \"← → to navigate\" hint, the first arrow press dismisses it, and tabbing back in does not show it again. Copy it with `astryx template useKeyboardHintHookUsage <path>`.",
+      "contributors": [
+        "kyu-rong"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/use-locale-invoice-summary-example.md",
+      "sha256": "87a42e998b39953c1b71bc94d142b78f8e47fdd3e844cb2ac4c6db7ff214770e",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "A new `useLocale — Invoice Summary` example block formats an invoice date and amount with `Intl` using the locale from `useLocale`, so switching the provider from English to German changes \"Nov 2, 2026 · $1,234.50\" to \"2. Nov. 2026 · 1.234,50 $\" with no second locale source. Copy it with `astryx template useLocaleHookUsage <path>`.",
+      "contributors": [
+        "MannXo"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/use-scrollable-area-activity-log-example.md",
+      "sha256": "09663b07b37ed2e62b4d72400b8e8de41270590f62961fa482c35626a651f7e0",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "A new `useScrollableArea — Activity Log Panel` example block shows a fixed-height Activity log whose entries scroll. `useScrollableArea` makes the panel a keyboard tab stop only when its entries overflow, shows a top or bottom edge shadow only where entries are hidden, and stops a scroll at the end from scrolling the page. Add entry flips it from not scrollable to scrollable. Copy it with `astryx template useScrollableAreaHookUsage <path>`.",
+      "contributors": [
+        "MannXo"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/use-tooltip-show-hide.md",
+      "sha256": "594724c8bbe80df63401870dc8a91cc47e21acb543279c2590e524289acde457",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "`useTooltip` returns `show()` and `hide()`. `show()` opens the tooltip and keeps it open until `hide()`, Escape, a press outside, or focus leaving its trigger, and its text is announced once. `hide()` closes it. Both fire `onShow` and `onHide`. Under a controlled `isOpen`, they only call those callbacks. Use them to build a toggle-style trigger: your own button calls them on each press, sets `aria-expanded` and `aria-controls={describedBy}`, and keeps its own accessible name.",
+      "contributors": [
+        "cixzhang"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/use-tree-focus-file-tree-example.md",
+      "sha256": "49948904f163db9621cd0349d5d63b3f9257fd0e6643841b6bcf77830e0f113d",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "A new `useTreeFocus — Keyboard File Tree` example block builds a small file tree from plain rows with tree roles and gives it the WAI-ARIA tree keyboard model with `useTreeFocus`: arrow keys move over the visible rows and open, enter, leave or close folders, Home and End jump to the ends, a typed letter jumps to a matching name, Enter opens a file, and one row is the tab stop. Copy it with `astryx template useTreeFocusHookUsage <path>`.",
+      "contributors": [
+        "MannXo"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/use-typeahead-country-list-example.md",
+      "sha256": "fc7be754083f245b9d6bf555541e1ab50f12420f78e2360d92278db8c764c82e",
+      "packages": [
+        {
+          "name": "@astryxdesign/cli",
+          "bump": "patch"
+        }
+      ],
+      "category": "docs",
+      "headline": "A new `useTypeahead — Type to Focus a Country` example block adds type-to-focus to a country list of buttons. Typing \"can\" focuses Canada, pressing \"b\" again and again cycles through Belgium, Brazil and Bulgaria, and \"e\" finds Éire with the accent ignored. `useTypeahead` reports each match through `onMatch`, and `useListFocus` moves focus. Copy it with `astryx template useTypeaheadHookUsage <path>`.",
+      "contributors": [
+        "MannXo"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/wheel-interaction-proofs.md",
+      "sha256": "35a7df48a836cfdb609e8ab60f689156d3bfe42c050a9b0c14b9c23359a36bc2",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: browser proofs for the touch picker wheel in Chromium and WebKit, which a finger gets on every engine. A flick coasts on UIKit's curve onto the row it projects and commits on arrival. A finger landing on a coasting wheel stops it, and it then eases onto the nearest row. A storyboard films a flick and its coast. In Chromium, the coast also keeps advancing every frame while the main thread is blocked, and does no Layout or Paint per frame. Under reduced motion, a flick still coasts as momentum with its rows flat, and a tap cross-fades onto its row, animating opacity alone for 200 ms or less. Opening the month and year wheels writes no element per year, and each year is drawn once. Under a mouse, a drag still scrolls the column onto a row.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/wheel-keys-time-order.md",
+      "sha256": "43fbe254fe95c1b3d4b8462cf7e06a49e35005205b2a74755cb484490989d758",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "In the DateInput, TimeInput and DateTimeInput bottom sheets, a wheel's Arrow, Page, Home and End keys move through its enabled values in time order, skipping disabled ones, and stop at the first or last enabled value, with a mouse as with a finger. On a 12-hour hour wheel 12 PM comes before 1 PM, so ArrowDown from 12 PM moves to 1 PM, and a key past the last allowed hour commits nothing.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/wheel-listbox-hook.md",
+      "sha256": "54302a25093906a24d40c45ad8c764831fa03b5697267b8c265fb0cfe5f8dbc9",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: the Wheel's two presentations, the scrolling column under a mouse and the picker wheel under a finger, share one listbox hook for their ids, ARIA attributes, Arrow, Page, Home and End keys, and row clicks. Each keeps where its moves start: the scrolling column steps from the row under its band, and the picker wheel from the row it is heading to.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/wheel-rows-aa-contrast.md",
+      "sha256": "57e788cb04618ac5bc9d568cb5acdf5248c9e11e52fef8d1cd9fffe70fe86655",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "fix",
+      "headline": "DateInput: with a mouse, the rows of the bottom-sheet picker's columns meet WCAG AA contrast at every scroll position; enabled rows fade by the theme's text colors instead of opacity.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/wheel-spin.md",
+      "sha256": "964f13abf0ac5f0e99007b6866c44657ca4c000b5f65130dedb92a1f84cea30b",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: the picker wheel turns from script, for the time columns that use it. Under a finger, `spinTo` on the wheel's ref turns it onto a row on the tap spin, then commits it as a rest would; under a fine pointer it commits the row at once. Either way it reports whether that row was committed: it refuses a disabled row and an index outside the rows, and a turn the wheel's unmounting cuts short reports that it did not arrive. Nothing public changes: the wheel is not exported from the package entry point.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/wheel-trackpad-notch.md",
+      "sha256": "0d401fff0b87bbcc40b7d08b1b1bdc32965fcbf4286af0845b5b03414acd579b",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "On a touch device with a trackpad or a mouse, such as a tablet with a keyboard, the picker wheels in the TimeInput, DateTimeInput and DateInput bottom sheets now take a trackpad's two-finger scroll as a finger: the rows follow the fingers, coast on at their lift, and rest on a row. One mouse-wheel notch turns a wheel one row, as an arrow key does, with no coast. Before, both moved the rows by each scroll's own distance, so a trackpad's momentum ran at the browser's rate and one notch moved several rows. A ctrl-scroll still zooms the page.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/wheel-uikit-picker-values.md",
+      "sha256": "5cde3adbdb6d787ed92d920a2ea0e7283102cee6b71fbf6e10c70d59ce141b6a",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "chore",
+      "headline": "Internal: UIPickerView's values measured on iOS 26.2 join the touch motion tables as internal constants: the row pitch, the picker's height and its rubber band, the coast's stop speed and velocity floor, the snap at rest, the tap spin and the selection tick. The pure math a wheel moves with comes with them. It projects the row a release rests on as UIScrollView sums its deceleration, coasts with the rate re-solved to stop on that row, snaps, bounces at an end, rubber-bands, and spins to a tapped row. It is checked against UIKit's recorded frames. Nothing public changes: none of it is exported from the package entry point, and themes do not set these values.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    },
+    {
+      "path": ".changeset/wheel-uikit-picker.md",
+      "sha256": "cbca23628b8955af9e70b518d6cd2800b5cb5eaf89f8f3010a104db12e5611bb",
+      "packages": [
+        {
+          "name": "@astryxdesign/core",
+          "bump": "patch"
+        }
+      ],
+      "category": "feat",
+      "headline": "Under a coarse primary pointer, as on a phone or a tablet, the picker wheels in the TimeInput, DateTimeInput and DateInput bottom sheets now move like UIPickerView. Their rows keep the 28 px pitch and lie flat, fading toward the edges of the column in every browser; the scrolling column under a mouse tilts and fades its rows only where the browser supports scroll-driven animations, and shows a plain list elsewhere. The row under the band is in semibold accent text on its plate while the wheel rests and while a finger drags it; no row is marked while the wheel coasts, snaps or turns. A flick coasts at UIKit's deceleration onto the row UIKit's projection picks. A finger landing on a moving wheel stops it. A tap on a row turns it onto the band, and a value changed from outside while the sheet is open, as when a bound clamps the time, turns the wheel onto its row. Past the first or last row, a drag rubber-bands and the wheel bounces back. As on iOS, the value commits when the wheel comes to rest, and the coast keeps running while the page's main thread is busy. Arrow keys and clicks on a row still commit at once. Under reduced motion a flick still coasts, as scrolling does; a tap, a key or a slow release cross-fades onto its row. `presentation=\"popover\"` keeps the previous surface; no value keeps the native-scroll column under a finger. Each row that reaches the band ticks with a short vibration where the browser supports it, as on Android; iOS Safari has no vibration. Under a fine primary pointer, as with a mouse on a desktop, the wheels keep the scrolling column.",
+      "contributors": [
+        "vjeux"
+      ],
+      "body": ""
+    }
+  ]
+}
