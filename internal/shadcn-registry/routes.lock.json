@@ -3692,6 +3692,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-input-status-icon-coupon-code-status",
+      "path": "examples/use-input-status-icon/coupon-code-status",
+      "aliases": []
+    },
+    {
       "name": "example-use-keyboard-hint-arrow-key-hint",
       "path": "examples/use-keyboard-hint/arrow-key-hint",
       "aliases": []

@@ -42,7 +42,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import {expect, test, type Page} from '@playwright/test';
+import {
+  expect,
+  keepRequestsLocal,
+  test,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import type {CastFrame, TrackedFrame} from './frames';
 import {
   advanceFrozenPage,
@@ -1198,7 +1203,9 @@ test.describe('frame evidence', () => {
         env: {...process.env, MESA_SHADER_CACHE_DIR: fresh},
       });
       try {
-        const page = await own.newPage();
+        const context = await own.newContext();
+        await keepRequestsLocal(context);
+        const page = await context.newPage();
         await page.setContent(
           '<div id="glass" style="width:120px;height:80px;backdrop-filter:blur(16px) saturate(180%)"></div>',
         );

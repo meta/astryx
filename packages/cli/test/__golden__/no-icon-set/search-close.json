@@ -36,6 +36,10 @@
         "description": "<text>",
         "import": "@astryxdesign/core/BottomSheet",
         "command": "astryx component BottomSheetSwitcher",
+        "deprecated": {
+          "replacement": "<text>",
+          "description": "<text>"
+        },
         "mentions": []
       },
       {
