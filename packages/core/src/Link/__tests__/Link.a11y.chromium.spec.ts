@@ -10,7 +10,12 @@
  * the story's router component records, and new tabs the page opens.
  */
 
-import {expect, test, type CDPSession, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type CDPSession,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   LINK_PATTERN,
   blockingResults,
