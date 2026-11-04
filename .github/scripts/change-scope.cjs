@@ -11,7 +11,9 @@ const {
 } = require('./knowledge-paths.cjs');
 
 /**
- * Classifies changed paths without reading PR-controlled content.
+ * Classifies changed paths. It reads no pull-request content as code: the
+ * only content it reads is GitHub's patch text for a Lab component's three
+ * entry files, as data (spec:AST-030 FR26).
  *
  * A spec-only PR may change only spec records. Templates, schemas, indexes,
  * architecture, guidance, audits, workflows, and code deliberately do not
@@ -30,6 +32,152 @@ const CHANGESET_PATTERN = /^\.changeset\/(?!README\.md$)[^/]+\.md$/;
 // The experimental Lab package: a change only here (and its release notes)
 // runs the Lab tests and the Storybook build (spec:AST-030 FR26).
 const LAB_ROOT = 'packages/lab/';
+
+// A new Lab component also adds its routes, its CLI discovery entry and its
+// Storybook story. These three files still count toward a Lab-only change when
+// their diff names only Lab components the change itself carries. The diff is
+// read as data (GitHub's patch text, never run); a missing patch, or any line
+// the checks do not recognize, keeps the change out of the Lab-only lane.
+const ROUTES_LOCK = 'internal/shadcn-registry/routes.lock.json';
+const OFFICIAL_PACKAGES = 'packages/cli/assets/discover/official-packages.json';
+const LAB_STORY =
+  /^apps\/storybook\/stories\/([A-Z][A-Za-z0-9]*)\.stories\.tsx$/;
+const LAB_COMPONENT_DIR = /^packages\/lab\/src\/([A-Z][A-Za-z0-9]*)\//;
+
+// The registry's route slug for a component name. It mirrors
+// slugifyRegistryName in apps/docsite/src/lib/shadcnRegistry.mjs (a test pins
+// the two equal): the trusted classifier loads no docsite module.
+function labRouteSlug(name) {
+  return String(name)
+    .replace(/([a-z0-9])([A-Z])/g, '$1-$2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
+}
+
+// The changed lines of a unified diff, without the file headers.
+function changedLines(patch) {
+  return patch
+    .split('\n')
+    .filter(line => /^[+-]/.test(line) && !/^(\+\+\+|---) /.test(line))
+    .map(line => ({
+      sign: line[0],
+      text: line.slice(1).trim().replace(/,$/, ''),
+    }));
+}
+
+function routesLockNamesLabOnly(patch, slugs) {
+  const ownSlug = value =>
+    [...slugs].some(
+      slug =>
+        value === `components/lab/${slug}` ||
+        value.startsWith(`examples/${slug}/`) ||
+        value.startsWith(`showcases/${slug}/`),
+    );
+  const ownName = value =>
+    [...slugs].some(
+      slug =>
+        value === `component-lab-${slug}` ||
+        value.startsWith(`example-${slug}-`) ||
+        value.startsWith(`showcase-${slug}-`),
+    );
+  const lines = changedLines(patch);
+  return (
+    lines.length > 0 &&
+    lines.every(({text}) => {
+      if (['{', '}', ']', '"aliases": []', '"aliases": ['].includes(text))
+        return true;
+      const name = /^"name": "([^"]+)"$/.exec(text);
+      if (name) return ownName(name[1]);
+      const route = /^"path": "([^"]+)"$/.exec(text);
+      if (route) return ownSlug(route[1]);
+      const alias = /^"([^"]+)"$/.exec(text);
+      return (
+        alias != null &&
+        /^components\/lab\//.test(alias[1]) &&
+        ownSlug(alias[1])
+      );
+    })
+  );
+}
+
+// The Lab package's line range in the base's official-packages.json.
+function labPackageLines(baseText) {
+  const lines = baseText.split('\n');
+  const start = lines.findIndex(line =>
+    line.includes('"package": "@astryxdesign/lab"'),
+  );
+  if (start === -1) return null;
+  const next = lines.findIndex(
+    (line, index) => index > start && line.includes('"package": "'),
+  );
+  return {first: start + 1, last: next === -1 ? lines.length : next};
+}
+
+function officialPackagesNamesLabOnly(patch, names, baseText) {
+  if (typeof baseText !== 'string') return false;
+  const range = labPackageLines(baseText);
+  if (range == null) return false;
+  const hunks = [
+    ...patch.matchAll(/^@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@/gm),
+  ];
+  if (hunks.length === 0) return false;
+  // Every hunk edits inside the Lab package's entry of the base file.
+  const inLab = hunks.every(([, start, count = '1']) => {
+    const first = Number(start);
+    const last = first + Math.max(Number(count), 1) - 1;
+    return first > range.first && last < range.last;
+  });
+  const lines = changedLines(patch);
+  return (
+    inLab &&
+    lines.length > 0 &&
+    lines.every(({text}) => {
+      if (['{', '}', '"kind": "component"'].includes(text)) return true;
+      const name = /^"name": "([^"]+)"$/.exec(text);
+      return name != null && names.has(name[1]);
+    })
+  );
+}
+
+function storyImportsLab(patch) {
+  const added = patch
+    .split('\n')
+    .filter(line => line.startsWith('+') && !line.startsWith('+++ '))
+    .map(line => line.slice(1))
+    .join('\n');
+  return /from '@astryxdesign\/lab(?:\/[^']*)?';/.test(added);
+}
+
+/**
+ * Whether a Lab entry file's change belongs to the Lab components this change
+ * carries (spec:AST-030 FR26). `names` are the Lab component folders the change
+ * touches; `patches` maps a path to GitHub's patch text; `officialPackagesBase`
+ * is the base's official-packages.json.
+ */
+function isLabEntryChange(change, {names, patches, officialPackagesBase}) {
+  const patch = patches?.[change.filename];
+  if (
+    typeof patch !== 'string' ||
+    patch === '' ||
+    change.previous_filename != null
+  )
+    return false;
+  const slugs = new Set([...names].map(labRouteSlug));
+  if (change.filename === ROUTES_LOCK)
+    return routesLockNamesLabOnly(patch, slugs);
+  if (change.filename === OFFICIAL_PACKAGES)
+    return officialPackagesNamesLabOnly(patch, names, officialPackagesBase);
+  const story = LAB_STORY.exec(change.filename);
+  // Only a new story: its whole text is in the patch.
+  return (
+    story != null &&
+    change.status === 'A' &&
+    names.has(story[1]) &&
+    storyImportsLab(patch)
+  );
+}
 
 const SURFACES = Object.freeze({
   KNOWLEDGE: 'knowledge',
@@ -175,7 +323,10 @@ function normalizeChange(change) {
   };
 }
 
-function classifyChanges(changes, {expectedCount} = {}) {
+function classifyChanges(
+  changes,
+  {expectedCount, patches = null, officialPackagesBase = null} = {},
+) {
   const normalized = changes
     .map(normalizeChange)
     .filter(change => change.filename);
@@ -239,16 +390,42 @@ function classifyChanges(changes, {expectedCount} = {}) {
   const docsiteOnly = exactSurface(SURFACES.DOCSITE);
   const toolingOnly = exactSurface(SURFACES.NODE_TOOLING);
   // Every changed path is in the Lab package, besides Changesets, which no
-  // test or build reads (spec:AST-030 FR26).
+  // test or build reads, and the Lab entry files of the Lab components the
+  // change carries (spec:AST-030 FR26).
+  const labNames = new Set(
+    allPaths.flatMap(filePath => {
+      const match = LAB_COMPONENT_DIR.exec(filePath);
+      return match ? [match[1]] : [];
+    }),
+  );
+  const labEntries = new Set(
+    normalized
+      .filter(change =>
+        isLabEntryChange(change, {
+          names: labNames,
+          patches,
+          officialPackagesBase,
+        }),
+      )
+      .map(change => change.filename),
+  );
   const labOnly =
     complete &&
     allPaths.some(filePath => filePath.startsWith(LAB_ROOT)) &&
     allPaths.every(
       filePath =>
-        filePath.startsWith(LAB_ROOT) || CHANGESET_PATTERN.test(filePath),
+        filePath.startsWith(LAB_ROOT) ||
+        CHANGESET_PATTERN.test(filePath) ||
+        labEntries.has(filePath),
     );
-  // An incomplete list, or any shared infrastructure, runs everything.
-  const fullSuite = !complete || allPaths.some(isSharedInfraPath);
+  // An incomplete list, or any shared infrastructure, runs everything. A Lab
+  // entry file of a Lab-only change is not shared infrastructure for it.
+  const fullSuite =
+    !complete ||
+    allPaths.some(
+      filePath =>
+        isSharedInfraPath(filePath) && !(labOnly && labEntries.has(filePath)),
+    );
   return {
     specOnly,
     toolingOnly,
@@ -324,7 +501,23 @@ if (require.main === module) {
       .filter(Boolean);
     process.stdout.write(`${JSON.stringify(classifyPaths(paths))}\n`);
   } else {
-    const result = classifyChanges(parseNameStatus(fs.readFileSync(0, 'utf8')));
+    // `--patches <file>`: GitHub's patch text per path, as JSON, for the Lab
+    // entry files. `--official-packages-base <file>`: the base's copy.
+    const flag = name => {
+      const index = process.argv.indexOf(name);
+      return index === -1 ? null : process.argv[index + 1];
+    };
+    const readJson = file =>
+      file ? JSON.parse(fs.readFileSync(file, 'utf8')) : null;
+    const readText = file =>
+      file && fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
+    const result = classifyChanges(
+      parseNameStatus(fs.readFileSync(0, 'utf8')),
+      {
+        patches: readJson(flag('--patches')),
+        officialPackagesBase: readText(flag('--official-packages-base')),
+      },
+    );
     if (result.specChangesetConflict) {
       console.error(
         'Pure spec-record changes must not add a Changeset; they do not release packages.',
@@ -346,6 +539,8 @@ if (require.main === module) {
 
 module.exports = {
   LAB_ROOT,
+  OFFICIAL_PACKAGES,
+  ROUTES_LOCK,
   NODE_TOOLING_PATHS,
   SURFACES,
   classifyChanges,
@@ -354,6 +549,8 @@ module.exports = {
   isNodeToolingPath,
   isPackageReleasePath,
   isSharedInfraPath,
+  isLabEntryChange,
   isSpecRecordPath,
+  labRouteSlug,
   parseNameStatus,
 };
