@@ -181,6 +181,7 @@
  */
 
 import {cubicBezier} from './bezier';
+import {LATE_START_MS} from './frameBlock';
 import {solveSpring, toSpring, type SpringDescription} from './spring';
 import {registerPresentedOffset, type PresentedSource} from './presentation';
 import {resolveMotion} from './resolveMotion';
@@ -189,6 +190,7 @@ import {
   registerReducedMotionCrossFade,
 } from './uikit/timing';
 import {planReducedMotion, type ReducedMotionView} from './reducedMotionPlan';
+import {themeReducesMotion} from '../privateAttributes/reducedMotion.stylex';
 
 /**
  * A value the animator can drive.
@@ -669,13 +671,6 @@ const REST_FRAMES_PER_SECOND = 60;
 const MAX_DURATION_MS = 30_000;
 
 /**
- * How long a task must run on past its first call from rest before that
- * counts as a block (WebKit; startAfterBlock): two frames at 60 Hz.
- */
-// Browser start times are frame times and a task's end a live clock, so only a block longer than a frame plus the task's own length can be told apart from that quantization.
-const LATE_START_MS = 34;
-
-/**
  * The task calls from rest are made in, shared by every call made in it
  * (every animator's), so one motion's parts that are separate calls start
  * together (startAfterBlock).
@@ -971,8 +966,10 @@ export function createMotionAnimator(
         };
   const pseudoElement = options.pseudoElement;
   // Reduced Motion reads the person's settings and nothing else: no option
-  // overrides them (design:reduced-motion DR4).
-  const prefersReducedMotion = defaultPrefersReducedMotion;
+  // overrides them (design:reduced-motion DR4). A theme that reduces motion
+  // for everyone counts as the setting.
+  const prefersReducedMotion = () =>
+    defaultPrefersReducedMotion() || themeReducesMotion(target);
   const isCoarsePointer = defaultIsCoarsePointer;
   const resting: Record<MotionProperty, number> = {
     ...IDENTITY,

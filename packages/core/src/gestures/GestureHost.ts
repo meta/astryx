@@ -179,6 +179,7 @@ import {
 import {subscribeInput} from '../utils/inputStream';
 import {isPrimaryClick} from '../utils/primaryClick';
 import {
+  type DragSelectionHold,
   type DragSelectionReleaseOptions,
   lockDragSelection,
   locksSelectionFor,
@@ -590,7 +591,7 @@ function wheelPixels(
  * A trackpad's precise deltas, a third of their legacy `wheelDelta` in
  * Chromium and WebKit, read as a trackpad's.
  */
-function scrollTypeOf(wheel: WheelEvent): ScrollType {
+export function scrollTypeOf(wheel: WheelEvent): ScrollType {
   if (wheel.deltaMode !== 0 || wheel.shiftKey) {
     return 'discrete';
   }
@@ -710,10 +711,7 @@ export class GestureHost {
     (options?: DragSelectionReleaseOptions) => void
   >();
   /** Each claimed contact's drag hold, until its lift or a give-back. */
-  private readonly claimHolds = new Map<
-    number,
-    (options?: DragSelectionReleaseOptions) => void
-  >();
+  private readonly claimHolds = new Map<number, DragSelectionHold>();
   private readonly presentedHitTesting: 'auto' | 'always' | 'never';
   /**
    * Contacts sent to what is drawn instead of what the engine hit, by host
@@ -3747,10 +3745,13 @@ export class GestureHost {
     }
     this.pointerIds.delete(event.pointerId);
     this.pointerKinds.delete(event.pointerId);
+    const hold = this.claimHolds.get(id);
     this.unlockSelection(id);
     const dispositions = this.arena.ended([
       {id, x: event.clientX, y: event.clientY, time: eventTime(event)},
     ]);
+    // A selection the lift's own handlers made stays, as a click's does.
+    hold?.keepLiftSelection();
     // A retargeted tap's own click arms the click guard for the engine's.
     const landed = this.retargeted.get(id);
     this.retargeted.delete(id);

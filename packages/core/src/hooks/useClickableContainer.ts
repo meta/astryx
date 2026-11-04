@@ -5,19 +5,28 @@
 /**
  * @file useClickableContainer.ts
  * @input Container ref, interactive element ref, click/href handlers
- * @output onClick and onMouseUp handlers for the container; INTERACTIVE_SELECTORS list;
+ * @output onClick, onMouseUp and onPointerDown handlers for the container;
+ *   INTERACTIVE_SELECTORS list;
  *   hasInteractiveAncestor and the shared innermostInteractive walk
  * @position Core hook for clickable containers with nested interactive
  *   elements. A click on a nested button or link does not run the card's
- *   action. Each navigation passes the rule in utils/safeUrl.ts first.
+ *   action, and a finger press there shows no press on the card. Each navigation
+ *   passes the rule in utils/safeUrl.ts first.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/hooks/index.ts (export)
  */
 
-import {useCallback, useEffect, type RefObject, type MouseEvent} from 'react';
+import {
+  useCallback,
+  useEffect,
+  type RefObject,
+  type MouseEvent,
+  type PointerEvent,
+} from 'react';
 import {isLayerSurface} from '../Layer/layerSurfacePress';
 import {isSafeUrl} from '../utils/safeUrl';
+import {cancelPress} from '../utils/pressFeedback';
 
 /**
  * The attribute this hook sets on the container it makes clickable. A click
@@ -159,6 +168,14 @@ export interface UseClickableContainerOptions {
 export interface ClickableContainerResult {
   onClick: (event: MouseEvent<HTMLElement>) => void;
   onMouseUp: (event: MouseEvent<HTMLElement>) => void;
+  /**
+   * Spread on the container with `onClick`. A press that starts on a nested
+   * interactive element does not activate the container. On a container that
+   * paints its press with `usePressFeedback`, this drops that touch press.
+   * A mouse `:active` press paint is unchanged. A container without it keeps
+   * its activation rule and shows its pressed state for every press.
+   */
+  onPointerDown: (event: PointerEvent<HTMLElement>) => void;
 }
 
 /**
@@ -176,12 +193,16 @@ export interface ClickableContainerResult {
  * @example
  * ```
  * const containerRef = useRef<HTMLDivElement>(null);
- * const { onClick, onMouseUp } = useClickableContainer({
+ * const { onClick, onMouseUp, onPointerDown } = useClickableContainer({
  *   containerRef,
  *   onClick: () => console.log('card clicked'),
  * });
  * return (
- *   <div ref={containerRef} onClick={onClick} onMouseUp={onMouseUp}>
+ *   <div
+ *     ref={containerRef}
+ *     onClick={onClick}
+ *     onMouseUp={onMouseUp}
+ *     onPointerDown={onPointerDown}>
  *     <p>Click anywhere on this card</p>
  *     <button onClick={() => alert('button')}>Nested button</button>
  *   </div>
@@ -305,5 +326,30 @@ export function useClickableContainer({
     [containerRef, href, disabled],
   );
 
-  return {onClick, onMouseUp};
+  // The press-state counterpart of onClick's rule, for touch: a finger press
+  // that would not activate the container shows no press on it. A mouse or
+  // pen press keeps its `:active` paint.
+  const onPointerDown = useCallback(
+    (event: PointerEvent<HTMLElement>) => {
+      const containerEl = containerRef.current;
+      const eventTarget = event.target;
+      if (
+        event.pointerType !== 'touch' ||
+        disabled ||
+        containerEl == null ||
+        !(eventTarget instanceof Element) ||
+        eventTarget === event.currentTarget ||
+        !hasInteractiveAncestor(eventTarget, containerEl) ||
+        // The control the container delegates to is the container's own
+        // action: a press on it activates the container.
+        interactiveRef?.current?.contains(eventTarget) === true
+      ) {
+        return;
+      }
+      cancelPress(containerEl);
+    },
+    [containerRef, interactiveRef, disabled],
+  );
+
+  return {onClick, onMouseUp, onPointerDown};
 }

@@ -150,6 +150,28 @@ describe('native contracts', () => {
     expect(types['core.d.ts']).toContain('icon: IconName;');
   });
 
+  it('gives Icon its semantic colors, and leaves the palette colors on the web', async () => {
+    const {contracts} = await buildContracts(loadCoreDoc);
+    const icon = contracts.find(contract => contract.name === 'Icon');
+    const semantic = [
+      'primary',
+      'secondary',
+      'tertiary',
+      'disabled',
+      'accent',
+      'info',
+      'success',
+      'error',
+      'warning',
+      'inherit',
+    ];
+    expect(icon!.core.color.type).toEqual({kind: 'enum', values: semantic});
+    expect(Object.entries(icon!.projections?.color ?? {})).toEqual(
+      semantic.map(color => [color, color]),
+    );
+    expect(generateSwift(contracts)['Icon.swift']).not.toContain('case blue');
+  });
+
   it('gives Avatar its named sizes, a press, and a link, and leaves pixel sizes on the web', async () => {
     const {contracts} = await buildContracts(loadCoreDoc);
     const avatar = contracts.find(contract => contract.name === 'Avatar');

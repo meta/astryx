@@ -144,9 +144,17 @@ new position every frame of the block, and a main-thread animation shows none
 (nothing changed, so no frame is sent at all: `busyWindowProof` counts the
 whole window as one stall). `settledWithin` (2 px) stops judging at the easing
 tail: the screencast rounds to whole pixels, so a tail that still moves shows
-plateaus within a pixel or two of rest. A judged part shorter than four of the
+plateaus within a pixel or two of rest. `settledWithinSteps` counts that bound
+in the cast's own position steps, read from the cast (`castStep`, from the
+`step` `trackMarker` gives each frame of the default marker; a control tracked
+by another color carries none, and `castStep` refuses it): 1 px in Chromium's PNG cast and 2 px in
+WebKit's JPEG cast, whose 4:2:0 chroma holds the marker's color in 2 by 2
+pixel blocks and so makes the tail's plateaus longer. Two steps stop at the
+same tail in either engine while a freeze further from rest is still judged. A judged part shorter than four of the
 screencast's intervals fails: the animation under test was not moving during
-the block. With
+the block. One that had already settled when the judged part began (nothing in
+the window to judge) throws `BusyWindowTooLateError`, with the numbers: the
+block ran too late, which is no reading of the component. With
 `during`, `blockMainThread` starts the loop from a task queued in the frame
 that saw the animation, after that frame's rendering update: WebKit hands a
 newly started animation to its compositor there, and a loop inside the rAF
@@ -154,7 +162,12 @@ callback would freeze even a compositor animation. Call it before the release
 that starts a settle and await it after, so the page is already waiting when
 the settle begins. An animation counts once it is no longer pending and has
 run at least one frame: a `minProgressMs` under 16 is raised to 16, since one
-created in the frame the page looks is not on the compositor yet. The `verdict` judges the
+created in the frame the page looks is not on the compositor yet. It counts
+only before its curve's held tail (keyframes that end in a run of identical
+values, read as `waitForRest` reads them): when the only animation running
+there started while the page waited, or the wait times out with only such
+animations, the page looked too late, and the wait rejects with
+`BusyWindowTooLateError`. The `verdict` judges the
 frames the screencast delivered, whatever its rate (a loaded machine's can
 deliver one frame in five or six), and tolerates nothing a frozen animation
 does: at least one frame in the judged part, no stall longer than three of the
@@ -182,9 +195,9 @@ late on a loaded runner, too late to wait on before blocking. Only a hold that
 starts before the block, on two frames at least, is excused, and every frame
 after its first change is judged, so a freeze later in the block still fails.
 Any other element already moving is judged from the block's start. WebKit's
-casts are 2 px quantized: the frames come at the
-viewport's size, but the page in them is captured at half resolution, so
-positions move in 2 CSS px steps (Chromium's in 1). With under two steps of
+casts are 2 px quantized: their JPEG frames hold the
+marker's color in 2 by 2 pixel chroma blocks (4:2:0, which the frame header
+reports), so positions move in 2 CSS px steps (Chromium's in 1). With under two steps of
 motion per frame, a frame delivered a few ms early shows no step and reads as
 not moved. The proof reports `stepPx` and `pxPerFrame` and notes each stretch
 that moves under two steps per frame, read over four frames at a time so a
@@ -205,9 +218,11 @@ entry: in WebKit, with the popover above BottomSheet's open modal dialog, the
 sheet's dim held for 155 to 225 ms into a block while the control moved, and
 inside the dialog it moves in step with the sheet. `waitForAnimation` and
 `blockMainThread`'s `during` never count the control's own animation, so on
-a dialog they still wait for the backdrop's. Track it from the
-same screencast (`trackMarker(page, frames, {rgb: CONTROL_RGB})`) and pass it
-as `control`: the component passes when it moved on every frame the control
+a dialog they still wait for the backdrop's. Track a top-layer control from
+the same screencast with `trackControl(page, frames)` (`trackMarker` with
+`CONTROL_RGB`, searching only the top strip it crosses). A control mounted
+`within` a dialog moves with it, so track that one with `trackMarker(page,
+frames, {rgb: CONTROL_RGB})`. Pass either as `control`: the component passes when it moved on every frame the control
 moved and its longest stall is no longer than the control's. Both are read from
 the same screencast frames, so a compositor animation misses none. A window in
 which the control moved on fewer than four frames fails, since the machine
@@ -215,16 +230,29 @@ presented too little to judge. A run of frames with no new position counts as
 moved when the change that ends it is a single cast step: the component moves
 under one step a frame there, as on an easing tail, which the cast cannot show
 on every frame. Where it moved under two steps a frame over the frames just
-before the run (a spring's slow tail inside a fast window), a frame delivered
-early can show no step too, so the change may carry the motion of every frame
+before the run (a spring's slow tail inside a fast window), or across the run
+itself (its catch-up over the frames it spans) where the curve slows faster
+than those frames show, a frame delivered early can show no step too, so the change may carry the motion of every frame
 the run held at that pace, to the nearest step. The run must also read as a
-slowing curve, at most one frame longer than the component's run before it. A
+slowing curve, at most one frame longer than the component's run before it.
+Under `settledWithinSteps`, a run under one cast step a frame may instead last
+ceil(step ÷ travel) frames, whatever the run before it. The travel is the
+slower moving pace around the run, never less than its own catch-up per frame.
+The run also lasts at most one frame more than the pace into it allows:
+ceil(step ÷ max(pace before, catch-up per frame)) + 1. A
 freeze ends in a catch-up of more than that, a stall in a frame-counted animation is longer than its runs
 before it, and a run that no change ends stays a miss. The component still has
 to show a new position on at least four of the control's frames. The cast step (`stepPx`)
 is read from the value's changes in the judged part, so a position the page
 commits off the grid once the block ends does not shrink it.
 A main-thread animation still fails: the control moves and it does not.
+
+`controlClock(control)` reads the compositor's own time in each frame off the
+control's position, for a proof that judges motion against time, not against
+the screencast's stamps. A loaded machine stamps frames late, and
+`inPresentationOrder` can then put a frame after frames that came after it.
+The clock takes the cycle origin that most frames agree with, so such a frame
+moves only its own reading. A frame within 36 px of a turn gets no reading.
 
 An animation that lasts a fraction of a second, such as a 0.2 s fade, leaves a
 block only a few frames to judge: in WebKit, or on a loaded machine, the control
@@ -260,7 +288,12 @@ Layout or Paint there; a layout-property animation does one per frame. Its
 (`waitForAnimation` describing keyframes, `blockMainThread` without `during`)
 is in `devtoolsTasks` instead, and only when no page script ran inside it. A
 test's own `page.evaluate` stays a long task, whether it calls page code
-directly or sets it off.
+directly or sets it off. Each long task carries its wall time (`durationMs`)
+and the main thread's own run time (`threadMs`, from the trace's thread
+clock). A busy machine stretches the first but not the second, so a claim
+about the page's own work judges `threadMs`. A thread that waits (a
+synchronous request, `Atomics.wait`) gains wall time but no thread time, so a
+claim about a blocking wait judges `durationMs`.
 
 **Storyboards.** Deterministic: frames come from seeking held animations or
 from stepping scripted input, never from wall-clock capture. The JSON trace
@@ -345,22 +378,22 @@ time: it fast-forwards whenever the page is idle.
 
 ## Engine limits (measured with Playwright 1.61)
 
-|                                                        | Chromium 149                                                                                                           | WebKit 26.5 (Linux build)                                                                                                                          |
-| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Trusted touch + pointer events, multi-touch            | yes                                                                                                                    | yes (a `touchstart` lists only the fingers that landed in it; pointer events exact)                                                                |
-| Page sees the scripted timestamps                      | yes, exactly                                                                                                           | no: real dispatch time; pacing keeps velocities within ~1 ms on an idle runner, but a CPU-starved one sends some steps late, then back to back     |
-| Sub-pixel touch positions                              | yes                                                                                                                    | no: integer CSS px                                                                                                                                 |
-| Native scroll, fling, pinch-zoom from injected touches | yes                                                                                                                    | no                                                                                                                                                 |
-| Lifting one finger while others stay down              | yes                                                                                                                    | pointer events right, but that `touchend` lists no remaining `touches`: skip with `PARTIAL_LIFT_SKIP`                                              |
-| Click synthesised from a touch                         | yes                                                                                                                    | only from `driver.tap` (WebKit's tap gesture), not from a raw touch sequence                                                                       |
-| Curve sampling, storyboards, input log                 | yes                                                                                                                    | yes                                                                                                                                                |
-| A CSS animation shorter than a gap between two frames  | yes: a pending animation starts at the next frame, and runs then                                                       | no: it can start and finish inside the gap, and its start event, sent at the next frame, finds nothing to record; `waitForAnimation` names it      |
-| Screencast frame evidence (busy main thread)           | yes                                                                                                                    | yes (WebKit's own screencast; frames keep coming while the main thread is blocked)                                                                 |
-| Rendering trace, long tasks                            | yes                                                                                                                    | no (Playwright exposes neither)                                                                                                                    |
-| Compositor presentation record                         | yes                                                                                                                    | no: `stop()` resolves to `[]`; the busy verdict judges the screencast alone                                                                        |
-| Wheel steps, exact CSS px deltas (`webInput.ts`)       | yes                                                                                                                    | desktop context only (`isMobile: false`): skip with `WHEEL_SKIP`; the step also moves the mouse there (a `pointermove`) and holds Control as a key |
-| Pen strokes, pressure, scripted timestamps             | yes                                                                                                                    | no: skip with `PEN_SKIP`                                                                                                                           |
-| Pen over a native scroller                             | no pan: the pen takes the mouse pipeline, so a stroke scrolls nothing, raises no `pointercancel` and ends in a `click` | no: skip with `PEN_SKIP`                                                                                                                           |
+|                                                        | Chromium 149                                                                                                           | WebKit 26.5 (Linux build)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Trusted touch + pointer events, multi-touch            | yes                                                                                                                    | yes (a `touchstart` lists only the fingers that landed in it; pointer events exact)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Page sees the scripted timestamps                      | yes, exactly                                                                                                           | no: real dispatch time; pacing keeps velocities within ~1 ms on an idle runner, but a CPU-starved one sends some steps late, then back to back; `pacing: 'spacing'` keeps the script's spacing after a stall instead, and fails a play whose page read a resting finger where the script moves, a throw where the script rests, or fewer than two moves, or, given `releaseTolerance`, a release that strays further than that from the script's (each read as Core's velocity tracker reads it): `TouchPageStallError` when the page's own touch or pointer listeners held an event back, `TouchPacingError` otherwise; the lift's `release` names what the page read |
+| Sub-pixel touch positions                              | yes                                                                                                                    | no: integer CSS px                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Native scroll, fling, pinch-zoom from injected touches | yes                                                                                                                    | no                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Lifting one finger while others stay down              | yes                                                                                                                    | pointer events right, but that `touchend` lists no remaining `touches`: skip with `PARTIAL_LIFT_SKIP`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Click synthesised from a touch                         | yes                                                                                                                    | only from `driver.tap` (WebKit's tap gesture), not from a raw touch sequence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Curve sampling, storyboards, input log                 | yes                                                                                                                    | yes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| A CSS animation shorter than a gap between two frames  | yes: a pending animation starts at the next frame, and runs then                                                       | no: it can start and finish inside the gap, and its start event, sent at the next frame, finds nothing to record; `waitForAnimation` names it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| Screencast frame evidence (busy main thread)           | yes                                                                                                                    | yes (WebKit's own screencast; frames keep coming while the main thread is blocked)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Rendering trace, long tasks                            | yes                                                                                                                    | no (Playwright exposes neither)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Compositor presentation record                         | yes                                                                                                                    | no: `stop()` resolves to `[]`; the busy verdict judges the screencast alone                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Wheel steps, exact CSS px deltas (`webInput.ts`)       | yes                                                                                                                    | desktop context only (`isMobile: false`): skip with `WHEEL_SKIP`; the step also moves the mouse there (a `pointermove`) and holds Control as a key                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Pen strokes, pressure, scripted timestamps             | yes                                                                                                                    | no: skip with `PEN_SKIP`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Pen over a native scroller                             | no pan: the pen takes the mouse pipeline, so a stroke scrolls nothing, raises no `pointercancel` and ends in a `click` | no: skip with `PEN_SKIP`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 
 What WebKit cannot show here — native scroll hand-off, flings, a finger
 lifting while another stays down, finger tracking under a busy main thread, and
@@ -391,9 +424,11 @@ Otherwise the dispatch stalled before the page (a loaded runner) and it throws
 `WheelPacingError` with the gaps. Wrap such a
 proof in `retakeOnWheelPacing(testInfo, attempt)`: one re-take, only on
 `WheelPacingError`, listed as a `wheel-retake` annotation. The burst times the
-page's handling with a listener on the window that runs after the page's own,
-so a listener that stops the step's propagation, or other main-thread work
-between steps (timers, frames), still counts as the dispatch's stall. Chromium
+page's handling with a listener on the window that runs after the page's own.
+A step whose propagation the page stops is marked by a task queued when it
+arrived, and never later than the next step's arrival. So its handling, with
+any work queued before that task, counts as the page's. Other main-thread work
+between steps (timers, frames) still counts as the dispatch's stall. Chromium
 stamps a step with its dispatch time, so a page that holds its main thread does
 not widen the gaps there, and every gap past `maxGapMs` is a `WheelPacingError`.
 

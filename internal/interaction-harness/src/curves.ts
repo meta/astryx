@@ -23,6 +23,7 @@
  */
 
 import type {Locator, Page} from '@playwright/test';
+import {defineCurveEnd} from './curve-end';
 import {parseTransform, type TimedValue, type Transform2D} from './math';
 
 /** How far inside its end a seek past an animation's end lands, ms. */
@@ -376,221 +377,126 @@ async function installRecorder(page: Page): Promise<void> {
  */
 async function installCurveEnd(page: Page): Promise<void> {
   await installRecorder(page);
-  await page.evaluate(() => {
-    const w = window as unknown as {
-      __harnessCurveEnd?: (animation: Animation) => number;
-      __harnessHold?: (
-        root: Element | null,
-        skip?: ReadonlySet<Animation>,
-      ) => unknown[];
-    };
-    if (w.__harnessCurveEnd) {
-      return;
-    }
-    const timingKeys = new Set([
-      'offset',
-      'computedOffset',
-      'easing',
-      'composite',
-    ]);
-    const values = (k: ComputedKeyframe) =>
-      JSON.stringify(
-        Object.keys(k)
-          .filter(p => !timingKeys.has(p))
-          .sort()
-          .map(p => [p, String(k[p])]),
+  // The hold, installed with the curve end it reads: one round trip installs
+  // both, so a hold sent from the test costs no extra one.
+  await page.evaluate(
+    `(${defineCurveEnd.toString()})();(${defineHold.toString()})();`,
+  );
+}
+
+/**
+ * Installs `window.__harnessHold(root)` in the page, once (see
+ * `installCurveEnd`). A page function: it closes over nothing, and reads the
+ * curve end `defineCurveEnd` installs.
+ */
+function defineHold(): void {
+  const w = window as unknown as {
+    __harnessHold?: (
+      root: Element | null,
+      skip?: ReadonlySet<Animation>,
+    ) => unknown[];
+  };
+  if (w.__harnessHold) {
+    return;
+  }
+  w.__harnessHold = (root: Element | null, skip?: ReadonlySet<Animation>) => {
+    const curveEnd = (
+      window as unknown as {__harnessCurveEnd: (a: Animation) => number}
+    ).__harnessCurveEnd;
+    const describe = (node: Element | null) =>
+      node == null
+        ? null
+        : node.tagName.toLowerCase() +
+          (node.id ? `#${node.id}` : '') +
+          (node.classList.length
+            ? `.${[...node.classList].slice(0, 2).join('.')}`
+            : '');
+    const now = Number(document.timeline.currentTime ?? performance.now());
+    const all = document.getAnimations().filter(animation => {
+      const target =
+        (animation.effect as KeyframeEffect | null)?.target ?? null;
+      return (
+        animation.playState === 'running' &&
+        animation.timeline instanceof DocumentTimeline &&
+        !(skip?.has(animation) ?? false) &&
+        (root == null ||
+          (target != null && (root === target || root.contains(target))))
       );
-    w.__harnessCurveEnd = animation => {
+    });
+    // Seeking and sampling run a curve forward: an animation running
+    // backward (`reverse()`, a negative playback rate) cannot be held and
+    // read, so it is refused rather than misread.
+    const backward = all.find(animation => animation.playbackRate < 0);
+    if (backward != null) {
+      throw new Error(
+        `holdAnimations: ${describe((backward.effect as KeyframeEffect | null)?.target ?? null) ?? 'an animation'} runs backward (reverse() or a negative playback rate); hold and sample a forward run instead`,
+      );
+    }
+    // Each animation's start on the document timeline, read before the pause
+    // clears it. A pending play has no start time yet: it starts now, as far
+    // back as its current time reaches through its playback rate (at rate 2,
+    // a run covers its curve in half the timeline), as seeking reads it.
+    const starts = all.map(animation =>
+      animation.startTime != null
+        ? Number(animation.startTime)
+        : now -
+          Number(animation.currentTime ?? 0) / (animation.playbackRate || 1),
+    );
+    const held = all.map(animation => {
+      animation.pause();
+      // `pause()` only schedules the pause: the engine takes the hold time at
+      // its next frame, a frame past where this read it. Setting the current
+      // time completes a pending pause at once, here.
+      // eslint-disable-next-line no-self-assign
+      animation.currentTime = animation.currentTime;
+      return animation;
+    });
+    // A later hold adds to the held set: what an earlier one held stays held
+    // (it is paused, so it is not taken again above) until released.
+    const w = window as unknown as {
+      __harnessHeld?: Animation[];
+      __harnessHeldStarts?: number[];
+      __harnessHeldOrigin?: number;
+    };
+    w.__harnessHeld = [...(w.__harnessHeld ?? []), ...held];
+    w.__harnessHeldStarts = [...(w.__harnessHeldStarts ?? []), ...starts];
+    // Times count from the origin the first hold set (its earliest start)
+    // until the release: a later hold, even of an animation that started
+    // earlier (its offset is then negative), and dropping one never move it,
+    // so every offsetMs already returned stays true.
+    const origin = Number.isFinite(w.__harnessHeldOrigin ?? Number.NaN)
+      ? (w.__harnessHeldOrigin as number)
+      : Math.min(...starts);
+    w.__harnessHeldOrigin = origin;
+    const offsets = starts.map(start => start - origin);
+    return held.map((animation, index) => {
       const effect = animation.effect as KeyframeEffect | null;
       const timing = effect?.getComputedTiming();
-      const delay = Number(timing?.delay ?? 0);
-      const active = Number(timing?.activeDuration ?? 0);
-      if (
-        effect == null ||
-        !Number.isFinite(active) ||
-        Number(timing?.iterations ?? 1) !== 1
-      ) {
-        return delay + active;
-      }
-      // A held end is read only for an animation that plays forward: run
-      // backward (a reverse or alternating direction, or `reverse()`'s
-      // negative playback rate), the held run is where its motion starts.
-      if (
-        (timing?.direction ?? 'normal') !== 'normal' ||
-        animation.playbackRate < 0
-      ) {
-        return delay + active;
-      }
-      const frames = effect.getKeyframes();
-      // A run holds only when it reaches offset 1 and every frame in it keys
-      // every property the animation keys: a property left out, or a last
-      // frame before offset 1, gets an implicit end frame and keeps moving.
-      const keyed = new Set(
-        frames.flatMap(k => Object.keys(k).filter(p => !timingKeys.has(p))),
-      );
-      const keysAll = (k: ComputedKeyframe) =>
-        [...keyed].every(p => k[p] !== undefined);
-      const last = frames[frames.length - 1];
-      if (last == null || Number(last.computedOffset) !== 1 || !keysAll(last)) {
-        return delay + active;
-      }
-      let first = frames.length - 1;
-      while (
-        first > 0 &&
-        keysAll(frames[first - 1]) &&
-        values(frames[first - 1]) === values(frames[first])
-      ) {
-        first -= 1;
-      }
-      const offset = Number(frames[first]?.computedOffset ?? 1);
-      if (offset >= 1) {
-        return delay + active;
-      }
-      // Keyframe offsets are progress, not time. Under a cubic-bézier effect
-      // easing (the CSS keywords included) whose progress only rises, the
-      // time the held run starts is solved from the curve; under any other
-      // easing (steps, linear() stops, an overshoot) the curve is read to the
-      // full end.
-      const easing = String(effect.getTiming().easing ?? 'linear').trim();
-      const named: Record<string, number[]> = {
-        linear: [0, 0, 1, 1],
-        ease: [0.25, 0.1, 0.25, 1],
-        'ease-in': [0.42, 0, 1, 1],
-        'ease-out': [0, 0, 0.58, 1],
-        'ease-in-out': [0.42, 0, 0.58, 1],
+      const cssName =
+        'transitionProperty' in animation
+          ? (animation as unknown as {transitionProperty: string})
+              .transitionProperty
+          : 'animationName' in animation
+            ? (animation as unknown as {animationName: string}).animationName
+            : null;
+      return {
+        index,
+        kind: animation.constructor.name,
+        name: cssName,
+        target: describe((effect?.target as Element | null) ?? null),
+        durationMs: Number(timing?.duration ?? 0),
+        delayMs: Number(timing?.delay ?? 0),
+        curveEndMs: curveEnd(animation),
+        easing: String(effect?.getTiming().easing ?? 'linear'),
+        keyframes: (effect?.getKeyframes() ?? []).map(
+          (k): Record<string, unknown> => ({...k}),
+        ),
+        heldAtMs:
+          animation.currentTime == null ? null : Number(animation.currentTime),
+        offsetMs: offsets[index],
       };
-      const match = /^cubic-bezier\(([^)]+)\)$/.exec(easing);
-      const points =
-        named[easing] ?? (match ? match[1].split(',').map(Number) : null);
-      if (
-        points == null ||
-        points.length !== 4 ||
-        !points.every(Number.isFinite) ||
-        points[1] < 0 ||
-        points[1] > 1 ||
-        points[3] < 0 ||
-        points[3] > 1
-      ) {
-        return delay + active;
-      }
-      const [x1, y1, x2, y2] = points;
-      const bezier = (u: number, p1: number, p2: number) =>
-        3 * (1 - u) * (1 - u) * u * p1 + 3 * (1 - u) * u * u * p2 + u * u * u;
-      let lo = 0;
-      let hi = 1;
-      for (let i = 0; i < 60; i += 1) {
-        const mid = (lo + hi) / 2;
-        if (bezier(mid, y1, y2) < offset) {
-          lo = mid;
-        } else {
-          hi = mid;
-        }
-      }
-      return delay + bezier((lo + hi) / 2, x1, x2) * active;
-    };
-    // The hold, installed with the curve end it reads: one round trip
-    // installs both, so a hold sent from the test costs no extra one.
-    w.__harnessHold = (root: Element | null, skip?: ReadonlySet<Animation>) => {
-      const curveEnd = (
-        window as unknown as {__harnessCurveEnd: (a: Animation) => number}
-      ).__harnessCurveEnd;
-      const describe = (node: Element | null) =>
-        node == null
-          ? null
-          : node.tagName.toLowerCase() +
-            (node.id ? `#${node.id}` : '') +
-            (node.classList.length
-              ? `.${[...node.classList].slice(0, 2).join('.')}`
-              : '');
-      const now = Number(document.timeline.currentTime ?? performance.now());
-      const all = document.getAnimations().filter(animation => {
-        const target =
-          (animation.effect as KeyframeEffect | null)?.target ?? null;
-        return (
-          animation.playState === 'running' &&
-          animation.timeline instanceof DocumentTimeline &&
-          !(skip?.has(animation) ?? false) &&
-          (root == null ||
-            (target != null && (root === target || root.contains(target))))
-        );
-      });
-      // Seeking and sampling run a curve forward: an animation running
-      // backward (`reverse()`, a negative playback rate) cannot be held and
-      // read, so it is refused rather than misread.
-      const backward = all.find(animation => animation.playbackRate < 0);
-      if (backward != null) {
-        throw new Error(
-          `holdAnimations: ${describe((backward.effect as KeyframeEffect | null)?.target ?? null) ?? 'an animation'} runs backward (reverse() or a negative playback rate); hold and sample a forward run instead`,
-        );
-      }
-      // Each animation's start on the document timeline, read before the pause
-      // clears it. A pending play has no start time yet: it starts now, as far
-      // back as its current time reaches through its playback rate (at rate 2,
-      // a run covers its curve in half the timeline), as seeking reads it.
-      const starts = all.map(animation =>
-        animation.startTime != null
-          ? Number(animation.startTime)
-          : now -
-            Number(animation.currentTime ?? 0) / (animation.playbackRate || 1),
-      );
-      const held = all.map(animation => {
-        animation.pause();
-        // `pause()` only schedules the pause: the engine takes the hold time at
-        // its next frame, a frame past where this read it. Setting the current
-        // time completes a pending pause at once, here.
-        // eslint-disable-next-line no-self-assign
-        animation.currentTime = animation.currentTime;
-        return animation;
-      });
-      // A later hold adds to the held set: what an earlier one held stays held
-      // (it is paused, so it is not taken again above) until released.
-      const w = window as unknown as {
-        __harnessHeld?: Animation[];
-        __harnessHeldStarts?: number[];
-        __harnessHeldOrigin?: number;
-      };
-      w.__harnessHeld = [...(w.__harnessHeld ?? []), ...held];
-      w.__harnessHeldStarts = [...(w.__harnessHeldStarts ?? []), ...starts];
-      // Times count from the origin the first hold set (its earliest start)
-      // until the release: a later hold, even of an animation that started
-      // earlier (its offset is then negative), and dropping one never move it,
-      // so every offsetMs already returned stays true.
-      const origin = Number.isFinite(w.__harnessHeldOrigin ?? Number.NaN)
-        ? (w.__harnessHeldOrigin as number)
-        : Math.min(...starts);
-      w.__harnessHeldOrigin = origin;
-      const offsets = starts.map(start => start - origin);
-      return held.map((animation, index) => {
-        const effect = animation.effect as KeyframeEffect | null;
-        const timing = effect?.getComputedTiming();
-        const cssName =
-          'transitionProperty' in animation
-            ? (animation as unknown as {transitionProperty: string})
-                .transitionProperty
-            : 'animationName' in animation
-              ? (animation as unknown as {animationName: string}).animationName
-              : null;
-        return {
-          index,
-          kind: animation.constructor.name,
-          name: cssName,
-          target: describe((effect?.target as Element | null) ?? null),
-          durationMs: Number(timing?.duration ?? 0),
-          delayMs: Number(timing?.delay ?? 0),
-          curveEndMs: curveEnd(animation),
-          easing: String(effect?.getTiming().easing ?? 'linear'),
-          keyframes: (effect?.getKeyframes() ?? []).map(
-            (k): Record<string, unknown> => ({...k}),
-          ),
-          heldAtMs:
-            animation.currentTime == null
-              ? null
-              : Number(animation.currentTime),
-          offsetMs: offsets[index],
-        };
-      });
-    };
-  });
+    });
+  };
 }
 
 export interface HeldAnimation {

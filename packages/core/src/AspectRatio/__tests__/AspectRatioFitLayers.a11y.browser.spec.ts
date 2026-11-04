@@ -12,7 +12,7 @@
 
 import * as fs from 'node:fs';
 import {fileURLToPath} from 'node:url';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -43,10 +43,6 @@ const TAILWIND_SETUPS = [
 const IMAGE =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'/%3E";
 
-// The local stand-in for the story's remote photos.
-const PHOTO =
-  "<svg xmlns='http://www.w3.org/2000/svg' width='400' height='400'/>";
-
 type Fit = 'cover' | 'contain';
 
 let storybook: StaticServer;
@@ -66,11 +62,6 @@ test.afterAll(async () => {
  * local source and any extra class.
  */
 async function captureStory(page: Page, fit: Fit, mediaClass: string) {
-  // The story loads its photos from picsum.photos. A slow response holds the
-  // load event that `page.setContent` waits for, so a local image answers them.
-  await page.route('**://picsum.photos/**', async route =>
-    route.fulfill({contentType: 'image/svg+xml', body: PHOTO}),
-  );
   await page.goto(
     `${storybook.origin}/iframe.html?id=core-aspectratio--fit-modes&viewMode=story`,
   );

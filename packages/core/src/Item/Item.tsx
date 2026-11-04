@@ -50,6 +50,7 @@ import {
 import type {BaseProps} from '../BaseProps';
 import {isRenderable} from '../utils/isRenderable';
 import {mergeProps} from '../utils/mergeProps';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {useFocusAcrossSwap} from '../utils/useFocusAcrossSwap';
 import {ItemDescriptionContext} from './ItemDescriptionContext';
 import {ItemMarkerColumnsContext} from './ItemMarkerColumnsContext';
@@ -627,11 +628,12 @@ export function Item({
   const containerRef = useRef<HTMLElement | null>(null);
   // Only onClick is needed: onMouseUp handles middle-click href navigation,
   // which delegation mode never has (href is ignored here).
-  const {onClick: delegatedOnClick} = useClickableContainer({
-    containerRef,
-    interactiveRef: interactiveRef ?? undefined,
-    disabled: isDisabled,
-  });
+  const {onClick: delegatedOnClick, onPointerDown: delegatedOnPointerDown} =
+    useClickableContainer({
+      containerRef,
+      interactiveRef: interactiveRef ?? undefined,
+      disabled: isDisabled,
+    });
 
   useDevWarning(
     'Item',
@@ -896,6 +898,14 @@ export function Item({
       {...restProps}
       {...swipeHandlers}
       {...linkRootProps}
+      {...(isDelegate
+        ? {
+            onPointerDown: chainEventHandlers(
+              restProps.onPointerDown,
+              delegatedOnPointerDown,
+            ),
+          }
+        : null)}
       aria-selected={(allowsAriaSelected && isSelected) || undefined}
       // aria-selected is invalid on roles that don't permit it (listitem, a
       // bare div, etc.). For those, convey selection via aria-current — valid

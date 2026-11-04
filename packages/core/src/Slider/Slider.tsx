@@ -48,6 +48,7 @@ import {VisuallyHidden} from '../VisuallyHidden';
 import type {InputStatus} from '../Field/types';
 import {mergeProps, rtlStyles} from '../utils';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {joinAriaIDs} from '../utils/inputAria';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {isRtlElement} from '../hooks/isRtlElement';
@@ -742,15 +743,20 @@ export function Slider({ref, ...props}: SliderProps) {
 
   const isHorizontal = orientation === 'horizontal';
 
-  // Consumer handlers run after the component's own and always run: the
-  // component's handlers call preventDefault() for their own reasons, which
-  // must not silence a consumer.
+  // Consumer handlers run after the component's own, so the component's
+  // preventDefault() calls never silence an enabled slider's consumer.
   const after =
     <E,>(own: (event: E) => void, consumer?: (event: E) => void) =>
     (event: E) => {
       own(event);
       consumer?.(event);
     };
+
+  // A disabled slider keeps its tab stop, so the browser still sends its events.
+  // Drop the caller's handlers, but keep focus and blur.
+  const callerProps = withholdCallerHandlers(rest, isDisabled);
+  const callerHandler = <E,>(handler?: (event: E) => void) =>
+    isDisabled ? undefined : handler;
   const generatedId = useId();
   const id = idProp ?? generatedId;
   const labelID = useId();
@@ -1475,7 +1481,7 @@ export function Slider({ref, ...props}: SliderProps) {
     ) => (
       <div
         key={thumbIndex}
-        {...(!isRange ? rest : undefined)}
+        {...(!isRange ? callerProps : undefined)}
         ref={trigger != null ? trigger.ref : !isRange ? ref : undefined}
         id={!isRange ? id : undefined}
         role="slider"
@@ -1504,7 +1510,7 @@ export function Slider({ref, ...props}: SliderProps) {
         }
         onKeyDown={after(
           e => handleKeyDown(thumbIndex, e),
-          !isRange ? onKeyDown : undefined,
+          !isRange ? callerHandler(onKeyDown) : undefined,
         )}
         onFocus={after(
           e => handleThumbFocus(thumbIndex, e),
@@ -1634,10 +1640,10 @@ export function Slider({ref, ...props}: SliderProps) {
         <div
           // In range mode the role="group" control takes the base props; a
           // single slider gives them to its role="slider" thumb.
-          {...(isRange ? rest : undefined)}
+          {...(isRange ? callerProps : undefined)}
           {...(isRange
             ? {
-                onKeyDown,
+                onKeyDown: callerHandler(onKeyDown),
                 onFocus,
                 onBlur,
                 'aria-describedby': ariaDescribedByProp,
@@ -1655,10 +1661,13 @@ export function Slider({ref, ...props}: SliderProps) {
                 'aria-labelledby': joinAriaIDs(labelID, ariaLabelledByProp),
               }
             : undefined)}
-          onPointerDown={after(handlePointerDown, onPointerDown)}
-          onPointerMove={after(handlePointerMove, onPointerMove)}
-          onPointerUp={after(handlePointerUp, onPointerUp)}
-          onPointerCancel={after(handlePointerUp, onPointerCancel)}
+          onPointerDown={after(handlePointerDown, callerHandler(onPointerDown))}
+          onPointerMove={after(handlePointerMove, callerHandler(onPointerMove))}
+          onPointerUp={after(handlePointerUp, callerHandler(onPointerUp))}
+          onPointerCancel={after(
+            handlePointerUp,
+            callerHandler(onPointerCancel),
+          )}
           {...mergeProps(
             themeProps('slider-control', {
               orientation,

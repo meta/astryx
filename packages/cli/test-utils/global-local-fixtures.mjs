@@ -118,16 +118,27 @@ export function packedCli() {
 }
 
 /**
- * Hard-link every file under `from` into `to`, copying across devices.
+ * Hard-link every file under `from` into `to`, copying across devices. Each
+ * folder named in `shared`, by its path below `from`, is one link to that
+ * folder instead.
  * @param {string} from
  * @param {string} to
+ * @param {ReadonlySet<string>} [shared]
+ * @param {string} [rel] - Path of `from` below the top folder.
  */
-function linkTree(from, to) {
+function linkTree(from, to, shared = new Set(), rel = '') {
   fs.mkdirSync(to, {recursive: true});
   for (const entry of fs.readdirSync(from, {withFileTypes: true})) {
     const src = path.join(from, entry.name);
     const dst = path.join(to, entry.name);
-    if (entry.isDirectory()) linkTree(src, dst);
+    const entryRel = rel ? `${rel}/${entry.name}` : entry.name;
+    if (entry.isDirectory() && shared.has(entryRel)) {
+      fs.symlinkSync(
+        src,
+        dst,
+        process.platform === 'win32' ? 'junction' : 'dir',
+      );
+    } else if (entry.isDirectory()) linkTree(src, dst, shared, entryRel);
     else {
       try {
         fs.linkSync(src, dst);
@@ -150,7 +161,10 @@ function linkTree(from, to) {
  */
 export function placeCli(dir, version, options = {}) {
   const from = packedCli();
-  linkTree(from, dir);
+  // Templates and icons are two thirds of the packed files, and no module
+  // there imports the CLI's code or packages. One link to each serves every
+  // copy. Each copy keeps its own code and its other assets.
+  linkTree(from, dir, new Set(['assets/templates', 'assets/icons']));
   if (!options.coreStep) {
     fs.rmSync(path.join(dir, 'foundation', 'release', 'core-worker.mjs'), {
       force: true,

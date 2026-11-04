@@ -189,6 +189,63 @@ describe('lockDragSelection (spec:AST-094 FR41)', () => {
     expect(refuses(field)).toBe(false);
     release({isCancel: true});
   });
+
+  it("keeps a selection that the lift's own handlers made after the release", async () => {
+    const get = mount(
+      '<p id="text">Text the page selected</p><p id="made">Text a handler selects</p><div id="pan">Pan</div>',
+    );
+    const selection = select(get('text'));
+    const release = lockDragSelection(
+      [get('pan')],
+      window,
+      selectionRangesOf(window),
+    );
+    release();
+    // The lifted action's own click selects other text.
+    select(get('made'));
+    release.keepLiftSelection();
+    document.dispatchEvent(new Event('selectionchange'));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(selection.toString()).toBe('Text a handler selects');
+  });
+
+  it("keeps a selection that the lift's handlers make in a microtask queued before the keep, as a click's render does", async () => {
+    const get = mount(
+      '<p id="text">Text the page selected</p><p id="made">Text a layout effect selects</p><div id="pan">Pan</div>',
+    );
+    const selection = select(get('text'));
+    const release = lockDragSelection(
+      [get('pan')],
+      window,
+      selectionRangesOf(window),
+    );
+    release();
+    // The click queued its render, whose layout effect selects other text.
+    queueMicrotask(() => select(get('made')));
+    release.keepLiftSelection();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    document.dispatchEvent(new Event('selectionchange'));
+    expect(selection.toString()).toBe('Text a layout effect selects');
+  });
+
+  it("puts the press's selection back when the lift's handlers changed nothing", async () => {
+    const get = mount(
+      '<p id="text">Text the page selected</p><div id="pan">Pan</div>',
+    );
+    const selection = select(get('text'));
+    const release = lockDragSelection(
+      [get('pan')],
+      window,
+      selectionRangesOf(window),
+    );
+    release();
+    release.keepLiftSelection();
+    // The press's own mouseup collapses the selection after the handlers ran.
+    selection.collapseToStart();
+    document.dispatchEvent(new Event('selectionchange'));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(selection.toString()).toBe('Text the page selected');
+  });
 });
 
 describe('startsOnSelectableText (spec:AST-094 FR41)', () => {

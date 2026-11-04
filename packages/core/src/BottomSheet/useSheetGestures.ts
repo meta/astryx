@@ -354,6 +354,8 @@ export interface UseSheetGesturesOptions {
   snapHeights?: () => number[];
   /** Notified when the settled visible detent height (px) changes. */
   onSnap?: (heightPx: number) => void;
+  /** Called once a drag first moves the sheet off its detent. */
+  onTravelStart?: () => void;
   /**
    * Called with the scrim opacity the sheet should show (1 = fully visible,
    * 0 = hidden) as the drag moves and on settle. Full while the sheet is at
@@ -508,6 +510,7 @@ export function useSheetGestures({
   onDismiss,
   snapHeights,
   onSnap,
+  onTravelStart,
   onScrimOpacity,
   hasFixedHeight = false,
 }: UseSheetGesturesOptions): UseSheetGesturesResult {
@@ -654,6 +657,8 @@ export function useSheetGestures({
   // stops by the time the re-anchor read it.
   const snapHeightsRef = useRef(snapHeights);
   snapHeightsRef.current = snapHeights;
+  const onTravelStartRef = useRef(onTravelStart);
+  onTravelStartRef.current = onTravelStart;
 
   const onDismissRef = useRef(onDismiss);
   const canDismissRef = useRef(canDismiss);
@@ -699,6 +704,8 @@ export function useSheetGestures({
   const sheetElRef = useRef<HTMLElement | null>(null);
   const bodyNodeRef = useRef<HTMLElement | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
+  // Syncs the browser layout with the transform reset, then ends the
+  // scroll-area reconcile one frame later.
   useLayoutEffect(() => {
     if (!isScrollAreaReconciling) {
       return;
@@ -758,6 +765,7 @@ export function useSheetGestures({
     },
     [recordSheetHeight],
   );
+  // Releases the height observer on unmount.
   useEffect(() => () => observerRef.current?.disconnect(), []);
 
   // Reset to the tallest detent each time the sheet re-opens.
@@ -909,6 +917,8 @@ export function useSheetGestures({
     resolveDetents,
   ]);
 
+  // Syncs window resize and orientation listeners with `isOpen`. Each event
+  // anchors the sheet to its settled detent again.
   useEffect(() => {
     if (!isOpen || typeof window === 'undefined') {
       return;
@@ -1026,6 +1036,8 @@ export function useSheetGestures({
     [prepareScrollAreaSettle, resolveDetents],
   );
 
+  // Syncs window blur and document visibilitychange listeners with `isOpen`. A
+  // blur or a hidden page cancels a drag.
   useEffect(() => {
     // Only an open sheet can be dragged; a closed one listens to nothing.
     if (!isOpen) {
@@ -1305,6 +1317,7 @@ export function useSheetGestures({
       if (!state.hasTraveled && next !== state.baseOffset) {
         state.hasTraveled = true;
         setIsTraveling(true);
+        onTravelStartRef.current?.();
       }
 
       // Mirror the scrim to the live drag: full at/above the mid detent,
