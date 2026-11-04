@@ -4,7 +4,8 @@
 
 /**
  * @file PickerWheel.tsx
- * @input Wheel's props (wheelOptions.ts): options, value and change callback
+ * @input Wheel's props (wheelOptions.ts): options, value and change callback;
+ *   optionally a ref for programmatic turns
  * @output PickerWheel: one picker column that moves like UIPickerView
  * @position Internal component; the Wheel under a finger (Wheel.tsx picks it)
  *
@@ -15,7 +16,14 @@
  * DateInputTouch.test.tsx, DateInput.doc.mjs and TimeInput.doc.mjs.
  */
 
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {scrollTypeOf} from '../gestures/GestureHost';
 import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
@@ -50,6 +58,7 @@ import {
   type WheelLayout,
 } from './wheelPhysics';
 import {
+  canSpinTo,
   endIndex,
   nearestEnabledIndex,
   steppedIndex,
@@ -197,6 +206,7 @@ export function PickerWheel({
   value,
   onChange,
   isActive = true,
+  ref,
 }: WheelProps) {
   const columnRef = useRef<HTMLDivElement | null>(null);
   const rowsRef = useRef<HTMLDivElement | null>(null);
@@ -584,8 +594,31 @@ export function PickerWheel({
     isPointerKept: true,
   });
 
-  // A key commits the row at `position` at once and turns the wheel there
-  // from `offset`.
+  // A spin turns only onto an enabled row (canSpinTo). So its arrival commits
+  // that row, and nothing turns on past it. It reports the row it was asked
+  // for, as the scrolling column does.
+  const spinTo = useCallback(
+    async (index: number): Promise<boolean> =>
+      new Promise(resolve => {
+        if (!canSpinTo(latestRef.current.options, index)) {
+          resolve(false);
+          return;
+        }
+        const offset = motion.offset();
+        move(turnCurve(columnRef.current, offset, index * ROW_HEIGHT), {
+          onEnd: (outcome, end) => {
+            if (outcome === 'arrived') {
+              arrive(end);
+            }
+            resolve(outcome === 'arrived');
+          },
+        });
+      }),
+    [motion, move, arrive],
+  );
+
+  useImperativeHandle(ref, () => ({spinTo}), [spinTo]);
+
   const turnToPosition = useCallback(
     (position: number, offset: number) => {
       const current = latestRef.current;

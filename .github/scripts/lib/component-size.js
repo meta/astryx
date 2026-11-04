@@ -8,8 +8,9 @@
  *   (the minified entry chunk and the chunks it imports statically, package
  *   imports included) and the gzip size of the stylesheet rules referenced by
  *   the modules it can load, import() targets included
- * @position Shared by analyze-pr.js for the PR size report. Sizes are gzip at
- *   the default compression level (spec:AST-080 FR8,
+ * @position Shared by analyze-pr.js for the PR size report, and by the
+ *   English-fallback import-cost test, which bundles several imports in one
+ *   build. Sizes are gzip at the default compression level (spec:AST-080 FR8,
  *   architecture:component-style-authoring INV6).
  */
 
@@ -47,6 +48,15 @@ function packageStylesheetPath(packageDir) {
   return null;
 }
 
+// The import under measurement reaches esbuild as stdin, read as if it were
+// this file beside the entry. The outputs stay in memory under this directory
+// of the working directory, so nothing is written. esbuild reads the listing
+// of every directory above each file it bundles. On a shared machine the
+// system temp directory can hold hundreds of thousands of entries. A file
+// written there for the import cost more than the build itself.
+const ENTRY_SOURCE = '__astryx-size-entry__.mjs';
+const OUT_DIR = '.astryx-size-out';
+
 // Bundle what importing `entry` loads eagerly: the entry chunk and the chunks
 // it imports statically, including modules reached through package imports
 // (other Astryx packages, React, StyleX, third-party libraries), minified for
@@ -55,72 +65,42 @@ function packageStylesheetPath(packageDir) {
 // bundled.
 function bundleImportWithInputs(entry, exportName) {
   if (!entry || !fs.existsSync(entry)) return null;
-  const os = require('node:os');
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-size-'));
   try {
-    const esbuild = require('esbuild');
     const workingDir = process.cwd();
-    const entryFile = path.join(scratch, 'entry.mjs');
-    fs.writeFileSync(
-      entryFile,
-      exportName
-        ? `export {${exportName}} from ${JSON.stringify(path.resolve(entry))};`
-        : `export * from ${JSON.stringify(path.resolve(entry))};`,
+    const resolveDir = path.dirname(path.resolve(entry));
+    const entryFile = path.join(resolveDir, ENTRY_SOURCE);
+    const {outputs, byPath} = splitBuild(
+      {
+        stdin: {
+          contents: exportName
+            ? `export {${exportName}} from ${JSON.stringify(path.resolve(entry))};`
+            : `export * from ${JSON.stringify(path.resolve(entry))};`,
+          resolveDir,
+          sourcefile: ENTRY_SOURCE,
+          loader: 'js',
+        },
+      },
+      workingDir,
     );
-    // Code splitting keeps modules reached only through import() in their own
-    // chunks, so the figure counts what the import loads eagerly: the entry
-    // chunk and every chunk it imports statically.
-    const outdir = path.join(scratch, 'out');
-    const result = esbuild.buildSync({
-      absWorkingDir: workingDir,
-      entryPoints: [entryFile],
-      outdir,
-      metafile: true,
-      bundle: true,
-      splitting: true,
-      minify: true,
-      format: 'esm',
-      platform: 'browser',
-      define: {'process.env.NODE_ENV': '"production"'},
-      loader: {'.css': 'empty'},
-      write: false,
-      logLevel: 'silent',
-    });
-    const outputs = result.metafile.outputs;
-    const byPath = new Map(
-      result.outputFiles.map(file => [
-        path.relative(workingDir, file.path),
-        file.text,
-      ]),
-    );
+    // A chunk an import() reaches is an entry point too: the import's own
+    // chunk is the one whose entry is the import.
+    const entryPoint = path
+      .relative(workingDir, entryFile)
+      .split(path.sep)
+      .join('/');
     const entryOutput = Object.keys(outputs).find(
-      key => outputs[key].entryPoint !== undefined,
+      key => outputs[key].entryPoint === entryPoint,
     );
-    // Chunks the entry reaches, following only the given import kinds.
-    function reachable(kinds) {
-      const seen = new Set();
-      const pending = [entryOutput];
-      while (pending.length > 0) {
-        const key = pending.pop();
-        if (key === undefined || seen.has(key)) continue;
-        seen.add(key);
-        for (const imported of outputs[key].imports || []) {
-          if (kinds.includes(imported.kind) && !imported.external) {
-            pending.push(imported.path);
-          }
-        }
-      }
-      return seen;
-    }
-    let text = '';
-    for (const key of reachable(['import-statement'])) {
-      text += byPath.get(key) ?? '';
-    }
+    if (entryOutput === undefined) return null;
+    const text = eagerText(outputs, byPath, entryOutput);
     // CSS ships in the package stylesheet whether its module loads eagerly or
     // through import(), so class names come from every chunk the entry can
     // load, dynamic imports included; chunks no kept code imports are ignored.
     const inputs = new Set();
-    for (const key of reachable(['import-statement', 'dynamic-import'])) {
+    for (const key of reachableChunks(outputs, entryOutput, [
+      'import-statement',
+      'dynamic-import',
+    ])) {
       for (const input of Object.keys(outputs[key].inputs || {})) {
         inputs.add(path.resolve(workingDir, input));
       }
@@ -129,8 +109,112 @@ function bundleImportWithInputs(entry, exportName) {
     return {text, inputs: [...inputs]};
   } catch {
     return null;
-  } finally {
-    fs.rmSync(scratch, {recursive: true, force: true});
+  }
+}
+
+// One build as the size report measures an import: minified ESM for the
+// browser, without CSS, its outputs in memory. Code splitting keeps modules
+// reached only through import() in their own chunks. So an entry chunk and
+// the chunks it imports statically are what the import loads eagerly.
+// `input` names the entries: `{stdin}` or `{entryPoints}`. Returns the
+// metafile outputs and each output's text by its relative path.
+function splitBuild(input, workingDir) {
+  const esbuild = require('esbuild');
+  const result = esbuild.buildSync({
+    absWorkingDir: workingDir,
+    ...input,
+    outdir: path.join(workingDir, OUT_DIR),
+    metafile: true,
+    bundle: true,
+    splitting: true,
+    minify: true,
+    format: 'esm',
+    platform: 'browser',
+    define: {'process.env.NODE_ENV': '"production"'},
+    loader: {'.css': 'empty'},
+    write: false,
+    logLevel: 'silent',
+  });
+  const byPath = new Map(
+    result.outputFiles.map(file => [
+      path.relative(workingDir, file.path),
+      file.text,
+    ]),
+  );
+  return {outputs: result.metafile.outputs, byPath};
+}
+
+// Chunks an entry chunk reaches in a build's metafile outputs, following only
+// the given import kinds.
+function reachableChunks(outputs, entryOutput, kinds) {
+  const seen = new Set();
+  const pending = [entryOutput];
+  while (pending.length > 0) {
+    const key = pending.pop();
+    if (key === undefined || seen.has(key)) continue;
+    seen.add(key);
+    for (const imported of outputs[key].imports || []) {
+      if (kinds.includes(imported.kind) && !imported.external) {
+        pending.push(imported.path);
+      }
+    }
+  }
+  return seen;
+}
+
+// What importing an entry loads eagerly: its chunk and every chunk it imports
+// statically, concatenated.
+function eagerText(outputs, byPath, entryOutput) {
+  let text = '';
+  for (const key of reachableChunks(outputs, entryOutput, [
+    'import-statement',
+  ])) {
+    text += byPath.get(key) ?? '';
+  }
+  return text;
+}
+
+// Each entry's output key in a build over the entries, by the path the caller
+// passed. esbuild names an entry by its path from the working directory, with
+// links resolved, so the match compares real paths.
+function entryOutputKeys(entries, outputs, workingDir) {
+  const byRealPath = new Map();
+  for (const [key, output] of Object.entries(outputs)) {
+    if (output.entryPoint === undefined) continue;
+    byRealPath.set(
+      fs.realpathSync(path.resolve(workingDir, output.entryPoint)),
+      key,
+    );
+  }
+  const keys = new Map();
+  for (const entry of entries) {
+    const key = byRealPath.get(fs.realpathSync(entry));
+    if (key !== undefined) keys.set(entry, key);
+  }
+  return keys;
+}
+
+// What importing each entry loads eagerly, from one build over every entry.
+// The build parses the modules the entries share once, not once per entry. A
+// file the entries share goes into one chunk with every part that any entry
+// keeps. Each entry is an entry point, so its default export counts too. So
+// each text holds at least what the entry's own build loads eagerly. That
+// bounds what an import keeps from above, and it is not the import's size.
+// Returns a Map of each bundled entry path to its text, or null when the
+// entries cannot be bundled together.
+function bundleImportsByEntry(entries) {
+  const existing = entries.filter(entry => fs.existsSync(entry));
+  if (existing.length === 0) return new Map();
+  try {
+    const workingDir = process.cwd();
+    const {outputs, byPath} = splitBuild({entryPoints: existing}, workingDir);
+    const texts = new Map();
+    for (const [entry, key] of entryOutputKeys(existing, outputs, workingDir)) {
+      texts.set(entry, eagerText(outputs, byPath, key));
+    }
+    return texts;
+  } catch {
+    return null;
   }
 }
 
@@ -140,15 +224,13 @@ function bundleImportWithInputs(entry, exportName) {
 function bundleInputsByEntry(entries) {
   const existing = entries.filter(entry => fs.existsSync(entry));
   if (existing.length === 0) return new Map();
-  const os = require('node:os');
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-reach-'));
   try {
     const esbuild = require('esbuild');
     const workingDir = process.cwd();
     const result = esbuild.buildSync({
       absWorkingDir: workingDir,
       entryPoints: existing,
-      outdir: scratch,
+      outdir: path.join(workingDir, OUT_DIR),
       metafile: true,
       bundle: true,
       format: 'esm',
@@ -158,26 +240,23 @@ function bundleInputsByEntry(entries) {
       write: false,
       logLevel: 'silent',
     });
-    const reach = new Map();
-    for (const output of Object.values(result.metafile.outputs)) {
-      if (output.entryPoint === undefined) continue;
-      reach.set(
-        fs.realpathSync(path.resolve(workingDir, output.entryPoint)),
-        Object.keys(output.inputs).map(input =>
-          path.resolve(workingDir, input),
-        ),
-      );
-    }
-    // Key by the paths callers passed, which may differ from real paths.
+    const outputs = result.metafile.outputs;
+    const keys = entryOutputKeys(existing, outputs, workingDir);
     const byEntry = new Map();
     for (const entry of existing) {
-      byEntry.set(entry, reach.get(fs.realpathSync(entry)) ?? []);
+      const key = keys.get(entry);
+      byEntry.set(
+        entry,
+        key === undefined
+          ? []
+          : Object.keys(outputs[key].inputs).map(input =>
+              path.resolve(workingDir, input),
+            ),
+      );
     }
     return byEntry;
   } catch {
     return null;
-  } finally {
-    fs.rmSync(scratch, {recursive: true, force: true});
   }
 }
 
@@ -326,5 +405,6 @@ module.exports = {
   classNamesIn,
   rulesForClasses,
   measureComponentImport,
+  bundleImportsByEntry,
   bundleInputsByEntry,
 };
