@@ -921,12 +921,15 @@ export default defineConfig(
         'error',
         {
           paths: [
-            {
-              name: '@playwright/test',
-              message:
-                "Import from '@astryxdesign/a11y-spec/playwright' instead: its `test` keeps every browser context off remote hosts.",
-            },
-          ],
+            '@playwright/test',
+            'playwright/test',
+            'playwright',
+            'playwright-core',
+          ].map(name => ({
+            name,
+            message:
+              "Import from '@astryxdesign/a11y-spec/playwright' instead: its `test` keeps every browser context off remote hosts.",
+          })),
         },
       ],
     },

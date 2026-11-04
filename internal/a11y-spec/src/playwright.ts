@@ -34,7 +34,8 @@ export async function keepRequestsLocal(
 /**
  * Every context starts from `browser.newContext`: the `context` and `page`
  * fixtures, `browser.newPage`, and a spec's own call. So the rule is set at
- * that one point, once per worker.
+ * that one point, once per worker. A browser that the spec launches itself is
+ * a different `Browser`: call `keepRequestsLocal` on each of its contexts.
  */
 function makeContextsHermetic(browser: Browser): void {
   const newContext = browser.newContext.bind(browser);
