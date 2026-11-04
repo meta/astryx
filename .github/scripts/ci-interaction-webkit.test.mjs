@@ -255,6 +255,7 @@ describe('WebKit interaction proof routing', () => {
       'packages/core/src/hooks/useIsomorphicLayoutEffect.ts',
       'packages/core/src/hooks/useAttachment.ts',
       'packages/core/src/utils/sharedResizeObserver.ts',
+      'packages/core/src/utils/scrollView.ts',
       'packages/core/src/hooks/__tests__/usePager.interaction.browser.spec.ts',
       'packages/core/src/hooks/__tests__/pagerBundle.ts',
       'internal/interaction-harness/src/webInput.ts',

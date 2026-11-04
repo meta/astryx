@@ -108,7 +108,13 @@ describe('Lab-only lane (spec:AST-030 FR26)', () => {
 
   it('runs the Node lane as any scoped pull request does, source-reading guards included', () => {
     // A Lab file that broke a guard would turn every later pull request red.
-    for (const s of steps('test-node')) {
+    // The one Lab-only step adds a check; none skips one.
+    const official = step('test-node', 'Lab-only: CLI official-packages check');
+    expect(official.if).toBe(`matrix.shard == 1 && ${LAB_TRUE}`);
+    expect(official.run).toBe(
+      'pnpm exec vitest run scripts/check-cli-official-packages.test.mjs --maxWorkers=1',
+    );
+    for (const s of steps('test-node').filter(s => s !== official)) {
       expect(String(s.if ?? ''), s.name ?? s.uses ?? s.run).not.toContain(
         'lab_only',
       );
@@ -185,7 +191,29 @@ describe('Lab-only lane (spec:AST-030 FR26)', () => {
     expect(all.indexOf(typecheck)).toBeGreaterThan(
       all.findIndex(s => s.name === 'Build packages and Storybook'),
     );
-    for (const s of all.filter(s => s !== typecheck)) {
+    // A Lab-only change that carries a Lab component's routes checks them
+    // against the registry the docsite builds from these packages.
+    const routeLock = step(
+      'build-storybook',
+      'Lab-only: check the ShadCN route lock',
+    );
+    expect(routeLock.if).toBe(
+      `steps.scope.outputs.docsite_only != 'true' && steps.scope.outputs.spec_only != 'true' && steps.scope.outputs.tooling_only != 'true' && ${LAB_TRUE}`,
+    );
+    // Compared with the merge base, not the head's parent commit.
+    expect(routeLock.env.MERGE_BASE).toBe(
+      '${{ steps.merge-base.outputs.sha }}',
+    );
+    expect(routeLock.env.DOCSITE_TARGET).toBe('canary');
+    expect(routeLock.run).toContain(
+      'git diff --quiet "$MERGE_BASE" HEAD -- internal/shadcn-registry/routes.lock.json',
+    );
+    expect(routeLock.run).not.toContain('HEAD^1');
+    expect(routeLock.run).toContain(
+      'node apps/docsite/scripts/generate-data.mjs',
+    );
+    expect(all.indexOf(routeLock)).toBeGreaterThan(all.indexOf(typecheck));
+    for (const s of all.filter(s => s !== typecheck && s !== routeLock)) {
       expect(String(s.if ?? ''), s.name ?? s.uses ?? s.run).not.toContain(
         'lab_only',
       );
