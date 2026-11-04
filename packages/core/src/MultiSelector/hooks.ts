@@ -105,9 +105,7 @@ export function useMultiCombobox({
     setHighlightedCell('option');
   }, []);
 
-  // Type-to-select, shared with Selector and the menus: a repeated letter
-  // walks to the next match, and a single letter searches from the option
-  // after the highlighted one. Closed, a match opens the list on it.
+  // A match on the closed control opens the list on that option.
   const typeahead = useTypeahead({
     getItemLabels: () => selectableItems.map(item => item.label),
     isDisabled: index => selectableItems[index]?.disabled === true,
@@ -142,7 +140,7 @@ export function useMultiCombobox({
   }, [selectableItems]);
 
   const closeAndReset = useCallback(() => {
-    // A pending prefix must not survive the close and poison the next keystroke.
+    // Clear the typed prefix on close. Otherwise the next key extends it.
     resetTypeahead();
     setHighlightedIndex(-1);
     onClose();
@@ -204,9 +202,9 @@ export function useMultiCombobox({
       }
 
       // With hasSearch the query input owns typing, so type-to-select is off.
-      // It runs ahead of the switch so a Space mid-typing extends the query
-      // instead of toggling, as in Selector.
-      if (!hasSearch && typeahead.onKeyDown(e)) {
+      // Space stays the toggle: after a letter jumps to an option, Space picks
+      // it, so Space never extends the typed prefix here.
+      if (!hasSearch && e.key !== ' ' && typeahead.onKeyDown(e)) {
         e.preventDefault();
         return;
       }

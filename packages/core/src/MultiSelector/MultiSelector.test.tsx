@@ -870,6 +870,28 @@ describe('MultiSelector', () => {
     expect(trigger).toHaveAttribute('aria-activedescendant', options[2].id);
   });
 
+  it('Space still toggles the option a typed letter jumped to', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <MultiSelector
+        label="Status"
+        options={['Open', 'Pending', 'Done']}
+        value={[]}
+        onChange={onChange}
+      />,
+    );
+
+    const trigger = screen.getByRole('combobox');
+    await user.click(trigger);
+    const options = screen.getAllByRole('option', h);
+
+    await user.keyboard('p');
+    expect(trigger).toHaveAttribute('aria-activedescendant', options[1].id);
+    await user.keyboard(' ');
+    expect(onChange).toHaveBeenCalledWith(['Pending']);
+  });
+
   it('typeahead opens a closed list on the match', async () => {
     const user = userEvent.setup();
     render(
