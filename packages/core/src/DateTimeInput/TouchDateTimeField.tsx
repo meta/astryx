@@ -640,9 +640,8 @@ export function TouchDateTimeField({
     () => getWeekdayHeaders(locale, weekStartsOn),
     [locale, weekStartsOn],
   );
-  // The day the picker keeps: the selected date's day of its month. The month
-  // and year view names its era from this day in the shown month, the way the
-  // year wheel does, for a month that spans an era change.
+  // The day the picker keeps: the selected date's day of its month. A month
+  // with an era change takes its heading era from this day.
   const keptDay =
     selectedDate == null ? 1 : calendarDayOfMonth(calendar, selectedDate);
   const monthYearLabel = formatCalendarMonthLabel(

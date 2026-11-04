@@ -182,8 +182,8 @@ const EPOCH: PlainDate = {year: 2000, month: 1, day: 1};
 
 function temporalMonthModel(calendar: CalendarSystem): MonthModel {
   const epoch = calendarMonthOf(calendar, EPOCH);
-  // Temporal arithmetic is slow next to a render, and the same months are
-  // asked for on every render of the panes and the wheels.
+  // Temporal arithmetic is slow next to a render. The panes and the wheels ask
+  // for the same months on every render.
   const months = new Map<number, CalendarMonth>();
   const monthAt = (index: number) => {
     let month = months.get(index);
