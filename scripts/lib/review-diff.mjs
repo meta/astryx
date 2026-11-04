@@ -4,10 +4,11 @@
  * @file Read the shipped source lines a change adds.
  * @input A unified diff (`git diff` output).
  * @output Each added line of shipped source with its file and new line number,
- *   every changed path, every added line of each path, and the count of added
- *   and removed lines of each path.
- * @position Shared by `pnpm specs:for --diff` and
- *   `scripts/review-global-baselines.mjs`, which match these lines against the
+ *   every added line of any file with its file and new line number, every
+ *   changed path, every added line of each path, and the count of added and
+ *   removed lines of each path.
+ * @position Shared by `pnpm specs:for --diff`, the public text check in Lint
+ *   and `scripts/review-global-baselines.mjs`, which match these lines against the
  *   `concerns` the owning records declare (`architecture:knowledge-contracts/INV20`).
  */
 
@@ -27,12 +28,14 @@ export function isShippedSource(file) {
 
 /**
  * Parse a unified diff into its changed paths and added lines. `addedLines`
- * keeps shipped source only; `addedByFile` keeps every added line of each path;
+ * keeps shipped source only; `everyAddedLine` keeps every added line of any
+ * file, with its new line number; `addedByFile` keeps every added line of each path;
  * `changedCountByFile` counts the added and removed lines of each path.
  */
 export function readDiff(diffText) {
   const files = [];
   const addedLines = [];
+  const everyAddedLine = [];
   const addedByFile = {};
   const changedCountByFile = {};
   let file = null;
@@ -59,6 +62,7 @@ export function readDiff(diffText) {
     if (!inHunk) continue;
     if (line.startsWith('+')) {
       addedByFile[file].push(line.slice(1));
+      everyAddedLine.push({file, line: newLine, text: line.slice(1)});
       changedCountByFile[file] += 1;
       if (isShippedSource(file)) {
         addedLines.push({file, line: newLine, text: line.slice(1)});
@@ -70,5 +74,5 @@ export function readDiff(diffText) {
       newLine += 1;
     }
   }
-  return {files, addedLines, addedByFile, changedCountByFile};
+  return {files, addedLines, everyAddedLine, addedByFile, changedCountByFile};
 }

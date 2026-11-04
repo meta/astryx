@@ -55,6 +55,25 @@ describe('readDiff', () => {
     expect(addedByFile).toEqual({'docs/a.md': ['added']});
   });
 
+  it('keeps every added line of any file with its new line number', () => {
+    const diff = [
+      'diff --git a/docs/a.md b/docs/a.md',
+      '--- a/docs/a.md',
+      '+++ b/docs/a.md',
+      '@@ -3,0 +4,2 @@',
+      '+one',
+      '+++ two',
+      '@@ -9 +11 @@',
+      '-old',
+      '+new',
+    ].join('\n');
+    expect(readDiff(diff).everyAddedLine).toEqual([
+      {file: 'docs/a.md', line: 4, text: 'one'},
+      {file: 'docs/a.md', line: 5, text: '++ two'},
+      {file: 'docs/a.md', line: 11, text: 'new'},
+    ]);
+  });
+
   it('reads added shipped-source lines with their new line numbers', () => {
     const {files, addedLines} = readDiff(fixture('pr-8381.diff'));
     expect(files).toEqual([

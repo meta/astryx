@@ -63,6 +63,24 @@ describe('findKinds', () => {
       expect(findKinds(text, digests), text).toEqual([]);
   });
 
+  it('finds a hashed name inside a hyphenated or camel-case word', () => {
+    const capital = FAKE_NAME[0].toUpperCase() + FAKE_NAME.slice(1);
+    for (const text of [
+      `${FAKE_NAME}-cli`,
+      `tools-${FAKE_NAME}`,
+      `use${capital}Session`,
+      `${FAKE_NAME.toUpperCase()}_DIR`,
+      `a/${FAKE_NAME}/b`,
+    ])
+      expect(findKinds(text, digests), text).toEqual(['an internal name']);
+  });
+
+  it('passes an upper-case hex colour that looks like an id', () => {
+    // Assembled so this file holds no complete id shape.
+    const colour = ['#D', '4485150'].join('');
+    expect(findKinds(`color: ${colour};`, digests)).toEqual([]);
+  });
+
   it('reads words and two-label hosts as tokens', () => {
     expect([...tokens('A b-c a.b.example.com')]).toEqual(
       expect.arrayContaining(['a', 'b-c', 'example.com']),
@@ -94,10 +112,29 @@ describe('addedLines', () => {
       {file: 'x.md', line: 11, text: 'new'},
     ]);
   });
+
+  it('reads an added line that starts with ++ as content, not a file header', () => {
+    const diff = [
+      'diff --git a/x.md b/x.md',
+      '--- a/x.md',
+      '+++ b/x.md',
+      '@@ -1,0 +2,2 @@',
+      `+++ see ${changeId}`,
+      '+next',
+    ].join('\n');
+    expect(addedLines(diff)).toEqual([
+      {file: 'x.md', line: 2, text: `++ see ${changeId}`},
+      {file: 'x.md', line: 3, text: 'next'},
+    ]);
+    expect(findKinds(addedLines(diff)[0].text, digests)).toEqual([
+      'an internal change or task id',
+    ]);
+  });
 });
 
 describe('check', () => {
-  const diff = (file, text) => `+++ b/${file}\n@@ -0,0 +1 @@\n+${text}\n`;
+  const diff = (file, text) =>
+    `diff --git a/${file} b/${file}\n--- /dev/null\n+++ b/${file}\n@@ -0,0 +1 @@\n+${text}\n`;
 
   it('reports where each finding is and its kind, never the text', () => {
     const findings = check({
@@ -152,6 +189,7 @@ describe('the script on a real repository', () => {
       }).trim();
     git('init', '-q', '-b', 'main');
     const commit = (file, text, message) => {
+      fs.mkdirSync(path.dirname(path.join(dir, file)), {recursive: true});
       fs.writeFileSync(path.join(dir, file), text);
       git('add', file);
       git('commit', '-q', '-m', message);
@@ -159,20 +197,25 @@ describe('the script on a real repository', () => {
     };
     const hashes = path.join(dir, 'hashes.json');
     fs.writeFileSync(hashes, JSON.stringify([...digests]));
-    const run = (base, head, env = {}) =>
-      spawnSync(
-        process.execPath,
-        [SCRIPT, '--base', base, '--head', head, '--hashes', hashes],
-        {cwd: dir, encoding: 'utf8', env: {...process.env, ...env}},
-      );
-    return {commit, run, hashes};
+    const run = (base, head, pr = null) => {
+      const args = [SCRIPT, '--base', base, '--head', head, '--hashes', hashes];
+      if (pr != null) {
+        const file = path.join(dir, 'pull-request.json');
+        fs.writeFileSync(file, JSON.stringify(pr));
+        args.push('--pr-json', file);
+      }
+      return spawnSync(process.execPath, args, {cwd: dir, encoding: 'utf8'});
+    };
+    return {commit, run, hashes, git, dir};
   };
 
   it('fails on a finding and prints no matched text', () => {
     const {commit, run} = repo();
     const base = commit('a.md', 'a\n', 'base');
     const head = commit('b.md', `uses ${FAKE_NAME}\n`, `add b (${changeId})`);
-    const result = run(base, head, {PR_BODY: `see ${FAKE_HOST}`});
+    const result = run(base, head, {
+      pull_request: {title: 'A clean title', body: `see ${FAKE_HOST}`},
+    });
     expect(result.status).toBe(1);
     expect(result.stdout).toContain(
       'message has an internal change or task id',
@@ -187,6 +230,37 @@ describe('the script on a real repository', () => {
       expect(result.stdout).not.toContain(value);
       expect(result.stderr).not.toContain(value);
     }
+  });
+
+  it('reads a path marked binary as text', () => {
+    const {commit, run} = repo();
+    commit('.gitattributes', '*.dat binary\n', 'mark dat files binary');
+    const base = commit('a.md', 'a\n', 'base');
+    const head = commit('notes.dat', `uses ${FAKE_NAME}\n`, 'add notes');
+    const result = run(base, head);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('file=notes.dat,line=1,');
+  });
+
+  it('passes a moved file whose text was already on the base branch', () => {
+    const {commit, run, git, dir} = repo();
+    commit('old/notes.md', `from ${changeId} long ago\n`, 'old notes');
+    const base = commit('a.md', 'a\n', 'base');
+    fs.mkdirSync(path.join(dir, 'new'));
+    git('mv', 'old/notes.md', 'new/notes.md');
+    git('commit', '-q', '-m', 'move the notes');
+    expect(run(base, git('rev-parse', 'HEAD')).status).toBe(0);
+  });
+
+  it('reads the title and description from the REST API shape too', () => {
+    const {commit, run} = repo();
+    const base = commit('a.md', 'a\n', 'base');
+    const head = commit('b.md', 'b\n', 'add b');
+    const result = run(base, head, {title: `fix ${taskId}`, body: null});
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(
+      'pull request title has an internal change or task id',
+    );
   });
 
   it('passes clean commits', () => {
@@ -244,14 +318,27 @@ describe('Lint runs the check (spec:AST-030 FR27)', () => {
     );
   });
 
-  it("runs the base branch's copy of the check and digests", () => {
+  it("runs the base branch's copy of the check, its diff reader and digests", () => {
+    for (const file of [
+      '.github/scripts/check-public-text.mjs',
+      'scripts/lib/review-diff.mjs',
+      '.github/public-text-hashes.json',
+    ])
+      expect(step.run).toContain(`git show "origin/$BASE_REF:${file}"`);
     expect(step.run).toContain(
-      'git show "origin/$BASE_REF:.github/scripts/check-public-text.mjs"',
-    );
-    expect(step.run).toContain(
-      'git show "origin/$BASE_REF:.github/public-text-hashes.json"',
+      'node "$CHECK_DIR/.github/scripts/check-public-text.mjs"',
     );
     expect(step.run).not.toMatch(/node \.github\/scripts\/check-public-text/);
+  });
+
+  it('skips only when the base branch has no check, never for missing digests', () => {
+    const exits = step.run.match(/exit 0/g) ?? [];
+    expect(exits).toHaveLength(1);
+    const skip = step.run.slice(0, step.run.indexOf('exit 0'));
+    expect(skip).toContain('check-public-text.mjs');
+    expect(skip).not.toContain('public-text-hashes.json');
+    // A missing digest file is removed, so the check itself fails on it.
+    expect(step.run).toContain('|| rm -f "$CHECK_DIR/public-text-hashes.json"');
   });
 
   it('checks the pull request head from its merge base, and fails without one', () => {
@@ -261,10 +348,14 @@ describe('Lint runs the check (spec:AST-030 FR27)', () => {
     expect(step.run).toMatch(/merge base was not found[^\n]*\n\s*exit 1/);
   });
 
-  it('reads the title and description from the environment and never prints them', () => {
-    expect(step.env.PR_TITLE).toBe('${{ github.event.pull_request.title }}');
-    expect(step.env.PR_BODY).toBe('${{ github.event.pull_request.body }}');
-    expect(step.run).not.toContain('github.event.pull_request');
-    expect(step.run).not.toMatch(/echo[^\n]*\$PR_(TITLE|BODY)/);
+  it('reads the current title and description through the API, and never prints them', () => {
+    expect(step.run).toContain(
+      'gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" > "$CHECK_DIR/pull-request.json"',
+    );
+    expect(step.run).toContain('--pr-json "$CHECK_DIR/pull-request.json"');
+    // A step's env is printed in the log, so the text never goes through it.
+    expect(JSON.stringify(step.env)).not.toMatch(/title|body/);
+    expect(step.run).not.toMatch(/cat [^\n]*pull-request\.json/);
+    expect(workflow.jobs.lint.permissions['pull-requests']).toBe('read');
   });
 });

@@ -3,8 +3,9 @@
 
 /**
  * @file check-public-text.mjs
- * @input `--base <sha> --head <sha> --hashes <file>`, run in a full clone. The
- *   PR_TITLE and PR_BODY environment variables, when set.
+ * @input `--base <sha> --head <sha> --hashes <file> [--pr-json <file>]`, run
+ *   in a clone that holds the range. `--pr-json` is the pull request as the
+ *   REST API or the event payload gives it, for its title and description.
  * @output One error line for each finding: where it is and what kind it is,
  *   never the text it matched. Exit 0 with no finding, 1 with a finding, 2 when
  *   the range cannot be read.
@@ -20,6 +21,9 @@
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import fs from 'node:fs';
+import {pathToFileURL} from 'node:url';
+
+import {readDiff} from '../../scripts/lib/review-diff.mjs';
 
 export const SALT = 'astryx-public-text:v1:';
 
@@ -28,13 +32,17 @@ export const POLICY =
 
 export const SHAPES = Object.freeze([
   {kind: 'an internal issue id', pattern: /\bkt-[a-z0-9]{4}\b/i},
-  {kind: 'an internal change or task id', pattern: /\b[DT][0-9]{6,}\b/},
+  // Not after `#`: an upper-case hex colour after `#` is no id.
+  {kind: 'an internal change or task id', pattern: /(?<!#)\b[DT][0-9]{6,}\b/},
   {kind: 'an internal paste id', pattern: /\bP[0-9]{9,}\b/},
   {kind: 'an internal host', pattern: /\binternal[a-z]*\.(?:com|net)\b/i},
 ]);
 
-const WORD = /[a-z0-9][a-z0-9-]*/g;
+const WORD = /[A-Za-z0-9][A-Za-z0-9-]*/g;
 const HOST = /\b(?:[a-z0-9-]+\.)+[a-z][a-z0-9-]*\b/g;
+// Between a lower-case letter or digit and an upper-case one, and before the
+// last capital of a run that starts a word: `useNameSession`, `HTTPServer`.
+const CAMEL_PART = /(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/;
 
 /** The salted digest of one lowercase token. */
 export function digest(token) {
@@ -43,11 +51,22 @@ export function digest(token) {
     .digest('hex');
 }
 
-/** The tokens of `text` that the hash check reads: words and hosts. */
+/**
+ * The tokens of `text` that the hash check reads: each word, each part of a
+ * hyphenated or camel-case word, and each host's last two labels.
+ */
 export function tokens(text) {
-  const lower = text.toLowerCase();
-  const found = new Set(lower.match(WORD) ?? []);
-  for (const host of lower.match(HOST) ?? []) {
+  const found = new Set();
+  for (const word of text.match(WORD) ?? []) {
+    found.add(word.toLowerCase());
+    for (const part of word.split('-')) {
+      if (part === '') continue;
+      found.add(part.toLowerCase());
+      for (const piece of part.split(CAMEL_PART))
+        found.add(piece.toLowerCase());
+    }
+  }
+  for (const host of text.toLowerCase().match(HOST) ?? []) {
     found.add(host.split('.').slice(-2).join('.'));
   }
   return found;
@@ -73,33 +92,9 @@ export function findKinds(text, digests) {
   return kinds;
 }
 
-/**
- * The added lines of a unified diff with no context lines, as
- * `{file, line, text}`.
- *
- * @param {string} diff
- */
+/** The added lines of a unified diff, as `{file, line, text}`. */
 export function addedLines(diff) {
-  const added = [];
-  let file = null;
-  let line = 0;
-  for (const raw of diff.split('\n')) {
-    if (raw.startsWith('+++ ')) {
-      file = raw === '+++ /dev/null' ? null : raw.replace(/^\+\+\+ b\//, '');
-      continue;
-    }
-    const hunk = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(raw);
-    if (hunk) {
-      line = Number(hunk[1]);
-      continue;
-    }
-    if (file == null) continue;
-    if (raw.startsWith('+')) {
-      added.push({file, line, text: raw.slice(1)});
-      line += 1;
-    }
-  }
-  return added;
+  return readDiff(diff).everyAddedLine;
 }
 
 /**
@@ -163,35 +158,55 @@ export function readRange(base, head) {
       return {sha, message};
     });
   if (commits.length === 0) throw new Error('the range has no commits');
+  // `--text` and `--no-textconv`: a path marked binary in `.gitattributes`
+  // shows its added lines too. Renames are found, so a moved file shows only
+  // the lines its move changed.
   const diff = git([
     'diff',
+    '--text',
+    '--no-textconv',
     '--unified=0',
     '--no-color',
     '--no-ext-diff',
-    '--no-renames',
+    '--find-renames',
     base,
     head,
   ]);
   return {commits, diff};
 }
 
+/**
+ * The title and description from the pull request JSON: the REST API's pull
+ * request, or an event payload that holds one under `pull_request`.
+ */
+export function readPullRequest(text) {
+  const json = JSON.parse(text);
+  const pr = json.pull_request ?? json;
+  if (typeof pr.title !== 'string')
+    throw new Error('the pull request JSON has no title');
+  return {title: pr.title, body: typeof pr.body === 'string' ? pr.body : ''};
+}
+
 function main() {
   const args = readArgs(process.argv.slice(2));
   let digests;
   let range;
+  let pr = {};
   try {
     digests = new Set(JSON.parse(fs.readFileSync(args.hashes, 'utf8')));
     range = readRange(args.base, args.head);
+    if (args['pr-json'] != null)
+      pr = readPullRequest(fs.readFileSync(args['pr-json'], 'utf8'));
   } catch (error) {
     console.log(
-      `::error title=Public text check::The check could not read the pull request's commits (${error.message.split('\n')[0]}). It does not pass a range it cannot read.`,
+      `::error title=Public text check::The check could not read the pull request's commits, the digests or the description (${error.message.split('\n')[0]}). It does not pass what it cannot read.`,
     );
     process.exit(2);
   }
   const findings = check({
     ...range,
-    title: process.env.PR_TITLE,
-    body: process.env.PR_BODY,
+    title: pr.title,
+    body: pr.body,
     digests,
     // The digests are hex, and the lockfile's integrity hashes are base64:
     // neither is text a person writes.
@@ -214,4 +229,5 @@ function main() {
   );
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)
+  main();

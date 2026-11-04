@@ -540,7 +540,9 @@ they are separately named.
   release-check cover Lab as before (DEC-21).
 - **FR27 — Lint fails a pull request whose public text carries an internal
   reference.** Public text is each commit message and added line from the merge
-  base to the pull request head, and the pull request's title and description.
+  base to the pull request head, and the pull request's title and description
+  as they read when the check runs. Generated text that no person writes, the
+  lockfile and the digest list, is not read.
   The required Lint job runs the base branch's copy of the check, so a pull
   request cannot change the check that judges it. The check matches generic
   shapes of internal identifiers and hosts, and salted digests of internal

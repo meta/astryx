@@ -23,6 +23,8 @@ jobs:
     runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
+      # The public text check reads the current title and description.
+      pull-requests: read
 
     steps:
       - name: Require a branch in this repository or the ci:run label
@@ -68,22 +70,31 @@ jobs:
 
       # Public text carries no internal identifier, host or name: each commit
       # message and added line from the merge base to the head, and the title
-      # and description (spec:AST-030 FR27). The base branch's copy of the
-      # check runs, so a pull request cannot change its own check.
+      # and description as they read when the check runs, so a re-run reads an
+      # edit (spec:AST-030 FR27). The base branch's copy of the check runs, so
+      # a pull request cannot change its own check.
       - name: Check public text
         if: github.event_name == 'pull_request'
         env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_BODY: ${{ github.event.pull_request.body }}
           BASE_REF: ${{ github.base_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -u
           CHECK_DIR="$RUNNER_TEMP/public-text"
-          mkdir -p "$CHECK_DIR"
-          if ! git show "origin/$BASE_REF:.github/scripts/check-public-text.mjs" > "$CHECK_DIR/check-public-text.mjs" 2>/dev/null \
-            || ! git show "origin/$BASE_REF:.github/public-text-hashes.json" > "$CHECK_DIR/public-text-hashes.json" 2>/dev/null; then
+          mkdir -p "$CHECK_DIR/.github/scripts" "$CHECK_DIR/scripts/lib"
+          if ! git show "origin/$BASE_REF:.github/scripts/check-public-text.mjs" > "$CHECK_DIR/.github/scripts/check-public-text.mjs" 2>/dev/null; then
             echo "::notice::The base branch has no public text check yet. It runs once the check is on the base branch."
             exit 0
+          fi
+          # Without the shared diff reader or the digests, the check fails.
+          git show "origin/$BASE_REF:scripts/lib/review-diff.mjs" > "$CHECK_DIR/scripts/lib/review-diff.mjs" 2>/dev/null \
+            || rm -f "$CHECK_DIR/scripts/lib/review-diff.mjs"
+          git show "origin/$BASE_REF:.github/public-text-hashes.json" > "$CHECK_DIR/public-text-hashes.json" 2>/dev/null \
+            || rm -f "$CHECK_DIR/public-text-hashes.json"
+          if ! gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" > "$CHECK_DIR/pull-request.json" 2>/dev/null; then
+            echo "::notice::The current title and description could not be read, so the check reads them as of this run's event."
+            cp "$GITHUB_EVENT_PATH" "$CHECK_DIR/pull-request.json"
           fi
           HEAD_SHA=$(git rev-parse HEAD^2)
           BASE_TIP=$(git rev-parse HEAD^1)
@@ -96,9 +107,10 @@ jobs:
             echo "::error title=Public text check::The merge base was not found, so the commits cannot be checked."
             exit 1
           fi
-          node "$CHECK_DIR/check-public-text.mjs" \
+          node "$CHECK_DIR/.github/scripts/check-public-text.mjs" \
             --base "$MERGE_BASE" --head "$HEAD_SHA" \
-            --hashes "$CHECK_DIR/public-text-hashes.json"
+            --hashes "$CHECK_DIR/public-text-hashes.json" \
+            --pr-json "$CHECK_DIR/pull-request.json"
 
       # A change to a workflow, a composite action or this config runs
       # actionlint over the workflows, with shellcheck on their run: scripts,
