@@ -1,5 +1,9 @@
 # @xds/theme-gothic
 
+# 0.7.7
+
+---
+
 # 0.7.6
 
 #### Fixes

@@ -1110,10 +1110,8 @@
     "spec:AST-086"
   ],
   "packages/core/src/TimeInput/TouchTimeField.tsx": [
-    "DEC-3",
     "FR2",
     "FR8",
-    "spec:AST-043",
     "spec:AST-086"
   ],
   "packages/core/src/Timestamp/Timestamp.tsx": [

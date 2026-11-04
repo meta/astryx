@@ -3,7 +3,7 @@
 /**
  * @file PowerSearchBottomSheet.test.tsx
  * @input Uses vitest, @testing-library/react, PowerSearch with
- *   `experimental.presentation`, and the sheet helpers
+ *   `presentation`, and the sheet helpers
  * @output Unit tests for the touch presentation (`component:PowerSearch`
  *   FR10–FR21, AR4–AR6): presentation resolution, the trigger, the Filters
  *   sheet, Add filter, the operator step, each value type (list values
@@ -38,6 +38,7 @@ import React, {createRef, StrictMode, useState} from 'react';
 import {act} from '@testing-library/react';
 import {PowerSearch, type PowerSearchProps} from './PowerSearch';
 import type {
+  PowerSearchChangeType,
   PowerSearchConfig,
   PowerSearchEditorProps,
   PowerSearchFilter,
@@ -228,8 +229,6 @@ const peopleSource: SearchSource = {
 const REORDERED: Overrides = {
   en: {
     '@astryx.powersearch.sheet.labelValue': '{value} ({label})',
-    '@astryx.powersearch.sheet.filtersClearedWithCount':
-      '{resultCount} — all filters removed',
   },
 };
 
@@ -295,6 +294,17 @@ const valueTypesConfig: PowerSearchConfig = {
       ],
     },
     {
+      key: 'updated',
+      label: 'Updated',
+      operators: [
+        {
+          key: 'after',
+          label: 'is after',
+          value: {type: 'date_absolute', isDateOnly: false},
+        },
+      ],
+    },
+    {
       key: 'age',
       label: 'Age',
       operators: [
@@ -348,9 +358,7 @@ const valueTypesConfig: PowerSearchConfig = {
   ],
 };
 
-type Presentation = NonNullable<
-  NonNullable<PowerSearchProps['experimental']>['presentation']
->;
+type Presentation = NonNullable<PowerSearchProps['presentation']>;
 
 function setup(
   props: Partial<PowerSearchProps> & {presentation?: Presentation} = {},
@@ -362,7 +370,7 @@ function setup(
       config={config}
       filters={[]}
       onChange={onChange}
-      experimental={{presentation}}
+      presentation={presentation}
       {...rest}
     />,
   );
@@ -484,6 +492,12 @@ function addFilter(): void {
   fireEvent.click(matches[matches.length - 1]);
 }
 
+/** Done in the current sheet: commits the draft and closes the flow. */
+function done(): void {
+  const matches = within(sheet()).getAllByRole('button', {name: 'Done'});
+  fireEvent.click(matches[matches.length - 1]);
+}
+
 /** The Clear all confirmation, open above the Filters sheet. */
 function clearConfirmation(): HTMLElement {
   return screen.getByRole('alertdialog', {name: 'Clear all filters?'});
@@ -542,6 +556,22 @@ beforeAll(async () => {
   }
 }, 20000);
 
+// A list value's Tokenizer sheet is loaded with React.lazy too. Open one up
+// front, so every later Tokenizer sheet renders synchronously inside its press.
+beforeAll(async () => {
+  stubEnvironment();
+  try {
+    setup({config: valueTypesConfig});
+    openAddFlow();
+    tapRow('ID');
+    fireEvent.click(within(sheet()).getByRole('button', {name: 'ID'}));
+    await screen.findByRole('dialog', {name: 'ID'}, {timeout: 15000});
+  } finally {
+    cleanup();
+    vi.unstubAllGlobals();
+  }
+}, 20000);
+
 beforeEach(() => {
   __resetLiveRegionsForTest();
   stubEnvironment();
@@ -556,23 +586,25 @@ afterEach(() => {
 // =============================================================================
 
 describe('PowerSearch presentation resolution (FR10)', () => {
-  it('keeps the tokenizer field when experimental is omitted', () => {
-    render(<PowerSearch config={config} filters={[]} onChange={vi.fn()} />);
+  const plain = (props: Partial<PowerSearchProps> = {}) => (
+    <PowerSearch config={config} filters={[]} onChange={vi.fn()} {...props} />
+  );
+
+  it('keeps the tokenizer field by default on a screen that is not compact coarse-pointer', () => {
+    render(plain());
     expect(screen.getByRole('combobox')).toBeInTheDocument();
     expect(document.querySelector(SHEET_TRIGGER)).toBeNull();
   });
 
-  it('keeps the tokenizer field for an empty experimental object and for popover', () => {
-    const {unmount} = render(
-      <PowerSearch
-        config={config}
-        filters={[]}
-        onChange={vi.fn()}
-        experimental={{}}
-      />,
-    );
-    expect(screen.getByRole('combobox')).toBeInTheDocument();
-    unmount();
+  it('defaults to adaptive: the sheet trigger on a compact coarse-pointer screen', () => {
+    stubMatchMedia(query => query === COMPACT_TOUCH_PRESENTATION_QUERY);
+    render(plain());
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(document.querySelector(SHEET_TRIGGER)).not.toBeNull();
+  });
+
+  it('keeps the tokenizer field with presentation="popover" on a compact coarse-pointer screen', () => {
+    stubMatchMedia(query => query === COMPACT_TOUCH_PRESENTATION_QUERY);
     setup({presentation: 'popover'});
     expect(screen.getByRole('combobox')).toBeInTheDocument();
     expect(document.querySelector(SHEET_TRIGGER)).toBeNull();
@@ -703,7 +735,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
         config={config}
         filters={[openFilter]}
         onChange={vi.fn()}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
         isDisabled
       />,
     );
@@ -717,7 +749,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
         config={config}
         filters={[openFilter]}
         onChange={vi.fn()}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     expect(isSheetOpen()).toBe(false);
@@ -830,7 +862,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
           config={config}
           filters={[]}
           onChange={vi.fn()}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
           resultCount={12}
         />
       </StrictMode>,
@@ -846,7 +878,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
           config={config}
           filters={[]}
           onChange={vi.fn()}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
           resultCount={1}
         />
       </StrictMode>,
@@ -868,7 +900,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
           config={config}
           filters={[openFilter]}
           onChange={vi.fn()}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
           resultCount={3}
         />,
       );
@@ -884,7 +916,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
           config={config}
           filters={[openFilter]}
           onChange={vi.fn()}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
           resultCount={1}
         />,
       );
@@ -949,7 +981,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
               filters={filters}
               onChange={onChange}
               resultCount={resultCount}
-              experimental={{presentation}}
+              presentation={presentation}
             />
           </Dialog>
         );
@@ -1028,7 +1060,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
       const filtersSheet = screen.getByRole('dialog', {name: 'Filters'});
       await waitFor(() =>
         expect(modalLiveRegion(filtersSheet)).toHaveTextContent(
-          'All filters removed. 240 results',
+          'All filters removed',
         ),
       );
       expect(modalLiveRegion(host)?.textContent ?? '').not.toContain(
@@ -1172,7 +1204,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
           onChange={() => {}}
           hasAutoFocus
           onFocus={onFocus}
-          experimental={{presentation: 'adaptive'}}
+          presentation="adaptive"
         />
       </>,
     );
@@ -1313,7 +1345,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
             // The count follows the filters, so Clear all changes it in the
             // same commit as the removal.
             resultCount={filters.length === 0 ? 240 : 12}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         );
       }
@@ -1338,14 +1370,18 @@ describe('PowerSearch sheet trigger (FR11)', () => {
       expect(modalLiveRegion(filtersDialog)?.textContent ?? '').not.toMatch(
         /All filters removed|240 results/,
       );
-      // Confirmed, the outcome and the count that changed with it are one
-      // announcement in the still-open Filters sheet.
+      // Confirmed, the outcome is announced in the still-open Filters sheet.
+      // The count follows the applied filters, which change on Done, so it
+      // is not part of the message.
       confirmClearAll();
       expect(isSheetOpen()).toBe(true);
       await waitFor(() =>
         expect(modalLiveRegion(filtersDialog)).toHaveTextContent(
-          'All filters removed. 240 results',
+          'All filters removed',
         ),
+      );
+      expect(modalLiveRegion(filtersDialog)?.textContent ?? '').not.toContain(
+        '240 results',
       );
       expect(sharedLiveRegion()?.textContent ?? '').toBe('');
     } finally {
@@ -1367,7 +1403,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
             filters={filters}
             onChange={next => setFilters(next)}
             resultCount={resultCount}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         );
       }
@@ -1421,8 +1457,12 @@ describe('PowerSearch Filters sheet (FR12)', () => {
     const {onChange} = setup({filters: [authorFilter, openFilter]});
     openSheet();
     fireEvent.click(removeButton('Status'));
-    expect(onChange).toHaveBeenCalledWith([authorFilter], 'remove', 1);
+    // The draft drops the row; the field hears about it on Done.
+    expect(onChange).not.toHaveBeenCalled();
     expect(sheet()).toHaveAttribute('aria-label', 'Filters');
+    expect(within(sheet()).queryByText('Status is Open')).toBeNull();
+    done();
+    expect(onChange).toHaveBeenCalledWith([authorFilter], 'remove', 1);
   });
 
   it('removes a one-tap filter with a tap on its row or its remove action, not a checked indicator (FR12)', () => {
@@ -1431,19 +1471,31 @@ describe('PowerSearch Filters sheet (FR12)', () => {
       operator: 'isTrue',
       value: {type: 'empty'},
     };
-    const {onChange} = setup({filters: [unassigned]});
+    const {onChange, unmount} = setup({filters: [unassigned]});
     openSheet();
     const remove = removeButton('Unassigned');
     expect(remove.querySelector('svg')).toBeTruthy();
     expect(within(sheet()).queryByRole('checkbox')).toBeNull();
     tapRow('Unassigned is true');
-    expect(onChange).toHaveBeenLastCalledWith([], 'remove', 0);
+    // The draft drops the row at once; the field hears about it on Done.
+    expect(onChange).not.toHaveBeenCalled();
     expect(sheet()).toHaveAttribute('aria-label', 'Filters');
-    fireEvent.click(remove);
-    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(within(sheet()).queryByText('Unassigned is true')).toBeNull();
+    done();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenLastCalledWith([], 'remove', 0);
+    unmount();
+    // The trailing remove action removes the same way.
+    const second = setup({filters: [unassigned]});
+    openSheet();
+    fireEvent.click(removeButton('Unassigned'));
+    expect(second.onChange).not.toHaveBeenCalled();
+    done();
+    expect(second.onChange).toHaveBeenCalledTimes(1);
+    expect(second.onChange).toHaveBeenLastCalledWith([], 'remove', 0);
   });
 
-  it('shows one centered Add filter and no header action, Done or Clear all when no filter is applied (FR12)', () => {
+  it('shows one centered Add filter and no header action or Clear all when no filter is applied; Done stays while the emptied draft has removals to apply (FR12)', () => {
     function EmptyStateHarness() {
       const [filters, setFilters] = useState<ReadonlyArray<PowerSearchFilter>>([
         openFilter,
@@ -1453,7 +1505,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
           config={config}
           filters={filters}
           onChange={next => setFilters(next)}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -1461,16 +1513,18 @@ describe('PowerSearch Filters sheet (FR12)', () => {
     openSheet();
     fireEvent.click(removeButton('Status'));
     expect(
-      within(sheet()).getByRole('heading', {name: 'No filters applied'}),
+      within(sheet()).getByRole('heading', {name: 'No filters'}),
     ).toBeTruthy();
     const addActions = within(sheet()).getAllByRole('button', {
       name: 'Add filter',
     });
     expect(addActions).toHaveLength(1);
     expect(addActions[0]).toHaveAttribute('data-variant', 'primary');
-    // After the last removal, focus lands on that one action.
+    // After the last removal, focus lands on that one action. Done stays,
+    // since the emptied draft still has removals to apply; Clear all goes
+    // with the last removable filter.
     expect(addActions[0]).toHaveFocus();
-    expect(within(sheet()).queryByRole('button', {name: 'Done'})).toBeNull();
+    expect(within(sheet()).getByRole('button', {name: 'Done'})).toBeTruthy();
     expect(
       within(sheet()).queryByRole('button', {name: 'Clear all'}),
     ).toBeNull();
@@ -1556,7 +1610,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
     expect(trigger()).toHaveFocus();
   });
 
-  it('clears editable filters behind a confirmation, keeps Filters open, and focuses Add filter (FR12, FR16)', () => {
+  it('clears editable filters behind a confirmation, keeps Filters open, and focuses Add filter (FR12, FR16)', async () => {
     const onChange = vi.fn();
     function Harness() {
       const [filters, setFilters] = useState<ReadonlyArray<PowerSearchFilter>>([
@@ -1571,7 +1625,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
             onChange(next, type, index);
             setFilters(next);
           }}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -1590,18 +1644,27 @@ describe('PowerSearch Filters sheet (FR12)', () => {
       within(confirmation).getByRole('button', {name: 'Keep filters'}),
     ).toHaveFocus();
     confirmClearAll();
-    expect(onChange).toHaveBeenCalledWith([], 'remove', 0);
+    // The clear empties the draft; the field keeps its filters until Done.
+    expect(onChange).not.toHaveBeenCalled();
     expect(
       screen.queryByRole('alertdialog', {name: 'Clear all filters?'}),
     ).toBeNull();
     expect(isSheetOpen()).toBe(true);
+    // The emptied draft's heading does not call the filters removed: they
+    // are applied until Done.
     expect(
-      within(sheet()).getByRole('heading', {name: 'No filters applied'}),
+      within(sheet()).getByRole('heading', {name: 'No filters'}),
     ).toBeTruthy();
+    expect(
+      within(sheet()).queryByRole('heading', {name: 'No filters applied'}),
+    ).toBeNull();
     expect(
       within(sheet()).getByRole('button', {name: 'Add filter'}),
     ).toHaveFocus();
-    expect(within(field()).queryByText('Open')).toBeNull();
+    expect(within(field()).getByText('Open')).toBeTruthy();
+    done();
+    expect(onChange).toHaveBeenCalledWith([], 'remove', 0);
+    await waitFor(() => expect(within(field()).queryByText('Open')).toBeNull());
   });
 
   it('keeps read-only filters on Clear all, reporting the first removed index (FR12)', () => {
@@ -1610,8 +1673,10 @@ describe('PowerSearch Filters sheet (FR12)', () => {
     openSheet();
     fireEvent.click(within(sheet()).getByRole('button', {name: 'Clear all'}));
     confirmClearAll();
-    expect(onChange).toHaveBeenCalledWith([pinned], 'remove', 1);
+    expect(onChange).not.toHaveBeenCalled();
     expect(isSheetOpen()).toBe(true);
+    done();
+    expect(onChange).toHaveBeenCalledWith([pinned], 'remove', 1);
   });
 
   it('returns to Filters unchanged when the confirmation is dismissed or kept (FR12)', () => {
@@ -1664,7 +1729,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
         config={config}
         filters={[openFilter]}
         onChange={vi.fn()}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
         isDisabled
       />,
     );
@@ -1689,13 +1754,13 @@ describe('PowerSearch Filters sheet (FR12)', () => {
             config={config}
             filters={filters}
             isDisabled={isDisabled}
-            // The commit that queues focus on Add filter also disables the
-            // field, which closes the flow before that focus lands.
+            // Done's report disables the field, which closes the flow
+            // wherever it was.
             onChange={next => {
               setFilters(next);
               setIsDisabled(true);
             }}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         </>
       );
@@ -1706,6 +1771,8 @@ describe('PowerSearch Filters sheet (FR12)', () => {
     tapRow('Status');
     tapRow('Closed');
     addFilter();
+    expect(isSheetOpen()).toBe(true);
+    done();
     expect(isSheetOpen()).toBe(false);
     // Reopened before the closing sheets finish their exit, so the flow is
     // still mounted.
@@ -1779,7 +1846,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
               setFilters(next);
             }}
             isReadOnly={readOnly}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         );
       }
@@ -1807,13 +1874,16 @@ describe('PowerSearch Filters sheet (FR12)', () => {
       // The value step finishes its exit before the removal.
       settleSheets();
       fireEvent.click(removeButton('Mixed'));
-      expect(onChange).toHaveBeenCalledWith([openFilter], 'remove', 1);
       const filtersDialog = sheet();
       await waitFor(() =>
         expect(modalLiveRegion(filtersDialog)).toHaveTextContent(
           'Removed Mixed all of 1 filter',
         ),
       );
+      expect(onChange).not.toHaveBeenCalled();
+      expect(onChange).not.toHaveBeenCalled();
+      done();
+      expect(onChange).toHaveBeenCalledWith([openFilter], 'remove', 1);
       unmount();
       // Read-only field: a plain row.
       render(<Harness readOnly />);
@@ -1864,7 +1934,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
           config={config}
           filters={[openFilter]}
           onChange={vi.fn()}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       </div>,
     );
@@ -1935,6 +2005,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
     );
     expect(primary()).toBeEnabled();
     fireEvent.click(primary());
+    done();
     expect(onChange).toHaveBeenCalledWith(
       [
         {
@@ -2042,7 +2113,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
             onChange(next, type, index);
             setFilters(next);
           }}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -2063,16 +2134,17 @@ describe('PowerSearch Filters sheet (FR12)', () => {
     // the first group's.
     fireEvent.click(rows()[1]);
     expect(subField()).toEqual(['Author']);
-    // Saving writes this group, unchanged, at its own index.
+    // Apply writes this group, unchanged, into the draft at its own index.
     fireEvent.click(within(sheet()).getByRole('button', {name: 'Apply'}));
-    expect(onChange).toHaveBeenCalledWith(
-      [statusGroup, authorGroup],
-      'edit',
-      1,
-    );
+    expect(onChange).not.toHaveBeenCalled();
     // And reopening the first group again shows the first group's content.
     fireEvent.click(rows()[0]);
     expect(subField()).toEqual(['Status']);
+    fireEvent.click(within(sheet()).getByRole('button', {name: 'Cancel'}));
+    settleSheets();
+    // A draft equal to the filters at open reports nothing on Done.
+    done();
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it('mounts nothing of the flow at rest: the trigger alone before a press and again after the exit (INV7)', async () => {
@@ -2094,7 +2166,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
     expect(screen.queryByRole('heading', {name: 'Filters'})).toBeNull();
   });
 
-  it('returns focus to the nearest row when Apply or Cancel finds the edited filter gone after a controlled update (FR15, FR16)', () => {
+  it('keeps the edited filter in the open draft when a controlled update removes it behind the flow; Apply and Cancel return to its row (FR15, FR16)', () => {
     const third: PowerSearchFilter = {
       field: 'status',
       operator: 'is',
@@ -2106,11 +2178,12 @@ describe('PowerSearch Filters sheet (FR12)', () => {
           config={config}
           filters={filters}
           onChange={() => {}}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
-    // Apply: the edited (middle) filter is removed while its step is open.
+    // An outside removal of the edited (middle) filter does not reach the
+    // open draft: Apply and Cancel find the filter where the step left it.
     const {rerender, unmount} = render(
       <Harness filters={[openFilter, authorFilter, third]} />,
     );
@@ -2120,18 +2193,16 @@ describe('PowerSearch Filters sheet (FR12)', () => {
     expect(
       within(sheet()).getByRole('heading', {name: 'Filters'}),
     ).toBeTruthy();
-    // Nothing was written, and focus is on the row that followed it.
     expect(
-      within(sheet()).getByRole('button', {name: 'Status is Closed'}),
+      within(sheet()).getByRole('button', {name: 'Author is Ada'}),
     ).toHaveFocus();
     unmount();
-    // Cancel, with no row left: Add filter.
     const second = render(<Harness filters={[authorFilter]} />);
     openEditFlow('Author is Ada');
     second.rerender(<Harness filters={[]} />);
     fireEvent.click(within(sheet()).getByRole('button', {name: 'Cancel'}));
     expect(
-      within(sheet()).getByRole('button', {name: 'Add filter'}),
+      within(sheet()).getByRole('button', {name: 'Author is Ada'}),
     ).toHaveFocus();
   });
 
@@ -2142,7 +2213,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
           config={cfg}
           filters={[]}
           onChange={() => {}}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -2191,7 +2262,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
     ).toHaveFocus();
   });
 
-  describe('a controlled update that removes the focused control (FR16)', () => {
+  describe('a draft edit that removes the focused control (FR16)', () => {
     const third: PowerSearchFilter = {
       field: 'status',
       operator: 'is',
@@ -2212,31 +2283,34 @@ describe('PowerSearch Filters sheet (FR12)', () => {
           filters={filters}
           onChange={() => {}}
           hasClear={hasClear}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
 
     it('moves focus from a removed Filters row to the nearest remaining row by index', () => {
-      const {rerender} = render(
-        <Harness filters={[openFilter, authorFilter, third]} />,
-      );
+      render(<Harness filters={[openFilter, authorFilter, third]} />);
       openSheet();
-      within(sheet()).getByRole('button', {name: 'Author is Ada'}).focus();
-      // The focused (middle) row is removed by the parent.
-      rerender(<Harness filters={[openFilter, third]} />);
-      expect(
-        within(sheet()).getByRole('button', {name: 'Status is Closed'}),
-      ).toHaveFocus();
+      // The focused (middle) row is removed by its own trailing action.
+      const authorRemove = removeButton('Author');
+      authorRemove.focus();
+      fireEvent.click(authorRemove);
+      // The next row's own remove action, so a run of removals stays on
+      // the same control.
+      const removes = () =>
+        within(sheet()).getAllByRole('button', {name: 'Remove Status filter'});
+      expect(removes()).toHaveLength(2);
+      expect(removes()[1]).toHaveFocus();
       // The focused (now last) row is removed: the new last row takes focus.
-      within(sheet()).getByRole('button', {name: 'Status is Closed'}).focus();
-      rerender(<Harness filters={[openFilter]} />);
+      fireEvent.click(removes()[1]);
+      expect(removes()).toHaveLength(1);
+      expect(removes()[0]).toHaveFocus();
       expect(
         within(sheet()).getByRole('button', {name: 'Status is Open'}),
-      ).toHaveFocus();
+      ).toBeTruthy();
     });
 
-    it('keeps focus on the same filter when the parent reorders the filters (FR12, FR16)', () => {
+    it('leaves the open draft, its rows and focus untouched when the parent reorders or removes filters behind the flow (FR12, FR16)', () => {
       const {rerender} = render(
         <Harness filters={[openFilter, authorFilter, third]} />,
       );
@@ -2245,40 +2319,17 @@ describe('PowerSearch Filters sheet (FR12)', () => {
         name: 'Author is Ada',
       });
       authorRow.focus();
-      // Same objects, new order: the row moves, its element stays.
       rerender(<Harness filters={[third, openFilter, authorFilter]} />);
-      expect(within(sheet()).getByRole('button', {name: 'Author is Ada'})).toBe(
-        authorRow,
-      );
-      expect(authorRow).toHaveFocus();
-      // Cloned objects, new order: the row is matched by its signature.
-      rerender(
-        <Harness filters={[{...authorFilter}, {...third}, {...openFilter}]} />,
-      );
-      expect(within(sheet()).getByRole('button', {name: 'Author is Ada'})).toBe(
-        authorRow,
-      );
-      expect(authorRow).toHaveFocus();
-    });
-
-    it('keeps focus on the same filter when the parent removes a filter above it (FR12, FR16)', () => {
-      const {rerender} = render(
-        <Harness filters={[openFilter, authorFilter, third]} />,
-      );
-      openSheet();
-      const authorRow = within(sheet()).getByRole('button', {
-        name: 'Author is Ada',
-      });
-      authorRow.focus();
-      rerender(<Harness filters={[authorFilter, third]} />);
-      expect(authorRow).toHaveFocus();
-      expect(within(sheet()).getByRole('button', {name: 'Author is Ada'})).toBe(
-        authorRow,
-      );
-      // Not the row at the old index.
+      rerender(<Harness filters={[third]} />);
       expect(
-        within(sheet()).getByRole('button', {name: 'Status is Closed'}),
-      ).not.toHaveFocus();
+        within(sheet())
+          .getAllByRole('listitem')
+          .map(row => row.textContent?.replace(/Remove.*$/, '').trim()),
+      ).toEqual(['Status is Open', 'Author is Ada', 'Status is Closed']);
+      expect(within(sheet()).getByRole('button', {name: 'Author is Ada'})).toBe(
+        authorRow,
+      );
+      expect(authorRow).toHaveFocus();
     });
 
     it('counts rows in one index space — plain read-only rows above the removed row are not counted (FR16)', () => {
@@ -2291,25 +2342,27 @@ describe('PowerSearch Filters sheet (FR12)', () => {
         operator: 'is',
         value: {type: 'string', value: 'Grace'},
       };
-      const {rerender} = render(
+      render(
         <Harness filters={[readOnlyFirst, authorFilter, third, fourth]} />,
       );
       openSheet();
       // Row 0 is plain (read-only); the focused Author row is button row 0.
-      within(sheet()).getByRole('button', {name: 'Author is Ada'}).focus();
-      rerender(<Harness filters={[readOnlyFirst, third, fourth]} />);
+      const authorRemove = within(sheet()).getAllByRole('button', {
+        name: 'Remove Author filter',
+      })[0];
+      authorRemove.focus();
+      fireEvent.click(authorRemove);
       // The row that followed it — not one row too far (counting the plain
       // row would land on "Author is Grace").
-      expect(
-        within(sheet()).getByRole('button', {name: 'Status is Closed'}),
-      ).toHaveFocus();
+      expect(removeButton('Status')).toHaveFocus();
     });
 
     it('moves focus from Clear all, gone with the last filter, to Add filter', () => {
-      const {rerender} = render(<Harness filters={[openFilter]} hasClear />);
+      render(<Harness filters={[openFilter]} hasClear />);
       openSheet();
       within(sheet()).getByRole('button', {name: 'Clear all'}).focus();
-      rerender(<Harness filters={[]} hasClear />);
+      fireEvent.click(within(sheet()).getByRole('button', {name: 'Clear all'}));
+      confirmClearAll();
       expect(
         within(sheet()).queryByRole('button', {name: 'Clear all'}),
       ).toBeNull();
@@ -2481,6 +2534,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
       onCancel: expect.any(Function),
     });
     fireEvent.click(within(sheet()).getByRole('button', {name: 'Save group'}));
+    done();
     expect(onChange).toHaveBeenCalledWith([saved], 'edit', 0);
   });
 
@@ -2617,7 +2671,7 @@ describe('PowerSearch Add filter (FR13)', () => {
           config={config}
           filters={filters}
           onChange={next => setFilters(next)}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -2654,7 +2708,7 @@ describe('PowerSearch Add filter (FR13)', () => {
               onChange(next, type, index);
               setFilters(next);
             }}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         );
       }
@@ -2671,7 +2725,7 @@ describe('PowerSearch Add filter (FR13)', () => {
         operator: 'isTrue',
         value: {type: 'empty'},
       };
-      expect(onChange).toHaveBeenCalledWith([openFilter, unassigned], 'add', 1);
+      expect(onChange).not.toHaveBeenCalled();
       const filtersDialog = sheet();
       expect(filtersDialog).toHaveAttribute('aria-label', 'Filters');
       expect(
@@ -2684,6 +2738,8 @@ describe('PowerSearch Add filter (FR13)', () => {
           'Added Unassigned is true',
         ),
       );
+      done();
+      expect(onChange).toHaveBeenCalledWith([openFilter, unassigned], 'add', 1);
     } finally {
       spy.mockRestore();
     }
@@ -2777,7 +2833,7 @@ describe('PowerSearch Add filter (FR13)', () => {
         config={config}
         filters={[]}
         onChange={vi.fn()}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
         isReadOnly
       />,
     );
@@ -2847,6 +2903,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
     expect(choice('Closed')).toBeChecked();
     expect(onChange).not.toHaveBeenCalled();
     addFilter();
+    done();
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenCalledWith(
       [
@@ -2938,6 +2995,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
     );
     expect(onChange).not.toHaveBeenCalled();
     addFilter();
+    done();
     expect(onChange).toHaveBeenCalledWith(
       [{field: 'status', operator: 'isEmpty', value: {type: 'empty'}}],
       'add',
@@ -2961,6 +3019,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
     );
     tapRow('Open');
     addFilter();
+    done();
     expect(onChange).toHaveBeenCalledWith(
       [
         {
@@ -3003,6 +3062,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
       }),
     ).toBeNull();
     addFilter();
+    done();
     expect(onChange).toHaveBeenCalledWith(
       [{field: 'status', operator: 'isEmpty', value: {type: 'empty'}}],
       'add',
@@ -3130,6 +3190,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
     expect(choice('Urgent')).not.toBeChecked();
     fireEvent.click(choice('Urgent'));
     addFilter();
+    done();
     expect(onChange).toHaveBeenCalledWith(
       [
         {
@@ -3164,6 +3225,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
     tapRow('Closed');
     expect(onChange).not.toHaveBeenCalled();
     apply();
+    done();
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onChange).toHaveBeenCalledWith(
       [
@@ -3221,7 +3283,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
           config={config}
           filters={filters}
           onChange={next => setFilters(next)}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -3270,7 +3332,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
           config={withNested}
           filters={filters}
           onChange={next => setFilters(next)}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -3292,27 +3354,27 @@ describe('PowerSearch value step (FR14–FR16)', () => {
           config={config}
           filters={filters}
           onChange={next => setFilters(next)}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
     render(<Harness />);
     openSheet();
     fireEvent.click(removeButton('Status'));
-    expect(within(sheet()).getByText('No filters applied')).toBeTruthy();
+    expect(within(sheet()).getByText('No filters')).toBeTruthy();
     expect(
       within(sheet()).getByRole('button', {name: 'Add filter'}),
     ).toHaveFocus();
   });
 
-  it('follows the original filter when controlled props reorder it', () => {
+  it("edits the draft while controlled props change behind the open flow: the rows keep the draft's order, and Done replays the edit onto the latest filters", () => {
     const onChange = vi.fn();
     const {rerender} = render(
       <PowerSearch
         config={config}
         filters={[openFilter, authorFilter]}
         onChange={onChange}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     openEditFlow('Status is Open');
@@ -3321,11 +3383,15 @@ describe('PowerSearch value step (FR14–FR16)', () => {
         config={config}
         filters={[{...authorFilter}, {...openFilter}]}
         onChange={onChange}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     tapRow('Closed');
     apply();
+    expect(onChange).not.toHaveBeenCalled();
+    // Done replays the edit onto the latest filters, where the parent's
+    // reorder put Status second.
+    done();
     expect(onChange).toHaveBeenCalledWith(
       [
         authorFilter,
@@ -3347,7 +3413,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
         config={config}
         filters={[openFilter]}
         onChange={onChange}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     openEditFlow('Status is Open');
@@ -3356,7 +3422,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
         config={config}
         filters={[authorFilter]}
         onChange={onChange}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     tapRow('Closed');
@@ -3389,7 +3455,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
               onChange(next, type, index);
               setFilters(next);
             }}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         );
       }
@@ -3419,7 +3485,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
       // The value step finishes its exit before the removal.
       settleSheets();
       fireEvent.click(removeButton('legacy'));
-      expect(onChange).toHaveBeenCalledWith([openFilter], 'remove', 1);
+      expect(onChange).not.toHaveBeenCalled();
       const filtersDialog = sheet();
       expect(
         within(filtersDialog).queryByRole('button', {name: 'legacy was'}),
@@ -3429,6 +3495,8 @@ describe('PowerSearch value step (FR14–FR16)', () => {
           'Removed legacy was',
         ),
       );
+      done();
+      expect(onChange).toHaveBeenCalledWith([openFilter], 'remove', 1);
     } finally {
       spy.mockRestore();
     }
@@ -3442,7 +3510,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
         config={config}
         filters={[openFilter]}
         onChange={onChange}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     openEditFlow('Status is Open');
@@ -3459,7 +3527,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
         }}
         filters={[openFilter]}
         onChange={onChange}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     expect(
@@ -3521,6 +3589,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
       onCancel: expect.any(Function),
     });
     fireEvent.click(screen.getByRole('button', {name: 'Custom save'}));
+    done();
     expect(onChange).toHaveBeenCalledWith([savedFilter], 'add', 0);
   });
 
@@ -3550,6 +3619,283 @@ describe('PowerSearch value step (FR14–FR16)', () => {
 // =============================================================================
 // Stacked steps (FR15a)
 // =============================================================================
+
+describe('PowerSearch sheet draft, Done and dismissal (FR15, FR15b, FR15c, FR22)', () => {
+  it('holds a draft: add, remove, edit and Clear all change the rows and nothing reaches onChange before Done; Done replays the edits in order with the list after each (FR15, FR15b)', () => {
+    const {onChange} = setup({filters: [openFilter, authorFilter]});
+    openSheet();
+    // Remove Author, then add Status is Closed through Add filter.
+    fireEvent.click(removeButton('Author'));
+    openAddFlow();
+    tapRow('Status');
+    tapRow('Closed');
+    addFilter();
+    expect(onChange).not.toHaveBeenCalled();
+    const closed: PowerSearchFilter = {
+      field: 'status',
+      operator: 'is',
+      value: {type: 'enum', value: 'closed'},
+    };
+    expect(
+      within(sheet())
+        .getAllByRole('listitem')
+        .map(row => row.textContent?.replace(/Remove.*$/, '').trim()),
+    ).toEqual(['Status is Open', 'Status is Closed']);
+    done();
+    expect(onChange).toHaveBeenCalledTimes(2);
+    expect(onChange).toHaveBeenNthCalledWith(1, [openFilter], 'remove', 1);
+    expect(onChange).toHaveBeenNthCalledWith(2, [openFilter, closed], 'add', 1);
+    expect(isSheetOpen()).toBe(false);
+  });
+
+  it('Done with an unchanged draft reports nothing and closes (FR15b)', () => {
+    const {onChange} = setup({filters: [openFilter]});
+    openSheet();
+    done();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(isSheetOpen()).toBe(false);
+  });
+
+  it('a swipe, scrim or Escape dismissal closes directly while the draft equals the filters at open (FR15c)', () => {
+    const {onChange} = setup({filters: [openFilter]});
+    openSheet();
+    fireEvent.keyDown(sheet(), {key: 'Escape'});
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(isSheetOpen()).toBe(false);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('a dismissal with a changed draft asks first: Keep editing returns focus to Add filter with the draft intact; Discard changes closes without a report, and the next open starts from the applied filters (FR15c)', async () => {
+    const spy = mockModalDialogs();
+    try {
+      const {onChange} = setup({filters: [openFilter, authorFilter]});
+      openSheet();
+      fireEvent.click(removeButton('Author'));
+      fireEvent.keyDown(sheet(), {key: 'Escape'});
+      const confirmation = await screen.findByRole('alertdialog', {
+        name: 'Discard changes?',
+      });
+      expect(confirmation).toHaveTextContent(
+        "Your changes to the filters haven't been applied.",
+      );
+      const [destructive, safe] = within(confirmation).getAllByRole('button');
+      expect(destructive).toHaveAccessibleName('Discard changes');
+      expect(safe).toHaveAccessibleName('Keep editing');
+      expect(safe).toHaveFocus();
+      expect(isSheetOpen()).toBe(true);
+      // Keep editing: the confirmation goes, the draft stands, focus lands
+      // on the Filters sheet's first control.
+      fireEvent.click(safe);
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+      expect(isSheetOpen()).toBe(true);
+      expect(
+        within(sheet()).queryByRole('button', {name: 'Author is Ada'}),
+      ).toBeNull();
+      expect(
+        within(sheet()).getByRole('button', {name: 'Add filter'}),
+      ).toHaveFocus();
+      expect(onChange).not.toHaveBeenCalled();
+      // Discard changes: closes, reports nothing; the applied filters stand.
+      fireEvent.keyDown(sheet(), {key: 'Escape'});
+      fireEvent.click(
+        within(
+          await screen.findByRole('alertdialog', {name: 'Discard changes?'}),
+        ).getByRole('button', {name: 'Discard changes'}),
+      );
+      expect(isSheetOpen()).toBe(false);
+      expect(onChange).not.toHaveBeenCalled();
+      expect(within(field()).getByText('Ada')).toBeTruthy();
+      settleSheets();
+      openSheet();
+      expect(
+        within(sheet()).getByRole('button', {name: 'Author is Ada'}),
+      ).toBeTruthy();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('dismissing Add filter opened as the entry point with a changed draft asks the same way (FR15c)', async () => {
+    const spy = mockModalDialogs();
+    try {
+      const {onChange} = setup();
+      openSheet();
+      expect(
+        within(sheet()).getByRole('heading', {name: 'Add filter'}),
+      ).toBeTruthy();
+      tapRow('Status');
+      tapRow('Closed');
+      addFilter();
+      // The add landed in Filters, which is now the bottom of the stack.
+      fireEvent.keyDown(sheet(), {key: 'Escape'});
+      expect(
+        await screen.findByRole('alertdialog', {name: 'Discard changes?'}),
+      ).toBeTruthy();
+      expect(onChange).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('keeps read-only filters in the draft: Clear all removes only editable ones, and Done reports the kept list (FR22)', () => {
+    const pinned: PowerSearchFilter = {...openFilter, isReadOnly: true};
+    const {onChange} = setup({filters: [authorFilter, pinned]});
+    openSheet();
+    expect(
+      within(sheet()).queryByRole('button', {name: 'Remove Status filter'}),
+    ).toBeNull();
+    fireEvent.click(within(sheet()).getByRole('button', {name: 'Clear all'}));
+    confirmClearAll();
+    expect(within(sheet()).getAllByRole('listitem')).toHaveLength(1);
+    expect(within(sheet()).getByText(/^Status/)).toBeTruthy();
+    expect(onChange).not.toHaveBeenCalled();
+    done();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith([pinned], 'remove', 0);
+  });
+
+  it('judges an unchanged draft by filter signature, whatever the order of a value\'s keys: no "Discard changes?" and nothing reported (FR15b)', () => {
+    const reordered: PowerSearchFilter = {
+      field: 'status',
+      operator: 'is',
+      value: {value: 'open', type: 'enum'},
+    };
+    const {onChange} = setup({filters: [reordered]});
+    openSheet();
+    // Edit the filter to the same value, which the editor writes with its
+    // keys in its own order.
+    tapRow('Status is Open');
+    apply();
+    settleSheets();
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.keyDown(sheet(), {key: 'Escape'});
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(isSheetOpen()).toBe(false);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("Done replays the edits onto the field's latest filters: a read-only filter the parent added while the flow was open survives, an edit finds its filter by signature, and a removal whose target the parent removed is skipped (FR15b, DEC-7)", () => {
+    const pinned: PowerSearchFilter = {
+      field: 'author',
+      operator: 'is',
+      value: {type: 'string', value: 'Grace'},
+      isReadOnly: true,
+    };
+    const third: PowerSearchFilter = {
+      field: 'author',
+      operator: 'is',
+      value: {type: 'string', value: 'Linus'},
+    };
+    const calls: [
+      ReadonlyArray<PowerSearchFilter>,
+      PowerSearchChangeType,
+      number,
+    ][] = [];
+    function Harness() {
+      const [filters, setFilters] = useState<ReadonlyArray<PowerSearchFilter>>([
+        openFilter,
+        authorFilter,
+        third,
+      ]);
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() => setFilters(current => [pinned, ...current])}>
+            Pin
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              setFilters(current => current.filter(f => f !== third))
+            }>
+            Drop third
+          </button>
+          <PowerSearch
+            config={config}
+            filters={filters}
+            onChange={(next, type, index) => {
+              calls.push([next, type, index]);
+              setFilters(next);
+            }}
+            presentation="bottom-sheet"
+          />
+        </>
+      );
+    }
+    render(<Harness />);
+    openSheet();
+    // Draft: remove Ada, edit Status is Open → Closed, remove Linus.
+    const authorRemoves = () =>
+      within(sheet()).getAllByRole('button', {name: 'Remove Author filter'});
+    fireEvent.click(authorRemoves()[0]);
+    tapRow('Status is Open');
+    tapRow('Closed');
+    apply();
+    settleSheets();
+    fireEvent.click(authorRemoves()[0]);
+    // Meanwhile the parent pins a read-only filter and drops the third one.
+    fireEvent.click(screen.getByRole('button', {name: 'Pin'}));
+    fireEvent.click(screen.getByRole('button', {name: 'Drop third'}));
+    expect(calls).toHaveLength(0);
+    done();
+    const edited: PowerSearchFilter = {
+      field: 'status',
+      operator: 'is',
+      value: {type: 'enum', value: 'closed'},
+    };
+    // Replayed onto [pinned, open, Ada]: remove Ada (index 2), edit Status
+    // is Open at index 1; Linus's removal is skipped, the parent dropped it.
+    expect(calls).toEqual([
+      [[pinned, openFilter], 'remove', 2],
+      [[pinned, edited], 'edit', 1],
+    ]);
+  });
+
+  it('Done on a field that became read-only while the flow was open reports nothing and closes (FR15b)', () => {
+    const onChange = vi.fn();
+    function Harness() {
+      const [isReadOnly, setIsReadOnly] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setIsReadOnly(true)}>
+            Lock
+          </button>
+          <PowerSearch
+            config={config}
+            filters={[openFilter, authorFilter]}
+            onChange={onChange}
+            isReadOnly={isReadOnly}
+            presentation="bottom-sheet"
+          />
+        </>
+      );
+    }
+    render(<Harness />);
+    openSheet();
+    fireEvent.click(removeButton('Author'));
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', {name: 'Lock'}));
+    expect(isSheetOpen()).toBe(true);
+    done();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(isSheetOpen()).toBe(false);
+  });
+
+  it('the popover presentation is unchanged: a token removal reports at once, with no draft and no Done (desktop)', async () => {
+    const {onChange} = setup({
+      presentation: 'popover',
+      filters: [openFilter, authorFilter],
+    });
+    fireEvent.click(
+      screen.getAllByRole('button', {name: 'Remove Status: is Open'})[0],
+    );
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith([authorFilter], 'remove', 0);
+    expect(screen.queryByRole('button', {name: 'Done'})).toBeNull();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+  });
+});
 
 describe('PowerSearch step sheets (retained stack, FR15a)', () => {
   // Dismissing the top step closes only that sheet, so the prior step returns
@@ -3808,7 +4154,7 @@ describe('PowerSearch step sheets (retained stack, FR15a)', () => {
           config={stale}
           filters={[openFilter, authorFilter]}
           onChange={vi.fn()}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />,
       );
       await new Promise(resolve => setTimeout(resolve, 40));
@@ -3936,6 +4282,12 @@ describe('PowerSearch content search (FR13)', () => {
     fireEvent.click(
       within(sheet()).getByRole('button', {name: '"release notes"'}),
     );
+    await waitFor(() => expect(isSheetOpen()).toBe(true));
+    expect(
+      within(sheet()).getByRole('heading', {name: 'Filters'}),
+    ).toBeTruthy();
+    expect(onChange).not.toHaveBeenCalled();
+    done();
     expect(onChange).toHaveBeenCalledWith(
       [
         openFilter,
@@ -3948,10 +4300,6 @@ describe('PowerSearch content search (FR13)', () => {
       'add',
       1,
     );
-    await waitFor(() => expect(isSheetOpen()).toBe(true));
-    expect(
-      within(sheet()).getByRole('heading', {name: 'Filters'}),
-    ).toBeTruthy();
   });
 
   it('adds a value suggestion from Enter and announces it inside the Filters sheet (AR6; AST-086 FR14)', async () => {
@@ -3966,6 +4314,18 @@ describe('PowerSearch content search (FR13)', () => {
       ).toBeTruthy();
       fireEvent.keyDown(input, {key: 'Enter'});
       // The first suggestion is the free-text content item.
+      expect(onChange).not.toHaveBeenCalled();
+      // The announcement lands in the Filters sheet the flow moved to, the
+      // dialog that stays open, not on the page body behind the modal.
+      const filtersDialog = sheet();
+      expect(filtersDialog).toHaveAttribute('aria-label', 'Filters');
+      await waitFor(() =>
+        expect(modalLiveRegion(filtersDialog)).toHaveTextContent(
+          'Added "status clo"',
+        ),
+      );
+      expect(sharedLiveRegion()?.textContent ?? '').toBe('');
+      done();
       expect(onChange).toHaveBeenCalledWith(
         [
           {
@@ -3977,16 +4337,6 @@ describe('PowerSearch content search (FR13)', () => {
         'add',
         0,
       );
-      // The announcement lands in the Filters sheet the flow moved to, the
-      // dialog that stays open, not on the page body behind the modal.
-      const filtersDialog = sheet();
-      expect(filtersDialog).toHaveAttribute('aria-label', 'Filters');
-      await waitFor(() =>
-        expect(modalLiveRegion(filtersDialog)).toHaveTextContent(
-          'Added "status clo"',
-        ),
-      );
-      expect(sharedLiveRegion()?.textContent ?? '').toBe('');
     } finally {
       spy.mockRestore();
     }
@@ -4141,6 +4491,7 @@ describe('PowerSearch sheet value types (FR17)', () => {
       target: {value: 'hello'},
     });
     addFilter();
+    done();
     expect(onChange).toHaveBeenCalledWith(
       [
         {
@@ -4167,6 +4518,7 @@ describe('PowerSearch sheet value types (FR17)', () => {
     });
     fireEvent.click(option);
     addFilter();
+    done();
     expect(onChange).toHaveBeenCalledWith(
       [
         {
@@ -4219,6 +4571,7 @@ describe('PowerSearch sheet value types (FR17)', () => {
       within(sheet()).getByRole('heading', {name: 'ID is any of'}),
     ).toBeTruthy();
     addFilter();
+    done();
     expect(onChange).toHaveBeenCalledWith(
       [
         {
@@ -4245,6 +4598,7 @@ describe('PowerSearch sheet value types (FR17)', () => {
     ).toBeEnabled();
     fireEvent.blur(input);
     addFilter();
+    done();
     expect(onChange).toHaveBeenCalledWith(
       [{field: 'lines', operator: 'gt', value: {type: 'integer', value: 12}}],
       'add',
@@ -4299,6 +4653,7 @@ describe('PowerSearch sheet value types (FR17)', () => {
     fireEvent.input(input, {target: {value: '2.5'}});
     fireEvent.blur(input);
     addFilter();
+    done();
     expect(onChange).toHaveBeenCalledWith(
       [{field: 'cost', operator: 'gt', value: {type: 'float', value: 2.5}}],
       'add',
@@ -4354,6 +4709,7 @@ describe('PowerSearch sheet value types (FR17)', () => {
       fireEvent.change(input, {target: {value: '03/11/2024'}});
       fireEvent.blur(input);
       apply();
+      done();
       expect(onChange).toHaveBeenCalledWith(
         [
           {
@@ -4392,6 +4748,47 @@ describe('PowerSearch sheet value types (FR17)', () => {
     expect(seen).toContain('Asia/Tokyo');
   });
 
+  it('date_absolute with isDateOnly: false: the value step shows the time in timezoneID on the row, the date picker and the time field, and stores the time typed (FR26)', () => {
+    const instantFilter: PowerSearchFilter = {
+      field: 'updated',
+      operator: 'after',
+      // 2024-03-10T03:00:00Z: March 9, 7:00 PM in Los Angeles.
+      value: {type: 'date_absolute', unixSeconds: 1710039600},
+    };
+    const {onChange} = setupValues({
+      filters: [instantFilter],
+      timezoneID: 'America/Los_Angeles',
+    });
+    openSheet();
+    expect(
+      within(sheet()).getByRole('button', {name: /Mar 9, 2024, 7:00 PM/}),
+    ).toBeTruthy();
+    tapRow(/^Updated is after/);
+    expect(within(sheet()).getByRole('combobox', {name: 'Date'})).toHaveValue(
+      'March 9, 2024',
+    );
+    const time = within(sheet()).getByLabelText('Time');
+    expect(time).toHaveValue('7:00 PM');
+    fireEvent.change(time, {target: {value: '8:30 PM'}});
+    fireEvent.blur(time);
+    apply();
+    done();
+    expect(onChange).toHaveBeenCalledWith(
+      [
+        {
+          field: 'updated',
+          operator: 'after',
+          value: {
+            type: 'date_absolute',
+            unixSeconds: Date.parse('2024-03-10T04:30:00Z') / 1000,
+          },
+        },
+      ],
+      'edit',
+      0,
+    );
+  });
+
   it('date_relative: rows stage a single relative value', () => {
     const {onChange} = setupValues();
     openAddFlow();
@@ -4402,6 +4799,7 @@ describe('PowerSearch sheet value types (FR17)', () => {
     tapRow('7 days ago');
     expect(choice('7 days ago')).toBeChecked();
     addFilter();
+    done();
     expect(onChange).toHaveBeenCalledWith(
       [
         {
@@ -4456,6 +4854,7 @@ describe('PowerSearch sheet value types (FR17)', () => {
       expect(screen.queryByRole('dialog', {name: 'Assignee'})).toBeNull(),
     );
     addFilter();
+    done();
     expect(onChange).toHaveBeenCalledWith(
       [
         {
@@ -4480,6 +4879,7 @@ describe('PowerSearch sheet value types (FR17)', () => {
       target: {value: 'teal'},
     });
     addFilter();
+    done();
     expect(onChange).toHaveBeenCalledWith(
       [
         {
@@ -4568,7 +4968,7 @@ describe('PowerSearch sheet value text', () => {
               filters={filters}
               onChange={next => setFilters(next)}
               timezoneID={timezoneID}
-              experimental={{presentation: 'bottom-sheet'}}
+              presentation="bottom-sheet"
             />
           );
         }
@@ -4686,7 +5086,7 @@ describe('PowerSearch sheet value text', () => {
             config={valueTypesConfig}
             filters={filters}
             onChange={next => setFilters(next)}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         );
       }
@@ -4727,7 +5127,7 @@ describe('PowerSearch sheet value text', () => {
               config={config}
               filters={filters}
               onChange={next => setFilters(next)}
-              experimental={{presentation: 'bottom-sheet'}}
+              presentation="bottom-sheet"
             />
           </InternationalizationProvider>
         );
@@ -4752,7 +5152,7 @@ describe('PowerSearch sheet value text', () => {
     }
   });
 
-  it('announces Clear all and a changed count through one catalog message a locale can reorder (INV1a)', async () => {
+  it('announces Clear all as its outcome alone: the result count follows the applied filters, which change on Done (AR6)', async () => {
     const spy = mockModalDialogs();
     try {
       function Harness() {
@@ -4766,7 +5166,7 @@ describe('PowerSearch sheet value text', () => {
               filters={filters}
               onChange={next => setFilters(next)}
               resultCount={filters.length === 0 ? 240 : 12}
-              experimental={{presentation: 'bottom-sheet'}}
+              presentation="bottom-sheet"
             />
           </InternationalizationProvider>
         );
@@ -4778,8 +5178,11 @@ describe('PowerSearch sheet value text', () => {
       confirmClearAll();
       await waitFor(() =>
         expect(modalLiveRegion(filtersDialog)?.textContent ?? '').toContain(
-          '240 results — all filters removed',
+          'All filters removed',
         ),
+      );
+      expect(modalLiveRegion(filtersDialog)?.textContent ?? '').not.toContain(
+        '240 results',
       );
     } finally {
       spy.mockRestore();
@@ -4831,7 +5234,7 @@ describe('PowerSearch sheet value text', () => {
             },
           ]}
           onChange={() => {}}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       </InternationalizationProvider>,
     );
@@ -4878,7 +5281,7 @@ describe('PowerSearch sheet value text', () => {
               config={valueTypesConfig}
               filters={current}
               onChange={next => setCurrent(next)}
-              experimental={{presentation: 'bottom-sheet'}}
+              presentation="bottom-sheet"
             />
           </InternationalizationProvider>
         );
@@ -4940,7 +5343,7 @@ describe('PowerSearch sheet value text', () => {
               },
             ]}
             onChange={() => {}}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         </InternationalizationProvider>,
       );
