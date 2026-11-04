@@ -6,9 +6,9 @@ id: spec:AST-111
 authority: draft
 archive_reason: null
 superseded_by: null
-approved_by: null
-approved_at: null
-phase: proposed
+approved_by: nynexman4464
+approved_at: 2026-11-04
+phase: accepted
 owners: [nynexman4464]
 affects_architecture:
   [architecture:internationalization, architecture:public-component-api]
