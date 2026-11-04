@@ -152,7 +152,9 @@ WebKit's JPEG cast, whose 4:2:0 chroma holds the marker's color in 2 by 2
 pixel blocks and so makes the tail's plateaus longer. Two steps stop at the
 same tail in either engine while a freeze further from rest is still judged. A judged part shorter than four of the
 screencast's intervals fails: the animation under test was not moving during
-the block. With
+the block. One that had already settled when the judged part began (nothing in
+the window to judge) throws `BusyWindowTooLateError`, with the numbers: the
+block ran too late, which is no reading of the component. With
 `during`, `blockMainThread` starts the loop from a task queued in the frame
 that saw the animation, after that frame's rendering update: WebKit hands a
 newly started animation to its compositor there, and a loop inside the rAF
@@ -160,7 +162,12 @@ callback would freeze even a compositor animation. Call it before the release
 that starts a settle and await it after, so the page is already waiting when
 the settle begins. An animation counts once it is no longer pending and has
 run at least one frame: a `minProgressMs` under 16 is raised to 16, since one
-created in the frame the page looks is not on the compositor yet. The `verdict` judges the
+created in the frame the page looks is not on the compositor yet. It counts
+only before its curve's held tail (keyframes that end in a run of identical
+values, read as `waitForRest` reads them): when the only animation running
+there started while the page waited, or the wait times out with only such
+animations, the page looked too late, and the wait rejects with
+`BusyWindowTooLateError`. The `verdict` judges the
 frames the screencast delivered, whatever its rate (a loaded machine's can
 deliver one frame in five or six), and tolerates nothing a frozen animation
 does: at least one frame in the judged part, no stall longer than three of the
@@ -211,9 +218,11 @@ entry: in WebKit, with the popover above BottomSheet's open modal dialog, the
 sheet's dim held for 155 to 225 ms into a block while the control moved, and
 inside the dialog it moves in step with the sheet. `waitForAnimation` and
 `blockMainThread`'s `during` never count the control's own animation, so on
-a dialog they still wait for the backdrop's. Track it from the
-same screencast (`trackMarker(page, frames, {rgb: CONTROL_RGB})`) and pass it
-as `control`: the component passes when it moved on every frame the control
+a dialog they still wait for the backdrop's. Track a top-layer control from
+the same screencast with `trackControl(page, frames)` (`trackMarker` with
+`CONTROL_RGB`, searching only the top strip it crosses). A control mounted
+`within` a dialog moves with it, so track that one with `trackMarker(page,
+frames, {rgb: CONTROL_RGB})`. Pass either as `control`: the component passes when it moved on every frame the control
 moved and its longest stall is no longer than the control's. Both are read from
 the same screencast frames, so a compositor animation misses none. A window in
 which the control moved on fewer than four frames fails, since the machine
@@ -237,6 +246,13 @@ to show a new position on at least four of the control's frames. The cast step (
 is read from the value's changes in the judged part, so a position the page
 commits off the grid once the block ends does not shrink it.
 A main-thread animation still fails: the control moves and it does not.
+
+`controlClock(control)` reads the compositor's own time in each frame off the
+control's position, for a proof that judges motion against time, not against
+the screencast's stamps. A loaded machine stamps frames late, and
+`inPresentationOrder` can then put a frame after frames that came after it.
+The clock takes the cycle origin that most frames agree with, so such a frame
+moves only its own reading. A frame within 36 px of a turn gets no reading.
 
 An animation that lasts a fraction of a second, such as a 0.2 s fade, leaves a
 block only a few frames to judge: in WebKit, or on a loaded machine, the control

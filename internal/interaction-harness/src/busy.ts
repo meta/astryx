@@ -8,8 +8,11 @@
  *   compositor-only control animation recorded in the same window —,
  *   `busyWindowProof`, which reads frame evidence for that window, against
  *   the control when it has one, `castStep`, the screencast's position step
- *   read from its frames, and `pooledBusyProof`, which judges several short
- *   blocks as one.
+ *   read from its frames, `pooledBusyProof`, which judges several short
+ *   blocks as one, and `BusyWindowTooLateError`, for a block that began
+ *   after the motion it was meant to catch had ended.
+ *   `trackControl` and `controlClock` read the control's box and its own
+ *   clock from the screencast.
  * @position The busy-main-thread proof: an animation that runs on the
  *   compositor keeps advancing at display rate while JavaScript holds the main
  *   thread; one driven from the main thread (rAF, style writes, layout
@@ -20,14 +23,46 @@
  */
 
 import type {Locator, Page} from '@playwright/test';
-import {frameStats, type FrameStats, type TrackedFrame} from './frames';
+import {defineCurveEnd} from './curve-end';
+import {
+  frameStats,
+  trackMarker,
+  type CastFrame,
+  type FrameStats,
+  type TrackedFrame,
+} from './frames';
 
 /** The control's colour, apart from the component's marker (`MARKER_RGB`). */
 export const CONTROL_RGB: readonly [number, number, number] = [0, 255, 255];
 
-/** The control box's side, and how far it travels along the top edge, CSS px. */
-const CONTROL_SIDE = 12;
+/**
+ * The control box's side, CSS px: it crosses the page's top `CONTROL_SIDE` px,
+ * where a proof reads nothing of the component.
+ */
+export const CONTROL_SIDE = 12;
+/** How far the control travels along the top edge, CSS px. */
 const CONTROL_TRAVEL = 240;
+/** How long the control takes to travel `CONTROL_TRAVEL` one way, ms. */
+const CONTROL_LEG_MS = 400;
+
+/**
+ * The control in each frame (`startBusyControl`'s box): `trackMarker` with
+ * `CONTROL_RGB`, searching only the strip the box crosses.
+ */
+export async function trackControl(
+  page: Page,
+  frames: readonly CastFrame[],
+): Promise<TrackedFrame[]> {
+  return trackMarker(page, frames, {
+    rgb: CONTROL_RGB,
+    region: {
+      x: 0,
+      y: 0,
+      width: CONTROL_SIDE + CONTROL_TRAVEL + 4,
+      height: CONTROL_SIDE + 4,
+    },
+  });
+}
 
 /**
  * Starts a plain compositor-only control animation: a `CONTROL_RGB` box in the
@@ -68,7 +103,7 @@ export async function startBusyControl(
     );
   }
   await page.evaluate(
-    ({color, side, travel}) =>
+    ({color, side, travel, legMs}) =>
       new Promise<void>((resolve, reject) => {
         const host = document.querySelector('[data-harness-control-host]');
         host?.removeAttribute('data-harness-control-host');
@@ -88,7 +123,7 @@ export async function startBusyControl(
             {transform: `translateX(${travel}px)`},
           ],
           {
-            duration: 400,
+            duration: legMs,
             iterations: Infinity,
             direction: 'alternate',
             easing: 'linear',
@@ -129,7 +164,12 @@ export async function startBusyControl(
         };
         frame(tick);
       }),
-    {color: [...rgb], side: CONTROL_SIDE, travel: CONTROL_TRAVEL},
+    {
+      color: [...rgb],
+      side: CONTROL_SIDE,
+      travel: CONTROL_TRAVEL,
+      legMs: CONTROL_LEG_MS,
+    },
   );
   return {
     raise: () =>
@@ -148,6 +188,94 @@ export async function startBusyControl(
         }
       }),
   };
+}
+
+/** How far a frame's stamp may run late and still agree with the others, ms. */
+const CONTROL_AGREE_MS = 20;
+/**
+ * Frames this near a turn get no reading. There the two times that a position
+ * gives are under 120 ms apart, and a stamp 60 ms late could pick either.
+ */
+const CONTROL_EDGE = 36;
+
+/**
+ * The compositor's clock in each frame of `control` (`startBusyControl`'s box,
+ * tracked with `trackControl`), ms. The compositor samples every animation at
+ * one time in a frame. So a component can be judged against this clock, not
+ * the screencast's stamps. A loaded machine can stamp a frame late, and
+ * `inPresentationOrder` then puts it after frames that it came before.
+ *
+ * The box's position gives two times a cycle, on the way out and on the way
+ * back. The cycle's origin is the one that the most frames agree with, each
+ * within `CONTROL_AGREE_MS` of one of its two times. So no single frame sets
+ * it. Each frame's stamp, measured from that origin, then picks its own time.
+ * A late or reordered frame moves only its own reading, and a gap moves none.
+ *
+ * A frame without the box gets no reading, and so does a frame within
+ * `CONTROL_EDGE` px of a turn. A frame that repeats the position before it
+ * shows no new time, so it gets none either. Readings count up from the
+ * origin a whole cycle or less before the first reading.
+ */
+export function controlClock(
+  control: readonly TrackedFrame[],
+): Map<number, number> {
+  const cycle = 2 * CONTROL_LEG_MS;
+  const usable = control.flatMap((frame, i) => {
+    const x = frame.box?.x;
+    const before = i > 0 ? control[i - 1].box?.x : undefined;
+    if (
+      x == null ||
+      x < CONTROL_EDGE ||
+      x > CONTROL_TRAVEL - CONTROL_EDGE ||
+      (before != null && Math.abs(x - before) <= 0.25)
+    ) {
+      return [];
+    }
+    const out = (x / CONTROL_TRAVEL) * CONTROL_LEG_MS;
+    return [{t: frame.t, out, back: cycle - out}];
+  });
+  const clock = new Map<number, number>();
+  if (usable.length === 0) {
+    return clock;
+  }
+  const onCycle = (a: number, b: number) => {
+    const d = Math.abs(a - b) % cycle;
+    return Math.min(d, cycle - d);
+  };
+  let origin = 0;
+  let agreeing = -1;
+  let spread = Number.POSITIVE_INFINITY;
+  for (let candidate = 0; candidate < cycle; candidate += 1) {
+    let count = 0;
+    let sum = 0;
+    for (const frame of usable) {
+      const phase = frame.t - candidate;
+      const d = Math.min(onCycle(phase, frame.out), onCycle(phase, frame.back));
+      if (d <= CONTROL_AGREE_MS) {
+        count += 1;
+        sum += d;
+      }
+    }
+    if (count > agreeing || (count === agreeing && sum < spread)) {
+      origin = candidate;
+      agreeing = count;
+      spread = sum;
+    }
+  }
+  const first = Math.min(...usable.map(frame => frame.t));
+  const anchored = origin + Math.floor((first - origin) / cycle) * cycle;
+  for (const frame of usable) {
+    const expected = frame.t - anchored;
+    const nearest = (ms: number) =>
+      ms + Math.round((expected - ms) / cycle) * cycle;
+    const out = nearest(frame.out);
+    const back = nearest(frame.back);
+    clock.set(
+      frame.t,
+      Math.abs(out - expected) <= Math.abs(back - expected) ? out : back,
+    );
+  }
+  return clock;
 }
 
 /** What the control presented in the judged part (see `busyWindowProof`). */
@@ -214,9 +342,37 @@ export interface BlockedWindow extends BusyWindow {
  * frame the page looks is still pending, not yet on the compositor
  * (Chromium), and in WebKit its start time resolves before its layer is
  * flushed: a block that started on it froze it.
+ *
+ * It counts only while it still moves: before its curve's held tail (where
+ * its keyframes end in a run of identical values, read as `waitForRest`
+ * reads it). A block in that tail would judge an animation that has stopped.
+ * When the only animation running there started while the page waited, or
+ * the wait times out with only such animations, the page looked too late:
+ * that rejects with `BusyWindowTooLateError`, with the numbers.
  */
 /** One display frame, ms: the least progress `blockMainThread` waits for. */
 const ONE_FRAME_MS = 16;
+
+/**
+ * The block began after the motion it was meant to catch had ended, so the
+ * window holds nothing to judge: when the block ran, not how the component
+ * moved. Thrown by `blockMainThread` (with `during`) when the animation under
+ * test is already in its curve's held tail where the page first looks, and by
+ * `busyWindowProof` when the tracked value had settled before the judged part
+ * of the window began. Always a red, with the numbers; never a pass. Start the
+ * block earlier: call `blockMainThread` before the action that starts the
+ * motion, and await it after.
+ */
+export class BusyWindowTooLateError extends Error {
+  constructor(
+    message: string,
+    /** The times the error is read from, ms. */
+    readonly numbers: Readonly<Record<string, number>>,
+  ) {
+    super(message);
+    this.name = 'BusyWindowTooLateError';
+  }
+}
 
 export async function blockMainThread(
   page: Page,
@@ -258,7 +414,10 @@ export async function blockMainThread(
       };
     }, ms);
   }
-  return during.evaluate(
+  // The curve end the wait reads, defined in the page first: sent before the
+  // wait and not awaited, so the wait starts no later than it did.
+  const defined = page.evaluate(defineCurveEnd);
+  const waited = during.evaluate(
     (element, {duration, minProgress, wait}) =>
       new Promise<BlockedWindow>((resolve, reject) => {
         // The harness's own waits run on the real timers: a frozen timer gate
@@ -285,16 +444,55 @@ export async function blockMainThread(
             target.closest('[data-harness-control]') != null
           );
         };
+        // Where each animation's curve ends, its held tail excluded.
+        const curveEnd =
+          (
+            window as unknown as {
+              __harnessCurveEnd?: (animation: Animation) => number;
+            }
+          ).__harnessCurveEnd ??
+          ((a: Animation) => {
+            const timing = a.effect?.getComputedTiming();
+            return (
+              Number(timing?.delay ?? 0) + Number(timing?.activeDuration ?? 0)
+            );
+          });
+        // What already ran when the wait began.
+        const before = new Set(element.getAnimations({subtree: true}));
+        const numbersOf = (a: Animation) => ({
+          currentTimeMs: Number(a.currentTime ?? 0),
+          curveEndMs: curveEnd(a),
+          startedWhileWaiting: before.has(a) ? 0 : 1,
+        });
+        // The first run the wait saw in its held tail, as it was then: it may
+        // finish, or be cancelled once its curve ends, before the wait times
+        // out.
+        let heldSeen: ReturnType<typeof numbersOf> | null = null;
+        const tooLate = (numbers: ReturnType<typeof numbersOf>) =>
+          new Error(`BusyWindowTooLate ${JSON.stringify(numbers)}`);
         const tick = () => {
-          const running = element
+          const ran = element
             .getAnimations({subtree: true})
-            .some(
+            .filter(
               a =>
                 !isControl(a) &&
                 a.playState === 'running' &&
                 !a.pending &&
                 Number(a.currentTime ?? 0) >= minProgress,
             );
+          // Still moving: before its curve's held tail. One running backward
+          // ends at its start, so it moves while it runs.
+          const running = ran.some(
+            a => a.playbackRate < 0 || Number(a.currentTime ?? 0) < curveEnd(a),
+          );
+          if (!running && ran.length > 0) {
+            heldSeen ??= numbersOf(ran[0]);
+          }
+          // In its held tail: started while the page waited, or, when the
+          // wait times out, what is left there or the first such run it saw.
+          const late = ran.find(a => !before.has(a));
+          const timedOut = realNow() > deadline;
+          const leftover = ran.length > 0 ? numbersOf(ran[0]) : heldSeen;
           if (running) {
             // The same loop as above, from a task queued in the frame that saw
             // the animation: it runs once that frame's rendering update has
@@ -312,7 +510,11 @@ export async function blockMainThread(
                 spanMs: now - start,
               });
             }, 0);
-          } else if (realNow() > deadline) {
+          } else if (late != null) {
+            reject(tooLate(numbersOf(late)));
+          } else if (timedOut && leftover != null) {
+            reject(tooLate(leftover));
+          } else if (timedOut) {
             reject(new Error('blockMainThread: no animation started'));
           } else {
             frame(tick);
@@ -322,6 +524,26 @@ export async function blockMainThread(
       }),
     {duration: ms, minProgress, wait: timeout},
   );
+  try {
+    const [, held] = await Promise.all([defined, waited]);
+    return held;
+  } catch (error) {
+    const late = /BusyWindowTooLate (\{.*\})/.exec(
+      error instanceof Error ? error.message : String(error),
+    );
+    if (late == null) {
+      throw error;
+    }
+    const numbers = JSON.parse(late[1]) as {
+      currentTimeMs: number;
+      curveEndMs: number;
+      startedWhileWaiting: number;
+    };
+    throw new BusyWindowTooLateError(
+      `blockMainThread: the animation under test was ${numbers.currentTimeMs.toFixed(0)} ms in, past the end of its curve at ${numbers.curveEndMs.toFixed(0)} ms, when the page ${numbers.startedWhileWaiting ? 'first saw it' : 'gave up waiting for one that moves'}: its motion had ended, so a block now holds nothing to judge. Call blockMainThread before the action that starts the motion, and await it after.`,
+      numbers,
+    );
+  }
 }
 
 export interface BusyVerdict {
@@ -679,6 +901,47 @@ export function busyWindowProof(
     );
     if (arrived != null) {
       end = Math.min(end, arrived.t);
+    }
+    // A sparse screencast can deliver the block's first frame after the
+    // judged part begins. Then the frame before the block shows the settle,
+    // when it and the block's first frame are both within the bound.
+    let before: (typeof valued)[number] | undefined;
+    for (const f of valued) {
+      if (f.t >= window.from) break;
+      before = f;
+    }
+    const firstInBlock = valued.find(f => f.t >= window.from);
+    const settledBy =
+      arrived != null && arrived.t <= window.from + marginMs
+        ? arrived.t
+        : before != null &&
+            arrived != null &&
+            arrived === firstInBlock &&
+            final != null &&
+            Math.abs(before.value - final) <= settledWithinPx
+          ? before.t
+          : null;
+    // Within the bound of where it ends before the judged part began: the
+    // block started after the motion had settled, so the window holds
+    // nothing to judge. That is when the block ran, not how the component
+    // moved.
+    if (settledBy != null) {
+      const presented = tracked.filter(
+        f => f.t >= window.from && f.t <= window.to,
+      ).length;
+      const fromBlock = settledBy - window.from;
+      const when =
+        fromBlock < 0
+          ? `${(-fromBlock).toFixed(0)} ms before`
+          : `${fromBlock.toFixed(0)} ms after`;
+      throw new BusyWindowTooLateError(
+        `busyWindowProof: the tracked ${axis} was within ${settledWithinPx} px of where it ends from ${when} the block began, before the judged part began at ${marginMs} ms (${presented} frames presented in the block): the block started after the motion had settled, so there is nothing in it to judge. Start the block earlier.`,
+        {
+          settledAtMs: fromBlock,
+          judgedFromMs: marginMs,
+          presented,
+        },
+      );
     }
   }
   const inner = {from: window.from + marginMs, to: end};

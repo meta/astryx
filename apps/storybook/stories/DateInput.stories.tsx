@@ -861,3 +861,39 @@ export const StylingParts: Story = {
     </div>
   ),
 };
+
+/**
+ * The bottom sheet with two centuries of years: the year wheel has 200 rows.
+ * Under a finger, opening the month and year wheels costs about the same as
+ * for two years: each year is drawn once, as a flat row.
+ */
+export const BottomSheetWideRange: Story = {
+  render: args => {
+    const [value, setValue] = useState<ISODateString | undefined>(
+      '2026-03-15' as ISODateString,
+    );
+    return <DateInput {...args} value={value} onChange={setValue} />;
+  },
+  args: {
+    label: 'Date of birth',
+    presentation: 'bottom-sheet',
+    min: '1900-01-01' as ISODateString,
+    max: '2099-12-31' as ISODateString,
+  },
+};
+
+/** The same sheet with two years: the year wheel has 2 rows. */
+export const BottomSheetNarrowRange: Story = {
+  render: args => {
+    const [value, setValue] = useState<ISODateString | undefined>(
+      '2026-03-15' as ISODateString,
+    );
+    return <DateInput {...args} value={value} onChange={setValue} />;
+  },
+  args: {
+    label: 'Date of birth',
+    presentation: 'bottom-sheet',
+    min: '2026-01-01' as ISODateString,
+    max: '2027-12-31' as ISODateString,
+  },
+};

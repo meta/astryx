@@ -29,6 +29,8 @@ import {
   plainDateGetWeekNumber,
   plainDateFormat,
   plainDateFormatStandaloneMonthYear,
+  plainDateWeekdayNames,
+  plainDateFormatDayNumber,
   formatSharedDate,
   DATE_FORMAT_LONG,
   DATE_FORMAT_WITH_WEEKDAY,
@@ -960,5 +962,65 @@ describe('plainDateWeekFieldName', () => {
 
   it('never returns an empty name', () => {
     expect(plainDateWeekFieldName('zxx').length).toBeGreaterThan(0);
+  });
+});
+
+describe('plainDateFormatDayNumber', () => {
+  it.each([
+    ['en', 15, '15'],
+    ['fa-IR', 15, '۱۵'],
+    ['ar-EG', 15, '١٥'],
+    ['en-u-nu-arab', 31, '٣١'],
+  ])('writes the number in the digits of %s', (locale, value, expected) => {
+    expect(plainDateFormatDayNumber(value, locale)).toBe(expected);
+  });
+
+  it('keeps the Gregorian number in a locale whose default calendar differs', () => {
+    // fa-IR formats dates in the Persian calendar by default; a day number
+    // must still be the Gregorian day it was given.
+    expect(plainDateFormatDayNumber(1, 'fa-IR')).toBe('۱');
+  });
+
+  it('adds no grouping separator', () => {
+    expect(plainDateFormatDayNumber(1234, 'en')).toBe('1234');
+  });
+});
+
+describe('plainDateWeekdayNames', () => {
+  it('formats the abbreviated weekday names Sunday first', () => {
+    expect(plainDateWeekdayNames('en')).toEqual([
+      'Sun',
+      'Mon',
+      'Tue',
+      'Wed',
+      'Thu',
+      'Fri',
+      'Sat',
+    ]);
+    expect(plainDateWeekdayNames('id-ID')).toEqual([
+      'Min',
+      'Sen',
+      'Sel',
+      'Rab',
+      'Kam',
+      'Jum',
+      'Sab',
+    ]);
+  });
+
+  it('formats the narrow width on request', () => {
+    expect(plainDateWeekdayNames('en', 'narrow')).toEqual([
+      'S',
+      'M',
+      'T',
+      'W',
+      'T',
+      'F',
+      'S',
+    ]);
+  });
+
+  it('returns null for a language the platform has no data for', () => {
+    expect(plainDateWeekdayNames('xx-ZZ')).toBeNull();
   });
 });

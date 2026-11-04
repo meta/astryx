@@ -184,6 +184,10 @@ a measured, sourced difference exists.
   integrator, its 300 ms animated scroll and that scroll's sinusoidal curve,
   DEC-25) plays from internal constants and is not yet a named role.
 
+  Implementation gap: the sheet picker wheel's snap rate (UIKit's measured
+  picker deceleration) plays from an internal constant and is not yet a named
+  role; a role kind for rates comes with a later change.
+
 ### Motion
 
 - **FR5 — Motion runs on the compositor.** Every release and every
@@ -322,7 +326,7 @@ a measured, sourced difference exists.
   exceptions. This rule governs
   this record's behaviors only; `spec:AST-057` keeps its per-event pointer
   read for the row swipe, as its record states. A `family:action-groups` member
-  tracks its own group as FR24 allows: under a fine pointer it keeps one
+  that tracks its group (`family:action-groups` FR1) keeps, as FR24 allows, one
   `pointerdown` listener on the group element, cancelable where the member
   needs it, adds document listeners only during a press, removed at the
   release, and may arm one per-document click swallower from the release until
@@ -599,7 +603,8 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   selection and native drag, while a trackpad's horizontal scroll swipes a
   row (`spec:AST-057` AR2, DEC-7); a
   pinch under a pen; the screen-edge pan under a mouse, a trackpad, or a pen;
-  and the 44 px coarse-pointer touch target, which stays coarse-only and never overlaps a
+  the slide across an action group under a mouse, and under any pointer
+  outside the touch presentation (`family:action-groups` FR1); and the 44 px coarse-pointer touch target, which stays coarse-only and never overlaps a
   neighbor's target. On the web, a pan takes a trackpad's two-finger scroll
   where its record allows it, and never a mouse wheel's notches. A scroll is a
   trackpad's only when it carries Chromium's and WebKit's trackpad signature:
@@ -726,9 +731,9 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   pointer, within FR24's listener budget.
 - `design:user-states` DR1, DR3 and `family:buttons`: press timing follows
   FR11's profiles under every pointer, the fine-pointer profile included.
-- Every `family:action-groups` member, as its membership rule lists them:
-  a press that slides across sibling actions acts on the action it lifts on
-  (FR26–FR28), under every pointer.
+- Every `family:action-groups` member outside the menu press model: a press
+  that slides across sibling actions acts on the action it lifts on
+  (FR26–FR28), under the touch presentation (`family:action-groups` FR1).
 - Every component under a coarse pointer: no box grows for touch, and a
   touch target reaches 44 px only through an invisible hit area clamped by
   its neighbors, unless a component or module record sets its own (FR42).
@@ -951,8 +956,9 @@ A person who presses one action and slides to another expects the same result
 in a menu, an alert's buttons, a button group, or a toolbar. Every member
 group of sibling actions behaves the same way, decided once and built in
 two owners: the menu press model and the action-group tracker
-(`family:action-groups`; `architecture:interaction-modality` INV13). The behavior works with a mouse
-as well, so it stays on for every pointer, while the 44 px target stays
+(`family:action-groups`; `architecture:interaction-modality` INV13). Menus keep the behavior for every
+pointer; an action group's slide runs for a finger and a pen under the touch
+presentation (`family:action-groups` DEC-1). The 44 px target stays
 touch-only.
 
 Rejected: a tracking rule for menus only.

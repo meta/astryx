@@ -317,6 +317,8 @@ export function useSpeechRecognition(
     transformTranscript,
   };
 
+  // Releases speech recognition, the audio analyser and the animation frame on
+  // unmount.
   useEffect(() => {
     return () => {
       recognitionRef.current?.abort();

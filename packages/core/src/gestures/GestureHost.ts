@@ -590,7 +590,7 @@ function wheelPixels(
  * A trackpad's precise deltas, a third of their legacy `wheelDelta` in
  * Chromium and WebKit, read as a trackpad's.
  */
-function scrollTypeOf(wheel: WheelEvent): ScrollType {
+export function scrollTypeOf(wheel: WheelEvent): ScrollType {
   if (wheel.deltaMode !== 0 || wheel.shiftKey) {
     return 'discrete';
   }

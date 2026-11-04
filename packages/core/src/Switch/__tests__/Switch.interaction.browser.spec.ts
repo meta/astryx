@@ -20,7 +20,7 @@ import {
   type Browser,
   type Locator,
   type Page,
-} from '@playwright/test';
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   castStoryboard,
   animationStoryboard,

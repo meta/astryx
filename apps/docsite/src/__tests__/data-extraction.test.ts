@@ -17,6 +17,7 @@ import {describe, it, expect} from 'vitest';
 import {docs as chatDocs} from '../../../../packages/core/src/Chat/Chat.doc.mjs';
 import {docs as drawerDocs} from '../../../../packages/core/src/Drawer/Drawer.doc.mjs';
 import {docs as drawerHeaderDocs} from '../../../../packages/core/src/Drawer/DrawerHeader.doc.mjs';
+import {docs as bottomSheetSwitcherDocs} from '../../../../packages/core/src/BottomSheet/BottomSheetSwitcher.doc.mjs';
 import docsiteConfig from '../../astryx.config.mjs';
 import {
   DEMO_CONTENT_MODULE,
@@ -720,6 +721,24 @@ describe('componentRegistry', () => {
     expect(toolCalls).toBeDefined();
     // It's standalone (has its own doc.mjs), not a sub-component
     expect(toolCalls!.parentDoc).toBeNull();
+  });
+
+  it('projects a doc deprecation, naming a documented current replacement', () => {
+    const all = Object.values(components).flat();
+    const byName = new Map(all.map(entry => [entry.name, entry]));
+    const switcher = byName.get(bottomSheetSwitcherDocs.name);
+    expect(bottomSheetSwitcherDocs.deprecated).toBeDefined();
+    expect(switcher?.deprecated).toMatchObject(
+      bottomSheetSwitcherDocs.deprecated!,
+    );
+    for (const entry of all.filter(e => e.deprecated)) {
+      const replacement = byName.get(entry.deprecated!.replacement);
+      expect(replacement, entry.name).toBeDefined();
+      expect(replacement!.deprecated, entry.name).toBeNull();
+      expect(entry.deprecated!.replacementDisplayName).toBe(
+        replacement!.displayName,
+      );
+    }
   });
 
   it('simple components have null parentDoc', () => {

@@ -757,6 +757,8 @@ export function ToastViewport({
     };
   }, [isTopLayer]);
 
+  // Syncs the host's place with the modal outlet registry. The host moves into
+  // the latest open modal, and back when that modal closes.
   useLayoutEffect(() => {
     if (!isTopLayer || host == null) {
       return;

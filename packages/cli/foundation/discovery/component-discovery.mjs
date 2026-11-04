@@ -11,6 +11,7 @@ import {DOC_EXPORTS} from '../doc-compiler/read.mjs';
 import {
   listDir,
   listDirEntries,
+  oncePerListing,
   pathExists,
   withListingCache,
 } from '../fs/listing-cache.mjs';
@@ -584,17 +585,26 @@ export function findComponentReadme(coreDir, name) {
  * @returns {string | null}
  */
 export function findComponentSource(coreDir, name) {
+  const found = ownSourceFile(coreDir, name);
+  if (found == null) return null;
+  // A component's exact name in another case (`tokenizer` for Tokenizer) is
+  // that component's. A module that only shares the spelling, such as
+  // `CodeBlock/tokenizer.ts`, never stands for it.
+  return caseSpelledComponentSource(path.join(coreDir, 'src'), name) == null
+    ? found
+    : null;
+}
+
+/**
+ * The file named for `name` in `src/`, found as {@link findComponentSource}
+ * describes, before the case-spelling check.
+ * @param {string} coreDir
+ * @param {string} name
+ * @returns {string | null}
+ */
+function ownSourceFile(coreDir, name) {
   const srcDir = path.join(coreDir, 'src');
-  // Try the prefixed forms (`XDSButton.tsx`) first since that is the current
-  // on-disk convention, then the bare forms (`Button.tsx`) that the Astryx-prefix
-  // migration (P4) renames to. `.tsx` before `.ts` within each so a component's
-  // `.tsx` wins over a same-named `.ts` helper; `.ts` covers hooks/functions.
-  const candidateFiles = [
-    `XDS${name}.tsx`,
-    `${name}.tsx`,
-    `XDS${name}.ts`,
-    `${name}.ts`,
-  ];
+  const candidateFiles = ownFileNames(name);
 
   /**
    * @param {string} dirPath
@@ -645,6 +655,71 @@ export function findComponentSource(coreDir, name) {
 
   // Fallback: search entire src tree for the file
   return searchDir(srcDir);
+}
+
+/**
+ * The file names a component's own source can have. The `XDS` forms come
+ * first, so an older prefixed file wins over a bare one. `.tsx` comes before
+ * `.ts`, so a component wins over a same-named helper. `.ts` covers hooks and
+ * functions.
+ * @param {string} name
+ * @returns {string[]}
+ */
+function ownFileNames(name) {
+  return [`XDS${name}.tsx`, `${name}.tsx`, `XDS${name}.ts`, `${name}.ts`];
+}
+
+// A component's name (PascalCase) or a hook's (`use` followed by PascalCase).
+const COMPONENT_OR_HOOK_NAME_RE = /^(?:use)?[A-Z][A-Za-z0-9]*$/;
+
+/**
+ * Every component or hook file in `src/`, by its stem in lower case: its
+ * stem (without an `XDS` prefix) and its path. Built once per operation.
+ * @param {string} srcDir
+ * @returns {Map<string, Array<{stem: string, file: string}>>}
+ */
+function caseStemIndex(srcDir) {
+  return oncePerListing(`case-stems\0${srcDir}`, () => {
+    /** @type {Map<string, Array<{stem: string, file: string}>>} */
+    const index = new Map();
+    /** @param {string} dirPath */
+    const visit = dirPath => {
+      for (const entry of listDirEntries(dirPath)) {
+        const entryPath = path.join(dirPath, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name !== '__tests__') visit(entryPath);
+          continue;
+        }
+        const stem = /^(?:XDS)?(.+)\.tsx?$/.exec(entry.name)?.[1];
+        if (stem == null || !COMPONENT_OR_HOOK_NAME_RE.test(stem)) continue;
+        const key = stem.toLowerCase();
+        index.set(key, [...(index.get(key) ?? []), {stem, file: entryPath}]);
+      }
+    };
+    if (pathExists(srcDir)) visit(srcDir);
+    return index;
+  });
+}
+
+/**
+ * The source of the component or hook whose exact name `name` spells in
+ * another case. A file named for it, anywhere in `src/`, exports it, as
+ * `TabList/Tab.tsx` exports Tab for `tab`. Null when no such file exists.
+ * @param {string} srcDir
+ * @param {string} name
+ * @returns {string | null}
+ */
+function caseSpelledComponentSource(srcDir, name) {
+  for (const {stem, file} of caseStemIndex(srcDir).get(name.toLowerCase()) ??
+    []) {
+    if (
+      stem !== name &&
+      (moduleExportsName(file, stem) || moduleExportsName(file, `XDS${stem}`))
+    ) {
+      return file;
+    }
+  }
+  return null;
 }
 
 /**
