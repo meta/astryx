@@ -118,7 +118,8 @@ The pan reads its numbers the way `UIPanGestureRecognizer` does, as measured
 in the UIKit lab:
 
 - It begins once the centroid has moved `hysteresis` (10 px) along either
-  axis, not as a distance.
+  axis, not as a distance. A function gives each press its own threshold,
+  read from the press's first touch when it lands.
 - `translation()` leaves out the travel the threshold took: a slow drag reads
   zero when the pan begins, and a step that overshoots keeps only the
   overshoot. A dragged surface does not jump. `totalTranslation()` is the

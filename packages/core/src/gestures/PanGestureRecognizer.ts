@@ -55,7 +55,12 @@ export interface PanGestureRecognizerOptions extends GestureRecognizerOptions<Pa
   minimumNumberOfTouches?: number;
   /** @default Infinity */
   maximumNumberOfTouches?: number;
-  hysteresis?: number;
+  /**
+   * The travel that begins the pan, px. A function gives each press its own
+   * threshold: it reads the press's first touch when that touch lands.
+   * @default UIKit's 10
+   */
+  hysteresis?: number | ((touch: GestureTouch) => number);
   /** Movement that may begin the pan; anything else fails it. @default 'any' */
   direction?: PanDirection;
   /**
@@ -117,6 +122,11 @@ export class PanGestureRecognizer extends GestureRecognizer {
   travelAtBegan: Point = ZERO;
 
   private readonly tracker: VelocityTracker;
+  /**
+   * Read once per press. A finger that lands later keeps the press's
+   * threshold.
+   */
+  private readonly hysteresisFor: ((touch: GestureTouch) => number) | null;
   /** The lift's event time once the pan ended: its release (AST-100 FR2). */
   private releaseTime: number | undefined = undefined;
   /** The centroid where the gesture started, in client px. */
@@ -132,7 +142,10 @@ export class PanGestureRecognizer extends GestureRecognizer {
     this.minimumNumberOfTouches = options.minimumNumberOfTouches ?? 1;
     this.maximumNumberOfTouches =
       options.maximumNumberOfTouches ?? Number.POSITIVE_INFINITY;
-    this.hysteresis = options.hysteresis ?? UIKIT_PAN.hysteresis.value;
+    const {hysteresis} = options;
+    this.hysteresisFor = typeof hysteresis === 'function' ? hysteresis : null;
+    this.hysteresis =
+      typeof hysteresis === 'number' ? hysteresis : UIKIT_PAN.hysteresis.value;
     this.direction = options.direction ?? 'any';
     this.axisRatio = options.axisRatio ?? 1;
     this.lockAxis = options.lockAxis ?? false;
@@ -237,6 +250,10 @@ export class PanGestureRecognizer extends GestureRecognizer {
     event: GestureEventContext,
   ): void {
     if (this.numberOfTouches === touches.length) {
+      const first = touches[0];
+      if (this.hysteresisFor != null && first != null) {
+        this.hysteresis = this.hysteresisFor(first);
+      }
       this.origin = centroid(this.touches.values());
       this.adjust = ZERO;
       this.raw = ZERO;
