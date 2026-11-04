@@ -163,7 +163,8 @@ optional `calendar` argument that defaults to `gregory` (FR18).
   month, keep its day of the month, and clamp to the target month's length.
   Shift+PageUp and Shift+PageDown move the focused day one calendar year, to the
   same month of that year; a leap month that the target year does not have
-  becomes its common counterpart (Adar I becomes Adar). `min` and `max` bound
+  becomes its common counterpart (Adar I becomes Adar), and a day the target
+  month lacks clamps to its last day. `min` and `max` bound
   navigation by day in every calendar.
 - **FR8 — Week numbers are ISO 8601.** `hasWeekNumbers` shows ISO 8601 week
   numbers in every calendar, and its documentation says so.
@@ -326,15 +327,20 @@ These requirements apply to the text fields of `DateInput` and
   than `gregory` or `iso8601`, `adaptive-native`, the deprecated `nativePicker`
   values, and an explicit `presentation="native"` use the Astryx surface for
   `DateInput` and `DateTimeInput` (FR15).
+- `architecture:public-component-api` INV16, where a caller's explicit
+  presentation choice wins over the default, names the same calendar exception:
+  under a calendar other than `gregory` or `iso8601`, an explicit
+  `presentation="native"` resolves to the Astryx surface for the pointer,
+  because no native date picker shows the application's calendar (FR15, DEC-7).
 - A provider locale with an explicit `-u-ca-` keyword, which the latest stable
   release shows in Gregorian, shows that calendar in `Calendar`, the date
   inputs, and FR18's formats. The keyword is the application's explicit request
   for the calendar (DEC-2): nonbreaking (FR5), and `calendar="gregory"` keeps
   Gregorian.
 - Gregorian behavior that changes, with its `spec:AST-017` class:
-  - FR7's Shift+PageUp and Shift+PageDown year step gives keys with no
-    documented behavior the APG date picker's year step, which
-    `component:Calendar` AR1 names as an exception: nonbreaking (FR3, FR5).
+  - `component:Calendar` AR1 already steps a Gregorian year with Shift+PageUp
+    and Shift+PageDown, clamping a missing day to the month's last day. FR7
+    extends the step to calendar years and leap months: additive (FR5).
   - FR12's `onChange` timing stops reporting dates for incomplete input, which
     restores `component:DateInput` FR1's next-ISO-date contract: a nonbreaking
     fix (FR5).
