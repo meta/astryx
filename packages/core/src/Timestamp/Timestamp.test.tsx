@@ -768,6 +768,20 @@ describe('Timestamp', () => {
       HTMLElement.prototype.hidePopover = originalHidePopover;
     });
 
+    it("keeps a caller's tabIndex while the hover card is attached (FR9)", async () => {
+      render(
+        <Timestamp
+          value={Date.now() / 1000 - 3600}
+          format="relative"
+          tabIndex={-1}
+          data-testid="ts"
+        />,
+      );
+      expect(screen.getByTestId('ts')).toHaveAttribute('tabindex', '-1');
+      await openTimestampHoverCard();
+      expect(screen.getByTestId('ts')).toHaveAttribute('tabindex', '-1');
+    });
+
     it('makes the <time> element focusable while the hover card is attached', () => {
       render(
         <Timestamp
@@ -1449,7 +1463,7 @@ describe('Timestamp pass-through props', () => {
     expect(time).toHaveAttribute('data-source', 'cms');
   });
 
-  it('keeps its own spelled-out label on a relative timestamp', () => {
+  it("keeps a caller's aria-label on a relative timestamp (FR5)", () => {
     render(
       <Timestamp
         value={Date.now()}
@@ -1463,10 +1477,21 @@ describe('Timestamp pass-through props', () => {
     expect({
       ariaLabel: stamp.getAttribute('aria-label'),
       dataSource: stamp.getAttribute('data-source'),
-    }).toEqual({
-      ariaLabel: expect.not.stringMatching(/^Caller label$/),
-      dataSource: 'cms',
-    });
+    }).toEqual({ariaLabel: 'Caller label', dataSource: 'cms'});
+  });
+
+  it('names a relative timestamp by the full date when the caller names nothing (FR5)', () => {
+    render(
+      <Timestamp
+        value={Date.now()}
+        format="relative"
+        aria-label={undefined}
+        data-testid="stamp"
+      />,
+    );
+    expect(screen.getByTestId('stamp').getAttribute('aria-label')).toMatch(
+      /\d{4}/,
+    );
   });
 });
 

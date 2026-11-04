@@ -5,9 +5,17 @@
  * Tests for Heading component
  */
 
-import {render, screen} from '@testing-library/react';
+import * as stylex from '@stylexjs/stylex';
+import {typeScaleVars} from '../theme/tokens.stylex';
+import {act, render, screen} from '@testing-library/react';
 import {describe, it, expect, vi} from 'vitest';
 import {Heading} from './Heading';
+
+const headingStyles = stylex.create({
+  // Overrides a property Heading's own level styles set, so the consumer
+  // value survives only when xstyle merges after them.
+  consumer: {fontSize: typeScaleVars['--text-heading-1-size']},
+});
 
 declare module './index' {
   interface HeadingTypeMap {
@@ -295,6 +303,36 @@ function countScrollWidthReads(run: () => void): number {
   return reads;
 }
 
+// jsdom does not resolve var(); the browser spec checks the resolved value.
+// Untruncated text reads the private container override, else break-word.
+const DEFAULT_WRAP = 'var(--_astryx-text-overflow-wrap,break-word)';
+const wrapOf = (element: Element) =>
+  getComputedStyle(element).overflowWrap.replace(/\s/g, '');
+
+// Heading FR3 (spec:AST-020 FR1, WCAG 2.2 1.4.10): a token longer than its
+// line wraps in a heading that is not truncated; truncation is unchanged.
+describe('Heading long unbroken tokens', () => {
+  const token =
+    'https://example.com/aVeryLongUnbrokenTokenThatIsWiderThan320px';
+
+  it('wraps them when the heading is not truncated', () => {
+    render(<Heading level={1}>{token}</Heading>);
+    expect(wrapOf(screen.getByText(token))).toBe(DEFAULT_WRAP);
+  });
+
+  it('leaves single-line truncation clipping on one line', () => {
+    render(
+      <Heading level={1} maxLines={1}>
+        {token}
+      </Heading>,
+    );
+    const style = getComputedStyle(screen.getByText(token));
+    expect(style.whiteSpace).toBe('nowrap');
+    expect(style.textOverflow).toBe('ellipsis');
+    expect(style.overflowWrap).not.toBe('break-word');
+  });
+});
+
 describe('Heading maxLines without a truncation tooltip', () => {
   it('takes no truncation measurement when hasTruncateTooltip is false', () => {
     const reads = countScrollWidthReads(() => {
@@ -324,5 +362,106 @@ describe('Heading maxLines without a truncation tooltip', () => {
       );
     });
     expect(reads).toBeGreaterThan(0);
+  });
+});
+
+function restoreProperty(
+  proto: HTMLElement,
+  name: 'scrollWidth' | 'offsetWidth',
+  descriptor: PropertyDescriptor | undefined,
+) {
+  if (descriptor) {
+    Object.defineProperty(proto, name, descriptor);
+  } else {
+    Reflect.deleteProperty(proto, name);
+  }
+}
+
+describe('Heading outline, passthrough, and styling-input precedence', () => {
+  it('adds no aria-level when accessibilityLevel equals level', () => {
+    render(
+      <Heading level={3} accessibilityLevel={3}>
+        Matching outline
+      </Heading>,
+    );
+    const element = screen.getByRole('heading', {name: 'Matching outline'});
+    expect(element.tagName).toBe('H3');
+    expect(element).not.toHaveAttribute('aria-level');
+  });
+
+  it('lets a caller aria-level win over the derived one', () => {
+    render(
+      <Heading level={2} accessibilityLevel={3} aria-level={4}>
+        Caller outline
+      </Heading>,
+    );
+    expect(
+      screen.getByRole('heading', {name: 'Caller outline'}),
+    ).toHaveAttribute('aria-level', '4');
+  });
+
+  it('merges className and xstyle after its own styles', () => {
+    render(
+      <Heading
+        level={2}
+        className="consumer-heading"
+        xstyle={headingStyles.consumer}>
+        Styled heading
+      </Heading>,
+    );
+    const consumerClasses = (
+      stylex.props(headingStyles.consumer).className ?? ''
+    )
+      .split(' ')
+      .filter(Boolean);
+    expect(consumerClasses.length).toBeGreaterThan(0);
+    expect(screen.getByRole('heading', {name: 'Styled heading'})).toHaveClass(
+      'astryx-heading',
+      'consumer-heading',
+      ...consumerClasses,
+    );
+  });
+
+  it('applies the line clamp after the caller style and keeps the rest of it', () => {
+    render(
+      <Heading
+        level={2}
+        maxLines={3}
+        style={{WebkitLineClamp: 5, opacity: 0.5}}>
+        Clamped heading
+      </Heading>,
+    );
+    const element = screen.getByRole('heading', {name: 'Clamped heading'});
+    expect(element.style.webkitLineClamp).toBe('3');
+    expect(element.style.opacity).toBe('0.5');
+  });
+
+  it('keeps the full text in the heading and adds no native title when truncated', async () => {
+    const proto = HTMLElement.prototype;
+    const scrollWidth = Object.getOwnPropertyDescriptor(proto, 'scrollWidth');
+    const offsetWidth = Object.getOwnPropertyDescriptor(proto, 'offsetWidth');
+    Object.defineProperty(proto, 'scrollWidth', {
+      configurable: true,
+      get: () => 500,
+    });
+    Object.defineProperty(proto, 'offsetWidth', {
+      configurable: true,
+      get: () => 100,
+    });
+    try {
+      render(
+        <Heading level={2} maxLines={1}>
+          A heading far wider than its column
+        </Heading>,
+      );
+      await act(async () => {});
+      const element = screen.getByRole('heading', {
+        name: 'A heading far wider than its column',
+      });
+      expect(element).not.toHaveAttribute('title');
+    } finally {
+      restoreProperty(proto, 'scrollWidth', scrollWidth);
+      restoreProperty(proto, 'offsetWidth', offsetWidth);
+    }
   });
 });

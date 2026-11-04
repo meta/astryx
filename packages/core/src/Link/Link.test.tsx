@@ -431,6 +431,35 @@ describe('Link', () => {
     expect(link.className).toContain('astryx-link');
     expect(link).toHaveAttribute('data-color', 'secondary');
   });
+
+  it('keeps the reflected data-color when a caller passes its own', () => {
+    const callerProps = {'data-color': 'danger'};
+    render(
+      <>
+        <Link href="/test" color="secondary" {...callerProps}>
+          Anchor Link
+        </Link>
+        <Link color="secondary" onClick={() => {}} {...callerProps}>
+          Button Link
+        </Link>
+        <Link href="/test" color="secondary" isDisabled {...callerProps}>
+          Disabled Link
+        </Link>
+      </>,
+    );
+    expect(screen.getByRole('link', {name: 'Anchor Link'})).toHaveAttribute(
+      'data-color',
+      'secondary',
+    );
+    expect(screen.getByRole('button', {name: 'Button Link'})).toHaveAttribute(
+      'data-color',
+      'secondary',
+    );
+    expect(screen.getByRole('link', {name: 'Disabled Link'})).toHaveAttribute(
+      'data-color',
+      'secondary',
+    );
+  });
 });
 
 describe('pressed state', () => {

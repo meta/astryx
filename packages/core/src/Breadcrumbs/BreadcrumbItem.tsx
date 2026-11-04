@@ -7,7 +7,8 @@
  * @input Uses React use/useRef/useEffect, stylex, theme tokens, BreadcrumbContext,
  *   rtlStyles for the contextual default slash, and (for the menu trigger)
  *   usePopover + the shared DropdownMenu item API (renderDropdownItems,
- *   DropdownMenuContext, MENU_ITEM_SELECTOR, useListFocus)
+ *   DropdownMenuContext, MENU_ITEM_SELECTOR, useListFocus), and
+ *   the AppShell mobile drawer helpers
  * @output Exports BreadcrumbItem component and BreadcrumbItemProps
  * @position Individual breadcrumb item; used inside Breadcrumbs
  *
@@ -51,6 +52,10 @@ import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {Icon} from '../Icon';
 import {usePopover} from '../Popover/usePopover';
 import {useListFocus} from '../hooks/useListFocus';
+import {useMenuPress} from '../hooks/useMenuPress';
+import {pressOnItemsOnly} from '../hooks/menuPressOnItems';
+import {menuTouchActionStyles} from '../DropdownMenu/menuTouchAction.stylex';
+import {useMenuOverflow} from '../DropdownMenu/useMenuOverflow';
 import {useTypeahead} from '../hooks/useTypeahead';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {renderDropdownItems} from '../DropdownMenu/renderDropdownItems';
@@ -68,7 +73,12 @@ import {
 import type {DropdownMenuOption} from '../DropdownMenu/DropdownMenu';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  useCloseMobileDrawerOnActivate,
+  useIsInAppShellMobileDrawer,
+} from '../AppShell/useCloseMobileDrawerOnActivate';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {isRenderable} from '../utils/isRenderable';
 // =============================================================================
 // Props
 // =============================================================================
@@ -301,6 +311,11 @@ export function BreadcrumbItem({
   // aria-current on this instead of guessing the <li>'s last child.
   const contentRef = useRef<HTMLElement>(null);
 
+  const closeDrawerAfter = useCloseMobileDrawerOnActivate(
+    useIsInAppShellMobileDrawer(),
+  );
+  const handleActivate = closeDrawerAfter(onClick);
+
   const isCurrent = isCurrentProp === true;
   const isAutoCandidate = isCurrentProp == null;
   const hasMenu = menu != null;
@@ -369,7 +384,9 @@ export function BreadcrumbItem({
 
   const content = (
     <>
-      {startIcon && <span {...stylex.props(itemStyles.icon)}>{startIcon}</span>}
+      {isRenderable(startIcon) && (
+        <span {...stylex.props(itemStyles.icon)}>{startIcon}</span>
+      )}
       {children}
     </>
   );
@@ -449,7 +466,7 @@ export function BreadcrumbItem({
         <LinkComponent
           ref={contentRef}
           href={href}
-          onClick={onClick}
+          onClick={handleActivate}
           {...focusOutlineProps.focusVisible(
             itemStyles.link,
             isSupporting ? itemStyles.supportingLink : itemStyles.defaultLink,
@@ -460,7 +477,7 @@ export function BreadcrumbItem({
         <button
           ref={contentRef as React.RefObject<HTMLButtonElement | null>}
           type="button"
-          onClick={onClick}
+          onClick={handleActivate}
           {...focusOutlineProps.focusVisible(
             itemStyles.link,
             itemStyles.buttonReset,
@@ -523,7 +540,7 @@ function BreadcrumbMenuTrigger({
   // The menu's rows move focus with the last input
   // (`architecture:interaction-modality` INV1); this menu has no press model
   // to activate the tracking they read, so it activates it itself.
-  useInteractionModalityTracking();
+  const {ref: modalityRef} = useInteractionModalityTracking();
 
   const popover = usePopover({
     hasLightDismiss: true,
@@ -550,6 +567,15 @@ function BreadcrumbMenuTrigger({
     boundarySelector: MENU_BOUNDARY_SELECTOR,
     wrap: false,
     onEscape: closeMenu,
+  });
+
+  // A press that slides across the menu's items acts on the item it lifts on,
+  // the highlight following the pointer, as DropdownMenu's does
+  // (`family:action-groups` FR1-FR3, FR5); a mouse released outside closes it.
+  const menuPress = useMenuPress({
+    menuRef: listRef,
+    itemSelector: MENU_ITEM_SELECTOR,
+    onDismiss: closeMenu,
   });
 
   const typeahead = useTypeahead({
@@ -625,6 +651,7 @@ function BreadcrumbMenuTrigger({
   );
 
   const menuContent = Array.isArray(menu) ? renderDropdownItems(menu) : menu;
+  const hasOverflow = useMenuOverflow(listRef, menuContent, popover.isOpen);
 
   return (
     <>
@@ -632,6 +659,7 @@ function BreadcrumbMenuTrigger({
         ref={useMergedRefs(
           ref as React.Ref<HTMLButtonElement>,
           buttonRef,
+          modalityRef,
           popover.triggerRef,
         )}
         type="button"
@@ -673,10 +701,20 @@ function BreadcrumbMenuTrigger({
           id={menuId}
           role="menu"
           aria-labelledby={triggerId}
+          {...menuPress.menuProps}
+          onPointerDown={pressOnItemsOnly(
+            menuPress.menuProps.onPointerDown,
+            MENU_ITEM_SELECTOR,
+          )}
           onKeyDown={listKeyDown}
           {...mergeProps(
             themeProps('breadcrumb-menu'),
-            stylex.props(menuStyles.menu),
+            stylex.props(
+              menuStyles.menu,
+              hasOverflow
+                ? menuTouchActionStyles.scrolls
+                : menuTouchActionStyles.fits,
+            ),
           )}>
           <DropdownMenuContext value={contextValue}>
             <DropdownMenuRootOpenContext value={popover.isOpen}>

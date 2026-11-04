@@ -22,6 +22,14 @@ export const docsDense = {
       ],
     },
     {
+      section: 'Icon sizes',
+      title: 'Icon sizes',
+      content: [
+        {type: 'prose', text: "theme sets each Icon size's glyph dimension: `width` + `height` on `components.icon['size:sm']` (or xsm/md/lg); semantic names + SVG components alike. px or rem only: a semantic icon takes its font size from the dimension, so em also grows its box. unstyled: xsm/sm/md/lg = 12/16/20/24px at 16px root, scale w/ root font size (rem keeps it). size names are fixed."},
+        null,
+      ],
+    },
+    {
       section: 'Dark mode',
       title: 'Dark mode',
       content: [

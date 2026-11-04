@@ -63,7 +63,11 @@ export const docs = {
     targets: [
       {className: 'astryx-outline', visualProps: ['density']},
       {className: 'astryx-outline-indicator'},
-      {className: 'astryx-outline-item', visualProps: ['level'], states: ['active']},
+      {
+        className: 'astryx-outline-item',
+        visualProps: ['level'],
+        states: ['active'],
+      },
     ],
   },
   components: [
@@ -101,7 +105,8 @@ export const docs = {
         {
           name: 'density',
           type: "'default' | 'compact'",
-          description: "Density variant controlling item padding. 'compact' for dense UIs, 'default' for standard spacing.",
+          description:
+            "Density variant controlling item padding. 'compact' for dense UIs, 'default' for standard spacing.",
           default: "'default'",
         },
         {
@@ -271,17 +276,53 @@ function FlashOnArrival() {
   usage: {
     anatomy,
     description:
-      'A table-of-contents sidebar for documentation pages, help centers, wikis, and long settings pages. Use it for navigation within a single page, not for app routes. Features a sliding indicator track that animates to the active heading. The list is a single tab stop: arrow keys move between headings, Home/End jump to the ends, and Enter/Space activate.',
+      'A table-of-contents sidebar for documentation pages, help centers, wikis, and long settings pages. Use it for navigation within a single page, not for app routes. Features a sliding indicator track that animates to the active heading. Each link is in the normal Tab order, and Enter/Space activate.',
     bestPractices: [
-      {guidance: true, description: 'Pass a flat ordered list of headings and let level control indentation.'},
-      {guidance: true, description: 'Use activeId when custom scroll logic owns the active section.'},
-      {guidance: true, description: 'Use density="compact" in dense sidebars where vertical space is tight.'},
-      {guidance: true, description: 'Use useOutlineFromMarkdown or useOutlineFromDOM when headings are generated from content. For linkable Markdown headings, pass the same createMarkdownHeadingLinks() entry to Markdown and Outline; configure headingIdPrefix on that plugin for multiple roots.'},
-      {guidance: true, description: 'Pass scrollContainerRef when the content scrolls in a split pane, modal, or panel instead of the viewport.'},
-      {guidance: true, description: 'Set offset to the height of a fixed header that overlays the content, so headings land below it instead of underneath it.'},
-      {guidance: false, description: 'Use Outline for application navigation - use SideNav or TopNav for routes.'},
-      {guidance: false, description: 'Use Outline for expandable hierarchy - use TreeList when nodes need expand and collapse.'},
-      {guidance: false, description: 'Rely on onNavigateEnd to mean "arrived" - it also fires when the user interrupts the scroll.'},
+      {
+        guidance: true,
+        description:
+          'Pass a flat ordered list of headings and let level control indentation.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use activeId when custom scroll logic owns the active section.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use density="compact" in dense sidebars where vertical space is tight.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use useOutlineFromMarkdown or useOutlineFromDOM when headings are generated from content. For linkable Markdown headings, pass the same createMarkdownHeadingLinks() entry to Markdown and Outline; configure headingIdPrefix on that plugin for multiple roots.',
+      },
+      {
+        guidance: true,
+        description:
+          'Pass scrollContainerRef when the content scrolls in a split pane, modal, or panel instead of the viewport.',
+      },
+      {
+        guidance: true,
+        description:
+          'Set offset to the height of a fixed header that overlays the content, so headings land below it instead of underneath it.',
+      },
+      {
+        guidance: false,
+        description:
+          'Use Outline for application navigation - use SideNav or TopNav for routes.',
+      },
+      {
+        guidance: false,
+        description:
+          'Use Outline for expandable hierarchy - use TreeList when nodes need expand and collapse.',
+      },
+      {
+        guidance: false,
+        description:
+          'Rely on onNavigateEnd to mean "arrived" - it also fires when the user interrupts the scroll.',
+      },
     ],
   },
 };
@@ -295,7 +336,11 @@ export const docsZh = {
     targets: [
       {className: 'astryx-outline', visualProps: ['density']},
       {className: 'astryx-outline-indicator'},
-      {className: 'astryx-outline-item', visualProps: ['level'], states: ['active']},
+      {
+        className: 'astryx-outline-item',
+        visualProps: ['level'],
+        states: ['active'],
+      },
     ],
   },
   components: [
@@ -332,40 +377,47 @@ export const docsZh = {
         {
           name: 'density',
           type: "'default' | 'compact'",
-          description: "控制项目内边距的密度变体。'compact' 用于紧凑界面，'default' 为标准间距。",
+          description:
+            "控制项目内边距的密度变体。'compact' 用于紧凑界面，'default' 为标准间距。",
           default: "'default'",
         },
         {
           name: 'onNavigateStart',
           type: '(id: string) => void',
-          description: '导航开始时（滚动前）调用，传入项目 id。与 onNavigateEnd 搭配可在目标标题上实现到达效果（闪烁、描边、脉冲）。',
+          description:
+            '导航开始时（滚动前）调用，传入项目 id。与 onNavigateEnd 搭配可在目标标题上实现到达效果（闪烁、描边、脉冲）。',
         },
         {
           name: 'onNavigateEnd',
           type: '(id: string) => void',
-          description: '导航结束时调用（平滑滚动停止，或减弱动效将其变为瞬时跳转）。每次 onNavigateStart 必定对应一次调用，包括用户中途手动滚动打断的情况，因此“导航中”状态不会泄漏。',
+          description:
+            '导航结束时调用（平滑滚动停止，或减弱动效将其变为瞬时跳转）。每次 onNavigateStart 必定对应一次调用，包括用户中途手动滚动打断的情况，因此“导航中”状态不会泄漏。',
         },
         {
           name: 'offset',
           type: 'number',
-          description: '覆盖滚动根顶部的固定顶栏高度（px）。同时位移激活线与滚动落点，因此标题被激活的位置正是点击后停留的位置——落在顶栏下方，而非被顶栏遮住。它与每个标题自身的 scroll-margin-top 叠加（先顶栏，再留白），而非取代它。若没有元素覆盖内容，保持 0，交给 scroll-margin-top 处理。',
+          description:
+            '覆盖滚动根顶部的固定顶栏高度（px）。同时位移激活线与滚动落点，因此标题被激活的位置正是点击后停留的位置——落在顶栏下方，而非被顶栏遮住。它与每个标题自身的 scroll-margin-top 叠加（先顶栏，再留白），而非取代它。若没有元素覆盖内容，保持 0，交给 scroll-margin-top 处理。',
           default: '0',
         },
         {
           name: 'scrollContainerRef',
           type: 'React.RefObject<HTMLElement | null>',
-          description: '要跟踪的滚动容器，替代自动探测最近的可滚动祖先。当内容在分栏、弹窗或面板中滚动而非视口时使用。',
+          description:
+            '要跟踪的滚动容器，替代自动探测最近的可滚动祖先。当内容在分栏、弹窗或面板中滚动而非视口时使用。',
         },
         {
           name: 'hasScrollOnClick',
           type: 'boolean',
-          description: '激活项目时是否平滑滚动。设为 false 可自行接管滚动（虚拟列表、路由）：Outline 仍会更新激活项、hash 和导航回调，但不执行滚动。',
+          description:
+            '激活项目时是否平滑滚动。设为 false 可自行接管滚动（虚拟列表、路由）：Outline 仍会更新激活项、hash 和导航回调，但不执行滚动。',
           default: 'true',
         },
         {
           name: 'xstyle',
           type: 'StyleXStyles',
-          description: '用于布局自定义的 StyleX 样式。必须是 stylex.create() 值。',
+          description:
+            '用于布局自定义的 StyleX 样式。必须是 stylex.create() 值。',
         },
       ],
     },
@@ -375,12 +427,36 @@ export const docsZh = {
     description:
       'A table-of-contents sidebar for documentation pages, help centers, wikis, and long settings pages. Use it for navigation within a single page, not for app routes.',
     bestPractices: [
-      {guidance: true, description: 'Pass a flat ordered list of headings and let level control indentation.'},
-      {guidance: true, description: 'Use activeId when custom scroll logic owns the active section.'},
-      {guidance: true, description: 'Use density="compact" in dense sidebars where vertical space is tight.'},
-      {guidance: true, description: 'Use useOutlineFromMarkdown or useOutlineFromDOM when headings are generated from content. For linkable Markdown headings, pass the same createMarkdownHeadingLinks() entry to Markdown and Outline; configure headingIdPrefix on that plugin for multiple roots.'},
-      {guidance: false, description: 'Use Outline for application navigation - use SideNav or TopNav for routes.'},
-      {guidance: false, description: 'Use Outline for expandable hierarchy - use TreeList when nodes need expand and collapse.'},
+      {
+        guidance: true,
+        description:
+          'Pass a flat ordered list of headings and let level control indentation.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use activeId when custom scroll logic owns the active section.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use density="compact" in dense sidebars where vertical space is tight.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use useOutlineFromMarkdown or useOutlineFromDOM when headings are generated from content. For linkable Markdown headings, pass the same createMarkdownHeadingLinks() entry to Markdown and Outline; configure headingIdPrefix on that plugin for multiple roots.',
+      },
+      {
+        guidance: false,
+        description:
+          'Use Outline for application navigation - use SideNav or TopNav for routes.',
+      },
+      {
+        guidance: false,
+        description:
+          'Use Outline for expandable hierarchy - use TreeList when nodes need expand and collapse.',
+      },
     ],
   },
 };
@@ -388,34 +464,77 @@ export const docsZh = {
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsDense = {
   description:
-    'Document outline/table-of-contents nav with sliding indicator track. Flat items array {id,label,level}; anchor links; density variant (default/compact); uncontrolled scroll-spy by scroll position (last heading past its resting line = offset + its own scroll-margin-top; first item at top, last at bottom); controlled with activeId; smooth-scroll on click that pins the active item until the next manual scroll. Single tab stop (roving tabindex): Arrow keys move, Home/End jump, Enter/Space activate. onNavigateStart/onNavigateEnd fire around the scroll. Scroll scoping via offset / scrollContainerRef / hasScrollOnClick.',
+    'Document outline/table-of-contents nav with sliding indicator track. Flat items array {id,label,level}; anchor links; density variant (default/compact); uncontrolled scroll-spy by scroll position (last heading past its resting line = offset + its own scroll-margin-top; first item at top, last at bottom); controlled with activeId; smooth-scroll on click that pins the active item until the next manual scroll. Each link is a Tab stop; Enter/Space activate; no arrow/Home/End movement. onNavigateStart/onNavigateEnd fire around the scroll. Scroll scoping via offset / scrollContainerRef / hasScrollOnClick.',
   usage: {
     anatomy,
     description:
       'A table-of-contents sidebar for documentation pages, help centers, wikis, and long settings pages. Use it for navigation within a single page, not for app routes.',
     bestPractices: [
-      {guidance: true, description: 'Pass a flat ordered list of headings and let level control indentation.'},
-      {guidance: true, description: 'Use activeId when custom scroll logic owns the active section.'},
-      {guidance: true, description: 'Use density="compact" in dense sidebars where vertical space is tight.'},
-      {guidance: true, description: 'Use useOutlineFromMarkdown or useOutlineFromDOM when headings are generated from content. For linkable Markdown headings, pass the same createMarkdownHeadingLinks() entry to Markdown and Outline; configure headingIdPrefix on that plugin for multiple roots.'},
-      {guidance: true, description: 'Pass scrollContainerRef when the content scrolls in a split pane, modal, or panel instead of the viewport.'},
-      {guidance: true, description: 'Set offset to the height of a fixed header that overlays the content, so headings land below it instead of underneath it.'},
-      {guidance: false, description: 'Use Outline for application navigation - use SideNav or TopNav for routes.'},
-      {guidance: false, description: 'Use Outline for expandable hierarchy - use TreeList when nodes need expand and collapse.'},
-      {guidance: false, description: 'Rely on onNavigateEnd to mean "arrived" - it also fires when the user interrupts the scroll.'},
+      {
+        guidance: true,
+        description:
+          'Pass a flat ordered list of headings and let level control indentation.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use activeId when custom scroll logic owns the active section.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use density="compact" in dense sidebars where vertical space is tight.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use useOutlineFromMarkdown or useOutlineFromDOM when headings are generated from content. For linkable Markdown headings, pass the same createMarkdownHeadingLinks() entry to Markdown and Outline; configure headingIdPrefix on that plugin for multiple roots.',
+      },
+      {
+        guidance: true,
+        description:
+          'Pass scrollContainerRef when the content scrolls in a split pane, modal, or panel instead of the viewport.',
+      },
+      {
+        guidance: true,
+        description:
+          'Set offset to the height of a fixed header that overlays the content, so headings land below it instead of underneath it.',
+      },
+      {
+        guidance: false,
+        description:
+          'Use Outline for application navigation - use SideNav or TopNav for routes.',
+      },
+      {
+        guidance: false,
+        description:
+          'Use Outline for expandable hierarchy - use TreeList when nodes need expand and collapse.',
+      },
+      {
+        guidance: false,
+        description:
+          'Rely on onNavigateEnd to mean "arrived" - it also fires when the user interrupts the scroll.',
+      },
     ],
   },
   propDescriptions: {
-    items: 'Ordered OutlineItem[]: {id,label,level}. id should match target heading DOM id.',
+    items:
+      'Ordered OutlineItem[]: {id,label,level}. id should match target heading DOM id.',
     activeId: 'Controlled active heading id. Disables built-in scroll-spy.',
     onActiveIdChange: 'Called when active id changes from scroll-spy or click.',
     label: "Accessible nav label. Default: 'Table of contents'.",
-    density: "Density variant: 'default' (standard) or 'compact'. Default: 'default'.",
-    onNavigateStart: 'Called with the id when navigation begins, before the scroll.',
-    onNavigateEnd: 'Called with the id once the scroll settles. Fires exactly once per onNavigateStart, including on user interruption.',
-    offset: 'Height in px of a fixed header overlaying the scroll root. Shifts BOTH the activation line and the scroll landing, so a heading activates where navigating to it lands it. Composes with (does not replace) each heading scroll-margin-top. Default: 0.',
-    scrollContainerRef: 'RefObject of the scroll container to track, instead of the nearest scrollable ancestor. For split panes, modals, panels.',
-    hasScrollOnClick: 'Whether activating an item smooth-scrolls to it. false = you own scrolling; active id, hash and callbacks still update. Default: true.',
+    density:
+      "Density variant: 'default' (standard) or 'compact'. Default: 'default'.",
+    onNavigateStart:
+      'Called with the id when navigation begins, before the scroll.',
+    onNavigateEnd:
+      'Called with the id once the scroll settles. Fires exactly once per onNavigateStart, including on user interruption.',
+    offset:
+      'Height in px of a fixed header overlaying the scroll root. Shifts BOTH the activation line and the scroll landing, so a heading activates where navigating to it lands it. Composes with (does not replace) each heading scroll-margin-top. Default: 0.',
+    scrollContainerRef:
+      'RefObject of the scroll container to track, instead of the nearest scrollable ancestor. For split panes, modals, panels.',
+    hasScrollOnClick:
+      'Whether activating an item smooth-scrolls to it. false = you own scrolling; active id, hash and callbacks still update. Default: true.',
     xstyle: 'StyleX styles for layout. Must be stylex.create() value.',
   },
   components: [
@@ -423,18 +542,25 @@ export const docsDense = {
       name: 'Outline',
       displayName: 'Outline',
       description:
-        'Document outline nav with sliding indicator. Renders heading anchors with a density variant, roving-tabindex keyboard nav, navigate callbacks, and scroll-spy active state when uncontrolled.',
+        'Document outline nav with sliding indicator. Renders heading anchors with a density variant, links in the normal Tab order, navigate callbacks, and scroll-spy active state when uncontrolled.',
       propDescriptions: {
-        items: 'Ordered OutlineItem[]: {id,label,level}. id should match target heading DOM id.',
+        items:
+          'Ordered OutlineItem[]: {id,label,level}. id should match target heading DOM id.',
         activeId: 'Controlled active heading id. Disables built-in scroll-spy.',
-        onActiveIdChange: 'Called when active id changes from scroll-spy or click.',
+        onActiveIdChange:
+          'Called when active id changes from scroll-spy or click.',
         label: "Accessible nav label. Default: 'Table of contents'.",
         density: "Density variant: 'default' | 'compact'. Default: 'default'.",
-        onNavigateStart: 'Called with the id when navigation begins, before the scroll.',
-        onNavigateEnd: 'Called with the id once the scroll settles. Fires exactly once per onNavigateStart, including on user interruption.',
-        offset: 'Height in px of a fixed header overlaying the scroll root. Shifts both the activation line and the scroll landing. Composes with scroll-margin-top. Default: 0.',
-        scrollContainerRef: 'RefObject of the scroll container to track, instead of the nearest scrollable ancestor.',
-        hasScrollOnClick: 'Whether activating an item smooth-scrolls to it. Default: true.',
+        onNavigateStart:
+          'Called with the id when navigation begins, before the scroll.',
+        onNavigateEnd:
+          'Called with the id once the scroll settles. Fires exactly once per onNavigateStart, including on user interruption.',
+        offset:
+          'Height in px of a fixed header overlaying the scroll root. Shifts both the activation line and the scroll landing. Composes with scroll-margin-top. Default: 0.',
+        scrollContainerRef:
+          'RefObject of the scroll container to track, instead of the nearest scrollable ancestor.',
+        hasScrollOnClick:
+          'Whether activating an item smooth-scrolls to it. Default: true.',
         xstyle: 'StyleX styles for layout. Must be stylex.create() value.',
       },
     },

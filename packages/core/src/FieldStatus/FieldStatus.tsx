@@ -20,7 +20,7 @@
 import React from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import {
   colorVars,
   radiusVars,
@@ -31,7 +31,7 @@ import {
 import type {InputStatusType} from '../Field/types';
 import {useEntryAnimation} from '../hooks/useEntryAnimation';
 import {themeProps} from '../utils/themeProps';
-import {Icon} from '../Icon';
+import {Icon} from '../Icon/Icon';
 import type {IconName} from '../Icon';
 import type {FieldStatusVariantMap} from './index';
 import {useFieldStatusAnnouncement} from './useFieldStatusAnnouncement';
@@ -63,6 +63,12 @@ const styles = stylex.create({
     fontFamily: typographyVars['--font-family-body'],
     fontSize: typeScaleVars['--text-supporting-size'],
     lineHeight: typeScaleVars['--text-supporting-leading'],
+    // A validation message often echoes the value that failed (an address, a
+    // URL). Let such an unbroken token wrap inside the field instead of
+    // painting past its edges (WCAG 2.2 SC 1.4.10 Reflow).
+    overflowWrap: 'anywhere',
+    // Text inside keeps `anywhere` too (Text FR3).
+    '--_astryx-text-overflow-wrap': 'anywhere',
   },
   attached: {
     marginTop: `calc(-1 * ${ATTACHED_OVERLAP})`,
@@ -118,6 +124,9 @@ const colorStyles = stylex.create({
 export type FieldStatusVariant = keyof FieldStatusVariantMap;
 
 export interface FieldStatusProps extends BaseProps<HTMLDivElement> {
+  /**
+   * Ref to the rendered message box.
+   */
   ref?: React.Ref<HTMLDivElement>;
   /**
    * The type of status to display.
@@ -136,6 +145,28 @@ export interface FieldStatusProps extends BaseProps<HTMLDivElement> {
   variant?: FieldStatusVariant;
 }
 
+// A direct `tooltip` resolves to the deprecated signature first; every other
+// call, a `FieldStatusVariant`-typed value included, resolves to the second,
+// which `ComponentProps<typeof FieldStatus>` reads.
+/**
+ * @deprecated FieldStatus has no `tooltip` presentation
+ * (`component:FieldStatus` FR7): it draws a plain message box with no tooltip.
+ * Set `statusVariant="tooltip"` on the field control instead, which shows the
+ * message from its on-field status icon. Removed in the next minor release.
+ */
+export function FieldStatus(
+  props: FieldStatusProps & {variant: 'tooltip'},
+): React.JSX.Element;
+/**
+ * A status message component for form fields: an `attached` message under a
+ * field, or a `detached` one with its own status icon.
+ *
+ * @example
+ * ```
+ * <FieldStatus type="error" message="This field is required" />
+ * ```
+ */
+export function FieldStatus(props: FieldStatusProps): React.JSX.Element;
 /**
  * A status message component for form fields.
  *
@@ -144,9 +175,10 @@ export interface FieldStatusProps extends BaseProps<HTMLDivElement> {
  * decorative for assistive tech (`aria-hidden`): the message text already names
  * the status in words and is announced through the live region. The `attached`
  * variant keeps its status affordance on the bordered input, so it renders no
- * icon here to avoid a duplicate. The `tooltip` variant renders no message box
- * at all — the input surfaces the status through a tooltip on its on-field
- * icon — so callers skip rendering FieldStatus for it.
+ * icon here to avoid a duplicate. FieldStatus has no `tooltip` presentation:
+ * a field control given `statusVariant="tooltip"` surfaces the status through
+ * a tooltip on its on-field icon and renders no FieldStatus for it
+ * (`component:FieldStatus` FR7).
  *
  * Screen-reader announcements go through the persistent `useAnnounce` live
  * regions (assertive for errors, polite otherwise) rather than `role`/

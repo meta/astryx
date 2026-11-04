@@ -25,7 +25,7 @@ It ships to npm **only under the `@canary` dist-tag** — there is never a stabl
 ## Status
 
 Under active development. The config-model chart and its marks/chrome are in place;
-API and visuals are still being refined. See [`docs/`](https://github.com/facebook/astryx/tree/main/packages/charts/docs) for the plan, design research, readiness audit, and
+API and visuals are still being refined. See [`docs/`](https://github.com/meta/astryx/tree/main/packages/charts/docs) for the plan, design research, readiness audit, and
 verification checklist.
 
 ## Usage
