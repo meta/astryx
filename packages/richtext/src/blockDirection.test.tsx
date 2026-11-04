@@ -13,11 +13,24 @@
  */
 
 import {describe, it, expect} from 'vitest';
+import {createEditor, $getRoot, $createTextNode, type TextNode} from 'lexical';
+import {
+  ListNode,
+  ListItemNode,
+  $createListNode,
+  $createListItemNode,
+} from '@lexical/list';
+import {HeadingNode, QuoteNode} from '@lexical/rich-text';
+import {CodeNode} from '@lexical/code';
+import {TableCellNode, TableNode, TableRowNode} from '@lexical/table';
 import {render, waitFor} from '@testing-library/react';
 import {RichTextEditor} from './RichTextEditor';
 import {RichTextView} from './RichTextView';
 import {markdownToEditorStateJSON} from './markdownSerializers';
-import {firstStrongDirection} from './BlockDirectionPlugin';
+import {
+  firstStrongDirection,
+  registerBlockDirection,
+} from './BlockDirectionPlugin';
 
 const HEBREW = 'פסקה בעברית לבדיקת כיוון הטקסט.';
 const ENGLISH = 'An English paragraph.';
@@ -207,22 +220,73 @@ describe('a top-level block carries its own direction (spec:AST-061 FR6)', () =>
     expect(firstStrongDirection('123 456')).toBeNull();
   });
 
-  it('writes every prose ancestor, so a wrapper never holds a stale direction', async () => {
-    const {container} = render(
-      <RichTextView
-        value={markdownToEditorStateJSON(
-          '- \u05e9\u05dc\u05d5\u05dd\n  - \u05e2\u05d5\u05dc\u05dd\n',
-        )}
-      />,
+  it('writes every prose ancestor inside the update that changed the text', async () => {
+    // The value a caller stores comes from the update that changed the text.
+    // The sweep that follows is tagged history-merge, which OnChangePlugin
+    // does not report, so a wrapper written only by the sweep holds a stale
+    // direction in that value until the next edit. Driving a real editor is
+    // the only way to see which update the write lands in: a whole-state
+    // load, as RichTextView does, runs no transforms at all.
+    const editor = createEditor({
+      namespace: 'block-direction-ancestors',
+      nodes: [
+        ListNode,
+        ListItemNode,
+        HeadingNode,
+        QuoteNode,
+        CodeNode,
+        TableNode,
+        TableRowNode,
+        TableCellNode,
+      ],
+      onError: error => {
+        throw error;
+      },
+    });
+    const teardown = registerBlockDirection(editor);
+
+    let wrapper: ListItemNode | null = null;
+    let leaf: TextNode | null = null;
+    editor.update(
+      () => {
+        const outer = $createListNode('bullet');
+        wrapper = $createListItemNode();
+        const inner = $createListNode('bullet');
+        const item = $createListItemNode();
+        leaf = $createTextNode('a');
+        item.append(leaf);
+        inner.append(item);
+        wrapper.append(inner);
+        outer.append(wrapper);
+        $getRoot().clear().append(outer);
+      },
+      {discrete: true},
     );
-    await waitFor(() => expect(container.querySelector('ul')).not.toBeNull());
-    // The wrapper is written from the text of everything under it, in the
-    // same update as the item that holds the text. Left to the follow-up
-    // sweep it would be tagged history-merge, which OnChangePlugin does not
-    // report, so a caller's stored value would lag by one edit.
-    expect(
-      [...container.querySelectorAll('li')].map(li => li.getAttribute('dir')),
-    ).toEqual(['rtl', 'rtl', 'rtl']);
+
+    // One edit: the nested item's text becomes strongly right-to-left. The
+    // wrapper has to be right-to-left in this update's own state.
+    const states: Array<{tags: Set<string>; wrapperDir: string | null}> = [];
+    const stop = editor.registerUpdateListener(({editorState, tags}) => {
+      editorState.read(() => {
+        states.push({
+          tags: new Set(tags),
+          wrapperDir: wrapper?.getLatest().getDirection() ?? null,
+        });
+      });
+    });
+    editor.update(
+      () => {
+        leaf?.setTextContent('\u05e9');
+      },
+      {discrete: true},
+    );
+
+    const typed = states.find(s => !s.tags.has('history-merge'));
+    expect(typed).toBeDefined();
+    expect(typed?.wrapperDir).toBe('rtl');
+
+    stop();
+    teardown();
   });
 
   it('gives a nesting list item a direction, so its step follows its text', async () => {

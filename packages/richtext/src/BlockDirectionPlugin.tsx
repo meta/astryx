@@ -56,11 +56,10 @@ const PROSE_NODES: ReadonlyArray<Klass<ElementNode>> = [
 ];
 
 /**
- * The containers, which order their contents in the document's direction and
- * so must never carry one of their own. A `dir` can still arrive on them from
- * pasted HTML (`$setDirectionFromDOM`) or an older stored document, which
- * would turn a list's markers or a table's columns around; clearing it keeps
- * the stored state saying what the document shows.
+ * The containers. They take their parent's direction from the theme whatever
+ * `dir` says, so an arriving one changes no pixels. It can still arrive from
+ * pasted HTML (`$setDirectionFromDOM`) or an older stored document; clearing
+ * it keeps the stored state saying what the document shows.
  *
  * A fenced code block is the one place this surface and core `Markdown`
  * disagree: the theme gives it `unicode-bidi: plaintext` so each line reads
