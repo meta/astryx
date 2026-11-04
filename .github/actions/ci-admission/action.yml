@@ -138,8 +138,8 @@ runs:
           const MAX_LOOKS = Math.max(1, Number(process.env.MAX_LOOKS || '8'));
           const LOOK_MS = MAX_LOOKS > 1 ? (MAX_WAIT_MS - JITTER_MS) / (MAX_LOOKS - 1) : MAX_WAIT_MS;
           // A run that would fit but yields to a waiting `main` check looks
-          // again this soon, outside its count of looks, since `main` waits
-          // are short.
+          // again this soon, outside its count of looks: the yield lasts at
+          // most MAIN_YIELD_MS.
           const YIELD_LOOK_MS = 2 * 60_000;
           // A run with no room but within this many jobs of it looks again
           // this soon, also outside its count of looks: near-full CI frees
@@ -178,8 +178,9 @@ runs:
           // no room is turned away (spec:AST-030 DEC-16).
           const MAX_WAITING = 10;
           // A pull-request run yields to a waiting `main` run for the first
-          // fifteen minutes of that wait. A longer `main` wait still counts its
-          // whole peak, but pull-request runs no longer stop for it.
+          // fifteen minutes of that wait. After that the `main` run still counts
+          // its whole peak, so a pull-request run starts only when it fits
+          // beside it (spec:AST-030 DEC-16).
           const MAIN_YIELD_MS = 15 * 60_000;
           const PHASE = process.env.PHASE || 'whole';
           // The most jobs a run holds at once, by workflow: ci.yml's

@@ -961,15 +961,11 @@ spend a low API budget. A `main` full check, release re-check or baseline
 capture (every dispatch of the CI workflow) goes first: while one waits,
 pull-request runs wait too, their Storybook builds included. A pull-request run
 that would fit and waits only for a `main` check looks again every two minutes
-until it starts. It yields only during the `main` check's first fifteen minutes
-of waiting; a longer `main` wait still counts its whole peak, but pull-request
-runs no longer stop for it, so a long `main` wait never turns pull requests
-away for hours. The extra looks happen only while
+until it starts. It yields that way only during the `main` check's first fifteen minutes of waiting. A longer `main` wait still counts its whole peak, so a pull-request run starts only when it fits beside that peak. While `main` waits, the pull-request runs that do not fit start one per ten minutes at their longest wait and the rest stop with "CI is full", for up to the two-hour wait. The extra looks happen only while
 CI is near full or `main` waits. Every pull-request job ends within its
 fifteen-minute budget, so `main` usually fits within fifteen minutes. A `main`
 run still waits until there is room, up to two hours, and its waiting job runs
-on a standard runner: a slim runner stops a job at fifteen minutes and so
-cancels the whole run, which happened twice to release gates. Nothing is
+on a standard runner: a slim runner stops a job at fifteen minutes and so cancels the whole run. Nothing is
 reserved for `main` outside its wait. At most ten pull-request runs wait at once, counting
 pull-request runs only; one more that finds no room stops at once, "CI is full:
 re-run all jobs or push later", rather than add a waiting job to a full CI. A
