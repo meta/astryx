@@ -134,7 +134,7 @@ generateThemeRules generateThemeRules theme/MediaTheme.doc.mjs theme/generateThe
 gestureCounter gestureCounter Layer/Layer.doc.mjs Layer/gestureCounter.ts
 getInitialFocusDate getInitialFocusDate Calendar/Calendar.doc.mjs Calendar/getInitialFocusDate.ts
 getLocaleDirection getLocaleDirection i18n/InternationalizationProvider.doc.mjs i18n/getLocaleDirection.ts
-getStandaloneShortWeekdayNames getStandaloneShortWeekdayNames Calendar/Calendar.doc.mjs Calendar/getStandaloneShortWeekdayNames.ts
+getWeekdayHeaderNames getWeekdayHeaderNames Calendar/Calendar.doc.mjs Calendar/getWeekdayHeaderNames.ts
 glidingDivider glidingDivider Table/Table.doc.mjs Table/glidingDivider.ts
 globalIconRegistry globalIconRegistry Icon/Icon.doc.mjs Icon/globalIconRegistry.tsx
 grammar grammar CodeBlock/CodeBlock.doc.mjs CodeBlock/grammar.ts
