@@ -3682,6 +3682,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-hotkeys-search-and-help-shortcuts",
+      "path": "examples/use-hotkeys/search-and-help-shortcuts",
+      "aliases": []
+    },
+    {
       "name": "example-use-hover-card-profile-preview",
       "path": "examples/use-hover-card/profile-preview",
       "aliases": []
@@ -3694,6 +3699,11 @@
     {
       "name": "example-use-layer-anchored-layer",
       "path": "examples/use-layer/anchored-layer",
+      "aliases": []
+    },
+    {
+      "name": "example-use-lightbox-gallery-grid",
+      "path": "examples/use-lightbox/gallery-grid",
       "aliases": []
     },
     {
@@ -3949,6 +3959,11 @@
     {
       "name": "hook-use-layer",
       "path": "hooks/use-layer",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-lightbox",
+      "path": "hooks/use-lightbox",
       "aliases": []
     },
     {
