@@ -56,6 +56,68 @@ describe('readDiff', () => {
     expect(addedByFile).toEqual({'docs/a.md': ['added']});
   });
 
+  it('keeps every added line of any file with its new line number', () => {
+    const diff = [
+      'diff --git a/docs/a.md b/docs/a.md',
+      '--- a/docs/a.md',
+      '+++ b/docs/a.md',
+      '@@ -3,0 +4,2 @@',
+      '+one',
+      '+++ two',
+      '@@ -9 +11 @@',
+      '-old',
+      '+new',
+    ].join('\n');
+    expect(readDiff(diff).everyAddedLine).toEqual([
+      {file: 'docs/a.md', line: 4, text: 'one'},
+      {file: 'docs/a.md', line: 5, text: '++ two'},
+      {file: 'docs/a.md', line: 11, text: 'new'},
+    ]);
+  });
+
+  it('reads a path with a space, or a quoted non-ASCII path, from the +++ header', () => {
+    const diff = [
+      'diff --git a/My notes.md b/My notes.md',
+      'new file mode 100644',
+      '--- /dev/null',
+      '+++ b/My notes.md\t',
+      '@@ -0,0 +1 @@',
+      '+first',
+      'diff --git "a/caf\\303\\251.md" "b/caf\\303\\251.md"',
+      '--- "a/caf\\303\\251.md"',
+      '+++ "b/caf\\303\\251.md"',
+      '@@ -1 +1 @@',
+      '-old',
+      '+second',
+    ].join('\n');
+    const {files, everyAddedLine, unreadable} = readDiff(diff);
+    expect(files).toEqual(['My notes.md', 'café.md']);
+    expect(everyAddedLine).toEqual([
+      {file: 'My notes.md', line: 1, text: 'first'},
+      {file: 'café.md', line: 1, text: 'second'},
+    ]);
+    expect(unreadable).toBe(false);
+  });
+
+  it('reads a deleted file by its old path, and flags a hunk with no readable path', () => {
+    expect(
+      readDiff(
+        [
+          'diff --git a/gone file.md b/gone file.md',
+          '--- a/gone file.md',
+          '+++ /dev/null',
+          '@@ -1 +0,0 @@',
+          '-removed',
+        ].join('\n'),
+      ).files,
+    ).toEqual(['gone file.md']);
+    const odd = readDiff(
+      ['diff --git a/x y b/x y', '@@ -0,0 +1 @@', '+lost'].join('\n'),
+    );
+    expect(odd.unreadable).toBe(true);
+    expect(odd.everyAddedLine).toEqual([]);
+  });
+
   it('reads added shipped-source lines with their new line numbers', () => {
     const {files, addedLines} = readDiff(fixture('pr-8381.diff'));
     expect(files).toEqual([

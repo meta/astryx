@@ -13,7 +13,12 @@
  *   are useSliderTouch.test.tsx and motion/uikit/slider.test.ts.
  */
 
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   blockMainThread,
   busyWindowProof,

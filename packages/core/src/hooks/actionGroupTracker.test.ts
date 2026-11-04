@@ -240,6 +240,55 @@ describe('createActionGroupTracker', () => {
     ]);
   });
 
+  it('times the release fade by the tempo its stylesheet reads, as the press controller does (spec:AST-108 FR4)', () => {
+    // A rule writes the tempo; browsers inherit it from the theme, jsdom
+    // only reads it where it is declared.
+    const style = document.createElement('style');
+    style.textContent = '[data-action] { --_astryx-motion-tempo: 1.5; }';
+    document.head.append(style);
+    try {
+      const group = tracker();
+      group.begin(100, 20);
+      group.end();
+      vi.advanceTimersByTime(PRESS_FADE_MS);
+      expect(first.button.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+      vi.advanceTimersByTime(PRESS_FADE_MS / 2);
+      expect(first.button.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    } finally {
+      style.remove();
+    }
+  });
+
+  it('under Reduce Motion a tempo may shorten the release fade but never lengthens it past 200 ms (spec:AST-108 FR4)', () => {
+    vi.stubGlobal(
+      'matchMedia',
+      (query: string): MediaQueryList =>
+        ({
+          matches: /prefers-reduced-motion:\s*reduce/.test(query),
+          media: query,
+          onchange: null,
+          addListener: () => undefined,
+          removeListener: () => undefined,
+          addEventListener: () => undefined,
+          removeEventListener: () => undefined,
+          dispatchEvent: () => false,
+        }) as MediaQueryList,
+    );
+    const style = document.createElement('style');
+    style.textContent = '[data-action] { --_astryx-motion-tempo: 1.5; }';
+    document.head.append(style);
+    try {
+      const group = tracker();
+      group.begin(100, 20);
+      group.end();
+      vi.advanceTimersByTime(PRESS_FADE_MS);
+      expect(first.button.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    } finally {
+      style.remove();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('dispose finishes a pending release fade', () => {
     const group = tracker();
     group.begin(100, 20);

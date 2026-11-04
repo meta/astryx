@@ -36,7 +36,7 @@ import {webInputDriver, WHEEL_SKIP} from '@astryxdesign/interaction-harness';
  */
 const TRACKPAD_SKIP =
   "Chromium's driver sends each wheel as a mouse wheel's notch (wheelDeltaY -120 whatever its delta); WebKit's driver sends a trackpad's precise deltas";
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 
 interface Entry {
   name: string;

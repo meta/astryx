@@ -10,7 +10,7 @@
  * jsdom has no native radio-group keyboard, so only a real engine shows it.
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

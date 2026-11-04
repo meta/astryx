@@ -10,7 +10,7 @@
  * SYNC: Keep the timings here equal to Spinner.tsx (`styles.rotor`).
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

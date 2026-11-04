@@ -29,6 +29,11 @@ export const docs = {
   group: 'BottomSheet',
   category: 'Overlay',
   keywords: ['bottom sheet', 'switcher', 'multi-step', 'flow', 'wizard'],
+  deprecated: {
+    replacement: 'BottomSheet',
+    description:
+      'Write each step as its own BottomSheet with isOpen, controlled by one state value that names the open step; moving on from inside the open step replaces it in place (see BottomSheet, Replacing a sheet). BottomSheetSwitcher keeps working until a future minor release removes it.',
+  },
   playground: {
     overlay: true,
     overlayControl: {
