@@ -186,28 +186,32 @@ export function usageFor(pkg, row) {
 const rowCount = ({added, changed, removed}) =>
   added.length + changed.length + removed.length;
 
-/** The key of every row two reports differ in, members included. */
-function differingKeys(from, to) {
-  const a = parseReport(from);
-  const b = parseReport(to);
-  const keys = new Set();
-  for (const [k, row] of b) if (a.get(k)?.line !== row.line) keys.add(k);
-  for (const k of a.keys()) if (!b.has(k)) keys.add(k);
-  return keys;
-}
+/** The rows of a `diffReports` result, in one list. */
+const rowsOf = ({added, changed, removed}) => [
+  ...added,
+  ...changed,
+  ...removed,
+];
 
 /**
- * How many rows the pull request changed that its committed report does not
- * show. Rows a report on main already lacked are not the pull request's, and
- * only a built surface of the merge base tells the two apart: against the
- * merge base's committed report, this counts none.
+ * How many of the pull request's rows its committed report does not show,
+ * counted as the pull request report counts them (a wholly added or removed
+ * item is one row). Rows a report on main already lacked are not the pull
+ * request's, and only a built surface of the merge base tells the two apart:
+ * against the merge base's committed report, this counts none.
  */
 function staleOwnRowCount({base, head, committed, baseSource, stale}) {
   if (!stale || base == null || baseSource === 'committed') return 0;
-  const behind = differingKeys(committed, head);
-  let n = 0;
-  for (const k of differingKeys(base, head)) if (behind.has(k)) n++;
-  return n;
+  const behind = rowsOf(diffReports(committed, head));
+  const item = r => `${r.entry}\0${r.section}\0${r.item}`;
+  const behindRows = new Set(behind.map(r => `${item(r)}\0${r.member ?? ''}`));
+  const behindItems = new Set(behind.map(item));
+  // A whole-item row stays behind when any part of that item is behind.
+  return rowsOf(diffReports(base, head)).filter(r =>
+    r.member
+      ? behindRows.has(`${item(r)}\0${r.member}`)
+      : behindItems.has(item(r)),
+  ).length;
 }
 
 /**

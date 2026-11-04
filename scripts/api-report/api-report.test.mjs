@@ -315,7 +315,7 @@ describe('API changes', () => {
           base: resize(report),
           head: addTone(resize(report)),
           committed: report,
-          baseSource: 'main',
+          baseSource: 'build',
         },
       ]);
       expect(change).toMatchObject({
@@ -323,6 +323,30 @@ describe('API changes', () => {
         staleRows: 2,
         staleOwnRows: 1,
       });
+      expect(staleReportWarnings([change], file)[0]).toContain(
+        'changes 1 row of',
+      );
+    });
+
+    it('counts a wholly added component as one row, as the pull request report does', () => {
+      const withChip2 = text =>
+        text.replace(
+          '### Components\n\n```text\n',
+          '### Components\n\n```text\ncomponent Chip2\n  prop a?: string\n  prop b?: string\n  prop c?: string\n  prop d?: string\n  prop e?: string\n',
+        );
+      const head = withChip2(report);
+      expect(head).not.toBe(report);
+      const [change] = computeChanges([
+        {
+          pkg: '@astryxdesign/demo',
+          base: report,
+          head,
+          committed: report,
+          baseSource: 'build',
+        },
+      ]);
+      expect(change.counts.added).toBe(1);
+      expect(change).toMatchObject({staleRows: 1, staleOwnRows: 1});
       expect(staleReportWarnings([change], file)[0]).toContain(
         'changes 1 row of',
       );

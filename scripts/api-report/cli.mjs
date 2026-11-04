@@ -45,7 +45,10 @@ import {generateReport} from './generate.mjs';
 
 export const REPORT_FILE = 'api-report.md';
 export const SURFACE_FILE = 'surface.json';
-/** api-changes.json's shape; 2 added `baseRecord`, `baseSource`, `staleRows`. */
+/**
+ * api-changes.json's shape. Version 2 has `baseRecord`, `baseSource`, `staleRows`
+ * and `staleOwnRows`; a reader of version 2 accepts a missing `staleOwnRows`.
+ */
 export const CHANGES_VERSION = 2;
 const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
