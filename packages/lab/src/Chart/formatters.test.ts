@@ -53,6 +53,12 @@ describe('Chart date formatters', () => {
     },
   );
 
+  it('writes `iso8601` dates as Gregorian ones', () => {
+    const day = new Date(2026, 9, 30, 12);
+    expect(shortDate(day, 'en', 'iso8601')).toBe(shortDate(day, 'en'));
+    expect(monthYear(day, 'en', 'iso8601')).toBe('Oct 2026');
+  });
+
   it('uses an explicit locale for unabridged currency values', () => {
     expect(currency('€', 'de-DE')(12.5)).toBe(
       `€${(12.5).toLocaleString('de-DE')}`,

@@ -14,6 +14,7 @@
  */
 
 import type {CalendarSystem, Locale} from '@astryxdesign/core/i18n';
+import {plainDateFormat, plainDateFromDate} from '@astryxdesign/core/utils';
 
 /** Lazily cache one formatter per locale, including the legacy host default. */
 function byLocale<T>(
@@ -46,30 +47,23 @@ const getPercentFormat = byLocale(
     }),
 );
 
-function byLocaleAndCalendar(
-  options: Intl.DateTimeFormatOptions,
-): (locale: Locale, calendar: CalendarSystem) => Intl.DateTimeFormat {
-  const cache = new Map<string, Intl.DateTimeFormat>();
-  return (locale, calendar) => {
-    const key = `${calendar} ${locale}`;
-    let format = cache.get(key);
-    if (format === undefined) {
-      format = new Intl.DateTimeFormat(locale, {...options, calendar});
-      cache.set(key, format);
-    }
-    return format;
-  };
-}
+const getShortDateFormat = byLocale(
+  locale =>
+    new Intl.DateTimeFormat(locale, {
+      month: 'short',
+      day: 'numeric',
+      calendar: 'gregory',
+    }),
+);
 
-const getShortDateFormat = byLocaleAndCalendar({
-  month: 'short',
-  day: 'numeric',
-});
-
-const getMonthYearFormat = byLocaleAndCalendar({
-  month: 'short',
-  year: 'numeric',
-});
+const getMonthYearFormat = byLocale(
+  locale =>
+    new Intl.DateTimeFormat(locale, {
+      month: 'short',
+      year: 'numeric',
+      calendar: 'gregory',
+    }),
+);
 
 const getListFormat = byLocale(
   locale => new Intl.ListFormat(locale, {style: 'long', type: 'conjunction'}),
@@ -201,7 +195,13 @@ export function shortDate(
   if (Number.isNaN(d.getTime())) {
     return String(value);
   }
-  return getShortDateFormat(locale, calendar).format(d);
+  return calendar === 'gregory'
+    ? getShortDateFormat(locale).format(d)
+    : plainDateFormat(
+        plainDateFromDate(d),
+        {month: 'short', day: 'numeric', calendar},
+        locale,
+      );
 }
 
 /**
@@ -218,5 +218,11 @@ export function monthYear(
   if (Number.isNaN(d.getTime())) {
     return String(value);
   }
-  return getMonthYearFormat(locale, calendar).format(d);
+  return calendar === 'gregory'
+    ? getMonthYearFormat(locale).format(d)
+    : plainDateFormat(
+        plainDateFromDate(d),
+        {month: 'short', year: 'numeric', calendar},
+        locale,
+      );
 }

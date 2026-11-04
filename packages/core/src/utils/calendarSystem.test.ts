@@ -14,6 +14,7 @@ import {
   calendarShiftMonths,
   calendarShiftYears,
   formatCalendarDate,
+  formatCalendarInstant,
   formatCalendarMonthLabel,
   isCalendarSystemAvailable,
   isGregorianAligned,
@@ -21,12 +22,15 @@ import {
 } from './calendarSystem';
 import {
   DATE_FORMAT_WITH_WEEKDAY,
+  formatSharedDate,
   type PlainDate,
   plainDateAddDays,
+  plainDateFormat,
   plainDateFromISO,
   plainDateIsAfter,
   plainDateToISO,
 } from './plainDate';
+import {withChineseTemporalAheadOfIntl} from '../__tests__/temporalAheadOfIntl';
 import type {ISODateString} from './dateTypes';
 
 const iso = plainDateFromISO;
@@ -276,6 +280,55 @@ describe('calendar labels', () => {
         'en',
       ),
     ).toBe('Friday, Aban 8, 1405 AP');
+  });
+});
+
+describe('labels where Intl and Temporal disagree', () => {
+  const day = iso('2027-02-06');
+  const noon = new Date('2027-02-06T12:00:00Z');
+  const longDate = {year: 'numeric', month: 'long', day: 'numeric'} as const;
+
+  it('names the Temporal day in plainDateFormat and formatSharedDate', () => {
+    withChineseTemporalAheadOfIntl(() => {
+      const options = {
+        month: 'long',
+        day: 'numeric',
+        calendar: 'chinese',
+      } as const;
+      expect(plainDateFormat(day, options, 'en')).toBe('First Month 1');
+      expect(formatSharedDate(day, 'date_long', 'en', 'chinese')).toMatch(
+        /^First Month 1, 2027/,
+      );
+    });
+  });
+
+  it('names the Temporal day of an instant and keeps its time', () => {
+    const value = withChineseTemporalAheadOfIntl(() =>
+      formatCalendarInstant(
+        'chinese',
+        noon,
+        {...longDate, hour: 'numeric', minute: '2-digit'},
+        'en',
+        'UTC',
+      ),
+    );
+    expect(value).toMatch(/^First Month 1, 2027\(ding-wei\) at 12:00\sPM$/);
+  });
+});
+
+describe('iso8601 labels', () => {
+  const end = new Date('2027-02-06T12:00:00Z');
+  const longDate = {year: 'numeric', month: 'long', day: 'numeric'} as const;
+
+  it('writes dates and instants as gregory does', () => {
+    const day = iso('2027-02-06');
+    expect(formatSharedDate(day, 'date', 'en', 'iso8601')).toBe(
+      formatSharedDate(day, 'date', 'en'),
+    );
+    const dateTime = {...longDate, hour: 'numeric', minute: '2-digit'} as const;
+    expect(formatCalendarInstant('iso8601', end, dateTime, 'en', 'UTC')).toBe(
+      formatCalendarInstant('gregory', end, dateTime, 'en', 'UTC'),
+    );
   });
 });
 

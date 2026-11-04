@@ -14,10 +14,11 @@ import {afterAll, afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import {PowerSearch} from './PowerSearch';
 import {PowerSearchToken} from './PowerSearchToken';
-import {formatDateAbsoluteCompact} from './formatFilterValue';
+import {formatDateAbsolute} from './formatFilterValue';
 import {InternationalizationProvider} from '../i18n/InternationalizationProvider';
 import type {CalendarSystem} from '../utils/calendarSystem';
 import {__resetDevWarnings} from '../utils/devWarning';
+import {withChineseTemporalAheadOfIntl} from '../__tests__/temporalAheadOfIntl';
 import type {
   PowerSearchConfig,
   PowerSearchField,
@@ -87,9 +88,11 @@ describe('PowerSearch date values in the provider calendar', () => {
     'writes the token value in $calendar under $locale',
     ({calendar, locale, year}) => {
       renderSearch({locale, calendar});
-      const expected = formatDateAbsoluteCompact(
+      const expected = formatDateAbsolute(
         UNIX_SECONDS,
         locale,
+        undefined,
+        true,
         calendar,
       );
       expect(expected).toContain(year);
@@ -100,13 +103,28 @@ describe('PowerSearch date values in the provider calendar', () => {
   it('keeps Gregorian dates without a provider calendar', () => {
     renderSearch({locale: 'fa-IR'});
     expect(
-      screen.getByText(formatDateAbsoluteCompact(UNIX_SECONDS, 'fa-IR')),
+      screen.getByText(formatDateAbsolute(UNIX_SECONDS, 'fa-IR', undefined)),
     ).toBeInTheDocument();
   });
 
   it('writes the PowerSearchToken value in the provider calendar', () => {
     renderToken({locale: 'en', calendar: 'persian'});
     expect(screen.getByText(/Aban 8, 1405 AP/)).toBeInTheDocument();
+  });
+
+  it('writes a date and time on the `chinese` day that Calendar shows', () => {
+    const lunarNewYear = Date.parse('2027-02-06T12:00:00Z') / 1000;
+    const value = withChineseTemporalAheadOfIntl(() =>
+      formatDateAbsolute(lunarNewYear, 'en', 'UTC', false, 'chinese'),
+    );
+    // Intl alone names the 30th day of the Twelfth Month of 2026.
+    expect(value).toMatch(/^Mo1 1, 2027, 12:00\sPM$/);
+  });
+
+  it('writes a date and time in `iso8601` as in `gregory`', () => {
+    expect(
+      formatDateAbsolute(UNIX_SECONDS, 'en', 'UTC', false, 'iso8601'),
+    ).toBe(formatDateAbsolute(UNIX_SECONDS, 'en', 'UTC', false));
   });
 
   describe('without Temporal', () => {
@@ -126,7 +144,7 @@ describe('PowerSearch date values in the provider calendar', () => {
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       renderSearch({locale: 'en', calendar: 'persian'});
       expect(
-        screen.getByText(formatDateAbsoluteCompact(UNIX_SECONDS, 'en')),
+        screen.getByText(formatDateAbsolute(UNIX_SECONDS, 'en', undefined)),
       ).toBeInTheDocument();
       expect(warn).toHaveBeenCalledWith(
         expect.stringContaining('needs a Temporal that supports it'),
@@ -137,7 +155,7 @@ describe('PowerSearch date values in the provider calendar', () => {
       renderSearch({locale: 'en', calendar: 'buddhist'});
       expect(
         screen.getByText(
-          formatDateAbsoluteCompact(UNIX_SECONDS, 'en', 'buddhist'),
+          formatDateAbsolute(UNIX_SECONDS, 'en', undefined, true, 'buddhist'),
         ),
       ).toBeInTheDocument();
     });

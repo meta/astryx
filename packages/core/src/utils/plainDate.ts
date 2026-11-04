@@ -9,7 +9,11 @@
 
 import type {ISODateString, PlainDate} from './dateTypes';
 import type {Locale} from '../i18n/types';
-import type {CalendarSystem} from './calendarSystem';
+import {
+  formatCalendarDate,
+  isCalendarSystem,
+  type CalendarSystem,
+} from './calendarSystem';
 import {firstCharacter} from './characters';
 import {standaloneMonthCapitalLanguages} from './standaloneMonthCapitals.generated';
 
@@ -456,13 +460,18 @@ export const DATE_FORMAT_SHORT_WITH_YEAR: Intl.DateTimeFormatOptions = {
  * when `options.calendar` is omitted. The explicit option remains supported for
  * compatibility with the public `Intl.DateTimeFormatOptions` signature; it is a
  * display-only escape hatch and does not change PlainDate arithmetic, parsing,
- * serialization, or any Astryx component's calendar semantics.
+ * serialization, or any Astryx component's calendar semantics. Another
+ * calendar names the month and day that Calendar shows in it.
  */
 export function plainDateFormat(
   pd: PlainDate,
   options: Intl.DateTimeFormatOptions,
   locale: Locale = 'en',
 ): string {
+  const calendar = options.calendar ?? 'gregory';
+  if (calendar !== 'gregory' && isCalendarSystem(calendar)) {
+    return formatCalendarDate(calendar, pd, options, locale);
+  }
   const [format, date] = plainDateFormatInput(pd, options, locale);
   return format.format(date);
 }

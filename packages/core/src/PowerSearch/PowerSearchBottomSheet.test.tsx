@@ -5030,7 +5030,7 @@ describe('PowerSearch sheet value text', () => {
           config={valueTypesConfig}
           filters={[dateFilter]}
           onChange={() => {}}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       </InternationalizationProvider>,
     );

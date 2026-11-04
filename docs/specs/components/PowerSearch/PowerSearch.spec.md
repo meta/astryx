@@ -540,10 +540,6 @@ no theming target or theme state; the root element keeps the existing
   ("writes the trigger token and the Filters row in the provider calendar").
   Evidence gap: no real-browser run, and no server render and hydration test,
   under a calendar that needs `Temporal`.
-- **Known gap:** under `chinese` and `dangi`, a date value with a time of day
-  takes its date from `Intl`, which can start a month on another day than
-  `Temporal`; the date-only token value names the month and day that
-  `component:Calendar` shows.
 - **Owner:** `nynexman4464`.
 - **Review condition:** Safari ships `Temporal`.
 

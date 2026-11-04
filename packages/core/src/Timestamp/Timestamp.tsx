@@ -360,9 +360,9 @@ export function Timestamp({
               date,
               effectiveFormat,
               locale,
-              // The pre-hydration placeholder is Gregorian and in UTC, labelled,
-              // so the server and the hydrating client produce the same text in
-              // every time zone, with or without Temporal.
+              // The placeholder before hydration is Gregorian and in UTC, with
+              // its zone. The server and the client then write the same text,
+              // with or without Temporal.
               isClockPending
                 ? {timeZone: 'UTC', isTimezoneShown: true}
                 : {isTimezoneShown, calendar},

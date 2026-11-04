@@ -17,7 +17,6 @@ import {
   dateTimeFormatFor,
   plainDateAddDays,
   plainDateAddMonths,
-  plainDateFormat,
   plainDateFormatDayNumber,
   plainDateFormatStandaloneMonthYear,
   plainDateFormatToParts,
@@ -327,7 +326,7 @@ function monthPartsKey(parts: Intl.DateTimeFormatPart[]): string {
  * The label always names the month and day that the grid shows. Intl and the
  * runtime's Temporal can disagree on where a month of the Chinese or Dangi
  * calendar starts; the label then takes its month and year from the middle of
- * the Temporal month, its day from Temporal, and its weekday from the date.
+ * the Temporal month, and its day from Temporal.
  */
 export function formatCalendarDate(
   calendar: CalendarSystem,
@@ -335,15 +334,32 @@ export function formatCalendarDate(
   options: Intl.DateTimeFormatOptions,
   locale: Locale,
 ): string {
-  if (isGregorianAligned(calendar)) {
-    return plainDateFormat(
-      pd,
-      {...options, calendar: labelCalendar(calendar)},
-      locale,
-    );
+  return joinParts(formatCalendarDateToParts(calendar, pd, options, locale));
+}
+
+/** The parts of `formatCalendarDate`'s label. */
+export function formatCalendarDateToParts(
+  calendar: CalendarSystem,
+  pd: PlainDate,
+  options: Intl.DateTimeFormatOptions,
+  locale: Locale,
+): Intl.DateTimeFormatPart[] {
+  const parts = formatToParts(labelCalendar(calendar), pd, options, locale);
+  return withTemporalDay(calendar, pd, parts, options, locale);
+}
+
+// Returns `parts` itself where Intl already names Temporal's month and day.
+function withTemporalDay(
+  calendar: CalendarSystem,
+  pd: PlainDate,
+  parts: Intl.DateTimeFormatPart[],
+  options: Intl.DateTimeFormatOptions,
+  locale: Locale,
+): Intl.DateTimeFormatPart[] {
+  if (isGregorianAligned(calendar) || !isCalendarSystemAvailable(calendar)) {
+    return parts;
   }
   const date = inCalendar(calendar, pd);
-  const parts = formatToParts(calendar, pd, options, locale);
   const middle = plainDateAddDays(
     pd,
     Math.floor(date.daysInMonth / 2) - (date.day - 1),
@@ -359,49 +375,71 @@ export function formatCalendarDate(
     Number(intlDay) === date.day &&
     monthPartsKey(parts) === monthPartsKey(middleParts)
   ) {
-    return parts.map(part => part.value).join('');
+    return parts;
   }
   const {numberingSystem} = dateTimeFormatFor(locale, {
     ...options,
     calendar,
     timeZone: 'UTC',
   }).resolvedOptions();
-  const weekday = parts.find(part => part.type === 'weekday')?.value;
-  return middleParts
-    .map(part =>
-      part.type === 'day'
-        ? plainDateFormatDayNumber(date.day, locale, numberingSystem)
-        : part.type === 'weekday' && weekday != null
-          ? weekday
-          : part.value,
-    )
-    .join('');
+  const middleValues = new Map(
+    middleParts.map(part => [part.type, part.value]),
+  );
+  return parts.map(part =>
+    part.type === 'day'
+      ? {
+          ...part,
+          value: plainDateFormatDayNumber(date.day, locale, numberingSystem),
+        }
+      : MONTH_PART_TYPES.has(part.type)
+        ? {...part, value: middleValues.get(part.type) ?? part.value}
+        : part,
+  );
 }
 
 /**
- * Formats the day an instant falls on in `timeZone` (the host's zone when
- * omitted) with date-only `options`, naming its month and day as
- * `formatCalendarDate` does.
+ * Formats an instant as `formatCalendarDate` formats the day it falls on in
+ * `timeZone`, the host's zone when omitted. Intl writes any time of day that
+ * `options` asks for.
  */
-export function formatInstantDate(
+export function formatCalendarInstant(
   calendar: CalendarSystem,
   instant: Date,
   options: Intl.DateTimeFormatOptions,
   locale: Locale,
   timeZone?: string,
 ): string {
-  if (calendar === 'gregory' || !isCalendarSystemAvailable(calendar)) {
-    return new Intl.DateTimeFormat(locale, {
-      ...options,
-      ...(timeZone === undefined ? {} : {timeZone}),
-      calendar,
-    }).format(instant);
-  }
+  return instantLabel(calendar, instant, options, locale, timeZone).text;
+}
+
+function instantLabel(
+  calendar: CalendarSystem,
+  instant: Date,
+  options: Intl.DateTimeFormatOptions,
+  locale: Locale,
+  timeZone: string | undefined,
+) {
+  const format = dateTimeFormatFor(locale, {
+    ...options,
+    ...(timeZone === undefined ? {} : {timeZone}),
+    calendar: labelCalendar(calendar),
+  });
+  const parts = format.formatToParts(instant);
   const day =
     timeZone === undefined
       ? plainDateFromDate(instant)
       : plainDateFromInstant(instant.getTime(), timeZone);
-  return formatCalendarDate(calendar, day, options, locale);
+  const fixed = withTemporalDay(calendar, day, parts, options, locale);
+  const isIntl = fixed === parts;
+  return {
+    format,
+    isIntl,
+    text: isIntl ? format.format(instant) : joinParts(fixed),
+  };
+}
+
+function joinParts(parts: Intl.DateTimeFormatPart[]): string {
+  return parts.map(part => part.value).join('');
 }
 
 /**

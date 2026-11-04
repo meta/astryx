@@ -29,8 +29,8 @@ import {formatInstant} from './formatInstant';
 import {formatTooltipLines} from './tooltipEntries';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {InternationalizationProvider} from '../i18n';
-import {formatCalendarDate, type CalendarSystem} from '../utils/calendarSystem';
-import {SHARED_DATE_FORMAT_OPTIONS} from '../utils/plainDate';
+import type {CalendarSystem} from '../utils/calendarSystem';
+import {withChineseTemporalAheadOfIntl} from '../__tests__/temporalAheadOfIntl';
 import {__resetDevWarnings} from '../utils/devWarning';
 
 async function openTimestampHoverCard(): Promise<HTMLElement> {
@@ -1916,23 +1916,29 @@ describe('Timestamp calendar systems', () => {
     });
   });
 
-  it.each(['date', 'date_long', 'date_weekday'] as const)(
-    'writes %s in the Chinese calendar as Calendar names the day',
+  it.each(['date', 'date_long', 'date_weekday', 'date_time', 'full'] as const)(
+    'writes %s in the `chinese` calendar on the day that Calendar shows',
     format => {
-      const day = {year: 2027, month: 2, day: 6};
-      expect(
+      const value = withChineseTemporalAheadOfIntl(() =>
         formatInstant(new Date('2027-02-06T12:00:00Z'), format, 'en', {
           timeZone: 'UTC',
           calendar: 'chinese',
         }),
-      ).toBe(
-        formatCalendarDate(
-          'chinese',
-          day,
-          SHARED_DATE_FORMAT_OPTIONS[format],
-          'en',
-        ),
       );
+      // Intl alone names the 30th day of the Twelfth Month of 2026.
+      expect(value).toMatch(/\b(Mo1|First Month) 1, 2027/);
+    },
+  );
+
+  it.each(['date_time', 'full'] as const)(
+    'writes %s in `iso8601` as in `gregory`',
+    format => {
+      expect(
+        formatInstant(INSTANT, format, 'en', {
+          timeZone: 'UTC',
+          calendar: 'iso8601',
+        }),
+      ).toBe(formatInstant(INSTANT, format, 'en', {timeZone: 'UTC'}));
     },
   );
 

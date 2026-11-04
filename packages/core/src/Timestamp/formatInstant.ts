@@ -30,7 +30,10 @@
  */
 
 import {SHARED_DATE_FORMAT_OPTIONS, getWallClock} from '../utils/plainDate';
-import {formatInstantDate, type CalendarSystem} from '../utils/calendarSystem';
+import {
+  formatCalendarInstant,
+  type CalendarSystem,
+} from '../utils/calendarSystem';
 import type {Locale} from '../i18n/types';
 import type {TimestampFormat} from './Timestamp';
 
@@ -156,15 +159,16 @@ export function formatInstant(
 
   switch (format) {
     case 'full':
-      return new Intl.DateTimeFormat(locale, {
-        ...FULL_OPTIONS,
-        timeZoneName: timeZoneNameStyle,
-        ...zone,
+      return formatCalendarInstant(
         calendar,
-      }).format(date);
+        date,
+        {...FULL_OPTIONS, timeZoneName: timeZoneNameStyle},
+        locale,
+        timeZone,
+      );
 
     case 'date':
-      return formatInstantDate(
+      return formatCalendarInstant(
         calendar,
         date,
         SHARED_DATE_FORMAT_OPTIONS.date,
@@ -173,7 +177,7 @@ export function formatInstant(
       );
 
     case 'date_long':
-      return formatInstantDate(
+      return formatCalendarInstant(
         calendar,
         date,
         SHARED_DATE_FORMAT_OPTIONS.date_long,
@@ -182,7 +186,7 @@ export function formatInstant(
       );
 
     case 'date_weekday':
-      return formatInstantDate(
+      return formatCalendarInstant(
         calendar,
         date,
         SHARED_DATE_FORMAT_OPTIONS.date_weekday,
@@ -191,12 +195,13 @@ export function formatInstant(
       );
 
     case 'date_time':
-      return new Intl.DateTimeFormat(locale, {
-        ...DATE_TIME_OPTIONS,
-        ...zoneName,
-        ...zone,
+      return formatCalendarInstant(
         calendar,
-      }).format(date);
+        date,
+        {...DATE_TIME_OPTIONS, ...zoneName},
+        locale,
+        timeZone,
+      );
 
     case 'time':
       return new Intl.DateTimeFormat(locale, {

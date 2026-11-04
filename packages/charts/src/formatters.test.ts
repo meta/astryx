@@ -118,13 +118,11 @@ describe('chart formatters', () => {
     },
   );
 
-  it('keeps one cached formatter per locale and calendar', () => {
+  it('defaults to Gregorian and writes `iso8601` dates as Gregorian ones', () => {
     const value = '2026-10-30';
-    expect(monthYear(value, 'en', 'persian')).not.toBe(
-      monthYear(value, 'en', 'gregory'),
-    );
-    expect(monthYear(value, 'en')).toBe(monthYear(value, 'en', 'gregory'));
-    expect(monthYear(value, 'en')).toContain('2026');
+    expect(monthYear(value, 'en')).toBe('Oct 2026');
+    expect(monthYear(value, 'en', 'iso8601')).toBe('Oct 2026');
+    expect(shortDate(value, 'en', 'iso8601')).toBe(shortDate(value, 'en'));
   });
 
   it('passes through non-finite and unparseable values', () => {

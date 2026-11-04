@@ -9,6 +9,7 @@
  */
 
 import type {CalendarSystem, Locale} from '@astryxdesign/core/i18n';
+import {plainDateFormat, plainDateFromDate} from '@astryxdesign/core/utils';
 
 /**
  * Compact number formatter (e.g. 1200 → "1.2K", 1500000 → "1.5M")
@@ -92,11 +93,11 @@ export function shortDate(
   if (isNaN(d.getTime())) {
     return String(value);
   }
-  return new Intl.DateTimeFormat(locale, {
-    month: 'short',
-    day: 'numeric',
-    calendar,
-  }).format(d);
+  return plainDateFormat(
+    plainDateFromDate(d),
+    {month: 'short', day: 'numeric', calendar},
+    locale,
+  );
 }
 
 /**
@@ -112,9 +113,9 @@ export function monthYear(
   if (isNaN(d.getTime())) {
     return String(value);
   }
-  return new Intl.DateTimeFormat(locale, {
-    month: 'short',
-    year: 'numeric',
-    calendar,
-  }).format(d);
+  return plainDateFormat(
+    plainDateFromDate(d),
+    {month: 'short', year: 'numeric', calendar},
+    locale,
+  );
 }

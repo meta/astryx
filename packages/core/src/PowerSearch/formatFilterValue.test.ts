@@ -318,6 +318,7 @@ describe('formatFilterValue', () => {
             unixSeconds,
             locale,
             'UTC',
+            false,
             calendar,
           );
           expect(value).toBe(
@@ -336,9 +337,11 @@ describe('formatFilterValue', () => {
         });
 
         it('writes the token value in the calendar', () => {
-          const value = formatDateAbsoluteCompact(
+          const value = formatDateAbsolute(
             unixSeconds,
             locale,
+            'UTC',
+            true,
             calendar,
           );
           expect(value).toBe(
@@ -346,6 +349,7 @@ describe('formatFilterValue', () => {
               year: 'numeric',
               month: 'short',
               day: 'numeric',
+              timeZone: 'UTC',
               calendar,
             }).format(instant),
           );
@@ -364,7 +368,9 @@ describe('formatFilterValue', () => {
               'UTC',
               calendar,
             ),
-          ).toBe(formatDateAbsolute(unixSeconds, locale, 'UTC', calendar));
+          ).toBe(
+            formatDateAbsolute(unixSeconds, locale, 'UTC', true, calendar),
+          );
         });
       },
     );
@@ -372,10 +378,10 @@ describe('formatFilterValue', () => {
     it('defaults absolute dates to the Gregorian calendar', () => {
       const unixSeconds = Date.parse('2026-10-30T12:00:00Z') / 1000;
       expect(formatDateAbsolute(unixSeconds, 'fa', 'UTC')).toBe(
-        formatDateAbsolute(unixSeconds, 'fa', 'UTC', 'gregory'),
+        formatDateAbsolute(unixSeconds, 'fa', 'UTC', true, 'gregory'),
       );
-      expect(formatDateAbsoluteCompact(unixSeconds, 'fa')).toBe(
-        formatDateAbsoluteCompact(unixSeconds, 'fa', 'gregory'),
+      expect(formatDateAbsolute(unixSeconds, 'fa', 'UTC', false)).toBe(
+        formatDateAbsolute(unixSeconds, 'fa', 'UTC', false, 'gregory'),
       );
       expect(
         fmt(
