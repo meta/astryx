@@ -99,6 +99,8 @@ import {toResult, searchedComponentsOf} from './_result.mjs';
  * @property {'file'|'doc'} [_hold] - How an integration component holds its
  *   name, for the owner rule.
  * @property {string} [_docPath] - An integration component's doc.
+ * @property {import('@astryxdesign/cli/authoring').ComponentDeprecation} [_deprecated] -
+ *   A deprecated component's replacement, from its doc's `deprecated`.
  */
 
 /**
