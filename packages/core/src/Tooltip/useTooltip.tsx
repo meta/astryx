@@ -21,7 +21,10 @@ import {
   type ReactNode,
   type RefCallback,
 } from 'react';
-import {createTriggerFocusGate} from '../utils/triggerFocus';
+import {
+  createTriggerFocusGate,
+  isFocusableTrigger,
+} from '../utils/triggerFocus';
 import * as stylex from '@stylexjs/stylex';
 import {
   useLayerInternal,
@@ -308,6 +311,10 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   const showTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
+  // Whether the tooltip is enabled now, for a show that runs after a render
+  // (a pending hover show) and for the trigger ref callback.
+  const isEnabledRef = useRef(isEnabled);
+  isEnabledRef.current = isEnabled;
 
   // Clear all timeouts
   const clearTimeouts = useCallback(() => {
@@ -461,20 +468,13 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     }
     clearTimeouts();
     showTimeoutRef.current = setTimeout(() => {
-      showLayer();
+      // A show scheduled while the tooltip was enabled runs only if it still
+      // is: nothing would close a tooltip that opens after it is disabled.
+      if (isEnabledRef.current) {
+        showLayer();
+      }
     }, delay);
   }, [isEnabled, isOpen, clearTimeouts, showLayer, delay]);
-
-  // A show scheduled while the triggers were enabled must not outlive them:
-  // disabling also detaches the leave listener that would have cancelled it,
-  // so the timer would open a tooltip that nothing ever closes. Only the
-  // pending show is dropped; a pending hide still runs.
-  useEffect(() => {
-    if (!isEnabled && showTimeoutRef.current) {
-      clearTimeout(showTimeoutRef.current);
-      showTimeoutRef.current = null;
-    }
-  }, [isEnabled]);
 
   // Schedule hide with delay (suppressed when isOpen is true).
   // A small hover bridge (when hideDelay is 0) lets the pointer travel from the
@@ -537,23 +537,30 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // focus that counted still hides on blur (utils/triggerFocus.ts).
   const [focusGate] = useState(createTriggerFocusGate);
 
+  // Whether focus on `target` opens the tooltip. With a `trigger`, its
+  // `focusTrigger` rule applies too. Only `:focus-visible` focus opens it, and
+  // a tap never does: a tapped `<input>` also matches `:focus-visible`.
+  const opensOnFocus = useCallback(
+    (target: HTMLElement, trigger: HTMLElement | null): boolean => {
+      if (
+        trigger != null &&
+        focusTrigger !== 'always' &&
+        (focusTrigger === 'never' ||
+          (target !== trigger && !isFocusableTrigger(trigger)))
+      ) {
+        return false;
+      }
+      return !isTouchInteraction() && target.matches(':focus-visible');
+    },
+    [focusTrigger, isTouchInteraction],
+  );
+
   const handleFocusIn = useCallback(
     (e: Event) => {
       if (!focusGate.focusIn(e, focusTrigger) || !isEnabled) {
         return;
       }
-      // A tap focuses the trigger it activates, and `:focus-visible` does not
-      // filter that out on every element: a tapped `<input>` or contenteditable
-      // matches it. Those are exactly the action triggers `auto` just decided
-      // to keep shut, so without this the focus reopens what the tap
-      // suppressed, over the field the user is trying to type into.
-      if (isTouchInteraction()) {
-        return;
-      }
-      // Only show tooltip for keyboard focus (:focus-visible),
-      // not programmatic focus (e.g. dialog auto-focus, touch tap)
-      const target = e.target as HTMLElement;
-      if (!target.matches(':focus-visible')) {
+      if (!opensOnFocus(e.target as HTMLElement, null)) {
         return;
       }
       clearTimeouts();
@@ -563,7 +570,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       focusGate,
       focusTrigger,
       isEnabled,
-      isTouchInteraction,
+      opensOnFocus,
       clearTimeouts,
       showLayer,
     ],
@@ -656,66 +663,141 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     ],
   );
 
-  // Interaction ref that handles event listeners only
-  const interactionRef: RefCallback<HTMLElement> = useCallback(
-    (el: HTMLElement | null) => {
-      // Cleanup previous element
-      if (triggerRef.current) {
-        triggerRef.current.removeEventListener('mouseenter', handleMouseEnter);
-        triggerRef.current.removeEventListener('mouseleave', handleMouseLeave);
-        triggerRef.current.removeEventListener('focusin', handleFocusIn);
-        triggerRef.current.removeEventListener('focusout', handleFocusOut);
-        triggerRef.current.removeEventListener('focusout', handleHeldFocusOut);
-        stopPressTrackingRef.current?.();
-        triggerRef.current.removeEventListener(
-          'pointerenter',
-          handlePointerEnter,
-        );
-        triggerRef.current.removeEventListener(
-          'pointerdown',
-          handlePointerDown,
-        );
+  // The trigger's listeners call the latest handlers through this ref, so
+  // the trigger ref callback keeps one identity. React then detaches it only
+  // when the trigger really goes away, not on an ordinary rerender.
+  const handlersRef = useRef({
+    handleMouseEnter,
+    handleMouseLeave,
+    handleFocusIn,
+    handleFocusOut,
+    handleHeldFocusOut,
+    handlePointerEnter,
+    handlePointerDown,
+    focusTrigger,
+    isOpen,
+    dropHold,
+    hideNow,
+    showNow,
+    opensOnFocus,
+  });
+  handlersRef.current = {
+    handleMouseEnter,
+    handleMouseLeave,
+    handleFocusIn,
+    handleFocusOut,
+    handleHeldFocusOut,
+    handlePointerEnter,
+    handlePointerDown,
+    focusTrigger,
+    isOpen,
+    dropHold,
+    hideNow,
+    showNow,
+    opensOnFocus,
+  };
+
+  // Removes the attached trigger's listeners (the trigger ref callback's
+  // cleanup).
+  const detachTriggerRef = useRef<(() => void) | null>(null);
+
+  // The trigger's ref callback owns every trigger listener, and reads the
+  // trigger's state when it attaches and detaches.
+  const interactionRef = useCallback((el: HTMLElement | null) => {
+    // Detach runs through the returned cleanup. A caller's own ref that
+    // reports `null` and then the same element on each render (an inline
+    // ref) leaves the trigger attached as it is.
+    if (el == null || el === triggerRef.current) {
+      return;
+    }
+    detachTriggerRef.current?.();
+    const latest = () => handlersRef.current;
+    // `pointerenter` runs before the synthesized `mouseenter` a tap produces,
+    // which is what lets the hover path know it is looking at a finger.
+    const onPointerEnter = (e: PointerEvent) => latest().handlePointerEnter(e);
+    const onMouseEnter = () => latest().handleMouseEnter();
+    const onMouseLeave = (e: Event) => latest().handleMouseLeave(e);
+    // Press-to-dismiss on a mouse; tap-to-open on a touch pointer.
+    const onPointerDown = (e: PointerEvent) => latest().handlePointerDown(e);
+    // Focus counts unless focus never opens the tooltip; `auto` decides per
+    // event (isFocusForTrigger).
+    const onFocusIn = (e: Event) => {
+      if (latest().focusTrigger !== 'never') {
+        latest().handleFocusIn(e);
       }
-
-      if (el) {
-        // Attach hover listeners. `pointerenter` runs before the synthesized
-        // `mouseenter` a tap produces, which is what lets the hover path know
-        // it is looking at a finger.
-        el.addEventListener('pointerenter', handlePointerEnter);
-        el.addEventListener('mouseenter', handleMouseEnter);
-        el.addEventListener('mouseleave', handleMouseLeave);
-        // Press-to-dismiss on a mouse; tap-to-open on a touch pointer.
-        el.addEventListener('pointerdown', handlePointerDown);
-
-        // Focus listeners unless focus never opens the tooltip; `auto` decides
-        // per event (utils/triggerFocus.ts).
-        if (focusTrigger !== 'never') {
-          el.addEventListener('focusin', handleFocusIn);
-          el.addEventListener('focusout', handleFocusOut);
-        }
+    };
+    const onFocusOut = (e: Event) => {
+      if (latest().focusTrigger !== 'never') {
+        latest().handleFocusOut(e);
       }
+    };
+    // A held tooltip's own focus-leave close, whatever `focusTrigger` is.
+    const onHeldFocusOut = (e: FocusEvent) => latest().handleHeldFocusOut(e);
+    el.addEventListener('pointerenter', onPointerEnter);
+    el.addEventListener('mouseenter', onMouseEnter);
+    el.addEventListener('mouseleave', onMouseLeave);
+    el.addEventListener('pointerdown', onPointerDown);
+    el.addEventListener('focusin', onFocusIn);
+    el.addEventListener('focusout', onFocusOut);
+    el.addEventListener('focusout', onHeldFocusOut);
+    triggerRef.current = el;
 
-      // Its own focus-leave listener: `focusTrigger="never"` attaches none.
-      el?.addEventListener('focusout', handleHeldFocusOut);
-      triggerRef.current = el;
-    },
-    [
-      handleHeldFocusOut,
-      focusTrigger,
-      handleMouseEnter,
-      handleMouseLeave,
-      handleFocusIn,
-      handleFocusOut,
-      handlePointerEnter,
-      handlePointerDown,
-    ],
-  );
+    // A trigger that attaches with focus already inside it (DropdownMenu's
+    // Button gets its tooltip wiring back as its menu closes) missed that
+    // focus. Show for it only if it would open the tooltip: returned keyboard
+    // focus does, focus returned after a pointer pick does not.
+    const focused = el.ownerDocument.activeElement;
+    if (
+      isEnabledRef.current &&
+      latest().isOpen === undefined &&
+      latest().focusTrigger !== 'never' &&
+      focused instanceof HTMLElement &&
+      el.contains(focused) &&
+      latest().opensOnFocus(focused, el)
+    ) {
+      latest().showNow();
+    }
+
+    const detach = () => {
+      if (detachTriggerRef.current === detach) {
+        detachTriggerRef.current = null;
+      }
+      el.removeEventListener('pointerenter', onPointerEnter);
+      el.removeEventListener('mouseenter', onMouseEnter);
+      el.removeEventListener('mouseleave', onMouseLeave);
+      el.removeEventListener('pointerdown', onPointerDown);
+      el.removeEventListener('focusin', onFocusIn);
+      el.removeEventListener('focusout', onFocusOut);
+      el.removeEventListener('focusout', onHeldFocusOut);
+      stopPressTrackingRef.current?.();
+      if (triggerRef.current === el) {
+        triggerRef.current = null;
+      }
+      // A tooltip belongs to its trigger: when the trigger goes away (a
+      // caller removes the wiring while its own layer is open), close an
+      // uncontrolled tooltip and drop its pending show, or the next attach
+      // brings a stale tooltip back.
+      if (latest().isOpen === undefined) {
+        latest().dropHold();
+        latest().hideNow();
+      }
+    };
+    detachTriggerRef.current = detach;
+    return detach;
+  }, []);
 
   // Combined ref - shorthand for calling both positionRef and interactionRef
-  const ref: RefCallback<HTMLElement> = useCallback(
+  const ref = useCallback(
     (el: HTMLElement | null) => {
       layerRef(el);
-      interactionRef(el);
+      const detachInteraction = interactionRef(el);
+      if (el == null) {
+        return;
+      }
+      return () => {
+        detachInteraction?.();
+        layerRef(null);
+      };
     },
     [layerRef, interactionRef],
   );
