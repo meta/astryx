@@ -70,6 +70,34 @@ describe('fixture repositories', () => {
     expect(git(root, 'log', '-1', '--format=%s', hashes.base)).toBe('base');
   });
 
+  it("writes a merge commit from its first parent's tree and its other parents", () => {
+    const root = path.join(tempDir(), 'repo');
+    const hashes = createRepository(root, [
+      {ref: 'refs/heads/main', name: 'base', files: {'a.txt': 'a\n'}},
+      {
+        ref: 'refs/heads/topic',
+        name: 'topic',
+        parent: 'base',
+        files: {'t.txt': 't\n'},
+      },
+      {ref: 'refs/heads/main', name: 'main', files: {'m.txt': 'm\n'}},
+      {
+        ref: 'refs/pull/1/merge',
+        name: 'merge',
+        parent: 'main',
+        merges: ['topic'],
+        files: {'t.txt': 't\n'},
+      },
+    ]);
+
+    expect(
+      git(root, 'rev-parse', 'refs/pull/1/merge^1', 'refs/pull/1/merge^2'),
+    ).toBe([hashes.main, hashes.topic].join('\n'));
+    expect(git(root, 'ls-tree', '--name-only', hashes.merge)).toBe(
+      ['a.txt', 'm.txt', 't.txt'].join('\n'),
+    );
+  });
+
   it('records a working tree exactly as a snapshot, and continues from a ref', () => {
     const root = tempDir();
     fs.mkdirSync(path.join(root, 'docs'));
