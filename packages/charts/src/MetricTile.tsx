@@ -5,17 +5,6 @@
  * @input Label, headline value, optional delta/description, and a trend slot
  * @output KPI tile — label, large tabular value, sentiment-aware delta, trend graphic
  * @position Composed dashboard primitive; pair with Sparkline via the `trend` slot
- *
- * @example
- * ```
- * <MetricTile
- *   label="Total requests"
- *   value="2.4M"
- *   delta={{value: '+12.4%', direction: 'up'}}
- *   description="vs. previous 30 days"
- *   trend={<Sparkline data={[4, 7, 5, 9, 6, 11]} />}
- * />
- * ```
  */
 
 'use client';
@@ -200,6 +189,17 @@ export interface MetricTileProps extends BaseProps<HTMLElement> {
  * The delta's color follows its direction (up=success, down=error,
  * flat=secondary) unless `sentiment` overrides it — use that for inverted
  * metrics where a drop is good (error rate, latency, churn).
+ *
+ * @example
+ * ```
+ * <MetricTile
+ *   label="Total requests"
+ *   value="2.4M"
+ *   delta={{value: '+12.4%', direction: 'up'}}
+ *   description="vs. previous 30 days"
+ *   trend={<Sparkline data={[4, 7, 5, 9, 6, 11]} />}
+ * />
+ * ```
  */
 export function MetricTile({
   label,

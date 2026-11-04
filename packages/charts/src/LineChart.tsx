@@ -5,16 +5,6 @@
  * @input Data rows, an x field, one or more y fields, and presentation options
  * @output Ready-to-use line chart — Chart root with line marks, axes, legend, and tooltip
  * @position Composed component; delegates scales, layout, and interaction to Chart
- *
- * @example
- * ```
- * <LineChart
- *   data={monthlyRevenue}
- *   xKey="month"
- *   yKeys={['revenue', 'trend']}
- *   title="Revenue vs trend"
- * />
- * ```
  */
 
 'use client';
@@ -77,6 +67,16 @@ export interface LineChartProps extends BaseProps<HTMLDivElement> {
  * with bottom/left axes, a grid, a legend, and a grouped hover tooltip.
  * Series without an explicit color take successive theme palette slots from
  * the chart root, so hover swatches, legend keys, and strokes always agree.
+ *
+ * @example
+ * ```
+ * <LineChart
+ *   data={monthlyRevenue}
+ *   xKey="month"
+ *   yKeys={['revenue', 'trend']}
+ *   title="Revenue vs trend"
+ * />
+ * ```
  */
 export function LineChart({
   data,
