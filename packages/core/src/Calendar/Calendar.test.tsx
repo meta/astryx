@@ -209,14 +209,78 @@ describe('Calendar', () => {
     expect(screen.getByText('January 2026')).toBeInTheDocument();
 
     rerender(renderCalendar('es-ES'));
-    expect(screen.getByText('enero de 2026')).toBeInTheDocument();
+    expect(screen.getByText('Enero de 2026')).toBeInTheDocument();
 
     const nextButton =
       document.querySelector<HTMLButtonElement>('[data-nav="next"]');
     expect(nextButton).not.toBeNull();
     await user.click(nextButton!);
-    expect(screen.getByText('febrero de 2026')).toBeInTheDocument();
+    expect(screen.getByText('Febrero de 2026')).toBeInTheDocument();
   });
+
+  it.each([
+    ['es-ES', 'Octubre de 2026', 'Noviembre de 2026'],
+    ['fr-FR', 'Octobre 2026', 'Novembre 2026'],
+    ['pl-PL', 'Październik 2026', 'Listopad 2026'],
+    ['ru-RU', 'Октябрь 2026 г.', 'Ноябрь 2026 г.'],
+  ])(
+    'starts each stand-alone month label with a capital in %s',
+    (locale, october, november) => {
+      render(
+        <InternationalizationProvider locale={locale}>
+          <Calendar mode="range" numberOfMonths={2} focusDate="2026-10-01" />
+        </InternationalizationProvider>,
+      );
+      // The heading names both months, each capitalized (FR1).
+      expect(screen.getByText(`${october} – ${november}`)).toBeInTheDocument();
+      // Each grid's name is the same stand-alone label.
+      expect(
+        screen
+          .getAllByRole('grid')
+          .map(grid => grid.getAttribute('aria-label')),
+      ).toEqual([october, november]);
+    },
+  );
+
+  it.each([
+    ['fa-IR', '۱۵', '۴۲'],
+    ['ar-EG', '١٥', '٤٢'],
+    ['en', '15', '42'],
+  ])(
+    'shows day and week numbers in the locale digits in %s',
+    (locale, day15, week42) => {
+      render(
+        <InternationalizationProvider locale={locale}>
+          <Calendar focusDate="2026-10-01" hasWeekNumbers />
+        </InternationalizationProvider>,
+      );
+      const october15 = document.querySelector(
+        'button[data-date="2026-10-15"]',
+      );
+      expect(october15).toHaveTextContent(new RegExp(`^${day15}$`));
+      // October 15, 2026 is in ISO week 42.
+      const weekHeaders = screen
+        .getAllByRole('rowheader')
+        .map(header => header.textContent);
+      expect(weekHeaders).toContain(week42);
+    },
+  );
+
+  it.each([
+    ['vi-VN', 'tháng 10 năm 2026'],
+    ['de-DE', 'Oktober 2026'],
+    ['en-US', 'October 2026'],
+  ])(
+    'leaves the month label as Intl gives it where CLDR does not capitalize in %s',
+    (locale, label) => {
+      render(
+        <InternationalizationProvider locale={locale}>
+          <Calendar focusDate="2026-10-01" />
+        </InternationalizationProvider>,
+      );
+      expect(screen.getByText(label)).toBeInTheDocument();
+    },
+  );
 
   it('displays correct number of day cells', () => {
     render(<Calendar />);
@@ -1061,6 +1125,118 @@ describe('Calendar', () => {
           expect.stringMatching(/January 28, 2026/),
         );
       });
+    });
+
+    it('moves the focused day by a year with Shift+PageDown and Shift+PageUp', async () => {
+      const user = userEvent.setup();
+      render(<Calendar focusDate="2026-03-01" />);
+
+      getDayButton(15, 'March').focus();
+      await user.keyboard('{Shift>}{PageDown}{/Shift}');
+      await waitFor(() => {
+        expect(politeRegion()).toHaveTextContent('March 2027');
+      });
+      await waitFor(() => {
+        expect(document.activeElement).toHaveAttribute(
+          'data-date',
+          '2027-03-15',
+        );
+      });
+
+      await user.keyboard('{Shift>}{PageUp}{/Shift}');
+      await waitFor(() => {
+        expect(politeRegion()).toHaveTextContent('March 2026');
+      });
+      await waitFor(() => {
+        expect(document.activeElement).toHaveAttribute(
+          'data-date',
+          '2026-03-15',
+        );
+      });
+    });
+
+    it('a year from February 29 lands on February 28', async () => {
+      const user = userEvent.setup();
+      render(<Calendar focusDate="2024-02-01" />);
+
+      getDayButton(29, 'February', 2024).focus();
+      await user.keyboard('{Shift>}{PageDown}{/Shift}');
+      await waitFor(() => {
+        expect(document.activeElement).toHaveAttribute(
+          'data-date',
+          '2025-02-28',
+        );
+      });
+      expect(screen.getByRole('grid')).toHaveAttribute(
+        'aria-label',
+        'February 2025',
+      );
+    });
+
+    it('a year step whose target lies past max changes nothing and keeps focus', async () => {
+      const user = userEvent.setup();
+      render(<Calendar focusDate="2026-03-01" max="2027-03-14" />);
+
+      getDayButton(15, 'March').focus();
+      await user.keyboard('{Shift>}{PageDown}{/Shift}');
+      expect(screen.getByRole('grid')).toHaveAttribute(
+        'aria-label',
+        'March 2026',
+      );
+      expect(document.activeElement).toBe(getDayButton(15, 'March'));
+    });
+
+    it("a year step onto a day disabled by a constraint focuses that month's first enabled day", async () => {
+      const user = userEvent.setup();
+      // March 1–19, 2027 disabled.
+      const noEarlyMarch2027 = (date: Date) =>
+        !(
+          date.getFullYear() === 2027 &&
+          date.getMonth() === 2 &&
+          date.getDate() < 20
+        );
+      render(
+        <Calendar
+          focusDate="2026-03-01"
+          dateConstraints={[noEarlyMarch2027]}
+        />,
+      );
+
+      getDayButton(15, 'March').focus();
+      await user.keyboard('{Shift>}{PageUp}{/Shift}');
+      await waitFor(() => {
+        expect(document.activeElement).toHaveAttribute(
+          'data-date',
+          '2025-03-15',
+        );
+      });
+      await user.keyboard('{Shift>}{PageDown}{/Shift}');
+      await user.keyboard('{Shift>}{PageDown}{/Shift}');
+      await waitFor(() => {
+        expect(document.activeElement).toHaveAttribute(
+          'data-date',
+          '2027-03-20',
+        );
+      });
+    });
+
+    it('in a two-month view a year step forward makes the target month the second one shown', async () => {
+      const user = userEvent.setup();
+      render(<Calendar focusDate="2026-01-01" numberOfMonths={2} />);
+
+      getDayButton(15).focus();
+      await user.keyboard('{Shift>}{PageDown}{/Shift}');
+      await waitFor(() => {
+        expect(document.activeElement).toHaveAttribute(
+          'data-date',
+          '2027-01-15',
+        );
+      });
+      expect(
+        screen.getAllByRole('grid').map(g => g.getAttribute('aria-label')),
+      ).toEqual(['December 2026', 'January 2027']);
+      const grids = screen.getAllByRole('grid');
+      expect(grids[1].querySelectorAll('button[tabindex="0"]')).toHaveLength(1);
     });
 
     it("pages from the first of two months onto the right day, not the second grid's fallback", async () => {

@@ -23,9 +23,12 @@
  */
 
 import {
+  use,
   useCallback,
   useId,
   useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
   useRef,
   type ReactNode,
 } from 'react';
@@ -49,9 +52,38 @@ import {ResizeHandle} from '../Resizable/ResizeHandle';
 import {themeProps} from '../utils/themeProps';
 import {SizeProvider} from '../SizeContext/SizeContext';
 import {useDevWarning} from '../hooks/useDevWarning';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {LayoutChangeSnapshot} from '../motion/LayoutChangeSnapshot';
+import {getFocusableElements} from '../hooks/useFocusTrap';
+import {useFocusLeavingChange} from '../utils/useFocusLeavingChange';
+import {readAccessibleName} from '../utils/accessibleName';
+import {
+  moveFocusLeftBehind,
+  noteFocusWithin,
+  type FocusWithin,
+} from '../utils/focusReturn';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {
+  SideNavFocusTargetsContext,
+  type SideNavFocusTargets,
+} from './SideNavFocusTargetsContext';
+import {
+  createRailLayout,
+  playRail,
+  snapshotRail,
+  SideNavShellContext,
+  type RailMotion,
+  type RailSnapshot,
+} from './railMotion';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/SideNav/SideNav.generated';
+import {isRenderable} from '../utils/isRenderable';
+
+registerEnglishFallback(english);
 // =============================================================================
 // Constants
 // =============================================================================
@@ -393,6 +425,19 @@ export interface SideNavProps extends BaseProps<HTMLElement> {
 // Component
 // =============================================================================
 
+/** Where focus was before a collapse, as the move after it needs it. */
+interface PendingRailFocus {
+  focus: FocusWithin;
+  /** Whether the rail keeps the row that held focus. */
+  isRowKept: boolean;
+  /** Kept rows before the row that held focus. */
+  keptBefore: number;
+  /** The name of the control outside the rows that held focus. */
+  outside: {name: string} | null;
+  /** Whether focus was on the collapse toggle. */
+  wasOnToggle: boolean;
+}
+
 /**
  * Sidebar navigation container for application pages.
  *
@@ -427,7 +472,7 @@ export function SideNav({
   handleRef,
   ...props
 }: SideNavProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   // Parse collapsible prop
   const collapsibleConfig = typeof collapsible === 'object' ? collapsible : {};
   const hasCollapseButton = collapsibleConfig.hasButton ?? true;
@@ -450,7 +495,10 @@ export function SideNav({
   // nav needs an id; a consumer's own id wins.
   const generatedNavId = useId();
   const navId = props.id ?? generatedNavId;
-  const mergedNavRef = useMergedRefs(ref, navRef);
+  // The nav's own document's last input decides the moved focus's ring
+  // (AR3), so a SideNav in a second document tracks input there.
+  const {ref: modalityRef} = useInteractionModalityTracking();
+  const mergedNavRef = useMergedRefs(ref, navRef, modalityRef);
   const collapseStateRef = useRef<SideNavCollapseState>({
     isCollapsed: false,
     toggle: () => {},
@@ -473,6 +521,189 @@ export function SideNav({
   });
 
   const collapsed = resizableHook.isCollapsed;
+
+  // Every collapse or expand, whatever caused it, plays the rail's motion
+  // (`component:SideNav` FR6): measured in the commit before the DOM changes,
+  // played after it before paint. Inside AppShell the content area moves with
+  // it through AppShell's own handle (`component:AppShell` FR17); outside,
+  // SideNav holds its own over its parent.
+  const shell = use(SideNavShellContext);
+  // A resizable rail's wrapper holds the nav and the handle; outside AppShell
+  // it is the rail the motion moves and lays its copy beside (FR6).
+  const resizeWrapperRef = useRef<HTMLDivElement>(null);
+  const ownRail = useCallback(
+    () => resizeWrapperRef.current ?? navRef.current,
+    [],
+  );
+  const ownLayout = useMemo(() => createRailLayout(ownRail), [ownRail]);
+  const railSnapshotRef = useRef<RailSnapshot | null>(null);
+  const motionRef = useRef<{rail: RailMotion; endContent: () => void} | null>(
+    null,
+  );
+  const measureRail = useCallback(
+    (wasCollapsed: boolean) => {
+      // A change during a running motion starts from what the rail shows.
+      const running = motionRef.current;
+      const shown = running?.rail.shown() ?? null;
+      running?.rail.end();
+      running?.endContent();
+      motionRef.current = null;
+      railSnapshotRef.current = snapshotRail(
+        shell?.rail() ?? ownRail(),
+        shell?.animatedLayout ?? ownLayout,
+        shown,
+        wasCollapsed,
+      );
+      // A collapse covers the old rail with its copy; when the rail cannot
+      // be copied, the page lands at once with it, on one clock, a running
+      // glide included.
+      const snapshot = railSnapshotRef.current;
+      if (snapshot != null && snapshot.swap == null && !wasCollapsed) {
+        shell?.landContent();
+        return;
+      }
+      shell?.beforeRailChange();
+    },
+    [shell, ownLayout, ownRail],
+  );
+  useLayoutEffect(() => {
+    const snapshot = railSnapshotRef.current;
+    railSnapshotRef.current = null;
+    if (snapshot == null) {
+      return;
+    }
+    // The content moves first: its glide starts before the rail rides it.
+    const endContent = shell?.afterRailChange() ?? (() => {});
+    motionRef.current = {
+      rail: playRail(
+        snapshot,
+        shell?.rail() ?? ownRail(),
+        shell?.animatedLayout ?? ownLayout,
+        shell?.column() ?? null,
+      ),
+      endContent,
+    };
+  }, [collapsed, shell, ownLayout, ownRail]);
+  // An unmount mid-motion removes the copy at once.
+  useLayoutEffect(
+    () => () => {
+      motionRef.current?.rail.end();
+      motionRef.current?.endContent();
+    },
+    [],
+  );
+
+  // Focus on something the collapsed rail does not render would fall to the
+  // page when the rail collapses (`component:SideNav` AR3). On a row the rail
+  // keeps (its link replaced, its expand toggle or row actions gone), focus
+  // stays on that row's control; from a row the rail drops (no icon, or
+  // nested), it moves to the rail's collapse toggle, or, with none, to the
+  // nearest row the rail keeps. Rows and the toggle register through their
+  // callback refs. Rows are matched across the commit by their place among
+  // the rows the rail keeps, not by element, since a row's control can be
+  // replaced by its collapsed form. Focus on a header or footer control that
+  // the collapse replaces goes to the new control with the same accessible
+  // name. From one the collapse removes or replaces under another name, or
+  // the resize handle, focus goes to the toggle, or, with none, to the first
+  // kept row.
+  // Focus moves only if the collapse lost it.
+  const rowsRef = useRef(new Map<HTMLElement, boolean>());
+  const togglesRef = useRef(new Set<HTMLElement>());
+  const focusTargets = useMemo<SideNavFocusTargets>(
+    () => ({
+      registerRow: (element, isKeptInRail) => {
+        rowsRef.current.set(element, isKeptInRail);
+        return () => {
+          rowsRef.current.delete(element);
+        };
+      },
+      registerToggle: element => {
+        togglesRef.current.add(element);
+        return () => {
+          togglesRef.current.delete(element);
+        };
+      },
+    }),
+    [],
+  );
+  const noteRailFocus = useFocusLeavingChange(
+    collapsed,
+    (wasCollapsed: boolean): PendingRailFocus | null => {
+      const nav = navRef.current;
+      // The resize handle sits beside the nav, in the resize wrapper, and goes
+      // with a collapse its Enter starts.
+      const focus = wasCollapsed
+        ? null
+        : (noteFocusWithin(nav) ?? noteFocusWithin(resizeWrapperRef.current));
+      if (focus == null || nav == null) {
+        return null;
+      }
+      const rows = railRows(nav, rowsRef.current);
+      // The innermost row holding focus, the last in document order: a nested
+      // row's parent holds it too.
+      let index = -1;
+      rows.forEach((row, at) => {
+        if (row.contains(focus.element)) {
+          index = at;
+        }
+      });
+      let outside = null;
+      if (index < 0) {
+        const controls = controlsOutsideRows(nav, rows);
+        const at = controls.findIndex(control =>
+          control.contains(focus.element),
+        );
+        outside = at < 0 ? null : {name: controlName(controls[at])};
+      }
+      return {
+        focus,
+        outside,
+        wasOnToggle: [...togglesRef.current].some(toggle =>
+          toggle.contains(focus.element),
+        ),
+        isRowKept: index >= 0 && rowsRef.current.get(rows[index]) === true,
+        keptBefore: rows
+          .slice(0, Math.max(index, 0))
+          .filter(row => rowsRef.current.get(row) === true).length,
+      };
+    },
+    (pending: PendingRailFocus, isCollapsed: boolean) => {
+      const nav = navRef.current;
+      if (!isCollapsed || nav == null) {
+        return;
+      }
+      // Collapsed, every row the nav renders is one the rail keeps, in order.
+      const kept = railRows(nav, rowsRef.current);
+      const controlOf = (row: HTMLElement | undefined) =>
+        row == null ? undefined : getFocusableElements(row)[0];
+      const toggle = [...togglesRef.current].find(element =>
+        nav.contains(element),
+      );
+      let sameOutside: HTMLElement | undefined;
+      if (pending.wasOnToggle) {
+        sameOutside = toggle;
+      } else if (pending.outside != null) {
+        const controls = controlsOutsideRows(nav, kept);
+        sameOutside = controls.find(
+          control => controlName(control) === pending.outside?.name,
+        );
+      }
+      const target = pending.isRowKept
+        ? controlOf(kept[pending.keptBefore])
+        : (sameOutside ??
+          toggle ??
+          controlOf(kept[pending.keptBefore - 1]) ??
+          controlOf(kept[pending.keptBefore]));
+      moveFocusLeftBehind(pending.focus, target);
+    },
+  );
+  const beforeRailChange = useCallback(
+    (wasCollapsed: boolean) => {
+      noteRailFocus(wasCollapsed);
+      measureRail(wasCollapsed);
+    },
+    [noteRailFocus, measureRail],
+  );
 
   const toggle = useCallback(() => {
     const next = !collapsed;
@@ -540,7 +771,9 @@ export function SideNav({
   // =========================================================================
   // Drawer mode — render inside MobileNav with heading as header
   // =========================================================================
-  const hasDrawerFooter = !!(footer || footerIcons);
+  // Slot presence follows `isRenderable` (`architecture:react-component-runtime`
+  // INV16), so the footer area shows whenever a slot inside it renders.
+  const hasDrawerFooter = isRenderable(footer) || isRenderable(footerIcons);
 
   if (renderMode === 'drawer') {
     return (
@@ -556,7 +789,7 @@ export function SideNav({
         {hasDrawerFooter && (
           <div {...stylex.props(styles.drawerFooter)}>
             {footer}
-            {footerIcons && (
+            {isRenderable(footerIcons) && (
               <div {...stylex.props(styles.drawerFooterIcons)}>
                 <SizeProvider value={FOOTER_ICON_SIZE}>
                   {footerIcons}
@@ -581,7 +814,7 @@ export function SideNav({
         {hasDrawerFooter && (
           <div {...stylex.props(styles.drawerFooter)}>
             {footer}
-            {footerIcons && (
+            {isRenderable(footerIcons) && (
               <div {...stylex.props(styles.drawerFooterIcons)}>
                 <SizeProvider value={FOOTER_ICON_SIZE}>
                   {footerIcons}
@@ -597,8 +830,8 @@ export function SideNav({
   // =========================================================================
   // Default mode — full sidebar
   // =========================================================================
-  const hasStickyTop = !!(header || topContent);
-  const hasStickyBottom = !!(footer || footerIcons);
+  const hasStickyTop = isRenderable(header) || isRenderable(topContent);
+  const hasStickyBottom = isRenderable(footer) || isRenderable(footerIcons);
   // The built-in collapse button only renders when collapse is enabled and it
   // hasn't been opted out via `collapsible.hasButton: false` (e.g. when the
   // consumer places a SideNavCollapseButton in the header instead).
@@ -632,7 +865,7 @@ export function SideNav({
             collapsed && styles.stickyTopCollapsed,
           )}>
           {header}
-          {topContent && (
+          {isRenderable(topContent) && (
             <div {...stylex.props(styles.topContent)}>{topContent}</div>
           )}
         </div>
@@ -673,34 +906,82 @@ export function SideNav({
   // Overlay drag handle inside the nav when resizable.
   // Uses ResizeHandle in overlay mode so the handle sits inside
   // the panel's overflow: clip bounds.
-  const content = showResizeHandle ? (
-    <div {...stylex.props(styles.resizableContainer)}>
+  // A resizable rail keeps its wrapper while collapsed, so collapsing or
+  // expanding never changes the nav's parent: the nav and its items stay
+  // mounted, and their state (an open nested group) and focus persist (FR6).
+  // Only the handle comes and goes.
+  const rail = isResizable ? (
+    <div ref={resizeWrapperRef} {...stylex.props(styles.resizableContainer)}>
       {navElement}
-      <ResizeHandle
-        data-testid="astryx-sidenav-resize-handle"
-        direction="horizontal"
-        position="overlay"
-        pillPlacement="end"
-        isAlwaysVisible={false}
-        xstyle={styles.resizableHandle}
-        resizable={resizableHook.props}
-        label={t('@astryx.sideNav.resizeSidebar')}
-        aria-controls={navId}
-      />
+      {showResizeHandle && (
+        <ResizeHandle
+          data-testid="astryx-sidenav-resize-handle"
+          direction="horizontal"
+          position="overlay"
+          pillPlacement="end"
+          isAlwaysVisible={false}
+          xstyle={styles.resizableHandle}
+          resizable={resizableHook.props}
+          label={t('@astryx.sideNav.resizeSidebar')}
+          aria-controls={navId}
+        />
+      )}
     </div>
   ) : (
     navElement
   );
+  // The snapshot stays mounted outside the resize wrapper.
+  const content = (
+    <>
+      <LayoutChangeSnapshot
+        value={collapsed}
+        onBeforeChange={beforeRailChange}
+      />
+      {rail}
+    </>
+  );
 
   if (isCollapsible) {
     return (
-      <SideNavCollapseContext value={collapseContext}>
-        {content}
-      </SideNavCollapseContext>
+      <SideNavFocusTargetsContext value={focusTargets}>
+        <SideNavCollapseContext value={collapseContext}>
+          {content}
+        </SideNavCollapseContext>
+      </SideNavFocusTargetsContext>
     );
   }
 
   return content;
+}
+
+/** The focusable controls in `nav` outside every row: header and footer. */
+function controlsOutsideRows(
+  nav: HTMLElement,
+  rows: HTMLElement[],
+): HTMLElement[] {
+  return getFocusableElements(nav).filter(
+    control => !rows.some(row => row.contains(control)),
+  );
+}
+
+/** A control's accessible name, so a re-rendered control is found again. */
+function controlName(control: HTMLElement): string {
+  return readAccessibleName(control) ?? '';
+}
+
+/**
+ * The registered rows inside `nav`, in document order, leaving out rows in a
+ * collapsed item's flyout, which is a layer of its own.
+ */
+function railRows(
+  nav: HTMLElement,
+  rows: ReadonlyMap<HTMLElement, boolean>,
+): HTMLElement[] {
+  return [...rows.keys()]
+    .filter(row => nav.contains(row) && row.closest('[popover]') == null)
+    .sort((a, b) =>
+      a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
+    );
 }
 
 SideNav.displayName = 'SideNav';

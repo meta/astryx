@@ -172,7 +172,7 @@ describe('GitHub Pages compatibility landing', () => {
       ['documentation', 'https://astryx.atmeta.com/'],
       ['storybook', 'https://astryx.atmeta.com/storybook/'],
       ['sandbox', 'https://astryx.atmeta.com/sandbox/'],
-      ['repository', 'https://github.com/facebook/astryx'],
+      ['repository', 'https://github.com/meta/astryx'],
     ]);
     expect(document.querySelector('#documentation')?.classList).toContain(
       'primary',

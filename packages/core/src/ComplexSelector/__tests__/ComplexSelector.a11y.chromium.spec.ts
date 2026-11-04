@@ -3,16 +3,19 @@
 
 /**
  * @file ComplexSelector.a11y.chromium.spec.ts
- * @input Uses the component-owned audit story and exact-head Storybook build
- * @output Chromium screenshots plus fail-closed theme, direction, viewport, geometry, state, and contrast receipts
- * @position Browser evidence for the ComplexSelector whole-component audit
+ * @input Exact-head ComplexSelector stories: the audit matrix, the secondary
+ *   toolbar trigger, and the tree-search popup, across states, themes,
+ *   direction, pointers, viewport sizes, and an app-declared layer inset
+ * @output Screenshots and fail-closed sensor receipts for the ComplexSelector whole-component audit
+ * @position Component-owned Night Watch browser evidence; CI runs it only for a ComplexSelector audit pull request
  */
 
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {expect, test, type Page} from '@playwright/test';
+import {inflateSync} from 'node:zlib';
+import {expect, test, type Locator, type Page} from '@playwright/test';
 import {holdMotionStill} from '@astryxdesign/a11y-spec/chromium';
 import {
   DEFAULT_STORYBOOK_DIR,
@@ -21,945 +24,995 @@ import {
 } from '@astryxdesign/a11y-spec/storybook';
 
 const OUTPUT = path.resolve('test-results/complex-selector-audit-evidence');
-const STORY_ID = 'core-complexselector--audit-matrix';
 const WIDE = {width: 1024, height: 900};
 const NARROW = {width: 320, height: 720};
+const SHORT = {width: 1024, height: 360};
+/** An app-declared bar over the block-end edge, as an app declares it once. */
+const APP_INSET_BLOCK_END = 80;
+/** The layer runtime's gutter at the default spacing scale (spacing-4). */
+const RUNTIME_GUTTER = 16;
+/** The popup's offset from its control (spacing-1 at the default scale) plus 1px. */
+const POPUP_OFFSET_TOLERANCE = 5;
 
-interface Scenario {
-  state: string;
-  mode: 'light' | 'dark';
-  direction: 'ltr' | 'rtl';
+type Mode = 'light' | 'dark';
+type Direction = 'ltr' | 'rtl';
+type Theme = 'neutral' | 'butter' | 'probe';
+type Pointer = 'fine' | 'coarse';
+type Story = 'matrix' | 'secondary' | 'tree';
+type State =
+  | 'rest'
+  | 'hover'
+  | 'focus-visible'
+  | 'pressed'
+  | 'open'
+  | 'disabled-hover'
+  | 'disabled-focus'
+  | 'caller-open'
+  | 'tall-open';
+
+type AuditCase = {
+  key: string;
+  story: Story;
+  mode: Mode;
+  direction: Direction;
+  theme: Theme;
+  state: State;
+  pointer: Pointer;
+  forcedColors: boolean;
   viewport: {width: number; height: number};
+  inset: boolean;
+};
+
+type AuditReceipt = {passed: boolean; expected: Record<string, unknown>};
+
+const cases: AuditCase[] = [];
+function addPair(
+  key: string,
+  options: Partial<Omit<AuditCase, 'key' | 'mode'>> = {},
+) {
+  for (const mode of ['light', 'dark'] as const) {
+    cases.push({
+      key: `${key}-${mode}`,
+      story: options.story ?? 'matrix',
+      mode,
+      direction: options.direction ?? 'ltr',
+      theme: options.theme ?? 'neutral',
+      state: options.state ?? 'rest',
+      pointer: options.pointer ?? 'fine',
+      forcedColors: options.forcedColors ?? false,
+      viewport: options.viewport ?? WIDE,
+      inset: options.inset ?? false,
+    });
+  }
 }
 
-interface EvidenceReceipt {
-  state: string;
-  image: {file: string; [key: string]: unknown};
-  stateVisualMatrix: Record<string, unknown>[];
-  contrastPairMatrix: Record<string, unknown>[];
-  browser: string;
+addPair('matrix-rest');
+addPair('matrix-rest-butter', {theme: 'butter'});
+addPair('matrix-rest-probe', {theme: 'probe'});
+addPair('matrix-rest-rtl', {direction: 'rtl'});
+addPair('matrix-rest-narrow', {viewport: NARROW});
+addPair('matrix-rest-coarse', {viewport: NARROW, pointer: 'coarse'});
+addPair('matrix-rest-forced-colors', {forcedColors: true});
+addPair('input-hover', {state: 'hover'});
+addPair('input-hover-butter', {state: 'hover', theme: 'butter'});
+addPair('input-focus-visible', {state: 'focus-visible'});
+addPair('input-focus-visible-butter', {
+  state: 'focus-visible',
+  theme: 'butter',
+});
+addPair('input-focus-visible-forced-colors', {
+  state: 'focus-visible',
+  forcedColors: true,
+});
+addPair('input-pressed', {state: 'pressed'});
+addPair('input-open', {state: 'open'});
+addPair('input-open-rtl', {state: 'open', direction: 'rtl'});
+addPair('input-open-coarse', {
+  state: 'open',
+  viewport: NARROW,
+  pointer: 'coarse',
+});
+addPair('disabled-hover', {state: 'disabled-hover'});
+addPair('disabled-focus', {state: 'disabled-focus'});
+addPair('caller-open', {state: 'caller-open'});
+addPair('caller-open-rtl', {state: 'caller-open', direction: 'rtl'});
+addPair('caller-open-narrow', {state: 'caller-open', viewport: NARROW});
+addPair('secondary-rest', {story: 'secondary'});
+addPair('secondary-hover', {story: 'secondary', state: 'hover'});
+addPair('secondary-open', {story: 'secondary', state: 'open'});
+addPair('tall-open', {story: 'tree', state: 'tall-open', viewport: SHORT});
+addPair('tall-open-inset', {
+  story: 'tree',
+  state: 'tall-open',
+  viewport: SHORT,
+  inset: true,
+});
+
+/** The combobox each state drives, by accessible name. */
+function targetName(item: AuditCase): string | null {
+  if (item.story === 'secondary') {
+    return 'View density';
+  }
+  if (item.story === 'tree') {
+    return 'Project destination';
+  }
+  if (item.state === 'disabled-hover' || item.state === 'disabled-focus') {
+    return 'Disabled value';
+  }
+  if (item.state === 'caller-open') {
+    return 'Custom trigger selector';
+  }
+  return item.state === 'rest' ? null : 'Selected medium';
 }
 
-const STATIC_CASES: Scenario[] = [
-  {state: 'wide-light-ltr', mode: 'light', direction: 'ltr', viewport: WIDE},
-  {state: 'wide-dark-ltr', mode: 'dark', direction: 'ltr', viewport: WIDE},
-  {state: 'wide-light-rtl', mode: 'light', direction: 'rtl', viewport: WIDE},
-  {state: 'wide-dark-rtl', mode: 'dark', direction: 'rtl', viewport: WIDE},
-  {
-    state: 'narrow-light-ltr',
-    mode: 'light',
-    direction: 'ltr',
-    viewport: NARROW,
-  },
-  {state: 'narrow-dark-ltr', mode: 'dark', direction: 'ltr', viewport: NARROW},
-];
+function storyId(item: AuditCase) {
+  if (item.story === 'secondary') {
+    return 'core-complexselector--secondary-variant';
+  }
+  if (item.story === 'tree') {
+    // The app declares its block-end bar once, through LayerProvider's
+    // public `inset` (spec:AST-059 FR6), in its own story.
+    return item.inset
+      ? 'core-complexselector--tree-list-with-search-above-app-bar'
+      : 'core-complexselector--tree-list-with-search';
+  }
+  return 'core-complexselector--audit-matrix';
+}
 
-const BUILTIN_INTERACTION_CASES: Scenario[] = [
-  {
-    state: 'builtin-light-ltr',
-    mode: 'light',
-    direction: 'ltr',
-    viewport: WIDE,
-  },
-  {
-    state: 'builtin-dark-ltr',
-    mode: 'dark',
-    direction: 'ltr',
-    viewport: WIDE,
-  },
-];
+/**
+ * The root color scheme: `html[data-theme]` maps the mode to `color-scheme`,
+ * and forced colors mode forces `color-scheme: light dark` (CSS Color
+ * Adjustment Module Level 1).
+ */
+function expectedColorScheme(item: AuditCase) {
+  return item.forcedColors ? 'light dark' : item.mode;
+}
 
-const INTERACTION_CASES: Scenario[] = [
-  {
-    state: 'custom-open-light-ltr',
-    mode: 'light',
-    direction: 'ltr',
-    viewport: WIDE,
-  },
-  {
-    state: 'custom-open-dark-ltr',
-    mode: 'dark',
-    direction: 'ltr',
-    viewport: WIDE,
-  },
-  {
-    state: 'custom-open-light-rtl',
-    mode: 'light',
-    direction: 'rtl',
-    viewport: WIDE,
-  },
-  {
-    state: 'custom-open-narrow-light',
-    mode: 'light',
-    direction: 'ltr',
-    viewport: NARROW,
-  },
-];
-
-const frames: Record<string, unknown>[] = [];
-const stateVisualMatrix: Record<string, unknown>[] = [];
-const contrastPairMatrix: Record<string, unknown>[] = [];
-let storybook: StaticServer;
+test.describe.configure({mode: 'serial', retries: 0});
+let server: StaticServer;
 let checkoutSha: string;
 let storybookSha: string;
-let browserVersion = 'unknown';
 
-test.beforeAll(async () => {
-  checkoutSha = execFileSync('git', ['rev-parse', 'HEAD'], {
-    encoding: 'utf8',
-  }).trim();
-  const expectedHead = process.env.ASTRYX_HEAD_SHA;
-  if (expectedHead && expectedHead !== checkoutSha) {
-    throw new Error('The audited checkout does not match the PR head');
+/**
+ * Whether a PNG paints more than one color, read from its decoded pixels so a
+ * blank or single-color frame cannot pass as evidence.
+ */
+function isNonBlank(png: Buffer): boolean {
+  let offset = 8;
+  let width = 0;
+  let height = 0;
+  let channels = 0;
+  const chunks: Buffer[] = [];
+  while (offset < png.length) {
+    const length = png.readUInt32BE(offset);
+    const type = png.toString('ascii', offset + 4, offset + 8);
+    const data = png.subarray(offset + 8, offset + 8 + length);
+    if (type === 'IHDR') {
+      width = data.readUInt32BE(0);
+      height = data.readUInt32BE(4);
+      channels = data[9] === 6 ? 4 : data[9] === 2 ? 3 : 0;
+    } else if (type === 'IDAT') {
+      chunks.push(data);
+    }
+    offset += 12 + length;
   }
-
-  storybook = await serveStorybook(
-    process.env.ASTRYX_STORYBOOK_DIR ?? DEFAULT_STORYBOOK_DIR,
-  );
-  const stamp = await fetch(`${storybook.origin}/astryx-build-sha.txt`);
-  if (!stamp.ok) {
-    throw new Error(
-      `The Storybook build has no source stamp (${stamp.status})`,
-    );
+  if (channels === 0 || width === 0 || height === 0) {
+    return false;
   }
-  storybookSha = (await stamp.text()).trim();
-  if (storybookSha !== checkoutSha) {
-    throw new Error(
-      'The served Storybook build does not match the audited checkout',
+  const raw = inflateSync(Buffer.concat(chunks));
+  const stride = width * channels;
+  let previous = Buffer.alloc(stride);
+  let first: string | null = null;
+  for (let y = 0; y < height; y++) {
+    const filter = raw[y * (stride + 1)];
+    const line = Buffer.from(
+      raw.subarray(y * (stride + 1) + 1, (y + 1) * (stride + 1)),
     );
+    for (let x = 0; x < stride; x++) {
+      const left = x >= channels ? line[x - channels] : 0;
+      const up = previous[x];
+      const upLeft = x >= channels ? previous[x - channels] : 0;
+      let predictor = 0;
+      if (filter === 1) {
+        predictor = left;
+      } else if (filter === 2) {
+        predictor = up;
+      } else if (filter === 3) {
+        predictor = Math.floor((left + up) / 2);
+      } else if (filter === 4) {
+        const estimate = left + up - upLeft;
+        const toLeft = Math.abs(estimate - left);
+        const toUp = Math.abs(estimate - up);
+        const toUpLeft = Math.abs(estimate - upLeft);
+        predictor =
+          toLeft <= toUp && toLeft <= toUpLeft
+            ? left
+            : toUp <= toUpLeft
+              ? up
+              : upLeft;
+      }
+      line[x] = (line[x] + predictor) & 255;
+    }
+    for (let x = 0; x < stride; x += channels) {
+      const pixel = line.subarray(x, x + channels).toString('hex');
+      if (first == null) {
+        first = pixel;
+      } else if (pixel !== first) {
+        return true;
+      }
+    }
+    previous = line;
   }
-  fs.mkdirSync(OUTPUT, {recursive: true});
-});
-
-test.afterAll(async () => {
-  if (checkoutSha && storybookSha) {
-    const receipts = fs
-      .readdirSync(OUTPUT)
-      .filter(file => file.endsWith('.sensors.json'))
-      .sort()
-      .map(
-        (file): EvidenceReceipt =>
-          JSON.parse(
-            fs.readFileSync(path.join(OUTPUT, file), 'utf8'),
-          ) as EvidenceReceipt,
-      );
-    fs.writeFileSync(
-      path.join(OUTPUT, 'manifest.json'),
-      `${JSON.stringify(
-        {
-          version: 1,
-          component: 'core/ComplexSelector',
-          headSha: checkoutSha,
-          storybookSha,
-          browser: receipts[0]?.browser ?? browserVersion,
-          frames: receipts.map(receipt => ({
-            state: receipt.state,
-            receipt: `${receipt.image.file}.sensors.json`,
-            image: receipt.image,
-          })),
-          stateVisualMatrix: receipts.flatMap(
-            receipt => receipt.stateVisualMatrix,
-          ),
-          contrastPairMatrix: receipts.flatMap(
-            receipt => receipt.contrastPairMatrix,
-          ),
-        },
-        null,
-        2,
-      )}\n`,
-    );
-  }
-  await storybook?.close();
-});
-
-async function loadScenario(page: Page, scenario: Scenario) {
-  const errors: string[] = [];
-  page.on('pageerror', error => errors.push(String(error)));
-  await page.setViewportSize(scenario.viewport);
-  await page.emulateMedia({reducedMotion: 'reduce'});
-  browserVersion = page.context().browser()?.version() ?? 'unknown';
-  await page.goto(
-    `${storybook.origin}/iframe.html?id=${STORY_ID}&viewMode=story&globals=colorMode:${scenario.mode};astryxTheme:neutral;direction:${scenario.direction}`,
-  );
-  const root = page.locator('#storybook-root');
-  await root.waitFor();
-  await holdMotionStill(page);
-  await page.evaluate(async () => document.fonts.ready);
-  await page.waitForFunction(
-    expected =>
-      document.documentElement.getAttribute('data-theme') === expected,
-    scenario.mode,
-  );
-  await page.waitForFunction(
-    expected =>
-      document.querySelector('#storybook-root [dir]')?.getAttribute('dir') ===
-      expected,
-    scenario.direction,
-  );
-  await page.evaluate(async () => {
-    await new Promise<void>(resolve =>
-      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-    );
-  });
-  return {errors, root};
+  return false;
 }
 
-async function readEnvironment(page: Page) {
-  return page.evaluate(() => {
-    const auditRoot = document.querySelector('[data-testid="audit-matrix"]');
-    if (!(auditRoot instanceof HTMLElement)) {
-      throw new Error('Audit matrix root is missing');
-    }
-    const auditRect = auditRoot.getBoundingClientRect();
-    const horizontalOverflow =
-      auditRoot.scrollWidth > auditRoot.clientWidth + 1 ||
-      auditRect.left < -1 ||
-      auditRect.right > innerWidth + 1;
-
-    return {
-      theme: document
-        .querySelector('[data-astryx-theme]')
-        ?.getAttribute('data-astryx-theme'),
-      declaredDirection: document
-        .querySelector('#storybook-root [dir]')
-        ?.getAttribute('dir'),
-      computedDirection: getComputedStyle(
-        document.querySelector('#storybook-root [dir]') ??
-          document.documentElement,
-      ).direction,
-      mode: document.documentElement.getAttribute('data-theme'),
-      colorScheme: getComputedStyle(document.documentElement).colorScheme,
-      fonts: document.fonts.status,
-      viewport: {width: innerWidth, height: innerHeight},
-      dpr: devicePixelRatio,
-      coarsePointer: matchMedia('(pointer: coarse)').matches,
-      anyCoarsePointer: matchMedia('(any-pointer: coarse)').matches,
-      reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
-      forcedColors: matchMedia('(forced-colors: active)').matches,
-      pageScrollWidth: document.documentElement.scrollWidth,
-      pageHorizontalOverflow:
-        document.documentElement.scrollWidth > innerWidth + 1,
-      rootScrollWidth: auditRoot.scrollWidth,
-      rootClientWidth: auditRoot.clientWidth,
-      rootBounds: {
-        left: Number(auditRect.left.toFixed(2)),
-        right: Number(auditRect.right.toFixed(2)),
-        width: Number(auditRect.width.toFixed(2)),
-      },
-      horizontalOverflow,
-      overflowingElements: [...auditRoot.querySelectorAll('*')]
-        .filter(element => {
-          const rect = element.getBoundingClientRect();
-          return (
-            rect.width > 0 &&
-            (rect.right > auditRect.right + 1 || rect.left < auditRect.left - 1)
-          );
-        })
-        .slice(0, 10)
-        .map(element => {
-          const rect = element.getBoundingClientRect();
-          return {
-            tag: element.tagName.toLowerCase(),
-            id: element.id,
-            className:
-              typeof element.className === 'string' ? element.className : '',
-            left: Number(rect.left.toFixed(2)),
-            right: Number(rect.right.toFixed(2)),
-            width: Number(rect.width.toFixed(2)),
-          };
-        }),
-      storyError: [
-        ...document.querySelectorAll(
-          '.sb-errordisplay, [data-testid="story-error"]',
-        ),
-      ].some(element => {
-        const rect = element.getBoundingClientRect();
-        const style = getComputedStyle(element);
-        return (
-          rect.width > 0 &&
-          rect.height > 0 &&
-          style.display !== 'none' &&
-          style.visibility !== 'hidden'
-        );
+async function nextFrames(page: Page) {
+  await page.evaluate(
+    async () =>
+      new Promise<void>(resolve => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
       }),
-    };
-  });
+  );
 }
 
-async function readContrastPairs(page: Page) {
-  return page.evaluate(() => {
-    interface Color {
-      r: number;
-      g: number;
-      b: number;
-      a: number;
-    }
-    const parse = (value: string): Color => {
-      const channels = value.match(/[\d.]+/g)?.map(Number);
-      if (!channels || channels.length < 3) {
-        throw new Error(`Cannot parse computed color: ${value}`);
-      }
-      return {
-        r: channels[0] ?? 0,
-        g: channels[1] ?? 0,
-        b: channels[2] ?? 0,
-        a: channels[3] ?? 1,
-      };
-    };
-    const composite = (front: Color, back: Color): Color => {
-      const a = front.a + back.a * (1 - front.a);
-      return {
-        r: (front.r * front.a + back.r * back.a * (1 - front.a)) / a,
-        g: (front.g * front.a + back.g * back.a * (1 - front.a)) / a,
-        b: (front.b * front.a + back.b * back.a * (1 - front.a)) / a,
-        a,
-      };
-    };
-    const renderedBackground = (element: Element) => {
-      const layers: Color[] = [];
-      let current: Element | null = element;
-      while (current) {
-        const layer = parse(getComputedStyle(current).backgroundColor);
-        if (layer.a > 0) {
-          layers.push(layer);
-        }
-        if (layer.a >= 0.999) {
-          break;
-        }
-        current = current.parentElement;
-      }
-      return layers.reverse().reduce((back, front) => composite(front, back), {
-        r: 255,
-        g: 255,
-        b: 255,
-        a: 1,
+/**
+ * Settled-render readback taken just before capture: running animations under
+ * the subject, and the subject plus every selector control box and open popup
+ * measured twice, two animation frames and 100 ms apart.
+ */
+async function readSettledRender(page: Page, rootSelector: string) {
+  const sample = async () =>
+    page.evaluate(selector => {
+      const root = document.querySelector(selector);
+      const nodes = [
+        root,
+        ...document.querySelectorAll(
+          '.astryx-complex-selector, .astryx-complex-selector-popup',
+        ),
+      ].filter(
+        (node): node is Element => node != null && node.checkVisibility(),
+      );
+      return nodes.map(node => {
+        const box = node.getBoundingClientRect();
+        return [box.x, box.y, box.width, box.height].map(
+          value => Math.round(value * 100) / 100,
+        );
       });
-    };
-    const luminance = (color: Color) => {
-      const channel = (value: number) => {
-        const normalized = value / 255;
-        return normalized <= 0.04045
-          ? normalized / 12.92
-          : ((normalized + 0.055) / 1.055) ** 2.4;
-      };
-      return (
-        0.2126 * channel(color.r) +
-        0.7152 * channel(color.g) +
-        0.0722 * channel(color.b)
-      );
-    };
-    const ratio = (left: Color, right: Color) => {
-      const a = luminance(left);
-      const b = luminance(right);
-      return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
-    };
-    const visible = (element: Element) => {
-      const rect = element.getBoundingClientRect();
-      const style = getComputedStyle(element);
-      return (
-        rect.width > 0 &&
-        rect.height > 0 &&
-        style.visibility !== 'hidden' &&
-        style.display !== 'none' &&
-        style.opacity !== '0'
-      );
-    };
+    }, rootSelector);
+  const first = await sample();
+  await nextFrames(page);
+  await page.waitForTimeout(100);
+  const second = await sample();
+  const runningAnimations = await page.evaluate(
+    () =>
+      document
+        .getAnimations()
+        .filter(animation => animation.playState === 'running').length,
+  );
+  return {
+    runningAnimations,
+    geometry: {first, second},
+    geometryStable: JSON.stringify(first) === JSON.stringify(second),
+  };
+}
 
-    const candidates = [
-      ...document.querySelectorAll(
-        '#storybook-root label, #storybook-root button[aria-haspopup="dialog"], #storybook-root .astryx-field-status',
+/** Text contrast for labels, trigger text, and status messages. */
+async function readContrastPairs(page: Page, rootSelector: string) {
+  return page.evaluate(selector => {
+    const root = document.querySelector(selector);
+    if (root == null) {
+      return [];
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    const ctx = canvas.getContext('2d', {willReadFrequently: true});
+    /** Any computed CSS color as sRGB 0–255 plus alpha 0–1. */
+    function rgba(color: string): [number, number, number, number] {
+      if (ctx == null) {
+        return [0, 0, 0, 0];
+      }
+      ctx.clearRect(0, 0, 1, 1);
+      ctx.fillStyle = '#000';
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 0, 1, 1);
+      const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+      return [r, g, b, a / 255];
+    }
+    function over(
+      front: [number, number, number, number],
+      back: [number, number, number],
+    ): [number, number, number] {
+      return [0, 1, 2].map(
+        index => front[index] * front[3] + back[index] * (1 - front[3]),
+      ) as [number, number, number];
+    }
+    function backdrop(element: Element): [number, number, number] {
+      const layers: [number, number, number, number][] = [];
+      let node: Element | null = element;
+      while (node) {
+        const layer = rgba(getComputedStyle(node).backgroundColor);
+        if (layer[3] > 0) {
+          layers.push(layer);
+          if (layer[3] >= 0.999) {
+            break;
+          }
+        }
+        node = node.parentElement;
+      }
+      if (layers.length === 0 || layers[layers.length - 1][3] < 0.999) {
+        layers.push(rgba(getComputedStyle(document.body).backgroundColor));
+      }
+      return layers
+        .reverse()
+        .reduce<[number, number, number]>(
+          (back, front) => over(front, back),
+          [255, 255, 255],
+        );
+    }
+    function luminance([r, g, b]: number[]) {
+      const [lr, lg, lb] = [r, g, b].map(channel => {
+        const c = channel / 255;
+        return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
+    }
+    const parts = [
+      ...root.querySelectorAll(
+        'label, .astryx-complex-selector button[role="combobox"] > span, .astryx-field-status',
       ),
-    ].filter(visible);
-
-    return candidates.map((element, index) => {
+    ].filter(element => {
+      const box = element.getBoundingClientRect();
+      return box.width > 0 && box.height > 0;
+    });
+    return parts.map(element => {
       const style = getComputedStyle(element);
-      const background = renderedBackground(element);
-      const foreground = composite(parse(style.color), background);
+      const back = backdrop(element);
+      const front = over(rgba(style.color), back);
+      const [high, low] = [luminance(front), luminance(back)].sort(
+        (a, b) => b - a,
+      );
+      const ratio = Math.round(((high + 0.05) / (low + 0.05)) * 100) / 100;
       const fontSize = Number.parseFloat(style.fontSize);
       const fontWeight = Number.parseFloat(style.fontWeight) || 400;
       const threshold =
         fontSize >= 24 || (fontSize >= 18.66 && fontWeight >= 700) ? 3 : 4.5;
-      const measured = Number(ratio(foreground, background).toFixed(2));
-      const labelledControl =
-        element instanceof HTMLLabelElement && element.htmlFor
-          ? document.getElementById(element.htmlFor)
-          : null;
-      // A disabled trigger keeps its tab stop and says so through
-      // aria-disabled rather than the native attribute.
-      const isInactive = (control: Element | null) =>
-        control instanceof HTMLButtonElement &&
-        (control.disabled || control.getAttribute('aria-disabled') === 'true');
-      const isDisabled = isInactive(element) || isInactive(labelledControl);
+      const control =
+        element.closest('.astryx-complex-selector') ??
+        (element instanceof HTMLLabelElement && element.htmlFor
+          ? document
+              .getElementById(element.htmlFor)
+              ?.closest('.astryx-complex-selector')
+          : null);
+      const isDisabled =
+        control?.querySelector('[aria-disabled="true"]') != null;
       return {
-        part: `${element.tagName.toLowerCase()}-${index}: ${(element.textContent ?? '').trim()}`,
-        state: isDisabled ? 'disabled' : 'rest',
-        meaningful: !isDisabled,
-        foreground: style.color,
-        backdrop: `rgba(${Math.round(background.r)}, ${Math.round(background.g)}, ${Math.round(background.b)}, ${background.a.toFixed(3)})`,
+        part: `${element.tagName.toLowerCase()}: ${(element.textContent ?? '').trim().slice(0, 60)}`,
+        color: style.color,
+        backdrop: `rgb(${back.map(Math.round).join(', ')})`,
         fontSize,
         fontWeight,
-        ratio: measured,
+        ratio,
         threshold,
         exception: isDisabled ? 'inactive control' : null,
-        passed: isDisabled || measured + 1e-6 >= threshold,
+        passed: isDisabled || ratio + 1e-6 >= threshold,
       };
     });
-  });
+  }, rootSelector);
 }
 
-async function writeFrame(
-  page: Page,
-  scenario: Scenario,
-  kind: 'matrix' | 'interaction' | 'custom-open',
-  expected: Record<string, unknown>,
-  observed: Record<string, unknown>,
-  stateRows: Record<string, unknown>[],
-  contrastRows: Record<string, unknown>[],
-) {
-  const file = `ComplexSelector__${scenario.state}.png`;
-  const png =
-    kind === 'matrix'
-      ? await page
-          .locator('[data-testid="audit-matrix"]')
-          .screenshot({animations: 'disabled'})
-      : await page.screenshot({animations: 'disabled'});
-  expect(png.length).toBeGreaterThan(100);
-  const receipt = {
-    state: scenario.state,
-    expected: {
-      build: checkoutSha,
-      storyId: STORY_ID,
-      captureRoot: 'body',
-      theme: 'neutral',
-      mode: scenario.mode,
-      direction: scenario.direction,
-      viewport: scenario.viewport,
-      kind,
-      ...expected,
-    },
-    observed: {
-      build: storybookSha,
-      storyId: STORY_ID,
-      ...observed,
-    },
-    image: {
-      file,
-      sha256: createHash('sha256').update(png).digest('hex'),
-      width: png.readUInt32BE(16),
-      height: png.readUInt32BE(20),
-    },
-    stateVisualMatrix: stateRows,
-    contrastPairMatrix: contrastRows,
-    browser: browserVersion,
-    passed:
-      stateRows.every(row => row.verdict === 'pass') &&
-      contrastRows.every(row => row.passed !== false),
-  };
-  fs.writeFileSync(path.join(OUTPUT, file), png);
-  fs.writeFileSync(
-    path.join(OUTPUT, `${file}.sensors.json`),
-    `${JSON.stringify(receipt, null, 2)}\n`,
-  );
-  frames.push({
-    state: scenario.state,
-    receipt: `${file}.sensors.json`,
-    image: receipt.image,
-  });
-  stateVisualMatrix.push(...stateRows);
-  contrastPairMatrix.push(...contrastRows);
-}
-
-test('captures the complete built-in state matrix', async ({page}) => {
-  const overflowFailures: string[] = [];
-  for (const scenario of STATIC_CASES) {
-    const {errors, root} = await loadScenario(page, scenario);
-    const initial = await root.boundingBox();
-    await page.evaluate(async () => {
-      await new Promise<void>(resolve =>
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-      );
-    });
-    const settled = await root.boundingBox();
-    if (!initial || !settled) {
-      throw new Error(`${scenario.state}: Storybook root has no layout box`);
-    }
-    const geometryDelta = Math.max(
-      Math.abs(initial.x - settled.x),
-      Math.abs(initial.y - settled.y),
-      Math.abs(initial.width - settled.width),
-      Math.abs(initial.height - settled.height),
-    );
-
-    const triggers = page.locator(
-      '#storybook-root button[aria-haspopup="dialog"]',
-    );
-    await expect(triggers).toHaveCount(10);
-    const environment = await readEnvironment(page);
-    const contrastRows = (await readContrastPairs(page)).map(pair => ({
-      screenshot: `ComplexSelector__${scenario.state}.png`,
-      theme: 'neutral',
-      mode: scenario.mode,
-      direction: scenario.direction,
-      viewport: scenario.viewport,
-      ...pair,
-    }));
-    for (const pair of contrastRows) {
-      expect(pair.passed, `${scenario.state}: ${pair.part}`).toBe(true);
-    }
-
-    const loading = page.getByRole('combobox', {name: 'Loading value'});
-    const disabled = page.getByRole('combobox', {name: 'Disabled value'});
-    const invalid = page.getByRole('combobox', {
-      name: 'Invalid required value',
-    });
-    const custom = page.getByRole('combobox', {
-      name: 'Custom trigger selector',
-    });
-    await expect(loading).toHaveAttribute('aria-busy', 'true');
-    await expect(disabled).toHaveAttribute('aria-disabled', 'true');
-    await expect(disabled).not.toHaveAttribute('disabled');
-    await expect(invalid).toHaveAttribute('aria-required', 'true');
-    await expect(custom).toHaveAttribute('role', 'combobox');
-    await expect(invalid).toHaveAttribute('aria-invalid', 'true');
-    await expect(custom).not.toHaveAttribute('aria-disabled');
-    await expect(page.locator('.astryx-field-status')).toHaveCount(3);
-
-    expect(geometryDelta).toBeLessThanOrEqual(0.5);
-    expect(environment.theme).toBe('neutral');
-    expect(environment.declaredDirection).toBe(scenario.direction);
-    expect(environment.computedDirection).toBe(scenario.direction);
-    expect(environment.mode).toBe(scenario.mode);
-    expect(environment.colorScheme).toBe(scenario.mode);
-    expect(environment.fonts).toBe('loaded');
-    expect(environment.viewport).toEqual(scenario.viewport);
-    expect(environment.reducedMotion).toBe(true);
-    expect(environment.forcedColors).toBe(false);
-    expect(environment.storyError).toBe(false);
-    expect(errors).toEqual([]);
-
-    const rows = [
-      ['rest', 'Rest — base field tokens'],
-      ['placeholder', 'Rest — supporting placeholder text'],
-      ['sizes', 'Rest — shared sm/md/lg element-height tokens'],
-      ['ghost', 'Rest — toolbar trigger representation'],
-      ['loading', 'Loading / Processing'],
-      ['disabled', 'Disabled — aria-disabled, keeps its tab stop'],
-      ['status-error', 'Status — Inverted'],
-      ['status-warning', 'Status — Inverted'],
-      ['status-success', 'Status — Inverted'],
-      ['overflow', 'Rest — bounded text truncation'],
-      ['caller-trigger', 'Rest — caller-owned control paint'],
-    ].map(([stateCaptured, approvedRepresentation]) => ({
-      stateCaptured,
-      screenshot: `ComplexSelector__${scenario.state}.png`,
-      approvedRepresentation,
-      tokenSignaturePresent: true,
-      matchesReference: 'yes',
-      verdict: 'pass',
-    }));
-    rows.push({
-      stateCaptured: 'responsive-inline-bounds',
-      screenshot: `ComplexSelector__${scenario.state}.png`,
-      approvedRepresentation: 'No component-owned horizontal overflow',
-      tokenSignaturePresent: true,
-      matchesReference: environment.horizontalOverflow ? 'no' : 'yes',
-      verdict: environment.horizontalOverflow ? 'fail' : 'pass',
-    });
-    if (environment.horizontalOverflow) {
-      overflowFailures.push(scenario.state);
-    }
-
-    await writeFrame(
-      page,
-      scenario,
-      'matrix',
-      {triggerCount: 10, statusCount: 3},
-      {
-        ...environment,
-        triggerCount: await triggers.count(),
-        statusCount: await page.locator('.astryx-field-status').count(),
-        customTriggerAriaDisabled: await custom.getAttribute('aria-disabled'),
-        pageErrors: errors.length,
-        settledRender: {initial, final: settled, maxDelta: geometryDelta},
-      },
-      rows,
-      contrastRows,
-    );
-  }
-  expect(
-    overflowFailures,
-    'Component-owned content must stay inside the 320px audit matrix',
-  ).toEqual([]);
-});
-
-test('captures built-in hover, focus, pressed, and open states', async ({
-  page,
-}) => {
-  for (const baseScenario of BUILTIN_INTERACTION_CASES) {
-    const {errors} = await loadScenario(page, baseScenario);
-    const trigger = page.getByRole('combobox', {name: 'Selected medium'});
-    // The control box paints the field ring and hover overlay; the trigger
-    // button inside it receives `data-testid` and focus.
-    const owner = page.locator('.astryx-complex-selector', {has: trigger});
-
-    const captureInteraction = async (
-      state: string,
-      approvedRepresentation: string,
-      observed: Record<string, unknown>,
-    ) => {
-      const scenario = {...baseScenario, state};
-      const environment = await readEnvironment(page);
-      const contrastRows = (await readContrastPairs(page)).map(pair => ({
-        screenshot: `ComplexSelector__${state}.png`,
-        theme: 'neutral',
-        mode: scenario.mode,
-        direction: scenario.direction,
-        viewport: scenario.viewport,
-        ...pair,
-      }));
-      for (const pair of contrastRows) {
-        expect(pair.passed, `${state}: ${pair.part}`).toBe(true);
-      }
-      const rows = [
-        {
-          stateCaptured: state,
-          screenshot: `ComplexSelector__${state}.png`,
-          approvedRepresentation,
-          tokenSignaturePresent: true,
-          matchesReference: 'yes',
-          verdict: 'pass',
-        },
-      ];
-      await writeFrame(
-        page,
-        scenario,
-        'interaction',
-        {semanticState: state},
-        {...environment, ...observed, pageErrors: errors.length},
-        rows,
-        contrastRows,
-      );
+async function paintOf(owner: Locator) {
+  return owner.evaluate(element => {
+    const style = getComputedStyle(element);
+    return {
+      backgroundColor: style.backgroundColor,
+      backgroundImage: style.backgroundImage,
+      boxShadow: style.boxShadow,
+      outlineStyle: style.outlineStyle,
+      outlineWidth: style.outlineWidth,
+      outlineColor: style.outlineColor,
+      transform: style.transform,
+      cursor: style.cursor,
     };
-
-    await trigger.hover();
-    const hoverPaint = await owner.evaluate(element => {
-      const style = getComputedStyle(element);
-      return {
-        backgroundColor: style.backgroundColor,
-        backgroundImage: style.backgroundImage,
-        boxShadow: style.boxShadow,
-      };
-    });
-    await captureInteraction(
-      `${baseScenario.state}-hover`,
-      'Hovered — Overlay style',
-      {
-        hovered: await trigger.evaluate(element => element.matches(':hover')),
-        hoverPaint,
-      },
-    );
-
-    await page.mouse.move(0, 0);
-    // The field ring is a keyboard ring (`:has(:focus-visible)`), so reach the
-    // trigger by keyboard: a programmatic focus after the hover would not
-    // match `:focus-visible`.
-    await trigger.focus();
-    await page.keyboard.press('Shift+Tab');
-    await page.keyboard.press('Tab');
-    await expect(trigger).toBeFocused();
-    const focusPaint = await owner.evaluate(element => {
-      const style = getComputedStyle(element);
-      return {
-        outlineStyle: style.outlineStyle,
-        outlineWidth: style.outlineWidth,
-        boxShadow: style.boxShadow,
-        backgroundImage: style.backgroundImage,
-      };
-    });
-    expect(
-      focusPaint.outlineStyle !== 'none' || focusPaint.boxShadow !== 'none',
-    ).toBe(true);
-    await captureInteraction(
-      `${baseScenario.state}-focus-visible`,
-      'Focused — Ring style (fields)',
-      {
-        focused: await trigger.evaluate(
-          element => element === document.activeElement,
-        ),
-        focusPaint,
-      },
-    );
-
-    const triggerBox = await trigger.boundingBox();
-    if (!triggerBox) {
-      throw new Error(`${baseScenario.state}: trigger has no layout box`);
-    }
-    await page.mouse.move(
-      triggerBox.x + triggerBox.width / 2,
-      triggerBox.y + triggerBox.height / 2,
-    );
-    await page.mouse.down();
-    const active = await trigger.evaluate(element =>
-      element.matches(':active'),
-    );
-    expect(active).toBe(true);
-    const pressedPaint = await owner.evaluate(element => {
-      const style = getComputedStyle(element);
-      return {
-        backgroundColor: style.backgroundColor,
-        backgroundImage: style.backgroundImage,
-        transform: style.transform,
-      };
-    });
-    await captureInteraction(
-      `${baseScenario.state}-pressed`,
-      'Pressed — pressed overlay for a field trigger',
-      {active, pressedPaint},
-    );
-
-    await page.mouse.up();
-    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
-    const dialog = page.getByRole('dialog', {name: 'Selected medium'});
-    await expect(dialog).toBeVisible();
-    const popup = page.locator('.astryx-complex-selector-popup:visible');
-    const popupBox = await popup.boundingBox();
-    if (!popupBox) {
-      throw new Error(`${baseScenario.state}: popup has no layout box`);
-    }
-    expect(popupBox.x).toBeGreaterThanOrEqual(-1);
-    expect(popupBox.x + popupBox.width).toBeLessThanOrEqual(
-      baseScenario.viewport.width + 1,
-    );
-    const indicatorTransform = await owner
-      .locator('svg')
-      .last()
-      .evaluate(element => getComputedStyle(element).transform);
-    await captureInteraction(
-      `${baseScenario.state}-open`,
-      'Expanded disclosure — same field surface with open-state indicator',
-      {
-        expanded: await trigger.getAttribute('aria-expanded'),
-        dialogVisible: await dialog.isVisible(),
-        triggerGeometry: triggerBox,
-        popupGeometry: popupBox,
-        indicatorTransform,
-      },
-    );
-
-    await page.keyboard.press('Escape');
-    await expect(trigger).toHaveAttribute('aria-expanded', 'false');
-    await expect(trigger).toBeFocused();
-    expect(errors).toEqual([]);
-  }
-});
-
-test('captures caller-rendered focus, anchor, dismissal, and direction', async ({
-  page,
-}) => {
-  const geometryFailures: string[] = [];
-  for (const scenario of INTERACTION_CASES) {
-    const {errors} = await loadScenario(page, scenario);
-    const custom = page.getByRole('combobox', {
-      name: 'Custom trigger selector',
-    });
-    await custom.focus();
-    await expect(custom).toBeFocused();
-    const focusPaint = await custom.evaluate(element => {
-      const style = getComputedStyle(element);
-      return {
-        outlineStyle: style.outlineStyle,
-        outlineWidth: style.outlineWidth,
-        boxShadow: style.boxShadow,
-        backgroundImage: style.backgroundImage,
-      };
-    });
-    expect(
-      focusPaint.outlineStyle !== 'none' ||
-        focusPaint.boxShadow !== 'none' ||
-        focusPaint.backgroundImage !== 'none',
-    ).toBe(true);
-
-    await custom.click();
-    await expect(custom).toHaveAttribute('aria-expanded', 'true');
-    const dialog = page.getByRole('dialog', {name: 'Custom trigger selector'});
-    await expect(dialog).toBeVisible();
-    const popover = page.locator('.astryx-complex-selector-popup:visible');
-    const triggerBox = await custom.boundingBox();
-    const popupBox = await popover.boundingBox();
-    if (!triggerBox || !popupBox) {
-      throw new Error(`${scenario.state}: trigger or popup has no layout box`);
-    }
-    const inlineDelta =
-      scenario.direction === 'rtl'
-        ? Math.abs(
-            triggerBox.x + triggerBox.width - (popupBox.x + popupBox.width),
-          )
-        : Math.abs(triggerBox.x - popupBox.x);
-    expect(inlineDelta).toBeLessThanOrEqual(4);
-    expect(
-      popupBox.y >= triggerBox.y + triggerBox.height - 1 ||
-        popupBox.y + popupBox.height <= triggerBox.y + 1,
-    ).toBe(true);
-    const popupFitsViewport =
-      popupBox.x >= -1 &&
-      popupBox.x + popupBox.width <= scenario.viewport.width + 1;
-
-    const environment = await readEnvironment(page);
-    expect(environment.declaredDirection).toBe(scenario.direction);
-    expect(environment.computedDirection).toBe(scenario.direction);
-    expect(environment.mode).toBe(scenario.mode);
-    expect(environment.viewport).toEqual(scenario.viewport);
-    expect(environment.storyError).toBe(false);
-    expect(errors).toEqual([]);
-
-    const rows = [
-      {
-        stateCaptured: 'caller-rendered focus-visible and open popup',
-        screenshot: `ComplexSelector__${scenario.state}.png`,
-        approvedRepresentation:
-          'Focused — caller control owns its focus representation; open state via aria-expanded',
-        tokenSignaturePresent: true,
-        matchesReference: 'yes',
-        verdict: 'pass',
-      },
-      {
-        stateCaptured: 'caller-popup-inline-bounds',
-        screenshot: `ComplexSelector__${scenario.state}.png`,
-        approvedRepresentation:
-          'Popup remains inside the viewport inline bounds',
-        tokenSignaturePresent: true,
-        matchesReference: popupFitsViewport ? 'yes' : 'no',
-        verdict: popupFitsViewport ? 'pass' : 'fail',
-      },
-      {
-        stateCaptured: 'responsive-inline-bounds',
-        screenshot: `ComplexSelector__${scenario.state}.png`,
-        approvedRepresentation: 'No component-owned horizontal overflow',
-        tokenSignaturePresent: true,
-        matchesReference: environment.horizontalOverflow ? 'no' : 'yes',
-        verdict: environment.horizontalOverflow ? 'fail' : 'pass',
-      },
-    ];
-    if (environment.horizontalOverflow || !popupFitsViewport) {
-      geometryFailures.push(scenario.state);
-    }
-
-    await writeFrame(
-      page,
-      scenario,
-      'custom-open',
-      {expanded: true, dialogVisible: true, inlineAnchorTolerancePx: 4},
-      {
-        ...environment,
-        expanded: await custom.getAttribute('aria-expanded'),
-        dialogVisible: await dialog.isVisible(),
-        triggerGeometry: triggerBox,
-        popupGeometry: popupBox,
-        inlineAnchorDelta: inlineDelta,
-        focusPaint,
-        pageErrors: errors.length,
-      },
-      rows,
-      [],
-    );
-
-    await page.keyboard.press('Escape');
-    await expect(custom).toHaveAttribute('aria-expanded', 'false');
-    await expect(custom).toBeFocused();
-  }
-  expect(
-    geometryFailures,
-    'Caller-rendered popup and matrix must stay inside the 320px viewport',
-  ).toEqual([]);
-});
-
-test('captures the narrow coarse-pointer path', async ({browser}) => {
-  const context = await browser.newContext({
-    viewport: NARROW,
-    deviceScaleFactor: 1,
-    hasTouch: true,
   });
-  const page = await context.newPage();
-  const scenario: Scenario = {
-    state: 'narrow-light-ltr-coarse',
-    mode: 'light',
-    direction: 'ltr',
-    viewport: NARROW,
-  };
+}
 
-  try {
-    const {errors} = await loadScenario(page, scenario);
-    const trigger = page.getByRole('combobox', {name: 'Selected medium'});
-    await trigger.tap();
-    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
-    const dialog = page.getByRole('dialog', {name: 'Selected medium'});
-    await expect(dialog).toBeVisible();
-    const popup = page.locator('.astryx-complex-selector-popup:visible');
-    const popupBox = await popup.boundingBox();
-    if (!popupBox) {
-      throw new Error(`${scenario.state}: popup has no layout box`);
+/**
+ * The open popup's layer box and the component-owned scroll containers in it
+ * (the layer root, the painted surface, and the content box the trigger
+ * controls) whose content overflows them. Caller content is not counted.
+ */
+async function readPopupScroll(page: Page, contentId: string | null) {
+  return page.evaluate(controlsId => {
+    const surface = [
+      ...document.querySelectorAll('.astryx-complex-selector-popup'),
+    ].find(element => element.checkVisibility());
+    if (surface == null) {
+      return null;
     }
-    const popupFitsViewport =
-      popupBox.x >= -1 &&
-      popupBox.x + popupBox.width <= scenario.viewport.width + 1;
-    const environment = await readEnvironment(page);
-    expect(environment.coarsePointer).toBe(true);
-    expect(environment.anyCoarsePointer).toBe(true);
-    expect(environment.viewport).toEqual(NARROW);
-    expect(environment.storyError).toBe(false);
-    expect(errors).toEqual([]);
-
-    const contrastRows = (await readContrastPairs(page)).map(pair => ({
-      screenshot: `ComplexSelector__${scenario.state}.png`,
-      theme: 'neutral',
-      mode: scenario.mode,
-      direction: scenario.direction,
-      viewport: scenario.viewport,
-      pointer: 'coarse',
-      ...pair,
-    }));
-    for (const pair of contrastRows) {
-      expect(pair.passed, `${scenario.state}: ${pair.part}`).toBe(true);
-    }
-    const rows = [
-      {
-        stateCaptured: 'narrow coarse-pointer open popup',
-        screenshot: `ComplexSelector__${scenario.state}.png`,
-        approvedRepresentation:
-          'Expanded disclosure — touch activation with bounded popup',
-        tokenSignaturePresent: true,
-        matchesReference:
-          popupFitsViewport && !environment.horizontalOverflow ? 'yes' : 'no',
-        verdict:
-          popupFitsViewport && !environment.horizontalOverflow
-            ? 'pass'
-            : 'fail',
-      },
-    ];
-    await writeFrame(
-      page,
-      scenario,
-      'interaction',
-      {pointer: 'coarse', expanded: true, dialogVisible: true},
-      {
-        ...environment,
-        expanded: await trigger.getAttribute('aria-expanded'),
-        dialogVisible: await dialog.isVisible(),
-        popupGeometry: popupBox,
-        pageErrors: errors.length,
-      },
-      rows,
-      contrastRows,
+    const popup = surface.closest('[popover]') ?? surface;
+    const box = popup.getBoundingClientRect();
+    const content =
+      controlsId == null ? null : document.getElementById(controlsId);
+    const owned = [popup, surface, content].filter(
+      (element, index, list): element is Element =>
+        element != null && list.indexOf(element) === index,
     );
-    expect(
-      popupFitsViewport,
-      'Coarse-pointer popup must stay inside the 320px viewport',
-    ).toBe(true);
-    expect(
-      environment.horizontalOverflow,
-      'Coarse-pointer matrix must not overflow horizontally',
-    ).toBe(false);
-  } finally {
-    await context.close();
+    const scrolling = owned
+      .filter(element => {
+        const overflowY = getComputedStyle(element).overflowY;
+        return (
+          (overflowY === 'auto' || overflowY === 'scroll') &&
+          element.scrollHeight > element.clientHeight + 1
+        );
+      })
+      .map(element => ({
+        node:
+          element === popup
+            ? 'layer'
+            : element === surface
+              ? 'surface'
+              : 'content',
+        scrollHeight: element.scrollHeight,
+        clientHeight: element.clientHeight,
+      }));
+    const edges = (element: Element | null) => {
+      if (element == null) {
+        return null;
+      }
+      const rect = element.getBoundingClientRect();
+      return {
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
+      };
+    };
+    return {
+      owned: owned.length,
+      geometry: {
+        top: box.top,
+        bottom: box.bottom,
+        left: box.left,
+        right: box.right,
+        height: box.height,
+      },
+      // The painted surface and the content it holds can extend past a capped
+      // layer box; the block-end bar must clear what paints, not only the box.
+      surfaceGeometry: edges(surface),
+      contentGeometry: edges(content),
+      scrolling,
+    };
+  }, contentId);
+}
+
+test.beforeAll(async () => {
+  fs.rmSync(OUTPUT, {recursive: true, force: true});
+  fs.mkdirSync(OUTPUT, {recursive: true});
+  checkoutSha = execFileSync('git', ['rev-parse', 'HEAD'], {
+    encoding: 'utf8',
+  }).trim();
+  const expected = process.env.ASTRYX_HEAD_SHA;
+  if (expected && expected !== checkoutSha) {
+    throw new Error(
+      `checkout ${checkoutSha} does not match expected head ${expected}`,
+    );
   }
+  server = await serveStorybook(
+    process.env.ASTRYX_STORYBOOK_DIR ?? DEFAULT_STORYBOOK_DIR,
+  );
+  const response = await fetch(`${server.origin}/astryx-build-sha.txt`);
+  if (!response.ok) {
+    throw new Error(`Storybook build has no SHA stamp (${response.status})`);
+  }
+  storybookSha = (await response.text()).trim();
+  if (storybookSha !== checkoutSha) {
+    throw new Error(
+      `Storybook ${storybookSha} does not match checkout ${checkoutSha}`,
+    );
+  }
+});
+
+test.afterAll(async () => {
+  await server?.close();
+});
+
+for (const item of cases) {
+  test(item.key, async ({browser}) => {
+    const context = await browser.newContext({
+      viewport: item.viewport,
+      deviceScaleFactor: 1,
+      colorScheme: item.mode,
+      reducedMotion: 'reduce',
+      hasTouch: item.pointer === 'coarse',
+      forcedColors: item.forcedColors ? 'active' : 'none',
+    });
+    const page = await context.newPage();
+    const pageErrors: string[] = [];
+    page.on('pageerror', error => pageErrors.push(String(error)));
+    await page.goto(
+      `${server.origin}/iframe.html?id=${storyId(item)}&viewMode=story&globals=colorMode:${item.mode};astryxTheme:${item.theme};direction:${item.direction}`,
+      {waitUntil: 'load'},
+    );
+    await page.locator('#storybook-root').waitFor();
+    const rootSelector =
+      item.story === 'matrix'
+        ? '[data-testid="audit-matrix"]'
+        : '#storybook-root';
+    const subject = page.locator(rootSelector);
+    await subject.waitFor();
+    // Read the shipped transitions under reduced motion before
+    // `holdMotionStill` overrides every duration for the captures:
+    // design:reduced-motion DR1/DR3 require a fine-pointer state change to
+    // complete at once, with no animated transform.
+    await page.emulateMedia({reducedMotion: 'reduce'});
+    const reducedMotionTransitions = await page.evaluate(selector => {
+      const root = document.querySelector(selector);
+      return [
+        ...(root?.querySelectorAll(
+          '.astryx-complex-selector, .astryx-complex-selector *',
+        ) ?? []),
+      ]
+        .map(element => {
+          const style = getComputedStyle(element);
+          const properties = style.transitionProperty.split(',');
+          const durations = style.transitionDuration.split(',');
+          return properties
+            .map((property, index) => ({
+              property: property.trim(),
+              duration: (durations[index % durations.length] ?? '0s').trim(),
+            }))
+            .filter(
+              ({property, duration}) =>
+                (property === 'transform' || property === 'all') &&
+                Number.parseFloat(duration) > 0,
+            )
+            .map(transition => ({
+              target:
+                typeof element.className === 'string'
+                  ? (element.className
+                      .split(' ')
+                      .find(name => name.startsWith('astryx-')) ??
+                    element.tagName.toLowerCase())
+                  : element.tagName.toLowerCase(),
+              ...transition,
+            }));
+        })
+        .flat();
+    }, rootSelector);
+    await holdMotionStill(page);
+    await page.evaluate(async () => document.fonts.ready);
+
+    const name = targetName(item);
+    const trigger =
+      name == null ? null : page.getByRole('combobox', {name, exact: true});
+    // The built-in control box paints the field; a caller-rendered control
+    // paints itself.
+    const owner =
+      trigger == null
+        ? null
+        : item.state === 'caller-open'
+          ? trigger
+          : page.locator('.astryx-complex-selector', {has: trigger});
+    const restPaint = owner == null ? null : await paintOf(owner);
+    let statePaint: Awaited<ReturnType<typeof paintOf>> | null = null;
+    const stateFacts: Record<string, unknown> = {};
+
+    if (trigger != null && owner != null) {
+      if (item.state === 'hover' || item.state === 'disabled-hover') {
+        await trigger.hover();
+        stateFacts.hovered = await owner.evaluate(element =>
+          element.matches(':hover'),
+        );
+      } else if (
+        item.state === 'focus-visible' ||
+        item.state === 'disabled-focus'
+      ) {
+        // Reach the trigger by keyboard: the field ring is a keyboard ring.
+        await trigger.focus();
+        await page.keyboard.press('Shift+Tab');
+        await page.keyboard.press('Tab');
+        stateFacts.focused = await trigger.evaluate(
+          element => element === document.activeElement,
+        );
+        stateFacts.focusVisible = await trigger.evaluate(element =>
+          element.matches(':focus-visible'),
+        );
+        if (item.state === 'disabled-focus') {
+          await page.keyboard.press('ArrowDown');
+          await page.keyboard.press('Enter');
+        }
+      } else if (item.state === 'pressed') {
+        const box = await trigger.boundingBox();
+        if (box == null) {
+          throw new Error(`${item.key}: trigger has no layout box`);
+        }
+        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+        await page.mouse.down();
+        stateFacts.active = await trigger.evaluate(element =>
+          element.matches(':active'),
+        );
+      } else if (
+        item.state === 'open' ||
+        item.state === 'caller-open' ||
+        item.state === 'tall-open'
+      ) {
+        if (item.state === 'caller-open') {
+          // spec:AST-055 AR2: the caller's control carries the one focus
+          // ring. Reach it by keyboard and record its ring before opening.
+          await trigger.focus();
+          await page.keyboard.press('Shift+Tab');
+          await page.keyboard.press('Tab');
+          stateFacts.callerFocused = await trigger.evaluate(
+            element => element === document.activeElement,
+          );
+          stateFacts.callerFocusVisible = await trigger.evaluate(element =>
+            element.matches(':focus-visible'),
+          );
+          await nextFrames(page);
+          const focusPaint = await paintOf(owner);
+          stateFacts.callerFocusPaint = focusPaint;
+          // A ring the rest state does not already paint: a visible outline
+          // that differs from rest, or a changed box shadow.
+          stateFacts.callerFocusRing =
+            (focusPaint.outlineStyle !== 'none' &&
+              Number.parseFloat(focusPaint.outlineWidth) > 0 &&
+              (focusPaint.outlineStyle !== restPaint?.outlineStyle ||
+                focusPaint.outlineWidth !== restPaint?.outlineWidth ||
+                focusPaint.outlineColor !== restPaint?.outlineColor)) ||
+            focusPaint.boxShadow !== restPaint?.boxShadow;
+          await page.mouse.move(0, 0);
+        }
+        if (item.pointer === 'coarse') {
+          await trigger.tap();
+        } else {
+          await trigger.click();
+        }
+        await page
+          .getByRole('dialog', {name: name ?? undefined, exact: true})
+          .waitFor({state: 'visible'});
+        await page.mouse.move(0, 0);
+      }
+      await nextFrames(page);
+      statePaint = await paintOf(owner);
+    }
+    await page.evaluate(async () => document.fonts.ready);
+
+    const observed = await page.evaluate(selector => {
+      const root = document.querySelector(selector);
+      return {
+        theme: document
+          .querySelector('[data-astryx-theme]')
+          ?.getAttribute('data-astryx-theme'),
+        mode: document.documentElement.getAttribute('data-theme'),
+        colorScheme: getComputedStyle(document.documentElement).colorScheme,
+        direction:
+          root == null
+            ? null
+            : getComputedStyle(
+                root.querySelector('.astryx-complex-selector, button') ?? root,
+              ).direction,
+        viewport: {width: innerWidth, height: innerHeight},
+        dpr: devicePixelRatio,
+        hover: matchMedia('(hover: hover)').matches,
+        reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
+        coarsePointer: matchMedia('(pointer: coarse)').matches,
+        forcedColors: matchMedia('(forced-colors: active)').matches,
+        horizontalOverflow:
+          document.documentElement.scrollWidth > innerWidth + 1,
+        fonts: document.fonts.status,
+        storybookError: document.body.classList.contains(
+          'sb-show-errordisplay',
+        ),
+        comboboxes: root?.querySelectorAll('[role="combobox"]').length ?? 0,
+        statuses: [...(root?.querySelectorAll('.astryx-field-status') ?? [])]
+          .length,
+        statusesWithIcon: [
+          ...(root?.querySelectorAll('.astryx-field-status') ?? []),
+        ].filter(status => status.querySelector('svg') != null).length,
+        onFieldStatusIcons:
+          root?.querySelectorAll(
+            '.astryx-complex-selector .astryx-input-status-icon',
+          ).length ?? 0,
+        overflowingElements: [...document.querySelectorAll('body *')]
+          .filter(element => {
+            const box = element.getBoundingClientRect();
+            return box.width > 0 && box.right > innerWidth + 1;
+          })
+          .slice(0, 5)
+          .map(element => {
+            const box = element.getBoundingClientRect();
+            return {
+              tag: element.tagName.toLowerCase(),
+              className:
+                typeof element.className === 'string'
+                  ? element.className.slice(0, 80)
+                  : '',
+              left: box.left,
+              right: box.right,
+            };
+          }),
+      };
+    }, rootSelector);
+
+    const triggerFacts =
+      trigger == null
+        ? null
+        : await trigger.evaluate(element => ({
+            role: element.getAttribute('role'),
+            expanded: element.getAttribute('aria-expanded'),
+            disabled: element.getAttribute('aria-disabled'),
+            nativeDisabled: (element as HTMLButtonElement).disabled === true,
+            focused: element === document.activeElement,
+          }));
+    const matrixFacts =
+      item.story === 'matrix'
+        ? await page.evaluate(() => {
+            const read = (label: string) => {
+              const element = [
+                ...document.querySelectorAll('[role="combobox"]'),
+              ].find(
+                candidate =>
+                  candidate.getAttribute('aria-labelledby') != null &&
+                  document
+                    .getElementById(
+                      candidate.getAttribute('aria-labelledby') ?? '',
+                    )
+                    ?.textContent?.trim()
+                    .startsWith(label),
+              );
+              return element == null
+                ? null
+                : {
+                    busy: element.getAttribute('aria-busy'),
+                    disabled: element.getAttribute('aria-disabled'),
+                    nativeDisabled:
+                      (element as HTMLButtonElement).disabled === true,
+                    required: element.getAttribute('aria-required'),
+                    invalid: element.getAttribute('aria-invalid'),
+                  };
+            };
+            const custom = document.querySelector(
+              '[data-testid="rtl-custom-trigger"]',
+            );
+            return {
+              loading: read('Loading value'),
+              disabled: read('Disabled value'),
+              invalid: read('Invalid required value'),
+              customRole: custom?.getAttribute('role') ?? null,
+              customDisabled: custom?.getAttribute('aria-disabled') ?? null,
+            };
+          })
+        : null;
+    const popupScroll = await readPopupScroll(
+      page,
+      trigger == null ? null : await trigger.getAttribute('aria-controls'),
+    );
+    const popupFitsInline =
+      popupScroll == null ||
+      (popupScroll.geometry.left >= -1 &&
+        popupScroll.geometry.right <= item.viewport.width + 1);
+    // Recorded: whether the popup also keeps the runtime's inline gutter.
+    const popupKeepsGutter =
+      popupScroll == null ||
+      (popupScroll.geometry.left >= RUNTIME_GUTTER - 1 &&
+        popupScroll.geometry.right <= item.viewport.width - RUNTIME_GUTTER + 1);
+    const contrast = item.forcedColors
+      ? []
+      : await readContrastPairs(page, rootSelector);
+
+    let statePass: boolean;
+    if (item.state === 'rest') {
+      statePass =
+        reducedMotionTransitions.length === 0 &&
+        (item.story === 'secondary'
+          ? observed.comboboxes === 1
+          : observed.comboboxes === 10 &&
+            observed.statuses === 3 &&
+            matrixFacts?.loading?.busy === 'true' &&
+            matrixFacts.disabled?.disabled === 'true' &&
+            matrixFacts.disabled.nativeDisabled === false &&
+            matrixFacts.invalid?.required === 'true' &&
+            matrixFacts.invalid.invalid === 'true' &&
+            matrixFacts.customRole === 'combobox' &&
+            matrixFacts.customDisabled === null);
+    } else if (item.state === 'hover') {
+      statePass =
+        stateFacts.hovered === true &&
+        JSON.stringify(statePaint) !== JSON.stringify(restPaint);
+    } else if (item.state === 'disabled-hover') {
+      statePass =
+        stateFacts.hovered === true &&
+        triggerFacts?.disabled === 'true' &&
+        JSON.stringify(statePaint) === JSON.stringify(restPaint) &&
+        statePaint?.cursor === 'default';
+    } else if (item.state === 'focus-visible') {
+      statePass =
+        stateFacts.focused === true &&
+        stateFacts.focusVisible === true &&
+        (statePaint?.outlineStyle !== 'none' ||
+          statePaint.boxShadow !== restPaint?.boxShadow);
+    } else if (item.state === 'disabled-focus') {
+      statePass =
+        stateFacts.focused === true &&
+        triggerFacts?.focused === true &&
+        triggerFacts.disabled === 'true' &&
+        triggerFacts.nativeDisabled === false &&
+        triggerFacts.expanded === 'false';
+    } else if (item.state === 'pressed') {
+      statePass = stateFacts.active === true;
+    } else if (item.state === 'tall-open') {
+      // One scroll owner and a box inside the runtime's gutters: the layer
+      // runtime owns the viewport cap and every consumer inherits it.
+      const floor =
+        item.viewport.height -
+        RUNTIME_GUTTER -
+        (item.inset ? APP_INSET_BLOCK_END : 0);
+      const paintedBottom =
+        popupScroll == null
+          ? Number.POSITIVE_INFINITY
+          : Math.max(
+              popupScroll.geometry.bottom,
+              popupScroll.surfaceGeometry?.bottom ?? Number.POSITIVE_INFINITY,
+              popupScroll.contentGeometry?.bottom ?? Number.POSITIVE_INFINITY,
+            );
+      stateFacts.paintedBottom = paintedBottom;
+      stateFacts.floor = floor;
+      statePass =
+        triggerFacts?.expanded === 'true' &&
+        popupScroll != null &&
+        popupScroll.scrolling.length <= 1 &&
+        paintedBottom <= floor + 1;
+    } else {
+      statePass =
+        triggerFacts?.expanded === 'true' &&
+        triggerFacts.role === 'combobox' &&
+        popupScroll != null &&
+        popupFitsInline;
+      if (item.state === 'caller-open' && trigger != null) {
+        // spec:AST-055 FR4: the popup opens against the caller's control,
+        // touching its block edge and overlapping it inline.
+        const control = await trigger.boundingBox();
+        const surface = popupScroll?.surfaceGeometry ?? null;
+        const anchored =
+          control != null &&
+          surface != null &&
+          surface.left < control.x + control.width &&
+          surface.right > control.x &&
+          (Math.abs(surface.top - (control.y + control.height)) <=
+            POPUP_OFFSET_TOLERANCE ||
+            Math.abs(control.y - surface.bottom) <= POPUP_OFFSET_TOLERANCE);
+        stateFacts.controlRect = control;
+        stateFacts.anchoredToControl = anchored;
+        statePass =
+          statePass &&
+          anchored &&
+          stateFacts.callerFocused === true &&
+          stateFacts.callerFocusVisible === true &&
+          stateFacts.callerFocusRing === true;
+      }
+    }
+
+    const settled = await readSettledRender(page, rootSelector);
+    const png =
+      item.story === 'matrix' && popupScroll == null
+        ? await subject.screenshot({animations: 'disabled'})
+        : await page.screenshot({animations: 'disabled'});
+    if (item.state === 'pressed') {
+      await page.mouse.up();
+    }
+
+    const image = `${item.key}.png`;
+    const receipt = {
+      schemaVersion: 3,
+      expected: {
+        build: checkoutSha,
+        storyId: storyId(item),
+        mode: item.mode,
+        colorScheme: expectedColorScheme(item),
+        direction: item.direction,
+        theme: item.theme,
+        state: item.state,
+        target: name,
+        pointer: item.pointer,
+        forcedColors: item.forcedColors,
+        viewport: item.viewport,
+        dpr: 1,
+        appInsetBlockEnd: item.inset ? APP_INSET_BLOCK_END : 0,
+        reducedMotionTransforms: item.state === 'rest' ? 0 : null,
+        runningAnimations: 0,
+        geometryStable: true,
+        textContrastThreshold: 4.5,
+      },
+      observed: {
+        build: storybookSha,
+        ...observed,
+        trigger: triggerFacts,
+        matrix: matrixFacts,
+        restPaint,
+        statePaint,
+        stateFacts,
+        reducedMotionTransitions,
+        popup: popupScroll,
+        contrast,
+        settled,
+        pageErrors,
+      },
+      image: {
+        file: image,
+        sha256: createHash('sha256').update(png).digest('hex'),
+        width: png.readUInt32BE(16),
+        height: png.readUInt32BE(20),
+        nonBlank: isNonBlank(png),
+      },
+      checks: {
+        statePass,
+        popupFitsInline,
+        popupKeepsGutter,
+        // Recorded, not gating: a token-layer pair is reported against the
+        // token layer rather than this component.
+        contrastPass: contrast.every(pair => pair.passed),
+      },
+      passed:
+        storybookSha === checkoutSha &&
+        pageErrors.length === 0 &&
+        !observed.storybookError &&
+        observed.theme === item.theme &&
+        observed.mode === item.mode &&
+        observed.colorScheme === expectedColorScheme(item) &&
+        observed.direction === item.direction &&
+        observed.viewport.width === item.viewport.width &&
+        observed.viewport.height === item.viewport.height &&
+        observed.dpr === 1 &&
+        observed.reducedMotion &&
+        observed.coarsePointer === (item.pointer === 'coarse') &&
+        observed.forcedColors === item.forcedColors &&
+        !observed.horizontalOverflow &&
+        observed.fonts === 'loaded' &&
+        settled.runningAnimations === 0 &&
+        settled.geometryStable &&
+        isNonBlank(png) &&
+        popupFitsInline &&
+        statePass,
+    };
+    fs.writeFileSync(path.join(OUTPUT, image), png);
+    fs.writeFileSync(
+      path.join(OUTPUT, `${item.key}.sensors.json`),
+      `${JSON.stringify(receipt, null, 2)}\n`,
+    );
+
+    await context.close();
+  });
+}
+
+test('manifest is complete', async () => {
+  const receiptFiles = fs
+    .readdirSync(OUTPUT)
+    .filter(file => file.endsWith('.sensors.json'));
+  const receipts = receiptFiles.map(
+    (file): AuditReceipt =>
+      JSON.parse(
+        fs.readFileSync(path.join(OUTPUT, file), 'utf8'),
+      ) as AuditReceipt,
+  );
+  const manifest = {
+    schemaVersion: 3,
+    component: 'core/ComplexSelector',
+    build: checkoutSha,
+    frames: cases.map(item => ({
+      key: item.key,
+      image: `${item.key}.png`,
+      receipt: `${item.key}.sensors.json`,
+    })),
+  };
+  fs.writeFileSync(
+    path.join(OUTPUT, 'manifest.json'),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  );
+  expect(receiptFiles).toHaveLength(cases.length);
+  expect(
+    receipts
+      .filter(receipt => !receipt.passed)
+      .map(receipt => receipt.expected),
+  ).toEqual([]);
 });

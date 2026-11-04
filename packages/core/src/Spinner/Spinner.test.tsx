@@ -15,6 +15,8 @@ import {Spinner} from './Spinner';
 import {InternationalizationProvider} from '../i18n';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
+import {getAllInjectedCss} from '../__tests__/forcedColors';
+import {declaredValue} from '../__tests__/stylexDeclarations';
 
 /** sm/md/lg/xl, as Spinner.tsx defines them. */
 const SIZES = {
@@ -27,8 +29,19 @@ const SIZES = {
 const ring = (testId = 'spinner') =>
   screen.getByTestId(testId).querySelector('svg') as SVGSVGElement;
 
+/** The track's svg and the arc's svg, in that order. */
+const rings = (testId = 'spinner') => [
+  ...screen.getByTestId(testId).querySelectorAll('svg'),
+];
+
+/** The box that turns: the arc's svg sits inside it, the track's does not. */
+const rotor = (testId = 'spinner') =>
+  rings(testId)[1].parentElement as HTMLSpanElement;
+
 const circles = (testId = 'spinner') => {
-  const [track, arc] = [...ring(testId).querySelectorAll('circle')];
+  const [track, arc] = [
+    ...screen.getByTestId(testId).querySelectorAll('circle'),
+  ];
   return {track, arc};
 };
 
@@ -251,9 +264,13 @@ describe('Spinner ring', () => {
 
   it('draws the ring in SVG', () => {
     render(<Spinner data-testid="spinner" />);
-    const svg = ring();
-    expect(svg).not.toBeNull();
-    expect(svg.querySelectorAll('circle')).toHaveLength(2);
+    // The track and the arc each have their own svg: the track stays put and
+    // the arc's svg sits in the rotor that turns.
+    const [trackSvg, arcSvg] = rings();
+    expect(trackSvg.querySelectorAll('circle')).toHaveLength(1);
+    expect(arcSvg.querySelectorAll('circle')).toHaveLength(1);
+    expect(trackSvg.parentElement).toBe(screen.getByTestId('spinner'));
+    expect(rotor().parentElement).toBe(screen.getByTestId('spinner'));
     expect(screen.getByTestId('spinner').querySelector('canvas')).toBeNull();
   });
 
@@ -265,11 +282,17 @@ describe('Spinner ring', () => {
       );
       // No viewBox: one user unit is one px, so the attributes below mean px.
       // They are the no-stylesheet fallback; CSS sizes the frame from the box.
+      // The track's are zero, so without a stylesheet the arc alone fills
+      // the box rather than sitting beside a second disc.
       const frame = diameter + border * 2;
-      const svg = ring();
-      expect(svg.getAttribute('viewBox')).toBeNull();
-      expect(Number(svg.getAttribute('width'))).toBe(frame);
-      expect(Number(svg.getAttribute('height'))).toBe(frame);
+      const [track, arc] = rings();
+      for (const svg of [track, arc]) {
+        expect(svg.getAttribute('viewBox')).toBeNull();
+      }
+      expect(Number(arc.getAttribute('width'))).toBe(frame);
+      expect(Number(arc.getAttribute('height'))).toBe(frame);
+      expect(Number(track.getAttribute('width'))).toBe(0);
+      expect(Number(track.getAttribute('height'))).toBe(0);
       for (const c of [circles().track, circles().arc]) {
         expect(c.getAttribute('cx')).toBe('50%');
         expect(c.getAttribute('cy')).toBe('50%');
@@ -302,13 +325,14 @@ describe('Spinner ring', () => {
   // because nothing tied them.
   it('sizes the frame from CSS, not from the size constant', () => {
     render(<Spinner data-testid="spinner" />);
-    const svg = ring();
     // No viewBox, and the circles centre on the box rather than on a centre
     // in user units — together that is what lets CSS size the frame from
     // `--_spinner-box-size`, the same composed var the span is sized from, so
     // a themed diameter moves both. The px attributes remain as the
     // no-stylesheet fallback and CSS outranks them whenever one is present.
-    expect(svg.getAttribute('viewBox')).toBeNull();
+    for (const svg of rings()) {
+      expect(svg.getAttribute('viewBox')).toBeNull();
+    }
     for (const c of [circles().track, circles().arc]) {
       expect(c.getAttribute('cx')).toBe('50%');
       expect(c.getAttribute('cy')).toBe('50%');
@@ -362,21 +386,62 @@ describe('Spinner ring', () => {
   );
 
   it('schedules no frame where the Web Animations API is absent', () => {
-    expect(SVGElement.prototype).not.toHaveProperty('getAnimations');
+    expect(HTMLElement.prototype).not.toHaveProperty('getAnimations');
     const raf = vi.spyOn(window, 'requestAnimationFrame');
     render(<Spinner data-testid="spinner" />);
     expect(ring()).not.toBeNull();
     expect(raf).not.toHaveBeenCalled();
   });
 
+  // The ring turns on the compositor: only the rotor moves, and only by
+  // `transform`, a property the browser animates without the main thread. A
+  // paint animation such as `stroke-dashoffset` would repaint the arc on the
+  // main thread every frame. It would stop while a script runs;
+  // `SpinnerMotion.a11y.chromium.spec.ts` holds the frames.
+  it('turns the arc by rotating the rotor, with nothing else animated', () => {
+    render(<Spinner data-testid="spinner" />);
+    const css = getAllInjectedCss();
+    const name = declaredValue(rotor(), 'animation-name');
+    expect(name).toBeTruthy();
+    expect(declaredValue(rotor(), 'animation-timing-function')).toBe('linear');
+    expect(declaredValue(rotor(), 'animation-iteration-count')).toBe(
+      'infinite',
+    );
+    // Its keyframes turn it once, by transform and nothing else. (jsdom's
+    // CSSOM lowercases the name in the rule but not in the at-rule.)
+    const keyframes = new RegExp(
+      `@keyframes ${name}\\s*\\{([\\s\\S]*?\\})\\s*\\}`,
+      'i',
+    ).exec(css)?.[1];
+    expect(keyframes).toMatch(/rotate\(0deg\)/);
+    expect(keyframes).toMatch(/rotate\(360deg\)/);
+    expect(keyframes).not.toMatch(/stroke|width|height|top|left/);
+    // Its own compositing layer from the first frame.
+    expect(declaredValue(rotor(), 'will-change')).toBe('transform');
+    // Nothing else in the spinner animates: not the arc, not the track.
+    for (const el of [
+      ...screen.getByTestId('spinner').querySelectorAll('svg, circle'),
+    ]) {
+      expect(declaredValue(el, 'animation-name')).toBeNull();
+    }
+    expect(css).not.toMatch(/@keyframes[^{]*\{[^}]*stroke-dashoffset/);
+  });
+
+  it('keeps the track out of the rotor', () => {
+    render(<Spinner data-testid="spinner" />);
+    expect(rotor().contains(circles().arc)).toBe(true);
+    expect(rotor().contains(circles().track)).toBe(false);
+    expect(rotor().getAttribute('aria-hidden')).toBe('true');
+  });
+
   it('pins every ring to the timeline origin in a single frame', () => {
     const animations: {startTime: number | null}[] = [];
-    const getAnimations = vi.fn(function (this: SVGElement) {
+    const getAnimations = vi.fn(function (this: HTMLElement) {
       const a = {startTime: null as number | null};
       animations.push(a);
       return [a];
     });
-    Object.defineProperty(SVGElement.prototype, 'getAnimations', {
+    Object.defineProperty(HTMLElement.prototype, 'getAnimations', {
       value: getAnimations,
       configurable: true,
       writable: true,
@@ -394,7 +459,7 @@ describe('Spinner ring', () => {
       const {container} = render(
         <>
           {Array.from({length: 5}, (_, i) => (
-            <Spinner key={i} />
+            <Spinner key={i} data-testid={`spinner-${i}`} />
           ))}
         </>,
       );
@@ -404,10 +469,10 @@ describe('Spinner ring', () => {
       frames.forEach(cb => cb(0));
       expect(animations).toHaveLength(5);
       expect(animations.every(a => a.startTime === 0)).toBe(true);
-      // The dash animation lives on the arc <circle>, a descendant of the
-      // <svg> this ref sits on, not the <svg> itself (#6253) — subtree:true
-      // is what lets getAnimations() find it from here.
-      expect(getAnimations).toHaveBeenCalledWith({subtree: true});
+      // The rotation lives on the rotor itself, the element the ref sits on.
+      expect(getAnimations.mock.contexts).toEqual(
+        Array.from({length: 5}, (_, i) => rotor(`spinner-${i}`)),
+      );
       // The pin runs on the branch the other shade cases cannot reach, so the
       // no-read assertion is made here too.
       expect(
@@ -417,7 +482,7 @@ describe('Spinner ring', () => {
       ).toEqual([]);
     } finally {
       // @ts-expect-error — removing the stub restores jsdom's real surface
-      delete SVGElement.prototype.getAnimations;
+      delete HTMLElement.prototype.getAnimations;
     }
   });
 });

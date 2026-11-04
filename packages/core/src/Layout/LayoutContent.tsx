@@ -21,7 +21,7 @@ import {use} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {spacingVars} from '../theme/tokens.stylex';
 import {LayoutSlotsContext} from './LayoutSlotsContext';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
 import type {SpacingStep} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
 import {

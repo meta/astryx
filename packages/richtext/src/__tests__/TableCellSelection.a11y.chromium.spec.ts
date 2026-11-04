@@ -254,12 +254,15 @@ test('the cells a selection covers are marked, and the rest are not', async ({
   expect(errors).toEqual([]);
 });
 
-test('the mark is visible against the surface in every theme and mode', async ({
-  page,
-}) => {
-  const failures: string[] = [];
-  for (const theme of THEMES) {
-    for (const mode of MODES) {
+// One test per theme and mode: each loads the story once, so the contract
+// for every theme stays well inside the per-test time limit on a busy runner,
+// and a miss names its theme and mode in the test title.
+for (const theme of THEMES) {
+  for (const mode of MODES) {
+    test(`the mark is visible against the surface (${theme}, ${mode})`, async ({
+      page,
+    }) => {
+      const failures: string[] = [];
       await openWithTable(page, theme, mode);
       const before = await paints(page);
       await dragAcross(page, 0, 4);
@@ -269,25 +272,25 @@ test('the mark is visible against the surface in every theme and mode', async ({
       // behind it is a different computed value and no mark at all.
       if (!looksDifferent(before[0], after[0])) {
         failures.push(`${theme}/${mode}: a selected cell looks unchanged`);
-        continue;
+      } else {
+        const contrast = await markContrast(page);
+        if (contrast < NON_TEXT_CONTRAST) {
+          failures.push(
+            `${theme}/${mode}: the mark clears the surface by only ${contrast.toFixed(2)}:1`,
+          );
+        }
+        // And the mark costs the cell's own text nothing: a wash drawn behind
+        // the text would show up here as a drop.
+        if (after[0].textContrast < before[0].textContrast - 0.01) {
+          failures.push(
+            `${theme}/${mode}: selecting drops header text from ${before[0].textContrast.toFixed(2)}:1 to ${after[0].textContrast.toFixed(2)}:1`,
+          );
+        }
       }
-      const contrast = await markContrast(page);
-      if (contrast < NON_TEXT_CONTRAST) {
-        failures.push(
-          `${theme}/${mode}: the mark clears the surface by only ${contrast.toFixed(2)}:1`,
-        );
-      }
-      // And the mark costs the cell's own text nothing: a wash drawn behind
-      // the text would show up here as a drop.
-      if (after[0].textContrast < before[0].textContrast - 0.01) {
-        failures.push(
-          `${theme}/${mode}: selecting drops header text from ${before[0].textContrast.toFixed(2)}:1 to ${after[0].textContrast.toFixed(2)}:1`,
-        );
-      }
-    }
+      expect(failures).toEqual([]);
+    });
   }
-  expect(failures).toEqual([]);
-});
+}
 
 test('the mark marks exactly the cells the next keystroke replaces', async ({
   page,

@@ -39,9 +39,24 @@ async function mount(
   );
   await expect(copyButton(page)).toBeVisible();
   if (Object.keys(args).length > 0) {
+    // Measure only the story as these args render it. Storybook emits
+    // `storyRendered` for the story's own first render too, shortly after it
+    // is visible, so the update waits for that render to finish first; the
+    // `storyRendered` it then waits for is the re-render with the args, and a
+    // re-render that never comes fails here instead of being measured. Each
+    // arg the cases pass is also checked in the page, so a slow runner can
+    // never measure the default story in its place.
+    await page.waitForFunction(
+      () =>
+        (
+          window as unknown as {
+            __STORYBOOK_PREVIEW__?: {currentRender?: {phase?: string}};
+          }
+        ).__STORYBOOK_PREVIEW__?.currentRender?.phase === 'finished',
+    );
     await page.evaluate(
       async ({storyId, updatedArgs}) =>
-        new Promise<void>(resolve => {
+        new Promise<void>((resolve, reject) => {
           const channel = (
             window as unknown as {
               __STORYBOOK_ADDONS_CHANNEL__: {
@@ -50,12 +65,32 @@ async function mount(
               };
             }
           ).__STORYBOOK_ADDONS_CHANNEL__;
-          channel.once('storyRendered', () => resolve());
+          const timer = setTimeout(
+            () =>
+              reject(new Error('the story did not re-render with its args')),
+            20_000,
+          );
+          channel.once('storyRendered', () => {
+            clearTimeout(timer);
+            resolve();
+          });
           channel.emit('updateStoryArgs', {storyId, updatedArgs});
-          setTimeout(resolve, 1500);
         }),
       {storyId: STORY, updatedArgs: args},
     );
+    if (typeof args.code === 'string') {
+      await expect(
+        page.locator('pre.astryx-code-block [data-line]'),
+      ).toHaveCount(args.code.split('\n').length);
+    }
+    if (typeof args.title === 'string') {
+      await expect(page.getByText(args.title, {exact: true})).toBeVisible();
+    }
+    if (args.isWrapped === true) {
+      await expect(
+        page.locator('pre.astryx-code-block [data-line="1"]'),
+      ).toHaveCSS('white-space', 'pre-wrap');
+    }
   }
 }
 

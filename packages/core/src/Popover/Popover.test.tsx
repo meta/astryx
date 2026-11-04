@@ -28,11 +28,12 @@ import {
   act,
   within,
   cleanup,
+  renderHook,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as stylex from '@stylexjs/stylex';
 import {readFileSync} from 'node:fs';
-import React, {useRef} from 'react';
+import React, {useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
 import {Popover} from './Popover';
 import {usePopover} from './usePopover';
@@ -873,6 +874,119 @@ describe('Popover', () => {
       );
     });
 
+    // iOS raises its keyboard only for a focus made while the browser still
+    // handles the tap, so initial focus lands within the opening event, not a
+    // frame later.
+    it('focuses the first content control within the click that opens it', () => {
+      const frames: FrameRequestCallback[] = [];
+      vi.stubGlobal(
+        'requestAnimationFrame',
+        (callback: FrameRequestCallback) => {
+          frames.push(callback);
+          return frames.length;
+        },
+      );
+      vi.stubGlobal('cancelAnimationFrame', () => {});
+      try {
+        render(
+          <Popover content={<input aria-label="Discount" />} label="Discount">
+            <button type="button">Open discount</button>
+          </Popover>,
+        );
+
+        act(() => {
+          fireEvent.click(screen.getByRole('button', {name: 'Open discount'}), {
+            detail: 1,
+          });
+        });
+
+        // No frame has run.
+        expect(
+          screen.getByRole('textbox', {name: 'Discount', hidden: true}),
+        ).toHaveFocus();
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('still focuses the content when the opening handler swaps it in', async () => {
+      function Swapped() {
+        const [mode, setMode] = useState<'view' | 'edit'>('view');
+        const popover = usePopover({dialogLabel: 'Details'});
+        return (
+          <>
+            <button
+              type="button"
+              ref={popover.triggerRef}
+              {...popover.triggerProps}
+              onClick={() => {
+                setMode('edit');
+                popover.show();
+              }}>
+              Edit details
+            </button>
+            {popover.render(
+              mode === 'view' ? (
+                <button type="button">View</button>
+              ) : (
+                <input aria-label="Name" />
+              ),
+            )}
+          </>
+        );
+      }
+      render(<Swapped />);
+
+      fireEvent.click(screen.getByRole('button', {name: 'Edit details'}), {
+        detail: 1,
+      });
+
+      await waitFor(() =>
+        expect(
+          screen.getByRole('textbox', {name: 'Name', hidden: true}),
+        ).toHaveFocus(),
+      );
+    });
+
+    it('keeps focus that onShow moves inside the popover', async () => {
+      function Fields() {
+        const secondRef = useRef<HTMLInputElement>(null);
+        const popover = usePopover({
+          dialogLabel: 'Fields',
+          onShow: () => secondRef.current?.focus(),
+        });
+        return (
+          <>
+            <button
+              type="button"
+              ref={popover.triggerRef}
+              {...popover.triggerProps}
+              onClick={popover.toggle}>
+              Open fields
+            </button>
+            {popover.render(
+              <>
+                <input aria-label="First" />
+                <input aria-label="Second" ref={secondRef} />
+              </>,
+            )}
+          </>
+        );
+      }
+      render(<Fields />);
+
+      fireEvent.click(screen.getByRole('button', {name: 'Open fields'}), {
+        detail: 1,
+      });
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      });
+
+      expect(
+        screen.getByRole('textbox', {name: 'Second', hidden: true}),
+      ).toHaveFocus();
+    });
+
     it('focuses the dialog container when content has no controls', async () => {
       render(
         <Popover content={<span>Read-only content</span>} label="Read only">
@@ -961,6 +1075,76 @@ describe('Popover', () => {
       fireEvent.keyDown(document, {key: 'Escape'});
       expect(trigger).toHaveAttribute('aria-expanded', 'false');
       expect(trigger).toHaveFocus();
+    });
+
+    it('leaves focus on a control inside that took it before the first frame', () => {
+      // Auto-focus waits a frame for content that is not mounted yet. Focus an
+      // app or a press put on a later control in that frame is not the first
+      // control's to take back.
+      const frames = new Map<number, FrameRequestCallback>();
+      let nextFrame = 0;
+      vi.stubGlobal(
+        'requestAnimationFrame',
+        (callback: FrameRequestCallback) => {
+          nextFrame += 1;
+          frames.set(nextFrame, callback);
+          return nextFrame;
+        },
+      );
+      vi.stubGlobal('cancelAnimationFrame', (frame: number) => {
+        frames.delete(frame);
+      });
+      try {
+        render(
+          <Popover
+            content={
+              <>
+                <button type="button">First</button>
+                <button type="button" data-testid="second">
+                  Second
+                </button>
+              </>
+            }
+            label="Test">
+            <button type="button">Open</button>
+          </Popover>,
+        );
+        fireEvent.click(screen.getByRole('button', {name: 'Open'}));
+
+        const second = screen.getByTestId('second');
+        second.focus();
+        for (const callback of [...frames.values()]) {
+          callback(0);
+        }
+
+        expect(second).toHaveFocus();
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it('still moves focus to the first control when focus is not inside', async () => {
+      render(
+        <Popover
+          content={
+            <>
+              <button type="button">First</button>
+              <button type="button">Second</button>
+            </>
+          }
+          label="Test">
+          <button type="button">Open</button>
+        </Popover>,
+      );
+      const trigger = screen.getByRole('button', {name: 'Open'});
+      trigger.focus();
+      fireEvent.click(trigger);
+
+      await waitFor(() =>
+        expect(
+          screen.getByRole('button', {name: 'First', hidden: true}),
+        ).toHaveFocus(),
+      );
     });
 
     it('does not move focus into a popover that closed before its first frame', () => {
@@ -1221,6 +1405,46 @@ describe('Popover', () => {
       fireEvent.keyDown(secondDocument, {key: 'Escape'});
       expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false);
     });
+
+    it('re-measures its overflow when its own window resizes', () => {
+      const {trigger, surface} = renderInSecondDocument();
+      const secondWindow = secondDocument.defaultView!;
+      const frames: FrameRequestCallback[] = [];
+      const requestFrame = vi
+        .spyOn(secondWindow, 'requestAnimationFrame')
+        .mockImplementation(callback => {
+          frames.push(callback);
+          return frames.length;
+        });
+      const runFrames = () =>
+        act(() => frames.splice(0).forEach(callback => callback(0)));
+      fireEvent.click(trigger, {detail: 1});
+      runFrames();
+      expect(surface.className).not.toContain(
+        'Popover__styles.surfaceScrollable',
+      );
+
+      // The window the Popover renders in gets too short for its content.
+      const {prototype} = secondWindow.HTMLElement;
+      const sizes = [
+        vi.spyOn(prototype, 'clientHeight', 'get').mockReturnValue(100),
+        vi.spyOn(prototype, 'scrollHeight', 'get').mockReturnValue(200),
+        vi.spyOn(prototype, 'clientWidth', 'get').mockReturnValue(200),
+        vi.spyOn(prototype, 'scrollWidth', 'get').mockReturnValue(200),
+      ];
+      try {
+        act(() => {
+          secondWindow.dispatchEvent(new secondWindow.Event('resize'));
+        });
+        runFrames();
+        expect(surface.className).toContain(
+          'Popover__styles.surfaceScrollable',
+        );
+      } finally {
+        sizes.forEach(size => size.mockRestore());
+        requestFrame.mockRestore();
+      }
+    });
   });
 
   describe('surface padding', () => {
@@ -1325,5 +1549,143 @@ describe('Popover', () => {
     expect(target).toHaveStyle({padding: '0'});
     expect(target).toContainElement(screen.getByTestId('content'));
     expect(screen.getByTestId('popover')).not.toHaveClass('consumer-popover');
+  });
+});
+
+describe('Popover focus region (DEC-9)', () => {
+  function Page({isModal}: {isModal: boolean}) {
+    return (
+      <div>
+        <Popover
+          isModal={isModal}
+          hasCloseButton={false}
+          label="Details"
+          content={
+            <>
+              <button type="button">First inside</button>
+              <button type="button">Last inside</button>
+            </>
+          }>
+          <button type="button">Open details</button>
+        </Popover>
+        <button type="button">Elsewhere 1</button>
+        <button type="button">Elsewhere 2</button>
+      </div>
+    );
+  }
+
+  async function openDetails() {
+    const trigger = screen.getByRole('button', {name: 'Open details'});
+    // A pointer press focuses the trigger before its click opens the popover.
+    trigger.focus();
+    fireEvent.click(trigger);
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', {name: 'First inside', hidden: true}),
+      ).toHaveFocus(),
+    );
+  }
+
+  describe.each([
+    ['non-modal', false],
+    ['modal', true],
+  ])('%s', (_name, isModal) => {
+    it('leaves a Tab pressed outside the open popover to the page', async () => {
+      const user = userEvent.setup();
+      render(<Page isModal={isModal} />);
+      await openDetails();
+
+      screen.getByRole('button', {name: 'Elsewhere 1'}).focus();
+      await user.tab();
+
+      expect(screen.getByRole('button', {name: 'Elsewhere 2'})).toHaveFocus();
+    });
+
+    it('leaves a Shift+Tab pressed outside the open popover to the page', async () => {
+      const user = userEvent.setup();
+      render(<Page isModal={isModal} />);
+      await openDetails();
+
+      screen.getByRole('button', {name: 'Elsewhere 2'}).focus();
+      await user.tab({shift: true});
+
+      expect(screen.getByRole('button', {name: 'Elsewhere 1'})).toHaveFocus();
+    });
+
+    it('cycles Tab and Shift+Tab inside the open popover', async () => {
+      const user = userEvent.setup();
+      render(<Page isModal={isModal} />);
+      await openDetails();
+      const first = screen.getByRole('button', {
+        name: 'First inside',
+        hidden: true,
+      });
+      const last = screen.getByRole('button', {
+        name: 'Last inside',
+        hidden: true,
+      });
+
+      await user.tab();
+      expect(last).toHaveFocus();
+      await user.tab();
+      expect(first).toHaveFocus();
+      await user.tab({shift: true});
+      expect(last).toHaveFocus();
+    });
+
+    it('closes on Escape from inside and returns focus to the trigger', async () => {
+      const user = userEvent.setup();
+      render(<Page isModal={isModal} />);
+      await openDetails();
+
+      await user.keyboard('{Escape}');
+
+      const trigger = screen.getByRole('button', {name: 'Open details'});
+      expect(trigger).toHaveAttribute('aria-expanded', 'false');
+      expect(trigger).toHaveFocus();
+    });
+  });
+});
+
+describe('usePopover trigger ref', () => {
+  // The layer object changes whenever onShow or onHide does. A trigger ref
+  // that changed with it made React detach and reattach the trigger on every
+  // render of a caller that passes inline callbacks.
+  it('stays the same function when onShow and onHide change across renders', () => {
+    const {result, rerender} = renderHook(
+      ({onShow, onHide}: {onShow: () => void; onHide: () => void}) =>
+        usePopover({onShow, onHide}),
+      {initialProps: {onShow: () => {}, onHide: () => {}}},
+    );
+    const first = result.current.triggerRef;
+
+    rerender({onShow: () => {}, onHide: () => {}});
+
+    expect(result.current.triggerRef).toBe(first);
+  });
+
+  it('leaves the trigger style alone on a render with new callbacks', () => {
+    function Trigger({count}: {count: number}) {
+      const popover = usePopover({onShow: () => {}, onHide: () => {}});
+      return (
+        <button type="button" ref={popover.triggerRef}>
+          Open {count}
+        </button>
+      );
+    }
+    const {rerender} = render(<Trigger count={0} />);
+    const trigger = screen.getByRole('button', {name: /^Open/});
+    const anchorName = trigger.style.getPropertyValue('anchor-name');
+    expect(anchorName).toMatch(/^--astryx-layer-/);
+    const records: MutationRecord[] = [];
+    const observer = new MutationObserver(found => records.push(...found));
+    observer.observe(trigger, {attributes: true, attributeFilter: ['style']});
+
+    rerender(<Trigger count={1} />);
+    records.push(...observer.takeRecords());
+    observer.disconnect();
+
+    expect(records).toHaveLength(0);
+    expect(trigger.style.getPropertyValue('anchor-name')).toBe(anchorName);
   });
 });

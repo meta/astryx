@@ -330,7 +330,7 @@ export const CONFIG_BASENAMES = [
 
 /** Default issue tracker used when neither config nor integration routes one. */
 export const DEFAULT_ISSUES_URL =
-  'https://github.com/facebook/astryx/issues/new';
+  'https://github.com/meta/astryx/issues/new';
 
 /**
  * Whether this project accepts `debug` handlers contributed by the

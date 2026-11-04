@@ -15,6 +15,7 @@
 
 import {describe, it, expect} from 'vitest';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {
@@ -129,8 +130,10 @@ describe('import hint correctness', () => {
      * @returns {string} the fixture's project root (pass as runCli's cwd)
      */
     function createIntegrationFixture({exports: pkgExports} = {}) {
+      // Outside the source tree: a scan of the repo's docs (docs-drift)
+      // running at the same time must never find this fixture's doc.
       const fixtureDir = fs.mkdtempSync(
-        path.join(__dirname, '__import_hint_integration_'),
+        path.join(os.tmpdir(), 'astryx-import-hint-integration-'),
       );
 
       fs.mkdirSync(path.join(fixtureDir, 'packages'), {recursive: true});
@@ -205,6 +208,22 @@ describe('import hint correctness', () => {
         const result = await runCli(['component', 'Widget'], fixtureDir);
         expect(result.code).toBe(0);
         expect(result.stdout).toContain("from '@test/widgets/Widget';");
+      } finally {
+        fs.rmSync(fixtureDir, {recursive: true, force: true});
+      }
+    });
+
+    it('builds its fixture where a scan of the repo\u2019s docs running at the same time never finds it', async () => {
+      // The docs-drift scan walks packages/cli/clients/cli/commands for
+      // .doc.mjs files. A fixture built there handed it this test's Widget
+      // doc, which could vanish before the scan imported it.
+      const fixtureDir = createIntegrationFixture();
+      try {
+        const {collectDocs} = await import('../../../test/drift/docs-drift.mjs');
+        const found = (await collectDocs())
+          .map(({file}) => path.resolve(REPO_ROOT, file))
+          .filter(file => file.startsWith(fixtureDir + path.sep));
+        expect(found).toEqual([]);
       } finally {
         fs.rmSync(fixtureDir, {recursive: true, force: true});
       }

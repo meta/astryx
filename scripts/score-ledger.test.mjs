@@ -19,7 +19,7 @@ import path from 'node:path';
 import {execFileSync} from 'node:child_process';
 import http from 'node:http';
 
-import {describe, it, expect} from 'vitest';
+import {afterAll, beforeAll, describe, it, expect} from 'vitest';
 
 import {
   AUDIT_PROMPT,
@@ -47,6 +47,22 @@ import {
   weakestSection,
   wikiCommitUrl,
 } from './score-ledger.mjs';
+
+/**
+ * The folder every temporary file of these tests lives in, the CLI's included
+ * (its TMPDIR), removed once they finish, so a run leaves nothing behind in the
+ * system temp directory. It is made in beforeAll, not when the module loads:
+ * Vitest skips both hooks when a run filters out every test here.
+ */
+let TEMP_ROOT = '';
+beforeAll(() => {
+  TEMP_ROOT = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'astryx-score-ledger-test-'),
+  );
+});
+afterAll(() => {
+  fs.rmSync(TEMP_ROOT, {recursive: true, force: true});
+});
 
 const REPO_ROOT = path.resolve(import.meta.dirname, '..');
 
@@ -243,7 +259,10 @@ describe('loadLedger never throws', () => {
   });
 
   it('rejects JSON that is not a ledger', async () => {
-    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-')), 'l.json');
+    const file = path.join(
+      fs.mkdtempSync(path.join(TEMP_ROOT, 'ledger-')),
+      'l.json',
+    );
     fs.writeFileSync(file, JSON.stringify({nope: true}));
     const {ledger, error} = await loadLedger(file);
     expect(ledger).toBeNull();
@@ -251,7 +270,10 @@ describe('loadLedger never throws', () => {
   });
 
   it('reads a real ledger', async () => {
-    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-')), 'l.json');
+    const file = path.join(
+      fs.mkdtempSync(path.join(TEMP_ROOT, 'ledger-')),
+      'l.json',
+    );
     fs.writeFileSync(file, JSON.stringify({ledgerVersion: 1, components: [entry()]}));
     const {ledger, error} = await loadLedger(file);
     expect(error).toBeNull();
@@ -842,7 +864,7 @@ describe('audit mode contract', () => {
 describe('issue plumbing', () => {
   it('links a filed BLOCK and says so when one is not filed', () => {
     expect(blockLink({id: 'A8', summary: 'x', issue: 3885})).toContain(
-      'https://github.com/facebook/astryx/issues/3885',
+      'https://github.com/meta/astryx/issues/3885',
     );
     expect(blockLink({id: 'A8', summary: 'x', issue: null})).toContain('no issue filed');
   });
@@ -893,7 +915,7 @@ function cli(argv, {cwd = REPO_ROOT, input, env} = {}) {
       cwd,
       input,
       encoding: 'utf8',
-      env: {...process.env, ...env},
+      env: {...process.env, TMPDIR: TEMP_ROOT, ...env},
       stdio: ['pipe', 'pipe', 'pipe'],
     });
     return {code: 0, out};
@@ -928,7 +950,7 @@ const scorecard = (over = {}) => ({
  * is shallow and pushes over file://, exactly as `ensureWikiClone` produces.
  */
 function makeWiki(seedLedger) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'score-ledger-wiki-'));
+  const root = fs.mkdtempSync(path.join(TEMP_ROOT, 'score-ledger-wiki-'));
   const bare = path.join(root, 'wiki.git');
   const seed = path.join(root, 'seed');
   const clone = path.join(root, 'clone');
@@ -987,15 +1009,15 @@ describe('the commit message', () => {
 
 describe('wiki URLs', () => {
   it('reads the repo out of a wiki remote, https or ssh', () => {
-    expect(repoFromWikiRemote('https://github.com/facebook/astryx.wiki.git')).toBe(
-      'facebook/astryx',
+    expect(repoFromWikiRemote('https://github.com/meta/astryx.wiki.git')).toBe(
+      'meta/astryx',
     );
-    expect(repoFromWikiRemote('git@github.com:facebook/astryx.wiki.git')).toBe('facebook/astryx');
+    expect(repoFromWikiRemote('git@github.com:meta/astryx.wiki.git')).toBe('meta/astryx');
   });
 
   it('builds a commit URL GitHub actually serves', () => {
     expect(wikiCommitUrl('deadbeef')).toBe(
-      'https://github.com/facebook/astryx/wiki/_compare/deadbeef',
+      'https://github.com/meta/astryx/wiki/_compare/deadbeef',
     );
   });
 });
