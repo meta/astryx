@@ -2643,6 +2643,14 @@ jobs:
         leg: [1, 2]
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Playwright's own image for the version the lockfile resolves, with
+    # WebKit and its system libraries already installed. Installing those on
+    # the runner took up to fifteen minutes when the package mirror was slow,
+    # which cancelled the leg before a proof ran. A guard test keeps the tag
+    # equal to the lockfile's Playwright version.
+    container:
+      image: mcr.microsoft.com/playwright:v1.61.1-noble
+      options: --ipc=host
     permissions:
       # The heavy-suite caps read the author's pull requests and runs.
       actions: read
@@ -2743,11 +2751,11 @@ jobs:
           name: storybook-${{ needs.build-storybook.outputs.short_hash }}
           path: apps/storybook/dist
 
-      # WebKit needs system libraries the runner image lacks; --with-deps
-      # installs them.
+      # The image carries WebKit and its system libraries; `install` finds the
+      # browser in place and downloads nothing.
       - name: Install Playwright WebKit
         if: steps.scope.outputs.applies == 'true'
-        run: pnpm install --frozen-lockfile && npx playwright install --with-deps webkit
+        run: pnpm install --frozen-lockfile && npx playwright install webkit
 
       # This leg's share of the WebKit spec files, from the paths the lane
       # covers, by their recorded times. The planner and the times come from
@@ -2802,6 +2810,8 @@ jobs:
           fi
           export LP_NUM_THREADS
           echo "llvmpipe threads: $LP_NUM_THREADS"
+          # Which Mesa software rasterizer the frames go through.
+          echo "Mesa DRI drivers: $(ls /usr/lib/x86_64-linux-gnu/dri 2>/dev/null | tr '\n' ' ')"
           pnpm exec playwright test \
             --test-list "$RUNNER_TEMP/interaction-leg.txt" \
             --config playwright.interaction.config.ts \
