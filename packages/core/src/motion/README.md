@@ -57,8 +57,9 @@ names for their use (`springs.settle`, `timing.stateChangeMs`,
 `timing.curves.move`, …): a shared table lists them when it registers
 (`roles`), and every other value, a component's measured spring included, is
 a plain constant. The per-role tables stay internal (`spec:AST-094` DEC-15): a
-role plays its table value, and nothing reads its CSS variable
-(`--motion-springs-settle`), so no page or theme style sets a role. A table's
+role plays its table value at the theme's tempo, and nothing reads the
+role's own CSS variable (`--motion-springs-settle`), so no page or theme
+style sets a role. A table's
 roles exist once its `register<Name>Table()` has run: the animator registers
 the Reduce Motion fade's curve, and code that plays the shared springs calls
 `registerSpringsTable()` before its first motion. The animator resolves each

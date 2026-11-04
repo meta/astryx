@@ -41,7 +41,7 @@ export const docs = {
           ['typography.scale', '--text-heading-*-size/weight/leading, --text-body-size/weight/leading', 'base (px), ratio'],
           ['typography.body/heading/code', '--font-family-body, --font-family-heading, --font-family-code', 'family, fallbacks?, url?, weight?'],
           ['radius', '--radius-inner, --radius-element, --radius-container, --radius-page, --radius-chat', 'base (px), multiplier (0–2)'],
-          ['motion', 'Every --duration-* token, --ease-entrance and --ease-move (springs don\'t read them yet)', 'tempo? (0.75–1.5), character? (crisp|standard|expressive); and/or a duration scale: fast (ms), medium (ms), ratio, slow?, easing?. The scale wins over tempo for the durations it sets, and explicit tokens win over both. Fixed whatever the knobs say: drags and momentum, rubber band, keyboard, press onset/cancel/flash, hover intent, gesture thresholds, Spinner/Skeleton loops, the 200 ms Reduce Motion cap. See {@link generic:motion}.'],
+          ['motion', 'Every --duration-* token, --ease-entrance and --ease-move (tempo also times the touch springs)', 'tempo? (0.75–1.5), character? (crisp|standard|expressive); and/or a duration scale: fast (ms), medium (ms), ratio, slow?, easing?. The scale wins over tempo for the durations it sets, and explicit tokens win over both. Fixed whatever the knobs say: drags and momentum, rubber band, keyboard, press onset/cancel/flash, hover intent, gesture thresholds, Spinner/Skeleton loops, the 200 ms Reduce Motion cap. See {@link generic:motion}.'],
         ]},
         {type: 'prose', text: 'For dark mode tuples in token values, see the Dark mode section of {@link generic:use-a-theme}.'},
       ],

@@ -157,7 +157,8 @@
  * once `registerSpringsTable()` has run, the Reduce Motion fade's curve,
  * which the animator registers alone). The per-role tables stay internal
  * (`spec:AST-094` DEC-15), so a role plays its table value: nothing reads a
- * CSS variable or the element's style for it. A spring written inline at the call
+ * role's own CSS variable. Its time scales by the tempo of the element's
+ * theme. A spring written inline at the call
  * site, and a table never registered, play as given; the fade's length is not
  * a role.
  *
@@ -2729,7 +2730,7 @@ export function createMotionAnimator(
     if (from === to && velocity === 0) {
       return null;
     }
-    // The motion role it plays: its table value (DEC-15).
+    // The motion role it plays, at the tempo of the theme it is in.
     const resolved = resolveMotion(target, spring);
     const curve = solveSpring(toSpring(resolved), {from, to, velocity});
     const duration = Math.min(

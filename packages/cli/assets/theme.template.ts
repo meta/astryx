@@ -181,8 +181,8 @@ export const myTheme = defineTheme({
   radius: {base: 4, multiplier: 1},
 
   /**
-   * Motion. Two knobs set how its CSS feels (touch springs don't read them
-   * yet):
+   * Motion. Two knobs set how it feels. tempo also times the touch springs;
+   * character sets only the CSS curves for now:
    *   tempo — 1 is Astryx's own; 0.75 the quickest, 1.5 the slowest.
    *   character — 'crisp' | 'standard' | 'expressive': the entrance and move
    *     curves (--ease-entrance, --ease-move). --ease-exit, the curve for

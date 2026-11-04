@@ -30,6 +30,7 @@ import {
 import {solveSpring, toSpring, type SpringDescription} from '../motion/spring';
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
 import {registerSwitchTable, switchControl} from '../motion/uikit/switch';
+import {resolveMotion} from '../motion/resolveMotion';
 import {useTouchPresentation} from '../utils/touchPresentation';
 import {awaitBrowserClick, clickForLift} from '../utils/browserClickWait';
 import {armClickGuard} from '../utils/clickGuard';
@@ -891,9 +892,16 @@ export class SwitchTouchController {
       return;
     }
     this.liftTime = null;
-    const lift = switchControl.lift;
-    const settle = switchControl.settle;
-    this.settleAt = settleTime(time, liftTime);
+    // The lift played these roles at the thumb's tempo, so the settle and the
+    // minimum lift take that tempo too.
+    const element = this.thumb?.element;
+    const lift = resolveMotion(element, switchControl.lift);
+    const settle = resolveMotion(element, switchControl.settle);
+    this.settleAt = settleTime(
+      time,
+      liftTime,
+      resolveMotion(element, switchControl, 'minimumLiftMs'),
+    );
     const hold = (this.settleAt - time) / 1000;
     const play = (
       animator: Animator | null,
@@ -962,8 +970,8 @@ export class SwitchTouchController {
           rest: held ? keep : 1,
           holdSeconds: held ? 0 : hold,
           threshold: 1e-4,
-          lift: switchControl.lift,
-          settle: switchControl.settle,
+          lift: resolveMotion(thumb.element, switchControl.lift),
+          settle: resolveMotion(thumb.element, switchControl.settle),
         }),
       });
     }
