@@ -23,7 +23,8 @@
  *    marker is marked, since the controller writes `data-astryx-press` on the
  *    element carrying the scope.
  *  - A styles-only module (`*.stylex.ts`) is covered when every file that
- *    imports it is marked.
+ *    composes one of its `stylex.create` exports is marked. A file that
+ *    imports only its plain functions paints nothing from it.
  */
 
 import fs from 'node:fs';
@@ -93,6 +94,32 @@ function referrers(name: string, except: string): string[] {
 }
 
 /** Files that import the module at `file` (by its relative specifier). */
+/** The names a module exports from `stylex.create`. */
+function styleExports(file: string): string[] {
+  const text = source.get(file) ?? '';
+  return [...text.matchAll(/export const (\w+) = stylex\.create\(/g)].map(
+    m => m[1],
+  );
+}
+
+/** Whether `user` imports at least one of `names` from `file`. */
+function importsAnyOf(user: string, file: string, names: string[]): boolean {
+  const stem = path.basename(file).replace(/\.tsx?$/, '');
+  const text = source.get(user) ?? '';
+  for (const m of text.matchAll(/import\s*\{([^}]*)\}\s*from\s+'([^']+)'/g)) {
+    if (!m[2].endsWith(stem)) {
+      continue;
+    }
+    const imported = m[1]
+      .split(',')
+      .map(part => part.trim().split(/\s+as\s+/)[0]);
+    if (imported.some(name => names.includes(name))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function importers(file: string): string[] {
   const stem = file.replace(/\.tsx?$/, '');
   return [...source.entries()]
@@ -135,8 +162,11 @@ describe('every surface that paints a press is reachable by the touch press cont
       if (file.endsWith('.stylex.ts')) {
         // A styles-only module: its arms land on whichever component composes
         // it, so each importer must be a marked surface.
-        const users = importers(file);
-        expect(users, `${file} is imported by nobody`).not.toHaveLength(0);
+        const styles = styleExports(file);
+        const users = importers(file).filter(
+          user => styles.length === 0 || importsAnyOf(user, file, styles),
+        );
+        expect(users, `${file} is composed by nobody`).not.toHaveLength(0);
         for (const user of users) {
           if (!isMarked(user)) {
             problems.push(`${user} composes ${file} unmarked`);
