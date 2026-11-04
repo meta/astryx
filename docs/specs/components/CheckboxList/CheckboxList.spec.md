@@ -322,7 +322,7 @@ CheckboxInput, Spinner, and FieldStatus targets.
   against `spec:AST-085` FR5 and FR7.
 - **Status without a message (FR14).** A status without a message renders
   nothing; its meaning is OQ3.
-- **Required announcement (FR17).** `role="group"` cannot carry `aria-required`, and browsers expose an unchecked `required` checkbox as invalid rather than required, so while the group is empty its first checkbox alone reports that state, as every required checkbox and radio does today; this is a platform limit, not a deferred fix.
+- **Required announcement (FR17).** `role="group"` cannot carry `aria-required`, and browsers expose an unchecked `required` checkbox as invalid rather than required, so while the group is empty its first checkbox alone reports that state, as a `CheckboxInput` with `isRequired` does today; a required `RadioList` keeps each radio's invalid state on its status instead (`component:RadioList` FR6).
 
 ## Decision log
 
