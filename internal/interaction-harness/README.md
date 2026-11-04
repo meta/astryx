@@ -279,7 +279,12 @@ Layout or Paint there; a layout-property animation does one per frame. Its
 (`waitForAnimation` describing keyframes, `blockMainThread` without `during`)
 is in `devtoolsTasks` instead, and only when no page script ran inside it. A
 test's own `page.evaluate` stays a long task, whether it calls page code
-directly or sets it off.
+directly or sets it off. Each long task carries its wall time (`durationMs`)
+and the main thread's own run time (`threadMs`, from the trace's thread
+clock). A busy machine stretches the first but not the second, so a claim
+about the page's own work judges `threadMs`. A thread that waits (a
+synchronous request, `Atomics.wait`) gains wall time but no thread time, so a
+claim about a blocking wait judges `durationMs`.
 
 **Storyboards.** Deterministic: frames come from seeking held animations or
 from stepping scripted input, never from wall-clock capture. The JSON trace
