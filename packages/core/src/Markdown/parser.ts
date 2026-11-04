@@ -2792,8 +2792,8 @@ interface AutolinkMatch {
  * `https://example.com/Foo_(bar)` keeps the inner pair).
  */
 function peelTrailingPunctAndParens(url: string): string {
-  // The parens are counted once; each peeled `)` then lowers the count, so a
-  // long run of `)` costs one pass.
+  // Each peeled `)` lowers the close count instead of a recount, so a long
+  // run of `)` costs one pass.
   let open = 0;
   let close = 0;
   for (let idx = 0; idx < url.length; idx++) {
