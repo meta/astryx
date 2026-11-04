@@ -799,6 +799,7 @@
     "/templates/usePressFeedbackHookUsage/",
     "/templates/useScrollableAreaHookUsage/",
     "/templates/useStreamingTextHookUsage/",
+    "/templates/useTableSortableStateHookUsage/",
     "/templates/useThemeHookUsage/",
     "/templates/useToastHookUsage/",
     "/templates/useTranslatorHookUsage/",
