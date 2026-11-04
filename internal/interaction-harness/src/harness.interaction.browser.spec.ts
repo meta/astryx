@@ -99,6 +99,7 @@ import {
   thawTimers,
   timeline,
   touchDriver,
+  TouchPageStallError,
   touchStoryboard,
   traceRendering,
   trackMarker,
@@ -361,6 +362,75 @@ test.describe('touch input', () => {
       }
       testInfo.annotations.push({type: 'touch-retake', description: note});
     }
+  });
+
+  test("a page whose pointer listener holds its main thread changes a paced flick's release itself: TouchPageStallError, never the runner's", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    // Each pointer move holds the main thread for 60 ms, as a component's
+    // pan handler can. A gesture host samples a finger from pointermove.
+    // WebKit hands the page the next touch only once it is free.
+    await page.route('http://pointer-stalling-page.test/', route =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>addEventListener("pointermove",()=>{const end=performance.now()+60;while(performance.now()<end){}});</script>',
+      }),
+    );
+    await page.goto('http://pointer-stalling-page.test/');
+    const driver = await touchDriver(page);
+    const outcome = await driver
+      .play(
+        drag({x: 200, y: 400}, {x: 200, y: 300}, {durationMs: 100, hz: 60}),
+        {pacing: 'spacing'},
+      )
+      .then(
+        () => 'resolved',
+        (error: unknown) => error,
+      );
+    expect(outcome).toBeInstanceOf(TouchPageStallError);
+    expect(String(outcome)).toMatch(
+      /the page's own touch and pointer listeners took \d+ ms/,
+    );
+  });
+
+  test("a page whose touch listener holds its main thread changes a paced flick's release itself: TouchPageStallError, never the runner's", async ({
+    page,
+    browserName,
+  }) => {
+    test.skip(
+      browserName !== 'webkit',
+      'only WebKit stamps a touch when it arrives; Chromium carries the scripted times',
+    );
+    // Each move holds the main thread for 40 ms, past the script's 17 ms
+    // spacing, and WebKit hands the page the next touch only once it is free.
+    await page.route('http://touch-stalling-page.test/', route =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<!doctype html><body style="margin:0;height:3000px;touch-action:none"><script>addEventListener("touchmove",e=>{e.preventDefault();const end=performance.now()+40;while(performance.now()<end){}},{passive:false});</script>',
+      }),
+    );
+    await page.goto('http://touch-stalling-page.test/');
+    const driver = await touchDriver(page);
+    const outcome = await driver
+      .play(
+        drag({x: 200, y: 400}, {x: 200, y: 300}, {durationMs: 100, hz: 60}),
+        {
+          pacing: 'spacing',
+        },
+      )
+      .then(
+        () => 'resolved',
+        (error: unknown) => error,
+      );
+    expect(outcome).toBeInstanceOf(TouchPageStallError);
+    expect(String(outcome)).toMatch(
+      /the page's own touch and pointer listeners took \d+ ms/,
+    );
   });
 
   test('a flick flings a native scroller, farther for a faster finger', async ({
@@ -1767,6 +1837,56 @@ test.describe('wheel and pen input', () => {
         // page's stall widens the gaps, and the error names it.
         expect(outcome).toBeInstanceOf(WheelPageStallError);
         expect(String(outcome)).toMatch(/the page split the run/);
+      }
+    } finally {
+      await context.close();
+    }
+  });
+
+  test('a page whose wheel listener stops the step and holds its main thread still splits a burst itself: never re-taken', async ({
+    browser,
+    browserName,
+  }) => {
+    const context = await browser.newContext({
+      viewport: {width: 402, height: 714},
+      isMobile: false,
+      hasTouch: false,
+    });
+    try {
+      const page = await context.newPage();
+      // The body's listener stops each step before it reaches the window,
+      // and blocks the main thread for 150 ms, past the 100 ms bound.
+      await page.route('http://wheel-stopping-page.test/', route =>
+        route.fulfill({
+          contentType: 'text/html',
+          body: '<!doctype html><body style="margin:0;height:3000px"><script>document.body.addEventListener("wheel",e=>{e.preventDefault();e.stopPropagation();const end=performance.now()+150;while(performance.now()<end){}},{passive:false});</script>',
+        }),
+      );
+      await page.goto('http://wheel-stopping-page.test/');
+      const driver = await webInputDriver(page);
+      test.skip(!driver.wheels, WHEEL_SKIP);
+      const testInfo = {
+        annotations: [] as {type: string; description?: string}[],
+      };
+      const attempts: number[] = [];
+      const outcome = await retakeOnWheelPacing(testInfo, async n => {
+        attempts.push(n);
+        return driver.wheelBurst({
+          x: 200,
+          y: 300,
+          steps: Array.from({length: 4}, () => ({dx: 10})),
+          maxGapMs: 100,
+        });
+      }).then(
+        () => 'resolved',
+        (error: unknown) => error,
+      );
+      expect(outcome).not.toBeInstanceOf(WheelPacingError);
+      expect(attempts).toEqual([1]);
+      if (browserName === 'webkit') {
+        // The queued task marks the stopped step's handling, so the stall is
+        // the page's.
+        expect(outcome).toBeInstanceOf(WheelPageStallError);
       }
     } finally {
       await context.close();
