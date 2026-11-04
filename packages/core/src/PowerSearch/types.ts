@@ -349,7 +349,8 @@ export interface PowerSearchConfig {
    * How free text (not starting with a field label) suggests values.
    * `'field-prefix'` answers only field-prefixed queries; `'all-string-fields'`
    * additionally emits a `<Field> <op> "<text>"` item for every visible
-   * string/string_list operator.
+   * string/string_list operator, skipping opted-out fields, short queries,
+   * and search-source operators without arbitrary strings.
    * @default 'field-prefix'
    */
   readonly valueMatchBehavior?: 'field-prefix' | 'all-string-fields';

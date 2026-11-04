@@ -177,7 +177,6 @@ export function usePowerSearchSource(
           }
         }
 
-        // Opt-in free-text value matches across every visible string field.
         // A query that starts with a field label belongs to the prefix path
         // above. Its value is the text after the label, not the whole query.
         if (config.config.valueMatchBehavior === 'all-string-fields') {
