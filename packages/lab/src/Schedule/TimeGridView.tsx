@@ -24,6 +24,7 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {Locale} from '@astryxdesign/core/i18n';
+import type {CalendarSystem} from '@astryxdesign/core/internal/calendar-system';
 import {layerAnimations} from '@astryxdesign/core/Layer';
 import {usePopover} from '@astryxdesign/core/Popover';
 import {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
@@ -63,6 +64,7 @@ import {
   ScheduleTime,
   styles,
   TitleFirstPill,
+  useScheduleCalendar,
 } from './shared';
 import {layoutTimedEvents, type TimedEventPlacement} from './timeGridLayout';
 import {
@@ -102,6 +104,7 @@ export function TimeGridView({
   renderPopover?: (event: CalendarEvent) => ReactNode;
 }) {
   const {categories, headingLevel, locale, range} = useScheduleContext();
+  const calendar = useScheduleCalendar();
   const hasPopover = renderPopover != null;
   const normalizedMinHour = Math.max(0, Math.min(23, Math.floor(minHour)));
   const normalizedMaxHour = Math.max(
@@ -355,6 +358,7 @@ export function TimeGridView({
           focusDate={focusDate}
           hours={hours}
           locale={locale}
+          calendar={calendar}
           timezoneID={timezoneID}
           timezoneLabel={timezoneLabel}
         />
@@ -378,14 +382,14 @@ export function TimeGridView({
                   display="block"
                   xstyle={styles.timeGridHeaderHeading}>
                   <span {...stylex.props(styles.timeGridHeaderHeadingContent)}>
-                    {formatWeekday(day, timezoneID, 'short', locale)}
+                    {formatWeekday(day, timezoneID, 'short', locale, calendar)}
                     <span
                       {...stylex.props(
                         styles.timeGridDayNumber,
                         plainDateIsEqual(day, focusDate) &&
                           styles.timeGridCurrentDayPill,
                       )}>
-                      {formatDayNumber(day, timezoneID, locale)}
+                      {formatDayNumber(day, timezoneID, locale, calendar)}
                     </span>
                   </span>
                 </Heading>
@@ -460,6 +464,7 @@ export function TimeGridView({
                         timezoneID,
                         categories,
                         locale,
+                        calendar,
                       )}
                       {...stylex.props(placement)}>
                       {pill}
@@ -482,6 +487,7 @@ export function TimeGridView({
                       timezoneID,
                       categories,
                       locale,
+                      calendar,
                     )}
                     aria-haspopup="dialog"
                     aria-expanded={isOpen}
@@ -527,7 +533,12 @@ export function TimeGridView({
                   {...(hasPopover
                     ? {
                         role: 'group',
-                        'aria-label': formatFullDate(day, timezoneID, locale),
+                        'aria-label': formatFullDate(
+                          day,
+                          timezoneID,
+                          locale,
+                          calendar,
+                        ),
                       }
                     : {'aria-hidden': true})}
                   {...stylex.props(
@@ -613,6 +624,7 @@ export function TimeGridView({
                         timezoneID,
                         categories,
                         locale,
+                        calendar,
                       );
                       if (popoverContent == null) {
                         return (
@@ -697,6 +709,7 @@ function TimeGridAccessibilityGrid({
   focusDate,
   hours,
   locale,
+  calendar,
   timezoneID,
   timezoneLabel,
 }: {
@@ -707,6 +720,7 @@ function TimeGridAccessibilityGrid({
   focusDate: PlainDate;
   hours: ReadonlyArray<number>;
   locale: Locale;
+  calendar: CalendarSystem;
   timezoneID: string;
   timezoneLabel: string;
 }) {
@@ -728,7 +742,7 @@ function TimeGridAccessibilityGrid({
             aria-current={
               plainDateIsEqual(day, focusDate) ? 'date' : undefined
             }>
-            {formatFullDate(day, timezoneID, locale)}
+            {formatFullDate(day, timezoneID, locale, calendar)}
           </div>
         ))}
       </div>
@@ -749,8 +763,9 @@ function TimeGridAccessibilityGrid({
                 categories,
                 day,
                 events: cellEvents,
-                label: `${formatFullDate(day, timezoneID, locale)} all day`,
+                label: `${formatFullDate(day, timezoneID, locale, calendar)} all day`,
                 locale,
+                calendar,
                 timezoneID,
               })}
             />
@@ -775,11 +790,12 @@ function TimeGridAccessibilityGrid({
                   categories,
                   day,
                   events: cellEvents,
-                  label: `${formatFullDate(day, timezoneID, locale)} ${formatHour(
+                  label: `${formatFullDate(day, timezoneID, locale, calendar)} ${formatHour(
                     hour,
                     locale,
                   )}`,
                   locale,
+                  calendar,
                   timezoneID,
                 })}
               />
@@ -797,6 +813,7 @@ function formatTimeGridAccessibilityCellLabel({
   events,
   label,
   locale,
+  calendar,
   timezoneID,
 }: {
   categories: ReadonlyArray<ScheduleCategory>;
@@ -804,6 +821,7 @@ function formatTimeGridAccessibilityCellLabel({
   events: ReadonlyArray<CalendarEvent>;
   label: string;
   locale: Locale;
+  calendar: CalendarSystem;
   timezoneID: string;
 }): string {
   if (events.length === 0) {
@@ -816,6 +834,7 @@ function formatTimeGridAccessibilityCellLabel({
         day,
         timezoneID,
         locale,
+        calendar,
       )}`,
   );
   return `${label}. ${eventLabels.join('. ')}`;
@@ -837,13 +856,21 @@ function formatEventButtonLabel(
   timezoneID: string,
   categories: ReadonlyArray<ScheduleCategory>,
   locale: Locale,
+  calendar: CalendarSystem,
 ): string {
   const category = getEventCategory(event, categories);
-  const timeLabel = formatTimeGridEventTime(event, day, timezoneID, locale);
+  const timeLabel = formatTimeGridEventTime(
+    event,
+    day,
+    timezoneID,
+    locale,
+    calendar,
+  );
   return `${event.title}, ${timeLabel}, ${category.label}, ${formatFullDate(
     day,
     timezoneID,
     locale,
+    calendar,
   )}`;
 }
 
@@ -857,12 +884,13 @@ function formatTimeGridEventTime(
   day: PlainDate,
   timezoneID: string,
   locale: Locale,
+  calendar: CalendarSystem,
 ): string {
   if (isDayEvent(event)) {
     return 'all day';
   }
   return isAllDaySpan(event)
-    ? formatEventDateTimeRange(event, timezoneID, locale)
+    ? formatEventDateTimeRange(event, timezoneID, locale, calendar)
     : formatEventTime(event, day, timezoneID, locale);
 }
 

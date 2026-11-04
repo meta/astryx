@@ -48,22 +48,24 @@ import {
   formatEventAccessibilityLabel,
   formatEventTimeRange,
   formatFullDate,
-  formatMonthTitle,
   formatWeekday,
   formatWeekRange,
+  formatWeekTitle,
   getEventCategory,
   isEventInPast,
   ListEventRow,
   MonthEventPill,
   ScheduleFrame,
-  ScheduleMonthTitle,
   SchedulePopoverBody,
+  ScheduleRangeMonthTitle,
   styles,
+  useScheduleCalendar,
 } from './shared';
 import {useCurrentTime} from './useCurrentTime';
 import {useScheduleViewPopover} from './useScheduleViewPopover';
 import {scheduleRangeToZonedDateTimeRange} from './zonedDateTime';
 import type {Locale} from '@astryxdesign/core/i18n';
+import type {CalendarSystem} from '@astryxdesign/core/internal/calendar-system';
 import type {
   CalendarEvent,
   ScheduleCategory,
@@ -136,6 +138,7 @@ function ScheduleMonthlyView({
     isLoading,
     headingLevel,
   } = useScheduleContext();
+  const calendar = useScheduleCalendar();
   const rangeDate = date.toPlainDate();
   const highlightedDate = focusDate.toPlainDate();
   const currentTime = useCurrentTime();
@@ -166,7 +169,17 @@ function ScheduleMonthlyView({
   const dayByISO = new Map<string, PlainDate>(
     days.map(day => [plainDateToISO(day), day]),
   );
-  const monthTitle = formatMonthTitle(rangeDate, timezoneID, locale);
+  // The grid shows one Gregorian month, which can span two months of the
+  // calendar, so its title names both.
+  const monthStart = plainDateSetFirstOfMonth(rangeDate);
+  const monthEnd = plainDateAddDays(plainDateAddMonths(monthStart, 1), -1);
+  const monthTitle = formatWeekTitle(
+    monthStart,
+    monthEnd,
+    timezoneID,
+    locale,
+    calendar,
+  );
   const tableRef = useRef<HTMLDivElement>(null);
   // Where each chip painted so far starts, so focus can land on that cell if
   // the chip goes away while its popover is open.
@@ -189,7 +202,7 @@ function ScheduleMonthlyView({
         const day = dayByISO.get(parsed.dayISO);
         return day == null
           ? monthTitle
-          : formatFullDate(day, timezoneID, locale);
+          : formatFullDate(day, timezoneID, locale, calendar);
       }
       return eventByID.get(parsed.eventID)?.title ?? monthTitle;
     },
@@ -232,7 +245,7 @@ function ScheduleMonthlyView({
     const openDayISO = plainDateToISO(openDay);
     openContent = (
       <SchedulePopoverBody
-        label={`${formatFullDate(openDay, timezoneID, locale)} events`}>
+        label={`${formatFullDate(openDay, timezoneID, locale, calendar)} events`}>
         <MonthDayEvents
           day={openDay}
           events={eventsByDay.get(openDayISO) ?? EMPTY_EVENTS}
@@ -255,7 +268,13 @@ function ScheduleMonthlyView({
 
   return (
     <ScheduleFrame
-      title={<ScheduleMonthTitle date={rangeDate} timezoneID={timezoneID} />}
+      title={
+        <ScheduleRangeMonthTitle
+          start={monthStart}
+          end={monthEnd}
+          timezoneID={timezoneID}
+        />
+      }
       titleLabel={monthTitle}
       isLoading={isLoading}>
       {/* A table, not an interactive grid (component:Schedule AR7): weekday
@@ -283,7 +302,13 @@ function ScheduleMonthlyView({
             <div
               key={plainDateToISO(day)}
               role="columnheader"
-              aria-label={formatWeekday(day, timezoneID, 'long', locale)}
+              aria-label={formatWeekday(
+                day,
+                timezoneID,
+                'long',
+                locale,
+                calendar,
+              )}
               aria-colindex={index + 2}
               {...stylex.props(styles.weekdayLabel)}>
               <Heading
@@ -291,7 +316,7 @@ function ScheduleMonthlyView({
                 color="secondary"
                 display="block"
                 xstyle={styles.weekdayHeading}>
-                {formatWeekday(day, timezoneID, 'short', locale)}
+                {formatWeekday(day, timezoneID, 'short', locale, calendar)}
               </Heading>
             </div>
           ))}
@@ -312,6 +337,7 @@ function ScheduleMonthlyView({
                     week[week.length - 1],
                     timezoneID,
                     locale,
+                    calendar,
                   )}
                 </div>
                 {week.map((day, dayIndex) => {
@@ -324,7 +350,12 @@ function ScheduleMonthlyView({
                     <div
                       key={plainDateToISO(day)}
                       role="cell"
-                      aria-label={formatFullDate(day, timezoneID, locale)}
+                      aria-label={formatFullDate(
+                        day,
+                        timezoneID,
+                        locale,
+                        calendar,
+                      )}
                       aria-colindex={dayIndex + 2}
                       // Focus lands here when the day's "+N more" goes away.
                       tabIndex={-1}
@@ -353,7 +384,7 @@ function ScheduleMonthlyView({
                           color="inherit"
                           weight="medium"
                           hasTabularNumbers>
-                          {formatDayNumber(day, timezoneID, locale)}
+                          {formatDayNumber(day, timezoneID, locale, calendar)}
                         </Text>
                       </div>
                       {(chipsByDay.get(index) ?? EMPTY_CHIPS).map(chip => {
@@ -367,7 +398,7 @@ function ScheduleMonthlyView({
                               {...stylex.props(styles.visuallyHidden)}>
                               {formatMonthEventName(
                                 chip.event,
-                                `since ${formatFullDate(startDay, timezoneID, locale)}`,
+                                `since ${formatFullDate(startDay, timezoneID, locale, calendar)}`,
                                 timezoneID,
                                 categories,
                                 locale,
@@ -415,7 +446,7 @@ function ScheduleMonthlyView({
                           type="button"
                           aria-label={`${hiddenCount} more ${
                             hiddenCount === 1 ? 'event' : 'events'
-                          }, ${formatFullDate(day, timezoneID, locale)}`}
+                          }, ${formatFullDate(day, timezoneID, locale, calendar)}`}
                           {...monthPopover.getTriggerProps(
                             dayKey(dayISO),
                             // An event handed over from this day's list
@@ -484,6 +515,7 @@ function MonthChip({
   isPast: boolean;
 }) {
   const {categories, timezoneID, locale} = useScheduleContext();
+  const calendar = useScheduleCalendar();
   const placement = [
     styles.monthChip(chip.columnEnd - chip.columnStart + 1, chip.level),
     isLastColumn && styles.monthChipInLastColumn,
@@ -504,7 +536,7 @@ function MonthChip({
   }
   const name = formatMonthEventName(
     chip.event,
-    formatEventDays(chip.event, timezoneID, locale),
+    formatEventDays(chip.event, timezoneID, locale, calendar),
     timezoneID,
     categories,
     locale,
@@ -551,8 +583,9 @@ function MonthDayEvents({
   onOpenEvent: (event: CalendarEvent) => void;
 }) {
   const {categories, timezoneID, locale} = useScheduleContext();
+  const calendar = useScheduleCalendar();
   const currentTime = useCurrentTime();
-  const fullDate = formatFullDate(day, timezoneID, locale);
+  const fullDate = formatFullDate(day, timezoneID, locale, calendar);
   return (
     <div {...stylex.props(styles.monthDayEvents)}>
       <Text type="supporting" weight="bold" color="secondary">
@@ -620,11 +653,12 @@ function formatEventDays(
   event: CalendarEvent,
   timezoneID: string,
   locale: Locale,
+  calendar: CalendarSystem,
 ): string {
   const [first, last] = getEventDateSpan(event, timezoneID);
   return plainDateIsEqual(first, last)
-    ? formatFullDate(first, timezoneID, locale)
-    : formatWeekRange(first, last, timezoneID, locale);
+    ? formatFullDate(first, timezoneID, locale, calendar)
+    : formatWeekRange(first, last, timezoneID, locale, calendar);
 }
 
 function getWeeks(days: ReadonlyArray<PlainDate>): PlainDate[][] {

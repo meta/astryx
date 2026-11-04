@@ -19,6 +19,7 @@ import {
   formatWeekTitle,
   ScheduleFrame,
   ScheduleRangeMonthTitle,
+  useScheduleCalendar,
 } from './shared';
 import {TimeGridView} from './TimeGridView';
 import {scheduleRangeToZonedDateTimeRange} from './zonedDateTime';
@@ -39,6 +40,7 @@ function ScheduleWeeklyView({
 }: ScheduleViewComponentProps<ScheduleWeeklyViewOptions>) {
   const {events, focusDate, timezoneID, locale, range, isLoading} =
     useScheduleContext();
+  const calendar = useScheduleCalendar();
   const {minHour = 0, maxHour = 24, hourHeight = 100, renderPopover} = options;
   const days = enumerateDates(range.startDate, range.endDate);
   const highlightedDate = focusDate.toPlainDate();
@@ -47,6 +49,7 @@ function ScheduleWeeklyView({
     days[days.length - 1],
     timezoneID,
     locale,
+    calendar,
   );
 
   return (

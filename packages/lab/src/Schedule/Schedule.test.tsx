@@ -69,6 +69,7 @@ describe('Schedule date formatting', () => {
           calendar: 'buddhist',
         },
         'en',
+        'gregory',
       ),
     ).toBe('2026');
   });
@@ -81,6 +82,7 @@ describe('Schedule date formatting', () => {
         'UTC',
         {month: 'long', year: 'numeric'},
         'th-TH',
+        'gregory',
       ),
     ).toBe(
       new Intl.DateTimeFormat('th-TH', {

@@ -15,6 +15,7 @@ import {
   calendarShiftYears,
   formatCalendarDate,
   formatCalendarInstant,
+  formatCalendarInstantRange,
   formatCalendarMonthLabel,
   isCalendarSystemAvailable,
   isGregorianAligned,
@@ -314,13 +315,30 @@ describe('labels where Intl and Temporal disagree', () => {
     );
     expect(value).toMatch(/^First Month 1, 2027\(ding-wei\) at 12:00\sPM$/);
   });
+
+  it('writes each end of a range in full', () => {
+    const value = withChineseTemporalAheadOfIntl(() =>
+      formatCalendarInstantRange(
+        'chinese',
+        new Date('2027-02-01T12:00:00Z'),
+        noon,
+        longDate,
+        'en',
+        'UTC',
+      ),
+    );
+    expect(value).toMatch(
+      /^Twelfth Month 26, 2026\(bing-wu\)\s–\sFirst Month 1, 2027\(ding-wei\)$/,
+    );
+  });
 });
 
 describe('iso8601 labels', () => {
+  const start = new Date('2027-02-01T12:00:00Z');
   const end = new Date('2027-02-06T12:00:00Z');
   const longDate = {year: 'numeric', month: 'long', day: 'numeric'} as const;
 
-  it('writes dates and instants as gregory does', () => {
+  it('writes dates, instants, and ranges as gregory does', () => {
     const day = iso('2027-02-06');
     expect(formatSharedDate(day, 'date', 'en', 'iso8601')).toBe(
       formatSharedDate(day, 'date', 'en'),
@@ -329,6 +347,9 @@ describe('iso8601 labels', () => {
     expect(formatCalendarInstant('iso8601', end, dateTime, 'en', 'UTC')).toBe(
       formatCalendarInstant('gregory', end, dateTime, 'en', 'UTC'),
     );
+    expect(
+      formatCalendarInstantRange('iso8601', start, end, longDate, 'en', 'UTC'),
+    ).toMatch(/^February 1\s–\s6, 2027$/);
   });
 });
 

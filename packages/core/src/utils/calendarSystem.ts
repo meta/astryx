@@ -468,6 +468,39 @@ export function formatCalendarInstant(
   return instantLabel(calendar, instant, options, locale, timeZone).text;
 }
 
+/**
+ * Formats the range between two instants. Intl writes the fields that both
+ * ends share once. Where Intl names another month or day than Temporal at
+ * either end, the range writes each end in full.
+ */
+export function formatCalendarInstantRange(
+  calendar: CalendarSystem,
+  start: Date,
+  end: Date,
+  options: Intl.DateTimeFormatOptions,
+  locale: Locale,
+  timeZone?: string,
+): string {
+  const ends = [start, end].map(instant =>
+    instantLabel(calendar, instant, options, locale, timeZone),
+  );
+  const {format} = ends[0];
+  if (ends.every(({isIntl}) => isIntl)) {
+    return format.formatRange(start, end);
+  }
+  // Intl writes a range of different years as two full dates around its
+  // separator, which gives the separator to put between the two full ends.
+  const far = new Date(start.getTime() + 400 * 86_400_000);
+  const both = format.formatRange(start, far);
+  const [from, to] = [format.format(start), format.format(far)];
+  const separator =
+    both.startsWith(from) && both.endsWith(to)
+      ? both.slice(from.length, both.length - to.length)
+      : ' – ';
+  const [first, last] = ends.map(({text}) => text);
+  return first === last ? first : `${first}${separator}${last}`;
+}
+
 function instantLabel(
   calendar: CalendarSystem,
   instant: Date,

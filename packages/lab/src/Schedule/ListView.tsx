@@ -35,6 +35,7 @@ import {
   ScheduleFrame,
   ScheduleRangeMonthTitle,
   styles,
+  useScheduleCalendar,
 } from './shared';
 import {useCurrentTime} from './useCurrentTime';
 import {scheduleRangeToZonedDateTimeRange} from './zonedDateTime';
@@ -54,6 +55,7 @@ function ScheduleListView(
 ) {
   const {events, timezoneID, locale, range, isLoading, headingLevel} =
     useScheduleContext();
+  const calendar = useScheduleCalendar();
   const days = enumerateDates(range.startDate, range.endDate);
   const currentTime = useCurrentTime();
   const currentPlainDate = plainDateFromInstant(currentTime, timezoneID);
@@ -63,6 +65,7 @@ function ScheduleListView(
     endDate,
     timezoneID,
     locale,
+    calendar,
   );
   const visibleDays = days
     .map(day => {
@@ -132,12 +135,13 @@ function ListDayHeading({
   headingLevel: 2 | 3 | 4 | 5 | 6;
 }) {
   const {locale} = useScheduleContext();
+  const calendar = useScheduleCalendar();
   return (
     <Heading
       level={headingLevel}
       color="secondary"
       display="block"
-      aria-label={formatFullDate(day, timezoneID, locale)}
+      aria-label={formatFullDate(day, timezoneID, locale, calendar)}
       aria-current={isCurrentDay ? 'date' : undefined}
       xstyle={styles.listDayHeading}>
       <span
@@ -146,10 +150,10 @@ function ListDayHeading({
           isCurrentDay && styles.listDayNumberCurrent,
         )}>
         <span {...stylex.props(styles.listDayNumberText)}>
-          {formatDayNumber(day, timezoneID, locale)}
+          {formatDayNumber(day, timezoneID, locale, calendar)}
         </span>
       </span>
-      {formatWeekday(day, timezoneID, 'short', locale)}
+      {formatWeekday(day, timezoneID, 'short', locale, calendar)}
     </Heading>
   );
 }
