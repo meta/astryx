@@ -272,16 +272,16 @@ describe('createRectMorph', () => {
     }
   });
 
-  it('presents on a theme timing: its duration and easing as given, from rest', async () => {
+  it('presents on a theme timing: its duration and easing as given, from the velocity it is given', async () => {
     const {element, morph} = setup();
     const path = lerpPath(SQUARE, BOX, {opacity: [0, 1]});
     const easing = [0.2, 0, 0, 1] as const;
-    // A tap has no velocity: a timed present starts from rest even when
-    // one is given.
+    // A timed present keeps the velocity it is given (a new target keeps the
+    // current velocity) and still lands on time.
     morph.present(path, {duration: 300, easing}, {velocity: 6});
     await playFrame();
     expect(live(element, 'scale').length).toBe(1);
-    const progress = timedProgressCurve(300, easing);
+    const progress = timedProgressCurve(300, easing, {velocity: 6});
     const start = clock;
     for (const t of [0, 0.05, 0.12, 0.2, 0.29]) {
       clock = start + t * 1000;

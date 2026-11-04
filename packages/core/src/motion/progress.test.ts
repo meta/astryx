@@ -184,6 +184,15 @@ describe('timedProgressCurve', () => {
     expect(curve.velocity(0.1)).toBeGreaterThan(0);
   });
 
+  it('starts at a retargeted velocity and still lands on time, at rest', () => {
+    const curve = timedProgressCurve(300, [0.25, 0.1, 0.25, 1], {velocity: 6});
+    expect(curve.velocity(0)).toBe(6);
+    const h = 1e-4;
+    expect((curve.at(h) - curve.at(0)) / h).toBeCloseTo(6, 1);
+    expect(curve.at(0.3)).toBeCloseTo(1, 9);
+    expect(curve.velocity(0.3)).toBe(0);
+  });
+
   it('lands at once for a zero duration', () => {
     const curve = timedProgressCurve(0, [0, 0, 1, 1]);
     expect(curve.duration).toBe(0);

@@ -200,7 +200,7 @@ those contracts.
   `spec:AST-094` FR5) once Core has that morph; until then, the module plays
   its own compositor translate. (Implementation gap: Core has the shared
   rectangle morph, but the size-change glide still plays its own compositor
-  translate; it moves onto the morph next.) It never animates height. Its walk visits only
+  translate.) It never animates height. Its walk visits only
   the changed element's ancestors up to the area and the element siblings on
   either side at each of their levels, through `parentElement`,
   `nextElementSibling` and `previousElementSibling`, descending only into an

@@ -15,29 +15,6 @@
  *   presentations share: an anchored menu, a popover, a context menu's
  *   lifted preview, a photo's zoom, a sub-menu's parent card
  *
- * A path (morphPath.ts) names the rect an element shows at each progress,
- * and its curves put the element there with `translate` and `scale` about
- * `transform-origin: 0 0` and a companion `opacity`, on the compositor.
- * `createRectMorph` plays a path on its element
- * (`present`) and back to the source on a target the caller gives
- * (`dismiss`): a copy placed where the element stands, since the browser
- * hides a closing popover at once, or the element itself. Each interrupts
- * the other: the new motion starts from the rect the animator presents at
- * that moment, on the path restarted there in its own law (`restartFrom`),
- * with the presented velocity projected on it (progress.ts). Once a present settles nothing of the morph's is left inline: iOS
- * Safari will not scroll a finger through a popover that keeps a `scale`,
- * even at 1.
- *
- * A present or a dismissal takes its timing as a motion: the theme's
- * duration and easing for a motion that a tap, a key or the program starts,
- * or a spring for a gesture's release, which starts at the gesture's
- * velocity. Only a spring carries a velocity into the motion.
- *
- * Reduced Motion is the animator's: on a coarse
- * pointer a present lands at rest and fades in, a dismissal fades out where
- * it stands, opacity only, in 200 ms; on any other pointer the change
- * completes at once.
- *
  * SYNC: When modified, update:
  * - /packages/core/src/motion/rectMorph.test.ts
  * - /packages/core/src/motion/README.md
@@ -71,7 +48,6 @@ import type {MotionCurvePoints} from './roles';
 import type {SpringDescription} from './spring';
 import {resolveMotion} from './resolveMotion';
 
-// The paths the morph plays, where its callers have always imported them.
 export {edgeGrowPath, lerpPath, morphCurves} from './morphPath';
 export type {MorphEnd, MorphPath, MorphRect, MorphScale} from './morphPath';
 
@@ -134,8 +110,9 @@ const INLINE_PROPERTIES = ['translate', 'scale', 'transform-origin'] as const;
 /**
  * How a present or a dismissal is timed. A motion that a tap, a key or the
  * program starts plays the theme's duration (ms) and easing. A gesture's
- * release plays a spring, which starts at the gesture's velocity
- * (`RectMorphPlayOptions.velocity`).
+ * release plays a spring. Either starts at the velocity it is given
+ * (`RectMorphPlayOptions.velocity`), so a new target keeps the current
+ * velocity.
  */
 export type RectMorphMotion =
   | {readonly duration: number; readonly easing: MotionCurvePoints}
@@ -146,9 +123,9 @@ export type RectMorphMotion =
  */
 export interface RectMorphPlayOptions {
   /**
-   * Progress per second a spring starts with (a finger's release). By
-   * default the velocity of what is on screen, projected on the path. A
-   * timed motion starts from rest.
+   * Progress per second to start with (a finger's release). By default the
+   * velocity of what is on screen, projected on the path, so a motion that
+   * interrupts another keeps its velocity.
    */
   velocity?: number;
   /**
@@ -303,7 +280,8 @@ export function createRectMorph(
     release(target);
   };
 
-  // Once a present settles on identity, nothing of the morph's stays inline.
+  // iOS Safari does not scroll a finger through an element that keeps a
+  // `scale`, even at 1. Clear it once the present settles.
   const retire = () => {
     const at = now();
     const identity =
@@ -320,11 +298,9 @@ export function createRectMorph(
     }
   };
 
-  // A path with no opacity of its own gives the animator's Reduced Motion
-  // cross-fade nothing to read, and it would start the motion on the source
-  // rect and dip. Such a path says which way it goes, so the cross-fade
-  // lands at rest on a present and fades out in place on a dismissal; a caller's own `crossfadeAs` still wins, and
-  // `'move'` keeps the animator's dip for an element that only moves.
+  // A path with no opacity gives the Reduced Motion cross-fade nothing to
+  // read. Treat it as an entrance on a present and an exit on a dismissal. A
+  // caller's `crossfadeAs` wins, and `'move'` keeps the animator's dip.
   const playOptions = (
     play: RectMorphPlayOptions,
     path: MorphPath,
@@ -352,7 +328,7 @@ export function createRectMorph(
   ) =>
     'spring' in motion
       ? progressCurve(resolveMotion(on, motion.spring), {velocity})
-      : timedProgressCurve(motion.duration, motion.easing);
+      : timedProgressCurve(motion.duration, motion.easing, {velocity});
 
   const curvesFor = (
     on: Element,
