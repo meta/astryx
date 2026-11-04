@@ -65,13 +65,13 @@ export const docs = {
       name: 'width',
       type: 'number | string',
       description:
-        'Width of the panel. Numbers are treated as pixels, strings are used as-is. Ignored when resizable is provided; the hook controls width.',
+        "Width of the panel. Numbers are treated as pixels, strings are used as-is. Ignored when resizable is provided; the hook controls width. Beside a ResizeHandle given a useResizable region's props, a panel at width={region.size} is inert while the region is collapsed, and focus inside it moves to the handle as it collapses.",
     },
     {
       name: 'resizable',
       type: 'ResizableProps',
       description:
-        "Resize props from useResizable(). When provided, the hook drives the panel width and a ResizeHandle should be placed adjacent to the panel. Carries the region's axis ('horizontal' | 'vertical'), which must match the adjacent ResizeHandle's direction.",
+        "Resize props from useResizable(). When provided, the hook drives the panel width and a ResizeHandle should be placed adjacent to the panel. Carries the region's axis ('horizontal' | 'vertical'), which must match the adjacent ResizeHandle's direction. Focus inside the panel moves to its ResizeHandle as it collapses, and the panel is inert while collapsed.",
     },
   ],
 };
@@ -119,13 +119,13 @@ export const docsZh = {
       name: 'width',
       type: 'number | string',
       description:
-        '面板宽度。数字按像素处理，字符串按原样使用。提供 resizable 时忽略，宽度由 hook 控制。',
+        '面板宽度。数字按像素处理，字符串按原样使用。提供 resizable 时忽略，宽度由 hook 控制。放在接收 useResizable 区域 props 的 ResizeHandle 旁边、以 width={region.size} 渲染时，区域折叠期间面板为 inert，折叠时面板内的焦点移到手柄上。',
     },
     {
       name: 'resizable',
       type: 'ResizableProps',
       description:
-        "来自 useResizable() 的调整大小属性。提供时面板宽度由 hook 驱动，应在面板旁放置 ResizeHandle。其中携带区域的轴向（'horizontal' | 'vertical'），必须与相邻 ResizeHandle 的 direction 一致。",
+        "来自 useResizable() 的调整大小属性。提供时面板宽度由 hook 驱动，应在面板旁放置 ResizeHandle。其中携带区域的轴向（'horizontal' | 'vertical'），必须与相邻 ResizeHandle 的 direction 一致。折叠时面板内的焦点会移到其 ResizeHandle 上，折叠期间面板为 inert。",
     },
   ],
 };
@@ -145,8 +145,8 @@ export const docsDense = {
       'Accessible label for landmark element; also names the region while it scrolls (default "Content").',
     role: 'ARIA landmark role.',
     width:
-      'Panel width. Numbers = pixels, strings as-is. Ignored when resizable provided; hook controls width.',
+      'Panel width. Numbers = pixels, strings as-is. Ignored when resizable provided; hook controls width. width={region.size} beside a ResizeHandle given the region props: inert while collapsed; focus inside moves to the handle on collapse.',
     resizable:
-      'Resize props from useResizable(). Hook drives panel width; place ResizeHandle adjacent.',
+      'Resize props from useResizable(). Hook drives panel width; place ResizeHandle adjacent. Focus inside moves to the handle on collapse; inert while collapsed.',
   },
 };
