@@ -148,7 +148,10 @@
   },
   "packageManager": "pnpm@11.10.0",
   "lint-staged": {
-    "*.{ts,tsx}": "eslint --cache --fix",
-    "*.{ts,tsx,md}": "prettier --write"
+    "*.{ts,tsx}": [
+      "eslint --cache --fix",
+      "prettier --write"
+    ],
+    "*.md": "prettier --write"
   }
 }
