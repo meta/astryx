@@ -2,8 +2,11 @@
 // @vitest-environment jsdom
 
 /**
- * The useScrollLock example pins the page while its full-screen menu is open
- * and puts the reader back at the same scroll position when it closes.
+ * The useScrollLock example locks the page while its full-screen menu is open,
+ * without moving it, and frees it again when the menu closes. The
+ * menu covers the page, so it also keeps keyboard focus inside itself
+ * (useFocusTrap): focus moves in on open, Escape closes, and focus returns to
+ * the Menu button.
  */
 
 import {act} from 'react';
@@ -56,21 +59,20 @@ afterEach(() => {
 });
 
 describe('useScrollLock example', () => {
-  it('pins the page at the current scroll position while the menu is open', () => {
-    vi.spyOn(window, 'scrollY', 'get').mockReturnValue(640);
+  it('locks the page without moving it while the menu is open', () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     renderExample();
-    expect(document.body.style.position).toBe('');
+    expect(document.documentElement.style.overflow).toBe('');
 
     act(() => button('Menu').click());
 
     expect(menu()).not.toBeNull();
-    expect(document.body.style.overflow).toBe('hidden');
-    expect(document.body.style.position).toBe('fixed');
-    expect(document.body.style.top).toBe('-640px');
+    expect(document.documentElement.style.overflow).toBe('hidden');
+    expect(document.body.style.position).toBe('');
+    expect(scrollTo).not.toHaveBeenCalled();
   });
 
-  it('unpins the page and restores the scroll position when the menu closes', () => {
-    vi.spyOn(window, 'scrollY', 'get').mockReturnValue(640);
+  it('frees the page where the reader left it when the menu closes', () => {
     const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     renderExample();
     act(() => button('Menu').click());
@@ -78,22 +80,57 @@ describe('useScrollLock example', () => {
     act(() => button('Close menu').click());
 
     expect(menu()).toBeNull();
-    expect(document.body.style.overflow).toBe('');
-    expect(document.body.style.position).toBe('');
-    expect(scrollTo).toHaveBeenCalledWith(0, 640);
+    expect(document.documentElement.style.overflow).toBe('');
+    expect(scrollTo).not.toHaveBeenCalled();
   });
 
-  it('unpins the page when a menu link is followed', () => {
+  it('frees the page when a menu link is followed', () => {
     vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     renderExample();
     act(() => button('Menu').click());
-    expect(document.body.style.position).toBe('fixed');
+    expect(document.documentElement.style.overflow).toBe('hidden');
 
     act(() => {
       menu()?.querySelector<HTMLAnchorElement>('a')?.click();
     });
 
     expect(menu()).toBeNull();
-    expect(document.body.style.position).toBe('');
+    expect(document.documentElement.style.overflow).toBe('');
+  });
+
+  it('moves focus into the menu and returns it to Menu on Close menu', () => {
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    renderExample();
+    const opener = button('Menu');
+    act(() => {
+      opener.focus();
+      opener.click();
+    });
+    expect(menu()?.contains(document.activeElement)).toBe(true);
+
+    act(() => button('Close menu').click());
+
+    expect(menu()).toBeNull();
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it('closes on Escape and returns focus to Menu', () => {
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    renderExample();
+    const opener = button('Menu');
+    act(() => {
+      opener.focus();
+      opener.click();
+    });
+
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent('keydown', {key: 'Escape', bubbles: true}),
+      );
+    });
+
+    expect(menu()).toBeNull();
+    expect(document.documentElement.style.overflow).toBe('');
+    expect(document.activeElement).toBe(opener);
   });
 });
