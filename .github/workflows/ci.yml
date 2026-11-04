@@ -94,7 +94,8 @@ concurrency:
 
 jobs:
   # Admit the whole run under CI's ceiling of about ninety concurrent jobs
-  # (spec:AST-030 FR16, DEC-16), in two slim jobs: `room` waits until the
+  # (spec:AST-030 FR16, DEC-16), in two jobs (slim on a pull request, standard
+  # on a dispatch): `room` waits until the
   # Storybook build has room and starts it, and `admission` waits for the rest
   # of the run unless it already fit. Every job here but build-storybook and
   # ci-full needs admission, directly or through the jobs it needs, so a
