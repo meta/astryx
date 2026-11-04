@@ -59,6 +59,7 @@ export default function TokenizerCreatable() {
             hasCreate
             hasEntriesOnFocus
             placeholder="Search or type a new name..."
+            presentation="popover"
           />
         </Stack>
       </Stack>

@@ -28,8 +28,10 @@ import {
 import {
   busyWindowProof,
   CONTROL_RGB,
+  countBetween,
   inPresentationOrder,
   startBusyControl,
+  traceRendering,
   trackMarker,
   type TrackedFrame,
 } from '@astryxdesign/interaction-harness';
@@ -413,50 +415,47 @@ test('a value change keeps moving while a script holds the main thread', async (
   ).toBeLessThanOrEqual(6);
 });
 
-test('a value change lays out and paints nothing per frame', async ({
-  page,
-  browser,
-}) => {
+test('a value change lays out and paints nothing per frame', async ({page}) => {
   await open(page, 20);
-  // Stretch the theme's duration so the trace sits wholly inside the change.
+  // Stretch the theme's duration so the second judged below sits wholly
+  // inside the change.
   await page.evaluate(() =>
     (
       document.querySelector('.astryx-circular-progress-fill') as HTMLElement
     ).style.setProperty('--duration-medium', '3000ms'),
   );
-  await setArgs(page, {value: 80});
-  await page.waitForTimeout(200);
-  await browser.startTracing(page, {
-    categories: ['devtools.timeline', 'disabled-by-default-devtools.timeline'],
+  // Tracing starts before the change, so however long it takes to start, it
+  // takes none of the change's time. The judged second starts two frames
+  // after the change's animations are ready, 200 ms in.
+  let from = 0;
+  let to = 0;
+  let moving = false;
+  const trace = await traceRendering(page, async () => {
+    await setArgs(page, {value: 80});
+    await page.waitForTimeout(200);
+    from = await page.evaluate(async () => {
+      await Promise.all(document.getAnimations().map(async a => a.ready));
+      await new Promise(resolve =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      );
+      return performance.timeOrigin + performance.now();
+    });
+    await page.waitForTimeout(1000);
+    [to, moving] = await page.evaluate(
+      () =>
+        [
+          performance.timeOrigin + performance.now(),
+          document.getAnimations().some(a => a.playState === 'running'),
+        ] as const,
+    );
   });
-  await page.waitForTimeout(1000);
-  const moving = await page.evaluate(() =>
-    document.getAnimations().some(a => a.playState === 'running'),
-  );
-  const trace = JSON.parse((await browser.stopTracing()).toString()) as {
-    traceEvents: {
-      name: string;
-      ph: string;
-      pid: number;
-      tid: number;
-      args?: {name?: string};
-    }[];
-  };
-  const mainThreads = new Set(
-    trace.traceEvents
-      .filter(e => e.ph === 'M' && e.name === 'thread_name')
-      .filter(e => e.args?.name === 'CrRendererMain')
-      .map(e => `${e.pid}:${e.tid}`),
-  );
-  const count = (name: string) =>
-    trace.traceEvents.filter(
-      e => e.name === name && mainThreads.has(`${e.pid}:${e.tid}`),
-    ).length;
+  const counts = countBetween(trace, from, to);
   // A full second of the change: nothing lays out or paints. A
   // stroke-dashoffset transition repainted every frame (36 paints in 410 ms).
+  expect(to - from).toBeGreaterThanOrEqual(1000);
   expect(moving).toBe(true);
-  expect(count('Layout')).toBe(0);
-  expect(count('Paint')).toBe(0);
+  expect(counts.Layout ?? 0).toBe(0);
+  expect(counts.Paint ?? 0).toBe(0);
 });
 
 test('at rest the ring draws what the stroked circle drew', async ({

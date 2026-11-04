@@ -2,7 +2,7 @@
 
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {render, screen, fireEvent, waitFor} from '@testing-library/react';
-import {Profiler} from 'react';
+import {Profiler, StrictMode, useState} from 'react';
 import {Lightbox} from './Lightbox';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {InternationalizationProvider} from '../i18n';
@@ -833,5 +833,87 @@ describe('Lightbox with an unusable controlled index', () => {
         />,
       ),
     ).not.toThrow();
+  });
+});
+
+// AR3: a viewer that unmounts while open (rendered only while open, or removed
+// with its view) returns focus to the element that opened it, as a close does.
+describe('Lightbox unmounting while open', () => {
+  const items = [
+    {src: 'a.jpg', alt: 'Sunrise'},
+    {src: 'b.jpg', alt: 'Sunset'},
+  ];
+  function Gallery() {
+    const [isOpen, setIsOpen] = useState(false);
+    return (
+      <>
+        <button type="button" onClick={() => setIsOpen(true)}>
+          View photos
+        </button>
+        {isOpen ? (
+          <Lightbox isOpen onOpenChange={setIsOpen} media={items} index={0} />
+        ) : null}
+        <button type="button" onClick={() => setIsOpen(false)}>
+          Remove viewer
+        </button>
+      </>
+    );
+  }
+
+  it('returns focus to the opener when the viewer unmounts', async () => {
+    render(<Gallery />);
+    const opener = screen.getByRole('button', {name: 'View photos'});
+    opener.focus();
+    fireEvent.click(opener);
+    const next = screen.getByLabelText('Next');
+    next.focus();
+
+    fireEvent.click(
+      screen.getByRole('button', {name: 'Remove viewer', hidden: true}),
+    );
+    await Promise.resolve();
+
+    expect(document.querySelector('dialog')).toBeNull();
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it('leaves focus on a page control the user pressed to remove the viewer', async () => {
+    render(<Gallery />);
+    const opener = screen.getByRole('button', {name: 'View photos'});
+    opener.focus();
+    fireEvent.click(opener);
+    const remove = screen.getByRole('button', {
+      name: 'Remove viewer',
+      hidden: true,
+    });
+    remove.focus();
+
+    fireEvent.click(remove);
+    await Promise.resolve();
+
+    expect(document.querySelector('dialog')).toBeNull();
+    expect(document.activeElement).toBe(remove);
+  });
+
+  it('keeps focus inside through StrictMode effects, then returns it on unmount', async () => {
+    render(
+      <StrictMode>
+        <Gallery />
+      </StrictMode>,
+    );
+    const opener = screen.getByRole('button', {name: 'View photos'});
+    opener.focus();
+    fireEvent.click(opener);
+    const next = screen.getByLabelText('Next');
+    next.focus();
+    await Promise.resolve();
+    expect(document.activeElement).toBe(next);
+
+    fireEvent.click(
+      screen.getByRole('button', {name: 'Remove viewer', hidden: true}),
+    );
+    await Promise.resolve();
+
+    expect(document.activeElement).toBe(opener);
   });
 });

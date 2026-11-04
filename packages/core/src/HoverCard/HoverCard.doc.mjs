@@ -54,7 +54,7 @@ export const docs = {
           name: 'children',
           type: 'ReactNode',
           description:
-            'The trigger. A single string or number is wrapped in a focusable inline span. Text that reaches HoverCard in several pieces, such as `Edited {when}`, gets no trigger, so pass one string, such as a template literal, or wrap it in a focusable element. With element children, HoverCard wires the first element, so that element does not need to accept a ref.',
+            'The trigger. Text children, a string or number or text written around an expression such as `Edited {when}`, are wrapped in a focusable inline span; holes such as `false` and `null` are ignored. With element children, HoverCard wires the first element, so that element does not need to accept a ref.',
         },
         {
           name: 'content',
@@ -98,7 +98,8 @@ export const docs = {
         {
           name: 'focusTrigger',
           type: "'auto' | 'always' | 'never'",
-          description: 'Controls when focus events trigger the hover card.',
+          description:
+            'When focus should open the hover card. auto opens when the trigger itself takes focus, or focus lands inside a trigger that is focusable at that moment, so a roving-tabindex member opens when the arrow keys reach it.',
           default: "'auto'",
         },
         {
@@ -130,7 +131,7 @@ export const docs = {
           name: 'hasHoverIndication',
           type: "'auto' | boolean",
           description:
-            'Shows a dashed underline on a text trigger. auto shows it when children is a single string or number. It has no effect on an element trigger, which keeps its own styling.',
+            'Shows a dashed underline on a text trigger. auto shows it when children is text: strings and numbers, such as `Edited {when}`, with holes such as `false` and `null` ignored. It has no effect on an element trigger, which keeps its own styling.',
           default: "'auto'",
         },
         {
@@ -266,7 +267,7 @@ export const docsZh = {
           name: 'children',
           type: 'ReactNode',
           description:
-            '触发元素。单个字符串或数字会被包裹在可聚焦的内联 span 中。分成多段到达的文本（例如 `Edited {when}`）不会得到触发器，请传入单个字符串（例如模板字符串）或用可聚焦元素包裹。传入元素时，HoverCard 连接第一个元素，因此该元素无需接受 ref。',
+            '触发元素。文本子元素（字符串或数字，或围绕表达式书写的文本，例如 `Edited {when}`）会被包裹在可聚焦的内联 span 中；`false`、`null` 等空位会被忽略。传入元素时，HoverCard 连接第一个元素，因此该元素无需接受 ref。',
         },
         {
           name: 'content',
@@ -303,7 +304,8 @@ export const docsZh = {
         {
           name: 'focusTrigger',
           type: "'auto' | 'always' | 'never'",
-          description: '控制焦点事件何时触发悬浮卡片。',
+          description:
+            '焦点何时打开悬浮卡片。auto 在触发元素自身获得焦点，或焦点落在当时可聚焦的触发元素内部时打开，因此方向键到达漫游 tabindex 成员时也会打开。',
           default: "'auto'",
         },
         {
@@ -335,7 +337,7 @@ export const docsZh = {
           name: 'hasHoverIndication',
           type: "'auto' | boolean",
           description:
-            '在文本触发元素上显示虚线下划线。auto：当 children 是单个字符串或数字时显示。对元素触发器无效，元素保留自身样式。',
+            '在文本触发元素上显示虚线下划线。auto：当 children 是文本（字符串和数字，例如 `Edited {when}`，忽略 `false`、`null` 等空位）时显示。对元素触发器无效，元素保留自身样式。',
           default: "'auto'",
         },
         {
@@ -474,7 +476,7 @@ export const docsDense = {
         'Component wrapper for hover card overlay; richer overlay triggered on hover/focus.',
       propDescriptions: {
         children:
-          'Trigger. A single string/number is wrapped in a focusable inline span; text in several pieces (`Edited {when}`) gets no trigger; pass one string or a focusable element. With elements, the first element is wired (no ref needed).',
+          'Trigger. Text children (strings/numbers, incl. `Edited {when}`; holes like false/null ignored) are wrapped in a focusable inline span. With elements, the first element is wired (no ref needed).',
         content: 'Hover card content.',
         placement:
           "Position relative to anchor element. Logical: start/end follow the popover's inherited direction (RTL mirrors).",
@@ -491,7 +493,7 @@ export const docsDense = {
         onOpenChange:
           'Callback when visibility changes; true=shown, false=hidden.',
         hasHoverIndication:
-          'Dashed underline on a text trigger. auto = single string/number children; no effect on element triggers.',
+          'Dashed underline on a text trigger. auto = text children (strings/numbers, holes ignored); no effect on element triggers.',
         isDefaultOpen: 'Show hover card on mount. Still dismissible.',
         isOpen:
           'Controlled open state. true holds open; false holds closed against hover, but trigger focus still opens it. Escape calls onOpenChange(false) without closing; setting false returns focus inside the card to the trigger.',

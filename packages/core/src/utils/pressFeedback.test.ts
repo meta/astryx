@@ -34,6 +34,10 @@ import {
   PRESSED_ATTRIBUTE,
 } from './pressFeedback';
 import {
+  isTrackedByGroup,
+  pressGroupItemProps,
+} from '../privateAttributes/pressGroupItem.stylex';
+import {
   PRESS_FADE_MS,
   PRESS_FLASH_MS,
   PRESS_ONSET_MS,
@@ -249,6 +253,26 @@ describe('the press reaches the surface the finger landed on', () => {
     expect(pressedRow()).toBe(-1);
   });
 
+  it('paints a Space press on a tracked action where the primary pointer is fine: a tracked action takes no `:active` paint', () => {
+    expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
+    const button = pressable('button');
+    for (const [name, value] of Object.entries(
+      pressGroupItemProps(['touch', 'pen']),
+    )) {
+      button.setAttribute(name, value);
+    }
+    rows[0].appendChild(button);
+    button.focus();
+    button.dispatchEvent(
+      new KeyboardEvent('keydown', {key: ' ', bubbles: true, cancelable: true}),
+    );
+    expect(button.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    button.dispatchEvent(
+      new KeyboardEvent('keyup', {key: ' ', bubbles: true, cancelable: true}),
+    );
+    expect(button.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+  });
+
   it('leaves a Space press to `:active` where the primary pointer is fine', () => {
     expect(window.matchMedia('(pointer: coarse)').matches).toBe(false);
     const button = pressable('button');
@@ -280,6 +304,67 @@ describe('the press reaches the surface the finger landed on', () => {
     press(ariaDisabled, 'pointerdown', 10, 10);
     vi.advanceTimersByTime(PRESS_ONSET_MS);
     expect(document.querySelectorAll(`[${PRESSED_ATTRIBUTE}]`)).toHaveLength(0);
+  });
+});
+
+describe('an action group whose own tracker paints its actions', () => {
+  // The group's tracker follows a held pointer across its actions and paints
+  // them. The controller must not write the press attribute there too.
+  function group(): {actions: HTMLElement[]; field: HTMLElement} {
+    const root = document.createElement('div');
+    const actions = [pressable('button'), pressable('button')];
+    for (const action of actions) {
+      for (const [name, value] of Object.entries(
+        pressGroupItemProps(['touch', 'pen']),
+      )) {
+        action.setAttribute(name, value);
+      }
+      root.appendChild(action);
+    }
+    // A member the tracker skips (a menu trigger) carries no marker.
+    const field = pressable('button');
+    root.appendChild(field);
+    document.body.appendChild(root);
+    return {actions, field};
+  }
+
+  it('paints nothing on an action its group tracks', () => {
+    const {actions} = group();
+    expect(isTrackedByGroup(actions[0])).toBe(true);
+    press(actions[0], 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    press(actions[0], 'pointerup', 10, 10);
+    vi.advanceTimersByTime(PRESS_FLASH_MS);
+    expect(actions[0].hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('leaves the paint the group writes on it alone', () => {
+    const {actions} = group();
+    actions[1].setAttribute(PRESSED_ATTRIBUTE, 'on');
+    press(actions[1], 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    press(actions[1], 'pointercancel', 10, 10);
+    expect(actions[1].getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('still paints a member the group does not track', () => {
+    const {field} = group();
+    press(field, 'pointerdown', 10, 10);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(field.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('still records the touch, so a scroll it drives brakes the next one', () => {
+    const {actions} = group();
+    scroller.appendChild(actions[0].parentElement as HTMLElement);
+    press(actions[0], 'pointerdown', 10, 10);
+    // The browser takes the touch to scroll: the cancel records nothing, so
+    // the touch-down alone must have recorded the finger.
+    press(actions[0], 'pointercancel', 10, 10);
+    scroller.dispatchEvent(new Event('scroll'));
+    press(rows[1], 'pointerdown', 10, 100);
+    vi.advanceTimersByTime(PRESS_ONSET_MS * 2);
+    expect(pressedRow()).toBe(-1);
   });
 });
 
@@ -676,6 +761,43 @@ describe('a phone or tablet paints a mouse or Space press itself', () => {
       rows[1].classList.remove('slow-row');
       style.remove();
     }
+  });
+
+  function groupAction(
+    row: HTMLElement,
+    pointerTypes: ReadonlyArray<string> = ['touch', 'pen'],
+  ): HTMLButtonElement {
+    const action = focusedButton(row);
+    for (const [name, value] of Object.entries(
+      pressGroupItemProps(pointerTypes),
+    )) {
+      action.setAttribute(name, value);
+    }
+    return action;
+  }
+
+  it('leaves a mouse press to a tracker that follows a mouse: it paints its own action', () => {
+    const action = groupAction(rows[1], ['mouse', 'pen', 'touch']);
+    press(action, 'pointerdown', 10, 100, 'mouse');
+    expect(action.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    press(action, 'pointerup', 10, 100, 'mouse');
+    expect(action.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('paints a mouse press on an action whose tracker follows a finger and a pen only: that tracker takes no mouse press', () => {
+    const action = groupAction(rows[1]);
+    press(action, 'pointerdown', 10, 100, 'mouse');
+    expect(action.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    press(action, 'pointerup', 10, 100, 'mouse');
+    expect(action.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+  });
+
+  it('still paints a Space press on a focused action its group tracks: the group tracks pointers only', () => {
+    const action = groupAction(rows[1]);
+    key(action, 'keydown');
+    expect(action.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+    key(action, 'keyup');
+    expect(action.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
   });
 
   it('keeps the paint while the mouse is dragged off the surface, as `:active` does', () => {

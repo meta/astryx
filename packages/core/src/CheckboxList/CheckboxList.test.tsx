@@ -1282,3 +1282,40 @@ describe('CheckboxList error status', () => {
     expect(screen.getByRole('checkbox')).not.toHaveAttribute('aria-invalid');
   });
 });
+
+describe('CheckboxList group disabled state', () => {
+  it('marks a disabled group aria-disabled', () => {
+    render(
+      <CheckboxList label="Toppings" isDisabled>
+        <CheckboxListItem value="cheese" label="Cheese" />
+      </CheckboxList>,
+    );
+    expect(screen.getByRole('group', {name: 'Toppings'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+
+  it('leaves an enabled group without aria-disabled', () => {
+    render(
+      <CheckboxList label="Toppings">
+        <CheckboxListItem value="cheese" label="Cheese" />
+      </CheckboxList>,
+    );
+    expect(screen.getByRole('group', {name: 'Toppings'})).not.toHaveAttribute(
+      'aria-disabled',
+    );
+  });
+
+  it("keeps a caller's own aria-disabled on an enabled group (FR15)", () => {
+    render(
+      <CheckboxList label="Toppings" aria-disabled="true">
+        <CheckboxListItem value="cheese" label="Cheese" />
+      </CheckboxList>,
+    );
+    expect(screen.getByRole('group', {name: 'Toppings'})).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+  });
+});

@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/core",
-  "version": "0.7.7",
+  "version": "0.7.8",
   "displayName": "Astryx Core",
   "description": "The component library. Accessible, themeable React components with built-in spacing, dark mode, and StyleX styling.",
   "author": "Meta Open Source",
@@ -824,15 +824,20 @@
       "types": "./dist/Markdown/remark.d.ts",
       "default": "./dist/Markdown/remark.js"
     },
+    "./internal/indicatorPress.stylex": {
+      "source": "./src/internal/indicatorPress.stylex.ts",
+      "types": "./dist/internal/indicatorPress.stylex.d.ts",
+      "default": "./dist/internal/indicatorPress.stylex.js"
+    },
     "./internal/touch": {
       "source": "./src/internal/touch.ts",
       "types": "./dist/internal/touch.d.ts",
       "default": "./dist/internal/touch.js"
     },
-    "./internal/tokenizer-presentation": {
-      "source": "./src/internal/tokenizer-presentation.ts",
-      "types": "./dist/internal/tokenizer-presentation.d.ts",
-      "default": "./dist/internal/tokenizer-presentation.js"
+    "./internal/selectable-card": {
+      "source": "./src/internal/selectable-card.ts",
+      "types": "./dist/internal/selectable-card.d.ts",
+      "default": "./dist/internal/selectable-card.js"
     }
   },
   "files": [

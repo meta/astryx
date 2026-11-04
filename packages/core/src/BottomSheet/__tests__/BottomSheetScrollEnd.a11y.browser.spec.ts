@@ -4,14 +4,15 @@
  * @file BottomSheetScrollEnd.a11y.browser.spec.ts
  * @input The `A11y/BottomSheet` direct-content stories in a built Storybook,
  *   in Chromium and WebKit.
- * @output Browser evidence that a hug-height sheet whose overflowing content
- *   sits directly in its content box keeps that box's block-end padding in the
- *   scroll range: at the scroll end the last line, or the last block, clears
- *   the end of the range by at least the padding.
- * @position Guards the open dialog's panel host (BottomSheet.tsx): a flex
- *   column host gave WebKit's content box a definite height, so the content
- *   overflowed the box and the padding fell out of the scroll range. WebKit
- *   here is desktop WebKit under Playwright, not iOS Safari.
+ * @output A sheet's overflowing direct content, at the hug height or a budget
+ *   height, keeps the content box's block-end padding in the scroll range. At
+ *   the scroll end, the last line or block clears the range's end by at least
+ *   that padding.
+ * @position Guards two WebKit layouts that drop that padding. A flex column
+ *   panel host in BottomSheet.tsx gives the content box a definite height.
+ *   WebKit ignores `min-height: min-content` on a block, which the content
+ *   box's minimum height in BottomSheetPanel.tsx avoids. WebKit here is
+ *   desktop WebKit under Playwright, not iOS Safari.
  */
 
 import {expect, test} from '@playwright/test';
@@ -33,7 +34,11 @@ test.afterAll(async () => {
 
 test.use({viewport: {width: 390, height: 844}, hasTouch: true});
 
-for (const story of ['hug-direct-text', 'hug-direct-blocks']) {
+for (const story of [
+  'hug-direct-text',
+  'hug-direct-blocks',
+  'capped-direct-blocks',
+]) {
   test(`${story}: the content box's block-end padding stays in the scroll range`, async ({
     page,
   }) => {

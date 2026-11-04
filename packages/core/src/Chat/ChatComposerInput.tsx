@@ -524,6 +524,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     };
   }, [inputControlRef, focusEditableAtEnd]);
 
+  // Syncs the contentEditable DOM with the controlled `value`.
   useEffect(() => {
     if (controlledValue === undefined || !editableRef.current) {
       return;
@@ -645,6 +646,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
         }
       : triggerMenu.ariaProps;
 
+  // Syncs the trigger menu's pending searches with `isDisabled`.
   useEffect(() => {
     if (isDisabled && triggerMenu.state.isActive) {
       // Reset also cancels pending searches, so late results cannot reopen

@@ -160,6 +160,8 @@ export function usageFor(pkg, row) {
       : `import '${spec}'`;
   if (kind === 'component') {
     if (!row.member || row.member === 'inherits') return `<${name} />`;
+    // An overload line is another call shape of the component, not a prop.
+    if (row.member.startsWith('overload ')) return `<${name} … />`;
     const literal = row.line.match(/'([^']+)'/);
     const value = literal
       ? `"${literal[1]}"`

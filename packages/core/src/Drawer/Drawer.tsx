@@ -222,8 +222,8 @@ const styles = stylex.create({
   // Scrim via the browser's ::backdrop pseudo-element (top layer).
   scrim: {
     '::backdrop': {
+      // No backdrop-filter: a full-viewport blur is costly to repaint.
       backgroundColor: colorVars['--color-overlay'],
-      backdropFilter: 'blur(2px)',
       opacity: 0,
       transitionProperty: 'opacity',
       transitionDuration: durationVars['--duration-medium'],

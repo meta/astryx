@@ -125,6 +125,12 @@ describe('native contracts', () => {
         reason: 'type "IconVariant" has no portable definition yet',
       },
       {name: 'xstyle', reason: 'web styling input'},
+      {
+        name: 'className',
+        reason: '"className" already means something else in web',
+      },
+      {name: 'style', reason: 'web styling input'},
+      {name: 'ref', reason: 'web element reference'},
     ]);
 
     const swift = generateSwift(contracts);

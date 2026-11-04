@@ -618,16 +618,6 @@
       "aliases": []
     },
     {
-      "name": "component-lab-mobile-power-search",
-      "path": "components/lab/mobile-power-search",
-      "aliases": []
-    },
-    {
-      "name": "component-lab-mobile-tokenizer",
-      "path": "components/lab/mobile-tokenizer",
-      "aliases": []
-    },
-    {
       "name": "component-lab-radial-chart",
       "path": "components/lab/radial-chart",
       "aliases": []
@@ -640,6 +630,11 @@
     {
       "name": "component-lab-schedule",
       "path": "components/lab/schedule",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-selectable-card-group",
+      "path": "components/lab/selectable-card-group",
       "aliases": []
     },
     {
@@ -1959,6 +1954,11 @@
     {
       "name": "example-context-menu-bottom-sheet",
       "path": "examples/context-menu/bottom-sheet",
+      "aliases": []
+    },
+    {
+      "name": "example-create-animator-playing-cards-in-plain-java-script",
+      "path": "examples/create-animator/playing-cards-in-plain-java-script",
       "aliases": []
     },
     {
@@ -3637,6 +3637,16 @@
       "aliases": []
     },
     {
+      "name": "example-use-animator-playing-cards",
+      "path": "examples/use-animator/playing-cards",
+      "aliases": []
+    },
+    {
+      "name": "example-use-announce-filter-result-count",
+      "path": "examples/use-announce/filter-result-count",
+      "aliases": []
+    },
+    {
       "name": "example-use-app-shell-mobile-custom-mobile-trigger",
       "path": "examples/use-app-shell-mobile/custom-mobile-trigger",
       "aliases": []
@@ -3662,6 +3672,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-focus-trap-quick-edit-panel",
+      "path": "examples/use-focus-trap/quick-edit-panel",
+      "aliases": []
+    },
+    {
       "name": "example-use-grid-focus-color-swatch-grid",
       "path": "examples/use-grid-focus/color-swatch-grid",
       "aliases": []
@@ -3684,6 +3699,11 @@
     {
       "name": "example-use-list-focus-recent-files",
       "path": "examples/use-list-focus/recent-files",
+      "aliases": []
+    },
+    {
+      "name": "example-use-outline-from-markdown-docs-article",
+      "path": "examples/use-outline-from-markdown/docs-article",
       "aliases": []
     },
     {
@@ -3787,8 +3807,18 @@
       "aliases": []
     },
     {
+      "name": "hook-create-animator",
+      "path": "hooks/create-animator",
+      "aliases": []
+    },
+    {
       "name": "hook-use-animated-layout",
       "path": "hooks/use-animated-layout",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-animator",
+      "path": "hooks/use-animator",
       "aliases": []
     },
     {
@@ -3939,6 +3969,11 @@
     {
       "name": "hook-use-multi-combobox",
       "path": "hooks/use-multi-combobox",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-outline-from-markdown",
+      "path": "hooks/use-outline-from-markdown",
       "aliases": []
     },
     {

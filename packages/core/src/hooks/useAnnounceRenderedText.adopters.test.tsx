@@ -65,8 +65,8 @@ const {Selector} = await import('../Selector');
 const {MultiSelector} = await import('../MultiSelector');
 const {CommandPalette} = await import('../CommandPalette');
 const {BaseTypeahead} = await import('../Typeahead/BaseTypeahead');
-const {TokenizerWithPresentation} =
-  await import('../internal/tokenizer-presentation');
+const {Tokenizer} = await import('../Tokenizer/Tokenizer');
+const {PowerSearch} = await import('../PowerSearch/PowerSearch');
 const {createStaticSource} = await import('../Typeahead/createStaticSource');
 const {TooltipWithTriggerBehavior} = await import('../Tooltip/Tooltip');
 
@@ -189,14 +189,14 @@ const ADOPTERS: Record<string, () => Promise<void>> = {
     // module's load alone outlasts it.
     await import('../Tokenizer/TokenizerBottomSheet');
     render(
-      <TokenizerWithPresentation
+      <Tokenizer
         label="Tags"
         searchSource={source}
         value={[]}
         onChange={() => {}}
         debounceMs={0}
         emptySearchText={<em>Nothing called that</em>}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     fireEvent.click(screen.getByRole('button', {name: 'Tags'}));
@@ -204,6 +204,43 @@ const ADOPTERS: Record<string, () => Promise<void>> = {
       target: {value: 'zzz'},
     });
     await expectDelegated('Nothing called that');
+  },
+  'PowerSearch/PowerSearchBottomSheet.tsx': async () => {
+    // The sheet's own content is its empty-result text — "No results found"
+    // for the content search, "No filters match your search" for the field
+    // search — and the value step's "This filter is no longer available";
+    // all plain text the shared module reads from the rendered element. The
+    // flow's `Added`, `Removed`, result-count and after-close messages are
+    // not rendered content and go through `useAnnounce` directly.
+    render(
+      <PowerSearch
+        config={{
+          name: 'Issues',
+          contentSearchFieldKey: 'author',
+          fields: [
+            {
+              key: 'author',
+              label: 'Author',
+              isValueMatchAllowed: false,
+              typeaheadMinQueryLength: 99,
+              operators: [{key: 'is', label: 'is', value: {type: 'string'}}],
+            },
+          ],
+        }}
+        filters={[]}
+        label="Filters"
+        isLabelHidden={false}
+        onChange={() => {}}
+        presentation="bottom-sheet"
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', {name: /^Filters/}));
+    // A query equal to the field's label hides the free-text item, and the
+    // field is below its min query length: nothing lists.
+    fireEvent.change(await screen.findByRole('searchbox', {name: 'Search'}), {
+      target: {value: 'Author'},
+    });
+    await expectDelegated('No results found');
   },
 };
 
