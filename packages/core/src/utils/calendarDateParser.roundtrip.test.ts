@@ -135,11 +135,27 @@ describe('committed text reads back as the same date (FR13)', () => {
   it.each<[string, CalendarSystem, ...[number, number, number][]]>([
     ['lv-LV', 'hebrew', [1900, 2, 1], [1900, 3, 2], [1901, 2, 20]],
     ['lv-LV', 'islamic-civil', [1900, 7, 1], [1900, 8, 26]],
-    ['am-ET', 'roc', [1900, 1, 1], [1911, 12, 31], [1912, 1, 1]],
-    ['am-ET', 'japanese', [1900, 1, 1], [1950, 6, 15], [2000, 6, 15]],
+    ['am-ET', 'roc', [1900, 1, 1], [1911, 12, 31], [1912, 1, 1], [2026, 1, 1]],
+    [
+      'am-ET',
+      'japanese',
+      [1900, 1, 1],
+      [1950, 6, 15],
+      [2000, 6, 15],
+      [2019, 5, 1],
+      [2026, 1, 1],
+    ],
     ['hi-IN', 'buddhist', [1900, 1, 1], [2026, 11, 2]],
   ])('%s %s', (locale, calendar, ...dates) => {
     const days = dates.map(([year, month, day]) => ({year, month, day}));
     expect(failures(locale, calendar, days)).toEqual([]);
+  });
+  it('writes the narrow era in the Amharic numeric pattern', () => {
+    const hint = (year: number, calendar: CalendarSystem) =>
+      formatCalendarDateHint({year, month: 1, day: 1}, 'am-ET', calendar);
+    expect(hint(2026, 'japanese')).toBe('1/1/8 R');
+    expect(hint(1990, 'japanese')).toBe('1/1/2 H');
+    expect(hint(2026, 'roc')).toBe('1/1/115 ROC');
+    expect(hint(1900, 'roc')).toBe('1/1/12 BROC');
   });
 });

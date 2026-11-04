@@ -1233,7 +1233,8 @@ const displayOptionCache = new WeakMap<
 /**
  * Adds the era to a format that omits it, so a year never reads as a
  * Gregorian year. Keeps the locale's own pattern when the era would reorder
- * the fields.
+ * the fields. In Amharic the short era moves the month first, but the narrow
+ * era keeps the day/month/year order.
  */
 function displayOptions(
   locale: Locale,
@@ -1254,11 +1255,15 @@ function displayOptions(
     const sample = {year: 2026, month: 11, day: 2};
     const parts = partsOf(locale, calendar, options, sample);
     result = options;
+    const order = fieldOrder(parts).join();
     if (!parts.some(p => p.type === 'era')) {
-      const withEra = {...options, era: 'short'} as const;
-      const eraParts = partsOf(locale, calendar, withEra, sample);
-      if (fieldOrder(parts).join() === fieldOrder(eraParts).join()) {
-        result = withEra;
+      for (const era of ['short', 'narrow'] as const) {
+        const withEra = {...options, era};
+        const eraParts = partsOf(locale, calendar, withEra, sample);
+        if (fieldOrder(eraParts).join() === order) {
+          result = withEra;
+          break;
+        }
       }
     }
     byLocale.set(key, result);
@@ -1280,9 +1285,10 @@ function formatInCalendar(
   const display = displayOptions(locale, calendar, options);
   const parts = partsOf(locale, calendar, display, pd);
   const text = plainDateFormat(pd, {...display, calendar}, locale);
-  // Some locales, such as Amharic, leave out the era because it reorders the
-  // fields. Text without an era reads in the latest era, so a date of an
-  // earlier era adds it on the side where the era format has it.
+  // When every era width reorders the fields, such as the Amharic short-month
+  // date, the text has no era. Text without an era reads in the latest era,
+  // so a date of an earlier era adds it on the side where the era format has
+  // it.
   const eraOf = (date: PlainDate) => calendarEraYear('en', calendar, date).era;
   if (
     WITHOUT_ERA.has(calendar) ||
