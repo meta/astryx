@@ -3843,12 +3843,13 @@ function familyComponentIcons(member, parent, context) {
     }
     if (Object.keys(ownValues).length > 0) own = JSON.stringify(ownValues);
   }
-  if (info && inherited) {
-    // An imported map can hold an `undefined` slot, which keeps the parent's.
+  if (info) {
+    // An imported map can hold an `undefined` slot: it keeps the parent's,
+    // and a root drops it, as `defineTheme` does.
     const mergeName = `${binding}MergeComponentIcons`;
     return {
       imports,
-      expression: `${mergeName}(${inherited}, ${own})`,
+      expression: `${mergeName}(${inherited ?? '{}'}, ${own})`,
       mergeName,
     };
   }

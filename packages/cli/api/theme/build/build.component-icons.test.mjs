@@ -43,6 +43,7 @@ export const baseSlots = {
   'code-block-copy': copySlot,
   'parity-panel-dismiss': {icon: 'close', size: 'sm'},
   'parity-nav-leading': ({selected}) => (selected ? null : undefined),
+  'parity-unset': undefined,
 };
 `;
 
@@ -135,6 +136,7 @@ const describe = theme => ({
     ),
   ),
   componentIcons: theme.componentIcons ?? null,
+  componentIconKeys: Object.keys(theme.componentIcons ?? {}).sort(),
   staticViewHasFunction: Object.values(theme.componentIcons ?? {}).some(
     value => typeof value === 'function',
   ),
@@ -378,6 +380,26 @@ export default defineTheme({
     expect(result.child.built).toEqual(result.child.runtime);
     expect(result.inherit.built).toEqual(result.inherit.runtime);
     expect(result.imported.built).toEqual(result.imported.runtime);
+    // A runtime theme extending the family root reads what one extending the
+    // source root reads: the root's undefined slot is not listed.
+    write(
+      'family-child.mjs',
+      `import {defineTheme} from '@astryxdesign/core/theme';
+import {slotsBaseTheme} from '${familyModule}';
+import source from './base/source.mjs';
+export const fromBuilt = defineTheme({name: 'family-from-built', extends: slotsBaseTheme, tokens: {}});
+export const fromSource = defineTheme({name: 'family-from-source', extends: source, tokens: {}});
+`,
+    );
+    const {child} = inspect([
+      {
+        label: 'child',
+        built: './family-child.mjs#fromBuilt',
+        runtime: './family-child.mjs#fromSource',
+      },
+    ]);
+    expect(child.built).toEqual(child.runtime);
+    expect(child.built.componentIconKeys).not.toContain('parity-unset');
     expect(
       result.imported.built.resolved['code-block-copy|{"copied":true}'],
     ).toEqual({icon: 'checkDouble', size: 'lg'});
@@ -497,6 +519,45 @@ export const fromSource = defineTheme({name: 'from-source', extends: source, tok
     expect(
       result.spreadUndefined.built.resolved['code-block-copy|{"copied":true}'],
     ).toEqual({icon: 'copy', size: 'sm'});
+  });
+});
+
+describe('a built theme written with --out', () => {
+  it('keeps the slot import as the source spells it, and loads where a module answers to it', async () => {
+    write('src/slots.mjs', SLOT_FUNCTIONS);
+    write(
+      'src/theme.mjs',
+      `import {defineTheme} from '@astryxdesign/core/theme';
+import {baseSlots} from './slots.mjs';
+export default defineTheme({name: 'slots-out', tokens: {}, componentIcons: baseSlots});
+`,
+    );
+    const built = await themeBuild(
+      'src/theme.mjs',
+      {out: 'dist/theme.css'},
+      {cwd: tmpDir},
+    );
+    expect(built?.type).toBe('theme.build');
+    const module = fs.readFileSync(
+      path.join(tmpDir, 'dist/slots-out.js'),
+      'utf8',
+    );
+    expect(module).toContain(`import { baseSlots } from './slots.mjs';`);
+
+    // The output directory supplies the module the specifier names.
+    write('dist/slots.mjs', SLOT_FUNCTIONS);
+    const {out} = inspect([
+      {
+        label: 'out',
+        built: './dist/slots-out.js#slotsOutTheme',
+        runtime: './src/theme.mjs#default',
+      },
+    ]);
+    expect(out.built).toEqual(out.runtime);
+    expect(out.built.resolved['code-block-copy|{"copied":true}']).toEqual({
+      icon: 'checkDouble',
+      size: 'lg',
+    });
   });
 });
 

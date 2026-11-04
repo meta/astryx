@@ -350,9 +350,12 @@ export const myTheme = defineTheme({
    * as `code-block-copy` for CodeBlock's copy button. A value is an icon name,
    * `null` to hide the icon, a partial `{icon, variant, size}` request, or a
    * pure function of the slot's state that returns one.
+   * Keep a slot function in its own module and import it, so a built theme
+   * can import it too. Here `copySlot` is
+   * `({copied}) => ({icon: copied ? 'checkDouble' : 'copy'})`.
    * Reference: `astryx docs icons`; each component's docs list its slots.
    */
-  // componentIcons: {'code-block-copy': ({copied}) => ({icon: copied ? 'checkDouble' : 'copy'})},
+  // componentIcons: {'code-block-copy': copySlot},
 
   /**
    * Replace the small components that DRAW control state — the checkbox box,
