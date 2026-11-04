@@ -24,17 +24,11 @@ const styles = stylex.create({
   filter: {
     flexShrink: 0,
   },
-  fadeStart: {
-    maskImage: {
-      default: FADE_FROM_LEFT,
-      ':is([dir="rtl"] *)': FADE_FROM_RIGHT,
-    },
+  fadeLeft: {
+    maskImage: FADE_FROM_LEFT,
   },
-  fadeEnd: {
-    maskImage: {
-      default: FADE_FROM_RIGHT,
-      ':is([dir="rtl"] *)': FADE_FROM_LEFT,
-    },
+  fadeRight: {
+    maskImage: FADE_FROM_RIGHT,
   },
   fadeBoth: {
     maskImage: `linear-gradient(to right, transparent, black ${FADE}, black calc(100% - ${FADE}), transparent)`,
@@ -56,6 +50,8 @@ export default function UseScrollOverflowHookUsage() {
   const [isRtl, setIsRtl] = useState(false);
   const {scrollRef, overflowStart, overflowEnd} = useScrollOverflow();
   const nextFilter = FILTERS.find(filter => !filters.includes(filter));
+  const fadeStart = isRtl ? styles.fadeRight : styles.fadeLeft;
+  const fadeEnd = isRtl ? styles.fadeLeft : styles.fadeRight;
 
   return (
     <VStack gap={3} width={320}>
@@ -69,8 +65,8 @@ export default function UseScrollOverflowHookUsage() {
             overflowStart && overflowEnd
               ? styles.fadeBoth
               : overflowStart
-                ? styles.fadeStart
-                : overflowEnd && styles.fadeEnd,
+                ? fadeStart
+                : overflowEnd && fadeEnd,
           )}>
           {filters.map(filter => (
             <Token

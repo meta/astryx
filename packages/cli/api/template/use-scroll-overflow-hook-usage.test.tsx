@@ -4,7 +4,8 @@
 /**
  * The useScrollOverflow example fades the edge of its filter strip only on
  * the side where filters are hidden, and updates the fade as the strip
- * scrolls and as filters are added.
+ * scrolls and as filters are added. The side follows the strip's own
+ * direction (the Right to left switch), not the page's.
  */
 
 import {act} from 'react';
@@ -56,6 +57,13 @@ function fade(): string {
   );
 }
 
+function setRightToLeft(): void {
+  const toggle = container.querySelector<HTMLInputElement>('[role="switch"]');
+  act(() => {
+    toggle?.click();
+  });
+}
+
 function scrollTo(offset: number): void {
   scrollLeft = offset;
   act(() => {
@@ -102,6 +110,7 @@ afterEach(() => {
   act(() => root?.unmount());
   root = null;
   container.remove();
+  document.documentElement.removeAttribute('dir');
   vi.restoreAllMocks();
 });
 
@@ -115,7 +124,7 @@ describe('useScrollOverflow example', () => {
     await addFilter();
     await addFilter();
     expect(strip().children).toHaveLength(4);
-    expect(fade()).toBe('fadeEnd');
+    expect(fade()).toBe('fadeRight');
   });
 
   it('fades the side where filters are hidden as the strip scrolls', async () => {
@@ -127,18 +136,31 @@ describe('useScrollOverflow example', () => {
     expect(fade()).toBe('fadeBoth');
 
     scrollTo(maxScroll);
-    expect(fade()).toBe('fadeStart');
+    expect(fade()).toBe('fadeLeft');
 
     scrollTo(0);
-    expect(fade()).toBe('fadeEnd');
+    expect(fade()).toBe('fadeRight');
   });
 
-  it('reads a right-to-left scroll offset from the start edge', async () => {
+  it('fades the right edge first when the strip is right to left', async () => {
+    setRightToLeft();
     await addFilter();
     await addFilter();
     const maxScroll = 4 * FILTER_WIDTH - STRIP_WIDTH;
+    expect(fade()).toBe('fadeLeft');
 
     scrollTo(-maxScroll);
-    expect(fade()).toBe('fadeStart');
+    expect(fade()).toBe('fadeRight');
+  });
+
+  it('follows the strip, not the page, inside a right-to-left page', async () => {
+    document.documentElement.setAttribute('dir', 'rtl');
+    await addFilter();
+    await addFilter();
+    const maxScroll = 4 * FILTER_WIDTH - STRIP_WIDTH;
+    expect(fade()).toBe('fadeRight');
+
+    scrollTo(maxScroll);
+    expect(fade()).toBe('fadeLeft');
   });
 });
