@@ -24,8 +24,8 @@
  *   events derived from them are trusted and cancelable, multi-touch works.
  *   Limits, measured with WebKit 26.5: no timestamp parameter (the page sees
  *   the real dispatch time, so velocity comes from real-time pacing: within
- *   ~1 ms on an idle runner, but a runner whose CPU quota stalls the process
- *   sends some steps late, and the ones behind them back to back);
+ *   ~1 ms on an idle runner; after a stall each step keeps its scripted gap,
+ *   less 2 ms, so the drag stretches instead of arriving as a burst);
  *   integer coordinates only; no native scrolling, fling or pinch-zoom from
  *   these touches; a `touchstart` lists only the fingers that landed in it
  *   (pointer events are exact); no click synthesised from a raw touch sequence (use
@@ -57,7 +57,11 @@ export interface PlayOptions {
    * behaviors that run on the compositor clock (a fling) want real pacing.
    */
   readonly realtime?: boolean;
-  /** Called after each event is dispatched, before the next one (storyboards). */
+  /**
+   * Called after each event is dispatched, before the next one (storyboards).
+   * With it, a WebKit driver sends each step at its scripted time, however
+   * late the step before was answered.
+   */
   readonly onEvent?: (
     step: TouchEventStep,
     index: number,
@@ -111,23 +115,55 @@ async function until(deadline: number): Promise<void> {
   }
 }
 
+/** The time (ms) an idle engine takes to answer a dispatch, at most. */
+const ANSWER_SLACK_MS = 2;
+
+/**
+ * When a step may leave, on the harness's clock: at its scripted time at the
+ * earliest. It also leaves no sooner than the script's gap, less
+ * ANSWER_SLACK_MS, after the engine answered the step before. The engine
+ * stamps each event no later than its answer. So no gap reaches the page more
+ * than ANSWER_SLACK_MS shorter than the script's, however late a step left or
+ * was handled. An idle run keeps its scripted times.
+ */
+export function leaveAt(
+  scriptedAt: number,
+  answeredBefore: number | null,
+  gap: number,
+): number {
+  return answeredBefore == null
+    ? scriptedAt
+    : Math.max(scriptedAt, answeredBefore + gap - ANSWER_SLACK_MS);
+}
+
 async function playSteps(
   script: TouchScript,
   options: PlayOptions,
   dispatch: (step: TouchEventStep, timestamp: number) => Promise<void>,
   stampFor: (t: number) => number,
+  keepsGaps = false,
 ): Promise<PlayedEvent[]> {
   const {realtime = true, onEvent} = options;
   const steps = toTouchEvents(script);
   const played: PlayedEvent[] = [];
   const origin = performance.now();
+  // Only an engine that stamps events with their dispatch time needs it, and
+  // only while nothing watches each step.
+  const keeping = keepsGaps && realtime && onEvent == null;
+  let answeredBefore: number | null = null;
   for (const [index, step] of steps.entries()) {
     if (realtime) {
-      await until(origin + step.t);
+      const gap = index > 0 ? step.t - steps[index - 1].t : 0;
+      await until(
+        keeping
+          ? leaveAt(origin + step.t, answeredBefore, gap)
+          : origin + step.t,
+      );
     }
     const timestamp = stampFor(step.t);
     const dispatchedAt = Date.now();
     await dispatch(step, timestamp);
+    answeredBefore = performance.now();
     played.push({...step, dispatchedAt, timestamp});
     await onEvent?.(step, index);
   }
@@ -233,6 +269,7 @@ async function webkitDriver(page: Page): Promise<TouchDriver> {
           });
         },
         () => Date.now(),
+        true,
       ).then(played => played.map(p => ({...p, timestamp: null})));
     },
     async tap(at) {

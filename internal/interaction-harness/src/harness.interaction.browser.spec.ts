@@ -285,7 +285,8 @@ test.describe('touch input', () => {
     // that holds the moves and sends them in a burst fails.
     //
     // The pacing is bounded from above too. The harness waits only while it
-    // is ahead of the script and sends a late step at once, so a move it
+    // is ahead of the script and, as this take watches every step, sends a
+    // late step at once, so a move it
     // waited for (it left more than 2 ms after the step before was answered)
     // must leave on time (no more than 2 ms after its scripted time). A harness
     // that paces slowly waits past every move's time: sending each step at
