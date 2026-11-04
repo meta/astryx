@@ -38,6 +38,48 @@ package manager does not add them: install them at that minor alongside
 richtext. See the RFC:
 [meta/astryx#3899](https://github.com/meta/astryx/issues/3899).
 
+## Collaborative editing
+
+`RichTextEditor` can be driven by a collaborative binding instead of by
+`defaultValue`. The binding stays in your app, so richtext itself depends on no
+CRDT library and an app that never collaborates pays nothing for this.
+
+Set `isCollaborative` and pass the binding in. A binding that ships as a React
+plugin goes through `plugins`:
+
+```tsx
+<RichTextEditor
+  label="Notes"
+  isCollaborative
+  plugins={
+    <CollaborationPlugin
+      id={documentID}
+      providerFactory={providerFactory}
+      shouldBootstrap={false}
+    />
+  }
+/>
+```
+
+A binding that ships as a Lexical extension goes through `extensions`, because
+an extension is read while the editor is built and cannot be a React child of
+one:
+
+```tsx
+<RichTextEditor
+  label="Notes"
+  isCollaborative
+  extensions={[configExtension(YCollabExtension, {doc, schemaVersion: 1})]}
+/>
+```
+
+`isCollaborative` turns off the editor's own undo history, because the binding
+owns undo and two history stacks over one editor fight each other. `hasHistory`
+controls that on its own if you need to.
+
+Your app owns the transport, the provider's lifecycle and presence. At most one
+client may seed a new document; prefer seeding it server-side.
+
 ## Install
 
 ```bash
