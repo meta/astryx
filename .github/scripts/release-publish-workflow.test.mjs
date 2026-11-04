@@ -41,7 +41,11 @@ function writeExecutable(root, name, contents) {
  * unknown, so nothing is skipped) and no waits between attempts.
  */
 function withPublisher(root) {
-  for (const file of ['publish-package.mjs', 'registry.mjs']) {
+  for (const file of [
+    'publish-order.mjs',
+    'publish-package.mjs',
+    'registry.mjs',
+  ]) {
     const target = path.join(root, 'scripts/npm', file);
     fs.mkdirSync(path.dirname(target), {recursive: true});
     fs.copyFileSync(path.join(ROOT, 'scripts/npm', file), target);
@@ -191,6 +195,12 @@ function runStablePublish({failingPackage = '', failOnce = ''} = {}) {
     writeJson(root, 'packages/themes/neutral/package.json', {
       name: '@astryxdesign/theme-neutral',
       version: '0.7.7',
+    });
+    // Listed before Core and depends on it: the publish order moves it after.
+    writeJson(root, 'packages/cli/package.json', {
+      name: '@astryxdesign/cli',
+      version: '0.7.7',
+      dependencies: {'@astryxdesign/core': '0.7.7'},
     });
     // Publishes after core in the loop and peers on it.
     writeJson(root, 'packages/themes/stone/package.json', {
@@ -473,10 +483,32 @@ describe('stable and canary publication authority', () => {
       'Not publishing @astryxdesign/theme-stone@0.7.7 because @astryxdesign/core failed',
     );
     expect(result.stdout).toMatch(
-      /Stable publish failed for: @astryxdesign\/core @astryxdesign\/theme-stone\./u,
+      /Stable publish failed for: @astryxdesign\/core @astryxdesign\/cli @astryxdesign\/theme-stone\./u,
     );
     expect(result.published).not.toContain('publish ./packages/themes/stone');
     expect(result.published).toContain('publish ./packages/themes/neutral');
+  });
+
+  it('holds back a package listed before its failed dependency', () => {
+    const result = runStablePublish({failingPackage: 'packages/core'});
+
+    expect(result.stdout).toContain(
+      'Not publishing @astryxdesign/cli@0.7.7 because @astryxdesign/core failed',
+    );
+    expect(result.published).not.toContain('publish ./packages/cli');
+  });
+
+  it('publishes every dependency before the packages that use it', () => {
+    const result = runStablePublish();
+    const order = result.published
+      .split('\n')
+      .filter(Boolean)
+      .map(line => line.split(' ')[1]);
+
+    expect(order.indexOf('./packages/core')).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf('./packages/core')).toBeLessThan(
+      order.indexOf('./packages/cli'),
+    );
   });
 
   it('retries a stable package whose first signature is rejected', () => {

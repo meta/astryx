@@ -17,7 +17,7 @@
  * - /packages/cli/assets/templates/blocks/components/CheckboxList/ (showcase blocks)
  */
 
-import {use, useId, useRef, type ReactNode} from 'react';
+import {use, useCallback, useId, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
 import {colorVars} from '../theme/tokens.stylex';
@@ -30,6 +30,7 @@ import {ListContext} from '../List/ListContext';
 import {CheckboxListContext} from './CheckboxListContext';
 import {ItemDescriptionContext} from '../Item/ItemDescriptionContext';
 import {joinAriaIDs} from '../utils/inputAria';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {ItemAlign} from '../Item';
 import {
   registerEnglishFallback,
@@ -284,6 +285,26 @@ export function CheckboxListItem({
   const checkboxRef = useRef<HTMLInputElement | null>(null);
   const hasRowInteraction = isInteractive || onClickProp != null;
 
+  // A required group decides which box carries native `required` from the
+  // state of every box. A change to this box's state registers it again.
+  const requiredGroup = ctx?.requiredGroup;
+  const isBoxChecked = resolvedChecked === true;
+  const isBoxEnabled = !effectiveDisabled && !effectiveReadOnly;
+  const registerWithRequiredGroup = useCallback(
+    (input: HTMLInputElement | null) =>
+      input != null && requiredGroup != null
+        ? requiredGroup.register(input, {
+            isChecked: isBoxChecked,
+            isEnabled: isBoxEnabled,
+          })
+        : undefined,
+    [requiredGroup, isBoxChecked, isBoxEnabled],
+  );
+  const checkboxInputRef = useMergedRefs(
+    checkboxRef,
+    registerWithRequiredGroup,
+  );
+
   // A read-only checkbox carries aria-readonly, which the row's clickable
   // container treats as a non-interactive target, so a click on it would be
   // delegated straight back to the checkbox without end. Stop that click at
@@ -349,7 +370,7 @@ export function CheckboxListItem({
       style={style}
       startContent={
         <DescribedCheckboxInput
-          ref={checkboxRef}
+          ref={checkboxInputRef}
           label={checkboxLabel}
           aria-labelledby={namesFromVisibleLabel ? labelID : undefined}
           isLabelHidden

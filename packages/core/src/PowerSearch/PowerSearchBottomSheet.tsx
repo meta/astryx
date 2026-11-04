@@ -185,8 +185,9 @@ export interface PowerSearchBottomSheetProps {
   filters: ReadonlyArray<PowerSearchFilter>;
   /**
    * The field's `onChange`. Done replays the draft's edits through it, in
-   * order, each with the list as it stood after that edit; nothing is
-   * reported before Done.
+   * order, onto the field's latest filters, each call carrying that list
+   * with the edit applied; nothing is reported before Done, and nothing when
+   * the field is read-only or disabled at Done.
    */
   onChange: (
     filters: ReadonlyArray<PowerSearchFilter>,
@@ -214,7 +215,7 @@ export interface PowerSearchBottomSheetProps {
 // Styles
 // =============================================================================
 
-/** One edit of the draft: the list before it, the list after it, and how it was reported. */
+/** One edit of the draft: the draft before and after it, and its type and index in the draft; Done replays it onto the field's latest filters. */
 interface DraftEdit {
   before: ReadonlyArray<PowerSearchFilter>;
   after: ReadonlyArray<PowerSearchFilter>;
@@ -1159,12 +1160,13 @@ export function PowerSearchBottomSheet({
   // consumer gets the calls a popover session makes and keeps a filter it
   // added meanwhile.
   const commitAndClose = useCallback(() => {
-    if (isDraftDirty) {
+    // A field that became read-only while the flow was open reports nothing.
+    if (isDraftDirty && isInteractive) {
       replayDraftEdits(committedFilters, draftEditsRef.current, onCommit);
     }
     draftEditsRef.current = [];
     closeFlow();
-  }, [closeFlow, committedFilters, isDraftDirty, onCommit]);
+  }, [closeFlow, committedFilters, isDraftDirty, isInteractive, onCommit]);
   const requestDismiss = useCallback(() => {
     if (isDraftDirty) {
       setIsDiscardConfirmationOpen(true);

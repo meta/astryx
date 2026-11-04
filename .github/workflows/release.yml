@@ -181,7 +181,10 @@ jobs:
           set -eu
           published=0
           FAILED=""
-          for pkg_dir in packages/* packages/themes/*; do
+          # Dependencies first, so the hold-back below sees every failed
+          # dependency before the packages that use it.
+          ORDER=$(node scripts/npm/publish-order.mjs packages/* packages/themes/*)
+          for pkg_dir in $ORDER; do
             [ -f "$pkg_dir/package.json" ] || continue
             # Stable `latest` never includes canaryOnly packages (e.g. lab):
             # skip them explicitly so even an accidental `private: false` can

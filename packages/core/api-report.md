@@ -572,6 +572,7 @@ component CheckboxList(props: CheckboxListProps)
   prop isLabelHidden?: boolean = false
   prop isOptional?: boolean = false
   prop isReadOnly?: boolean = false
+  prop isRequired?: boolean = false
   prop label: string
   prop onChange?: (values: string[]) => void
   prop ref?: React.Ref<HTMLDivElement>
