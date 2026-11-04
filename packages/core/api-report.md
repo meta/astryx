@@ -1362,6 +1362,7 @@ component InputGroupText(props: InputGroupTextProps)
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 component InternationalizationProvider(props: InternationalizationProviderProps)
+  prop calendar?: CalendarSystem
   prop children: ReactNode
   prop dir?: 'ltr' | 'rtl'
   prop locale: Locale
@@ -3759,6 +3760,7 @@ interface CalendarDay
 interface CalendarHandle
   navigateTo: (date: ISODateString) => void
 type CalendarProps = CalendarSingleProps | CalendarRangeProps (props of Calendar)
+type CalendarSystem = 'gregory' | 'iso8601' | 'buddhist' | 'roc' | 'japanese' | 'persian' | 'indian' | 'hebrew' | 'chinese' | 'dangi' | 'coptic' | 'ethiopic' | 'ethioaa' | 'islamic-c … #85e5f84c
 interface CardProps extends BaseProps<HTMLDivElement> (props of Card)
 type CardVariant = keyof CardVariantMap
 interface CardVariantMap
@@ -4546,6 +4548,7 @@ interface IntegerOperatorValue
   units?: string
 type InteractiveRole = 'link' | 'button' | 'inert'
 interface InternationalizationContextValue
+  calendar?: CalendarSystem
   direction: 'ltr' | 'rtl'
   locale: Locale
   messages: MessagesByLocale
@@ -9172,6 +9175,7 @@ useTypeahead (.)
 ### Also exported from an earlier entry point
 
 ```text
+CalendarSystem (.)
 Catalog (.)
 InternationalizationContext (.)
 InternationalizationContextValue (.)
