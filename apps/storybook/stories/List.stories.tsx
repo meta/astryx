@@ -19,6 +19,7 @@ import {Icon} from '@astryxdesign/core/Icon';
 import {Switch} from '@astryxdesign/core/Switch';
 import {Heading, Text} from '@astryxdesign/core/Text';
 import {VStack} from '@astryxdesign/core/Layout';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {
   Cog6ToothIcon,
   BellIcon,
@@ -282,7 +283,9 @@ function EndControlsDemo() {
         <ListItem
           label="Network"
           onClick={() => {}}
-          endContent={<Icon icon={ChevronRightIcon} />}
+          endContent={
+            <Icon icon={ChevronRightIcon} xstyle={rtlStyles.mirror} />
+          }
           swipeActions={{trailing: [{label: 'Forget', onActivate: () => {}}]}}
         />
         <ListItem
@@ -299,7 +302,9 @@ function EndControlsDemo() {
         <ListItem
           label="Bluetooth"
           onClick={() => {}}
-          endContent={<Icon icon={ChevronRightIcon} />}
+          endContent={
+            <Icon icon={ChevronRightIcon} xstyle={rtlStyles.mirror} />
+          }
         />
       </List>
       <Button label="Load more" variant="secondary" />
