@@ -662,8 +662,9 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   that grows only with its text, such as a Button whose label follows the
   16 px reading base:
   the 16 px mobile reading base (`design:mobile-typography` DR1, DR3) and the
-  16 px text-entry floor (`family:input-fields` FR9) are unaffected. Under a
-  coarse pointer, touch targets meet 44 px through an invisible hit area. A
+  16 px text-entry floor (`family:input-fields` FR9) are unaffected.
+  Under a coarse pointer, the touch target grows toward 44 × 44 px, up to halfway to a neighboring target, and is never smaller than the control's own box (owner decision, 2026-11-04; `spec:AST-094` FR42).
+  It grows through an invisible hit area. A
   hit-area expansion never overlaps a neighboring interactive element's own
   target: where neighbors are closer than 44 px, the expansion is clamped to
   half the gap, or skipped, so each element stays reachable; an expansion a
