@@ -2,9 +2,10 @@
 
 /**
  * @file Tests for the API report generator and the API changes renderer.
- * @input  `__fixtures__/repo`: a built fixture package with every row kind, an
- *         `./internal/*` entry point, a stylesheet, a component doc with
- *         theming targets, a private package, and a public-attribute record
+ * @input  `__fixtures__/repo`: a built fixture package with every row kind,
+ *         overloaded components, hooks and functions, an `./internal/*` entry
+ *         point, a stylesheet, a component doc with theming targets, a
+ *         private package, and a public-attribute record
  * @output Vitest assertions on report content, order, determinism, and change rows
  * @position scripts/api-report — guards architecture:public-component-api INV24
  */
@@ -86,11 +87,81 @@ describe('generateReport', () => {
     expect(report).toContain('interface ChipExperimentalOptions @experimental');
   });
 
-  it('leaves out ./internal/*, private custom properties, and unlisted attributes', () => {
+  it('reads an overloaded component as ComponentProps does, and lists its other signatures as tagged overloads', () => {
+    expect(report).toMatch(/^component Badge\(props: BadgeProps\)$/m);
+    expect(report).toContain(
+      '  overload (props: BadgeProps & { color: string }) => ReactNode @deprecated',
+    );
+    expect(report).toContain(
+      "  overload (props: Omit<BadgeProps, 'tone'> & { experimental: { glow?: boolean } }) => ReactNode @experimental",
+    );
+    expect(report).toContain('interface BadgeProps (props of Badge)');
+    expect(report).not.toContain('BadgeColorProps');
+    expect(report).not.toContain('BadgeExperimentalProps');
+  });
+
+  it('keeps the statement tags of an overloaded component declared as a const', () => {
+    expect(report).toMatch(/^component Tag\(props: TagProps\) @deprecated$/m);
+    expect(report).toMatch(
+      /^ {2}overload \(props: TagProps & \{color: string\}\) => ReactNode$/m,
+    );
+    expect(report).toContain('interface TagProps (props of Tag)');
+  });
+
+  it('lists an overloaded component as internal when its row is', () => {
+    expect(report).toMatch(/^component Pill\(props: PillProps\) @internal$/m);
+    expect(report).toContain('internal Pill via .');
+  });
+
+  it("tags each overload of a hook or a function with its own declaration's tags", () => {
+    expect(report).toContain(
+      [
+        'hook useChipMode',
+        "  overload (mode: 'a') => string",
+        '  overload () => string @deprecated',
+        "  overload (mode: 'b') => number",
+      ].join('\n'),
+    );
+    expect(report).toContain(
+      [
+        'function parseChip',
+        '  overload (label: string, legacy: true) => string @deprecated',
+        '  overload (label: string) => string',
+      ].join('\n'),
+    );
+  });
+
+  it('tags the row of an overloaded hook or function only with the tags every overload has', () => {
+    expect(report).toMatch(/^function parseChip$/m);
+    expect(report).toContain(
+      [
+        'function legacyChip @deprecated',
+        '  overload (label: string) => string @deprecated',
+        '  overload (label: string, size: ChipSize) => string @deprecated',
+      ].join('\n'),
+    );
+  });
+
+  it('leaves out ./internal/*, commented-out custom properties, and unlisted attributes', () => {
     expect(report).not.toContain('secret');
-    expect(report).not.toContain('--_demo-private');
     expect(report).not.toContain('--commented-out');
     expect(report).not.toContain('data-astryx-private');
+  });
+
+  it('leaves out a private --_* custom property', () => {
+    expect(report).not.toContain('--_demo-private');
+  });
+
+  it('leaves out a custom property name that StyleX hashed', () => {
+    expect(report).not.toContain('--x1ue0wla');
+  });
+
+  it('still lists a public --astryx-* custom property', () => {
+    expect(report).toContain('var --astryx-demo-offset (./demo.css)');
+  });
+
+  it('still lists a short authored name in the StyleX prefix form', () => {
+    expect(report).toContain('var --xl (./demo.css)');
   });
 
   it('details a declaration once and points later entry points at it', () => {
@@ -333,6 +404,15 @@ describe('API changes', () => {
     expect(usage('function chipOnly')).toBe(
       "import {chipOnly} from '@astryxdesign/demo/chip'; chipOnly(…)",
     );
+  });
+
+  it("gives a component's overload line the component's usage example", () => {
+    const overloads = [...parseReport(report).values()].filter(
+      r => r.item === 'component Badge' && r.member?.startsWith('overload '),
+    );
+    expect(overloads).toHaveLength(2);
+    for (const row of overloads)
+      expect(usageFor('@astryxdesign/demo', row)).toBe('<Badge … />');
   });
 
   it('renders nothing when the API is unchanged and the committed report is current', () => {

@@ -8,7 +8,7 @@
  * @position Browser-only accessibility regression test for MultiSelector
  */
 
-import {expect, test} from '@playwright/test';
+import {expect, test} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

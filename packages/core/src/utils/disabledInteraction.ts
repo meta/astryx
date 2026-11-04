@@ -2,8 +2,9 @@
 
 /**
  * @file disabledInteraction.ts
- * @input An optional caller keydown handler
- * @output Event props that keep a focusable, aria-disabled control inert
+ * @input An optional caller keydown handler, or a control's caller props
+ * @output Event props that keep a focusable, aria-disabled control inert, and
+ *   the caller props such a control hands its element
  * @position Shared by controls that replace native `disabled` with
  *   `aria-disabled` under spec:AST-085 (FR1, FR2)
  */
@@ -37,4 +38,24 @@ export function disabledInteractionProps<T extends HTMLElement>(
       }
     },
   };
+}
+
+/**
+ * The caller props a disabled, focusable control hands its element: every
+ * `on*` handler is dropped except focus and blur, so the control runs no
+ * caller callback, as a natively disabled one runs none. Enabled, `props` pass
+ * through unchanged.
+ */
+export function withholdCallerHandlers<P extends object>(
+  props: P,
+  isDisabled: boolean,
+): P {
+  if (!isDisabled) {
+    return props;
+  }
+  return Object.fromEntries(
+    Object.entries(props).filter(
+      ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
+    ),
+  ) as P;
 }

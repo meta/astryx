@@ -47,6 +47,7 @@ import * as path from 'node:path';
 import {createHash} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
 import {CLI_ROOT} from '../foundation/fs/paths.mjs';
+import {runCli} from '../test-utils/run-cli.mjs';
 import {writeIconSetProject} from '../test-utils/icon-set-fixture.mjs';
 
 const REPO_ROOT = path.resolve(CLI_ROOT, '..', '..');
@@ -195,21 +196,27 @@ function astryx(args, cwd = project) {
       `main's CLI handed \`astryx ${args.join(' ')}\` over to another CLI: ${result.stderr.trim()}`,
     );
   }
-  /** @param {string} text */
-  const clean = text =>
-    text
-      .split(cwd)
-      .join('<project>')
-      .split(REPO_ROOT)
-      .join('<repo>')
-      .split(GOLDEN_REPO)
-      .join('<repo>')
-      .replace(VERSION_PATTERN, '$1<version>');
   return {
     status: result.status,
-    stdout: clean(result.stdout),
-    stderr: clean(result.stderr),
+    stdout: placeholders(result.stdout, cwd),
+    stderr: placeholders(result.stderr, cwd),
   };
+}
+
+/**
+ * CLI output with machine paths and the CLI's release version as placeholders.
+ * @param {string} text
+ * @param {string} cwd the folder the CLI ran in
+ */
+function placeholders(text, cwd) {
+  return text
+    .split(cwd)
+    .join('<project>')
+    .split(REPO_ROOT)
+    .join('<repo>')
+    .split(GOLDEN_REPO)
+    .join('<repo>')
+    .replace(VERSION_PATTERN, '$1<version>');
 }
 
 /** Doctor checks that read the computer, not the project. */
@@ -504,11 +511,22 @@ describe('with no icon set, stable output is unchanged', () => {
   // listing, each topic's sections, a digest of each topic's JSON skeleton
   // (its fields, blocks, and identities, not its prose), and the leak fields.
   it('every stable docs topic: the listing, its sections, and its JSON', async () => {
-    const list = JSON.parse(astryx(['docs', '--json']).stdout);
+    const listed = astryx(['docs', '--json']);
+    // Outside regeneration, this process reads every topic, one CLI run each,
+    // instead of a new process per topic. Those runs print what the bin
+    // prints, as the listing checks.
+    /** @param {string[]} args */
+    const read = async args => {
+      if (REGENERATING) return astryx(args);
+      const result = await runCli(args, project);
+      return {...result, stdout: placeholders(result.stdout, project)};
+    };
+    expect((await read(['docs', '--json'])).stdout).toBe(listed.stdout);
+    const list = JSON.parse(listed.stdout);
     /** @type {Record<string, any>} */
     const topics = {};
     for (const {topic} of list.data) {
-      const doc = JSON.parse(astryx(['docs', topic, '--json']).stdout);
+      const doc = JSON.parse((await read(['docs', topic, '--json'])).stdout);
       topics[topic] = {
         sections: (doc.data.sections ?? []).map(
           (/** @type {any} */ section) => section.id ?? section.key,
