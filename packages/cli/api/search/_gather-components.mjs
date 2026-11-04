@@ -73,6 +73,8 @@ async function gatherCoreComponents(coreDir) {
     let description = '';
     /** @type {string[]} */
     let guidance = [];
+    /** @type {import('@astryxdesign/cli/authoring').ComponentDeprecation | undefined} */
+    let deprecated;
     if (readme && readme.endsWith('.doc.mjs')) {
       const loaded = await loadModuleDoc(readme);
       // A member documented in its family's doc (VStack in Stack's doc) is
@@ -83,6 +85,7 @@ async function gatherCoreComponents(coreDir) {
         keywords = Array.isArray(doc.keywords) ? doc.keywords : [];
         description = doc.usage?.description || doc.description || '';
         guidance = guidanceFrom(doc);
+        deprecated = doc.deprecated;
       }
       for (const [n, place] of familyPlaces(loaded)) places.set(n, place);
     }
@@ -92,6 +95,7 @@ async function gatherCoreComponents(coreDir) {
       keywords,
       description,
       guidance,
+      ...(deprecated ? {_deprecated: deprecated} : {}),
       _package: CORE_PACKAGE,
       _import: resolveImportPath(coreDir, comp),
     });
@@ -178,6 +182,7 @@ async function gatherIntegrationComponents(loadedIntegrations) {
         keywords: doc && Array.isArray(doc.keywords) ? doc.keywords : [],
         description: doc ? doc.usage?.description || doc.description || '' : '',
         guidance: guidanceFrom(doc),
+        ...(doc?.deprecated ? {_deprecated: doc.deprecated} : {}),
         ...places.get(rec.name),
         _package: rec.package ?? integration.name,
         // Exactly what `component` reports: a doc may state its own specifier
