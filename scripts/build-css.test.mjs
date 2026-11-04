@@ -102,6 +102,11 @@ function specificity(selector) {
 
 function stateRule(css, {property, token, state, media}) {
   const lines = css.split('\n');
+  // The token as the fallback of another variable is one component's own
+  // paint, not the shared overlay this guard orders.
+  const asFallback = new RegExp(
+    `var\\(--[\\w-]+,\\s*var\\(--color-overlay-${token}\\)`,
+  );
   return lines.find(line => {
     const inHoverMedia = line.includes('@media (hover: hover)');
     return (
@@ -109,7 +114,8 @@ function stateRule(css, {property, token, state, media}) {
       line.includes(`:${state}:where(`) &&
       !line.includes('::') &&
       line.includes(`${property}:`) &&
-      line.includes(`var(--color-overlay-${token})`)
+      line.includes(`var(--color-overlay-${token})`) &&
+      !asFallback.test(line)
     );
   });
 }
