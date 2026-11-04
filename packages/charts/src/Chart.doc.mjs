@@ -138,7 +138,7 @@ export const docs = {
       name: 'xLabel',
       type: 'string',
       description:
-        'Display name for the x field, used for the axis, the data-table header, and the tooltip. Defaults to the xKey.',
+        'Display name for the x field in the chart accessible name and the hidden data-table header. Defaults to the xKey.',
     },
     {
       name: 'series',

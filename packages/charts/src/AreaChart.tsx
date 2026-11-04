@@ -28,7 +28,7 @@ import type {ChartLegendProps} from './ChartLegend';
 import type {ChartTooltipProps} from './ChartTooltip';
 import {ChartAxis} from './ChartAxis';
 import {ChartGrid} from './ChartGrid';
-import {area} from './marks';
+import {area} from './marks/area';
 
 export interface AreaChartProps extends BaseProps<HTMLDivElement> {
   /** Ref forwarded to the root chart container. */

@@ -23,7 +23,7 @@
 import type {Ref, ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '@astryxdesign/core';
-import {useTranslator} from '@astryxdesign/core';
+import {VisuallyHidden, useTranslator} from '@astryxdesign/core';
 import {mergeProps} from '@astryxdesign/core/utils';
 import {themeProps} from '@astryxdesign/core/utils';
 import {
@@ -84,23 +84,6 @@ const styles = stylex.create({
     marginTop: spacingVars['--spacing-1'],
     alignSelf: 'stretch',
     minWidth: 0,
-  },
-  srOnly: {
-    position: 'absolute',
-    width: '1px',
-    height: '1px',
-    paddingTop: 0,
-    paddingBottom: 0,
-    paddingInlineStart: 0,
-    paddingInlineEnd: 0,
-    marginBlockStart: '-1px',
-    marginBlockEnd: 0,
-    marginInlineStart: 0,
-    marginInlineEnd: 0,
-    overflow: 'hidden',
-    clip: 'rect(0 0 0 0)',
-    whiteSpace: 'nowrap',
-    borderWidth: 0,
   },
 });
 
@@ -268,9 +251,9 @@ export function MetricTile({
               <path d={DELTA_GLYPH_PATHS[delta.direction]} />
             </svg>
             {delta.value}
-            <span {...stylex.props(styles.srOnly)}>
+            <VisuallyHidden>
               {t(DIRECTION_MESSAGE_KEYS[delta.direction])}
-            </span>
+            </VisuallyHidden>
           </span>
         ) : null}
       </span>

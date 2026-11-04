@@ -114,7 +114,8 @@ export const docs = {
     {
       name: 'title',
       type: 'string',
-      description: 'Accessible name for the chart image.',
+      description:
+        'Accessible name for the chart image. Paints a visible heading above the plot, so only set it when the layout has room.',
     },
     {
       name: 'ref',

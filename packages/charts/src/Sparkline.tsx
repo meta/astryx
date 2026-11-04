@@ -21,7 +21,8 @@ import {useTranslator} from '@astryxdesign/core';
 import {Chart} from './Chart';
 import type {YBaseline} from './types';
 import type {ChartTooltipProps} from './ChartTooltip';
-import {area, line} from './marks';
+import {area} from './marks/area';
+import {line} from './marks/line';
 
 const SPARKLINE_MARGIN = {top: 2, right: 2, bottom: 2, left: 2};
 
