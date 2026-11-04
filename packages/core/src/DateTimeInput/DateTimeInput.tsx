@@ -1033,10 +1033,8 @@ function PointerDateTimeField({
     hasPlaceholder: placeholderFromProps != null,
   });
 
-  // DateTimeInput fixes its status presentation to the detached message box,
-  // so the shared helper suppresses the on-field icon (the message box carries
-  // its own leading glyph). Routed through the helper for consistency with the
-  // rest of the bordered input family.
+  // The detached message box carries its own glyph, so the helper shows no
+  // on-field icon.
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
     useInputStatusIcon({
       status: fieldStatus,

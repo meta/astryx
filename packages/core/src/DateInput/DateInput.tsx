@@ -619,7 +619,6 @@ function PointerDateField({
   // Constraint checking for text input validation (reuses calendar logic)
   const {isDateDisabled} = useCalendarConstraints({min, max, dateConstraints});
 
-  // Unified change handler that fires both onChange and changeAction
   const fireChange = useCallback(
     (newValue: ISODateString | undefined) => {
       if (isEffectivelyDisabled) {
