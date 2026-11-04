@@ -4,7 +4,8 @@
 
 /**
  * @file Item.tsx
- * @input Uses React, ReactNode, StyleXStyles, theme tokens, useClickableContainer
+ * @input Uses React, ReactNode, StyleXStyles, theme tokens, useClickableContainer,
+ *   the shared press overlays and the compositor press layer
  * @output Exports Item component, ItemProps type; publishes the shared inline inset.
  *   Only numbered composing rows keep their start/label/end slots in one flex
  *   group, through Item's private exact-marker scope; other marked rows keep
@@ -62,6 +63,7 @@ import {useDevWarning} from '../hooks/useDevWarning';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import type {ItemSwipeBridge} from './ItemSwipeLayer';
 
@@ -533,7 +535,6 @@ const styles = stylex.create({
   // zoomable (WCAG 1.4.4). The hover transition keeps its own clock beside
   // the transform's.
   swipeRoot: {
-    isolation: 'isolate',
     touchAction: 'pan-y pinch-zoom',
     transform: `translate3d(${SWIPE_TRAVEL}, 0, 0)`,
     transitionProperty: 'background-color, transform',
@@ -926,6 +927,10 @@ export function Item({
           align === 'first-line' && styles.alignFirstLine,
           isInteractive && styles.interactive,
           isInteractive && interactionOverlayStyles.backgroundColor,
+          // The touch press on a compositor layer (after the overlay, whose
+          // own touch paint it turns off): the release keeps fading while
+          // script runs.
+          isInteractive && rowPressLayerStyles.cell,
           isLinkRoot && styles.linkRoot,
           isHighlighted && styles.highlighted,
           isSelected && styles.selected,

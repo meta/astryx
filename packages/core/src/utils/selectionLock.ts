@@ -28,7 +28,11 @@
 //
 // A mouse never takes the lock, so its released behavior stays (AST-017).
 
-import {containsAlongFlatTree, parentAcrossShadow} from './flatTree';
+import {
+  containsAlongFlatTree,
+  deepActiveElement,
+  parentAcrossShadow,
+} from './flatTree';
 import {subscribeInput} from './inputStream';
 import {isIosWebKit} from './touchQueries';
 
@@ -614,15 +618,6 @@ function openShadowRootsOf(target: EventTarget | null): ShadowRoot[] {
     root = host.getRootNode();
   }
   return roots;
-}
-
-/** The focused element, inside open shadow roots too. */
-function deepActiveElement(doc: Document | null): Element | null {
-  let active = doc?.activeElement ?? null;
-  while (active?.shadowRoot?.activeElement != null) {
-    active = active.shadowRoot.activeElement;
-  }
-  return active;
 }
 
 /**

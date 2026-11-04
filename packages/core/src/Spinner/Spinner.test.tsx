@@ -10,6 +10,7 @@
  */
 
 import {describe, it, expect, vi, afterEach} from 'vitest';
+import {Profiler} from 'react';
 import {render, screen} from '@testing-library/react';
 import {Spinner} from './Spinner';
 import {InternationalizationProvider} from '../i18n';
@@ -407,15 +408,31 @@ describe('Spinner ring', () => {
     expect(declaredValue(rotor(), 'animation-iteration-count')).toBe(
       'infinite',
     );
-    // Its keyframes turn it once, by transform and nothing else. (jsdom's
-    // CSSOM lowercases the name in the rule but not in the at-rule.)
+    // Its keyframes turn it by whole turns, by transform and nothing else.
+    // (jsdom's CSSOM lowercases the name in the rule but not in the at-rule.)
     const keyframes = new RegExp(
       `@keyframes ${name}\\s*\\{([\\s\\S]*?\\})\\s*\\}`,
       'i',
     ).exec(css)?.[1];
     expect(keyframes).toMatch(/rotate\(0deg\)/);
-    expect(keyframes).toMatch(/rotate\(360deg\)/);
     expect(keyframes).not.toMatch(/stroke|width|height|top|left/);
+    // One iteration holds many turns, and its duration is that many periods,
+    // so each turn still takes one period. Chromium wakes the main thread at
+    // each iteration boundary while React listens for `animationiteration`.
+    const endDegrees = Math.max(
+      ...[...(keyframes ?? '').matchAll(/rotate\((\d+)deg\)/g)].map(m =>
+        Number(m[1]),
+      ),
+    );
+    const turns = endDegrees / 360;
+    expect(Number.isInteger(turns)).toBe(true);
+    expect(turns).toBeGreaterThanOrEqual(100);
+    const duration = declaredValue(rotor(), 'animation-duration') ?? '';
+    expect(duration).toMatch(
+      new RegExp(
+        `^calc\\(var\\(--_astryx-pre-tempo-duration-slow-min,.*\\) \\* ${turns}\\)$`,
+      ),
+    );
     // Its own compositing layer from the first frame.
     expect(declaredValue(rotor(), 'will-change')).toBe('transform');
     // Nothing else in the spinner animates: not the arc, not the track.
@@ -425,6 +442,31 @@ describe('Spinner ring', () => {
       expect(declaredValue(el, 'animation-name')).toBeNull();
     }
     expect(css).not.toMatch(/@keyframes[^{]*\{[^}]*stroke-dashoffset/);
+  });
+
+  it('renders once and never again while the ring turns', () => {
+    vi.useFakeTimers({
+      toFake: ['requestAnimationFrame', 'setTimeout', 'setInterval'],
+    });
+    let renders = 0;
+    const onRender = () => {
+      renders += 1;
+    };
+    try {
+      render(
+        <Profiler id="spinner" onRender={onRender}>
+          {Array.from({length: 20}, (_, i) => (
+            <Spinner key={i} data-testid={`spinner-${i}`} />
+          ))}
+        </Profiler>,
+      );
+      expect(renders).toBe(1);
+      // Ten seconds of frames and timers: the motion is CSS only.
+      vi.advanceTimersByTime(10_000);
+      expect(renders).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps the track out of the rotor', () => {
