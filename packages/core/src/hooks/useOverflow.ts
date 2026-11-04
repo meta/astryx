@@ -177,12 +177,34 @@ export function useOverflow(
   const [visibleCount, setVisibleCount] = useState(itemCount);
   const [rows, setRows] = useState(1);
   const [rowHeight, setRowHeight] = useState(0);
+  // The values last written to state. A measurement that matches them writes
+  // nothing, so a resize that changes nothing renders nothing.
+  const appliedRef = useRef({visibleCount: itemCount, rows: 1, rowHeight: 0});
   const containerElRef = useRef<HTMLElement | null>(null);
   const measureElRef = useRef<HTMLElement | null>(null);
   const observedElRef = useRef<HTMLElement | null>(null);
   const observedMeasureElRef = useRef<HTMLElement | null>(null);
   const unobserveContainerRef = useRef<(() => void) | null>(null);
   const unobserveMeasureRef = useRef<(() => void) | null>(null);
+
+  const apply = useCallback(
+    (nextVisible: number, nextRows: number, nextRowHeight: number) => {
+      const applied = appliedRef.current;
+      if (applied.visibleCount !== nextVisible) {
+        applied.visibleCount = nextVisible;
+        setVisibleCount(nextVisible);
+      }
+      if (applied.rows !== nextRows) {
+        applied.rows = nextRows;
+        setRows(nextRows);
+      }
+      if (applied.rowHeight !== nextRowHeight) {
+        applied.rowHeight = nextRowHeight;
+        setRowHeight(nextRowHeight);
+      }
+    },
+    [],
+  );
 
   const calculate = useCallback(() => {
     const container = containerElRef.current;
@@ -217,10 +239,7 @@ export function useOverflow(
       : 0;
 
     if (children.length === 0) {
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- overflow count is derived from measured DOM widths
-      setVisibleCount(0);
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- derived from measured DOM
-      setRows(0);
+      apply(0, 0, appliedRef.current.rowHeight);
       return;
     }
 
@@ -241,14 +260,7 @@ export function useOverflow(
       collapseFrom,
     });
 
-    // eslint-disable-next-line @eslint-react/set-state-in-effect -- overflow count is derived from measured DOM widths
-    setVisibleCount(nextVisible);
-    // eslint-disable-next-line @eslint-react/set-state-in-effect -- derived from measured DOM
-    setRows(prev => (prev === nextRows ? prev : nextRows));
-    // eslint-disable-next-line @eslint-react/set-state-in-effect -- derived from measured DOM
-    setRowHeight(prev =>
-      prev === measuredRowHeight ? prev : measuredRowHeight,
-    );
+    apply(nextVisible, nextRows, measuredRowHeight);
   }, [
     itemCount,
     gap,
@@ -257,6 +269,7 @@ export function useOverflow(
     maxRows,
     collapseFrom,
     observeParent,
+    apply,
   ]);
 
   const containerRef = useCallback(

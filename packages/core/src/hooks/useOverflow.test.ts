@@ -557,6 +557,29 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
     },
   );
 
+  it.each([0, 20])(
+    'renders nothing for a resize that changes no measured value (items %ipx tall)',
+    async itemHeight => {
+      let renders = 0;
+      const {result} = renderHook(() => {
+        renders++;
+        return useOverflow(3, {gap: 10, maxRows: 2});
+      });
+      const box = resizableBox(200);
+
+      act(() => {
+        result.current.measureRef(mockMeasure([50, 50, 50], 30, itemHeight));
+        result.current.containerRef(box as unknown as HTMLElement);
+      });
+      const settled = renders;
+
+      box.offsetWidth = 220;
+      await deliverBeforePaint(box);
+
+      expect(renders).toBe(settled);
+    },
+  );
+
   it('measures every list that one delivery reports, then renders once', async () => {
     let renders = 0;
     const {result} = renderHook(() => {

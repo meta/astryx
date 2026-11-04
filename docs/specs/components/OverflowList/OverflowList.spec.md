@@ -130,6 +130,10 @@ Consumer migration instructions belong in consumer docs and release notes.
 - **PR1 — Measurement.** OverflowList observes the measured box's size, renders
   every item in the hidden copy and the visible ones again in the list, and
   reports collapsed sets after measurement, before the frame paints.
+- Known effect: a resize that changes the folded set before paint makes
+  Chromium report "ResizeObserver loop completed with undelivered
+  notifications" once; no notification is lost, and an error monitor should
+  ignore this message.
 
 ## Accessibility contract
 
