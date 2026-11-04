@@ -1811,7 +1811,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           value={[]}
           onChange={() => {}}
           debounceMs={0}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       </StrictMode>,
     );
