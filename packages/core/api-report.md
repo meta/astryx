@@ -1047,7 +1047,7 @@ component DropdownMenu(props: DropdownMenuProps)
   prop onClick?: () => void
   prop onOpenChange?: (isOpen: boolean) => void
   prop placement?: LayerPlacement = 'below'
-  prop presentation?: DropdownMenuPresentation = 'popover'
+  prop presentation?: DropdownMenuPresentation
   prop renderTrigger?: (props: DropdownMenuTriggerProps) => ReactNode
   prop xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
@@ -1602,7 +1602,7 @@ component MoreMenu(props: MoreMenuProps)
   prop label?: string = 'More options'
   prop onOpenChange?: (isOpen: boolean) => void
   prop placement?: LayerPlacement = 'below'
-  prop presentation?: DropdownMenuPresentation = 'popover'
+  prop presentation?: DropdownMenuPresentation
   prop ref?: React.Ref<HTMLButtonElement>
   prop size?: ButtonSize = 'md'
   prop variant?: ButtonVariant = 'ghost'
