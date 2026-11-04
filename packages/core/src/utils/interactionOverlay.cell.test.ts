@@ -2,20 +2,18 @@
 
 /**
  * @file interactionOverlay.cell.test.ts
- * @input vitest, the UIKit constants table (motion/uikit/timing.ts), the press
+ * @input vitest, the press
  *   layer style (`rowPressLayerStyles.cell`, privateAttributes/press.stylex.ts) and the rows that compose
  *   it (Item, TreeList)
- * @output Holds the layer's build-time clock to the constants table, and
+ * @output Holds the layer's release to the theme's exit motion tokens, and
  *   asserts what a row ships for the touch press: the pressed token on a
  *   `::before` shown at once on the on arm, an opacity release on the fading
- *   arm on the cell clock, and none of the overlay's own main-thread release,
+ *   arm on the exit tokens, and none of the overlay's own main-thread release,
  *   all under a finger; a fine pointer's row as it was (no layer, no
  *   stacking context, the overlay's own paint); and that the layer and the
- *   overlay cap their release under reduced motion with the Reduce Motion
- *   constant, never a literal
+ *   overlay cap their release under reduced motion with DR2's bound
  * @position Unit test of the row press layer (privateAttributes/press.stylex.ts
- *   `rowPressLayerStyles.cell`, its clocks in utils/rowPressLayer.stylex.ts
- *   `cellPressConsts`); the real-engine proofs (compositor, busy main
+ *   `rowPressLayerStyles.cell`); the real-engine proofs (compositor, busy main
  *   thread, curve) are in
  *   List/__tests__/ListRowPress.interaction.browser.spec.ts
  */
@@ -27,13 +25,12 @@ import * as stylex from '@stylexjs/stylex';
 import {createElement} from 'react';
 import {render, screen} from '@testing-library/react';
 import {describe, expect, it} from 'vitest';
-import {timing} from '../motion/uikit/timing';
 import {Item} from '../Item';
 import {TreeList} from '../TreeList';
 import {durationToMs, rulesDeclaredFor} from '../__tests__/pressState';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {interactionOverlayStyles} from './interactionOverlay.stylex';
 import {PRESS_FADE_MS} from './pressGesture';
-import {cellPressConsts} from './rowPressLayer.stylex';
 
 const ON = '[data-astryx-press="on"]';
 const FADING = '[data-astryx-press="fading"]';
@@ -91,14 +88,15 @@ const values = (rules: string[], property: string) =>
     return match == null ? [] : [match[1].trim()];
   });
 
+/** A declared value without spaces, as StyleX may minify it. */
+const compact = (css: string) => css.replace(/\s+/g, '');
+
 describe('press layer clock', () => {
-  it('plays the strength release’s tempo clock and its Reduce Motion cap, so the layer and the strength land together (spec:AST-108 FR4, FR4a)', () => {
+  it("plays the strength release's clock, the exit duration with DR2's bound under Reduce Motion, so the layer and the strength land together (spec:AST-094 FR5)", () => {
     const clocksOf = (file: string) =>
-      (
-        readFileSync(resolve(__dirname, file), 'utf8').match(
-          /`(?:calc|min)\([^`]*--_astryx-motion-tempo[^`]*\)`/g,
-        ) ?? []
-      ).map(clock => clock.replace(/\$\{[^}]+\}/g, '${ms}'));
+      readFileSync(resolve(__dirname, file), 'utf8').match(
+        /(?:durationVars\['--duration-exit'\]|`min\(\$\{durationVars\['--duration-exit'\]\}, \$\{reducedMotionFadeConsts\.duration\}\)`);/g,
+      ) ?? [];
     const layer = clocksOf('../privateAttributes/press.stylex.ts');
     expect(layer.length).toBe(2);
     expect(new Set(layer)).toEqual(
@@ -106,18 +104,11 @@ describe('press layer clock', () => {
     );
   });
 
-  it('is the constants table’s press release, mirrored for the stylesheet', () => {
-    expect(cellPressConsts.cellReleaseMs).toBe(timing.press.highlightOutMs);
-    expect(cellPressConsts.cellReleaseEase).toBe(
-      `cubic-bezier(${timing.press.highlightOutCurve.join(', ')})`,
-    );
+  it('resolves, without a theme, to the clock the controller checks the release at', () => {
+    expect(durationToMs('var(--duration-exit)')).toBe(PRESS_FADE_MS);
   });
 
-  it('runs on the clock the controller checks the release at', () => {
-    expect(cellPressConsts.cellReleaseMs).toBe(PRESS_FADE_MS);
-  });
-
-  it("the shared overlay's release plays the same curve, the table's, from its own copy", () => {
+  it("the shared overlay's release plays the exit easing", () => {
     const element = document.createElement('button');
     element.className =
       stylex.props(interactionOverlayStyles.pressedAlpha).className ?? '';
@@ -126,11 +117,8 @@ describe('press layer clock', () => {
       const selector = selectorOf(rule);
       return selector.includes(FADING) && !selector.includes('::');
     });
-    // StyleX writes the curve minified: compare the control points.
-    const points = (css: string) =>
-      (css.match(/-?\d*\.?\d+/g) ?? []).map(Number);
-    expect(values(fading, 'animation-timing-function').map(points)).toEqual([
-      [...timing.press.highlightOutCurve],
+    expect(values(fading, 'animation-timing-function').map(compact)).toEqual([
+      'var(--ease-exit)',
     ]);
     element.remove();
   });
@@ -209,20 +197,19 @@ describe.each([
     expect(values(on, 'animation-name')).toEqual([]);
   });
 
-  it('releases with an opacity animation on the cell clock and curve', () => {
+  it('releases with an opacity animation on the exit tokens', () => {
     const row = mount();
     const fading = layerRules(row, FADING);
     expect(values(fading, 'animation-name')).toHaveLength(1);
-    // The clock, and its reduced-motion cap (DR2), both the table's value.
-    expect([
-      ...new Set(values(fading, 'animation-duration').map(durationToMs)),
-    ]).toEqual([timing.press.highlightOutMs]);
-    // StyleX writes the curve minified (`cubic-bezier(0,0,.2,1)`): compare
-    // the control points.
-    const points = (css: string) =>
-      (css.match(/-?\d*\.?\d+/g) ?? []).map(Number);
-    expect(values(fading, 'animation-timing-function').map(points)).toEqual([
-      [...timing.press.highlightOutCurve],
+    // The clock, and its reduced-motion cap (DR2).
+    expect(new Set(values(fading, 'animation-duration').map(compact))).toEqual(
+      new Set([
+        'var(--duration-exit)',
+        `min(var(--duration-exit),${reducedMotionFadeConsts.duration})`,
+      ]),
+    );
+    expect(values(fading, 'animation-timing-function').map(compact)).toEqual([
+      'var(--ease-exit)',
     ]);
     expect(values(fading, 'animation-fill-mode')).toEqual(['both']);
   });

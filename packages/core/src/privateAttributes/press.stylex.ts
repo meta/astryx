@@ -19,9 +19,9 @@
  */
 
 import * as stylex from '@stylexjs/stylex';
-import {colorVars} from '../theme/tokens.stylex';
+import {colorVars, durationVars, easeVars} from '../theme/tokens.stylex';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {pressVars} from '../utils/interactionOverlay.stylex';
-import {cellPressConsts} from '../utils/rowPressLayer.stylex';
 
 // The overlay's arm selectors (interactionOverlay.stylex.ts), restated here:
 // StyleX resolves a style's keys within its own file.
@@ -54,13 +54,12 @@ const pressRelease = stylex.keyframes({
 });
 
 /**
- * The row layer's clock as CSS. It is the strength release's clock, scaled
- * by the theme's `--_astryx-motion-tempo` up to 1.5, so the layer and the
- * strength land together.
+ * The row layer's clock as CSS: the strength release's clock, the theme's
+ * exit duration, so the layer and the strength land together.
  */
-const CELL_RELEASE = `calc(${cellPressConsts.cellReleaseMs}ms * min(var(--_astryx-motion-tempo, 1), 1.5))`;
-/** The same clock under Reduce Motion: a tempo may shorten it, never lengthen it. */
-const CELL_RELEASE_REDUCED = `min(${cellPressConsts.cellReleaseMs}ms, calc(${cellPressConsts.cellReleaseMs}ms * var(--_astryx-motion-tempo, 1)))`;
+const CELL_RELEASE = durationVars['--duration-exit'];
+/** The same clock under Reduce Motion, no longer than the Reduce Motion fade. */
+const CELL_RELEASE_REDUCED = `min(${durationVars['--duration-exit']}, ${reducedMotionFadeConsts.duration})`;
 const REDUCED_MOTION = '@media (prefers-reduced-motion: reduce)';
 
 /** Opacity 1 → 0: the row layer leaves; its fading arm runs it. */
@@ -69,8 +68,8 @@ const cellRelease = stylex.keyframes({
   to: {opacity: 0},
 });
 
-/** The release's curve: the table's gentle ease-out. */
-const RELEASE_EASE = cellPressConsts.cellReleaseEase;
+/** The release's curve: the theme's exit easing, as the strength's. */
+const RELEASE_EASE = easeVars['--ease-exit'];
 
 export const rowPressLayerStyles = stylex.create({
   /**

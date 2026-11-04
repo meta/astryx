@@ -924,6 +924,51 @@ export const AdaptivePresentation: Story = {
 };
 
 /**
+ * The sheet presentation keeps `endContent` at the field's inline end and
+ * renders its tokens through `renderToken`, as the inline field does. The end
+ * content's buttons and a token's own remove control act at once; a tap
+ * anywhere else on the field opens the sheet. The grid column sizes the field,
+ * so a test can narrow it.
+ */
+export const SheetPresentationEndContent: Story = {
+  render: () => {
+    const [value, setValue] = useState<SearchableItem[]>([
+      sheetTags[0],
+      sheetTags[1],
+      sheetTags[2],
+      sheetTags[3],
+    ]);
+    const [copies, setCopies] = useState(0);
+    return (
+      <div style={{display: 'grid', gridTemplateColumns: 'minmax(0, 400px)'}}>
+        <Tokenizer
+          label="Recipients"
+          searchSource={sheetTagSource}
+          value={value}
+          onChange={items => setValue(items)}
+          debounceMs={0}
+          placeholder="Add recipients"
+          presentation="bottom-sheet"
+          renderToken={(item, onRemove) => (
+            <Token label={item.label} onRemove={onRemove} />
+          )}
+          endContent={
+            <Button
+              label={`Cc (${copies})`}
+              variant="ghost"
+              size="sm"
+              onClick={() => setCopies(count => count + 1)}
+            />
+          }
+        />
+      </div>
+    );
+  },
+  name: 'Bottom sheet with end content and custom tokens',
+  parameters: {viewport: {defaultViewport: 'mobile2'}},
+};
+
+/**
  * Disabled and at-limit states of the sheet presentation: the disabled
  * trigger stays focusable and does not open; at `maxEntries` the sheet's
  * unchecked rows are inert while checked rows still toggle.

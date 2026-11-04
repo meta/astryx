@@ -94,7 +94,8 @@ concurrency:
 
 jobs:
   # Admit the whole run under CI's ceiling of about ninety concurrent jobs
-  # (spec:AST-030 FR16, DEC-16), in two slim jobs: `room` waits until the
+  # (spec:AST-030 FR16, DEC-16), in two jobs (slim on a pull request, standard
+  # on a dispatch): `room` waits until the
   # Storybook build has room and starts it, and `admission` waits for the rest
   # of the run unless it already fit. Every job here but build-storybook and
   # ci-full needs admission, directly or through the jobs it needs, so a
@@ -112,8 +113,10 @@ jobs:
     # whether the whole run fit on that look. A pull-request run finding ten
     # others already waiting, and no room, is turned away: CI is full.
     if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))
-    runs-on: ubuntu-slim
-    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 20 || 15 }}
+    # A dispatch (a main or release check) may wait longer than a slim job's
+    # fifteen-minute cap, so it waits on a standard runner (spec:AST-030 DEC-16).
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && 'ubuntu-latest' || 'ubuntu-slim' }}
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 130 || 15 }}
     permissions:
       actions: read
       contents: read
@@ -135,20 +138,22 @@ jobs:
         id: room
         uses: ./.ci-admission/.github/actions/ci-admission
         continue-on-error: true
-        timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 16 || 13 }}
+        timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 125 || 13 }}
         with:
           phase: room
           peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 16 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
-          max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 15 || 12 }}
-          max-looks: ${{ github.event_name == 'workflow_dispatch' && 8 || 2 }}
+          max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
+          max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
           label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 3}'
 
   admission:
     needs: [room]
     if: (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run')))
-    runs-on: ubuntu-slim
-    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 20 || 15 }}
+    # A dispatch (a main or release check) may wait longer than a slim job's
+    # fifteen-minute cap, so it waits on a standard runner (spec:AST-030 DEC-16).
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && 'ubuntu-latest' || 'ubuntu-slim' }}
+    timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 130 || 15 }}
     permissions:
       actions: read
       contents: read
@@ -172,7 +177,7 @@ jobs:
         id: rest
         uses: ./.ci-admission/.github/actions/ci-admission
         continue-on-error: true
-        timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 16 || 13 }}
+        timeout-minutes: ${{ github.event_name == 'workflow_dispatch' && 125 || 13 }}
         with:
           phase: rest
           fits: ${{ needs.room.outputs.fits }}
@@ -181,8 +186,8 @@ jobs:
           next: ${{ needs.room.outputs.next }}
           peak: ${{ github.event_name == 'workflow_dispatch' && 39 || 16 }}
           main: ${{ github.event_name == 'workflow_dispatch' }}
-          max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 15 || 12 }}
-          max-looks: ${{ github.event_name == 'workflow_dispatch' && 8 || 2 }}
+          max-wait-minutes: ${{ github.event_name == 'workflow_dispatch' && 120 || 12 }}
+          max-looks: ${{ github.event_name == 'workflow_dispatch' && 30 || 2 }}
           label-legs: '{"ci:run-visual": 6, "ci:run-rtl": 9, "ci:run-a11y": 3}'
 
       # A pull-request run that waited its longest while another started at
@@ -1054,7 +1059,9 @@ jobs:
     needs: [heavy-ci, native-swift-runner]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled())) }}
     runs-on: ${{ needs.native-swift-runner.outputs.applies == 'true' && 'macos-15' || 'ubuntu-slim' }}
-    timeout-minutes: 30
+    # The slim branch only reports that Swift is out of scope; a slim job
+    # stops at fifteen minutes.
+    timeout-minutes: ${{ needs.native-swift-runner.outputs.applies == 'true' && 30 || 15 }}
     permissions:
       contents: read
     steps:
