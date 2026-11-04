@@ -43,6 +43,8 @@ import {
   buildShadcnRegistry,
   generateShadcnRegistry,
   generateShadcnRegistryForTarget,
+  registrySkipNotices,
+  reportRegistrySkips,
 } from '../../apps/docsite/scripts/generate-shadcn-registry.mjs';
 import {createPublishedImportJudge} from '../../apps/docsite/scripts/published-exports.mjs';
 import {readImports} from '../../packages/cli/foundation/integrations/public-imports.mjs';
@@ -346,12 +348,22 @@ describe('buildShadcnRegistry', () => {
         'export default function TimerShowcase() { return <Timer />; }\n',
     });
 
-    const {items, counts} = buildShadcnRegistry(input);
+    const {items, counts, skippedItems} = buildShadcnRegistry(input);
 
     expect(items.map(item => item.name)).not.toContain(
       'showcase-timer-default',
     );
     expect(counts.skippedUnpublishedBlocks).toBe(1);
+    expect(skippedItems).toEqual([
+      {
+        kind: 'block',
+        name: 'TimerShowcase',
+        reason: 'subpath',
+        specifier: '@astryxdesign/core/Timer',
+        packageName: '@astryxdesign/core',
+        version: '0.5.2',
+      },
+    ]);
   });
 
   it('skips a block that lazy-loads or re-exports an unpublished subpath', () => {
@@ -407,6 +419,14 @@ describe('buildShadcnRegistry', () => {
 
       expect(result.total).toBe(3);
       expect(result.skippedUnpublishedBlocks).toBe(1);
+      expect(result.skippedItems).toEqual([
+        {
+          kind: 'block',
+          name: 'ButtonFuture',
+          reason: 'component',
+          names: ['FutureButton'],
+        },
+      ]);
       expect(
         existsSync(path.join(outDir, 'showcases', 'button', 'future.json')),
       ).toBe(false);
@@ -431,13 +451,18 @@ describe('buildShadcnRegistry', () => {
           "import {Button} from '@astryxdesign/core/Button';\n" +
           'export default function ButtonAnimated() { createAnimator(null); return <Button label="Save" />; }\n',
       });
-      // The published release exports Button but not createAnimator.
-      const publishedImports = statement =>
-        statement.source.startsWith('@astryxdesign/core')
+      // The published root and Button subpath export Button but not
+      // createAnimator; this fake cannot tell for other subpaths.
+      const publishedImports = statement => {
+        if (!statement.source.startsWith('@astryxdesign/core'))
+          return undefined;
+        return statement.source === '@astryxdesign/core' ||
+          statement.source === '@astryxdesign/core/Button'
           ? statement.names
               .map(binding => binding.imported)
               .filter(name => name !== 'Button')
-          : undefined;
+          : null;
+      };
 
       const latest = generateShadcnRegistryForTarget({
         target: 'latest',
@@ -454,9 +479,11 @@ describe('buildShadcnRegistry', () => {
 
       expect(latest.total).toBe(3);
       expect(latest.skippedUnpublishedBlocks).toBe(1);
-      expect(latest.unpublishedImports).toEqual([
+      expect(latest.skippedItems).toEqual([
         {
-          block: 'ButtonAnimated',
+          kind: 'block',
+          name: 'ButtonAnimated',
+          reason: 'export',
           specifier: '@astryxdesign/core',
           names: ['createAnimator'],
           packageName: '@astryxdesign/core',
@@ -469,7 +496,7 @@ describe('buildShadcnRegistry', () => {
         ),
       ).toBe(false);
       expect(canary.total).toBe(4);
-      expect(canary.unpublishedImports).toEqual([]);
+      expect(canary.skippedItems).toEqual([]);
       expect(
         existsSync(
           path.join(root, 'canary', 'showcases', 'button', 'animated.json'),
@@ -491,6 +518,16 @@ describe('buildShadcnRegistry', () => {
         path.join(dist, 'index.d.ts'),
         'export declare const Button: unknown;\n',
       );
+      // The page's Card subpath is declared and built.
+      mkdirSync(path.join(dist, 'Card'), {recursive: true});
+      writeFileSync(
+        path.join(dist, 'Card', 'index.js'),
+        'export const Card = 1;\n',
+      );
+      writeFileSync(
+        path.join(dist, 'Card', 'index.d.ts'),
+        'export declare const Card: unknown;\n',
+      );
       const input = fixture();
       input.blocks.push({
         ...input.blocks[0],
@@ -503,7 +540,14 @@ describe('buildShadcnRegistry', () => {
           'export default function ButtonCounter() { const [n] = useState(0); return <Button label={String(n)} />; }\n',
       });
       const publishedImports = createPublishedImportJudge(root, [
-        {...packages[1], packagePath: 'packages/core'},
+        {
+          ...packages[1],
+          packagePath: 'packages/core',
+          packageExports: {
+            ...packages[1].packageExports,
+            './Card': './dist/Card/index.js',
+          },
+        },
       ]);
 
       const result = generateShadcnRegistryForTarget({
@@ -515,11 +559,12 @@ describe('buildShadcnRegistry', () => {
 
       expect(result.total).toBe(4);
       expect(result.skippedUnpublishedBlocks).toBe(0);
-      expect(result.unpublishedImports).toEqual([]);
+      expect(result.skippedItems).toEqual([]);
       // Only Astryx's own unread subpath is named; `react` stays silent.
       expect(result.unreadImports).toEqual([
         {
-          block: 'ButtonShowcase',
+          kind: 'block',
+          name: 'ButtonShowcase',
           specifier: '@astryxdesign/core/Button',
           packageName: '@astryxdesign/core',
           version: '0.5.2',
@@ -528,6 +573,154 @@ describe('buildShadcnRegistry', () => {
     } finally {
       rmSync(root, {recursive: true, force: true});
     }
+  });
+
+  it('omits a production page that imports a name the published subpath lacks, and keeps it in preview', () => {
+    const root = mkdtempSync(
+      path.join(tmpdir(), 'astryx-shadcn-unpublished-page-'),
+    );
+    try {
+      const input = fixture();
+      input.templates.push({
+        ...input.templates[0],
+        slug: 'animated',
+        name: 'Animated',
+        source:
+          "import {createAnimator} from '@astryxdesign/core';\n" +
+          "import {Card} from '@astryxdesign/core/Card';\n" +
+          'export default function Page() { createAnimator(null); return <Card />; }\n',
+      });
+      // The published release exports Button and Card, not createAnimator.
+      const publishedImports = statement =>
+        statement.source.startsWith('@astryxdesign/core')
+          ? statement.names
+              .map(binding => binding.imported)
+              .filter(name => name !== 'Button' && name !== 'Card')
+          : undefined;
+      // Both pages import the Card subpath, which this release declares.
+      const packages = input.packages.map(pkg =>
+        pkg.name === '@astryxdesign/core'
+          ? {
+              ...pkg,
+              packageExports: {
+                ...pkg.packageExports,
+                './Card': './dist/Card/index.js',
+              },
+            }
+          : pkg,
+      );
+
+      const latest = generateShadcnRegistryForTarget({
+        target: 'latest',
+        outDir: path.join(root, 'latest'),
+        publishedImports,
+        ...input,
+        packages,
+      });
+      const canary = generateShadcnRegistryForTarget({
+        target: 'canary',
+        outDir: path.join(root, 'canary'),
+        publishedImports,
+        ...input,
+        packages,
+      });
+
+      expect(latest.pages).toBe(1);
+      expect(latest.skippedUnpublishedPages).toBe(1);
+      expect(latest.skippedItems).toEqual([
+        {
+          kind: 'page',
+          name: 'animated',
+          reason: 'export',
+          specifier: '@astryxdesign/core',
+          names: ['createAnimator'],
+          packageName: '@astryxdesign/core',
+          version: '0.5.2',
+        },
+      ]);
+      expect(canary.pages).toBe(2);
+      expect(canary.skippedItems).toEqual([]);
+    } finally {
+      rmSync(root, {recursive: true, force: true});
+    }
+  });
+
+  it('reports every item the registry leaves out or keeps unchecked as lines, annotations and a job summary', () => {
+    const release = {packageName: '@astryxdesign/core', version: '0.7.6'};
+    const notices = registrySkipNotices({
+      skippedItems: [
+        {
+          kind: 'block',
+          name: 'AnimatorPlayingCardsVanilla',
+          reason: 'export',
+          specifier: '@astryxdesign/core',
+          names: ['createAnimator'],
+          ...release,
+        },
+        {
+          kind: 'block',
+          name: 'ButtonFuture',
+          reason: 'component',
+          names: ['FutureButton'],
+        },
+        {
+          kind: 'block',
+          name: 'TimerShowcase',
+          reason: 'subpath',
+          specifier: '@astryxdesign/core/Timer',
+          ...release,
+        },
+        {
+          kind: 'page',
+          name: 'chart',
+          reason: 'package',
+          packageName: '@astryxdesign/charts',
+        },
+      ],
+      unreadImports: [
+        {
+          kind: 'page',
+          name: 'dashboard',
+          specifier: '@astryxdesign/core/Card',
+          ...release,
+        },
+      ],
+    });
+    // A missing name and an unread subpath come first: the run page shows
+    // only the first ten annotations.
+    expect(notices).toEqual([
+      'not run until a release has it: block AnimatorPlayingCardsVanilla imports createAnimator from @astryxdesign/core, which @astryxdesign/core 0.7.6 does not export',
+      'could not read what @astryxdesign/core/Card exports in @astryxdesign/core 0.7.6; kept page dashboard',
+      'not run until a release has it: block TimerShowcase imports @astryxdesign/core/Timer, a subpath @astryxdesign/core 0.7.6 does not export',
+      'not run until a release has it: page chart needs @astryxdesign/charts, which has no published release',
+      'not run until a release has it: block ButtonFuture uses FutureButton, which the published components do not include',
+    ]);
+
+    const local = [];
+    reportRegistrySkips(notices, {env: {}, log: line => local.push(line)});
+    expect(local).toEqual(
+      notices.map(notice => `  ShadCN registry: ${notice}`),
+    );
+
+    const logged = [];
+    const summary = [];
+    reportRegistrySkips(notices, {
+      env: {GITHUB_ACTIONS: 'true', GITHUB_STEP_SUMMARY: '/summary.md'},
+      log: line => logged.push(line),
+      appendFile: (file, text) => summary.push([file, text]),
+    });
+    expect(logged.filter(line => line.startsWith('::notice'))).toEqual([
+      '::notice title=ShadCN registry::5 not run or unchecked; the job summary lists them all',
+      ...notices.map(notice => `::notice title=ShadCN registry::${notice}`),
+    ]);
+    expect(summary).toEqual([
+      [
+        '/summary.md',
+        '### ShadCN registry: 5 not run or unchecked\n\n' +
+          notices.map(notice => `- ${notice}`).join('\n') +
+          '\n',
+      ],
+    ]);
   });
 
   it('judges an import against a published subpath with the CLI reader, re-exports included', () => {

@@ -182,6 +182,7 @@ describe('where runs wait', () => {
       guarded.push(id);
     }
     expect(guarded.sort()).toEqual([
+      'pr-component-a11y-contracts',
       'pr-interaction',
       'pr-interaction-webkit',
       'pr-touched-components',

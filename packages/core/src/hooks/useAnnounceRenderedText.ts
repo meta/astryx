@@ -135,6 +135,7 @@ export function useAnnounceRenderedText(
   );
   const isFirstRunRef = useRef(true);
 
+  // Syncs the live region with the rendered text.
   // No dependency array: the text lives in the DOM, and a caller can change it
   // without a prop that this hook sees. One text read per render is cheap, and
   // the dedupe below makes later renders no-ops.

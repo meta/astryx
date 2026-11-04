@@ -14,10 +14,7 @@
 import type {OperatorValue, FilterValue, EnumItem} from './types';
 import type {Locale, TranslatorFn} from '../i18n';
 import {truncateCharacters} from '../utils/characters';
-import {
-  formatDateAbsoluteCompact,
-  formatSharedNumber,
-} from './formatFilterValue';
+import {formatDateAbsolute, formatSharedNumber} from './formatFilterValue';
 import {registerEnglishFallback} from '../i18n/englishFallback';
 import english from '../i18n/generated-english/PowerSearch/formatTokenValue.generated';
 
@@ -119,6 +116,7 @@ export function formatTokenValueText(
   locale: Locale,
   t?: TranslatorFn,
   formatList?: ListFormatFn,
+  timezoneID?: string,
 ): string | null {
   switch (filterValue.type) {
     case 'empty':
@@ -176,8 +174,15 @@ export function formatTokenValueText(
       return filterValue.value;
 
     case 'date_absolute':
+      // The token reads a value in the zone its editor uses.
       return truncateString(
-        formatDateAbsoluteCompact(filterValue.unixSeconds, locale),
+        formatDateAbsolute(
+          filterValue.unixSeconds,
+          locale,
+          timezoneID,
+          operatorValue.type !== 'date_absolute' ||
+            operatorValue.isDateOnly !== false,
+        ),
         maxLength,
       );
 

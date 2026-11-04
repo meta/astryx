@@ -29,7 +29,7 @@
  * - /packages/core/src/Timestamp/Timestamp.test.tsx
  */
 
-import {SHARED_DATE_FORMAT_OPTIONS, getTimeZoneParts} from '../utils/plainDate';
+import {SHARED_DATE_FORMAT_OPTIONS, getWallClock} from '../utils/plainDate';
 import type {Locale} from '../i18n/types';
 import type {TimestampFormat} from './Timestamp';
 
@@ -123,38 +123,6 @@ const DATE_TIME_OPTIONS: Intl.DateTimeFormatOptions = {
 
 function pad(n: number): string {
   return String(n).padStart(2, '0');
-}
-
-/** The fields a `system_*` string is assembled from. */
-interface WallClock {
-  year: number;
-  month: number;
-  day: number;
-  hour: number;
-  minute: number;
-  second: number;
-}
-
-/**
- * Wall-clock fields for an instant: in the named zone, or — with no zone —
- * the viewer's own, read straight off the `Date`. The zone-less branch
- * deliberately stays on plain getters so the default rendering never gains a
- * dependency on `Intl` zone data it did not have before.
- *
- * The explicit return type is load-bearing: it is what forces the two branches
- * to keep producing the same shape.
- */
-function getWallClock(date: Date, timeZone: string | undefined): WallClock {
-  return timeZone === undefined
-    ? {
-        year: date.getFullYear(),
-        month: date.getMonth() + 1,
-        day: date.getDate(),
-        hour: date.getHours(),
-        minute: date.getMinutes(),
-        second: date.getSeconds(),
-      }
-    : getTimeZoneParts(date.getTime(), timeZone);
 }
 
 /**

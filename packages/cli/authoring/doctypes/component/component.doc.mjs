@@ -59,6 +59,12 @@ export const doc = {
         'Integration components only: the exact `name` of the Core ComponentDoc this component takes over for unqualified lookup, so every app that loads the integration gets it from component detail, component lists, search, `swizzle <Name>`, and issue routing; `swizzle --list` keeps listing Core names. The Core original stays reachable with `--package @astryxdesign/core`. It takes effect only when the package\'s peer range starts at the release that applies it, `"@astryxdesign/cli": ">=0.6.7"` or later; with a lower range nothing changes and `doctor integration components` warns ({@link generic:replace-a-core-component}). Set it only to intentionally own a Core identity; give an alternative or variant its own name instead.',
     },
     {
+      name: 'deprecated',
+      type: '{replacement: string; description: string}',
+      description:
+        "Marks a deprecated component: it keeps working and stays documented, labeled with what replaces it. `replacement` is the `name` of the documented component to use instead; `description` is the modernization route in a sentence or two. The docsite shows a Deprecated badge in the component's page header and index tile, labels its search result, and adds a notice that links the replacement; `astryx search` results and `astryx build` kit entries carry the field. Omit it for a component that is not deprecated.",
+    },
+    {
       name: 'keywords',
       type: 'string[]',
       description:

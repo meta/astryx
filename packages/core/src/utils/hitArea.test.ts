@@ -264,6 +264,33 @@ describe('watchHitArea', () => {
     stop();
   });
 
+  it('measures a control in an opening layer by its layout box, so its insets hold once the layer settles', () => {
+    // The layer opens from half size about the page origin, so every rect on
+    // screen is half its layout box during the first pass.
+    const half = ({left, top, right, bottom}: HitRect) => ({
+      left: left / 2,
+      top: top / 2,
+      right: right / 2,
+      bottom: bottom / 2,
+    });
+    const control = byId('switch');
+    Object.assign(control.style, {
+      width: '24px',
+      height: '24px',
+      boxSizing: 'border-box',
+    });
+    place(control, half(rect(100, 100, 24, 24)));
+    place(byId('link'), half(rect(132, 100, 60, 24)));
+    place(byId('other'), half(rect(400, 400, 24, 24)));
+    const heard: HitInsets[] = [];
+    const stop = watchHitArea(control, insets => heard.push(insets));
+    show(control);
+    flush();
+    // The same insets as the page at full size gives.
+    expect(heard).toEqual([{top: 10, right: 4, bottom: 10, left: 10}]);
+    stop();
+  });
+
   it('measures nothing off screen', () => {
     const control = byId('switch');
     place(control, rect(100, 100, 24, 24));

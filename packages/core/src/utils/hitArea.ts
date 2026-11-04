@@ -24,6 +24,9 @@
 // live control measures: only under a coarse primary pointer (AST-094), only on
 // screen, and in one read pass per frame within a 4 ms budget. Until the first
 // pass the insets are 0, so first paint never overlaps anything.
+// The insets are lengths in the control's own box, so a pass measures in its
+// layout px. A layer that opens from a smaller scale then keeps the insets of
+// the size it settles at.
 
 import {observeContent} from './sharedMutationObserver';
 
@@ -330,6 +333,77 @@ function plainRect(element: Element): HitRect {
   return {left, top, right, bottom};
 }
 
+/** A box that the transforms around it leave at its layout size. */
+const UNSCALED = {x: 1, y: 1} as const;
+
+/** One axis of a box's scale on screen: its client size over its layout size. */
+function axisScale(onScreen: number, layout: number): number {
+  if (!(layout > 0) || !(onScreen > 0)) {
+    return 1;
+  }
+  const scale = onScreen / layout;
+  // Within rounding of 1 the box is at its layout size: no change to the rects.
+  return Math.abs(scale - 1) < 1e-3 ? 1 : scale;
+}
+
+/**
+ * How far the transforms around `element` scale its box on screen, per axis.
+ * A layer that opens from a smaller scale scales every rect inside it, while
+ * the layout box keeps the size the layer settles at. Only a scale is
+ * expected: a rotated or skewed box would read as a larger scale.
+ */
+function screenScale(
+  element: Element,
+  onScreen: HitRect,
+): {x: number; y: number} {
+  const style = element.ownerDocument.defaultView?.getComputedStyle(element);
+  if (style == null || !style.width.endsWith('px')) {
+    return UNSCALED;
+  }
+  const px = (value: string) => Number.parseFloat(value) || 0;
+  const isContentBox = style.boxSizing !== 'border-box';
+  const width =
+    px(style.width) +
+    (isContentBox
+      ? px(style.paddingLeft) +
+        px(style.paddingRight) +
+        px(style.borderLeftWidth) +
+        px(style.borderRightWidth)
+      : 0);
+  const height =
+    px(style.height) +
+    (isContentBox
+      ? px(style.paddingTop) +
+        px(style.paddingBottom) +
+        px(style.borderTopWidth) +
+        px(style.borderBottomWidth)
+      : 0);
+  return {
+    x: axisScale(onScreen.right - onScreen.left, width),
+    y: axisScale(onScreen.bottom - onScreen.top, height),
+  };
+}
+
+/**
+ * `rect` in the layout px of the box at `origin`: its offset from `origin`,
+ * divided by that box's scale on screen.
+ */
+function inLayout(
+  rect: HitRect,
+  origin: HitRect,
+  scale: {x: number; y: number},
+): HitRect {
+  if (scale.x === 1 && scale.y === 1) {
+    return rect;
+  }
+  return {
+    left: origin.left + (rect.left - origin.left) / scale.x,
+    top: origin.top + (rect.top - origin.top) / scale.y,
+    right: origin.left + (rect.right - origin.left) / scale.x,
+    bottom: origin.top + (rect.bottom - origin.top) / scale.y,
+  };
+}
+
 interface Candidate {
   readonly element: Element;
   readonly rect: HitRect;
@@ -373,14 +447,15 @@ function measureOne(
   candidates: ReadonlyArray<Candidate>,
 ): {target: HitRect; insets: HitInsets; neighbours: HitRect[]} {
   const target = plainRect(watch.element);
+  const scale = screenScale(watch.element, target);
   // Two targets each growing up to half the minimum reach each other from a
   // minimum apart.
   const reach = Math.max(0, watch.minSize);
   const band = grown(target, {
-    top: reach,
-    right: reach,
-    bottom: reach,
-    left: reach,
+    top: reach * scale.y,
+    right: reach * scale.x,
+    bottom: reach * scale.y,
+    left: reach * scale.x,
   });
   const neighbours = candidates
     .filter(
@@ -393,7 +468,16 @@ function measureOne(
     .map(({rect}) => rect);
   return {
     target,
-    insets: clampedHitInsets(target, neighbours, watch.minSize),
+    // The insets are in the control's layout px. The returned rects stay in
+    // screen px for a touch's distance checks. A neighbour maps by the
+    // control's scale, as if it is in the same layer. A neighbour outside that
+    // layer then reads farther away. A touch compares screen distances, so it
+    // still counts that neighbour.
+    insets: clampedHitInsets(
+      inLayout(target, target, scale),
+      neighbours.map(rect => inLayout(rect, target, scale)),
+      watch.minSize,
+    ),
     neighbours,
   };
 }
