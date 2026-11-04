@@ -352,6 +352,54 @@ describe('API changes', () => {
       );
     });
 
+    // Small hand-written reports: one component with two props.
+    const tiny = ({
+      item = 'component Chip',
+      size = "'md'",
+      tone = "'neutral'",
+      chip = true,
+    } = {}) =>
+      '## `.`\n\n### Components\n\n```text\n' +
+      (chip
+        ? `${item}\n  prop size?: ChipSize = ${size}\n  prop tone?: ChipTone = ${tone}\n`
+        : '') +
+      '```\n';
+
+    it('warns for a prop change to a component the committed report lacks entirely', () => {
+      const [change] = computeChanges([
+        {
+          pkg: '@astryxdesign/demo',
+          base: tiny(),
+          head: tiny({size: "'sm'"}),
+          committed: tiny({chip: false}),
+          baseSource: 'build',
+        },
+      ]);
+      expect(change.rows.map(r => r.member)).toEqual(['size']);
+      expect(change.staleOwnRows).toBe(1);
+    });
+
+    it('does not count a changed item line the report already shows, when another member is behind', () => {
+      const head = tiny({item: 'component Chip<T>'});
+      const [change] = computeChanges([
+        {
+          pkg: '@astryxdesign/demo',
+          base: tiny(),
+          head,
+          committed: tiny({item: 'component Chip<T>', tone: "'accent'"}),
+          baseSource: 'build',
+        },
+      ]);
+      expect(change.rows.map(r => [r.item, r.member])).toEqual([
+        ['component Chip', null],
+      ]);
+      expect(change).toMatchObject({
+        stale: true,
+        staleRows: 1,
+        staleOwnRows: 0,
+      });
+    });
+
     it('does not warn for a report that was stale before the pull request', () => {
       expect(
         warn({

@@ -78,8 +78,12 @@ export function parseReport(text) {
       });
     }
   }
+  for (const [key, row] of rows) ROW_KEY.set(row, key);
   return rows;
 }
+
+/** Each parsed row's key in its report, for matching rows across two diffs. */
+const ROW_KEY = new WeakMap();
 
 function itemName(line) {
   if (/^[\w$]+ \(/.test(line)) return line.split(' ')[0]; // `Name (./entry)` in an also-exported list
@@ -118,12 +122,22 @@ export function diffReports(base, head) {
   const added = [];
   const changed = [];
   const removed = [];
+  // Every differing key before folding, so a caller can match single members.
+  const keys = new Set();
   for (const [k, row] of b) {
     if (!a.has(k)) added.push(row);
-    else if (a.get(k).line !== row.line)
-      changed.push({...row, before: a.get(k).line});
+    else if (a.get(k).line !== row.line) {
+      const change = {...row, before: a.get(k).line};
+      ROW_KEY.set(change, k);
+      changed.push(change);
+    } else continue;
+    keys.add(k);
   }
-  for (const [k, row] of a) if (!b.has(k)) removed.push(row);
+  for (const [k, row] of a)
+    if (!b.has(k)) {
+      removed.push(row);
+      keys.add(k);
+    }
   // A wholly added or removed item reports once, not once per member.
   const fold = rows => {
     const items = new Set(
@@ -135,7 +149,7 @@ export function diffReports(base, head) {
       r => !r.member || !items.has(`${r.entry}\0${r.section}\0${r.item}`),
     );
   };
-  return {added: fold(added), changed, removed: fold(removed)};
+  return {added: fold(added), changed, removed: fold(removed), keys};
 }
 
 /**
@@ -202,16 +216,16 @@ const rowsOf = ({added, changed, removed}) => [
  */
 function staleOwnRowCount({base, head, committed, baseSource, stale}) {
   if (!stale || base == null || baseSource === 'committed') return 0;
-  const behind = rowsOf(diffReports(committed, head));
-  const item = r => `${r.entry}\0${r.section}\0${r.item}`;
-  const behindRows = new Set(behind.map(r => `${item(r)}\0${r.member ?? ''}`));
-  const behindItems = new Set(behind.map(item));
-  // A whole-item row stays behind when any part of that item is behind.
-  return rowsOf(diffReports(base, head)).filter(r =>
-    r.member
-      ? behindRows.has(`${item(r)}\0${r.member}`)
-      : behindItems.has(item(r)),
-  ).length;
+  const behind = diffReports(committed, head).keys;
+  const own = diffReports(base, head);
+  const whole = new Set([...own.added, ...own.removed].filter(r => !r.member));
+  // A member or a changed item line matches by its own key; a wholly added
+  // or removed item matches when any of its keys is behind.
+  return rowsOf(own).filter(r => {
+    const key = ROW_KEY.get(r);
+    if (behind.has(key)) return true;
+    return whole.has(r) && [...behind].some(k => k.startsWith(`${key}\0`));
+  }).length;
 }
 
 /**
