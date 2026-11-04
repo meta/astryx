@@ -27,11 +27,16 @@ function mockMeasure(
   return {children} as unknown as HTMLElement;
 }
 
+// The callback of the most recently created observer. The shared observer
+// outlives a test while any element stays observed, so a delivery goes to it.
+let latestObserverCallback: ResizeObserverCallback | null = null;
+
 // Stubs ResizeObserver — fires callback immediately on observe, like the real one
 class FakeResizeObserver {
   callback: ResizeObserverCallback;
   constructor(cb: ResizeObserverCallback) {
     this.callback = cb;
+    latestObserverCallback = cb;
   }
   observe = vi.fn(() => {
     this.callback([], this);
@@ -500,5 +505,81 @@ describe('useOverflow with behavior=observeParent', () => {
 
     expect(result.current.visibleCount).toBe(2);
     expect(result.current.hasOverflow).toBe(true);
+  });
+});
+
+describe('useOverflow when the observer reports a resize (component:OverflowList PR1)', () => {
+  // A box whose width a test changes, as a resize would.
+  function resizableBox(width: number): {offsetWidth: number} & Element {
+    return {offsetWidth: width} as unknown as {offsetWidth: number} & Element;
+  }
+
+  // Reports resizes the way the browser does: after layout, outside act(). A
+  // microtask still runs before the frame paints; a render scheduled as a
+  // task runs after it. So the test checks state once microtasks have run.
+  async function deliverBeforePaint(...targets: Element[]): Promise<void> {
+    const actGlobal = globalThis as {IS_REACT_ACT_ENVIRONMENT?: boolean};
+    const wasActEnvironment = actGlobal.IS_REACT_ACT_ENVIRONMENT;
+    actGlobal.IS_REACT_ACT_ENVIRONMENT = false;
+    try {
+      for (const target of targets) {
+        latestObserverCallback?.(
+          [{target} as unknown as ResizeObserverEntry],
+          {} as ResizeObserver,
+        );
+      }
+      await Promise.resolve();
+      await Promise.resolve();
+    } finally {
+      actGlobal.IS_REACT_ACT_ENVIRONMENT = wasActEnvironment;
+    }
+  }
+
+  it.each([
+    ['shrinks', 200, 100, 3, 1],
+    ['grows', 100, 200, 1, 3],
+  ])(
+    'renders the new visible count before the frame paints when the box %s',
+    async (_label, fromWidth, toWidth, before, after) => {
+      const {result} = renderHook(() => useOverflow(3, {gap: 10}));
+      const box = resizableBox(fromWidth);
+
+      act(() => {
+        result.current.measureRef(mockMeasure([50, 50, 50], 30));
+        result.current.containerRef(box as unknown as HTMLElement);
+      });
+      expect(result.current.visibleCount).toBe(before);
+
+      box.offsetWidth = toWidth;
+      await deliverBeforePaint(box);
+
+      expect(result.current.visibleCount).toBe(after);
+    },
+  );
+
+  it('measures every list that one delivery reports, then renders once', async () => {
+    let renders = 0;
+    const {result} = renderHook(() => {
+      renders++;
+      return [useOverflow(3, {gap: 10}), useOverflow(3, {gap: 10})] as const;
+    });
+    const first = resizableBox(200);
+    const second = resizableBox(200);
+
+    act(() => {
+      result.current[0].measureRef(mockMeasure([50, 50, 50], 30));
+      result.current[0].containerRef(first as unknown as HTMLElement);
+      result.current[1].measureRef(mockMeasure([50, 50, 50], 30));
+      result.current[1].containerRef(second as unknown as HTMLElement);
+    });
+    const settled = renders;
+
+    first.offsetWidth = 100;
+    second.offsetWidth = 100;
+    await deliverBeforePaint(first, second);
+
+    expect(result.current[0].visibleCount).toBe(1);
+    expect(result.current[1].visibleCount).toBe(1);
+    expect(renders).toBe(settled + 1);
   });
 });

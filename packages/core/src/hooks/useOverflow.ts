@@ -4,7 +4,8 @@
 
 /**
  * @file useOverflow.ts
- * @input Uses React useState, useCallback, useRef; useIsomorphicLayoutEffect
+ * @input Uses React useState, useCallback, useRef; react-dom flushSync;
+ *   useIsomorphicLayoutEffect
  * @output Exports useOverflow hook for measuring and managing horizontal overflow
  * @position Core hook; used by OverflowList and consumers for overflow patterns.
  *   Hidden copies of the children are measured, so nothing flickers. The
@@ -16,6 +17,7 @@
  */
 
 import {useState, useCallback, useRef} from 'react';
+import {flushSync} from 'react-dom';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {computeOverflow} from './computeOverflow';
@@ -83,6 +85,52 @@ export interface UseOverflowReturn {
   rows: number;
   /** Measured max item height in pixels; used to size the multi-row container */
   rowHeight: number;
+}
+
+// Measurements that the resize observer reported in the current frame.
+const pendingMeasures = new Set<() => void>();
+
+/**
+ * Measures again for a resize the observer reported.
+ *
+ * The observer reports after layout and before paint. A state update made
+ * there renders in a later task, after the frame paints, so one frame shows
+ * the old visible set at the new width. A microtask still runs before paint:
+ * it measures every list that this delivery reported, then applies all the
+ * results in one synchronous render.
+ */
+function measureBeforePaint(measure: () => void): void {
+  if (pendingMeasures.size === 0) {
+    queueMicrotask(() => {
+      const measures = [...pendingMeasures];
+      pendingMeasures.clear();
+      // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the new visible set must render before the frame that reported the resize paints
+      flushSync(() => {
+        for (const run of measures) {
+          run();
+        }
+      });
+    });
+  }
+  pendingMeasures.add(measure);
+}
+
+/**
+ * Observes `element` and measures again on each reported resize. The
+ * registration measurement runs at once: it happens while React commits the
+ * ref, which is before paint already.
+ */
+function observeForOverflow(element: Element, measure: () => void): () => void {
+  let isRegistering = true;
+  const unobserve = observeResize(element, () => {
+    if (isRegistering) {
+      measure();
+    } else {
+      measureBeforePaint(measure);
+    }
+  });
+  isRegistering = false;
+  return unobserve;
 }
 
 /**
@@ -223,9 +271,7 @@ export function useOverflow(
       if (el) {
         const target =
           observeParent && el.parentElement ? el.parentElement : el;
-        unobserveContainerRef.current = observeResize(target, () => {
-          calculate();
-        });
+        unobserveContainerRef.current = observeForOverflow(target, calculate);
         observedElRef.current = target;
       }
     },
@@ -243,9 +289,7 @@ export function useOverflow(
         return;
       }
 
-      unobserveMeasureRef.current = observeResize(el, () => {
-        calculate();
-      });
+      unobserveMeasureRef.current = observeForOverflow(el, calculate);
       observedMeasureElRef.current = el;
     },
     [calculate],
