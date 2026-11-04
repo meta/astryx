@@ -53,6 +53,7 @@ import {iconBoxSizeStyles, type IconSize} from '../Icon/IconSize.stylex';
 import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {useButtonGroup} from '../ButtonGroup/ButtonGroupContext';
+import {PressGroupContext} from '../hooks/pressGroupContext';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
 import {InputGroupInternalContext} from '../InputGroup/InputGroupInternalContext';
 import {
@@ -76,6 +77,12 @@ import english from '../i18n/generated-english/Button/Button.generated';
 import {isRenderable} from '../utils/isRenderable';
 
 registerEnglishFallback(english);
+
+/**
+ * Written by the press controller or a group's tracker while a press is
+ * believed. Typed `string`, so StyleX reads it as a computed key.
+ */
+const PRESSED_ON: string = '[data-astryx-press="on"]';
 
 /**
  * Base button styles
@@ -138,7 +145,19 @@ const styles = stylex.create({
         default: 'scale(0.98)',
         '@media (pointer: coarse)': 'scale(1)',
       },
-      '[data-astryx-press="on"]': 'scale(0.98)',
+      [PRESSED_ON]: 'scale(0.98)',
+    },
+  },
+  // A tracked action's own `:active` image paints nothing: the tracker paints
+  // the action under the pointer, which need not be the one pressed first.
+  trackedOverlay: {
+    backgroundSize: {default: null, [`:active:not(${PRESSED_ON})`]: '0 0'},
+  },
+  // A tracked action's press is painted by its group's tracker alone.
+  pressableTracked: {
+    transform: {
+      default: 'scale(1)',
+      [PRESSED_ON]: 'scale(0.98)',
     },
   },
   inactive: {
@@ -147,7 +166,7 @@ const styles = stylex.create({
     transform: {
       default: 'none',
       ':active': 'none',
-      '[data-astryx-press="on"]': 'none',
+      [PRESSED_ON]: 'none',
     },
   },
   disabled: {
@@ -160,7 +179,7 @@ const styles = stylex.create({
     backgroundImage: {
       default: 'none',
       ':active': 'none',
-      '[data-astryx-press="on"]': 'none',
+      [PRESSED_ON]: 'none',
     },
   },
   iconOnly: {
@@ -632,6 +651,7 @@ export function Button({
   const t = useComponentTranslator();
   const size = useSize(sizeProp, 'md');
   const buttonGroup = useButtonGroup();
+  const isGroupTracked = use(PressGroupContext);
   const inputGroup = useInputGroup();
 
   const [isPending, startTransition] = useTransition();
@@ -760,11 +780,13 @@ export function Button({
     sizeStyles[size],
     isIconOnly && styles.iconOnly,
     interactionOverlayStyles.backgroundImage,
+    isGroupTracked && styles.trackedOverlay,
     buttonDisabled && styles.inactive,
     isTrueDisabled && styles.disabled,
     useAriaDisabled && styles.ariaDisabled,
     renderAsLink && styles.link,
-    !buttonGroup && styles.pressable,
+    !buttonGroup &&
+      (isGroupTracked ? styles.pressableTracked : styles.pressable),
     buttonGroup &&
       (buttonGroup.orientation === 'horizontal'
         ? groupStyles.horizontal

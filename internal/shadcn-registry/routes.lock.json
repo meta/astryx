@@ -618,16 +618,6 @@
       "aliases": []
     },
     {
-      "name": "component-lab-mobile-power-search",
-      "path": "components/lab/mobile-power-search",
-      "aliases": []
-    },
-    {
-      "name": "component-lab-mobile-tokenizer",
-      "path": "components/lab/mobile-tokenizer",
-      "aliases": []
-    },
-    {
       "name": "component-lab-radial-chart",
       "path": "components/lab/radial-chart",
       "aliases": []
@@ -640,6 +630,11 @@
     {
       "name": "component-lab-schedule",
       "path": "components/lab/schedule",
+      "aliases": []
+    },
+    {
+      "name": "component-lab-selectable-card-group",
+      "path": "components/lab/selectable-card-group",
       "aliases": []
     },
     {
@@ -1959,6 +1954,11 @@
     {
       "name": "example-context-menu-bottom-sheet",
       "path": "examples/context-menu/bottom-sheet",
+      "aliases": []
+    },
+    {
+      "name": "example-create-animator-playing-cards-in-plain-java-script",
+      "path": "examples/create-animator/playing-cards-in-plain-java-script",
       "aliases": []
     },
     {
@@ -3637,6 +3637,16 @@
       "aliases": []
     },
     {
+      "name": "example-use-animator-playing-cards",
+      "path": "examples/use-animator/playing-cards",
+      "aliases": []
+    },
+    {
+      "name": "example-use-announce-filter-result-count",
+      "path": "examples/use-announce/filter-result-count",
+      "aliases": []
+    },
+    {
       "name": "example-use-app-shell-mobile-custom-mobile-trigger",
       "path": "examples/use-app-shell-mobile/custom-mobile-trigger",
       "aliases": []
@@ -3662,13 +3672,28 @@
       "aliases": []
     },
     {
+      "name": "example-use-focus-trap-quick-edit-panel",
+      "path": "examples/use-focus-trap/quick-edit-panel",
+      "aliases": []
+    },
+    {
       "name": "example-use-grid-focus-color-swatch-grid",
       "path": "examples/use-grid-focus/color-swatch-grid",
       "aliases": []
     },
     {
+      "name": "example-use-hotkeys-search-and-help-shortcuts",
+      "path": "examples/use-hotkeys/search-and-help-shortcuts",
+      "aliases": []
+    },
+    {
       "name": "example-use-hover-card-profile-preview",
       "path": "examples/use-hover-card/profile-preview",
+      "aliases": []
+    },
+    {
+      "name": "example-use-input-status-icon-coupon-code-status",
+      "path": "examples/use-input-status-icon/coupon-code-status",
       "aliases": []
     },
     {
@@ -3682,8 +3707,18 @@
       "aliases": []
     },
     {
+      "name": "example-use-lightbox-gallery-grid",
+      "path": "examples/use-lightbox/gallery-grid",
+      "aliases": []
+    },
+    {
       "name": "example-use-list-focus-recent-files",
       "path": "examples/use-list-focus/recent-files",
+      "aliases": []
+    },
+    {
+      "name": "example-use-locale-invoice-summary",
+      "path": "examples/use-locale/invoice-summary",
       "aliases": []
     },
     {
@@ -3704,6 +3739,11 @@
     {
       "name": "example-use-press-feedback-pressable-card",
       "path": "examples/use-press-feedback/pressable-card",
+      "aliases": []
+    },
+    {
+      "name": "example-use-scrollable-area-activity-log-panel",
+      "path": "examples/use-scrollable-area/activity-log-panel",
       "aliases": []
     },
     {
@@ -3772,6 +3812,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-typeahead-type-to-focus-a-country",
+      "path": "examples/use-typeahead/type-to-focus-a-country",
+      "aliases": []
+    },
+    {
       "name": "example-v-stack-basic",
       "path": "examples/v-stack/basic",
       "aliases": []
@@ -3792,8 +3837,18 @@
       "aliases": []
     },
     {
+      "name": "hook-create-animator",
+      "path": "hooks/create-animator",
+      "aliases": []
+    },
+    {
       "name": "hook-use-animated-layout",
       "path": "hooks/use-animated-layout",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-animator",
+      "path": "hooks/use-animator",
       "aliases": []
     },
     {
@@ -3909,6 +3964,11 @@
     {
       "name": "hook-use-layer",
       "path": "hooks/use-layer",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-lightbox",
+      "path": "hooks/use-lightbox",
       "aliases": []
     },
     {

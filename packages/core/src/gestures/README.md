@@ -96,6 +96,10 @@ Once a drag has claimed its finger, a second finger never breaks it.
 | `PinchGestureRecognizer`         | `UIPinchGestureRecognizer`         | continuous | `scale` (settable, to re-base it), `velocity` in scale per second, `focalPoint()`                                                                                                                                  |
 | `ScreenEdgePanGestureRecognizer` | `UIScreenEdgePanGestureRecognizer` | continuous | `edges`: `leading` / `trailing`, resolved against the view's writing direction; attached to an edge zone the view lies within; fails as soon as the touch lands outside every requested edge band; a finger's only |
 
+Each recognizer reports what it is in `kind` (`'tap'`, `'longPress'`,
+`'pan'`, `'screenEdgePan'`, `'swipe'`, `'pinch'`): code tells the family apart by it, never by `instanceof`
+(`architecture:react-component-runtime` INV13).
+
 A recognizer created with `claimsTouches: false` is a watcher (a tab bar
 that minimizes while the page scrolls): it never claims, so its element gets
 only passive listeners and a scroll never waits for it; it prevents no other
@@ -174,7 +178,9 @@ innerPan.requireToFail(edgePan);
 ## Touches in the view: `createPressTracker`
 
 A pressable control's view-level touch handling, with `UIControl`
-semantics:
+semantics, built by `createPressTracker(options)`: a factory, as
+`architecture:react-component-runtime` INV13 asks of the touch modules outside
+the recognizer family (`VelocityTracker` is still a class, its one listed gap):
 
 - `touchDown`, `touchDragInside` / `touchDragOutside`, `touchDragEnter` /
   `touchDragExit`, `touchUpInside` / `touchUpOutside`, `touchCancel`.
@@ -436,9 +442,9 @@ no scroll.
 
 ### Holding the page still
 
-A scroll lock may hold the page with `holdPageScroll(document, decide)` from
-`pageHold.ts`, which returns the release (none does yet: `useScrollLock`
-does not call it). It lives in its own module, so a page without a scroll
+A scroll lock (`useScrollLock`) holds the page with
+`holdPageScroll(document, decide)` from `pageHold.ts`, which returns the
+release. It lives in its own module, so a page without a scroll
 lock never ships it, and it imports nothing of the gesture host: it asks the
 document's host whether a recognizer owns a touch only if a host exists, and
 a document without one has no recognizer to own it. A hold reads the

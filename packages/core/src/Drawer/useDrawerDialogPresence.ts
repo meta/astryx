@@ -131,6 +131,8 @@ export function useDrawerDialogPresence({
   // Element focused when the drawer opened — restored on close.
   const triggerElementRef = useRef<HTMLElement | null>(null);
 
+  // Syncs the drawer's native host with `isOpen`. It shows or hides the
+  // top-layer host, keeps the opener, waits for the exit, and returns focus.
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) {

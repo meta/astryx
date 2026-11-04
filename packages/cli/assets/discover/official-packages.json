@@ -142,14 +142,6 @@
         },
         {
           "kind": "component",
-          "name": "MobilePowerSearch"
-        },
-        {
-          "kind": "component",
-          "name": "MobileTokenizer"
-        },
-        {
-          "kind": "component",
           "name": "RadialChart"
         },
         {
@@ -159,6 +151,10 @@
         {
           "kind": "component",
           "name": "Schedule"
+        },
+        {
+          "kind": "component",
+          "name": "SelectableCardGroup"
         },
         {
           "kind": "component",

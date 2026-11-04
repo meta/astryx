@@ -8,29 +8,12 @@
  * @output Styled drag handle with WAI-ARIA separator role and keyboard support
  * @position Between resizable panels; consumed directly by builders
  *
- * The handle element is 1px wide (the divider line itself), with an
- * absolutely-positioned wider hit area for pointer interaction.
- * Pill grip indicator can sit on either side of the divider (or centered)
- * via pillPlacement. Default 'auto' places the pill on the panel side and
- * flips when the panel collapses to 0px so it stays accessible.
- *
- * Pill placement uses a single stylex dynamic style that accepts a direction
- * multiplier (-1 or 1). The pill element has its own themeProps
- * ('resize-handle-pill') so themes can target size/shape directly.
- *
- * While the panel is collapsed, aria-valuenow is clamped to aria-valuemin
- * (a value below the minimum is invalid per WCAG 4.1.2) and a localized
- * "Collapsed" aria-valuetext announces the real state.
- *
- * The handle's input (the pointer drag, the keys, the double-click) is
- * resizeGesture.ts. ResizeHandle forwards its React events to it, over the
- * region its `resizable` prop describes. A drag takes pointer capture on the grab zone.
- * The gesture's move, up and cancel events then go there, as in Slider, even
- * over an embedded frame.
+ * A drag takes pointer capture on the element it starts on, so moves over an
+ * embedded frame still arrive.
  */
 
 import {useEffect, useRef, useState} from 'react';
-import type {ReactNode} from 'react';
+import type {HTMLAttributes, ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {
@@ -52,6 +35,7 @@ import {
   type ResizeGesture,
   type ResizeGestureModel,
 } from './resizeGesture';
+import {separatorAttributes} from './separatorAttributes';
 import {themeProps} from '../utils/themeProps';
 
 import {useDevWarning} from '../hooks/useDevWarning';
@@ -79,30 +63,6 @@ function resolveEffectiveSide(
     return panelSide === 'start' ? 'end' : 'start';
   }
   return panelSide;
-}
-
-/**
- * Hit-area inline bias, expressed as a fraction of the pill's per-side offset.
- *
- * The visible pill is placed by `pillOffsetX`/`pillOffsetY`: anchored at the
- * divider's inline-start edge and pushed one grip-width-plus-gap toward the
- * panel side via a PHYSICAL translate (dir −1 = start, +1 = end). Because that
- * offset is physical, the pill sits on the same physical side of the divider in
- * both LTR and RTL. The grab zone must sit OVER that pill, so it has to use the
- * exact same anchor + physical-offset construction as the pill (just wider) —
- * anchoring the hit area at the divider centre (`insetInlineStart: 50%`) and
- * biasing with a percentage translate mixes a logical anchor (which flips under
- * RTL) with a physical translate (which doesn't), leaving the grab zone stranded
- * to one side under RTL. Returning the pill's `dir` here lets the hit area reuse
- * `pillOffsetX`/`pillOffsetY` so the two elements are positioned identically.
- */
-function hitAreaBiasDir(
-  effectiveSide: 'start' | 'end' | 'center',
-): number | null {
-  if (effectiveSide === 'center') {
-    return null;
-  }
-  return effectiveSide === 'start' ? -1 : 1;
 }
 
 const styles = stylex.create({
@@ -136,6 +96,12 @@ const styles = stylex.create({
     insetInlineStart: 0,
     insetInlineEnd: 0,
     height: 'var(--resize-handle-hit-area, 16px)',
+  },
+  overlayHorizontalOnShortPane: {
+    width: 'min(var(--resize-handle-hit-area, 16px), 50%)',
+  },
+  overlayVerticalOnShortPane: {
+    height: 'min(var(--resize-handle-hit-area, 16px), 50%)',
   },
   horizontal: {
     width: 1,
@@ -196,25 +162,45 @@ const styles = stylex.create({
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
   },
-  // Centered grab zone (pillPlacement 'center' / no bias): sit the hit area on
-  // the divider itself. Inline centering comes from rtlStyles.centerInline at
-  // the call site (correct in LTR and RTL); this block owns only the block axis.
+  // The grab zone sits centred on the Handle whatever `pillPlacement` says,
+  // which only places the pill. Inline centering comes from
+  // rtlStyles.centerInline at the call site (correct in LTR and RTL); this
+  // block owns only the block axis.
   hitAreaCenteredY: {
     insetBlockStart: '50%',
     transform: 'translateY(-50%)',
+  },
+  hitAreaWithinHandleX: {
+    width: `min(${spacingVars['--spacing-4']}, 100%)`,
+  },
+  hitAreaWithinHandleY: {
+    height: `min(${spacingVars['--spacing-4']}, 100%)`,
   },
 
   // Pill base — themes target .astryx-resize-handle-pill for size/shape.
   pill: {
     position: 'absolute',
     zIndex: 2,
-    pointerEvents: 'none',
+    touchAction: 'none',
+    userSelect: 'none',
     borderRadius: radiusVars['--radius-full'],
     backgroundColor: colorVars['--color-border'],
     transitionProperty: 'opacity, background-color, transform',
     transitionDuration: durationVars['--duration-fast'],
     transitionTimingFunction: easeVars['--ease-standard'],
     top: '50%',
+  },
+  pillGrabHorizontal: {
+    cursor: {
+      default: 'col-resize',
+      ':is(:disabled,[aria-disabled="true"])': 'default',
+    },
+  },
+  pillGrabVertical: {
+    cursor: {
+      default: 'row-resize',
+      ':is(:disabled,[aria-disabled="true"])': 'default',
+    },
   },
   pillHorizontal: {
     width: 3,
@@ -224,59 +210,93 @@ const styles = stylex.create({
     width: spacingVars['--spacing-8'],
     height: 3,
   },
-  pillHidden: {opacity: 0},
+  // A hidden pill paints nothing, so it takes no pointer either.
+  pillHidden: {opacity: 0, pointerEvents: 'none'},
   pillVisible: {opacity: 1},
   pillHover: {
     opacity: 1,
+    pointerEvents: 'auto',
     backgroundColor: colorVars['--color-border'],
   },
   pillActive: {
     opacity: 1,
+    pointerEvents: 'auto',
     backgroundColor: colorVars['--color-border-emphasized'],
+  },
+  // A pill shown on hover can sit outside the Grab zone. This invisible
+  // extension spans the gap toward the Handle, so the pointer keeps the hover
+  // on its way to the pill. It reaches no further than the pill, and it takes
+  // the pointer only while the pill does. The pill's offset is a physical
+  // translate, so the side toward the Handle is physical too.
+  pillBridgeRight: {
+    '::before': {
+      content: '""',
+      position: 'absolute',
+      insetBlock: 0,
+      insetInlineStart: {
+        default: 0,
+        ':is([dir="rtl"] *)': `calc(-1 * ${spacingVars['--spacing-1']} - 1px)`,
+      },
+      insetInlineEnd: {
+        default: `calc(-1 * ${spacingVars['--spacing-1']} - 1px)`,
+        ':is([dir="rtl"] *)': 0,
+      },
+    },
+  },
+  pillBridgeLeft: {
+    '::before': {
+      content: '""',
+      position: 'absolute',
+      insetBlock: 0,
+      insetInlineStart: {
+        default: `calc(-1 * ${spacingVars['--spacing-1']} - 1px)`,
+        ':is([dir="rtl"] *)': 0,
+      },
+      insetInlineEnd: {
+        default: 0,
+        ':is([dir="rtl"] *)': `calc(-1 * ${spacingVars['--spacing-1']} - 1px)`,
+      },
+    },
+  },
+  pillBridgeDown: {
+    '::before': {
+      content: '""',
+      position: 'absolute',
+      insetInline: 0,
+      insetBlockStart: 0,
+      insetBlockEnd: `calc(-1 * ${spacingVars['--spacing-1']} - 1px)`,
+    },
+  },
+  pillBridgeUp: {
+    '::before': {
+      content: '""',
+      position: 'absolute',
+      insetInline: 0,
+      insetBlockStart: `calc(-1 * ${spacingVars['--spacing-1']} - 1px)`,
+      insetBlockEnd: 0,
+    },
   },
 });
 
 // Dynamic styles — avoids inline style overrides.
 // Each axis gets its own function since StyleX requires static structure.
 const dynamicStyles = stylex.create({
-  // Hit-area inline offset — mirrors the pill's `pillOffsetX`/`pillOffsetY`
-  // construction so the grab zone sits centred on the visible pill in BOTH
-  // directions. Both anchor at the divider's inline-start edge
-  // (`insetInlineStart: 0`) and travel toward the panel side with the SAME
-  // physical translate `dir * (gripWidth + gap)`, so they share the pill's
-  // near edge. The hit area is wider, so it also shifts by half the width
-  // difference `(16px − 3px) / 2 = 6.5px` to align the two CENTRES. That
-  // centring shift is along the inline axis (a box grows from its inline-start
-  // edge toward inline-end), so it must flip physical sign under RTL — unlike
-  // the `dir * (...)` travel, which is physical and identical in both
-  // directions because the pill's own offset is physical. Mixing the previous
-  // divider-relative `50%` anchor with a percentage translate stranded the grab
-  // zone to one side under RTL; this construction keeps it on the pill.
-  //
-  // Only the offset axis is translated. Unlike the pill — a small box anchored
-  // at the divider's midpoint, so it needs a −50% self-shift to centre — the
-  // grab zone is STRETCHED along the handle by hitAreaHorizontal/Vertical's
-  // 0/0 insets, so it is already in place on that axis. A percentage there
-  // would displace it by half the handle's own length, growing with the panel.
-  hitAreaOffsetX: (dir: number) => ({
-    insetInlineStart: 0,
-    transform: {
-      default: `translateX(calc(${dir} * (3px + ${spacingVars['--spacing-1']}) - 6.5px))`,
-      ':is([dir="rtl"] *)': `translateX(calc(${dir} * (3px + ${spacingVars['--spacing-1']}) + 6.5px))`,
-    },
+  // An inline Handle's zone is centred on its line, so half of it reaches into
+  // the pane.
+  hitAreaLengthX: (pane: number) => ({
+    width: `min(${spacingVars['--spacing-4']}, ${pane}px)`,
   }),
-  hitAreaOffsetY: (dir: number) => ({
-    insetBlockStart: 0,
-    transform: `translateY(calc(${dir} * (3px + ${spacingVars['--spacing-1']}) - 6.5px))`,
+  hitAreaLengthY: (pane: number) => ({
+    height: `min(${spacingVars['--spacing-4']}, ${pane}px)`,
   }),
-  pillOffsetX: (dir: number) => ({
+  pillOffsetX: (dir: -1 | 1) => ({
     insetInlineStart: 0,
     transform: `translate(calc(${dir} * (100% + ${spacingVars['--spacing-1']})), -50%)`,
   }),
   // Vertical offset: no rotation — use explicit landscape dimensions.
   // Rotation + offset creates confusing coordinate math since translate
   // operates in pre-rotation local space.
-  pillOffsetY: (dir: number) => ({
+  pillOffsetY: (dir: -1 | 1) => ({
     top: 0,
     transform: `translate(-50%, calc(${dir} * (100% + ${spacingVars['--spacing-1']})))`,
   }),
@@ -333,7 +353,8 @@ export interface ResizeHandleProps extends Omit<
   isAlwaysVisible?: boolean;
 
   /**
-   * Which side of the divider line the pill sits on.
+   * Which side of the divider line the pill sits on. It moves only the pill:
+   * the grab zone stays centred on the divider.
    * - `'auto'` — panel side by default, flips when panel is collapsed to 0px
    * - `'start'` — left (horizontal) or top (vertical)
    * - `'end'` — right (horizontal) or bottom (vertical)
@@ -468,9 +489,12 @@ export function ResizeHandle({
     isReversed,
     isCollapsed,
   );
-  // Physical offset direction shared by the pill and the grab zone (null =
-  // centered / no bias). Keeps the two positioned identically in LTR and RTL.
-  const hitBiasDir = hitAreaBiasDir(effectiveSide);
+  // An inline zone reaches at most half of the pane the Handle resizes. An
+  // overlay Handle takes at most half of it. A collapsed pane, or one at 0px,
+  // has nothing to protect and keeps the whole zone.
+  const paneSize = resizable?._size;
+  const paneLength =
+    isCollapsed || paneSize == null || paneSize <= 0 ? undefined : paneSize;
   const isInteracting = isHovered || isFocused;
 
   // A handle whose axis disagrees with its region drags along one axis while
@@ -494,6 +518,8 @@ export function ResizeHandle({
   // are released here. The region outlives this handle and still has to hear
   // that its gesture is over.
   const hasRegion = resizable != null;
+  // Interrupts the region's gesture when the handle loses its region or
+  // unmounts.
   useEffect(() => {
     if (!hasRegion) {
       return;
@@ -504,19 +530,8 @@ export function ResizeHandle({
   }, [hasRegion, regionGesture]);
 
   // --- ARIA ---
-  // When collapsed the panel's real size (0) sits below aria-valuemin, which
-  // is invalid per WCAG 4.1.2. Clamp aria-valuenow to the minimum and announce
-  // the true state via aria-valuetext instead; the valuetext is removed as
-  // soon as the panel expands so the numeric value reads again.
   const sizeNow = resizable?._size;
   const minNow = resizable?._minSizePx;
-  const ariaValueNow =
-    sizeNow == null || minNow == null
-      ? undefined
-      : isCollapsed
-        ? Math.max(sizeNow, minNow)
-        : sizeNow;
-  const ariaValueMin = minNow;
   // A separator with a value needs a maximum (WAI-ARIA, APG window splitter).
   // Unbounded regions report the basis they can fill; a hand-built props
   // object without it reports only a configured maximum.
@@ -524,27 +539,58 @@ export function ResizeHandle({
     ? (getEffectiveMaxPx(resizable) ??
       (resizable._maxSizePx !== Infinity ? resizable._maxSizePx : undefined))
     : undefined;
-  const ariaValueMax =
-    effectiveMax != null && Number.isFinite(effectiveMax)
-      ? effectiveMax
-      : undefined;
-  const ariaValueText =
-    resizable != null && isCollapsed
-      ? t('@astryx.resizable.collapsed')
-      : undefined;
+  // The attributes createResizable writes on a plain element, from the same
+  // derivation.
+  const aria = separatorAttributes({
+    direction,
+    isDisabled,
+    value:
+      sizeNow == null || minNow == null
+        ? undefined
+        : {
+            size: sizeNow,
+            minPx: minNow,
+            maxPx: effectiveMax,
+            isCollapsed,
+            collapsedText: t('@astryx.resizable.collapsed'),
+          },
+  });
+
+  // The Grip pill takes the pointer as the Grab zone does, so a pill drawn
+  // outside the zone still resizes.
+  const grabHandlers: Pick<
+    HTMLAttributes<HTMLDivElement>,
+    | 'onPointerDown'
+    | 'onPointerMove'
+    | 'onPointerUp'
+    | 'onPointerCancel'
+    | 'onLostPointerCapture'
+    | 'onPointerEnter'
+    | 'onPointerLeave'
+  > = {
+    onPointerDown: e => {
+      if (!isDisabled) {
+        gesture?.pointerDown(e);
+      }
+    },
+    onPointerMove: e => gesture?.pointerMove(e),
+    onPointerUp: e => gesture?.pointerUp(e),
+    onPointerCancel: e => gesture?.pointerCancel(e),
+    onLostPointerCapture: e => gesture?.pointerCancel(e),
+    onPointerEnter: () => setIsHovered(true),
+    onPointerLeave: () => {
+      if (!isDragging) {
+        setIsHovered(false);
+      }
+    },
+  };
 
   return (
     <div
       ref={useMergedRefs(ref, handleRef)}
       role="separator"
-      aria-orientation={isHorizontal ? 'vertical' : 'horizontal'}
-      aria-valuenow={ariaValueNow}
-      aria-valuemin={ariaValueMin}
-      aria-valuemax={ariaValueMax}
-      aria-valuetext={ariaValueText}
+      {...aria}
       aria-label={label}
-      aria-disabled={isDisabled || undefined}
-      tabIndex={isDisabled ? -1 : 0}
       onDoubleClick={() => {
         if (!isDisabled) {
           gesture?.doubleClick();
@@ -560,6 +606,11 @@ export function ResizeHandle({
           isOverlay && styles.overlay,
           isOverlay &&
             (isHorizontal ? styles.overlayHorizontal : styles.overlayVertical),
+          isOverlay &&
+            paneLength != null &&
+            (isHorizontal
+              ? styles.overlayHorizontalOnShortPane
+              : styles.overlayVerticalOnShortPane),
           !isOverlay && (isHorizontal ? styles.horizontal : styles.vertical),
           !isOverlay &&
             !hasDivider &&
@@ -594,34 +645,21 @@ export function ResizeHandle({
         {...stylex.props(
           styles.hitArea,
           isHorizontal ? styles.hitAreaHorizontal : styles.hitAreaVertical,
-          // Bias the grab zone to sit over the visible pill. When the pill is
-          // centered (no bias) just center the hit area on the divider; when
-          // it's offset to a panel side, reuse the pill's physical-offset
-          // construction so the two stay aligned in LTR and RTL alike.
-          hitBiasDir == null
-            ? isHorizontal
-              ? rtlStyles.centerInline('0px')
-              : styles.hitAreaCenteredY
-            : isHorizontal
-              ? dynamicStyles.hitAreaOffsetX(hitBiasDir)
-              : dynamicStyles.hitAreaOffsetY(hitBiasDir),
+          isHorizontal
+            ? rtlStyles.centerInline('0px')
+            : styles.hitAreaCenteredY,
+          isOverlay &&
+            (isHorizontal
+              ? styles.hitAreaWithinHandleX
+              : styles.hitAreaWithinHandleY),
+          !isOverlay &&
+            paneLength != null &&
+            (isHorizontal
+              ? dynamicStyles.hitAreaLengthX(paneLength)
+              : dynamicStyles.hitAreaLengthY(paneLength)),
           isDisabled && styles.disabled,
         )}
-        onPointerDown={e => {
-          if (!isDisabled) {
-            gesture?.pointerDown(e);
-          }
-        }}
-        onPointerMove={e => gesture?.pointerMove(e)}
-        onPointerUp={e => gesture?.pointerUp(e)}
-        onPointerCancel={e => gesture?.pointerCancel(e)}
-        onLostPointerCapture={e => gesture?.pointerCancel(e)}
-        onPointerEnter={() => setIsHovered(true)}
-        onPointerLeave={() => {
-          if (!isDragging) {
-            setIsHovered(false);
-          }
-        }}
+        {...grabHandlers}
       />
       {/* Pill grip indicator — themed via .astryx-resize-handle-pill */}
       {children ?? (
@@ -640,11 +678,25 @@ export function ResizeHandle({
                   : dynamicStyles.pillOffsetY(
                       effectiveSide === 'start' ? -1 : 1,
                     ),
+              isHorizontal
+                ? styles.pillGrabHorizontal
+                : styles.pillGrabVertical,
               isAlwaysVisible ? styles.pillVisible : styles.pillHidden,
+              !isAlwaysVisible &&
+                effectiveSide !== 'center' &&
+                (isHorizontal
+                  ? effectiveSide === 'start'
+                    ? styles.pillBridgeRight
+                    : styles.pillBridgeLeft
+                  : effectiveSide === 'start'
+                    ? styles.pillBridgeDown
+                    : styles.pillBridgeUp),
               isInteracting && !isDragging && styles.pillHover,
               isDragging && styles.pillActive,
+              isDisabled && styles.disabled,
             ),
           )}
+          {...grabHandlers}
         />
       )}
     </div>

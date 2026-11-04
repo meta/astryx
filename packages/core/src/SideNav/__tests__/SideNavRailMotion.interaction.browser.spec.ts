@@ -13,7 +13,8 @@
  *   stays continuous, an expand whose old wrap is not copied keeps the edges
  *   together, and Reduce Motion cross-fades under a finger (DR2) and changes at
  *   once under a mouse (DR3), also on a loaded machine: those two cases read
- *   the motion by its own start and end, never at a fixed time
+ *   the motion by its own start and end, never at a fixed time. A second press
+ *   after a long task starts its fades where the glide carries on.
  * @position Testing; the components' unit cases are
  *   SideNav/SideNavRailMotion.test.tsx
  *
@@ -21,7 +22,7 @@
  *   SideNav.spec.md and the FR17 Verification row in AppShell.spec.md.
  */
 
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,
@@ -667,6 +668,104 @@ test.describe('component:SideNav FR6 and component:AppShell FR17 under a mouse',
       labelsShown: true,
       copies: 0,
     });
+  });
+
+  test('a second click after a long task starts the fades where the glide carries on, as the same click without the task does', async ({
+    page,
+  }) => {
+    await openStory(page, DESKTOP_STORY);
+    // A collapse, then a click that reverses it 1150 ms later, its handler
+    // busy for `blockMs` first. Returns the reversal's fades' first keyframes.
+    const reverse = async (blockMs: number) =>
+      page.evaluate(async blockMs => {
+        const toggle = () =>
+          [...document.querySelectorAll('button')].find(button =>
+            /^(Collapse|Expand) sidebar$/.test(
+              button.getAttribute('aria-label') ?? button.textContent ?? '',
+            ),
+          ) as HTMLElement;
+        const frame = async () =>
+          new Promise<void>(resolve => {
+            requestAnimationFrame(() => resolve());
+          });
+        toggle().click();
+        const collapsed = performance.now();
+        while (performance.now() - collapsed < 1150 - blockMs) {
+          await frame();
+        }
+        await new Promise<void>(resolve => {
+          setTimeout(resolve, 0);
+        });
+        // A press's own feedback reads the timeline first. That holds its time
+        // for the rest of this task, as on a real page.
+        void document.timeline.currentTime;
+        const busy = performance.now() + blockMs;
+        while (performance.now() < busy) {
+          // the click handler's own work
+        }
+        const before = new Set(document.getAnimations());
+        toggle().click();
+        await new Promise<void>(resolve => {
+          setTimeout(resolve, 0);
+        });
+        const main = document.querySelector('[role="main"]');
+        const first = (match: (target: Element) => boolean) => {
+          const animation = document.getAnimations().find(candidate => {
+            const effect = candidate.effect as KeyframeEffect | null;
+            const target = effect?.target;
+            return (
+              !before.has(candidate) &&
+              target instanceof Element &&
+              match(target) &&
+              effect?.getKeyframes().some(frame => frame.opacity != null)
+            );
+          });
+          const opacity = (
+            animation?.effect as KeyframeEffect | undefined
+          )?.getKeyframes()[0]?.opacity;
+          return opacity == null ? null : Number(opacity);
+        };
+        const copyOf = (target: Element) => target.closest('[inert]');
+        return {
+          // The content's old wrap, held as its copy, and the new wrap.
+          wrapCopy: first(
+            target =>
+              copyOf(target) === target && target.querySelector('nav') == null,
+          ),
+          newWrap: first(
+            target => copyOf(target) == null && target.parentElement === main,
+          ),
+          // The rail's old state, held as its copy.
+          railCopy: first(
+            target =>
+              copyOf(target) === target && target.querySelector('nav') != null,
+          ),
+        };
+      }, blockMs);
+    const settle = async () => {
+      await expect
+        .poll(async () => {
+          const rest = await railAtRest(page);
+          return rest.copies + rest.running;
+        })
+        .toBe(0);
+    };
+    const free = await reverse(0);
+    await settle();
+    const blocked = await reverse(1000);
+    await settle();
+    test.info().annotations.push({
+      type: 'reversal fades (free, blocked)',
+      description: JSON.stringify({free, blocked}),
+    });
+    for (const key of ['wrapCopy', 'newWrap', 'railCopy'] as const) {
+      expect(free[key], key).not.toBeNull();
+      expect(blocked[key], key).not.toBeNull();
+      expect(
+        Math.abs(Number(blocked[key]) - Number(free[key])),
+        key,
+      ).toBeLessThan(0.1);
+    }
   });
 
   for (const load of LOADS) {

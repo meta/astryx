@@ -155,6 +155,17 @@ describe('createActionGroupTracker', () => {
     expect(second.onClick).not.toHaveBeenCalled();
   });
 
+  it('where several actions hold the point, the one the press landed on wins (a test renderer lays out nothing)', () => {
+    place(first.button, {left: 0, top: 0, width: 0, height: 0});
+    place(second.button, {left: 0, top: 0, width: 0, height: 0});
+    const group = tracker();
+    group.begin(0, 0, {landed: second.button.firstChild});
+    expect(group.highlighted).toBe(second.button);
+    group.end();
+    expect(second.onClick).toHaveBeenCalledTimes(1);
+    expect(first.onClick).not.toHaveBeenCalled();
+  });
+
   it('skips disabled actions', () => {
     second.button.disabled = true;
     const group = tracker();
@@ -227,6 +238,55 @@ describe('createActionGroupTracker', () => {
       second.button,
       null,
     ]);
+  });
+
+  it('times the release fade by the tempo its stylesheet reads, as the press controller does (spec:AST-108 FR4)', () => {
+    // A rule writes the tempo; browsers inherit it from the theme, jsdom
+    // only reads it where it is declared.
+    const style = document.createElement('style');
+    style.textContent = '[data-action] { --_astryx-motion-tempo: 1.5; }';
+    document.head.append(style);
+    try {
+      const group = tracker();
+      group.begin(100, 20);
+      group.end();
+      vi.advanceTimersByTime(PRESS_FADE_MS);
+      expect(first.button.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+      vi.advanceTimersByTime(PRESS_FADE_MS / 2);
+      expect(first.button.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    } finally {
+      style.remove();
+    }
+  });
+
+  it('under Reduce Motion a tempo may shorten the release fade but never lengthens it past 200 ms (spec:AST-108 FR4)', () => {
+    vi.stubGlobal(
+      'matchMedia',
+      (query: string): MediaQueryList =>
+        ({
+          matches: /prefers-reduced-motion:\s*reduce/.test(query),
+          media: query,
+          onchange: null,
+          addListener: () => undefined,
+          removeListener: () => undefined,
+          addEventListener: () => undefined,
+          removeEventListener: () => undefined,
+          dispatchEvent: () => false,
+        }) as MediaQueryList,
+    );
+    const style = document.createElement('style');
+    style.textContent = '[data-action] { --_astryx-motion-tempo: 1.5; }';
+    document.head.append(style);
+    try {
+      const group = tracker();
+      group.begin(100, 20);
+      group.end();
+      vi.advanceTimersByTime(PRESS_FADE_MS);
+      expect(first.button.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    } finally {
+      style.remove();
+      vi.unstubAllGlobals();
+    }
   });
 
   it('dispose finishes a pending release fade', () => {

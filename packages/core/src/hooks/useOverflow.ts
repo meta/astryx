@@ -251,7 +251,8 @@ export function useOverflow(
     [calculate],
   );
 
-  // Recalculate when itemCount changes
+  // Syncs the visible count with the rendered layout. It measures again after
+  // the items change.
   useIsomorphicLayoutEffect(() => {
     calculate();
   }, [calculate]);

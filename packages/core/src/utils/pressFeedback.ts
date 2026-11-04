@@ -2,11 +2,11 @@
 
 /**
  * @file pressFeedback.ts
- * @input The press state machine (pressGesture.ts), the menu-press marker
- *   (hooks/menuPressMarker.ts) and the document's pointer, keyboard, scroll and
+ * @input The press state machine (pressGesture.ts), the menu-press and
+ *   press-group markers and the document's pointer, keyboard, scroll and
  *   visibility events
- * @output PRESSABLE_ATTRIBUTE, PRESSED_ATTRIBUTE, pressableProps and
- *   installPressFeedback
+ * @output PRESSABLE_ATTRIBUTE, PRESSED_ATTRIBUTE, pressableProps,
+ *   pressFadeMs and installPressFeedback
  * @position The DOM half of the touch press model. usePressFeedback installs
  *   it, and the CSS arms live in interactionOverlay.stylex.ts.
  *
@@ -46,6 +46,7 @@ import {isCoarsePointer, watchCoarsePointer} from './coarsePointer';
 import {subscribeInput} from './inputStream';
 import {TOUCH_QUERY} from './touchPresentation';
 import {holdsPressThroughDrag} from '../privateAttributes/pressHoldsDrag.stylex';
+import {isTrackedByGroup} from '../privateAttributes/pressGroupItem.stylex';
 
 /**
  * The marker the controller finds with `closest()`. Every Astryx component
@@ -152,7 +153,7 @@ const TIMER_MS: Record<NonNullable<PressStep['timer']>, number> = {
  * property its stylesheet reads: the theme's `--_astryx-motion-tempo`. Under
  * Reduce Motion a tempo may shorten the fade, never lengthen it past 200 ms.
  */
-function fadeMs(element: Element): number {
+export function pressFadeMs(element: Element): number {
   const style = getComputedStyle(element);
   const value = style.getPropertyValue('--_astryx-motion-tempo').trim();
   const read = value === '' ? Number.NaN : Number(value);
@@ -233,7 +234,7 @@ function apply(slot: Slot, step: PressStep): void {
       },
       // The release fade follows the theme's tempo (AST-108). The onset delay
       // and the tap flash do not.
-      kind === 'fade' ? fadeMs(live.element) : TIMER_MS[kind],
+      kind === 'fade' ? pressFadeMs(live.element) : TIMER_MS[kind],
     );
   }
 }
@@ -325,8 +326,9 @@ function stylesheetDroppedActive(): boolean {
 
 /**
  * The surface a mouse button's or the Space key's press paints, if any: the
- * innermost marked surface, outside a menu. A key's press paints only a
- * focused element that is itself the surface, as `:active` does.
+ * innermost marked surface, outside a menu and off a tracked action. A key's
+ * press paints only a focused element that is itself the surface, as
+ * `:active` does.
  */
 function buttonSurfaceAt(
   target: EventTarget | null,
@@ -334,6 +336,10 @@ function buttonSurfaceAt(
 ): HTMLElement | null {
   const element = surfaceAt(target);
   if (element == null || element.closest(MENU_PRESS_ROOT) != null) {
+    return null;
+  }
+  // A tracker that follows a mouse paints a mouse press on its own actions.
+  if (pointerId != null && isTrackedByGroup(element, 'mouse')) {
     return null;
   }
   if (pointerId == null && element !== target) {
@@ -414,7 +420,14 @@ function onPointerDown(event: PointerEvent): void {
   const braking = element != null && scrollerIsBraking(element);
   lastTouchAt = Date.now();
   lastTouchTarget = event.target instanceof Node ? event.target : null;
-  if (element == null || braking) {
+  // A group's tracker that follows this pointer paints its action, so two
+  // writers would erase each other's paint. The touch still counts for the
+  // brake above.
+  if (
+    element == null ||
+    braking ||
+    isTrackedByGroup(element, event.pointerType)
+  ) {
     return;
   }
   takeOver(button, element);
@@ -560,6 +573,11 @@ function activatesOnSpace(target: EventTarget | null): boolean {
   );
 }
 
+/** A tracked action takes no `:active` paint, so a key's press paints here. */
+function isTrackedAction(target: EventTarget | null): boolean {
+  return target instanceof Element && isTrackedByGroup(target);
+}
+
 /**
  * Space went down on a focused button that is itself a pressable surface.
  * Heard in the BUBBLE phase, after the page's own handlers, so a press the
@@ -573,7 +591,7 @@ function onKeyDown(event: KeyboardEvent): void {
     event.isComposing ||
     event.defaultPrevented ||
     !activatesOnSpace(event.target) ||
-    !stylesheetDroppedActive()
+    !(stylesheetDroppedActive() || isTrackedAction(event.target))
   ) {
     return;
   }
