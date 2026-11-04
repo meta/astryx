@@ -6,7 +6,8 @@
  *   PerformanceObserver for long tasks
  * @output `traceRendering` — counts of the main thread's rendering work
  *   (Layout, Paint, UpdateLayoutTree, PrePaint, …) between two marks — and
- *   `installLongTaskLog` / `readLongTasks`.
+ *   `installLongTaskLog` / `readLongTasks`. `longTasksOf` gives each long task
+ *   its wall and thread time.
  * @position The "no Layout/Paint during a transform/opacity animation" proof.
  *   A compositor animation costs the main thread nothing per frame; one that
  *   animates a layout property, or writes styles from JavaScript each frame,
@@ -51,6 +52,19 @@ export const RENDERING_EVENTS = [
   'HitTest',
 ] as const;
 
+/** A main-thread task longer than 50 ms, epoch ms. */
+export interface TracedTask {
+  readonly start: number;
+  /** Wall time, ms. */
+  readonly durationMs: number;
+  /**
+   * The main thread's own run time in the task, from the trace's thread clock,
+   * ms; at most `durationMs`. A busy machine stretches a task's wall time but
+   * not its thread time. Without a thread clock it is the wall time.
+   */
+  readonly threadMs: number;
+}
+
 export interface RenderingTrace {
   /** Count per trace event name inside the window, on the page's main thread. */
   readonly counts: Readonly<Record<string, number>>;
@@ -67,20 +81,14 @@ export interface RenderingTrace {
    * `page.evaluate`) is one, whether it calls page code directly or sets it
    * off; only the harness's own marked reads are in `devtoolsTasks`.
    */
-  readonly longTasks: readonly {
-    readonly start: number;
-    readonly durationMs: number;
-  }[];
+  readonly longTasks: readonly TracedTask[];
   /**
    * Main-thread tasks longer than 50 ms inside the window that ran a DevTools
    * command the harness marked as its own read (`HARNESS_READ`) and no page
    * script, epoch ms: `waitForAnimation` describing every animation's
    * keyframes, or `blockMainThread(page, ms)` without `during`.
    */
-  readonly devtoolsTasks: readonly {
-    readonly start: number;
-    readonly durationMs: number;
-  }[];
+  readonly devtoolsTasks: readonly TracedTask[];
   /** Every counted rendering event with its epoch-ms time, for sub-window counts. */
   readonly events: readonly {readonly name: string; readonly t: number}[];
   /** The window, epoch ms on the page's clock. */
@@ -102,12 +110,14 @@ export function countBetween(
   return counts;
 }
 
-interface TraceEvent {
+export interface TraceEvent {
   name: string;
   cat: string;
   ph: string;
   ts: number;
   dur?: number;
+  /** Thread-clock duration, µs. */
+  tdur?: number;
   pid: number;
   tid: number;
   args?: Record<string, unknown>;
@@ -178,12 +188,38 @@ export async function traceRendering(
       counted.push({name: e.name, t: toEpochMs(e.ts)});
     }
   }
+  const {longTasks, devtoolsTasks} = longTasksOf(
+    events.filter(e => onMain(e) && e.ph !== 'E'),
+    toEpochMs,
+  );
+  return {
+    counts,
+    layout: counts.Layout ?? 0,
+    paint: counts.Paint ?? 0,
+    styleRecalc: counts.UpdateLayoutTree ?? 0,
+    prePaint: counts.PrePaint ?? 0,
+    durationMs: (end.ts - start.ts) / 1000,
+    longTasks,
+    devtoolsTasks,
+    events: counted,
+    window: {from: fromEpoch, to: toEpoch},
+  };
+}
+
+/**
+ * The main thread's tasks longer than 50 ms, split into the page's own and the
+ * harness's marked reads. `main` holds the main thread's events in the window;
+ * `toEpochMs` turns trace time into epoch ms.
+ */
+export function longTasksOf(
+  main: readonly TraceEvent[],
+  toEpochMs: (ts: number) => number,
+): {longTasks: TracedTask[]; devtoolsTasks: TracedTask[]} {
   // A task that ran a DevTools command received it over the DevTools
   // session's pipe; page script it set off shows as its listener, timer or
   // frame callback.
-  const main = events.filter(e => onMain(e) && e.ph !== 'E');
-  const longTasks: {start: number; durationMs: number}[] = [];
-  const devtoolsTasks: {start: number; durationMs: number}[] = [];
+  const longTasks: TracedTask[] = [];
+  const devtoolsTasks: TracedTask[] = [];
   for (const task of main) {
     if (task.name !== 'RunTask' || (task.dur ?? 0) <= 50_000) {
       continue;
@@ -209,23 +245,14 @@ export async function traceRendering(
           HARNESS_READ,
     );
     const pageScript = inside.some(e => PAGE_SCRIPT_EVENTS.has(e.name));
+    const wall = task.dur ?? 0;
     (devtools && harnessRead && !pageScript ? devtoolsTasks : longTasks).push({
       start: toEpochMs(task.ts),
-      durationMs: (task.dur ?? 0) / 1000,
+      durationMs: wall / 1000,
+      threadMs: Math.min(task.tdur ?? wall, wall) / 1000,
     });
   }
-  return {
-    counts,
-    layout: counts.Layout ?? 0,
-    paint: counts.Paint ?? 0,
-    styleRecalc: counts.UpdateLayoutTree ?? 0,
-    prePaint: counts.PrePaint ?? 0,
-    durationMs: (end.ts - start.ts) / 1000,
-    longTasks,
-    devtoolsTasks,
-    events: counted,
-    window: {from: fromEpoch, to: toEpoch},
-  };
+  return {longTasks, devtoolsTasks};
 }
 
 /**

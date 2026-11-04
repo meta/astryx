@@ -13,13 +13,7 @@
  * small graphs are mirrored in a visually hidden From/To/Value table.
  */
 
-import {
-  type ReactNode,
-  useMemo,
-  useRef,
-  useState,
-  useLayoutEffect,
-} from 'react';
+import {type ReactNode, useCallback, useMemo, useState} from 'react';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {SankeyProvider} from './SankeyContext';
 import {computeLayout} from './layout';
@@ -154,19 +148,14 @@ export function SankeyChart({
   label = 'Sankey chart',
   children,
 }: SankeyChartProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
 
-  useLayoutEffect(() => {
-    const el = containerRef.current;
-    if (!el) {
-      return;
-    }
+  const observeContainerWidth = useCallback((container: HTMLDivElement) => {
     const ro = new ResizeObserver(entries => {
       const w = entries[0]?.contentRect.width ?? 0;
       setContainerWidth(w);
     });
-    ro.observe(el);
+    ro.observe(container);
     return () => ro.disconnect();
   }, []);
 
@@ -225,7 +214,7 @@ export function SankeyChart({
   const showDataTable = links.length > 0 && links.length <= MAX_TABLE_LINKS;
 
   return (
-    <div ref={containerRef} style={{width: '100%'}}>
+    <div ref={observeContainerWidth} style={{width: '100%'}}>
       {ctx && (
         <div
           role={needsScroll ? 'group' : undefined}
