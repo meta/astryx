@@ -421,8 +421,8 @@ export interface DateInputProps extends Omit<
    * application loads; without it the field uses the Gregorian calendar.
    * The native date control is Gregorian, so with a calendar other than
    * `gregory` or `iso8601` every presentation that would show it uses the
-   * popover on a fine pointer and the bottom sheet on a coarse pointer. The
-   * bottom sheet's months and wheels stay Gregorian.
+   * popover on a fine pointer and the bottom sheet on a coarse pointer. On a
+   * coarse pointer the field and its bottom sheet show Gregorian dates.
    *
    * @default the InternationalizationProvider's calendar, else `'gregory'`
    * @example
