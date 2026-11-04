@@ -307,6 +307,48 @@ describe('a top-level block carries its own direction (spec:AST-061 FR6)', () =>
     ).toEqual(['ltr', 'ltr', 'ltr', 'ltr', 'ltr']);
   });
 
+  it('skips combining marks and reads letter numbers as strong', async () => {
+    // A combining mark is Bidi_Class NSM: it takes the direction of the
+    // character it sits on and is never strong itself. It also carries that
+    // character's script, so a Hebrew point matches Script=Hebrew.
+    expect(firstStrongDirection('\u05b0Annual report')).toBe('ltr');
+    expect(firstStrongDirection('\u05b0')).toBeNull();
+    expect(firstStrongDirection('\u064eAnnual report')).toBe('ltr');
+
+    // On a strong base the mark changes nothing.
+    expect(firstStrongDirection('\u05e9\u05b8\u05dc\u05d5\u05b9\u05dd')).toBe(
+      'rtl',
+    );
+    expect(
+      firstStrongDirection(
+        '\u0645\u064e\u0631\u0652\u062d\u064e\u0628\u064b\u0627',
+      ),
+    ).toBe('rtl');
+
+    // Letter numbers are Bidi_Class L, and \p{Letter} does not cover them.
+    expect(firstStrongDirection('\u2160')).toBe('ltr');
+    expect(firstStrongDirection('\u2160\u05e9\u05dc\u05d5\u05dd')).toBe('ltr');
+  });
+
+  it('reads a table cell by its own text, marks and numerals included', async () => {
+    // The written `dir` comes from the block's own text, so it is the same
+    // in either document; the computed direction that depends on the
+    // document is covered by the parity spec in a real browser.
+    const {container} = render(
+      <RichTextView
+        value={markdownToEditorStateJSON(
+          '| a | b | c |\n| --- | --- | --- |\n| \u05b0Annual report | \u2160 | \u05e9\u05dc\u05d5\u05dd |\n',
+        )}
+      />,
+    );
+    await waitFor(() => expect(container.querySelector('td')).not.toBeNull());
+    // A leading Hebrew point must not make the first cell right-to-left, and
+    // a Roman numeral must not leave the second without a direction.
+    expect(
+      [...container.querySelectorAll('td p')].map(p => p.getAttribute('dir')),
+    ).toEqual(['ltr', 'ltr', 'rtl']);
+  });
+
   it('passes over Arabic-Indic digits, which are weak, not strong', async () => {
     // Arabic-Indic and Persian digits sit in the Arabic script but are
     // Bidi_Class AN/EN, so the first-strong scan must not stop on them.

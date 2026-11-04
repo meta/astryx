@@ -121,11 +121,22 @@ const WEAK_ARABIC_NUMBER =
   /[\u0600-\u0605\u0609\u060A\u0660-\u0669\u066A-\u066C\u06DD\u06F0-\u06F9\u0890\u0891\u08E2]/u;
 
 /**
- * Bidi_Class `L`: any other letter, plus the left-to-right mark. Digits,
- * punctuation, emoji and other symbols are deliberately absent: the
- * algorithm's P2 rule skips them, so `123 — מזל טוב` and `🎉 מזל טוב` both read right-to-left.
+ * Bidi_Class `L`: any other letter, the letter numbers (Roman numeral `Ⅰ`
+ * and its kind, which `\p{Letter}` does not cover), and the left-to-right
+ * mark. Digits, punctuation, emoji and other symbols are deliberately
+ * absent: the algorithm's P2 rule skips them, so `123 — מזל טוב` and
+ * `🎉 מזל טוב` both read right-to-left.
  */
-const STRONG_LTR = /[\p{Letter}\u200E]/u;
+const STRONG_LTR = /[\p{Letter}\p{Nl}\u200E]/u;
+
+/**
+ * Bidi_Class `NSM`: a combining mark takes the direction of the character it
+ * sits on and is never strong itself. A mark carries its base letter's
+ * script, so `\p{Script=Hebrew}` matches Hebrew points and `\p{Script=Arabic}`
+ * matches harakat; without this the scan would stop on a leading vowel point
+ * and read `ְAnnual report` as right-to-left.
+ */
+const COMBINING_MARK = /\p{Mark}/u;
 
 /**
  * P2 and P3 of that algorithm: the direction of the first strongly
@@ -135,7 +146,7 @@ const STRONG_LTR = /[\p{Letter}\u200E]/u;
  */
 export function firstStrongDirection(text: string): 'ltr' | 'rtl' | null {
   for (const character of text) {
-    if (WEAK_ARABIC_NUMBER.test(character)) {
+    if (COMBINING_MARK.test(character) || WEAK_ARABIC_NUMBER.test(character)) {
       continue;
     }
     if (STRONG_RTL.test(character)) {

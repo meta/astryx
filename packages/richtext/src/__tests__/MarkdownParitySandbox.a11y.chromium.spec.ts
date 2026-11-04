@@ -2164,6 +2164,55 @@ for (const direction of ['ltr', 'rtl'] as const) {
   // their order and a column's start edge is the document's. The paragraph
   // inside a cell is prose and takes its own, so a cell of English in a
   // right-to-left document reads and is edited left-to-right.
+  test(`a cell reads past a combining mark and reads a letter number (${direction})`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto(
+      `${storybook.origin}/iframe.html?id=richtext-richtexteditor--markdown-serializers&viewMode=story&globals=astryxTheme:neutral;colorMode:light;direction:${direction}`,
+      {waitUntil: 'load'},
+    );
+    // A leading Hebrew point is Bidi_Class NSM, never strong; a Roman
+    // numeral is Bidi_Class L, which `\p{Letter}` does not cover.
+    await page
+      .locator('textarea')
+      .fill(
+        '| a | b | c |\n| --- | --- | --- |\n| \u05b0Annual report | \u2160 | \u05e9\u05dc\u05d5\u05dd |',
+      );
+    await expect(page.locator('table:visible')).toHaveCount(2);
+    const read = () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll('[data-lexical-editor] td p')].map(p => ({
+          dir: p.getAttribute('dir'),
+          computed: getComputedStyle(p).direction,
+        })),
+      );
+    // Editor and view, three cells each.
+    const imported = await read();
+    expect(imported).toHaveLength(6);
+    for (const cell of imported.filter((_, i) => i % 3 === 0)) {
+      expect(cell.dir).toBe('ltr');
+      expect(cell.computed).toBe('ltr');
+    }
+    for (const cell of imported.filter((_, i) => i % 3 === 1)) {
+      expect(cell.dir).toBe('ltr');
+      expect(cell.computed).toBe('ltr');
+    }
+    for (const cell of imported.filter((_, i) => i % 3 === 2)) {
+      expect(cell.dir).toBe('rtl');
+      expect(cell.computed).toBe('rtl');
+    }
+
+    // The editing path: typing the same text into a cell reaches the same
+    // answer as importing it.
+    const first = page.locator('[data-lexical-editor] td p').first();
+    await first.click();
+    await page.keyboard.press('ControlOrMeta+a');
+    await page.keyboard.press('Backspace');
+    await page.keyboard.type('\u05b0Annual report');
+    await expect(first).toHaveAttribute('dir', 'ltr');
+  });
+
   test(`a table orders in the document direction and its cells read their own (${direction})`, async ({
     page,
   }) => {
