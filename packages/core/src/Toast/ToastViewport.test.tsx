@@ -2809,6 +2809,37 @@ describe('Toast swipe dismissal', () => {
   });
 });
 
+describe('ToastViewport with no toasts', () => {
+  // iOS Safari keeps a toolbar color that it took from the viewport while
+  // the viewport has a box.
+  it('has no box once its last toast has left, and a box for the next toast', () => {
+    renderViewport(<ShowToastButton options={SWIPE_TOAST} />);
+    act(() => {
+      fireEvent.click(screen.getByText('Trigger'));
+    });
+    const viewport = screen.getByRole('region', {name: 'Notifications'});
+    expect(getComputedStyle(viewport).display).toBe('flex');
+
+    const wrapper = getToastWrapperByText('Swipe toast');
+    act(() => {
+      fireEvent.click(
+        within(wrapper).getByRole('button', {name: 'Dismiss notification'}),
+      );
+    });
+    // The leaving toast keeps the box until its exit ends.
+    expect(getComputedStyle(viewport).display).toBe('flex');
+    act(() => {
+      completeExit(wrapper.dataset.toastId ?? '');
+    });
+    expect(getComputedStyle(viewport).display).toBe('none');
+
+    act(() => {
+      fireEvent.click(screen.getByText('Trigger'));
+    });
+    expect(getComputedStyle(viewport).display).toBe('flex');
+  });
+});
+
 describe('ToastViewport region ARIA', () => {
   it('does not expose an empty notifications landmark', () => {
     renderViewport(<ShowToastButton />);

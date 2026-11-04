@@ -115,6 +115,13 @@ const styles = stylex.create({
     backgroundColor: 'transparent',
     overflow: 'visible',
   },
+  // iOS Safari colors its toolbar from a fixed element at the bottom edge. A
+  // toast that a swipe sends through that edge gives the viewport its color.
+  // Safari keeps that color while the viewport has a box, so an empty
+  // viewport has none.
+  viewportEmpty: {
+    display: 'none',
+  },
   // The viewport sits at the inset the app declared on LayerProvider for a
   // bar floating over that edge (spec:AST-059 FR6); unset, each reads 0px.
   // A toast-only `inset` prop writes the same edges inline and wins.
@@ -916,6 +923,7 @@ export function ToastViewport({
           styles.viewport,
           styles.viewportInlineSpan,
           posStyle,
+          !hasToasts && styles.viewportEmpty,
         ),
         {
           style: Object.keys(insetStyle).length > 0 ? insetStyle : undefined,
