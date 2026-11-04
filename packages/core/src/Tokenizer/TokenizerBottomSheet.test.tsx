@@ -46,6 +46,12 @@ import {
 } from '../BottomSheet/bottomSheetStack';
 import {getActiveModalOutlet} from '../Layer/modalOutlet';
 
+// Tokenizer loads its sheet on demand, and a first load under the test
+// transform can take seconds on a busy machine. The file loads the sheet
+// module before any test runs, so that load counts against no wait or time
+// limit.
+await import('./TokenizerBottomSheet');
+
 const ITEMS: SearchableItem[] = [
   {id: 'design', label: 'Design'},
   {id: 'eng', label: 'Eng'},
@@ -143,19 +149,22 @@ const openTrigger = () => screen.getByRole('button', {name: 'Tags'});
 const list = () => document.querySelector<HTMLElement>('[data-total-count]')!;
 
 // The sheet surface is loaded with React.lazy, so the first sheet renders a
-// tick after it opens. Open one up front so the module is cached and every
-// later sheet renders synchronously.
+// tick after it opens. Open one up front so every later sheet renders
+// synchronously. `act` renders the sheet once its loaded module resolves,
+// with no wait.
 beforeAll(async () => {
   stubEnvironment();
   try {
     render(<Harness />);
-    fireEvent.click(openTrigger());
-    await screen.findByLabelText('Search Tags', undefined, {timeout: 15000});
+    await act(async () => {
+      fireEvent.click(openTrigger());
+    });
+    expect(screen.getByLabelText('Search Tags')).toBeInTheDocument();
   } finally {
     cleanup();
     vi.unstubAllGlobals();
   }
-}, 20000);
+});
 
 beforeEach(() => {
   __resetLiveRegionsForTest();
