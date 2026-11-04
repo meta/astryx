@@ -689,7 +689,9 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   row (`spec:AST-057` AR2, DEC-7); a
   pinch under a pen; the screen-edge pan under a mouse, a trackpad, or a pen;
   the slide across an action group under a mouse, and under any pointer
-  outside the touch presentation (`family:action-groups` FR1); and the 44 px coarse-pointer touch target, which stays coarse-only and never overlaps a
+  outside the touch presentation (`family:action-groups` FR1); ChatLayout's
+  keyboard dismissal under a mouse, whose drag selects text
+  (`component:ChatLayout` FR10); and the 44 px coarse-pointer touch target, which stays coarse-only and never overlaps a
   neighbor's target. On the web, a pan takes a trackpad's two-finger scroll
   where its record allows it, and never a mouse wheel's notches. A scroll is a
   trackpad's only when it carries Chromium's and WebKit's trackpad signature:

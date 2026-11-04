@@ -4,7 +4,8 @@
 
 /**
  * @file ChatLayout.tsx
- * @input Uses React, StyleX, theme tokens, useChatStreamScroll, useChatNewMessages
+ * @input Uses React, StyleX, theme tokens, useChatStreamScroll, useChatNewMessages,
+ *   useGestureRecognizer, the keyboard dismissal pan and the composer's follow
  * @output Exports ChatLayout component and ChatLayoutProps
  * @position Layout shell for full chat interfaces — messages in page flow, composer fixed to bottom
  *
@@ -27,17 +28,27 @@
  * - /packages/core/src/Chat/index.ts (exports)
  * - /apps/storybook/stories/ChatLayout.stories.tsx
  * - /packages/cli/assets/templates/blocks/components/ChatLayout/ (block examples)
+ * - /packages/core/src/Chat/transcriptDismiss.ts (the dismiss line)
+ * - /packages/core/src/Chat/composerFollow.ts (the composer and frosted layer)
  */
 
-import {type ReactNode, useMemo, useRef} from 'react';
+import {type ReactNode, useMemo, useRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {spacingVars} from '../theme/tokens.stylex';
+import {colorVars, spacingVars} from '../theme/tokens.stylex';
 import type {BaseProps} from '../BaseProps';
 import {mergeProps} from '../utils';
 import {useChatStreamScroll} from './useChatStreamScroll';
 import {useChatNewMessages} from './useChatNewMessages';
 import {ChatLayoutScrollButton} from './ChatLayoutScrollButton';
 import {ChatLayoutContext} from './ChatContext';
+import {
+  createKeyboardDismissPan,
+  dismissKeyboardAtRelease,
+} from './transcriptDismiss';
+import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
+import {useAttachmentPair} from '../hooks/useAttachment';
+import {createComposerFollow} from './composerFollow';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
@@ -190,6 +201,31 @@ const styles = stylex.create({
     paddingBlockEnd: spacingVars['--spacing-3'],
   },
 
+  // The armed cue under Reduce Motion: the pressed overlay over the composer,
+  // which only fades in and out, as touch presentations do there.
+  dockArmedCue: {
+    '::after': {
+      content: '""',
+      position: 'absolute',
+      inset: 0,
+      pointerEvents: 'none',
+      backgroundColor: colorVars['--color-overlay-pressed'],
+      opacity: 0,
+      transitionProperty: 'opacity',
+      transitionDuration: {
+        default: reducedMotionFadeConsts.duration,
+        '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+          '0s',
+      },
+      transitionTimingFunction: reducedMotionFadeConsts.easing,
+    },
+  },
+  dockArmed: {
+    '::after': {
+      opacity: 1,
+    },
+  },
+
   dockInner: {
     marginInline: 'auto',
     width: '100%',
@@ -304,6 +340,8 @@ export function ChatLayout({
 }: ChatLayoutProps) {
   const t = useComponentTranslator();
   const rootRef = useRef<HTMLDivElement>(null);
+  const composerRef = useRef<HTMLDivElement>(null);
+  const edgeRef = useRef<HTMLDivElement>(null);
 
   const scrollContainerRef = externalScrollRef ?? rootRef;
   const isSelfScrolling = !externalScrollRef;
@@ -326,6 +364,35 @@ export function ChatLayout({
         scroll.scrollToBottom();
       }}
     />
+  );
+
+  // Under Reduce Motion an armed drag shows the pressed overlay instead of
+  // moving the composer.
+  const [isArmedCue, setArmedCue] = useState(false);
+  const [composerFollow] = useState(() => createComposerFollow(setArmedCue));
+  useAttachmentPair(
+    composerRef,
+    edgeRef,
+    (composer, edge) => {
+      composerFollow.attach({composer, edge});
+      return () => composerFollow.attach(null);
+    },
+    null,
+  );
+  useGestureRecognizer(
+    rootRef,
+    () =>
+      createKeyboardDismissPan(
+        // Where the page draws the composer. A browser's own pan to the
+        // focused field moves it with the page.
+        () =>
+          composerRef.current?.getBoundingClientRect().top ??
+          Number.POSITIVE_INFINITY,
+      ),
+    pan => {
+      composerFollow.update(pan);
+      dismissKeyboardAtRelease(pan);
+    },
   );
 
   // --- Layout context ---
@@ -397,10 +464,21 @@ export function ChatLayout({
           {scrollButton === undefined ? defaultScrollButton : scrollButton}
 
           {/* Frosted glass layer */}
-          <div {...stylex.props(styles.blurLayer, currentDensity.blurLayer)} />
+          <div
+            ref={edgeRef}
+            {...stylex.props(styles.blurLayer, currentDensity.blurLayer)}
+          />
 
-          {/* Composer */}
-          <div {...stylex.props(styles.dock, currentDensity.dock)}>
+          {/* Composer: a transcript drag lifted at its top dismisses the
+              software keyboard. */}
+          <div
+            ref={composerRef}
+            {...stylex.props(
+              styles.dock,
+              currentDensity.dock,
+              styles.dockArmedCue,
+              isArmedCue && styles.dockArmed,
+            )}>
             <div {...stylex.props(styles.dockInner, currentDensity.dockInner)}>
               {composer}
             </div>

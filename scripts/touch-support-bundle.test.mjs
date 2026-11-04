@@ -194,6 +194,8 @@ const GESTURE_USERS = new Set([
   'hooks: useScrollLock',
   'AppShell',
   'BottomSheet',
+  // Chat: ChatLayout's keyboard dismissal, a pan on its transcript.
+  'Chat',
   'CommandPalette',
   'ContextMenu',
   'DateInput',
