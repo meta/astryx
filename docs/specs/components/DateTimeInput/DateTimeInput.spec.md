@@ -74,10 +74,8 @@ or pointer-adaptive combinations of those surfaces.
 - Compatibility class: default change for non-English-US locales; additive
   `calendar` prop with a Gregorian default; typed Gregorian dates fire
   `onChange` only for complete input (FR11); existing types, callbacks, roles,
-  and exports remain stable. A provider locale with an explicit `-u-ca-`
-  keyword shows that calendar; the keyword is the application's explicit
-  request (`spec:AST-111` DEC-2): nonbreaking; `calendar="gregory"` keeps
-  Gregorian.
+  and exports remain stable. A provider locale with a `-u-ca-` keyword keeps
+  Gregorian dates (`spec:AST-111` DEC-2); set `calendar` to choose one.
 - Controlled/uncontrolled behavior: DateTimeInput remains controlled; `undefined`
   represents no committed date-time value
 - Migration decision: none; picker presentation and deprecated `nativePicker`

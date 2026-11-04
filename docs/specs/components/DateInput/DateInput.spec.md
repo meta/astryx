@@ -81,16 +81,14 @@ browser/OS date picker selected by the public presentation contract.
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: additive `calendar` prop with a Gregorian default;
-  under a finger the sheet wheels' markup changes, and under every
-  presentation keys step through the values in time order (FR17). Typed
-  Gregorian entry fires `onChange` only for complete input, a nonbreaking fix
-  that restores FR1's next-ISO-date contract; its rejection messages are
-  additive; and text that `parseDateInput` reads still commits on Enter or blur
-  (FR20). A provider locale with an explicit `-u-ca-`
-  keyword shows that calendar; the keyword is the application's explicit
-  request (`spec:AST-111` DEC-2): nonbreaking; `calendar="gregory"` keeps
-  Gregorian.
+- Compatibility class: additive `calendar` prop with a Gregorian default; under
+  a finger the sheet wheels' markup changes, and under every presentation keys
+  step through the values in time order (FR17). Typed Gregorian entry fires
+  `onChange` only for complete input, a nonbreaking fix that restores FR1's
+  next-ISO-date contract; its rejection messages are additive; and text that
+  `parseDateInput` reads still commits on Enter or blur (FR20). A provider
+  locale with a `-u-ca-` keyword keeps Gregorian dates (`spec:AST-111` DEC-2);
+  set `calendar` to choose one.
 - Controlled/uncontrolled behavior: unchanged; DateInput remains controlled by
   `value`, with `undefined` representing no selected date
 - Migration decision: `spec:AST-043/DEC-1` and `spec:AST-043/DEC-2` own the
