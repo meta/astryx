@@ -353,8 +353,8 @@ function buttonSurfaceAt(
   if (element == null || element.closest(MENU_PRESS_ROOT) != null) {
     return null;
   }
-  // A group's tracker follows pointers only, so a key's press stays here.
-  if (pointerId != null && isTrackedByGroup(element)) {
+  // A tracker that follows a mouse paints a mouse press on its own actions.
+  if (pointerId != null && isTrackedByGroup(element, 'mouse')) {
     return null;
   }
   if (pointerId == null && element !== target) {
@@ -435,9 +435,14 @@ function onPointerDown(event: PointerEvent): void {
   const braking = element != null && scrollerIsBraking(element);
   lastTouchAt = Date.now();
   lastTouchTarget = event.target instanceof Node ? event.target : null;
-  // A group's tracker paints a tracked action, so two writers would erase each
-  // other's paint. The touch still counts for the brake above.
-  if (element == null || braking || isTrackedByGroup(element)) {
+  // A group's tracker that follows this pointer paints its action, so two
+  // writers would erase each other's paint. The touch still counts for the
+  // brake above.
+  if (
+    element == null ||
+    braking ||
+    isTrackedByGroup(element, event.pointerType)
+  ) {
     return;
   }
   takeOver(button, element);

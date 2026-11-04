@@ -73,6 +73,8 @@ export function useImageMode(
     mode: 'dark' | 'light' | null;
   } | null>(null);
 
+  // Syncs the mode with the image at `src`. It fetches and decodes the image,
+  // then samples its pixels.
   useEffect(() => {
     if (!src) {
       return;

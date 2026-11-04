@@ -96,6 +96,7 @@ export function useOutsidePress(): OutsidePressWatch {
     },
     [],
   );
+  // Stops the outside-press listeners on unmount.
   useEffect(() => stop, [stop]);
   return useMemo(() => ({start, stop}), [start, stop]);
 }

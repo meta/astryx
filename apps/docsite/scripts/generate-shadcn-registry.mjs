@@ -651,62 +651,81 @@ export function buildShadcnRegistry({
   const packageCatalog = new Map(packages.map(pkg => [pkg.name, pkg]));
   const blockItems = [];
   let skippedUnpublishedBlocks = 0;
-  const unpublishedImports = [];
+  // Every item left out, with why, and every one kept unchecked, so a "not
+  // run" never reads as a pass.
+  const skippedItems = [];
   const unreadImports = [];
+  function releaseOf(specifier) {
+    const pkg = packageCatalog.get(packageNameFromSpecifier(specifier));
+    return pkg == null
+      ? null
+      : {packageName: pkg.name, version: pkg.version ?? null};
+  }
+  // Whether every name an item imports from its own packages is published.
+  // A published subpath can lack a name a later release adds there, such as a
+  // new function; the item returns once a release exports it. An item whose
+  // own packages' declarations cannot be read stays, and the build names it.
+  function exportsPublished(kind, name, source) {
+    if (publishedImports == null) return true;
+    const {missing, unread} = missingPublishedImport(source, publishedImports);
+    if (missing != null) {
+      skippedItems.push({
+        kind,
+        name,
+        reason: 'export',
+        ...missing,
+        ...releaseOf(missing.specifier),
+      });
+      return false;
+    }
+    for (const specifier of unread) {
+      const release = releaseOf(specifier);
+      if (release != null) {
+        unreadImports.push({kind, name, specifier, ...release});
+      }
+    }
+    return true;
+  }
   for (const block of blocks.map(withAuthoredSource)) {
     // A released subpath can still lack a named component added after the last
     // package release. Production blocks must satisfy both contracts: the
     // imported subpath below and the published component snapshot here.
-    if (
-      skipBlocksWithUnavailableComponents &&
-      block.componentsUsed?.some(
-        componentName => !availableComponentNames.has(componentName),
-      )
-    ) {
+    const unavailable = skipBlocksWithUnavailableComponents
+      ? (block.componentsUsed ?? []).filter(
+          component => !availableComponentNames.has(component),
+        )
+      : [];
+    if (unavailable.length > 0) {
+      skippedItems.push({
+        kind: 'block',
+        name: block.dirName,
+        reason: 'component',
+        names: unavailable,
+      });
       skippedUnpublishedBlocks++;
       continue;
     }
-    const unpublishedComponentImport = readImportSpecifiers(
+    const undeclared = readImportSpecifiers(
       block.source,
       `${block.dirName}.tsx`,
     ).find(specifier => {
       const pkg = packageCatalog.get(packageNameFromSpecifier(specifier));
       return pkg != null && !packageExportsSpecifier(pkg, specifier);
     });
-    if (unpublishedComponentImport) {
-      skippedUnpublishedBlocks++;
-      continue;
-    }
-    // A published subpath can also lack a name a later release adds there,
-    // such as a new function. The block returns once a release exports it.
-    const {missing, unread} =
-      publishedImports == null
-        ? {missing: null, unread: []}
-        : missingPublishedImport(block.source, publishedImports);
-    if (missing != null) {
-      const pkg = packageCatalog.get(
-        packageNameFromSpecifier(missing.specifier),
-      );
-      unpublishedImports.push({
-        block: block.dirName,
-        ...missing,
-        packageName: pkg?.name ?? packageNameFromSpecifier(missing.specifier),
-        version: pkg?.version ?? null,
+    if (undeclared != null) {
+      skippedItems.push({
+        kind: 'block',
+        name: block.dirName,
+        reason: 'subpath',
+        specifier: undeclared,
+        ...releaseOf(undeclared),
       });
       skippedUnpublishedBlocks++;
       continue;
     }
-    // A block stays when its own packages' declarations cannot be read. The
-    // build names it, so a broken check does not read as a pass.
-    for (const specifier of unread) {
-      const pkg = packageCatalog.get(packageNameFromSpecifier(specifier));
-      if (pkg == null) continue;
-      unreadImports.push({
-        block: block.dirName,
-        specifier,
-        packageName: pkg.name,
-        version: pkg.version ?? null,
-      });
+    if (!exportsPublished('block', block.dirName, block.source)) {
+      skippedUnpublishedBlocks++;
+      continue;
     }
     try {
       blockItems.push(
@@ -720,6 +739,12 @@ export function buildShadcnRegistry({
       );
     } catch (error) {
       if (error instanceof UnpublishedAstryxDependencyError) {
+        skippedItems.push({
+          kind: 'block',
+          name: block.dirName,
+          reason: 'package',
+          packageName: error.packageName,
+        });
         skippedUnpublishedBlocks++;
         continue;
       }
@@ -731,6 +756,10 @@ export function buildShadcnRegistry({
   const pageItems = [];
   let skippedUnpublishedPages = 0;
   for (const template of templates.map(withAuthoredSource)) {
+    if (!exportsPublished('page', template.slug, template.source)) {
+      skippedUnpublishedPages++;
+      continue;
+    }
     try {
       pageItems.push(
         pageItem(
@@ -743,6 +772,12 @@ export function buildShadcnRegistry({
       );
     } catch (error) {
       if (error instanceof UnpublishedAstryxDependencyError) {
+        skippedItems.push({
+          kind: 'page',
+          name: template.slug,
+          reason: 'package',
+          packageName: error.packageName,
+        });
         skippedUnpublishedPages++;
         continue;
       }
@@ -775,7 +810,7 @@ export function buildShadcnRegistry({
   return {
     registry,
     items,
-    unpublishedImports,
+    skippedItems,
     unreadImports,
     counts: {
       components: componentItems.filter(
@@ -794,6 +829,84 @@ export function buildShadcnRegistry({
       total: items.length,
     },
   };
+}
+
+function releaseText({packageName, version}) {
+  return version ? `${packageName} ${version}` : packageName;
+}
+
+const SKIP_NOTICES = {
+  component: skip =>
+    `uses ${skip.names.join(', ')}, which the published components do not include`,
+  subpath: skip =>
+    `imports ${skip.specifier}, a subpath ${releaseText(skip)} does not export`,
+  package: skip => `needs ${skip.packageName}, which has no published release`,
+  export: skip =>
+    `imports ${skip.names.join(', ')} from ${skip.specifier}, which ` +
+    `${releaseText(skip)} does not export`,
+};
+
+/** The order notices print in: GitHub's run page shows only the first ten. */
+const NOTICE_ORDER = ['export', 'unread', 'subpath', 'package', 'component'];
+
+/** One line per item the registry leaves out or keeps unchecked. */
+export function registrySkipNotices({skippedItems, unreadImports}) {
+  const lines = [
+    ...skippedItems.map(skip => ({
+      reason: skip.reason,
+      line:
+        `not run until a release has it: ${skip.kind} ${skip.name} ` +
+        SKIP_NOTICES[skip.reason](skip),
+    })),
+    ...unreadImports.map(kept => ({
+      reason: 'unread',
+      line:
+        `could not read what ${kept.specifier} exports in ` +
+        `${releaseText(kept)}; kept ${kept.kind} ${kept.name}`,
+    })),
+  ];
+  return lines
+    .sort(
+      (a, b) => NOTICE_ORDER.indexOf(a.reason) - NOTICE_ORDER.indexOf(b.reason),
+    )
+    .map(({line}) => line);
+}
+
+function workflowCommandText(text) {
+  return text
+    .replaceAll('%', '%25')
+    .replaceAll('\r', '%0D')
+    .replaceAll('\n', '%0A');
+}
+
+/**
+ * Prints each notice, and in GitHub Actions also as an annotation and a job
+ * summary list, so a "not run" never reads as a pass.
+ */
+export function reportRegistrySkips(
+  notices,
+  {env = process.env, log = console.log, appendFile = fs.appendFileSync} = {},
+) {
+  const heading = `${notices.length} not run or unchecked`;
+  if (notices.length > 0 && env.GITHUB_ACTIONS === 'true') {
+    log(
+      `::notice title=ShadCN registry::${heading}; the job summary lists them all`,
+    );
+  }
+  for (const notice of notices) {
+    log(`  ShadCN registry: ${notice}`);
+    if (env.GITHUB_ACTIONS === 'true') {
+      log(`::notice title=ShadCN registry::${workflowCommandText(notice)}`);
+    }
+  }
+  if (notices.length > 0 && env.GITHUB_STEP_SUMMARY) {
+    appendFile(
+      env.GITHUB_STEP_SUMMARY,
+      `### ShadCN registry: ${heading}\n\n` +
+        notices.map(notice => `- ${notice}`).join('\n') +
+        '\n',
+    );
+  }
 }
 
 function writeJson(filePath, value) {
@@ -848,7 +961,7 @@ export function generateShadcnRegistry({
   }
   return {
     ...result.counts,
-    unpublishedImports: result.unpublishedImports,
+    skippedItems: result.skippedItems,
     unreadImports: result.unreadImports,
     itemNames: new Set(result.items.map(item => item.name)),
     itemPaths: new Set(result.items.map(item => item.astryx.path)),

@@ -144,6 +144,7 @@ export const WithClear: Story = {
   args: {
     ...Default.args,
     hasClear: true,
+    presentation: 'popover',
   },
   name: 'With Clear All Button',
 };
@@ -253,6 +254,7 @@ export const WithEntriesOnFocus: Story = {
         value={value}
         onChange={items => setValue(items)}
         hasEntriesOnFocus
+        presentation="popover"
       />
     );
   },
@@ -281,6 +283,7 @@ export const OverflowInline: Story = {
           value={value}
           onChange={items => setValue(items)}
           tokenOverflowBehavior="unfocusedInline"
+          presentation="popover"
         />
         <p style={{marginTop: 8}}>
           This text will shift down when the tokenizer expands on focus.
@@ -313,6 +316,7 @@ export const OverflowLayer: Story = {
           value={value}
           onChange={items => setValue(items)}
           tokenOverflowBehavior="unfocusedLayer"
+          presentation="popover"
         />
         <p style={{marginTop: 8}}>
           This text should not shift when the tokenizer expands on focus.
@@ -337,6 +341,7 @@ export const WithEndContent: Story = {
         value={value}
         onChange={items => setValue(items)}
         endContent={<Button label="Apply" variant="primary" size="sm" />}
+        presentation="popover"
       />
     );
   },
@@ -399,6 +404,7 @@ export const SizeVariants: Story = {
           placeholder="Small size"
           size="sm"
           hasClear
+          presentation="popover"
         />
         <Tokenizer
           label="Medium (32px)"
@@ -408,6 +414,7 @@ export const SizeVariants: Story = {
           placeholder="Medium size (default)"
           size="md"
           hasClear
+          presentation="popover"
         />
         <Tokenizer
           label="Large (36px)"
@@ -417,6 +424,7 @@ export const SizeVariants: Story = {
           placeholder="Large size"
           size="lg"
           hasClear
+          presentation="popover"
         />
       </div>
     );
@@ -437,6 +445,7 @@ export const CreatableWithSearch: Story = {
         hasCreate
         hasEntriesOnFocus
         placeholder="Search or type a new name..."
+        presentation="popover"
       />
     );
   },
@@ -507,6 +516,7 @@ export const Loading: Story = {
         onChange={items => setValue(items)}
         hasClear
         endContent={<span>{value.length} selected</span>}
+        presentation="popover"
       />
     );
   },
@@ -538,6 +548,7 @@ export const LogicalOrder: Story = {
     label: 'Team Members',
     placeholder: 'Add more...',
     hasClear: true,
+    presentation: 'popover',
   },
   name: 'Logical order',
 };
@@ -559,6 +570,7 @@ export const RtlEndLane: Story = {
       value={[users[0]]}
       onChange={() => {}}
       hasClear
+      presentation="popover"
     />
   ),
   args: {
@@ -587,6 +599,7 @@ export const LongTokenEndLane: Story = {
         value={[longToken]}
         onChange={() => {}}
         hasClear
+        presentation="popover"
       />
       <Tokenizer
         {...args}
@@ -598,6 +611,7 @@ export const LongTokenEndLane: Story = {
         renderToken={(item, onRemove) => (
           <Token label={item.label} onRemove={onRemove} />
         )}
+        presentation="popover"
       />
     </div>
   ),
@@ -643,6 +657,7 @@ export const CaretPlacement: Story = {
     label: 'Team Members',
     placeholder: 'Add more...',
     hasClear: true,
+    presentation: 'popover',
   },
   name: 'Caret placement',
   play: async ({canvasElement}) => {
@@ -840,14 +855,14 @@ const sheetTagSource: SearchSource = {
 };
 
 /**
- * The experimental touch surface, forced on every device so it is reviewable
- * on a laptop: `experimental.presentation="bottom-sheet"`. The trigger shows
+ * The touch surface, forced on every device so it is reviewable on a laptop:
+ * `presentation="bottom-sheet"`. The trigger shows
  * the selected tokens; tapping it opens one tall sheet with the search row on
  * top, checkbox rows that keep their place while the sheet is open, a Create
  * row for typed text, and a pinned footer with a confirmed Clear all beside
  * Save, which commits the draft; `onChange` fires once, on Save.
  */
-export const ExperimentalBottomSheet: Story = {
+export const SheetPresentation: Story = {
   render: args => {
     const [value, setValue] = useState<SearchableItem[]>([
       sheetTags[0],
@@ -862,7 +877,7 @@ export const ExperimentalBottomSheet: Story = {
         hasCreate
         maxMenuItems={1000}
         debounceMs={0}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />
     );
   },
@@ -870,15 +885,15 @@ export const ExperimentalBottomSheet: Story = {
     label: 'Tags',
     placeholder: 'Add tags',
   },
-  name: 'Experimental: bottom sheet',
+  name: 'Bottom sheet',
 };
 
 /**
- * `experimental.presentation="adaptive"`: the sheet on a compact
+ * `presentation="adaptive"`, the default: the sheet on a compact
  * coarse-pointer screen (narrow the viewport and emulate touch), otherwise the
  * inline combobox — the same resolution Selector uses.
  */
-export const ExperimentalAdaptive: Story = {
+export const AdaptivePresentation: Story = {
   render: args => {
     // Enough tokens to wrap the inline field's row on a phone, so the box
     // the trigger keeps at the swap is the wrapped one (FR16, FR17).
@@ -897,7 +912,7 @@ export const ExperimentalAdaptive: Story = {
         onChange={items => setValue(items)}
         maxMenuItems={1000}
         debounceMs={0}
-        experimental={{presentation: 'adaptive'}}
+        presentation="adaptive"
       />
     );
   },
@@ -905,7 +920,7 @@ export const ExperimentalAdaptive: Story = {
     label: 'Tags',
     placeholder: 'Add tags',
   },
-  name: 'Experimental: adaptive',
+  name: 'Adaptive (default)',
 };
 
 /**
@@ -913,7 +928,7 @@ export const ExperimentalAdaptive: Story = {
  * trigger stays focusable and does not open; at `maxEntries` the sheet's
  * unchecked rows are inert while checked rows still toggle.
  */
-export const ExperimentalBottomSheetStates: Story = {
+export const SheetPresentationStates: Story = {
   render: args => {
     const [value, setValue] = useState<SearchableItem[]>([
       sheetTags[0],
@@ -928,7 +943,7 @@ export const ExperimentalBottomSheetStates: Story = {
           value={[sheetTags[0], sheetTags[1]]}
           onChange={() => {}}
           isDisabled
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
         <Tokenizer
           {...args}
@@ -937,7 +952,7 @@ export const ExperimentalBottomSheetStates: Story = {
           value={[]}
           onChange={() => {}}
           isDisabled
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
         <Tokenizer
           {...args}
@@ -947,7 +962,7 @@ export const ExperimentalBottomSheetStates: Story = {
           onChange={items => setValue(items)}
           maxEntries={2}
           debounceMs={0}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       </div>
     );
@@ -955,5 +970,5 @@ export const ExperimentalBottomSheetStates: Story = {
   args: {
     placeholder: 'Add tags',
   },
-  name: 'Experimental: bottom sheet states',
+  name: 'Bottom sheet states',
 };

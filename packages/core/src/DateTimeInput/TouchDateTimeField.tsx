@@ -70,6 +70,7 @@ import {rtlStyles} from '../utils/rtlStyles';
 import {themeProps} from '../utils/themeProps';
 import {normalizeDayOfWeek} from '../utils/dateTypes';
 import {formatLocaleTime} from '../utils/timeFormat';
+import {getWeekdayHeaders} from '../Calendar/getWeekdayHeaderNames';
 import {
   formatISOTime,
   isImeKeyEvent,
@@ -84,7 +85,6 @@ import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {joinAriaIDs} from '../utils/inputAria';
 import {
   DATE_FORMAT_LONG,
-  DATE_FORMAT_WEEKDAY_ONLY,
   plainDateFormat,
   plainDateFromISO,
   plainDateToday,
@@ -658,16 +658,9 @@ export function TouchDateTimeField({
   const canStepBack = monthIndex > minMonthIndex;
   const canStepForward = monthIndex < maxMonthIndex;
 
-  const dayNames = useMemo(
-    () =>
-      Array.from({length: 7}, (_, offset) =>
-        plainDateFormat(
-          {year: 1970, month: 1, day: 4 + ((weekStartsOn + offset) % 7)},
-          DATE_FORMAT_WEEKDAY_ONLY,
-          locale,
-        ),
-      ),
-    [weekStartsOn, locale],
+  const weekdayHeaders = useMemo(
+    () => getWeekdayHeaders(locale, weekStartsOn),
+    [locale, weekStartsOn],
   );
   const monthYearLabel = plainDateFormatStandaloneMonthYear(
     {year, month, day: 1},
@@ -881,6 +874,8 @@ export function TouchDateTimeField({
       return {
         value: hour,
         label: String(hour),
+        // Keys step in time order: 12 PM comes before 1 PM.
+        order: hour24,
         isDisabled: !rangeOverlaps(
           hour24 * 3600,
           hour24 * 3600 + 3599,
@@ -1141,8 +1136,8 @@ export function TouchDateTimeField({
                 isWheelOpen && styles.touchDateSurfaceHidden,
               )}>
               <div aria-hidden="true" {...stylex.props(styles.touchWeekdays)}>
-                {dayNames.map(name => (
-                  <div key={name} {...stylex.props(styles.touchWeekday)}>
+                {weekdayHeaders.map(({dayOfWeek, name}) => (
+                  <div key={dayOfWeek} {...stylex.props(styles.touchWeekday)}>
                     {name}
                   </div>
                 ))}

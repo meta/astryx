@@ -3,7 +3,7 @@
 /**
  * @file PowerSearchBottomSheet.test.tsx
  * @input Uses vitest, @testing-library/react, PowerSearch with
- *   `experimental.presentation`, and the sheet helpers
+ *   `presentation`, and the sheet helpers
  * @output Unit tests for the touch presentation (`component:PowerSearch`
  *   FR10–FR21, AR4–AR6): presentation resolution, the trigger, the Filters
  *   sheet, Add filter, the operator step, each value type (list values
@@ -295,6 +295,17 @@ const valueTypesConfig: PowerSearchConfig = {
       ],
     },
     {
+      key: 'updated',
+      label: 'Updated',
+      operators: [
+        {
+          key: 'after',
+          label: 'is after',
+          value: {type: 'date_absolute', isDateOnly: false},
+        },
+      ],
+    },
+    {
       key: 'age',
       label: 'Age',
       operators: [
@@ -348,9 +359,7 @@ const valueTypesConfig: PowerSearchConfig = {
   ],
 };
 
-type Presentation = NonNullable<
-  NonNullable<PowerSearchProps['experimental']>['presentation']
->;
+type Presentation = NonNullable<PowerSearchProps['presentation']>;
 
 function setup(
   props: Partial<PowerSearchProps> & {presentation?: Presentation} = {},
@@ -362,7 +371,7 @@ function setup(
       config={config}
       filters={[]}
       onChange={onChange}
-      experimental={{presentation}}
+      presentation={presentation}
       {...rest}
     />,
   );
@@ -542,6 +551,22 @@ beforeAll(async () => {
   }
 }, 20000);
 
+// A list value's Tokenizer sheet is loaded with React.lazy too. Open one up
+// front, so every later Tokenizer sheet renders synchronously inside its press.
+beforeAll(async () => {
+  stubEnvironment();
+  try {
+    setup({config: valueTypesConfig});
+    openAddFlow();
+    tapRow('ID');
+    fireEvent.click(within(sheet()).getByRole('button', {name: 'ID'}));
+    await screen.findByRole('dialog', {name: 'ID'}, {timeout: 15000});
+  } finally {
+    cleanup();
+    vi.unstubAllGlobals();
+  }
+}, 20000);
+
 beforeEach(() => {
   __resetLiveRegionsForTest();
   stubEnvironment();
@@ -556,23 +581,25 @@ afterEach(() => {
 // =============================================================================
 
 describe('PowerSearch presentation resolution (FR10)', () => {
-  it('keeps the tokenizer field when experimental is omitted', () => {
-    render(<PowerSearch config={config} filters={[]} onChange={vi.fn()} />);
+  const plain = (props: Partial<PowerSearchProps> = {}) => (
+    <PowerSearch config={config} filters={[]} onChange={vi.fn()} {...props} />
+  );
+
+  it('keeps the tokenizer field by default on a screen that is not compact coarse-pointer', () => {
+    render(plain());
     expect(screen.getByRole('combobox')).toBeInTheDocument();
     expect(document.querySelector(SHEET_TRIGGER)).toBeNull();
   });
 
-  it('keeps the tokenizer field for an empty experimental object and for popover', () => {
-    const {unmount} = render(
-      <PowerSearch
-        config={config}
-        filters={[]}
-        onChange={vi.fn()}
-        experimental={{}}
-      />,
-    );
-    expect(screen.getByRole('combobox')).toBeInTheDocument();
-    unmount();
+  it('defaults to adaptive: the sheet trigger on a compact coarse-pointer screen', () => {
+    stubMatchMedia(query => query === COMPACT_TOUCH_PRESENTATION_QUERY);
+    render(plain());
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(document.querySelector(SHEET_TRIGGER)).not.toBeNull();
+  });
+
+  it('keeps the tokenizer field with presentation="popover" on a compact coarse-pointer screen', () => {
+    stubMatchMedia(query => query === COMPACT_TOUCH_PRESENTATION_QUERY);
     setup({presentation: 'popover'});
     expect(screen.getByRole('combobox')).toBeInTheDocument();
     expect(document.querySelector(SHEET_TRIGGER)).toBeNull();
@@ -703,7 +730,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
         config={config}
         filters={[openFilter]}
         onChange={vi.fn()}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
         isDisabled
       />,
     );
@@ -717,7 +744,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
         config={config}
         filters={[openFilter]}
         onChange={vi.fn()}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     expect(isSheetOpen()).toBe(false);
@@ -830,7 +857,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
           config={config}
           filters={[]}
           onChange={vi.fn()}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
           resultCount={12}
         />
       </StrictMode>,
@@ -846,7 +873,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
           config={config}
           filters={[]}
           onChange={vi.fn()}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
           resultCount={1}
         />
       </StrictMode>,
@@ -868,7 +895,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
           config={config}
           filters={[openFilter]}
           onChange={vi.fn()}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
           resultCount={3}
         />,
       );
@@ -884,7 +911,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
           config={config}
           filters={[openFilter]}
           onChange={vi.fn()}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
           resultCount={1}
         />,
       );
@@ -949,7 +976,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
               filters={filters}
               onChange={onChange}
               resultCount={resultCount}
-              experimental={{presentation}}
+              presentation={presentation}
             />
           </Dialog>
         );
@@ -1172,7 +1199,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
           onChange={() => {}}
           hasAutoFocus
           onFocus={onFocus}
-          experimental={{presentation: 'adaptive'}}
+          presentation="adaptive"
         />
       </>,
     );
@@ -1313,7 +1340,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
             // The count follows the filters, so Clear all changes it in the
             // same commit as the removal.
             resultCount={filters.length === 0 ? 240 : 12}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         );
       }
@@ -1367,7 +1394,7 @@ describe('PowerSearch sheet trigger (FR11)', () => {
             filters={filters}
             onChange={next => setFilters(next)}
             resultCount={resultCount}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         );
       }
@@ -1453,7 +1480,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
           config={config}
           filters={filters}
           onChange={next => setFilters(next)}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -1571,7 +1598,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
             onChange(next, type, index);
             setFilters(next);
           }}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -1664,7 +1691,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
         config={config}
         filters={[openFilter]}
         onChange={vi.fn()}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
         isDisabled
       />,
     );
@@ -1695,7 +1722,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
               setFilters(next);
               setIsDisabled(true);
             }}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         </>
       );
@@ -1779,7 +1806,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
               setFilters(next);
             }}
             isReadOnly={readOnly}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         );
       }
@@ -1864,7 +1891,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
           config={config}
           filters={[openFilter]}
           onChange={vi.fn()}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       </div>,
     );
@@ -2042,7 +2069,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
             onChange(next, type, index);
             setFilters(next);
           }}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -2106,7 +2133,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
           config={config}
           filters={filters}
           onChange={() => {}}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -2142,7 +2169,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
           config={cfg}
           filters={[]}
           onChange={() => {}}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -2212,7 +2239,7 @@ describe('PowerSearch Filters sheet (FR12)', () => {
           filters={filters}
           onChange={() => {}}
           hasClear={hasClear}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -2617,7 +2644,7 @@ describe('PowerSearch Add filter (FR13)', () => {
           config={config}
           filters={filters}
           onChange={next => setFilters(next)}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -2654,7 +2681,7 @@ describe('PowerSearch Add filter (FR13)', () => {
               onChange(next, type, index);
               setFilters(next);
             }}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         );
       }
@@ -2777,7 +2804,7 @@ describe('PowerSearch Add filter (FR13)', () => {
         config={config}
         filters={[]}
         onChange={vi.fn()}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
         isReadOnly
       />,
     );
@@ -3221,7 +3248,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
           config={config}
           filters={filters}
           onChange={next => setFilters(next)}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -3270,7 +3297,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
           config={withNested}
           filters={filters}
           onChange={next => setFilters(next)}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -3292,7 +3319,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
           config={config}
           filters={filters}
           onChange={next => setFilters(next)}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -3312,7 +3339,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
         config={config}
         filters={[openFilter, authorFilter]}
         onChange={onChange}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     openEditFlow('Status is Open');
@@ -3321,7 +3348,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
         config={config}
         filters={[{...authorFilter}, {...openFilter}]}
         onChange={onChange}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     tapRow('Closed');
@@ -3347,7 +3374,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
         config={config}
         filters={[openFilter]}
         onChange={onChange}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     openEditFlow('Status is Open');
@@ -3356,7 +3383,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
         config={config}
         filters={[authorFilter]}
         onChange={onChange}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     tapRow('Closed');
@@ -3389,7 +3416,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
               onChange(next, type, index);
               setFilters(next);
             }}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         );
       }
@@ -3442,7 +3469,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
         config={config}
         filters={[openFilter]}
         onChange={onChange}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     openEditFlow('Status is Open');
@@ -3459,7 +3486,7 @@ describe('PowerSearch value step (FR14–FR16)', () => {
         }}
         filters={[openFilter]}
         onChange={onChange}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     expect(
@@ -3509,13 +3536,14 @@ describe('PowerSearch value step (FR14–FR16)', () => {
     tapRow('Status');
     // The same props, with the same meaning, as the popover passes: the
     // caller's config, the partial filter, the mode, the save label, the
-    // read-only flag, and the two callbacks; no sheet-only `timezoneID`.
+    // read-only flag, the field's zone, and the two callbacks.
     expect(seenProps).toHaveBeenLastCalledWith({
       config,
       filter: {field: 'status', operator: 'is', value: undefined},
       mode: 'create',
       saveButtonLabel: 'Keep',
       isReadOnly: false,
+      timezoneID: 'Asia/Tokyo',
       onSave: expect.any(Function),
       onCancel: expect.any(Function),
     });
@@ -3807,7 +3835,7 @@ describe('PowerSearch step sheets (retained stack, FR15a)', () => {
           config={stale}
           filters={[openFilter, authorFilter]}
           onChange={vi.fn()}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />,
       );
       await new Promise(resolve => setTimeout(resolve, 40));
@@ -4333,6 +4361,104 @@ describe('PowerSearch sheet value types (FR17)', () => {
     expect(input).toHaveValue('March 10, 2024');
   });
 
+  it.each([
+    ['Asia/Tokyo', 'March 10, 2024', '2024-03-10T15:00:00Z'],
+    ['Pacific/Honolulu', 'March 9, 2024', '2024-03-11T10:00:00Z'],
+    [undefined, 'March 10, 2024', '2024-03-11T00:00:00Z'],
+  ])(
+    "date_absolute: the value step's date input opens on the day in timezoneID %s and stores a picked day as that zone's midnight",
+    (timezoneID, opensOn, storedAfterPickingMarch11) => {
+      const dateFilter: PowerSearchFilter = {
+        field: 'created',
+        operator: 'after',
+        // 2024-03-10T03:00:00Z: March 10 in Tokyo, March 9 in Honolulu.
+        value: {type: 'date_absolute', unixSeconds: 1710039600},
+      };
+      const {onChange} = setupValues({filters: [dateFilter], timezoneID});
+      openEditFlow(/^Created is after/);
+      const input = within(sheet()).getByRole('combobox', {name: 'Date'});
+      expect(input).toHaveValue(opensOn);
+      fireEvent.change(input, {target: {value: '03/11/2024'}});
+      fireEvent.blur(input);
+      apply();
+      expect(onChange).toHaveBeenCalledWith(
+        [
+          {
+            field: 'created',
+            operator: 'after',
+            value: {
+              type: 'date_absolute',
+              unixSeconds: Date.parse(storedAfterPickingMarch11) / 1000,
+            },
+          },
+        ],
+        'edit',
+        0,
+      );
+    },
+  );
+
+  it("date_absolute: a components Editor override in the value step receives the field's timezoneID (FR14, FR25)", () => {
+    const seen: (string | undefined)[] = [];
+    function Editor(props: PowerSearchEditorProps) {
+      seen.push(props.timezoneID);
+      return <div>custom editor</div>;
+    }
+    const dateFilter: PowerSearchFilter = {
+      field: 'created',
+      operator: 'after',
+      value: {type: 'date_absolute', unixSeconds: 1710039600},
+    };
+    setupValues({
+      filters: [dateFilter],
+      timezoneID: 'Asia/Tokyo',
+      components: {date_absolute: {Editor}},
+    });
+    openEditFlow(/^Created is after/);
+    expect(within(sheet()).getByText('custom editor')).toBeTruthy();
+    expect(seen).toContain('Asia/Tokyo');
+  });
+
+  it('date_absolute with isDateOnly: false: the value step shows the time in timezoneID on the row, the date picker and the time field, and stores the time typed (FR26)', () => {
+    const instantFilter: PowerSearchFilter = {
+      field: 'updated',
+      operator: 'after',
+      // 2024-03-10T03:00:00Z: March 9, 7:00 PM in Los Angeles.
+      value: {type: 'date_absolute', unixSeconds: 1710039600},
+    };
+    const {onChange} = setupValues({
+      filters: [instantFilter],
+      timezoneID: 'America/Los_Angeles',
+    });
+    openSheet();
+    expect(
+      within(sheet()).getByRole('button', {name: /Mar 9, 2024, 7:00 PM/}),
+    ).toBeTruthy();
+    tapRow(/^Updated is after/);
+    expect(within(sheet()).getByRole('combobox', {name: 'Date'})).toHaveValue(
+      'March 9, 2024',
+    );
+    const time = within(sheet()).getByLabelText('Time');
+    expect(time).toHaveValue('7:00 PM');
+    fireEvent.change(time, {target: {value: '8:30 PM'}});
+    fireEvent.blur(time);
+    apply();
+    expect(onChange).toHaveBeenCalledWith(
+      [
+        {
+          field: 'updated',
+          operator: 'after',
+          value: {
+            type: 'date_absolute',
+            unixSeconds: Date.parse('2024-03-10T04:30:00Z') / 1000,
+          },
+        },
+      ],
+      'edit',
+      0,
+    );
+  });
+
   it('date_relative: rows stage a single relative value', () => {
     const {onChange} = setupValues();
     openAddFlow();
@@ -4509,7 +4635,7 @@ describe('PowerSearch sheet value text', () => {
               filters={filters}
               onChange={next => setFilters(next)}
               timezoneID={timezoneID}
-              experimental={{presentation: 'bottom-sheet'}}
+              presentation="bottom-sheet"
             />
           );
         }
@@ -4538,18 +4664,17 @@ describe('PowerSearch sheet value text', () => {
     },
   );
 
-  it('reads a date into the editor as the popover presentation does (FR17)', () => {
+  it('reads a date into the editor as the popover presentation does (FR17, FR25)', () => {
     setup({
       config: valueTypesConfig,
       filters: [dateFilter],
       timezoneID: 'Pacific/Honolulu',
     });
     openEditFlow(/^Created is after/);
-    // Both presentations' date editors read the instant's UTC day; the
-    // token and row may name a neighbouring day in an off-UTC zone (the
-    // record's known gap).
+    // Both presentations' date editors read the instant's day in
+    // `timezoneID`, the day the token and the row name.
     expect(within(sheet()).getByRole('combobox', {name: 'Date'})).toHaveValue(
-      'March 10, 2024',
+      'March 9, 2024',
     );
   });
 
@@ -4628,7 +4753,7 @@ describe('PowerSearch sheet value text', () => {
             config={valueTypesConfig}
             filters={filters}
             onChange={next => setFilters(next)}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         );
       }
@@ -4669,7 +4794,7 @@ describe('PowerSearch sheet value text', () => {
               config={config}
               filters={filters}
               onChange={next => setFilters(next)}
-              experimental={{presentation: 'bottom-sheet'}}
+              presentation="bottom-sheet"
             />
           </InternationalizationProvider>
         );
@@ -4708,7 +4833,7 @@ describe('PowerSearch sheet value text', () => {
               filters={filters}
               onChange={next => setFilters(next)}
               resultCount={filters.length === 0 ? 240 : 12}
-              experimental={{presentation: 'bottom-sheet'}}
+              presentation="bottom-sheet"
             />
           </InternationalizationProvider>
         );
@@ -4773,7 +4898,7 @@ describe('PowerSearch sheet value text', () => {
             },
           ]}
           onChange={() => {}}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       </InternationalizationProvider>,
     );
@@ -4820,7 +4945,7 @@ describe('PowerSearch sheet value text', () => {
               config={valueTypesConfig}
               filters={current}
               onChange={next => setCurrent(next)}
-              experimental={{presentation: 'bottom-sheet'}}
+              presentation="bottom-sheet"
             />
           </InternationalizationProvider>
         );
@@ -4882,7 +5007,7 @@ describe('PowerSearch sheet value text', () => {
               },
             ]}
             onChange={() => {}}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         </InternationalizationProvider>,
       );

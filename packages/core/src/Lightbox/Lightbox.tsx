@@ -43,7 +43,7 @@ import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
 import {LayerContentBoundary} from '../Layer/layerScopedContext';
 import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
-import {overlayPaddingReset} from '../Layout/padding.stylex';
+import {overlayPaddingReset} from '../Layout/overlayPaddingReset.stylex';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
 
@@ -429,6 +429,7 @@ export function Lightbox({
   // Open/close dialog. The dialog renders only with an item, so a viewer
   // opened before its first item arrives opens when that item does.
   const hasItem = currentItem != null;
+  // Syncs the native dialog with `isOpen` through `showModal()` and `close()`.
   useIsomorphicLayoutEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog || !hasItem) {
