@@ -30,13 +30,13 @@ export default function InputGroupSearchAction() {
         />
         <Button label="Search" variant="primary" onClick={search} />
       </InputGroup>
-      {searchedFor != null && (
-        <Text type="supporting" color="secondary">
-          {searchedFor === ''
+      <Text type="supporting" color="secondary" role="status">
+        {searchedFor == null
+          ? ''
+          : searchedFor === ''
             ? 'Showing all orders'
             : `Showing orders that match “${searchedFor}”`}
-        </Text>
-      )}
+      </Text>
     </VStack>
   );
 }
