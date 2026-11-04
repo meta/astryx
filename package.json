@@ -105,6 +105,7 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
     "@babel/core": "catalog:",
+    "@babel/preset-typescript": "catalog:",
     "@changesets/cli": "^2.31.0",
     "@eslint-react/eslint-plugin": "^5.10.4",
     "@eslint/compat": "^2.1.0",

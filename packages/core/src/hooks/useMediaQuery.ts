@@ -20,7 +20,8 @@ import {useCallback, useSyncExternalStore} from 'react';
 
 /**
  * SSR-safe media query hook.
- * Returns whether the given media query matches.
+ * Returns whether the given media query matches. Where the window has no
+ * `matchMedia`, as in a test DOM, it returns `serverDefault`.
  *
  * @param query - CSS media query string
  * @param serverDefault - Value to return during SSR. Pass a server-side hint
@@ -35,6 +36,10 @@ import {useCallback, useSyncExternalStore} from 'react';
 export function useMediaQuery(query: string, serverDefault = false): boolean {
   const subscribe = useCallback(
     (onStoreChange: () => void) => {
+      // A DOM without `matchMedia`, such as a test DOM, has nothing to watch.
+      if (typeof window.matchMedia !== 'function') {
+        return () => {};
+      }
       const mql = window.matchMedia(query);
       mql.addEventListener('change', onStoreChange);
       return () => mql.removeEventListener('change', onStoreChange);
@@ -42,9 +47,13 @@ export function useMediaQuery(query: string, serverDefault = false): boolean {
     [query],
   );
 
-  const getSnapshot = useCallback(() => {
-    return window.matchMedia(query).matches;
-  }, [query]);
+  const getSnapshot = useCallback(
+    () =>
+      typeof window.matchMedia === 'function'
+        ? window.matchMedia(query).matches
+        : serverDefault,
+    [query, serverDefault],
+  );
 
   const getServerSnapshot = useCallback(() => serverDefault, [serverDefault]);
 

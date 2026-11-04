@@ -14,14 +14,19 @@
  *   touch presentation under a finger.
  */
 
-import {expect, test, type Browser, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Browser,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   openStory,
   PEN_SKIP,
   webInputDriver,
   withStorybook,
 } from '@astryxdesign/interaction-harness';
-import {BROWSER_CLICK_WAIT_MS} from '../switchTouch';
+import {BROWSER_CLICK_WAIT_MS} from '../../utils/browserClickWait';
 
 const storybook = withStorybook(test);
 

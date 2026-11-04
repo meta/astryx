@@ -40,6 +40,8 @@ export function useDevWarning(
   condition: boolean = true,
 ): void {
   const hasWarnedRef = useRef(false);
+  // The console is outside React. The ref prints the warning one time, also
+  // when StrictMode runs the Effect again.
   useEffect(() => {
     if (condition && !hasWarnedRef.current) {
       hasWarnedRef.current = true;

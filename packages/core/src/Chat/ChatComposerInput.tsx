@@ -68,6 +68,7 @@ import {
 import {Badge, type BadgeProps} from '../Badge';
 import {useChatComposerContext} from './ChatContext';
 import {themeProps} from '../utils/themeProps';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import type {EnterKeyHint} from '../Field/textEntryTraits';
 import {
   registerEnglishFallback,
@@ -390,13 +391,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
   } = props;
   // Keep focus/blur observation available, but do not forward activation or
   // editing callbacks from the disabled root (including capture handlers).
-  const rootProps = isDisabled
-    ? Object.fromEntries(
-        Object.entries(rest).filter(
-          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
-        ),
-      )
-    : rest;
+  const rootProps = withholdCallerHandlers(rest, isDisabled);
   const label = labelFromProps ?? t('@astryx.chat.composerInput.label');
   const placeholder =
     placeholderFromProps ??
@@ -529,6 +524,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     };
   }, [inputControlRef, focusEditableAtEnd]);
 
+  // Syncs the contentEditable DOM with the controlled `value`.
   useEffect(() => {
     if (controlledValue === undefined || !editableRef.current) {
       return;
@@ -650,6 +646,7 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
         }
       : triggerMenu.ariaProps;
 
+  // Syncs the trigger menu's pending searches with `isDisabled`.
   useEffect(() => {
     if (isDisabled && triggerMenu.state.isActive) {
       // Reset also cancels pending searches, so late results cannot reopen

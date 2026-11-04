@@ -4,10 +4,10 @@
  * @file index.ts
  * @input The domain files of the UIKit constants table
  * @output Re-exports `springs` and one constant per spring (`SHEET_PRESENT_SPRING`,
- *   …), `scroll`, `timing`, `navigation`, `progressBar`, the `slider` and
- *   switch (`switchControl`) domains, and the gesture thresholds (one
- *   `UIKIT_*` group per recognizer, their union `UIKIT_GESTURES`, and the
- *   haptic tables)
+ *   …), `scroll`, `timing`, `navigation`, `picker`, `progressBar`,
+ *   `segmentedControl`, `datePicker`, `slider` and `switchControl`. It also
+ *   re-exports the gesture thresholds: one `UIKIT_*` group per recognizer,
+ *   their union `UIKIT_GESTURES`, and the haptic tables
  * @position Entry of the UIKit constants table (motion/uikit). Internal to
  *   core: not exported from the package entry point
  *
@@ -27,6 +27,7 @@ export {
   UIKIT_CONTROL,
   UIKIT_GESTURES,
   UIKIT_LONG_PRESS,
+  UIKIT_MENU_PRESS,
   UIKIT_PAN,
   UIKIT_PINCH,
   UIKIT_PRESS,
@@ -39,9 +40,12 @@ export {
   type GestureConstantUnit,
   type HapticFeedbackKind,
 } from './gestures';
+export {datePicker} from './datePicker';
 export {navigation, registerNavigationTable} from './navigation';
+export {picker} from './picker';
 export {progressBar, registerProgressBarTable} from './progressBar';
 export {registerScrollTable, scroll} from './scroll';
+export {segmentedControl} from './segmented';
 export {slider} from './slider';
 export {
   ACTION_SHEET_DISMISS_SPRING,
@@ -64,7 +68,6 @@ export {
   NAVIGATION_POP_SPRING,
   NAVIGATION_PUSH_SPRING,
   QUICK_CHANGE_SPRING,
-  SEGMENTED_THUMB_SPRING,
   SETTLE_SPRING,
   SHEET_DETENT_SPRING,
   SHEET_DISMISS_SPRING,

@@ -188,6 +188,8 @@ export function useModalOutlet(
   const isLatestRef = useRef(isLatest);
   isLatestRef.current = isLatest;
   const suppliedRef = useRef<HTMLDialogElement | null>(null);
+  // Syncs the module registry of modal outlets with this dialog while it is
+  // active. It also follows the dialog's native `close` event.
   useEffect(() => {
     const element = ref.current;
     if (!isActive || element == null) {

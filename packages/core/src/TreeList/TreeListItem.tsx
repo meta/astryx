@@ -4,7 +4,8 @@
 
 /**
  * @file TreeListItem.tsx
- * @input Uses React, StyleX, theme tokens, TreeListBranches
+ * @input Uses React, StyleX, theme tokens, TreeListBranches, the shared press
+ *   overlays and the compositor press layer
  * @output Exports TreeListItem component (internal, not publicly exported)
  * @position Internal implementation; consumed by TreeList.tsx
  *
@@ -27,6 +28,7 @@ import {
 } from '../theme/tokens.stylex';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {rowPressLayerStyles} from '../privateAttributes/press.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {
   hasInteractiveAncestor,
@@ -480,11 +482,12 @@ export function TreeListItem({
   // a plain element and both hook instances stay inert on it.
   const forwardsToLink = href != null && handleClick == null;
   const linkRowRef = useRef<HTMLDivElement>(null);
-  const {onClick: delegateToLink} = useClickableContainer({
-    containerRef: linkRowRef,
-    interactiveRef: linkRef,
-    disabled: isDisabled || !forwardsToLink,
-  });
+  const {onClick: delegateToLink, onPointerDown: pressOnLinkRow} =
+    useClickableContainer({
+      containerRef: linkRowRef,
+      interactiveRef: linkRef,
+      disabled: isDisabled || !forwardsToLink,
+    });
   const {onMouseUp: openLinkOnMiddleClick} = useClickableContainer({
     containerRef: linkRowRef,
     href,
@@ -712,6 +715,10 @@ export function TreeListItem({
                   densityStyles[density],
                   styles.interactive,
                   interactionOverlayStyles.backgroundImage,
+                  // The touch press on a compositor layer (after the
+                  // overlay, whose own touch paint it turns off).
+                  rowPressLayerStyles.cell,
+                  rowPressLayerStyles.cellOnImage,
                   isDisabled && styles.disabled,
                   isSelected && styles.selected,
                   xstyle,
@@ -732,7 +739,8 @@ export function TreeListItem({
           )}
           ref={forwardsToLink ? linkRowRef : undefined}
           onClick={forwardsToLink ? delegateToLink : handleClick}
-          onMouseUp={forwardsToLink ? openLinkOnMiddleClick : undefined}>
+          onMouseUp={forwardsToLink ? openLinkOnMiddleClick : undefined}
+          onPointerDown={forwardsToLink ? pressOnLinkRow : undefined}>
           <div {...stylex.props(styles.indentedContent)}>{innerContent}</div>
         </div>
       </div>

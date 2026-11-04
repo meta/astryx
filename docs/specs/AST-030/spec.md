@@ -43,7 +43,9 @@ affects_consumer_docs: []
     ".github/scripts/ci-pr-gate.*",
     ".github/scripts/perf-*",
     "apps/sandbox/perf/**",
-    "playwright.perf.config.ts"
+    "playwright.perf.config.ts",
+    ".github/scripts/check-public-text.*",
+    ".github/public-text-hashes.json"
   ]
 }
 ```
@@ -175,8 +177,11 @@ they are separately named.
   check (FR12) is the visual, accessibility and RTL owners' pull-request
   coverage for the components a change touches: its visual part runs inside
   `pr-visual`, and its accessibility and RTL part runs in one advisory job
-  beside them that reports no required context, so it routes no new surface
-  lane. A selected surface whose dedicated
+  beside them that reports no required context. The touched components'
+  browser accessibility contracts (FR12) run in their own parallel job, which
+  reports no required context of its own: the existing `test` join waits on
+  it and fails with it (FR7), so `test` stays the one required name and it
+  routes no new surface lane. A selected surface whose dedicated
   owner is not yet admitted continues through broad CI. The Build package's test
   owner includes its production CSS-layer cascade behavior. Theme-family
   compilation remains `theme-build` and does not become Build merely because both
@@ -207,7 +212,8 @@ they are separately named.
   `ci:run-visual`, `ci:run-a11y` or `ci:run-rtl`, in each case last applied by
   someone with write, maintain or admin access, and a lookup that cannot
   confirm that runs nothing. A label runs only its own suite. A Lab-only pull
-  request (FR26) runs no default touched-components check; its labels still
+  request (FR26) runs no default touched-components check and no contract
+  job; its labels still
   run their suites. Without a label, a pull request update
   runs none of these owners at their opted-in scope, and no required context
   depends on them; it runs one default touched-components check instead:
@@ -225,8 +231,31 @@ they are separately named.
   is the full suites behind the labels. No required context depends on the
   touched check, and it records each touched component's pass, fail, changed
   or not-run result per suite, or that the change was wide and how many
-  components it touched, for the pull-request comment. The default check also runs, in Chromium, the browser accessibility spec files the change adds or modifies, and only those files, routed by their own `@pr-a11y` lines read from the merge commit: a changed `release-only` spec waits for the release check, a changed `audit` spec for its component-audit pull request, and the run widens to no other spec. It stays inside the check's 15-minute budget by running at most four changed spec files, in path order, and stopping after eight minutes; a file over the limit is recorded as not run, with the label that runs it, and a spec that does not finish fails the run, so neither reads as passed. A pull request that changes no such file runs none, and a failing one turns the advisory check red on that pull request, wide changes included. An opted-in PR's a11y MUST remain scoped to changed components
-  plus fast interaction guards; full a11y
+  components it touched, for the pull-request comment. Beside the default check, one contract job runs, in Chromium, the
+  browser accessibility contracts of the components the change touches. It
+  needs only the pull request's Storybook build. First it runs the browser
+  accessibility spec files the change adds or modifies, at most four, in path
+  order, routed by their own `@pr-a11y` lines read from the merge commit; a
+  changed `audit` spec waits for its component-audit pull request. Then, unless
+  the change is wide, it runs the `scoped` and `release-only` spec files that
+  each touched component owns, in path order, found by the same `@pr-a11y`
+  scope and spec-location mapping the labelled run uses. It runs no spec of
+  another component or of a reverse dependent, and no unchanged `audit` or
+  `always` spec. The contract job runs in parallel with the unit-test jobs and
+  MUST NOT become the pull request's critical path: it starts after the
+  Storybook build and MUST finish before the slowest unit-test job, so the
+  time until the required `test` join reports does not grow. It stops after
+  eight minutes: it starts a file only when that file's recorded duration fits
+  the time left. A contract file that cannot finish within the budget is
+  reported as not run, not split. Each file it does not run, for that budget
+  or the four-file limit, is reported as not run in the check's summary and
+  annotations, with the label that runs it. A spec that starts and does not
+  finish fails. A failing contract fails the required `test` join (FR7) and
+  blocks the merge. A not-run file passes the join, so a skip never reads as a
+  pass and an overflow never reads as a failure. An opted-in PR's a11y MUST
+  remain scoped to changed components plus fast interaction guards, and also
+  runs the `release-only` spec files a changed component owns directly, never
+  through a shared scope token or an unknown scope; full a11y
   sweeps, whole-repository spec-test contracts, and their evidence uploads MUST
   run only for `release-check` in this workflow. Missing,
   failed, cancelled, or skipped required work MUST block the release-check join.
@@ -280,9 +309,10 @@ they are separately named.
   audits every component each of those folders implements. A Changeset renders nothing and widens no audit. A changed module that no component bundle holds adds none, and without
   a readable build the audits run in full. PR accessibility, when it runs, stays
   scoped to changed components (FR12). Without a label, the default
-  touched-components check audits only the touched components, and runs only
-  the browser accessibility spec files the change adds or modifies; it never
-  widens (FR12). Shared infrastructure runs the full suite of the owners the
+  touched-components check audits only the touched components, and the
+  contract job runs only the browser accessibility spec files the change adds
+  or modifies and those the touched components own; neither widens to reverse
+  dependents, shared modules or other components (FR12). Shared infrastructure runs the full suite of the owners the
   pull request runs (visual, accessibility and RTL only with their `ci:run-*`
   labels, FR12): root
   dependency manifests and lockfile, root configuration, a package's manifest,
@@ -510,6 +540,20 @@ they are separately named.
   classifier has no Lab-only lane. An outside
   contributor's pull request still needs `ci:run` (FR17), and `main` and the
   release-check cover Lab as before (DEC-21).
+- **FR27 — Lint fails a pull request whose public text carries an internal
+  reference.** Public text is each commit message and added line from the merge
+  base to the pull request head, and the pull request's title and description
+  as they read when the check runs. Generated text that no person writes, the
+  lockfile and the digest list, is not read.
+  The required Lint job runs the base branch's copy of the check, so a pull
+  request cannot change the check that judges it. The check matches generic
+  shapes of internal identifiers and hosts, and salted digests of internal
+  names; the repository holds no internal name in plain text. A failure names
+  the location and the kind of reference, never the matched text, and tells
+  the contributor to remove the reference at that location, with a maintainer's
+  help when the reference is unclear. A range it cannot read fails the check. A
+  maintainer handles a false positive through the normal fix-forward route,
+  with no bypass.
 
 ### Platform support
 
@@ -557,7 +601,8 @@ The nightly perf lane is the one scheduled measurement outside them (FR18).
 | FR10     | surface-admission and routing contract tests                                                                                                       | existing surface; proposed surface with and without the full admission contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | a new surface adds lanes without its approved paths, commands, ownership, projections, and routing tests                                                                                                                                                                                                                                                                                                  |
 | FR11     | surface owner, internal-job, and required-join contract tests                                                                                      | Build package browser behavior; CLI; theme-family broad fallback; mixed Core+CLI                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | a second owner is routed for one surface, an internal job masquerades as a lane, an owned failure misses its join, or an unrelated owner runs                                                                                                                                                                                                                                                             |
 | FR12     | Storybook visual-plan, canonical workflow, and repository-owner guard tests                                                                        | PR scope; full-plan maintenance; report-only publication; deployment/a11y/RTL/vibe artifacts                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | another workflow captures or compares pixels, a renamed or aliased owner escapes the guard, or legitimate non-visual artifacts are rejected                                                                                                                                                                                                                                                               |
-| FR12     | `touched-components.test.mjs` changed-spec routing; `a11y-pr-contracts.test.mjs` `changedOnly` cases                                               | a pull request that adds a browser accessibility spec; one that changes an `always` spec; one that changes a `release-only` or an `audit` spec; one that changes more spec files than the limit; a component change with no spec change                                                                                                                                                                                                                                                                                                                                                                                      | a pull request that adds a browser accessibility spec that fails is not caught on that pull request, an unchanged, `release-only` or `audit` spec runs in the default check, a file over the limit is reported as passed, or the default check widens past the changed spec files                                                                                                                         |
+| FR12     | `touched-components.test.mjs` changed-spec routing; `a11y-pr-contracts.test.mjs` `changedOnly` cases                                               | a pull request that adds a browser accessibility spec; one that changes an `always` spec; one that changes a `release-only` or an `audit` spec; one that changes more spec files than the limit; a component change with no spec change                                                                                                                                                                                                                                                                                                                                                                                      | a pull request that adds a browser accessibility spec that fails is not caught on that pull request, another component's spec or an unchanged `audit` spec runs in the contract job, a not-run file reads as passed or fails the join, or a failing contract leaves the `test` join green                                                                                                                 |
+| FR12     | `a11y-pr-contracts.test.mjs` ownership cases; the CI workflow contract; contract-job and unit-test-job timings on 17 component pull requests       | a pull request that touches one component with an owned `release-only` contract, passing and failing; a contract file that cannot finish within the budget; a wide change; a reverse dependent of the touched component; measured: setup up to about 1.5 minutes plus the 8-minute stop, against the slowest unit-test job finishing 9.9 to 25 minutes after the Storybook build                                                                                                                                                                                                                                             | a touched component's owned `release-only` contract does not run on its pull request, a failing contract leaves the `test` join green, a skipped file is split, does not show as "not run" in the check's summary or fails the join, the contract job finishes after the slowest unit-test job, or a wide change or reverse dependent runs owned contracts                                                |
 | FR13     | classifier, workflow contract, component-analysis and RTL-scope tests                                                                              | component change; shared module; Changeset beside code; infrastructure path; incomplete list; no build                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | an infrastructure path is scoped, a file-system guard test is skipped, a reverse dependent leaves visual/RTL or enters PR accessibility, or a full-suite event is narrowed                                                                                                                                                                                                                                |
 | FR14     | `workflow-paths.test.mjs` over every workflow                                                                                                      | path allowlist; required-context workflow                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | a `paths-ignore`, a match-all or exclusion glob, or a path filter on a workflow that reports a required context fails                                                                                                                                                                                                                                                                                     |
 | FR15     | workflow contract and reconciler tests                                                                                                             | ENGOWNER spec PR; owner command; other comment; fork review; non-spec PR; run over the request budget; maintainer dispatch; fork PR, code-only: an owner's exact-head approval plus the owner command clears the code half                                                                                                                                                                                                                                                                                                                                                                                                   | `review-required` succeeds while spec approval is missing, another workflow publishes a review context, a fork review starts the spec checks, a non-command comment starts a runner, an over-budget run decides, or a fork's approved code-only PR stays pending after the owner command                                                                                                                  |
@@ -572,6 +617,7 @@ The nightly perf lane is the one scheduled measurement outside them (FR18).
 | FR23     | `release-check-shape.test.mjs`, `a11y-contract-shard.test.mjs` and the release-check workflow contract                                             | release-check and pull-request legs; a contract file longer than a leg's share, one it cannot name exactly, and a serial one; the recorded suite; a re-check from an admin, a maintainer and a writer, from another branch, with a short SHA and with an older commit; failed-only beside a passed, a running and a missing run                                                                                                                                                                                                                                                                                              | a narrower release-check, a held or over-budget leg, a test selected by no leg or by two, a re-check that a writer can start, that waits for main's running check, or that re-runs jobs of another commit fails                                                                                                                                                                                           |
 | FR24     | `ci-heavy-lanes.test.mjs` cadence cases                                                                                                            | release-check 170 and 176 minutes old; the unit lane hourly beside it; weekday 06:37 Pacific inside the window in standard and daylight time; the pre-cut check already started; the tip already checked; a weekend morning; before 06:30 and after 07:30                                                                                                                                                                                                                                                                                                                                                                    | a release-check starts inside the 175-minute window, the pre-cut check is skipped or starts twice, or it runs on a weekend                                                                                                                                                                                                                                                                                |
 | FR26     | `ci-lab-only-routing.test.mjs`, `change-scope.test.mjs` and `test-scope-action.test.mjs` Lab-only cases                                            | a Lab-only change, with and without a Changeset; Lab beside core, charts, a Storybook story, the docsite, the Sandbox, a workflow, the lockfile, root configuration, internal tooling or a spec record; a rename into or out of Lab; an incomplete list; a base classifier without the lane; each required context, its owners, the UI legs' Lab tests, the UI and Node guard tests, the repository guards, the Storybook build and Lab typecheck, the heavy suites with and without a label, lint and an agent push                                                                                                         | a mixed change takes the Lab-only lane; a required context skips or fails, or passes without its notice; a Lab test, a guard test, a repository guard, the Lab typecheck or the Storybook build does not run; an unlabelled heavy suite, the docsite or the full typecheck runs, or a label's suite cannot audit Lab; lint is skipped                                                                     |
+| FR27     | `check-public-text.test.mjs` over the check and the Lint workflow step                                                                             | each identifier shape; a hashed name and host made up in the test; ordinary text; a finding in a commit message, an added line and the description; a match before the merge base; an empty range, a bad sha, a missing commit and a missing digest file                                                                                                                                                                                                                                                                                                                                                                     | a reference passes; the output holds the matched text; a match on the base branch fails a later pull request; an unreadable range passes; the step runs the pull request's own copy                                                                                                                                                                                                                       |
 
 ## Decision log
 
@@ -684,7 +730,8 @@ retroactive status as release evidence.
 **Decider:** `cixzhang`, `2026-10-28`
 **Superseded in part by:** `spec:AST-030/DEC-11` (main is checked about hourly,
 not on every push); `spec:AST-030/DEC-18` (a release re-check cancels the check
-running in main's lane)
+running in main's lane); `spec:AST-030/DEC-22` (a touched component's own
+accessibility contracts run, and block, on its pull request)
 
 Run the visual, accessibility and RTL owners on every push to `main`, through
 the same exact-commit `release-check` the release gate uses, and before a cut;
@@ -701,7 +748,12 @@ while the full
 suites stay behind their labels; the
 modal-close, theme-var and story-play guards are steps of the accessibility
 owner, so they run with it, after merge or on a labelled pull request. A
-browser accessibility spec file a pull request adds or modifies runs in that same job, by itself, so a new scoped or `always` spec is checked on its own pull request rather than first on `main`'s release check; an `audit` or `release-only` spec still first runs on its audit pull request or the release check. It costs nothing on a pull request that changes no spec. A
+browser accessibility spec file a pull request adds or modifies, and every
+`scoped` or `release-only` spec file a touched component owns, runs in its
+own job, in parallel with the unit-test jobs, so a component's own contracts
+are checked on its own pull request rather than first on `main`'s release
+check; an `audit` spec still first runs on its audit pull request. A failing
+contract blocks the merge through the `test` join (DEC-22). A
 failure on `main` is repaired forward with an atomic pull request, not reverted
 first. This supersedes DEC-5's choice to keep these checks off main pushes:
 running the browser suites on every update of every open pull request costs
@@ -1000,6 +1052,39 @@ repository-wide guards (a landed guard break blocks everyone else's pull
 requests); counting Lab stories under `apps/storybook/stories/` as Lab-only
 (they share the visual surface, and a path cannot tell a Lab story from a core
 one without reading pull-request content, FR3).
+
+### DEC-22 — A touched component's own accessibility contracts run, and block, on its pull request
+
+**Reference:** `spec:AST-030/DEC-22`
+**Decider:** `cixzhang`, `2026-11-02`
+
+A Switch change merged with every required check green while its own
+aborted-press contract failed: a press released away from the switch still
+turned it on (WCAG 2.5.2). The contract was `release-only`, so no pull request
+ran it. Main's release check found the failure, and the release waited for a
+fix-forward. About fifty spec files across about thirty components are
+`release-only`, so no pull request runs them.
+
+The decider chose to run each touched component's own `scoped` and
+`release-only` contracts on its pull request, and to let a failure block the
+merge, on one condition: the work runs in parallel with the tests, so the time
+to green does not grow. One contract job therefore runs them, with the spec
+files the change edits, in parallel with the unit-test jobs: it needs only the
+Storybook build, stops after eight minutes, and finishes before the slowest
+unit-test job. The required `test` check waits on it, so a failure blocks the
+merge and no new required name appears.
+
+The result reports what happened. A file that the budget or a limit leaves out
+is "not run" in the check's summary and annotations, with the label that runs
+it, and is never split; it never reads as a pass and never fails the join. Wide changes (more than five touched components, or
+shared styles), shared modules and reverse dependents keep their scope, `audit`
+bindings still first run on their audit pull request, and the release check
+still runs every contract.
+
+Rejected: an advisory result (a red advisory check does not stop a merge when
+the required checks are green, so it would not have stopped the Switch change);
+release-check-only owned contracts (each miss holds a release until a
+fix-forward lands).
 
 ## Open questions
 
