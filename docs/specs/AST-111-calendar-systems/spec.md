@@ -116,7 +116,10 @@ import 'temporal-polyfill/full/global';
 `InternationalizationProvider`, `Calendar`, `DateInput`, `DateRangeInput`, and
 `DateTimeInput` accept it. `formatSharedDate` in `@astryxdesign/core/utils`, and
 `shortDate` and `monthYear` in `@astryxdesign/charts` and Lab `Chart`, take an
-optional `calendar` argument that defaults to `gregory` (FR18).
+optional `calendar` argument that defaults to `gregory` (FR18). The public
+`useCalendarDays` and `useCalendarNavigation` hooks in
+`@astryxdesign/core/Calendar` take an optional `calendar` that defaults to
+`gregory` and do not read the provider (FR20).
 
 ## Requirements
 
@@ -141,7 +144,8 @@ optional `calendar` argument that defaults to `gregory` (FR18).
   calendar.
 - **FR4 — Structure comes from the calendar.** Month lengths, the number of
   months in a year, leap months, and eras come from the calendar. No grid,
-  wheel, list, or step assumes 12 months or Gregorian month lengths. A leap
+  wheel, list, or step in a component, or in a hook given a calendar (FR20),
+  assumes 12 months or Gregorian month lengths. A leap
   month is a distinct month with its own name: Adar I and Adar II in a Hebrew
   leap year, or the leap month of a `chinese` or `dangi` year.
 - **FR5 — Some calendars need Temporal.** `gregory`, `iso8601`, `buddhist`,
@@ -200,7 +204,9 @@ These requirements apply to the text fields of `DateInput` and
   ambiguous, following the ICU4X year-ambiguity model: a year before the
   calendar's epoch era always shows its era, and in the `japanese` and `roc`
   calendars, whose era changes within 1900 through 2100, a format that omits the
-  era gains it, written narrow when that keeps the locale's field order. Without
+  era gains it, written narrow when that keeps the locale's field order; where
+  every era width reorders the fields, only a date before the latest era gains
+  it, because a year without an era reads in the latest era. Without
   a typed era, a one- or two-digit Japanese year is in the current era and a
   four-digit Japanese year is Gregorian, a Minguo year of up to three digits is
   in the 民國 (Minguo) era, and an Ethiopic year is in the AM era. A two-digit
@@ -262,6 +268,17 @@ These requirements apply to the text fields of `DateInput` and
   calendar: `plainDateFormat` through its existing `calendar` format option, and
   `formatSharedDate`, `shortDate`, and `monthYear` through an optional
   `calendar` argument. Astryx call sites pass the resolved calendar.
+- **FR20 — The public calendar hooks take an explicit calendar.**
+  `useCalendarDays` and `useCalendarNavigation` take an optional `calendar` that
+  defaults to `gregory`; they never read the provider, so a caller's numbers
+  keep their meaning when the application adds a provider calendar. With a
+  calendar, `useCalendarDays` reads `year` and `month` as the calendar's year
+  and the month's position in that year, as `Temporal.PlainDate` numbers them (1
+  through 13 in a Hebrew leap year), and each day keeps its Gregorian date while
+  `dayNumber` is its day of the calendar month. `useCalendarNavigation` steps
+  calendar months, writes `monthYearLabel` in the calendar, and reports the
+  visible month in the calendar's numbers so that it feeds `useCalendarDays`.
+  Without `calendar`, both behave as released.
 
 ### Lunisolar calendars
 
@@ -374,6 +391,8 @@ These requirements apply to the text fields of `DateInput` and
     gap: nonbreaking (FR5).
   - `formatSharedDate`, `shortDate`, and `monthYear` gain an optional argument:
     additive (FR5).
+  - `useCalendarDays` and `useCalendarNavigation` gain an optional `calendar`
+    that defaults to `gregory` (FR20): additive (FR5).
 - Consumer docs: the internationalization guide covers choosing a calendar,
   loading a `Temporal` polyfill on the server and in the browser, and FR19's
   caveat. `Calendar` documents `hasWeekNumbers` as ISO 8601 and explains that
@@ -383,18 +402,19 @@ These requirements apply to the text fields of `DateInput` and
 
 ## Verification
 
-| Contract     | Verification                                                                                                 | Representative states                                                                                                                                                                                                  | Mutation or failure expectation                                                                                                                                                  |
-| ------------ | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| FR1–FR2      | Provider and component resolution tests                                                                      | Every identifier; an unknown identifier; component over provider over default; bare `fa-IR`; a `-u-ca-` locale stays Gregorian                                                                                         | A locale selects a calendar, the precedence changes, or an unknown identifier throws                                                                                             |
-| FR3          | Callback and form tests in non-Gregorian calendars                                                           | Select, type, clear, `min`, `max`, and `dateConstraints` in `persian` and `hebrew`                                                                                                                                     | Any reported or submitted value is not Gregorian ISO                                                                                                                             |
-| FR4, FR6–FR7 | Month-structure tests against `Temporal` for every calendar from 1900 through 2100; real-browser grid checks | Persian month boundaries, a Hebrew leap year, the Ethiopic thirteenth month, the Japanese era change, a `chinese` leap month; PageUp, PageDown, Shift+PageUp, Shift+PageDown                                           | A month start, length, or step differs from `Temporal`, or a leap month vanishes                                                                                                 |
-| FR5          | Real-browser runs with `Temporal` removed, with and without the polyfill; server render and hydrate          | `persian` with and without `Temporal`; `buddhist` and `japanese` without `Temporal`                                                                                                                                    | A crash, a missing warning, or a hydration mismatch                                                                                                                              |
-| FR8          | Calendar week-number tests                                                                                   | `persian` and `hebrew` grids with `hasWeekNumbers`                                                                                                                                                                     | A week number that is not ISO 8601                                                                                                                                               |
-| FR9–FR14     | Parser tests; a round-trip matrix; DateInput and DateTimeInput interaction tests                             | Every calendar from 1900 through 2100 in native locales, English, and Swedish, in every named format; Adar; partial input; mixed digits; Japanese eras; invalid dates; Gregorian text that only `parseDateInput` reads | A round trip fails, an invalid date is adjusted, `onChange` fires on partial input, or Gregorian text that `parseDateInput` reads, other than a one-digit year, stops committing |
-| FR15–FR17    | Presentation tests and touch interaction tests                                                               | `adaptive-native` and `native` with `persian`; month counts in Hebrew leap and common years; era year labels; `DateRangeInput` trigger text                                                                            | A native date input renders for a non-Gregorian calendar under any presentation, or a wheel shows 12 months for a 13-month year                                                  |
-| FR18         | Formatter tests                                                                                              | Timestamp date formats, PowerSearch values, Schedule labels, and chart dates in `persian`                                                                                                                              | A built-in date format ignores the provider's calendar, or a `system_*` format changes                                                                                           |
-| FR19         | Documentation review                                                                                         | The internationalization guide and date component docs                                                                                                                                                                 | The caveat is missing                                                                                                                                                            |
-| AR1–AR3      | Accessibility-tree and announcement assertions                                                               | Day buttons and announcements in `persian`; each rejection kind                                                                                                                                                        | A spoken date uses another calendar than the grid, or two rejection kinds share a message                                                                                        |
+| Contract     | Verification                                                                                                 | Representative states                                                                                                                                                                                                                | Mutation or failure expectation                                                                                                                                                  |
+| ------------ | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| FR1–FR2      | Provider and component resolution tests                                                                      | Every identifier; an unknown identifier; component over provider over default; bare `fa-IR`; a `-u-ca-` locale stays Gregorian                                                                                                       | A locale selects a calendar, the precedence changes, or an unknown identifier throws                                                                                             |
+| FR3          | Callback and form tests in non-Gregorian calendars                                                           | Select, type, clear, `min`, `max`, and `dateConstraints` in `persian` and `hebrew`                                                                                                                                                   | Any reported or submitted value is not Gregorian ISO                                                                                                                             |
+| FR4, FR6–FR7 | Month-structure tests against `Temporal` for every calendar from 1900 through 2100; real-browser grid checks | Persian month boundaries, a Hebrew leap year, the Ethiopic thirteenth month, the Japanese era change, a `chinese` leap month; PageUp, PageDown, Shift+PageUp, Shift+PageDown                                                         | A month start, length, or step differs from `Temporal`, or a leap month vanishes                                                                                                 |
+| FR5          | Real-browser runs with `Temporal` removed, with and without the polyfill; server render and hydrate          | `persian` with and without `Temporal`; `buddhist` and `japanese` without `Temporal`                                                                                                                                                  | A crash, a missing warning, or a hydration mismatch                                                                                                                              |
+| FR8          | Calendar week-number tests                                                                                   | `persian` and `hebrew` grids with `hasWeekNumbers`                                                                                                                                                                                   | A week number that is not ISO 8601                                                                                                                                               |
+| FR9–FR14     | Parser tests; a round-trip matrix; DateInput and DateTimeInput interaction tests                             | Every calendar from 1900 through 2100 in native locales, English, and Swedish, in every named format; Adar; partial input; mixed digits; Japanese eras; invalid dates; Gregorian text that only `parseDateInput` reads               | A round trip fails, an invalid date is adjusted, `onChange` fires on partial input, or Gregorian text that `parseDateInput` reads, other than a one-digit year, stops committing |
+| FR15–FR17    | Presentation tests and touch interaction tests                                                               | `adaptive-native` and `native` with `persian`; month counts in Hebrew leap and common years; era year labels; `DateRangeInput` trigger text                                                                                          | A native date input renders for a non-Gregorian calendar under any presentation, or a wheel shows 12 months for a 13-month year                                                  |
+| FR18         | Formatter tests                                                                                              | Timestamp date formats, PowerSearch values, Schedule labels, and chart dates in `persian`                                                                                                                                            | A built-in date format ignores the provider's calendar, or a `system_*` format changes                                                                                           |
+| FR19         | Documentation review                                                                                         | The internationalization guide and date component docs                                                                                                                                                                               | The caveat is missing                                                                                                                                                            |
+| FR20         | Hook tests                                                                                                   | `useCalendarDays` without `calendar` matches released output; `persian` and a Hebrew leap year (month 13) with `calendar`; `useCalendarNavigation` steps and labels calendar months; a provider calendar does not change either hook | A hook reads the provider, changes released Gregorian output, or assumes 12 months when given a calendar                                                                         |
+| AR1–AR3      | Accessibility-tree and announcement assertions                                                               | Day buttons and announcements in `persian`; each rejection kind                                                                                                                                                                      | A spoken date uses another calendar than the grid, or two rejection kinds share a message                                                                                        |
 
 Known verification gap: none of these suites exist on `main`.
 
