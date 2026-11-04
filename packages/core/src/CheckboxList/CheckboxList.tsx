@@ -208,6 +208,13 @@ export function CheckboxList({
     () => (isRequired ? createRequiredGroup() : undefined),
     [isRequired],
   );
+  const observeRequiredGroup = useCallback(
+    (container: HTMLDivElement | null) =>
+      container != null && requiredGroup != null
+        ? requiredGroup.observe(container)
+        : undefined,
+    [requiredGroup],
+  );
 
   const [, startTransition] = useTransition();
   const isCollectionMode = value !== undefined;
@@ -321,7 +328,11 @@ export function CheckboxList({
           {...rest}
           // The disabled-message tooltip anchors here; its handlers are gated
           // internally by isEnabled, so attaching unconditionally is safe.
-          ref={useMergedRefs(ref, disabledMessageTooltip.ref)}
+          ref={useMergedRefs(
+            ref,
+            disabledMessageTooltip.ref,
+            observeRequiredGroup,
+          )}
           {...mergeProps(
             stylex.props(controlXstyle),
             controlClassName,

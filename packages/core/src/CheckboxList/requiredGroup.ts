@@ -8,9 +8,9 @@
  *   `isRequired` group and CheckboxListItem registers its checkbox with it
  *
  * The browser has no required state for a group of checkboxes. While no box
- * is checked, the first enabled box carries native `required`, so the browser
- * blocks submit and moves focus to that box with its own message. Once any box
- * is checked, no box carries `required`.
+ * is checked, the first enabled box carries native `required`. The browser
+ * then blocks submit and moves focus to that box with its own message. Once
+ * any box is checked, no box carries `required`.
  */
 
 /** The state of one box that decides which box carries `required`. */
@@ -27,6 +27,12 @@ export interface RequiredGroup {
    * updates the rest. An item registers again when its state changes.
    */
   register: (input: HTMLInputElement, box: RequiredGroupBox) => () => void;
+  /**
+   * Updates `required` when the group's options move, for example after a
+   * keyed reorder, which registers no box again. Returns a function that
+   * stops it.
+   */
+  observe: (container: HTMLElement) => () => void;
 }
 
 function byDocumentOrder(a: HTMLInputElement, b: HTMLInputElement): number {
@@ -58,6 +64,11 @@ export function createRequiredGroup(): RequiredGroup {
         input.required = false;
         update();
       };
+    },
+    observe(container) {
+      const observer = new MutationObserver(update);
+      observer.observe(container, {childList: true, subtree: true});
+      return () => observer.disconnect();
     },
   };
 }

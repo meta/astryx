@@ -12,14 +12,16 @@
 
 import {useState, type ReactElement} from 'react';
 import {describe, expect, it, vi} from 'vitest';
-import {fireEvent, render, screen, within} from '@testing-library/react';
+import {act, fireEvent, render, screen, within} from '@testing-library/react';
 import {CheckboxList} from './CheckboxList';
 import {CheckboxListItem} from './CheckboxListItem';
 import {FormLayout} from '../FormLayout/FormLayout';
 
+const NONE: string[] = [];
+
 function RequiredForm({
   onSubmit,
-  initial = [],
+  initial = NONE,
   disabledValue,
   isGroupDisabled = false,
 }: {
@@ -56,8 +58,7 @@ function RequiredForm({
 }
 
 const box = (name: string) => screen.getByRole('checkbox', {name});
-const form = () =>
-  screen.getByRole('form', {name: 'Signup'}) as HTMLFormElement;
+const form = () => screen.getByRole<HTMLFormElement>('form', {name: 'Signup'});
 
 describe('CheckboxList isRequired', () => {
   it('shows the required marker after the group label', () => {
@@ -155,6 +156,44 @@ describe('CheckboxList isRequired', () => {
     expect(box('Design')).toBeRequired();
     rerender(
       <CheckboxList label="Topics" value={[]} onChange={() => {}}>
+        <CheckboxListItem label="Design" value="design" />
+      </CheckboxList>,
+    );
+    expect(box('Design')).not.toBeRequired();
+  });
+
+  it('moves required to the new first box after a keyed reorder', async () => {
+    const items = [
+      {label: 'Design', value: 'design'},
+      {label: 'Engineering', value: 'eng'},
+    ];
+    const list = (order: typeof items) => (
+      <CheckboxList label="Topics" isRequired value={[]} onChange={() => {}}>
+        {order.map(item => (
+          <CheckboxListItem
+            key={item.value}
+            label={item.label}
+            value={item.value}
+          />
+        ))}
+      </CheckboxList>
+    );
+    const {rerender} = render(list(items));
+    expect(box('Design')).toBeRequired();
+    rerender(list([...items].reverse()));
+    await act(async () => {});
+    expect(box('Engineering')).toBeRequired();
+    expect(box('Design')).not.toBeRequired();
+  });
+
+  it('skips a read-only group: no box is required', () => {
+    render(
+      <CheckboxList
+        label="Topics"
+        isRequired
+        isReadOnly
+        value={[]}
+        onChange={() => {}}>
         <CheckboxListItem label="Design" value="design" />
       </CheckboxList>,
     );
