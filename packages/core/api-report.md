@@ -2884,6 +2884,7 @@ hook useCommandPaletteContext: () => CommandPaletteContextValue | null
 hook useContainerReveal: (options?: UseContainerRevealOptions) => UseContainerRevealReturn
 hook useDevWarning: (component: string, message: string, condition?: boolean) => void
 hook useDirection: () => 'ltr' | 'rtl'
+hook useDragToSnapPoints: (ref: RefObject<HTMLElement | null>, options: DragToSnapPointsOptions) => UseDragToSnapPointsResult
 hook useDropdownMenuContext: () => DropdownMenuContextValue | null
 hook useEntryAnimation: (preset?: EntryAnimationPreset) => StyleXStyles | null
 hook useFocusTrap: <T extends HTMLElement = HTMLElement>(options: UseFocusTrapOptions) => UseFocusTrapReturn<T>
@@ -2986,6 +2987,7 @@ function composeEventHandlers: <E extends SyntheticEvent>(...handlers: (((event:
 function container: ({…}: ContainerOptions) => readonly [Readonly<{ readonly boxSizing: stylex.StyleXClassNameFor<"boxSizing", "border-box">; readonly paddingInlineStart: stylex.StyleXClassNameFor<"paddingIn … #72b9b91f
 function createAnimator: (element: HTMLElement) => Animator
 function createCodeLanguage: ({…}: CreateCodeLanguageOptions) => CodeLanguage
+function createDragToSnapPoints: (element: HTMLElement, options: DragToSnapPointsOptions) => DragToSnapPoints
 function createISOTimeString: (value: string) => ISOTimeString | null
 function createIncrementalState: <MathEnabled extends boolean = false>() => IncrementalState<MathEnabled>
 function createPanGesture: (element: Element, options: PanGestureOptions) => PanGesture
@@ -4201,6 +4203,14 @@ interface DividerVariantMap
   strong: true
   subtle: true
 type DomainTokenName = SyntaxTokenName | DataTokenName
+interface DragToSnapPoints
+  destroy: () => void
+  settleTo: (index: number) => void
+interface DragToSnapPointsOptions
+  axis: 'x' | 'y'
+  flickThreshold?: number
+  onSettle: (index: number) => void
+  snapPoints: ReadonlyArray<number>
 interface DrawerHeaderProps extends BaseProps<HTMLDivElement> (props of DrawerHeader)
 interface DrawerProps extends BaseProps<HTMLDialogElement> (props of Drawer)
 type DropdownMenuButtonProps = Omit<ButtonProps, 'onClick'>
@@ -5900,6 +5910,8 @@ interface UseContainerRevealOptions
 interface UseContainerRevealReturn
   getContainerProps: (options?: ContainerRevealOptions) => { className?: string; style?: CSSProperties }
   getContentRevealProps: (options?: ContentRevealOptions) => { className?: string; style?: CSSProperties }
+interface UseDragToSnapPointsResult
+  settleTo: (index: number) => void
 interface UseFocusTrapOptions
   isActive: boolean
   onEscape?: () => void
@@ -9079,6 +9091,8 @@ AnnouncePoliteness (.)
 ClickableContainerResult (.)
 ContainerRevealOptions (.)
 ContentRevealOptions (.)
+DragToSnapPoints (.)
+DragToSnapPointsOptions (.)
 EntryAnimationPreset (.)
 Hotkey (.)
 INTERACTIVE_SELECTORS (.)
@@ -9113,6 +9127,7 @@ UseClipboardOptions (.)
 UseClipboardReturn (.)
 UseContainerRevealOptions (.)
 UseContainerRevealReturn (.)
+UseDragToSnapPointsResult (.)
 UseFocusTrapOptions (.)
 UseFocusTrapReturn (.)
 UseGridFocusOptions (.)
@@ -9151,6 +9166,7 @@ useClickableContainer (.)
 useClipboard (.)
 useContainerReveal (.)
 useDevWarning (.)
+useDragToSnapPoints (.)
 useEntryAnimation (.)
 useFocusTrap (.)
 useGridFocus (.)
