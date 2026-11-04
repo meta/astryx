@@ -1962,8 +1962,13 @@
       "aliases": []
     },
     {
-      "name": "example-create-pan-gesture-a-playing-card-without-react",
-      "path": "examples/create-pan-gesture/a-playing-card-without-react",
+      "name": "example-create-pan-gesture-a-draggable-box-without-react",
+      "path": "examples/create-pan-gesture/a-draggable-box-without-react",
+      "aliases": []
+    },
+    {
+      "name": "example-create-pan-gesture-a-playing-card-without-react-advanced",
+      "path": "examples/create-pan-gesture/a-playing-card-without-react-advanced",
       "aliases": []
     },
     {
@@ -3732,8 +3737,13 @@
       "aliases": []
     },
     {
-      "name": "example-use-pan-gesture-a-playing-card",
-      "path": "examples/use-pan-gesture/a-playing-card",
+      "name": "example-use-pan-gesture-a-draggable-box",
+      "path": "examples/use-pan-gesture/a-draggable-box",
+      "aliases": []
+    },
+    {
+      "name": "example-use-pan-gesture-a-playing-card-advanced",
+      "path": "examples/use-pan-gesture/a-playing-card-advanced",
       "aliases": []
     },
     {

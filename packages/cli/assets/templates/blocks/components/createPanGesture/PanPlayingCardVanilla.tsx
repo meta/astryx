@@ -12,8 +12,8 @@ const DECK = [
 ];
 /** A release faster than this (px/s) throws the card away. */
 const THROW_SPEED = 1000;
-/** How far a thrown card travels before the next one is dealt, px. */
-const THROW_DISTANCE = 480;
+/** How far a thrown card travels while it fades, px. */
+const THROW_DISTANCE = 160;
 const SETTLE = 'translate 300ms cubic-bezier(0.2, 0.9, 0.3, 1.2)';
 const THROW = 'translate 250ms ease-in, opacity 250ms ease-in';
 
@@ -35,12 +35,12 @@ function mountDeck(table: HTMLElement, discardButton: HTMLButtonElement) {
   card.setAttribute('role', 'img');
   card.setAttribute('aria-label', DECK[0].name);
   Object.assign(card.style, {
-    width: '120px',
-    height: '170px',
+    width: '80px',
+    height: '112px',
     display: 'grid',
     placeItems: 'center',
-    font: 'bold 40px system-ui, sans-serif',
-    borderRadius: '12px',
+    font: 'bold 28px system-ui, sans-serif',
+    borderRadius: '10px',
     backgroundColor: 'var(--color-background-surface)',
     color: 'var(--color-text-primary)',
     boxShadow: '0 2px 8px rgb(0 0 0 / 0.2)',
@@ -141,10 +141,15 @@ export default function PanPlayingCardVanilla() {
   return (
     <div
       ref={mountTable}
-      style={{display: 'grid', gap: 16, padding: 16, maxWidth: 360}}>
+      style={{
+        display: 'grid',
+        gap: 16,
+        padding: 16,
+        width: 'min(360px, 80vw)',
+      }}>
       <div
         style={{
-          height: 200,
+          height: 280,
           display: 'grid',
           placeItems: 'center',
           overflow: 'hidden',

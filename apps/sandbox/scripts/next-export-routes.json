@@ -467,6 +467,8 @@
     "/templates/PaginationPageSize/",
     "/templates/PaginationVariants/",
     "/templates/PaginationWithTable/",
+    "/templates/PanDraggableBox/",
+    "/templates/PanDraggableBoxVanilla/",
     "/templates/PanPlayingCard/",
     "/templates/PanPlayingCardVanilla/",
     "/templates/PopoverBottomSheetAlternative/",
