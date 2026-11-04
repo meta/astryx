@@ -87,8 +87,12 @@ export interface UseOverflowReturn {
   rowHeight: number;
 }
 
+// A measurement either applies its result at once or returns the update to
+// apply after the frame paints.
+type Measure = (timing: 'now' | 'beforePaint') => (() => void) | undefined;
+
 // Measurements that the resize observer reported in the current frame.
-const pendingMeasures = new Set<() => void>();
+const pendingMeasures = new Set<Measure>();
 
 /**
  * Measures again for a resize the observer reported.
@@ -96,18 +100,26 @@ const pendingMeasures = new Set<() => void>();
  * The observer reports after layout and before paint. A state update here
  * renders in a later task, after the frame paints. A microtask still runs
  * before paint. It measures every reported list and renders the results once.
+ * An update that a measurement returns renders in a later task, after paint.
  */
-function measureBeforePaint(measure: () => void): void {
+function measureBeforePaint(measure: Measure): void {
   if (pendingMeasures.size === 0) {
     queueMicrotask(() => {
       const measures = [...pendingMeasures];
       pendingMeasures.clear();
+      const afterPaint: (() => void)[] = [];
       // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the new visible set must render before the frame that reported the resize paints
       flushSync(() => {
         for (const run of measures) {
-          run();
+          const deferred = run('beforePaint');
+          if (deferred) {
+            afterPaint.push(deferred);
+          }
         }
       });
+      for (const update of afterPaint) {
+        update();
+      }
     });
   }
   pendingMeasures.add(measure);
@@ -117,17 +129,34 @@ function measureBeforePaint(measure: () => void): void {
  * The registration call runs while React commits the ref, before paint, so it
  * measures at once.
  */
-function observeForOverflow(element: Element, measure: () => void): () => void {
+function observeForOverflow(element: Element, measure: Measure): () => void {
   let isRegistering = true;
   const unobserve = observeResize(element, () => {
     if (isRegistering) {
-      measure();
+      measure('now');
     } else {
       measureBeforePaint(measure);
     }
   });
   isRegistering = false;
   return unobserve;
+}
+
+/**
+ * Counts the rows the container's children fill in the current layout, up to
+ * `maxRows`. A child that starts at or below the bottom of the current row
+ * starts a new row.
+ */
+function countLaidOutRows(container: HTMLElement, maxRows: number): number {
+  let rows = 0;
+  let rowBottom = -Infinity;
+  for (const child of Array.from(container.children) as HTMLElement[]) {
+    if (child.offsetHeight > 0 && child.offsetTop >= rowBottom) {
+      rows++;
+      rowBottom = child.offsetTop + child.offsetHeight;
+    }
+  }
+  return Math.min(rows, maxRows);
 }
 
 /**
@@ -203,71 +232,86 @@ export function useOverflow(
     [],
   );
 
-  const calculate = useCallback(() => {
-    const container = containerElRef.current;
-    const measure = measureElRef.current;
-    if (!container || !measure) {
-      return;
-    }
+  const calculate: Measure = useCallback(
+    (timing = 'now') => {
+      const container = containerElRef.current;
+      const measure = measureElRef.current;
+      if (!container || !measure) {
+        return;
+      }
 
-    let availableWidth: number;
+      let availableWidth: number;
 
-    if (observeParent && container.parentElement) {
-      const parent = container.parentElement;
-      const parentStyle = getComputedStyle(parent);
-      availableWidth =
-        parent.clientWidth -
-        parseFloat(parentStyle.paddingLeft) -
-        parseFloat(parentStyle.paddingRight);
-    } else {
-      availableWidth = container.offsetWidth;
-    }
+      if (observeParent && container.parentElement) {
+        const parent = container.parentElement;
+        const parentStyle = getComputedStyle(parent);
+        availableWidth =
+          parent.clientWidth -
+          parseFloat(parentStyle.paddingLeft) -
+          parseFloat(parentStyle.paddingRight);
+      } else {
+        availableWidth = container.offsetWidth;
+      }
 
-    const allChildren = Array.from(measure.children) as HTMLElement[];
+      const allChildren = Array.from(measure.children) as HTMLElement[];
 
-    // The measurement container holds itemCount items, plus optionally
-    // an overflow indicator as the last child.
-    const hasIndicator = allChildren.length > itemCount;
-    const children = hasIndicator
-      ? allChildren.slice(0, itemCount)
-      : allChildren;
-    const indicatorWidth = hasIndicator
-      ? allChildren[allChildren.length - 1].offsetWidth
-      : 0;
+      // The measurement container holds itemCount items, plus optionally
+      // an overflow indicator as the last child.
+      const hasIndicator = allChildren.length > itemCount;
+      const children = hasIndicator
+        ? allChildren.slice(0, itemCount)
+        : allChildren;
+      const indicatorWidth = hasIndicator
+        ? allChildren[allChildren.length - 1].offsetWidth
+        : 0;
 
-    if (children.length === 0) {
-      apply(0, 0, appliedRef.current.rowHeight);
-      return;
-    }
+      if (children.length === 0) {
+        apply(0, 0, appliedRef.current.rowHeight);
+        return;
+      }
 
-    const widths = children.map(child => child.offsetWidth);
-    const measuredRowHeight = children.reduce(
-      (max, child) => Math.max(max, child.offsetHeight || 0),
-      0,
-    );
+      const widths = children.map(child => child.offsetWidth);
+      const measuredRowHeight = children.reduce(
+        (max, child) => Math.max(max, child.offsetHeight || 0),
+        0,
+      );
 
-    const {visibleCount: nextVisible, rows: nextRows} = computeOverflow({
-      widths,
+      const {visibleCount: nextVisible, rows: nextRows} = computeOverflow({
+        widths,
+        gap,
+        availableWidth,
+        indicatorWidth,
+        minVisibleItems,
+        maxVisibleItems,
+        maxRows,
+        collapseFrom,
+      });
+
+      // A multi-row list changes its own height when the new set fills a
+      // different number of rows. Rendering that before paint makes the browser
+      // report a ResizeObserver loop error, so that update renders after paint.
+      if (
+        timing === 'beforePaint' &&
+        maxRows != null &&
+        maxRows > 1 &&
+        countLaidOutRows(container, maxRows) !== nextRows
+      ) {
+        return () => apply(nextVisible, nextRows, measuredRowHeight);
+      }
+      apply(nextVisible, nextRows, measuredRowHeight);
+      return undefined;
+    },
+    [
+      itemCount,
       gap,
-      availableWidth,
-      indicatorWidth,
       minVisibleItems,
       maxVisibleItems,
       maxRows,
       collapseFrom,
-    });
-
-    apply(nextVisible, nextRows, measuredRowHeight);
-  }, [
-    itemCount,
-    gap,
-    minVisibleItems,
-    maxVisibleItems,
-    maxRows,
-    collapseFrom,
-    observeParent,
-    apply,
-  ]);
+      observeParent,
+      apply,
+    ],
+  );
 
   const containerRef = useCallback(
     (el: HTMLElement | null) => {
@@ -308,7 +352,7 @@ export function useOverflow(
   // Syncs the visible count with the rendered layout. It measures again after
   // the items change.
   useIsomorphicLayoutEffect(() => {
-    calculate();
+    calculate('now');
   }, [calculate]);
 
   const hasOverflow = visibleCount < itemCount;

@@ -580,6 +580,57 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
     },
   );
 
+  // A visible container whose children sit in rows of 20px items with a
+  // 10px gap: `rowOf[i]` is the row (0-based) child i is laid out in.
+  function laidOutRows(
+    width: number,
+    rowOf: number[],
+  ): {offsetWidth: number; children: unknown[]} & Element {
+    return {
+      offsetWidth: width,
+      children: rowOf.map(row => ({offsetTop: row * 30, offsetHeight: 20})),
+    } as unknown as {offsetWidth: number; children: unknown[]} & Element;
+  }
+
+  it('renders after paint when a multi-row fold changes the rows the list fills', async () => {
+    const {result} = renderHook(() => useOverflow(6, {gap: 10, maxRows: 2}));
+    const box = laidOutRows(120, [0, 0, 1, 1]);
+    act(() => {
+      result.current.measureRef(mockMeasure([50, 50, 50, 50, 50, 50], 30, 20));
+      result.current.containerRef(box as unknown as HTMLElement);
+    });
+    expect(result.current.visibleCount).toBe(3);
+    expect(result.current.rows).toBe(2);
+
+    // At 260px the three shown items and the indicator fit on one row, so
+    // the list is one row tall; the new set fills two rows.
+    Object.assign(box, laidOutRows(260, [0, 0, 0, 0]));
+    await deliverBeforePaint(box);
+    expect(result.current.visibleCount).toBe(3);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(result.current.visibleCount).toBe(6);
+    expect(result.current.rows).toBe(2);
+  });
+
+  it('renders before paint when a multi-row fold keeps the rows the list fills', async () => {
+    const {result} = renderHook(() => useOverflow(6, {gap: 10, maxRows: 2}));
+    const box = laidOutRows(260, [0, 0, 0, 0, 1, 1]);
+    act(() => {
+      result.current.measureRef(mockMeasure([50, 50, 50, 50, 50, 50], 30, 20));
+      result.current.containerRef(box as unknown as HTMLElement);
+    });
+    expect(result.current.visibleCount).toBe(6);
+
+    // At 120px the six shown items wrap past two rows; the list clips at two.
+    Object.assign(box, laidOutRows(120, [0, 0, 1, 1, 2, 2]));
+    await deliverBeforePaint(box);
+
+    expect(result.current.visibleCount).toBe(3);
+  });
+
   it('measures every list that one delivery reports, then renders once', async () => {
     let renders = 0;
     const {result} = renderHook(() => {
