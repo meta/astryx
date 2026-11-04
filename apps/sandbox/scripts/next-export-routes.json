@@ -796,6 +796,7 @@
     "/templates/useLocaleHookUsage/",
     "/templates/useOutlineFromMarkdownHookUsage/",
     "/templates/useOverflowHookUsage/",
+    "/templates/useOverlayHookUsage/",
     "/templates/usePressFeedbackHookUsage/",
     "/templates/useScrollableAreaHookUsage/",
     "/templates/useStreamingTextHookUsage/",

@@ -3732,6 +3732,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-overlay-product-quick-view",
+      "path": "examples/use-overlay/product-quick-view",
+      "aliases": []
+    },
+    {
       "name": "example-use-popover-quick-actions",
       "path": "examples/use-popover/quick-actions",
       "aliases": []
@@ -4014,6 +4019,11 @@
     {
       "name": "hook-use-overflow",
       "path": "hooks/use-overflow",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-overlay",
+      "path": "hooks/use-overlay",
       "aliases": []
     },
     {
