@@ -129,6 +129,8 @@ const styles = stylex.create({
       default: 'grid',
       '@container (max-width: 480px)': 'none',
     },
+    // The timeline gives up the space, so the open slider is never cut.
+    flexShrink: 0,
     alignItems: 'center',
     // The slider's column opens while the volume control is hovered or holds
     // focus, and stays open on touch, matching the container reveal.

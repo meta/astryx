@@ -320,7 +320,11 @@ the menu, and the `<` and `>` shortcuts share one default list of speeds.
 
 In both presets the volume slider appears while the volume control is hovered
 or holds focus, and always on a coarse pointer, through the shared container
-reveal. Mute stays in place while the slider opens.
+reveal. The slider opens beside Mute toward the center of the row, so Mute
+stays under the pointer, and the slider shows the volume in a tooltip. Its
+column opens and closes with a short width transition: the disclosure
+exception to transform-only motion, applied on the inline axis to one small,
+user-started change. It does not move under reduced motion.
 
 ### DEC-12 — Media glyphs come from the icon registry
 
