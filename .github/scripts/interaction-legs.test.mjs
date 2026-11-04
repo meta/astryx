@@ -8,7 +8,7 @@ import {fileURLToPath} from 'node:url';
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
-import {listedFiles, planLegs, recordLog} from './interaction-legs.mjs';
+import {planLegs, recordLog} from './interaction-legs.mjs';
 
 const root = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -75,19 +75,16 @@ describe('planLegs', () => {
   });
 });
 
-describe('listedFiles and recordLog', () => {
-  it('reads the spec files of a Playwright list report, nested suites included', () => {
-    const report = {
-      suites: [
-        {
-          file: 'b.spec.ts',
-          specs: [{file: 'b.spec.ts'}],
-          suites: [{specs: [{file: 'b.spec.ts'}]}],
-        },
-        {suites: [{suites: [{specs: [{file: 'a.spec.ts'}]}]}]},
-      ],
-    };
-    expect(listedFiles(report)).toEqual(['a.spec.ts', 'b.spec.ts']);
+describe('the list reader and recordLog', () => {
+  it('reads the list report with the reader the accessibility contracts use', () => {
+    const source = fs.readFileSync(
+      path.join(root, '.github/scripts/interaction-legs.mjs'),
+      'utf8',
+    );
+    expect(source).toContain(
+      "import {listedFiles} from './a11y-pr-contracts.mjs';",
+    );
+    expect(source).not.toMatch(/function listedFiles/);
   });
 
   it("records each test's gap from the line before it, under its spec file and project", () => {
@@ -163,6 +160,7 @@ describe('the interaction proof legs in ci.yml', () => {
       expect(keep.if).toBe("steps.scope.outputs.applies == 'true'");
       for (const [file, dir] of [
         ['.github/scripts/interaction-legs.mjs', '.github/scripts/'],
+        ['.github/scripts/a11y-pr-contracts.mjs', '.github/scripts/'],
         ['scripts/lib/duration-split.mjs', 'scripts/lib/'],
         ['.github/interaction-durations.json', '.github/'],
       ])
@@ -198,6 +196,20 @@ describe('the interaction proof legs in ci.yml', () => {
       ).toBe(lane.evidence);
     });
   }
+
+  it('a change to the planner, its modules or the recorded times runs both lanes', () => {
+    for (const id of ['pr-interaction', 'pr-interaction-webkit']) {
+      const scope = ci.jobs[id].steps.find(each => each.id === 'scope');
+      const pattern = new RegExp(scope.with.paths);
+      for (const file of [
+        '.github/scripts/interaction-legs.mjs',
+        '.github/scripts/a11y-pr-contracts.mjs',
+        'scripts/lib/duration-split.mjs',
+        '.github/interaction-durations.json',
+      ])
+        expect(pattern.test(file), `${id} ${file}`).toBe(true);
+    }
+  });
 
   it('the WebKit legs plan only the paths the WebKit lane covers', () => {
     const plan = step(
@@ -308,6 +320,7 @@ describe('the interaction proof legs in ci.yml', () => {
       const copies = path.join(path.dirname(out), 'legs');
       for (const file of [
         '.github/scripts/interaction-legs.mjs',
+        '.github/scripts/a11y-pr-contracts.mjs',
         'scripts/lib/duration-split.mjs',
       ]) {
         fs.mkdirSync(path.dirname(path.join(copies, file)), {recursive: true});

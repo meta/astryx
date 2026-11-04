@@ -21,6 +21,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 import {costOf, splitByDuration} from '../../scripts/lib/duration-split.mjs';
+import {listedFiles} from './a11y-pr-contracts.mjs';
 
 // CI runs this file from the workflow's own commit, outside the checkout, in
 // the checkout's root.
@@ -43,17 +44,6 @@ export function planLegs(files, durations, legs) {
     files: leg,
     seconds: leg.reduce((sum, file) => sum + cost(file), 0),
   }));
-}
-
-/** The spec files of a Playwright `--list --reporter=json` report. */
-export function listedFiles(report) {
-  const files = new Set();
-  const walk = suite => {
-    for (const child of suite.suites ?? []) walk(child);
-    for (const spec of suite.specs ?? []) files.add(spec.file);
-  };
-  for (const suite of report.suites ?? []) walk(suite);
-  return [...files].map(file => file.split(path.sep).join('/')).sort();
 }
 
 const TEST_LINE = /^(\S+Z)\s+\S+\s+\d+\s+\[([\w-]+)\] › ([^:]+):\d+:\d+ › /;

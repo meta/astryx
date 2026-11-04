@@ -137,7 +137,23 @@ export function copiedFromScope(job, step, script) {
   const steps = job.steps ?? [];
   return steps
     .slice(0, steps.indexOf(step))
-    .some(earlier => String(earlier.run ?? '').includes(copy));
+    .some(
+      earlier =>
+        String(earlier.run ?? '').includes(copy) &&
+        beforeHeadCheckout(job, earlier),
+    );
+}
+
+/** Whether the step runs before the job's head checkout replaces the workspace. */
+export function beforeHeadCheckout(job, step) {
+  const steps = job.steps ?? [];
+  const head = steps.findIndex(
+    each =>
+      String(each.uses ?? '').startsWith('actions/checkout@') &&
+      String(each.with?.ref ?? '').includes('pull_request.head.sha') &&
+      !each.with?.path,
+  );
+  return head === -1 || steps.indexOf(step) < head;
 }
 
 export function unguardedScripts(job) {
@@ -154,8 +170,13 @@ export function unguardedScripts(job) {
       if (condition.includes(`hashFiles('${script}') != ''`)) continue;
       // Loaded from the workflow's own commit, not the head.
       if (run.includes(`$WORKFLOW_SHA:${script}`)) continue;
-      // Read from the job's scope checkout, also the workflow's own commit.
-      if (run.includes(`.test-scope/${script}`) && scopeHolds(job, script))
+      // Read from the job's scope checkout, also the workflow's own commit,
+      // before the head checkout replaces the workspace.
+      if (
+        run.includes(`.test-scope/${script}`) &&
+        scopeHolds(job, script) &&
+        beforeHeadCheckout(job, step)
+      )
         continue;
       // Run from a copy an earlier step took from that scope checkout.
       if (copiedFromScope(job, step, script)) continue;

@@ -2329,7 +2329,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/actions/test-scope/)'
+          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(interaction-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/interaction-durations\.json$|\.github/actions/test-scope/)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
 
@@ -2344,14 +2344,16 @@ jobs:
         run: echo "No interaction proofs for this change."
 
       # The head checkout below replaces the workspace, scope checkout
-      # included, so the leg planner, the shared splitter it imports and the
-      # recorded times move to the runner's temporary directory first.
+      # included, so the leg planner, the modules it imports (the shared
+      # splitter and the Playwright list reader) and the recorded times move
+      # to the runner's temporary directory first.
       - name: Keep the leg planner from the workflow's commit
         if: steps.scope.outputs.applies == 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/interaction-legs/.github/scripts" "$RUNNER_TEMP/interaction-legs/scripts/lib"
           cp .test-scope/.github/scripts/interaction-legs.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
           cp .test-scope/scripts/lib/duration-split.mjs "$RUNNER_TEMP/interaction-legs/scripts/lib/"
+          cp .test-scope/.github/scripts/a11y-pr-contracts.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
           cp .test-scope/.github/interaction-durations.json "$RUNNER_TEMP/interaction-legs/.github/"
 
       # The caps step comes from the merge commit, not the pull request's
@@ -2486,7 +2488,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform|flatTree|inputStream|clickGuard|selectionLock|coarsePointer|sharedResizeObserver)|packages/core/src/privateAttributes/(hapticSwitch|reducedMotion)\.stylex\.ts$|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback|isRtlElement|useIsomorphicLayoutEffect|useAttachment|usePager|__tests__/(usePager|pagerBundle))|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/actions/test-scope/)'
+          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform|flatTree|inputStream|clickGuard|selectionLock|coarsePointer|sharedResizeObserver)|packages/core/src/privateAttributes/(hapticSwitch|reducedMotion)\.stylex\.ts$|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback|isRtlElement|useIsomorphicLayoutEffect|useAttachment|usePager|__tests__/(usePager|pagerBundle))|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(interaction-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/interaction-durations\.json$|\.github/actions/test-scope/)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
 
@@ -2501,14 +2503,16 @@ jobs:
         run: echo "No WebKit interaction proofs for this change (it touches no gesture, motion, touch or press code, and none of their shared setup)."
 
       # The head checkout below replaces the workspace, scope checkout
-      # included, so the leg planner, the shared splitter it imports and the
-      # recorded times move to the runner's temporary directory first.
+      # included, so the leg planner, the modules it imports (the shared
+      # splitter and the Playwright list reader) and the recorded times move
+      # to the runner's temporary directory first.
       - name: Keep the leg planner from the workflow's commit
         if: steps.scope.outputs.applies == 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/interaction-legs/.github/scripts" "$RUNNER_TEMP/interaction-legs/scripts/lib"
           cp .test-scope/.github/scripts/interaction-legs.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
           cp .test-scope/scripts/lib/duration-split.mjs "$RUNNER_TEMP/interaction-legs/scripts/lib/"
+          cp .test-scope/.github/scripts/a11y-pr-contracts.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
           cp .test-scope/.github/interaction-durations.json "$RUNNER_TEMP/interaction-legs/.github/"
 
       # The caps step comes from the merge commit, not the pull request's
