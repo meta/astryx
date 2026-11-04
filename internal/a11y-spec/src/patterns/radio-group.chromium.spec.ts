@@ -8,7 +8,7 @@
  * @position Contract self-test; proves the reusable contract, not Astryx components.
  */
 
-import {expect, test, type CDPSession, type Page} from '@playwright/test';
+import {expect, test, type CDPSession, type Page} from '../playwright';
 import {checkAccessibilitySpec, type ExpectationResult} from '../check';
 import {describeExpectation, requiredLayers} from '../contract';
 import {

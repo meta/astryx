@@ -633,6 +633,12 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         return;
       }
       if (handleTouchPointerDown(event)) {
+        // A pen in range starts the hover show before it lands. Left pending,
+        // that show opens the layer during the press. The tap then closes it.
+        if (showTimeoutRef.current) {
+          clearTimeout(showTimeoutRef.current);
+          showTimeoutRef.current = null;
+        }
         return;
       }
       if (isOpen !== undefined) {

@@ -27,6 +27,7 @@ import {
   type BlockedWindow,
   busyWindowProof,
   CONTROL_RGB,
+  controlClock,
   countBetween,
   markElement,
   startBusyControl,
@@ -34,11 +35,10 @@ import {
   traceRendering,
   trackMarker,
 } from '@astryxdesign/interaction-harness';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {build} from 'esbuild';
 import type {Animator, MotionHandle} from '../animator';
 import type * as MotionBundle from './motionBundle';
-import {controlClock} from './controlClock';
 
 let script = '';
 
@@ -133,6 +133,14 @@ async function blockedRun(
   // Before the animation, so it is on the compositor first; in the top
   // strip, clear of the box (top 40 px) and its marker.
   await startBusyControl(page);
+  // The control's start on the page clock. Its own time at a frame, past
+  // this start, is that frame's time on the page clock.
+  const controlStart = await page.evaluate(() => {
+    const animation = document
+      .querySelector('[data-harness-control]')
+      ?.getAnimations()[0];
+    return performance.timeOrigin + Number(animation?.startTime ?? NaN);
+  });
   const cast = await startScreencast(page);
   // The curve starts when the browser commits it (handle.started).
   const start = await page.evaluate(
@@ -152,14 +160,17 @@ async function blockedRun(
   const frames = await cast.stop();
   const tracked = await trackMarker(page, frames);
   const control = await trackMarker(page, frames, {rgb: CONTROL_RGB});
-  return {start, busy, tracked, control};
+  return {start, controlStart, busy, tracked, control};
 }
 
 test('a spring keeps advancing every frame through a 1 s main-thread block, on its curve', async ({
   page,
   browserName,
 }) => {
-  const {start, busy, tracked, control} = await blockedRun(page, SLOW);
+  const {start, controlStart, busy, tracked, control} = await blockedRun(
+    page,
+    SLOW,
+  );
   // Judged against what the compositor presented in the same window, not a
   // display-rate bound: a loaded runner's compositor skips frames for every
   // animation alike, and the harness reads a slow tail inside the block at
@@ -186,8 +197,8 @@ test('a spring keeps advancing every frame through a 1 s main-thread block, on i
   // screencast's timestamps say (a loaded runner stamps some frames late).
   // Placing the box's position on the analytic curve (inverting it), the
   // spring must have advanced the same time over each such run of frames.
-  // Chromium also stamps frames on the page's clock, so there the median
-  // offset from the curve is near zero too.
+  // The control's start plus its own time places each frame on the page's
+  // clock, so the median offset from the curve is near zero too.
   const inside = tracked.filter(
     f => f.box != null && f.t > busy.from + 20 && f.t < busy.to - 20,
   );
@@ -221,36 +232,45 @@ test('a spring keeps advancing every frame through a 1 s main-thread block, on i
     },
   );
   const [curve, faster] = curveMs;
-  const controlAt = new Map(
-    control.flatMap(f => (f.box == null ? [] : [[f.t, f.box.x] as const])),
-  );
   // The control's own time at each frame (controlClock): 240 px out in
   // 400 ms, back in 400 ms, read from its position on the origin most frames
   // agree with, so no one frame's stamp or direction sets it.
-  const clock = controlClock(
-    inside.map(f => ({t: f.t, x: controlAt.get(f.t) ?? null})),
-  );
+  const clock = controlClock(control);
+  const timed = inside.flatMap((f, i) => {
+    const ms = clock.get(f.t);
+    return ms == null ? [] : [{i, ms}];
+  });
   /** How far the box's curve time drifts from the control's, ms. */
   const drift = (times: number[]) => {
-    const gaps = clock.map(({i, ms}) => times[i] - ms).sort((x, y) => x - y);
+    const gaps = timed.map(({i, ms}) => times[i] - ms).sort((x, y) => x - y);
     return (
       gaps[Math.floor(gaps.length * 0.9)] - gaps[Math.floor(gaps.length * 0.1)]
     );
   };
-  const offsets = inside.map((f, i) => f.t - start - curve[i]);
-  const sorted = [...offsets].sort((x, y) => x - y);
-  const median = sorted[Math.floor(sorted.length / 2)];
-  // The offsets' spread reads the screencast's timestamps, which a loaded
-  // runner stamps late on some frames: recorded, judged by the drift instead.
-  const spread =
-    sorted[Math.floor(sorted.length * 0.9)] -
-    sorted[Math.floor(sorted.length * 0.1)];
+  // Each timed frame's time on the page clock is the control's start plus
+  // the control's own time. Its stamp only picks the whole cycle, so a late
+  // stamp moves no offset.
+  const offsets = timed
+    .map(({i, ms}) => {
+      const cycles = Math.round((inside[i].t - controlStart - ms) / 800);
+      return controlStart + ms + cycles * 800 - start - curve[i];
+    })
+    .sort((x, y) => x - y);
+  const median = offsets[Math.floor(offsets.length / 2)];
+  // The stamps' own offsets, recorded only: a loaded runner stamps some
+  // frames late.
+  const stamped = inside
+    .map((f, i) => f.t - start - curve[i])
+    .sort((x, y) => x - y);
   const read = {
-    frames: clock.length,
+    frames: timed.length,
     drift: drift(curve),
     faster: drift(faster),
     median,
-    spread,
+    stampMedian: stamped[Math.floor(stamped.length / 2)],
+    stampSpread:
+      stamped[Math.floor(stamped.length * 0.9)] -
+      stamped[Math.floor(stamped.length * 0.1)],
   };
   test.info().annotations.push({
     type: 'the spring against the control (ms)',
@@ -258,11 +278,11 @@ test('a spring keeps advancing every frame through a 1 s main-thread block, on i
   });
   // Placed on its curve and on the control's, every frame is the same time
   // apart, to within the 1 px steps of both; a spring 10% off drifts.
-  expect(clock.length, JSON.stringify(read)).toBeGreaterThan(20);
+  expect(timed.length, JSON.stringify(read)).toBeGreaterThan(20);
   expect(read.drift, JSON.stringify(read)).toBeLessThan(12);
   expect(read.faster, JSON.stringify(read)).toBeGreaterThan(24);
   if (browserName === 'chromium') {
-    expect(Math.abs(median)).toBeLessThan(20);
+    expect(Math.abs(median), JSON.stringify(read)).toBeLessThan(20);
   }
 });
 

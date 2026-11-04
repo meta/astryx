@@ -3692,6 +3692,11 @@
       "aliases": []
     },
     {
+      "name": "example-use-input-status-icon-coupon-code-status",
+      "path": "examples/use-input-status-icon/coupon-code-status",
+      "aliases": []
+    },
+    {
       "name": "example-use-keyboard-hint-arrow-key-hint",
       "path": "examples/use-keyboard-hint/arrow-key-hint",
       "aliases": []
@@ -3804,6 +3809,11 @@
     {
       "name": "example-use-translator-load-more-footer",
       "path": "examples/use-translator/load-more-footer",
+      "aliases": []
+    },
+    {
+      "name": "example-use-tree-focus-keyboard-file-tree",
+      "path": "examples/use-tree-focus/keyboard-file-tree",
       "aliases": []
     },
     {

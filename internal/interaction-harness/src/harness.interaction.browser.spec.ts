@@ -42,7 +42,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import {expect, test, type Page} from '@playwright/test';
+import {
+  expect,
+  keepRequestsLocal,
+  test,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import type {CastFrame, TrackedFrame} from './frames';
 import {
   advanceFrozenPage,
@@ -1198,7 +1203,9 @@ test.describe('frame evidence', () => {
         env: {...process.env, MESA_SHADER_CACHE_DIR: fresh},
       });
       try {
-        const page = await own.newPage();
+        const context = await own.newContext();
+        await keepRequestsLocal(context);
+        const page = await context.newPage();
         await page.setContent(
           '<div id="glass" style="width:120px;height:80px;backdrop-filter:blur(16px) saturate(180%)"></div>',
         );
@@ -4794,14 +4801,15 @@ test.describe('page freeze', () => {
     const box = page.locator('#box');
     const watch = await watchAnimations(box);
     const startedAt = Date.now();
-    await box.evaluate(el => {
-      el.animate(
+    // Over before the freeze, and read only after the thaw. The freeze waits
+    // for the run's own end. A run starts only at a frame, and a busy machine
+    // can draw no frame for longer than any fixed wait.
+    await box.evaluate(async el => {
+      await el.animate(
         [{transform: 'translateX(0px)'}, {transform: 'translateX(100px)'}],
         {duration: 200},
-      );
+      ).finished;
     });
-    // Over before the freeze, and read only after the thaw.
-    await page.waitForTimeout(400);
     const frozenAt = Date.now();
     await freezePage(page);
     await page.waitForTimeout(600);
@@ -4825,11 +4833,13 @@ test.describe('page freeze', () => {
         {duration: 60_000, easing: 'linear'},
       );
     });
-    await page.waitForTimeout(100);
-    // Where the run started, on the page's clock, before any freeze.
-    const startedAt = await page.evaluate(() =>
-      Number((window as unknown as {run: Animation}).run.startTime),
-    );
+    // Where the run started, on the page's clock, before any freeze. It has
+    // a start time only once a frame starts it, so the read waits for that.
+    const startedAt = await page.evaluate(async () => {
+      const {run} = window as unknown as {run: Animation};
+      await run.ready;
+      return Number(run.startTime);
+    });
     for (let cycle = 0; cycle < 10; cycle++) {
       await freezePage(page);
       await page.waitForTimeout(50);

@@ -62,7 +62,9 @@ export const PRESS_FLASH_MS = 100;
  * How long the paint takes to leave after a release: UIKit's deselect
  * crossfade. The one number, shared with the stylesheet: the release
  * animation in interactionOverlay.stylex.ts runs on the same constant, so the
- * timer that removes the attribute and the fade cannot drift apart.
+ * controller's release clock and the fade cannot drift apart. When the clock
+ * runs out, the controller waits for a release animation that still runs,
+ * then removes the attribute.
  */
 export const PRESS_FADE_MS: number = pressConsts.releaseMs;
 
@@ -119,7 +121,7 @@ export type PressEvent =
   | {kind: 'onset'}
   /** {@link PRESS_FLASH_MS} elapsed on a too-quick tap. */
   | {kind: 'flashEnd'}
-  /** {@link PRESS_FADE_MS} elapsed; the paint is gone. */
+  /** The release is over: its animation ended, or its clock ran out with none running. */
   | {kind: 'fadeEnd'};
 
 export interface PressStep {
