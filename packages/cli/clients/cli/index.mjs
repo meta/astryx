@@ -32,11 +32,13 @@ import {markReportsResult} from './lib/define-command.mjs';
 import {
   agentDocsTargetDir,
   assertAgentDocsTarget,
+} from '../../foundation/agent-docs/agent-docs-root.mjs';
+import {CLI_ROOT} from '../../foundation/fs/paths.mjs';
+import {
   isAstryxInitialized,
   isAstryxPromptInReach,
-} from '../../foundation/agent-docs/agent-docs.mjs';
-import {CLI_ROOT} from '../../foundation/fs/paths.mjs';
-import {setupNudge} from '../../foundation/agent-docs/agent-doc-state.mjs';
+  setupNudge,
+} from '../../foundation/agent-docs/agent-doc-state.mjs';
 import * as debug from '../../foundation/debug/index.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -186,8 +188,8 @@ function fullCommandName(actionCommand, root) {
  */
 export async function loadProjectDebugHandler() {
   try {
-    const {findConfigPath, Project} = await import(
-      '../../foundation/config/project.mjs'
+    const {findConfigPath} = await import(
+      '../../foundation/config/config-path.mjs'
     );
     const configPath = findConfigPath(process.cwd());
     if (!configPath) return;
@@ -196,6 +198,7 @@ export async function loadProjectDebugHandler() {
       debug.noteConfigGateSkipped();
       return;
     }
+    const {Project} = await import('../../foundation/config/project.mjs');
     await Project.load(process.cwd());
   } catch {
     // A broken config is the command's problem to report, not ours.
