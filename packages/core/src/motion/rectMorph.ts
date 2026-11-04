@@ -10,10 +10,8 @@
  * @output Exports `createRectMorph` (present and dismiss, each interrupting
  *   the other), and re-exports the paths it plays (`lerpPath`,
  *   `edgeGrowPath`, `morphCurves`) from morphPath.ts
- * @position Motion foundation building block, internal to core: the one
- *   "grow out of a source rect, shrink back into it" that touch
- *   presentations share: an anchored menu, a popover, a context menu's
- *   lifted preview, a photo's zoom, a sub-menu's parent card
+ * @position Motion building block, internal to core: grow out of a source
+ *   rect and shrink back into it
  *
  * SYNC: When modified, update:
  * - /packages/core/src/motion/rectMorph.test.ts
@@ -250,9 +248,8 @@ export function createRectMorph(
     }
   };
 
-  // Leaves the element as laid out: identity, and none of the morph's inline
-  // properties (an opacity only when a path animated it). At rest it needs no
-  // compositing layer, so the values go in without promoting it.
+  // At rest the element needs no compositing layer, so set the values without
+  // promoting it.
   const restoreElement = () => {
     animator.set(
       ownsOpacity
@@ -317,14 +314,14 @@ export function createRectMorph(
           : null),
   });
 
-  // A spring goes through `resolveMotion` on the element that plays it: a
-  // touch motion role resolves to its table value and reads no style, and a
-  // caller's bare spring comes back as given. A timed motion is the caller's
-  // duration and easing, already resolved from the theme.
+  // A spring goes through `resolveMotion`. A motion role resolves to its
+  // table value, and a bare spring comes back as given. `velocity` is
+  // undefined when nothing was moving: a timed motion then plays its easing
+  // as given.
   const progressFor = (
     on: Element,
     motion: RectMorphMotion,
-    velocity: number,
+    velocity: number | undefined,
   ) =>
     'spring' in motion
       ? progressCurve(resolveMotion(on, motion.spring), {velocity})
@@ -335,7 +332,7 @@ export function createRectMorph(
     path: MorphPath,
     motion: RectMorphMotion,
     play: RectMorphPlayOptions,
-    velocity: number,
+    velocity: number | undefined,
   ) => {
     const progress = progressFor(on, motion, velocity);
     const fade =
@@ -348,7 +345,7 @@ export function createRectMorph(
     const from =
       exiting ?? (presenting != null && box != null ? {animator, box} : null);
     let start = path;
-    let velocity = play.velocity ?? 0;
+    let velocity = play.velocity;
     let opacity: number | undefined;
     if (from != null) {
       opacity = from.animator.get('opacity', at);
@@ -394,9 +391,14 @@ export function createRectMorph(
       opacity,
       'source',
     );
+    // A settled present is not moving: only a motion in flight hands its
+    // velocity on.
+    const inFlight = exiting != null || presenting != null;
     const velocity =
       play.velocity ??
-      presentedProgressVelocity(from.animator, channelsOf(back), at);
+      (inFlight
+        ? presentedProgressVelocity(from.animator, channelsOf(back), at)
+        : undefined);
     // The same copy handed again continues on it: it keeps its animator, and
     // its release runs once, when the dismissal still running ends. Any other
     // target ends the dismissal in flight first.
@@ -416,9 +418,8 @@ export function createRectMorph(
       ownsOpacity ||= back.opacityAt != null;
     } else {
       // The element is hidden as it closes: leave it as laid out, and let go
-      // of the layer its presentation promoted, in this task. Kept, the
-      // promotion would end its linger after the element's last motion: a
-      // style write on an element that no longer paints, landing inside the
+      // of the layer its presentation promoted, in this task. Otherwise the
+      // promotion's linger ends later, with a style write inside the
       // dismissal's frames. The next present attaches the element again. A
       // handed-in animator stays on the element: its owner still drives it.
       restoreElement();

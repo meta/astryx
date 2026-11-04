@@ -15,6 +15,7 @@
 
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {createMotionAnimator} from './animator';
+import {cubicBezier} from './bezier';
 import {progressCurve, timedProgressCurve} from './progress';
 import {
   createRectMorph,
@@ -286,6 +287,36 @@ describe('createRectMorph', () => {
     for (const t of [0, 0.05, 0.12, 0.2, 0.29]) {
       clock = start + t * 1000;
       expectRect(morph.presentedRect()!, path.rectAt(progress.at(t)), 0.01);
+    }
+  });
+
+  it('plays a timed present from rest on its easing as given', async () => {
+    const {morph} = setup();
+    const path = lerpPath(SQUARE, BOX);
+    const easing = [0, 0, 0.58, 1] as const;
+    const ease = cubicBezier(easing);
+    morph.present(path, {duration: 250, easing});
+    await playFrame();
+    const start = clock;
+    for (const t of [0.02, 0.05, 0.1, 0.2]) {
+      clock = start + t * 1000;
+      expectRect(morph.presentedRect()!, path.rectAt(ease(t / 0.25)), 0.01);
+    }
+  });
+
+  it('plays a timed dismissal from a settled present on its easing as given', async () => {
+    const {element, morph} = setup();
+    const path = lerpPath(SQUARE, BOX);
+    morph.present(path, {spring: SPRING});
+    await settle(2000);
+    const easing = [0, 0, 0.58, 1] as const;
+    const ease = cubicBezier(easing);
+    morph.dismiss(path, {duration: 250, easing}, {target: copyOf(element)});
+    await playFrame();
+    const start = clock;
+    for (const t of [0.02, 0.05, 0.1, 0.2]) {
+      clock = start + t * 1000;
+      expectRect(morph.presentedRect()!, path.rectAt(1 - ease(t / 0.25)), 0.01);
     }
   });
 
