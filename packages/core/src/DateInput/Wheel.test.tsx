@@ -2,16 +2,26 @@
 
 /**
  * @file Wheel.test.tsx
- * @input Uses Vitest, Testing Library and the Wheel column
- * @output Proves where a wheel rests when it stops on a row it cannot commit
- * @position Unit coverage for Wheel.tsx's rest rule; the wheels inside the
+ * @input Uses Vitest, Testing Library, the Wheel column and a stubbed
+ *   matchMedia (and CSS.supports, to show the engine does not matter)
+ * @output Proves where today's wheel rests when it stops on a row it cannot
+ *   commit, and which column (and which frame) each primary pointer draws
+ * @position Unit coverage for Wheel.tsx: the switch and today's column
+ *   (PickerWheel.test.tsx covers the touch column); the wheels inside the
  *   DateInput, DateTimeInput and TimeInput sheets are covered by their own
  *   touch suites
  */
 
+import {useState} from 'react';
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {afterEach, beforeAll, describe, expect, it, vi} from 'vitest';
-import {nearestEnabledIndex, Wheel, type WheelOption} from './Wheel';
+import {fakeAnimate} from '../motion/__tests__/fakeWebAnimation';
+import {
+  nearestEnabledIndex,
+  ScrollWheel,
+  Wheel,
+  type WheelOption,
+} from './Wheel';
 import {SCROLL_QUIET_MS} from './useScrollSettle';
 
 const ROW = 28;
@@ -67,7 +77,7 @@ describe('Wheel — where it comes to rest', () => {
    * the scroller's scrollTop and scrollTo, so a test can stop the wheel on any
    * row.
    */
-  function renderWheel(value: number) {
+  function renderWheel(value: number, Column: typeof ScrollWheel = Wheel) {
     Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
       configurable: true,
       get(this: HTMLElement) {
@@ -76,8 +86,8 @@ describe('Wheel — where it comes to rest', () => {
     });
     const onChange = vi.fn();
     const scrollTo = vi.fn();
-    const {rerender} = render(
-      <Wheel label="Hour" options={HOURS} value={value} onChange={onChange} />,
+    const {rerender, unmount} = render(
+      <Column label="Hour" options={HOURS} value={value} onChange={onChange} />,
     );
     const scroller = screen.getByRole('listbox', {name: 'Hour'});
     let top = value * ROW;
@@ -106,7 +116,7 @@ describe('Wheel — where it comes to rest', () => {
         scroller.dispatchEvent(new Event('scrollend'));
       });
     };
-    return {onChange, scrollTo, moveTo, stopOn, rerender};
+    return {onChange, scrollTo, moveTo, stopOn, rerender, unmount};
   }
 
   it('commits an enabled row it stops on', () => {
@@ -213,34 +223,63 @@ describe('Wheel — where it comes to rest', () => {
       );
     });
 
-    it('cross-fades onto it on a touch screen: opacity only, 200 ms', () => {
-      stubReducedMotion('coarse');
+    it('cross-fades onto it after a touch: opacity only, 200 ms', async () => {
+      // A touch screen whose primary pointer is fine (a laptop's): today's
+      // column, and a touch release fades (DR2).
+      stubReducedMotion('fine');
+      const {scrollTo, stopOn} = renderWheel(10);
+      const scroller = screen.getByRole('listbox', {name: 'Hour'});
+      fireEvent.pointerDown(scroller, {pointerType: 'touch'});
+      const {animate, animations} = fakeAnimate();
+      scroller.animate = animate;
+      stopOn(7);
+      // Out, then back in after the rows land: opacity alone.
+      expect(animations).toHaveLength(1);
+      expect(animations[0].keyframes.map(frame => frame.opacity)).toEqual([
+        1, 0,
+      ]);
+      expect(scrollTo).not.toHaveBeenCalled();
+      await act(async () => animations[0].finish());
+      // The rows land at the dip's midpoint, with no travel.
+      expect(scrollTo).toHaveBeenCalledWith({top: 9 * ROW, behavior: 'auto'});
+      expect(animations).toHaveLength(2);
+      expect(animations[1].keyframes.map(frame => frame.opacity)).toEqual([
+        0, 1,
+      ]);
+      for (const {keyframes} of animations) {
+        for (const frame of keyframes) {
+          expect(
+            Object.keys(frame).filter(
+              key => key !== 'offset' && key !== 'easing',
+            ),
+          ).toEqual(['opacity']);
+        }
+      }
+      const total = animations.reduce(
+        (sum, {options}) => sum + Number(options.duration),
+        0,
+      );
+      expect(total).toBeLessThanOrEqual(200);
+    });
+
+    it('lands the rows only when the fade-out ends, however late its frame comes', async () => {
+      // design:reduced-motion DR2: a timer at the dip's middle could fire
+      // after the fade-in began, and the rows would move fully visible.
+      stubReducedMotion('fine');
       vi.useFakeTimers();
       const {scrollTo, stopOn} = renderWheel(10);
       const scroller = screen.getByRole('listbox', {name: 'Hour'});
-      const animate = vi.fn();
-      scroller.animate = animate as HTMLElement['animate'];
+      fireEvent.pointerDown(scroller, {pointerType: 'touch'});
+      const {animate, animations} = fakeAnimate();
+      scroller.animate = animate;
       stopOn(7);
-      expect(animate).toHaveBeenCalledTimes(1);
-      const [keyframes, timing] = animate.mock.calls[0];
-      // Out and back in, opacity alone.
-      expect((keyframes as Keyframe[]).map(frame => frame.opacity)).toEqual([
-        1, 0, 1,
-      ]);
-      for (const frame of keyframes as Keyframe[]) {
-        expect(
-          Object.keys(frame).filter(
-            key => key !== 'offset' && key !== 'easing',
-          ),
-        ).toEqual(['opacity']);
-      }
-      expect(timing.duration).toBeLessThanOrEqual(200);
-      // The rows land at the dip's midpoint, with no travel.
-      expect(scrollTo).not.toHaveBeenCalled();
       act(() => {
-        vi.advanceTimersByTime(timing.duration / 2);
+        vi.advanceTimersByTime(10_000);
       });
-      expect(scrollTo).toHaveBeenCalledWith({top: 9 * ROW, behavior: 'auto'});
+      expect(scrollTo).not.toHaveBeenCalled();
+      expect(animations).toHaveLength(1);
+      await act(async () => animations[0].finish());
+      expect(scrollTo.mock.calls).toEqual([[{top: 9 * ROW, behavior: 'auto'}]]);
     });
 
     it('steps with the arrow keys at once with a keyboard', () => {
@@ -268,54 +307,71 @@ describe('Wheel — where it comes to rest', () => {
       });
     }
 
-    it('lands an arrow key step on a touch screen under its cross-fade, not before', () => {
+    it('lands an arrow key step on a coarse pointer under its cross-fade, not before', async () => {
+      // A finger gets the touch column (PickerWheel.test.tsx); today's
+      // column keeps its dip for a coarse pointer wherever it is rendered.
       stubReducedMotion('coarse');
-      vi.useFakeTimers();
-      const {onChange, scrollTo, rerender} = renderWheel(10);
+      const {onChange, scrollTo, rerender} = renderWheel(10, ScrollWheel);
       const scroller = screen.getByRole('listbox', {name: 'Hour'});
-      const animate = vi.fn();
-      scroller.animate = animate as HTMLElement['animate'];
+      const {animate, animations} = fakeAnimate();
+      scroller.animate = animate;
       pressArrowDown();
       expect(onChange).toHaveBeenCalledWith(11);
       // The parent takes the step. The new value must not move the rows
       // while they are still fully visible: they land under the dip.
       rerender(
-        <Wheel label="Hour" options={HOURS} value={11} onChange={onChange} />,
+        <ScrollWheel
+          label="Hour"
+          options={HOURS}
+          value={11}
+          onChange={onChange}
+        />,
       );
-      expect(animate).toHaveBeenCalledTimes(1);
+      expect(animations).toHaveLength(1);
       expect(scrollTo).not.toHaveBeenCalled();
-      const [, timing] = animate.mock.calls[0];
-      act(() => {
-        vi.advanceTimersByTime(timing.duration / 2);
-      });
+      await act(async () => animations[0].finish());
       expect(scrollTo.mock.calls).toEqual([
         [{top: 11 * ROW, behavior: 'auto'}],
       ]);
     });
 
-    it('starts a second step’s dip where the first one’s fade-in has the column', () => {
+    it('starts a second step’s dip where the first one’s fade-in has the column', async () => {
       // design:reduced-motion DR2: a leaving element fades out where it is,
       // so a step during the last dip's fade-in never pops back to opaque.
+      // A finger gets the touch column (PickerWheel.test.tsx); today's
+      // column keeps its dip for a coarse pointer wherever it is rendered.
       stubReducedMotion('coarse');
-      vi.useFakeTimers();
-      renderWheel(10);
+      renderWheel(10, ScrollWheel);
       const scroller = screen.getByRole('listbox', {name: 'Hour'});
-      const animate = vi.fn();
-      scroller.animate = animate as HTMLElement['animate'];
+      const {animate, animations} = fakeAnimate();
+      scroller.animate = animate;
       pressArrowDown();
-      const [first, timing] = animate.mock.calls[0];
-      expect((first as Keyframe[])[0].opacity).toBe(1);
-      // Past the midpoint: the rows have landed and the column fades back in.
-      act(() => {
-        vi.advanceTimersByTime(timing.duration / 2 + 40);
-      });
+      expect(animations[0].keyframes[0].opacity).toBe(1);
+      // The rows have landed, and the column fades back in.
+      await act(async () => animations[0].finish());
+      expect(animations).toHaveLength(2);
       scroller.style.opacity = '0.5';
       pressArrowDown();
-      expect(animate).toHaveBeenCalledTimes(2);
-      const [second] = animate.mock.calls[1];
-      expect((second as Keyframe[]).map(frame => frame.opacity)).toEqual([
-        0.5, 0, 1,
+      expect(animations).toHaveLength(3);
+      // The fade-in stops, and the next fade-out starts where it was.
+      expect(animations[1].cancel).toHaveBeenCalled();
+      expect(animations[2].keyframes.map(frame => frame.opacity)).toEqual([
+        0.5, 0,
       ]);
+    });
+
+    it('lands nothing once unmounted within the fade-out', async () => {
+      stubReducedMotion('fine');
+      const {scrollTo, stopOn, unmount} = renderWheel(10);
+      const scroller = screen.getByRole('listbox', {name: 'Hour'});
+      fireEvent.pointerDown(scroller, {pointerType: 'touch'});
+      const {animate, animations} = fakeAnimate();
+      scroller.animate = animate;
+      stopOn(7);
+      unmount();
+      expect(animations[0].cancel).toHaveBeenCalled();
+      await act(async () => animations[0].finish());
+      expect(scrollTo).not.toHaveBeenCalled();
     });
 
     it('changes at once after an earlier touch on a fine pointer, for a key or a tap', () => {
@@ -341,20 +397,17 @@ describe('Wheel — where it comes to rest', () => {
       expect(animate).not.toHaveBeenCalled();
     });
 
-    it('cross-fades the travel after a touch drag on a fine pointer', () => {
+    it('cross-fades the travel after a touch drag on a fine pointer', async () => {
       stubReducedMotion('fine');
-      vi.useFakeTimers();
       const {scrollTo, stopOn} = renderWheel(10);
       const scroller = screen.getByRole('listbox', {name: 'Hour'});
-      const animate = vi.fn();
-      scroller.animate = animate as HTMLElement['animate'];
+      const {animate, animations} = fakeAnimate();
+      scroller.animate = animate;
       fireEvent.pointerDown(scroller, {pointerType: 'touch'});
       stopOn(7);
-      expect(animate).toHaveBeenCalledTimes(1);
+      expect(animations).toHaveLength(1);
       expect(scrollTo).not.toHaveBeenCalled();
-      act(() => {
-        vi.advanceTimersByTime(animate.mock.calls[0][1].duration / 2);
-      });
+      await act(async () => animations[0].finish());
       expect(scrollTo).toHaveBeenCalledWith({top: 9 * ROW, behavior: 'auto'});
     });
 
@@ -474,5 +527,173 @@ describe('Wheel — where it comes to rest', () => {
       behavior: 'smooth',
     });
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe('Wheel — keys under a mouse', () => {
+  /** The scrolling column over `options`, whose owner commits each change. */
+  function OwnedColumn({
+    options,
+    initial,
+    onChange,
+  }: {
+    options: WheelOption[];
+    initial: number;
+    onChange: (value: number) => void;
+  }) {
+    const [value, setValue] = useState(initial);
+    return (
+      <ScrollWheel
+        label="Hour"
+        options={options}
+        value={value}
+        onChange={next => {
+          onChange(next);
+          setValue(next);
+        }}
+      />
+    );
+  }
+
+  function renderColumn(options: WheelOption[], initial: number) {
+    const onChange = vi.fn();
+    render(
+      <OwnedColumn options={options} initial={initial} onChange={onChange} />,
+    );
+    return {listbox: screen.getByRole('listbox', {name: 'Hour'}), onChange};
+  }
+
+  it('at a 12:00–17:00 bound, moves a key to the next enabled row and stops at the last one', () => {
+    const bound = HOURS.map(option => ({
+      ...option,
+      isDisabled: option.value < 12 || option.value > 17,
+    }));
+    const {listbox, onChange} = renderColumn(bound, 17);
+    // No enabled row lies below 17: these keys commit nothing.
+    for (const key of ['ArrowDown', 'PageDown', 'End']) {
+      fireEvent.keyDown(listbox, {key});
+    }
+    expect(onChange).not.toHaveBeenCalled();
+    // PageUp's target, 7, is past the bound: the key stops at 12.
+    fireEvent.keyDown(listbox, {key: 'PageUp'});
+    expect(onChange).toHaveBeenLastCalledWith(12);
+    fireEvent.keyDown(listbox, {key: 'ArrowUp'});
+    fireEvent.keyDown(listbox, {key: 'Home'});
+    expect(onChange).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(listbox, {key: 'End'});
+    expect(onChange).toHaveBeenLastCalledWith(17);
+  });
+
+  it('at a 12:00–17:00 bound on a 12-hour hour wheel, steps in time order: nothing after 5 PM, and 1 PM after 12 PM', () => {
+    // The PM hours as the 12-hour wheel lists them, 1 to 12, each standing for
+    // its full hour: 12 (noon) comes before 1. Noon to 5 PM are in the bound.
+    const pmHours = Array.from({length: 12}, (_, index) => {
+      const hour = index + 1;
+      const hour24 = hour === 12 ? 12 : hour + 12;
+      return {
+        value: hour,
+        label: String(hour),
+        order: hour24,
+        isDisabled: hour24 > 17,
+      };
+    });
+    const {listbox, onChange} = renderColumn(pmHours, 5);
+    for (const key of ['ArrowDown', 'PageDown', 'End']) {
+      fireEvent.keyDown(listbox, {key});
+    }
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.keyDown(listbox, {key: 'Home'});
+    expect(onChange).toHaveBeenLastCalledWith(12);
+    fireEvent.keyDown(listbox, {key: 'ArrowDown'});
+    expect(onChange).toHaveBeenLastCalledWith(1);
+    fireEvent.keyDown(listbox, {key: 'ArrowUp'});
+    expect(onChange).toHaveBeenLastCalledWith(12);
+  });
+
+  it('moves a key from a row outside the bounds onto the first enabled row in its direction', () => {
+    const bound = HOURS.map(option => ({
+      ...option,
+      isDisabled: option.value < 12 || option.value > 17,
+    }));
+    const {listbox, onChange} = renderColumn(bound, 20);
+    fireEvent.keyDown(listbox, {key: 'ArrowDown'});
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.keyDown(listbox, {key: 'ArrowUp'});
+    expect(onChange).toHaveBeenLastCalledWith(17);
+  });
+});
+
+describe('Wheel — by pointer', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /**
+   * The pointer and the engine: `(pointer: coarse)` is a finger, and
+   * `-webkit-touch-callout` exists only in WebKit on iOS, which must not
+   * matter.
+   */
+  function stubDevice({ios, coarse}: {ios: boolean; coarse: boolean}) {
+    vi.stubGlobal('CSS', {
+      supports: (condition: string) =>
+        ios && condition.includes('-webkit-touch-callout'),
+    });
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn((query: string) => ({
+        matches: query === '(pointer: coarse)' && coarse,
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      })),
+    );
+  }
+
+  function renderPicker() {
+    const onChange = vi.fn();
+    const view = render(
+      <Wheel label="Hour" options={HOURS} value={12} onChange={onChange} />,
+    );
+    return {...view, onChange};
+  }
+
+  it.each([
+    ['iOS WebKit', true],
+    ['Android Chrome', false],
+  ])('draws the touch column under a finger, on %s', (_, ios) => {
+    stubDevice({ios, coarse: true});
+    const {container} = renderPicker();
+    expect(container.querySelector('[data-wheel]')).not.toBeNull();
+    // Each option is a drawn row, once.
+    expect(container.querySelectorAll('[data-wheel-row]')).toHaveLength(
+      HOURS.length,
+    );
+  });
+
+  it.each([
+    ['a mouse', false],
+    ['iOS WebKit with a mouse', true],
+  ])('keeps the scrolling column, with no frame, for %s', (_, ios) => {
+    stubDevice({ios, coarse: false});
+    const {container} = renderPicker();
+    expect(container.querySelector('[data-wheel]')).toBeNull();
+    // Today's column, straight in its container: no group frame around it.
+    expect(
+      screen.getByRole('listbox', {name: 'Hour'}).parentElement?.parentElement,
+    ).toBe(container);
+  });
+});
+
+describe('Wheel — markup', () => {
+  // Written before the listbox wiring moved into useWheelListbox: the
+  // snapshot holds today's column to its markup (attributes, classes, order).
+  it('keeps today’s column’s markup', () => {
+    const {container} = render(
+      <Wheel label="Hour" options={HOURS} value={10} onChange={() => {}} />,
+    );
+    // React's generated ids depend on how many renders ran before.
+    expect(
+      container.innerHTML.replace(/_r_[0-9a-z]+_/g, '_r_id_'),
+    ).toMatchSnapshot();
   });
 });

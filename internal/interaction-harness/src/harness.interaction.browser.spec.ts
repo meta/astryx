@@ -31,7 +31,10 @@
  *   until the filmstrip is done, drops callbacks the page cancels, stamps held
  *   frames with the time they run, and leaves the harness its own frames; a
  *   cast filmstrip keeps exactly the presented frames of its window, labelled
- *   from its zero, as PNG.
+ *   from its zero, as PNG; a page freeze holds every animation, timer and
+ *   clock the page reads and thaws each animation from where it stood (one the
+ *   page dated while frozen too), arms on an input ahead of the page's own
+ *   listeners, steps by the scene's own clock, and freezes on a condition.
  * @position The harness's own test. A component spec trusts these
  *   instruments; this file is why it may.
  */
@@ -42,11 +45,13 @@ import path from 'node:path';
 import {expect, test, type Page} from '@playwright/test';
 import type {CastFrame, TrackedFrame} from './frames';
 import {
+  advanceFrozenPage,
   armHold,
   animationStoryboard,
   castStoryboard,
   blockMainThread,
   busyWindowProof,
+  BusyWindowTooLateError,
   compareCurve,
   countBetween,
   cubicBezier,
@@ -55,11 +60,16 @@ import {
   drag,
   flick,
   frames,
+  freezePage,
+  freezePageOn,
+  freezePageWhen,
   freezeTimers,
+  HARNESS_READ,
   holdAnimations,
   installInputLog,
   type InputRecord,
   installLongTaskLog,
+  installPageFreeze,
   installTimerGate,
   markElement,
   merge,
@@ -80,6 +90,7 @@ import {
   startBusyControl,
   Storyboard,
   tap,
+  thawPage,
   thawTimers,
   timeline,
   touchDriver,
@@ -2829,17 +2840,38 @@ test.describe('animation state', () => {
   }) => {
     await fixture(page);
     const box = page.locator('#box');
-    await box.evaluate(el => {
-      el.style.transition = 'transform 300ms linear 200ms';
+    await box.evaluate((el, read) => {
+      // The transition's time at each of the wait's own reads (it marks
+      // them), so the check reads what the wait judged, not a later frame.
+      const w = window as unknown as {__reads: (number | null)[]};
+      w.__reads = [];
+      const timeStamp = console.timeStamp.bind(console);
+      console.timeStamp = (label?: string) => {
+        if (label === read) {
+          const run = el.getAnimations()[0];
+          w.__reads.push(run == null ? null : Number(run.currentTime));
+        }
+        timeStamp(label);
+      };
+      // It runs for the whole test, so the wait finds it running however
+      // late it first looks: the claim is about its 200 ms delay.
+      el.style.transition = 'transform 60s linear 200ms';
       void (el as HTMLElement).offsetWidth;
       el.style.transform = 'translateY(100px)';
-    });
-    await waitForAnimation(box, {minProgressMs: 50});
-    // 50 ms along the curve: past the 200 ms delay, not inside it.
-    const currentTime = await box.evaluate(el =>
-      Number(el.getAnimations()[0]?.currentTime),
+    }, HARNESS_READ);
+    const [found] = await waitForAnimation(box, {minProgressMs: 50});
+    expect(found.finishedAt).toBeNull();
+    // 50 ms along the curve at the read the wait answered on: past the
+    // 200 ms delay, not inside it.
+    const reads = await page.evaluate(
+      () => (window as unknown as {__reads: (number | null)[]}).__reads,
     );
-    expect(currentTime).toBeGreaterThanOrEqual(250);
+    expect(reads.at(-1)).toBeGreaterThanOrEqual(250);
+    await box.evaluate(el => {
+      for (const run of el.getAnimations()) {
+        run.finish();
+      }
+    });
     await waitForRest(box);
   });
 
@@ -3924,6 +3956,87 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     await thawTimers(page);
   });
 
+  test("blockMainThread with during names a block that would begin in the motion's held tail, and waits past an older run held there", async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // Moves for its first 30%, then holds its end value: its curve ends at
+    // 900 ms of 3 s.
+    const held = [
+      {transform: 'translateX(0px)', offset: 0},
+      {transform: 'translateX(200px)', offset: 0.3},
+      {transform: 'translateX(200px)', offset: 1},
+    ];
+    // Started while the page waits, already 1.5 s in: past its curve, so a
+    // block now would judge a run that has stopped.
+    const late = blockMainThread(page, 100, {during: box, timeout: 2_000}).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    await page.waitForTimeout(100);
+    await box.evaluate((el, keyframes) => {
+      const run = el.animate(keyframes, {duration: 3_000, easing: 'linear'});
+      run.currentTime = 1_500;
+    }, held);
+    const error = await late;
+    expect(error).toBeInstanceOf(BusyWindowTooLateError);
+    const {numbers} = error as BusyWindowTooLateError;
+    expect(numbers.curveEndMs).toBeCloseTo(900, 3);
+    expect(numbers.currentTimeMs).toBeGreaterThanOrEqual(1_500);
+    expect(numbers.startedWhileWaiting).toBe(1);
+    // That run still holds its end when the next wait begins: the page waits
+    // for one that moves, and blocks while it does.
+    const moving = blockMainThread(page, 100, {during: box, timeout: 2_000});
+    await page.waitForTimeout(100);
+    const startedAt = await box.evaluate(el => {
+      el.animate([{translate: '0 0'}, {translate: '0 100px'}], {
+        duration: 1_000,
+        easing: 'linear',
+      });
+      return performance.timeOrigin + performance.now();
+    });
+    const window = await moving;
+    expect(window.from).toBeGreaterThan(startedAt);
+  });
+
+  test('blockMainThread with during names a late block when the run it saw held ends before the wait times out', async ({
+    page,
+  }) => {
+    await fixture(page);
+    const box = page.locator('#box');
+    // Already in its held tail (its curve ends at 900 ms of 3 s) when the
+    // wait begins, then cancelled, as Core's animator cancels a held run
+    // once its curve ends: nothing runs when the wait times out.
+    await box.evaluate(el => {
+      const run = el.animate(
+        [
+          {transform: 'translateX(0px)', offset: 0},
+          {transform: 'translateX(200px)', offset: 0.3},
+          {transform: 'translateX(200px)', offset: 1},
+        ],
+        {duration: 3_000, easing: 'linear'},
+      );
+      run.currentTime = 1_500;
+      (window as unknown as {heldRun: Animation}).heldRun = run;
+    });
+    await page.waitForTimeout(100);
+    const late = blockMainThread(page, 100, {during: box, timeout: 1_000}).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    await page.waitForTimeout(300);
+    await page.evaluate(() =>
+      (window as unknown as {heldRun: Animation}).heldRun.cancel(),
+    );
+    const error = await late;
+    expect(error).toBeInstanceOf(BusyWindowTooLateError);
+    const {numbers} = error as BusyWindowTooLateError;
+    expect(numbers.curveEndMs).toBeCloseTo(900, 3);
+    expect(numbers.currentTimeMs).toBeGreaterThanOrEqual(1_500);
+    expect(numbers.startedWhileWaiting).toBe(0);
+  });
+
   test('the timer gate holds a component timer until the filmstrip is done', async ({
     page,
   }, testInfo) => {
@@ -4180,5 +4293,569 @@ test.describe('storyboards', {tag: '@storyboard'}, () => {
     });
     expect(empty.frames).toEqual([]);
     await expect(empty.write(testInfo)).rejects.toThrow(/no frames/);
+  });
+});
+
+const FREEZE_FIXTURE = `<!doctype html><meta name=viewport content="width=device-width,initial-scale=1">
+<style>body{margin:0} #box{position:absolute;left:0;top:40px;width:40px;height:40px;background:#0a7}</style>
+<div id="box"></div>
+<script>
+  // The page's own key handler, registered at load on the window's capture
+  // phase: it records whether a freeze was already on, starts a run and then
+  // keeps the main thread busy. The loop counts work, not time: the page's
+  // clocks stand still while it is frozen.
+  window.addEventListener('keydown', () => {
+    window.frozenAtHandler = window.__harnessFreeze?.frozen ?? null;
+    document.getElementById('box').animate(
+      [{transform: 'translateX(0px)'}, {transform: 'translateX(400px)'}],
+      {duration: 2000, easing: 'linear'},
+    );
+    let work = 0;
+    for (let i = 0; i < 4e7; i++) work += i % 7;
+    window.work = work;
+  }, true);
+</script>`;
+
+async function freezeFixture(page: Page) {
+  await page.route('http://freeze.test/', route =>
+    route.fulfill({contentType: 'text/html', body: FREEZE_FIXTURE}),
+  );
+  await page.goto('http://freeze.test/');
+}
+
+/** The box's run as the page reads it, and the page's clocks. */
+const readScene = (page: Page) =>
+  page.locator('#box').evaluate(el => {
+    const animation = el.getAnimations()[0];
+    return {
+      x: new DOMMatrix(getComputedStyle(el).transform).m41,
+      now: performance.now(),
+      date: Date.now(),
+      timeline: Number(document.timeline.currentTime),
+      current: animation == null ? null : Number(animation.currentTime),
+      state: animation?.playState ?? null,
+    };
+  });
+
+/** Starts a 2 s linear run of the box over 400 px. */
+const startRun = (page: Page) =>
+  page.locator('#box').evaluate(el => {
+    el.animate(
+      [{transform: 'translateX(0px)'}, {transform: 'translateX(400px)'}],
+      {duration: 2_000, easing: 'linear'},
+    );
+  });
+
+test.describe('page freeze', () => {
+  test('a frozen scene stands still and reads no time passing; thawed, it plays on from where it stood, and the frozen span counts for neither its clock nor its animation', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    await startRun(page);
+    await waitForAnimation(page.locator('#box'), {minProgressMs: 100});
+    await freezePage(page);
+    const frozen = await readScene(page);
+    const frozenAt = Date.now();
+    await page.waitForTimeout(300);
+    const still = await readScene(page);
+    expect(still).toEqual(frozen);
+    expect(still.state).toBe('running');
+    // Read in the thaw's own task: the run resumes exactly where it stood.
+    const atThaw = await page.locator('#box').evaluate(el => {
+      (
+        window as unknown as {__harnessFreeze: {thaw(): void}}
+      ).__harnessFreeze.thaw();
+      return Number(el.getAnimations()[0].currentTime);
+    });
+    expect(atThaw).toBeCloseTo(frozen.current ?? NaN, 3);
+    await thawPage(page);
+    await page.waitForTimeout(200);
+    const thawed = await readScene(page);
+    const elapsed = Date.now() - frozenAt;
+    const moved = (thawed.current ?? 0) - (frozen.current ?? 0);
+    expect(moved).toBeGreaterThan(100);
+    expect(thawed.x).toBeGreaterThan(frozen.x);
+    // The 300 ms frozen span counts for neither the run nor the page's clock.
+    expect(elapsed - moved).toBeGreaterThan(250);
+    expect(elapsed - (thawed.now - frozen.now)).toBeGreaterThan(250);
+  });
+
+  test("a freeze armed on an input lands before the page's own listeners for it, so a slow handler's run is held at its start", async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    await freezePageOn(page, 'keydown');
+    await page.keyboard.press('a');
+    expect(
+      await page.evaluate(
+        () => (window as unknown as {frozenAtHandler: unknown}).frozenAtHandler,
+      ),
+    ).toBe(true);
+    const held = await readScene(page);
+    expect(held.current).toBe(0);
+    await page.waitForTimeout(250);
+    expect((await readScene(page)).current).toBe(0);
+    await thawPage(page);
+    // Only an input the install listens for can arm a freeze.
+    await expect(freezePageOn(page, 'focus')).rejects.toThrow(/arms only on/);
+  });
+
+  test('without a freeze the same slow handler runs first, and a late read finds its run well along', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    await page.keyboard.press('a');
+    expect(
+      await page.evaluate(
+        () => (window as unknown as {frozenAtHandler: unknown}).frozenAtHandler,
+      ),
+    ).toBe(false);
+    await page.waitForTimeout(250);
+    expect((await readScene(page)).current).toBeGreaterThan(150);
+  });
+
+  test("an advance moves the page's clock and every held animation on together, while timers stay held", async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    await startRun(page);
+    await waitForAnimation(page.locator('#box'), {minProgressMs: 50});
+    await freezePage(page);
+    await page.evaluate(() => {
+      setTimeout(() => {
+        (window as unknown as {timerRan?: boolean}).timerRan = true;
+      }, 10);
+    });
+    const before = await readScene(page);
+    await advanceFrozenPage(page, 120);
+    const after = await readScene(page);
+    expect(after.now - before.now).toBeCloseTo(120, 6);
+    expect(after.timeline - before.timeline).toBeCloseTo(120, 6);
+    expect((after.current ?? 0) - (before.current ?? 0)).toBeCloseTo(120, 6);
+    expect(after.x - before.x).toBeCloseTo(24, 1);
+    expect(
+      await page.evaluate(
+        () => (window as unknown as {timerRan?: boolean}).timerRan,
+      ),
+    ).toBeUndefined();
+    await thawPage(page);
+    expect(
+      await page.evaluate(
+        () => (window as unknown as {timerRan?: boolean}).timerRan,
+      ),
+    ).toBe(true);
+  });
+
+  test('a freeze on a condition stops the scene on the first frame it holds, and rejects when it never does', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    const reached = freezePageWhen(
+      page,
+      (min: number) => {
+        const box = document.getElementById('box');
+        return (
+          box != null &&
+          new DOMMatrix(getComputedStyle(box).transform).m41 >= min
+        );
+      },
+      100,
+    );
+    await startRun(page);
+    await reached;
+    const frozen = await readScene(page);
+    expect(frozen.x).toBeGreaterThanOrEqual(100);
+    expect(frozen.x).toBeLessThan(400);
+    await page.waitForTimeout(200);
+    expect((await readScene(page)).x).toBe(frozen.x);
+    // On a frozen page the page's clock stands still: the timeout runs on
+    // the real one.
+    await expect(
+      freezePageWhen(page, () => false, null, {timeout: 300}),
+    ).rejects.toThrow(/did not hold within 300 ms/);
+    await thawPage(page);
+    await expect(
+      freezePageWhen(page, () => false, null, {timeout: 300}),
+    ).rejects.toThrow(/did not hold within 300 ms/);
+  });
+
+  test('a start the page dates while frozen resumes at the thaw from where it held, in the thaw task itself', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    await freezePage(page);
+    await page.locator('#box').evaluate(el => {
+      const animation = el.animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(400px)'}],
+        {duration: 2_000, easing: 'linear'},
+      );
+      animation.startTime = performance.now();
+    });
+    await advanceFrozenPage(page, 100);
+    expect((await readScene(page)).current).toBeCloseTo(100, 6);
+    // Read in the thaw's own task, before any frame: the timeline still
+    // reads its last frame's time, which trails the page's clock.
+    const atThaw = await page.locator('#box').evaluate(el => {
+      (
+        window as unknown as {__harnessFreeze: {thaw(): void}}
+      ).__harnessFreeze.thaw();
+      return Number(el.getAnimations()[0].currentTime);
+    });
+    expect(atThaw).toBeCloseTo(100, 3);
+    await thawPage(page);
+  });
+
+  test('a timeout pending across a freeze comes due on the page’s clock, not early by the frozen span', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    // A 3 s run and a 1 s timeout started together: they share the page's
+    // clock, so the timeout comes due with the run 1 s in.
+    await page.locator('#box').evaluate(el => {
+      const animation = el.animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(400px)'}],
+        {duration: 3_000, easing: 'linear'},
+      );
+      setTimeout(() => {
+        (window as unknown as {firedAt?: number}).firedAt = Number(
+          animation.currentTime,
+        );
+      }, 1_000);
+    });
+    await page.waitForTimeout(100);
+    await freezePage(page);
+    await page.waitForTimeout(600);
+    await thawPage(page);
+    const firedAt = () =>
+      page.evaluate(
+        () => (window as unknown as {firedAt?: number}).firedAt ?? null,
+      );
+    await expect.poll(firedAt, {timeout: 5_000}).not.toBeNull();
+    // On the real clock it would come 600 ms early, the run about 400 ms in.
+    // The run's time is its last frame's: up to two frames behind.
+    expect(await firedAt()).toBeGreaterThan(1_000 - 34);
+    expect(await firedAt()).toBeLessThan(3_000);
+  });
+
+  test('a scroll-driven animation is left to its scroller, and the page’s timeline keeps reading time', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    const hasScrollTimeline = await page.evaluate(
+      () =>
+        typeof (window as {ScrollTimeline?: unknown}).ScrollTimeline ===
+        'function',
+    );
+    test.skip(!hasScrollTimeline, 'this engine has no ScrollTimeline');
+    await page.evaluate(() => {
+      const spacer = document.createElement('div');
+      spacer.style.height = '4000px';
+      document.body.append(spacer);
+      const ScrollTimeline = (
+        window as unknown as {
+          ScrollTimeline: new (options: {source: Element}) => AnimationTimeline;
+        }
+      ).ScrollTimeline;
+      const source = document.scrollingElement ?? document.documentElement;
+      const timeline = new ScrollTimeline({source});
+      document
+        .getElementById('box')
+        ?.animate([{opacity: 0}, {opacity: 1}], {timeline});
+      // A scroll timeline's time is a percentage, read once here.
+      void timeline.currentTime;
+    });
+    const pageTime = () =>
+      page.evaluate(() => Number(document.timeline.currentTime));
+    const scrollTime = () =>
+      page.evaluate(() => {
+        const animation = document
+          .getElementById('box')
+          ?.getAnimations()
+          .find(each => each.timeline !== document.timeline);
+        return animation == null ? null : String(animation.currentTime);
+      });
+    expect(Number.isFinite(await pageTime())).toBe(true);
+    await freezePage(page);
+    const before = await scrollTime();
+    expect(before).not.toBeNull();
+    // Frozen, the scroll-driven run still follows its scroller.
+    await page.evaluate(() => window.scrollTo(0, 2_000));
+    await expect.poll(scrollTime).not.toBe(before);
+    expect(Number.isFinite(await pageTime())).toBe(true);
+    await thawPage(page);
+    expect(Number.isFinite(await pageTime())).toBe(true);
+  });
+
+  test('on a frozen page the harness still samples, arms a hold and blocks the main thread, on the real clock', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    await freezePage(page);
+    const box = page.locator('#box');
+    const samples = await sampleRects(box, 200);
+    expect(samples.length).toBeGreaterThan(3);
+    const hold = await armHold(page, box, {timeout: 300});
+    await expect(hold.held()).rejects.toThrow(
+      'armHold: no animation under the scope ran within 300 ms',
+    );
+    const blocked = await blockMainThread(page, 50);
+    expect(blocked.spanMs).toBeGreaterThanOrEqual(50);
+    await thawPage(page);
+  });
+
+  test('a CSS animation the page resumes while frozen is held where it stands, not at its start', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    // A CSS run paused 500 ms in, before the freeze.
+    await page.locator('#box').evaluate(el => {
+      const style = document.createElement('style');
+      style.textContent =
+        '@keyframes slide { to { transform: translateX(400px); } }';
+      document.head.append(style);
+      (el as HTMLElement).style.animation = 'slide 2s linear paused';
+      el.getAnimations()[0].currentTime = 500;
+    });
+    const at = () =>
+      page
+        .locator('#box')
+        .evaluate(el => Number(el.getAnimations()[0].currentTime));
+    expect(await at()).toBeCloseTo(500, 0);
+    await freezePage(page);
+    // The page resumes it by CSS while frozen.
+    await page.locator('#box').evaluate(el => {
+      (el as HTMLElement).style.animationPlayState = 'running';
+    });
+    await page.waitForTimeout(100);
+    expect(await at()).toBeCloseTo(500, 0);
+    await thawPage(page);
+    await page.waitForTimeout(100);
+    expect(await at()).toBeGreaterThan(500);
+  });
+
+  test('a CSS transition the page reverses while frozen plays the reversal after the thaw, not the old run from its start', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    const box = page.locator('#box');
+    await box.evaluate(el => {
+      const element = el as HTMLElement;
+      element.style.transition = 'transform 1s linear';
+      void getComputedStyle(element).transform;
+      element.style.transform = 'translateX(400px)';
+    });
+    // About 160 px along, frozen; the page sends the box back.
+    await page.waitForTimeout(400);
+    await freezePage(page);
+    await box.evaluate(el => {
+      (el as HTMLElement).style.transform = 'translateX(0px)';
+    });
+    const frozenAt = (await box.boundingBox())?.x ?? NaN;
+    await thawPage(page);
+    await page.waitForTimeout(100);
+    const soon = (await box.boundingBox())?.x ?? NaN;
+    await page.waitForTimeout(500);
+    const later = (await box.boundingBox())?.x ?? NaN;
+    // Back toward 0 all along: never past where it stood when frozen.
+    expect(soon).toBeLessThanOrEqual(frozenAt + 1);
+    expect(later).toBeLessThanOrEqual(soon + 1);
+  });
+
+  test('after a thaw, blockMainThread stamps its window on the real clock', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    await freezePage(page);
+    await page.waitForTimeout(600);
+    await thawPage(page);
+    const before = Date.now();
+    const blocked = await blockMainThread(page, 50);
+    const after = Date.now();
+    // The page's own clock trails the real one by the 600 ms frozen span.
+    expect(blocked.from).toBeGreaterThan(before - 50);
+    expect(blocked.to).toBeLessThan(after + 50);
+  });
+
+  test('after a thaw, waitForAnimation and sampleRects stamp on the real clock', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    await freezePage(page);
+    await page.waitForTimeout(600);
+    await thawPage(page);
+    const box = page.locator('#box');
+    const before = Date.now();
+    await box.evaluate(el => {
+      el.animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(100px)'}],
+        {duration: 400},
+      );
+    });
+    const [run] = await waitForAnimation(box);
+    const samples = await sampleRects(box, 100);
+    const after = Date.now();
+    // The page's own clock trails the real one by the 600 ms frozen span.
+    expect(run.from).toBeGreaterThan(before - 50);
+    expect(run.from).toBeLessThan(after + 50);
+    expect(samples.length).toBeGreaterThan(0);
+    for (const sample of samples) {
+      expect(sample.t).toBeGreaterThan(before - 50);
+      expect(sample.t).toBeLessThan(after + 50);
+    }
+  });
+
+  test('a CSS animation the page dates and then removes while frozen stays removed after the thaw', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    const box = page.locator('#box');
+    await page.evaluate(() => {
+      const style = document.createElement('style');
+      style.textContent =
+        '@keyframes slide { to { transform: translateX(400px); } }';
+      document.head.append(style);
+    });
+    await freezePage(page);
+    // Started, dated and removed, all while frozen.
+    await box.evaluate(el => {
+      (el as HTMLElement).style.animation = 'slide 2s linear';
+    });
+    await page.waitForTimeout(100);
+    await box.evaluate(el => {
+      el.getAnimations()[0].startTime = document.timeline.currentTime;
+      (el as HTMLElement).style.animation = 'none';
+      // Style is read at once, so the run is cancelled before the thaw.
+      void getComputedStyle(el).animationName;
+    });
+    await page.waitForTimeout(100);
+    await thawPage(page);
+    await page.waitForTimeout(300);
+    expect(await box.evaluate(el => el.getAnimations().length)).toBe(0);
+    expect(await box.evaluate(el => getComputedStyle(el).transform)).toBe(
+      'none',
+    );
+  });
+
+  test('a run that finished before a freeze is dated where it ran, read after the thaw', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    const box = page.locator('#box');
+    const watch = await watchAnimations(box);
+    const startedAt = Date.now();
+    await box.evaluate(el => {
+      el.animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(100px)'}],
+        {duration: 200},
+      );
+    });
+    // Over before the freeze, and read only after the thaw.
+    await page.waitForTimeout(400);
+    const frozenAt = Date.now();
+    await freezePage(page);
+    await page.waitForTimeout(600);
+    await thawPage(page);
+    const [finished] = await watch.started();
+    expect(finished.from).toBeGreaterThan(startedAt - 50);
+    expect(finished.from).toBeLessThan(frozenAt);
+    expect(finished.finishedAt).not.toBeNull();
+    expect(Number(finished.finishedAt)).toBeLessThan(frozenAt);
+  });
+
+  test('the page’s clock and its runs stay together across ten freeze and thaw cycles', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    await page.locator('#box').evaluate(el => {
+      (window as unknown as {run?: Animation}).run = el.animate(
+        [{transform: 'translateX(0px)'}, {transform: 'translateX(400px)'}],
+        {duration: 60_000, easing: 'linear'},
+      );
+    });
+    await page.waitForTimeout(100);
+    // Where the run started, on the page's clock, before any freeze.
+    const startedAt = await page.evaluate(() =>
+      Number((window as unknown as {run: Animation}).run.startTime),
+    );
+    for (let cycle = 0; cycle < 10; cycle++) {
+      await freezePage(page);
+      await page.waitForTimeout(50);
+      await thawPage(page);
+      await page.waitForTimeout(30);
+    }
+    // In one frame: the run's time against the page's time since it started.
+    const drift = await page.evaluate(
+      start =>
+        new Promise<number>(resolve => {
+          requestAnimationFrame(time => {
+            const run = (window as unknown as {run: Animation}).run;
+            resolve(Number(run.currentTime) - (time - start));
+          });
+        }),
+      startedAt,
+    );
+    expect(Math.abs(drift)).toBeLessThan(5);
+  });
+
+  test('a condition that throws rejects freezePageWhen with its error', async ({
+    page,
+  }) => {
+    await installPageFreeze(page);
+    await freezeFixture(page);
+    await installTimerGate(page);
+    await expect(
+      freezePageWhen(
+        page,
+        () => {
+          throw new Error('the condition broke');
+        },
+        undefined,
+        {timeout: 2_000},
+      ),
+    ).rejects.toThrow('the condition broke');
+  });
+
+  test('a page without the freeze keeps its own clock, and a freeze there refuses to start', async ({
+    page,
+  }) => {
+    await freezeFixture(page);
+    await installTimerGate(page);
+    expect(await page.evaluate(() => '__harnessFreeze' in window)).toBe(false);
+    await expect(freezePage(page)).rejects.toThrow(/installPageFreeze/);
+    await expect(freezePageOn(page, 'keydown')).rejects.toThrow(
+      /installPageFreeze/,
+    );
   });
 });

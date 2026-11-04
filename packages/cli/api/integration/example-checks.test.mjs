@@ -9,6 +9,11 @@ import {integrationCheck} from './check/check.mjs';
 import {outsideFiles} from '../../foundation/integrations/validate-contributions.mjs';
 import {spawnSync} from 'node:child_process';
 import {npmCommand} from '../../foundation/release/cache.mjs';
+import {warmIntegrationChecks} from '../../test-utils/warm-integration-checks.mjs';
+
+// The checks' one-time start in this file (TypeScript and its lib files) runs
+// here, while the file is collected, so no test carries it.
+await warmIntegrationChecks({inRepository: false});
 
 /**
  * Whether the npm the CLI starts packs `rel` from the test package. npm

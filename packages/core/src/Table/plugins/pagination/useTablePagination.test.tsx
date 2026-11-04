@@ -344,12 +344,16 @@ describe('useTablePagination', () => {
           pageSizeOptions={[10, 25, 50]}
         />,
       );
-      expect(screen.getByLabelText('Items per page')).toBeInTheDocument();
+      expect(
+        screen.getByRole('combobox', {name: 'Items per page'}),
+      ).toBeInTheDocument();
     });
 
     it('paginationProps exclude pageSizeOptions when not provided', () => {
       render(<PaginatedTable data={generateItems(50)} pageSize={10} />);
-      expect(screen.queryByLabelText('Items per page')).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('combobox', {name: 'Items per page'}),
+      ).not.toBeInTheDocument();
     });
   });
 

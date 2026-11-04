@@ -8,9 +8,11 @@
  * @output A context carrying a predicate that tells which tokens the user can
  *   remove
  * @position Internal to Core: not exported from the Tokenizer barrel. A
- *   component that composes Tokenizer and locks some tokens (PowerSearch: every
- *   filter of a read-only field) provides it. Backspace then removes nothing
- *   while the last token is locked. Without it, every token is removable.
+ *   component that composes Tokenizer and locks some tokens (PowerSearch: its
+ *   read-only filters, and every filter of a read-only field) provides it. In
+ *   the popover presentation, Clear all then keeps a locked token, Backspace
+ *   removes nothing while the last token is locked, and Clear all shows only
+ *   while a removable token remains. Without it, every token is removable.
  */
 
 import {createContext} from 'react';

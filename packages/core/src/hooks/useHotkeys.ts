@@ -157,6 +157,8 @@ export function useHotkeys(hotkeys: Hotkey[]): void {
     hotkeysRef.current = hotkeys;
   });
 
+  // Syncs a window keydown listener with this mount. The listener runs the
+  // first hotkey that matches.
   useEffect(() => {
     const isApple = isApplePlatform();
 

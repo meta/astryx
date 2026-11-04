@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "sources": {
-    "@astryxdesign/core": "0.7.7",
-    "@astryxdesign/theme-neutral": "0.7.7"
+    "@astryxdesign/core": "0.7.8",
+    "@astryxdesign/theme-neutral": "0.7.8"
   },
   "files": {
     "reset.css": {
@@ -12,7 +12,7 @@
       "sha256": "6e4c8f8f0cb0695cf59fd74d3b58d2151290f2a1945fad3f9ac4399ea09b6676"
     },
     "theme.css": {
-      "sha256": "9c73c0801d199e1b3313ce7258b6c617311dae5ac4578473571f7b38d5f44947"
+      "sha256": "098258bba26cfa89d7f1d91b0ab3daa9d4b2c64de0e94c9c6cd3a43012b71fbf"
     }
   }
 }

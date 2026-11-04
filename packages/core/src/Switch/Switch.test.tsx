@@ -25,7 +25,7 @@
 import {StrictMode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
-import {render, screen, fireEvent, waitFor} from '@testing-library/react';
+import {act, render, screen, fireEvent, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Switch} from './Switch';
 import {
@@ -97,6 +97,94 @@ describe('Switch', () => {
       />,
     );
     expect(screen.getByRole('switch')).toBeInTheDocument();
+  });
+
+  it('toggles nothing for a pen press that a window blur cancels, at its later lift or its click (spec:AST-094 FR44)', async () => {
+    const onChange = vi.fn();
+    render(<Switch label="Wi-Fi" value={false} onChange={onChange} />);
+    const input = screen.getByRole('switch');
+    const pen = (type: 'pointerdown' | 'pointerup', time: number) => {
+      const event = new Event(type, {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+      });
+      Object.defineProperties(event, {
+        pointerId: {value: 7},
+        pointerType: {value: 'pen'},
+        isPrimary: {value: true},
+        clientX: {value: 10},
+        clientY: {value: 10},
+        button: {value: 0},
+        buttons: {value: type === 'pointerup' ? 0 : 1},
+        timeStamp: {value: time},
+      });
+      act(() => {
+        input.dispatchEvent(event);
+      });
+    };
+    pen('pointerdown', 1000);
+    act(() => {
+      window.dispatchEvent(new Event('blur'));
+    });
+    // The microtask after the blur, where an armed press's page listeners go.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    pen('pointerup', 1080);
+    // The pen's own click: a pointer's, detail 1.
+    fireEvent.click(input, {detail: 1});
+    expect(onChange).not.toHaveBeenCalled();
+    expect(input).not.toBeChecked();
+  });
+
+  it('toggles nothing for a pen press that a window blur cancels under a coarse primary pointer too (spec:AST-094 FR44)', () => {
+    const original = window.matchMedia;
+    window.matchMedia = (query: string) => ({
+      matches: query === '(pointer: coarse)',
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    });
+    try {
+      const onChange = vi.fn();
+      render(<Switch label="Wi-Fi" value={false} onChange={onChange} />);
+      const input = screen.getByRole('switch');
+      const pen = (type: 'pointerdown' | 'pointerup', time: number) => {
+        const event = new Event(type, {
+          bubbles: true,
+          cancelable: true,
+          composed: true,
+        });
+        Object.defineProperties(event, {
+          pointerId: {value: 7},
+          pointerType: {value: 'pen'},
+          isPrimary: {value: true},
+          clientX: {value: 10},
+          clientY: {value: 10},
+          button: {value: 0},
+          buttons: {value: type === 'pointerup' ? 0 : 1},
+          timeStamp: {value: time},
+        });
+        act(() => {
+          input.dispatchEvent(event);
+        });
+      };
+      pen('pointerdown', 1000);
+      act(() => {
+        window.dispatchEvent(new Event('blur'));
+      });
+      pen('pointerup', 1080);
+      fireEvent.click(input, {detail: 1});
+      expect(onChange).not.toHaveBeenCalled();
+      expect(input).not.toBeChecked();
+    } finally {
+      window.matchMedia = original;
+    }
   });
 
   it('calls onChange with new checked state when clicked', async () => {
@@ -577,9 +665,9 @@ describe('Switch', () => {
 
   // Retained after review. The shared contract's switch.required.declared
   // accepts either the native attribute or aria-required, because a non-native
-  // switch can only offer the latter — and Switch sets aria-required from a
-  // form-level default too. Only this test pins `isRequired` to the NATIVE
-  // attribute, which is what makes the browser block submission.
+  // switch can only offer the latter. Switch sets aria-required from its own
+  // `isRequired` only. This test pins `isRequired` to the NATIVE attribute,
+  // which is what makes the browser block submission.
   it('sets required attribute when isRequired is true', () => {
     render(
       <Switch
@@ -1398,11 +1486,15 @@ describe('touch listeners (spec:AST-094 FR24)', () => {
   // React's root delegates touch events too: count against a plain element.
   const listenersWhileRendering = (
     isDisabled: boolean | 'none' | 'busy',
-  ): {touch: number; pointer: number; contextMenu: number} => {
+  ): {touch: number; pointer: number; contextMenu: number; click: number} => {
     vi.spyOn(window, 'matchMedia').mockImplementation(coarseMedia);
     const types: string[] = [];
+    const clickTargets: unknown[] = [];
     const record = function (this: unknown, type: string) {
       types.push(type);
+      if (type === 'click') {
+        clickTargets.push(this);
+      }
     };
     const onDocument = vi
       .spyOn(document, 'addEventListener')
@@ -1410,7 +1502,7 @@ describe('touch listeners (spec:AST-094 FR24)', () => {
     const onElements = vi
       .spyOn(HTMLElement.prototype, 'addEventListener')
       .mockImplementation(record);
-    const {unmount} = render(
+    const {container, unmount} = render(
       isDisabled === 'none' ? (
         <div />
       ) : (
@@ -1425,26 +1517,37 @@ describe('touch listeners (spec:AST-094 FR24)', () => {
     );
     onDocument.mockRestore();
     onElements.mockRestore();
+    // On the switch's own elements, read while they are mounted: React's root
+    // and the page's shared listeners are not the switch's.
+    const ownClicks = clickTargets.filter(
+      target =>
+        target instanceof Node &&
+        target !== container &&
+        container.contains(target),
+    ).length;
     unmount();
     vi.restoreAllMocks();
     return {
       touch: types.filter(type => type.startsWith('touch')).length,
       pointer: types.filter(type => type.startsWith('pointer')).length,
       contextMenu: types.filter(type => type === 'contextmenu').length,
+      click: ownClicks,
     };
   };
 
-  it('a switch under a coarse pointer attaches no touch listener, and a disabled one arms no press listener', () => {
+  it('a switch under a coarse pointer attaches no touch or click listener, and a disabled one arms no press listener', () => {
     const baseline = listenersWhileRendering('none');
     const enabled = listenersWhileRendering(false);
     const disabled = listenersWhileRendering(true);
     const busy = listenersWhileRendering('busy');
     // No state adds a touch listener, so a scroll never waits on the switch.
     // Nor a context-menu one: the gesture host keeps a held switch's menu
-    // closed.
+    // closed. Nor a click one on its own elements: a lift's click wait
+    // listens only while it waits (utils/browserClickWait.ts).
     for (const counts of [enabled, disabled, busy]) {
       expect(counts.touch).toBe(baseline.touch);
       expect(counts.contextMenu).toBe(baseline.contextMenu);
+      expect(counts.click).toBe(0);
     }
     // The gesture host arms a press listener for an enabled switch only.
     expect(enabled.pointer).toBeGreaterThan(disabled.pointer);

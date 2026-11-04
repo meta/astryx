@@ -23,7 +23,7 @@ import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {Icon, type IconSize} from '../Icon/Icon';
-import {Tooltip} from '../Tooltip/Tooltip';
+import {TooltipWithTriggerBehavior} from '../Tooltip/Tooltip';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -122,8 +122,8 @@ const styles = stylex.create({
  * labels, values, and metrics for permission notes, metric definitions, and
  * field help.
  *
- * InfoTip is Tooltip with `triggerBehavior="toggle"` on a named button: Tooltip
- * opens, pins, announces, and closes the help. The info icon resolves from
+ * InfoTip is a press-to-pin Tooltip on a named button: Tooltip opens, pins,
+ * announces, and closes the help. The info icon resolves from
  * the icon registry, so themes can replace it.
  *
  * @example
@@ -157,7 +157,7 @@ export function InfoTip({
   // stack takes Escape, so one press never closes both the help and an
   // enclosing Dialog.
   return (
-    <Tooltip
+    <TooltipWithTriggerBehavior
       content={content}
       // The tooltip is the button's only purpose. A click, a tap, Enter, or
       // Space pins it open, and the press stops at the button. So an InfoTip's
@@ -179,7 +179,7 @@ export function InfoTip({
         )}>
         <Icon icon="info" size={size} />
       </button>
-    </Tooltip>
+    </TooltipWithTriggerBehavior>
   );
 }
 

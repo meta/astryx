@@ -13,6 +13,7 @@
 import {describe, it, expect, vi} from 'vitest';
 import {render, screen} from '@testing-library/react';
 import * as stylex from '@stylexjs/stylex';
+import {CheckCircleIcon} from '@heroicons/react/24/outline';
 import {TestIcon} from '../__tests__/TestIcon';
 import {unthemedLength} from '../__tests__/unthemedLength';
 import {Theme} from '../theme/Theme';
@@ -57,36 +58,18 @@ describe('Icon', () => {
     expect(screen.getByTestId('icon')).toHaveAttribute('aria-hidden', 'true');
   });
 
-  it('renders with different color variants', () => {
-    const {rerender} = render(
-      <Icon icon={TestIcon} color="primary" data-testid="icon" />,
-    );
-    expect(screen.getByTestId('icon')).toBeInTheDocument();
-
-    rerender(<Icon icon={TestIcon} color="secondary" data-testid="icon" />);
-    expect(screen.getByTestId('icon')).toBeInTheDocument();
-
-    rerender(<Icon icon={TestIcon} color="accent" data-testid="icon" />);
-    expect(screen.getByTestId('icon')).toBeInTheDocument();
-
-    rerender(<Icon icon={TestIcon} color="info" data-testid="icon" />);
-    expect(screen.getByTestId('icon')).toBeInTheDocument();
-
-    rerender(<Icon icon={TestIcon} color="success" data-testid="icon" />);
-    expect(screen.getByTestId('icon')).toBeInTheDocument();
-
-    rerender(<Icon icon={TestIcon} color="error" data-testid="icon" />);
-    expect(screen.getByTestId('icon')).toBeInTheDocument();
-
-    rerender(<Icon icon={TestIcon} color="warning" data-testid="icon" />);
-    expect(screen.getByTestId('icon')).toBeInTheDocument();
-
-    rerender(<Icon icon={TestIcon} color="inherit" data-testid="icon" />);
-    expect(screen.getByTestId('icon')).toBeInTheDocument();
-  });
-
-  it('renders with non-semantic color variants', () => {
-    const nonSemanticColors = [
+  describe('theming target reflection', () => {
+    const colors = [
+      'primary',
+      'secondary',
+      'tertiary',
+      'disabled',
+      'accent',
+      'info',
+      'success',
+      'error',
+      'warning',
+      'inherit',
       'blue',
       'red',
       'green',
@@ -98,31 +81,68 @@ describe('Icon', () => {
       'pink',
       'purple',
     ] as const;
-    const {rerender} = render(
-      <Icon icon={TestIcon} color={nonSemanticColors[0]} data-testid="icon" />,
-    );
-    expect(screen.getByTestId('icon')).toBeInTheDocument();
+    const sizes = ['xsm', 'sm', 'md', 'lg'] as const;
 
-    for (const c of nonSemanticColors.slice(1)) {
-      rerender(<Icon icon={TestIcon} color={c} data-testid="icon" />);
-      expect(screen.getByTestId('icon')).toBeInTheDocument();
-    }
-  });
+    it('reflects each color on the icon target in component mode', () => {
+      for (const color of colors) {
+        const {unmount} = render(
+          <Icon icon={TestIcon} color={color} data-testid="icon" />,
+        );
+        const icon = screen.getByTestId('icon');
+        expect(icon).toHaveClass('astryx-icon');
+        expect(icon).toHaveAttribute('data-color', color);
+        unmount();
+      }
+    });
 
-  it('renders with different size variants', () => {
-    const {rerender} = render(
-      <Icon icon={TestIcon} size="xsm" data-testid="icon" />,
-    );
-    expect(screen.getByTestId('icon')).toBeInTheDocument();
+    it('reflects each color on the icon target in registry mode', () => {
+      for (const color of colors) {
+        const {unmount} = render(
+          <Icon icon="check" color={color} data-testid="icon" />,
+        );
+        const icon = screen.getByTestId('icon');
+        expect(icon).toHaveClass('astryx-icon');
+        expect(icon).toHaveAttribute('data-color', color);
+        unmount();
+      }
+    });
 
-    rerender(<Icon icon={TestIcon} size="sm" data-testid="icon" />);
-    expect(screen.getByTestId('icon')).toBeInTheDocument();
+    it('reflects the default inherit color when color is omitted', () => {
+      render(
+        <>
+          <Icon icon={TestIcon} data-testid="component" />
+          <Icon icon="check" data-testid="registry" />
+        </>,
+      );
+      expect(screen.getByTestId('component')).toHaveAttribute(
+        'data-color',
+        'inherit',
+      );
+      expect(screen.getByTestId('registry')).toHaveAttribute(
+        'data-color',
+        'inherit',
+      );
+    });
 
-    rerender(<Icon icon={TestIcon} size="md" data-testid="icon" />);
-    expect(screen.getByTestId('icon')).toBeInTheDocument();
-
-    rerender(<Icon icon={TestIcon} size="lg" data-testid="icon" />);
-    expect(screen.getByTestId('icon')).toBeInTheDocument();
+    it('reflects each size on the icon target in both modes', () => {
+      for (const size of sizes) {
+        const {unmount} = render(
+          <>
+            <Icon icon={TestIcon} size={size} data-testid="component" />
+            <Icon icon="check" size={size} data-testid="registry" />
+          </>,
+        );
+        expect(screen.getByTestId('component')).toHaveAttribute(
+          'data-size',
+          size,
+        );
+        expect(screen.getByTestId('registry')).toHaveAttribute(
+          'data-size',
+          size,
+        );
+        unmount();
+      }
+    });
   });
 
   it('sizes component-mode icons in rem so they scale with root font-size', () => {
@@ -819,6 +839,19 @@ describe('Icon', () => {
       expect(icon).toHaveAttribute('role', 'img');
       expect(icon).toHaveAttribute('aria-label', 'Completed');
       expect(icon).not.toHaveAttribute('aria-hidden');
+    });
+
+    it('exposes a labelled icon component that hides itself by default', () => {
+      // Heroicons render aria-hidden="true" unless the caller overrides it.
+      render(<Icon icon={CheckCircleIcon} label="Completed" />);
+      const icon = screen.getByRole('img', {name: 'Completed'});
+      expect(icon).not.toHaveAttribute('aria-hidden');
+    });
+
+    it('keeps an icon component that hides itself decorative without a label', () => {
+      render(<Icon icon={CheckCircleIcon} data-testid="icon" />);
+      expect(screen.getByTestId('icon')).toHaveAttribute('aria-hidden', 'true');
+      expect(screen.queryByRole('img')).not.toBeInTheDocument();
     });
 
     it('keeps the decorative default when label is omitted (component mode)', () => {
