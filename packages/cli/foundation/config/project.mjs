@@ -1281,15 +1281,20 @@ export class Project {
    * @returns {Promise<ProjectIntegrationIssue[]>}
    */
   async issues() {
-    // Template replacement validity depends on the combined Core + integration
-    // catalog. Resolve it first so issue results never depend on which discovery
-    // method the caller happened to invoke earlier.
-    await this.templates();
-    // Component replacement validity likewise depends on Core plus every
-    // integration's components.
-    await this.componentReplacements();
-    for (const integration of this.#loadedIntegrations) {
-      await this.#collectIssues(integration);
+    // Each issue these passes find belongs to an integration, because Core's
+    // templates and components declare no replacement. A project with no
+    // integration skips them.
+    if (this.#loadedIntegrations.length > 0) {
+      // Template replacement validity depends on the combined Core +
+      // integration catalog. Resolve it first so issue results never depend
+      // on which discovery method the caller happened to invoke earlier.
+      await this.templates();
+      // Component replacement validity likewise depends on Core plus every
+      // integration's components.
+      await this.componentReplacements();
+      for (const integration of this.#loadedIntegrations) {
+        await this.#collectIssues(integration);
+      }
     }
     // Return a stable copy so callers can't mutate internal state.
     return this.#issues.map(i => ({...i}));
