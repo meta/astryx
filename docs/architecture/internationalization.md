@@ -276,9 +276,10 @@ for all 30 shipped locales plus `pseudo`.
   the host default. That is a known conformance gap, not a recorded default;
   making it deterministic is a separate compatibility change.
 - **INV10 — The application selects the calendar; values stay Gregorian.** A
-  date component shows the calendar that it resolves from its own `calendar`
-  prop or the provider's `calendar` prop, and otherwise the Gregorian calendar
-  (`spec:AST-111` FR2). Locale changes language, numbering, and field order; a
+  `Calendar` shows the calendar that it resolves from its own `calendar` prop
+  or the provider's `calendar` prop, and otherwise the Gregorian calendar
+  (`spec:AST-111` FR2). `DateInput`, `DateRangeInput`, and `DateTimeInput`
+  show Gregorian dates. Locale changes language, numbering, and field order; a
   locale never selects the calendar, neither by its default calendar nor by a
   `-u-ca-` keyword. `PlainDate` values, constraints, and machine formats stay
   Gregorian ISO in every calendar. The runtime's `Temporal` owns the arithmetic

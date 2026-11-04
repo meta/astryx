@@ -261,8 +261,9 @@ button.
   month start render that month differently, and React renders it again on
   the client during hydration (`spec:AST-111` FR19). Day and month names
   follow the month and day that the grid shows in every case.
-- **Preserved obligations:** `spec:AST-013` FR7 and FR8, and FR9 outside the
-  `chinese` and `dangi` mixed-implementation case. The Gregorian grid keeps
+- **Preserved obligations:** `spec:AST-013` FR7 and FR8, and FR9 whenever the
+  server and the browser resolve the calendar the same way, outside the
+  `chinese` and `dangi` case. The Gregorian grid keeps
   the primary task, accessibility, Gregorian ISO values and callbacks, and
   repeated use; nothing throws; a server and a browser that both have
   `Temporal`, or both lack it, render the same markup.

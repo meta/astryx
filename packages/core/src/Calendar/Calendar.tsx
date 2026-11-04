@@ -246,7 +246,6 @@ interface CalendarRangeProps extends CalendarBaseProps {
 
 export type CalendarProps = CalendarSingleProps | CalendarRangeProps;
 
-/** The first day of `month` that `isDisabled` allows, or null. */
 function firstEnabledDayOfMonth(
   month: CalendarMonth,
   isDisabled: (pd: PlainDate) => boolean,
