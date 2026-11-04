@@ -57,7 +57,6 @@ import {
 } from '../hooks/useAdaptivePresentation';
 import {useIsHydrating} from '../hooks/useIsHydrating';
 import {VisuallyHidden} from '../VisuallyHidden';
-import {useDevWarning} from '../hooks/useDevWarning';
 import {warnOnce} from '../utils/devWarning';
 import type {SizeValue} from '../utils/types';
 import {BaseTypeahead} from '../Typeahead/BaseTypeahead';
@@ -92,7 +91,7 @@ import type {
 } from '../Typeahead/types';
 import {composeEventHandlers, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
-import {isFocusDetached} from '../utils/focusReturn';
+import {isFocusDetached} from '../utils/isFocusDetached';
 import {themeProps} from '../utils/themeProps';
 import type {SheetDraftChange} from '../internal/sheetDraft';
 import type {TokenizerBottomSheetProps} from './TokenizerBottomSheet';
@@ -335,20 +334,6 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
   ref?: React.Ref<HTMLInputElement>;
   /** Imperative handle ref for focus/blur control. */
   handleRef?: React.Ref<TokenizerHandle>;
-  /**
-   * Experimental options, outside the stable compatibility promise: anything
-   * in this object may change or be removed in a patch release.
-   * @experimental
-   */
-  experimental?: {
-    /**
-     * The earlier spelling of `presentation`, with the same values. The
-     * top-level `presentation` wins when both are set.
-     * @experimental
-     * @deprecated Use the stable `presentation` prop.
-     */
-    presentation?: TokenizerPresentation;
-  };
 }
 
 /** How Tokenizer presents its choices; see `TokenizerProps.presentation`. */
@@ -792,8 +777,7 @@ export function Tokenizer<T extends SearchableItem>({
   ref,
   handleRef,
   onKeyDown,
-  presentation: presentationProp,
-  experimental,
+  presentation = 'adaptive',
   id: idProp,
   'aria-describedby': ariaDescribedByProp,
   'aria-labelledby': ariaLabelledByProp,
@@ -827,13 +811,6 @@ export function Tokenizer<T extends SearchableItem>({
   // `adaptive` resolves through the policy the selection controls share. An
   // open sheet keeps its presentation until it closes. A resolution change
   // during a task does not replace the open surface.
-  const presentation =
-    presentationProp ?? experimental?.presentation ?? 'adaptive';
-  useDevWarning(
-    'Tokenizer',
-    '`presentation` and `experimental.presentation` are both set; `presentation` wins. Remove `experimental.presentation`.',
-    presentationProp !== undefined && experimental?.presentation !== undefined,
-  );
   const resolvedPresentation = useAdaptivePresentation(presentation);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   // Latched for the sheet's lifetime: a sheet stays presented after it closes

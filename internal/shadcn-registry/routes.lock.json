@@ -3672,13 +3672,28 @@
       "aliases": []
     },
     {
+      "name": "example-use-focus-trap-quick-edit-panel",
+      "path": "examples/use-focus-trap/quick-edit-panel",
+      "aliases": []
+    },
+    {
       "name": "example-use-grid-focus-color-swatch-grid",
       "path": "examples/use-grid-focus/color-swatch-grid",
       "aliases": []
     },
     {
+      "name": "example-use-hotkeys-search-and-help-shortcuts",
+      "path": "examples/use-hotkeys/search-and-help-shortcuts",
+      "aliases": []
+    },
+    {
       "name": "example-use-hover-card-profile-preview",
       "path": "examples/use-hover-card/profile-preview",
+      "aliases": []
+    },
+    {
+      "name": "example-use-input-status-icon-coupon-code-status",
+      "path": "examples/use-input-status-icon/coupon-code-status",
       "aliases": []
     },
     {
@@ -3692,8 +3707,18 @@
       "aliases": []
     },
     {
+      "name": "example-use-lightbox-gallery-grid",
+      "path": "examples/use-lightbox/gallery-grid",
+      "aliases": []
+    },
+    {
       "name": "example-use-list-focus-recent-files",
       "path": "examples/use-list-focus/recent-files",
+      "aliases": []
+    },
+    {
+      "name": "example-use-locale-invoice-summary",
+      "path": "examples/use-locale/invoice-summary",
       "aliases": []
     },
     {
@@ -3714,6 +3739,11 @@
     {
       "name": "example-use-press-feedback-pressable-card",
       "path": "examples/use-press-feedback/pressable-card",
+      "aliases": []
+    },
+    {
+      "name": "example-use-scrollable-area-activity-log-panel",
+      "path": "examples/use-scrollable-area/activity-log-panel",
       "aliases": []
     },
     {
@@ -3779,6 +3809,11 @@
     {
       "name": "example-use-translator-load-more-footer",
       "path": "examples/use-translator/load-more-footer",
+      "aliases": []
+    },
+    {
+      "name": "example-use-typeahead-type-to-focus-a-country",
+      "path": "examples/use-typeahead/type-to-focus-a-country",
       "aliases": []
     },
     {
@@ -3929,6 +3964,11 @@
     {
       "name": "hook-use-layer",
       "path": "hooks/use-layer",
+      "aliases": []
+    },
+    {
+      "name": "hook-use-lightbox",
+      "path": "hooks/use-lightbox",
       "aliases": []
     },
     {

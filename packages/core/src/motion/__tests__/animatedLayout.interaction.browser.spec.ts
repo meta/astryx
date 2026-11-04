@@ -17,7 +17,7 @@
  */
 
 import {fileURLToPath} from 'node:url';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {build} from 'esbuild';
 import type * as Bundle from './animatedLayoutBundle';
 
@@ -769,6 +769,441 @@ test.describe('spec:AST-105 Coverage', () => {
       expect(Math.abs(run.y1After - run.y1)).toBeLessThan(0.1);
     });
   }
+
+  test('a change made after a block longer than its motion still shows its motion: the block delays it instead of skipping past it', async ({
+    page,
+  }) => {
+    await open(
+      page,
+      `<div id="area" class="area"><div id="grow" class="grow"></div>
+        <div id="after" class="row"></div></div>`,
+    );
+    const run = await page.evaluate(async mutate => {
+      const frame = async () =>
+        new Promise<number>(resolve => requestAnimationFrame(resolve));
+      await frame();
+      // In a task after that frame, something reads the timeline first, as
+      // any animation started there does. That holds its time for the rest of
+      // the task. Then the page is busy for 1000 ms and makes the change.
+      await new Promise<void>(resolve => {
+        setTimeout(resolve, 0);
+      });
+      const early = document.timeline.currentTime;
+      const end = performance.now() + 1000;
+      while (performance.now() < end) {
+        // the page's main thread is busy
+      }
+      const held = document.timeline.currentTime === early;
+      await window.change({changed: '#grow', mutate});
+      const [animation] = (
+        document.querySelector('#after') as HTMLElement
+      ).getAnimations();
+      const duration = Number(animation.effect?.getComputedTiming().endTime);
+      await frame();
+      await frame();
+      return {
+        duration,
+        held,
+        playState: animation.playState,
+        currentTime: Number(animation.currentTime),
+      };
+    }, OPEN_GROW);
+    test.info().annotations.push({
+      type: 'after a block',
+      description: JSON.stringify(run),
+    });
+    // The timeline still read the time from before the block, and the glide
+    // is shorter than the block. Started on that time, it would be over by the
+    // first frame after the block.
+    expect(run.held).toBe(true);
+    expect(run.duration).toBeLessThan(1000);
+    expect(run.playState).toBe('running');
+    expect(run.currentTime).toBeLessThan(run.duration / 2);
+  });
+
+  test('a change made after a block retargets a running glide from where the compositor has it, not from before the block', async ({
+    page,
+  }) => {
+    await open(
+      page,
+      `<div id="area" class="area"><div id="grow" class="grow"></div>
+        <div id="second" class="grow"></div><div id="after" class="row"></div></div>`,
+    );
+    await change(page);
+    await page.waitForTimeout(100);
+    const run = await page.evaluate(async mutate => {
+      const row = document.querySelector('#after') as HTMLElement;
+      const frame = async () =>
+        new Promise<number>(resolve => requestAnimationFrame(resolve));
+      await frame();
+      await new Promise<void>(resolve => {
+        setTimeout(resolve, 0);
+      });
+      // Reading the glide reads the timeline, which then holds its time for
+      // the rest of this task.
+      const [first] = row.getAnimations();
+      const heldElapsed = Number(first.currentTime);
+      const yHeld = window.glideBoxOf(row).top;
+      const keyframes =
+        (first.effect as KeyframeEffect | null)?.getKeyframes() ?? [];
+      const duration = Number(first.effect?.getComputedTiming().duration);
+      // The glide's y offset `elapsed` ms after its start, from its keyframes.
+      const yAt = (elapsed: number) => {
+        const p = Math.min(1, Math.max(0, elapsed / duration));
+        for (let i = 0; i + 1 < keyframes.length; i++) {
+          const a = keyframes[i].computedOffset;
+          const b = keyframes[i + 1].computedOffset;
+          if (p >= a && p <= b) {
+            const ya = parseFloat(String(keyframes[i].translate).split(' ')[1]);
+            const yb = parseFloat(
+              String(keyframes[i + 1].translate).split(' ')[1],
+            );
+            return ya + ((yb - ya) * (p - a)) / Math.max(b - a, 1e-9);
+          }
+        }
+        return 0;
+      };
+      const end = performance.now() + 400;
+      while (performance.now() < end) {
+        // the page's main thread is busy
+      }
+      // Where the compositor has the row as the block ends.
+      const reached =
+        yHeld +
+        yAt(performance.now() - Number(first.startTime)) -
+        yAt(heldElapsed);
+      await window.change({changed: '#second', mutate});
+      await frame();
+      await frame();
+      return {yHeld, reached, shown: window.glideBoxOf(row).top};
+    }, `document.querySelector('#second').classList.add('open')`);
+    test.info().annotations.push({
+      type: 'a retarget after a block',
+      description: JSON.stringify(run),
+    });
+    // The row glides down. Two frames after the block it is past where the
+    // compositor had it as the block ended, not back near its place before.
+    expect(run.reached).toBeGreaterThan(run.yHeld + 20);
+    expect(run.shown).toBeGreaterThanOrEqual(run.reached - 1);
+  });
+
+  test('a change made after a block that follows an earlier layout motion in the same task still shows its motion', async ({
+    page,
+  }) => {
+    await open(
+      page,
+      `<div id="area" class="area" style="height: 200px"><div id="grow" class="grow"></div>
+        <div id="after" class="row"></div></div>
+        <div id="area2" class="area" style="height: 200px"><div id="grow2" class="grow"></div>
+        <div id="after2" class="row"></div></div>`,
+    );
+    const run = await page.evaluate(async () => {
+      const frame = async () =>
+        new Promise<number>(resolve => requestAnimationFrame(resolve));
+      await frame();
+      // In one task after that frame: a layout motion, then the page busy
+      // for 1000 ms, then a second change.
+      await new Promise<void>(resolve => {
+        setTimeout(resolve, 0);
+      });
+      const early = document.timeline.currentTime;
+      await window.change({
+        changed: '#grow',
+        area: '#area',
+        mutate: `document.querySelector('#grow').classList.add('open')`,
+      });
+      const end = performance.now() + 1000;
+      while (performance.now() < end) {
+        // the page's main thread is busy
+      }
+      const blockEnd = performance.now();
+      const held = document.timeline.currentTime === early;
+      await window.change({
+        changed: '#grow2',
+        area: '#area2',
+        mutate: `document.querySelector('#grow2').classList.add('open')`,
+      });
+      const [animation] = (
+        document.querySelector('#after2') as HTMLElement
+      ).getAnimations();
+      const duration = Number(animation.effect?.getComputedTiming().endTime);
+      return {
+        duration,
+        held,
+        blockEnd,
+        startTime: Number(animation.startTime),
+        early: Number(early),
+      };
+    });
+    test.info().annotations.push({
+      type: 'a second change after a block',
+      description: JSON.stringify(run),
+    });
+    // The timeline still read the time from before the block, and the second
+    // change's glide is shorter than the block. Started on that time, as the
+    // first change's was, it would be over by the first frame after the block.
+    // It starts at the change instead, after the block, whenever the frames
+    // after it come.
+    expect(run.held).toBe(true);
+    expect(run.duration).toBeLessThan(1000);
+    expect(run.startTime).toBeGreaterThanOrEqual(run.blockEnd);
+  });
+
+  test('a swap whose parts ride the glide starts them with the glide, on the start read for the change, however late in its frame the change is made', async ({
+    page,
+  }) => {
+    await open(
+      page,
+      `<div id="area" class="area" style="height: 300px"><div id="grow" class="grow"></div>
+        <div id="after" class="row"></div></div>`,
+    );
+    const run = await page.evaluate(async () => {
+      await new Promise<number>(resolve => requestAnimationFrame(resolve));
+      const container = document.querySelector('#area') as HTMLElement;
+      const target = document.querySelector('#grow') as HTMLElement;
+      const row = document.querySelector('#after') as HTMLElement;
+      const layout = window.AnimatedLayout.createAnimatedLayout(
+        () => container,
+      );
+      const report = window.AnimatedLayout.reportLayoutChange(
+        layout,
+        () => target,
+      );
+      report.measureBefore();
+      const swap = window.AnimatedLayout.holdLayoutSwap(layout, row, {
+        isVisiblePart: true,
+      });
+      target.classList.add('open');
+      // Late in the frame: the change's start is the moment it is made.
+      const end = performance.now() + 50;
+      while (performance.now() < end) {
+        // the page's main thread is busy
+      }
+      report.animate();
+      // As a shell does, it reads the change's start for its own clock. Then
+      // it plays a swap whose parts ride the row's glide, which flushes first.
+      const startedAt = window.AnimatedLayout.layoutStartFor(document);
+      if (swap != null) {
+        window.AnimatedLayout.playLayoutSwap(swap, {
+          host: container,
+          copy: p => ({opacity: 1 - p}),
+          rideWith: {element: row, travel: {x: 0, y: 80}},
+          incoming: [],
+        });
+      }
+      await new Promise<void>(resolve => {
+        setTimeout(resolve, 0);
+      });
+      const glide = row
+        .getAnimations()
+        .find(animation => animation.playState !== 'finished');
+      const copy = swap?.copy.getAnimations()[0];
+      return {
+        startedAt,
+        glide: glide == null ? null : Number(glide.startTime),
+        copy: copy == null ? null : Number(copy.startTime),
+      };
+    });
+    test.info().annotations.push({
+      type: 'the starts of a riding swap',
+      description: JSON.stringify(run),
+    });
+    expect(run.glide).not.toBeNull();
+    expect(run.copy).not.toBeNull();
+    expect(run.glide).toBe(run.startedAt);
+    expect(run.copy).toBe(run.startedAt);
+  });
+
+  test('a change begun after a block that follows an earlier layout motion, with nothing run between them, still shows its motion', async ({
+    page,
+  }) => {
+    await open(
+      page,
+      `<div id="area" class="area" style="height: 200px"><div id="grow" class="grow"></div>
+        <div id="after" class="row"></div></div>
+        <div id="area2" class="area" style="height: 200px"><div id="grow2" class="grow"></div>
+        <div id="after2" class="row"></div></div>`,
+    );
+    const run = await page.evaluate(async () => {
+      await new Promise<number>(resolve => requestAnimationFrame(resolve));
+      await new Promise<void>(resolve => {
+        setTimeout(resolve, 0);
+      });
+      const early = document.timeline.currentTime;
+      const make = (area: string, changed: string) => {
+        const container = document.querySelector(area);
+        const target = document.querySelector(changed) as HTMLElement;
+        const layout = window.AnimatedLayout.createAnimatedLayout(
+          () => container,
+        );
+        const report = window.AnimatedLayout.reportLayoutChange(
+          layout,
+          () => target,
+        );
+        report.measureBefore();
+        target.classList.add('open');
+        report.animate();
+        return window.AnimatedLayout.playLayoutChange(layout, target);
+      };
+      // In one run of script, with no microtask between: a layout change,
+      // the page busy for 1000 ms, then a second change.
+      const firstEntrance = make('#area', '#grow');
+      const end = performance.now() + 1000;
+      while (performance.now() < end) {
+        // the page's main thread is busy
+      }
+      const blockEnd = performance.now();
+      const held = document.timeline.currentTime === early;
+      const entrance = make('#area2', '#grow2');
+      await new Promise<void>(resolve => {
+        queueMicrotask(resolve);
+      });
+      const [glide] = (
+        document.querySelector('#after2') as HTMLElement
+      ).getAnimations();
+      const [firstGlide] = (
+        document.querySelector('#after') as HTMLElement
+      ).getAnimations();
+      return {
+        held,
+        blockEnd,
+        entrance: entrance == null ? null : Number(entrance.startTime),
+        glide: glide == null ? null : Number(glide.startTime),
+        firstEntrance:
+          firstEntrance == null ? null : Number(firstEntrance.startTime),
+        firstGlide: firstGlide == null ? null : Number(firstGlide.startTime),
+      };
+    });
+    test.info().annotations.push({
+      type: 'a change begun after a block',
+      description: JSON.stringify(run),
+    });
+    // The second change takes a start of its own, after the block, and its
+    // entrance and glide share it. The first change's glide, made at its flush
+    // after the block, keeps the start its own entrance took. Two starts there
+    // would leave its rows over the content it reveals.
+    expect(run.held).toBe(true);
+    expect(run.entrance).not.toBeNull();
+    expect(Number(run.entrance)).toBeGreaterThanOrEqual(run.blockEnd);
+    expect(run.glide).toBe(run.entrance);
+    expect(run.firstEntrance).not.toBeNull();
+    expect(run.firstGlide).toBe(run.firstEntrance);
+  });
+
+  test('a change\u2019s own entrance and the glide of the content after it share one start, however long the rest of its commit runs', async ({
+    page,
+  }) => {
+    await open(
+      page,
+      `<div id="area" class="area" style="height: 300px"><div id="grow" class="grow"></div>
+        <div id="after" class="row"></div></div>`,
+    );
+    const run = await page.evaluate(async () => {
+      await new Promise<number>(resolve => requestAnimationFrame(resolve));
+      const container = document.querySelector('#area');
+      const target = document.querySelector('#grow') as HTMLElement;
+      const layout = window.AnimatedLayout.createAnimatedLayout(
+        () => container,
+      );
+      const report = window.AnimatedLayout.reportLayoutChange(
+        layout,
+        () => target,
+      );
+      report.measureBefore();
+      target.classList.add('open');
+      report.animate();
+      // The entrance plays in the adopter's layout effect. The glide of the
+      // row after it is made once the commit's other layout effects have run,
+      // here 60 ms of them.
+      const entrance = window.AnimatedLayout.playLayoutChange(layout, target);
+      const end = performance.now() + 60;
+      while (performance.now() < end) {
+        // the rest of the commit
+      }
+      await new Promise<void>(resolve => {
+        queueMicrotask(resolve);
+      });
+      const [glide] = (
+        document.querySelector('#after') as HTMLElement
+      ).getAnimations();
+      return {
+        entrance: entrance == null ? null : Number(entrance.startTime),
+        glide: glide == null ? null : Number(glide.startTime),
+      };
+    });
+    test.info().annotations.push({
+      type: 'the starts of one change',
+      description: JSON.stringify(run),
+    });
+    // Two starts would put the revealed edge ahead of the row after it for
+    // the whole motion.
+    expect(run.entrance).not.toBeNull();
+    expect(run.glide).not.toBeNull();
+    expect(run.glide).toBe(run.entrance);
+  });
+
+  test('in a same-origin frame made after the page, a change glides at once, on that frame\u2019s own clock', async ({
+    page,
+  }) => {
+    await open(page, '<div id="host"></div>');
+    const run = await page.evaluate(async style => {
+      const frame = async (view: Window) =>
+        new Promise<number>(resolve => view.requestAnimationFrame(resolve));
+      // Frames first, so the frame's clock starts well after the page's.
+      for (let i = 0; i < 30; i++) {
+        await frame(window);
+      }
+      const iframe = document.createElement('iframe');
+      iframe.style.cssText = 'width: 400px; height: 600px; border: 0';
+      iframe.srcdoc = `<!doctype html><style>${style}</style>
+        <div id="area" class="area"><div id="grow" class="grow"></div>
+        <div id="after" class="row"></div></div>`;
+      const loaded = new Promise(resolve => {
+        iframe.addEventListener('load', resolve, {once: true});
+      });
+      document.getElementById('host')?.appendChild(iframe);
+      await loaded;
+      const doc = iframe.contentDocument as Document;
+      const view = iframe.contentWindow as Window;
+      await frame(view);
+      await frame(view);
+      const area = doc.getElementById('area') as HTMLElement;
+      const grow = doc.getElementById('grow') as HTMLElement;
+      const layout = window.AnimatedLayout.createAnimatedLayout(() => area);
+      const report = window.AnimatedLayout.reportLayoutChange(
+        layout,
+        () => grow,
+      );
+      report.measureBefore();
+      grow.classList.add('open');
+      report.animate();
+      window.AnimatedLayout.playLayoutChange(layout, grow);
+      await new Promise<void>(resolve => {
+        queueMicrotask(resolve);
+      });
+      const [animation] = (
+        doc.getElementById('after') as HTMLElement
+      ).getAnimations();
+      await frame(view);
+      await frame(view);
+      return {
+        gap: performance.now() - view.performance.now(),
+        playState: animation.playState,
+        currentTime: Number(animation.currentTime),
+      };
+    }, BASE_STYLE);
+    test.info().annotations.push({
+      type: 'a change in a frame',
+      description: JSON.stringify(run),
+    });
+    // The frame's clock started well after the page's...
+    expect(run.gap).toBeGreaterThan(100);
+    // ...and the row after the change glides from the first frames, rather
+    // than holding its old place until the page's clock comes round.
+    expect(run.playState).toBe('running');
+    expect(run.currentTime).toBeGreaterThanOrEqual(0);
+    expect(run.currentTime).toBeLessThan(200);
+  });
 
   test('nested areas: motion stops at the inner area; an inner area moves as one unit', async ({
     page,
@@ -2323,6 +2758,108 @@ test.describe('spec:AST-105 FR9 (the edge reveal)', () => {
       );
     });
   }
+
+  test('the two-state form reversed after a block keeps the edge on the column it rides: the edge starts where the column shows, not where it showed before the block', async ({
+    page,
+    browserName,
+  }) => {
+    await open(
+      page,
+      `<div id="area" class="area"><div id="row" style="display: flex; height: 300px">
+        <nav id="panel" style="width: 260px; flex: none; background: #ccf"><span>Projects</span></nav>
+        <div id="column" style="flex: 1; background: #efe">The page</div>
+      </div></div>`,
+      '#panel.narrow { width: 48px !important; }',
+    );
+    const result = await page.evaluate(async () => {
+      const area = document.querySelector('#area');
+      const panel = document.querySelector('#panel') as HTMLElement;
+      const column = document.querySelector('#column') as HTMLElement;
+      const AL = window.AnimatedLayout;
+      const layout = AL.createAnimatedLayout(() => area);
+      const frames: EdgeFrame[] = [];
+      const read = (phase: string) => {
+        const box = panel.getBoundingClientRect();
+        const next = window.glideBoxOf(column);
+        const inset = window.insetOf(panel);
+        const computed = window.computedInsetOf(panel);
+        frames.push({
+          phase,
+          edge: box.right - inset.right,
+          beside: next.left,
+          shown: box.width - inset.left - inset.right,
+          skew:
+            Math.abs(computed.left - inset.left) +
+            Math.abs(computed.right - inset.right) +
+            Math.abs(column.getBoundingClientRect().left - next.left),
+        });
+      };
+      const frame = async () =>
+        new Promise<void>(resolve => {
+          requestAnimationFrame(() => resolve());
+        });
+      await frame();
+      // A collapse, left to run for 120 ms.
+      let hold = AL.holdLayoutEdge(layout, panel, {edge: 'inline-end'});
+      let report = AL.reportLayoutChange(layout, () => panel);
+      report.measureBefore();
+      panel.classList.add('narrow');
+      report.animate();
+      const motion = AL.playLayoutEdge(hold!, panel, layout, {
+        edge: 'inline-end',
+        rideWith: column,
+      });
+      const start = performance.now();
+      while (performance.now() - start < 120) {
+        await frame();
+      }
+      await new Promise<void>(resolve => {
+        setTimeout(resolve, 0);
+      });
+      // The toggle back runs late in its task, after 50 ms of other work.
+      // It reads what the panel shows, then its own work runs for 400 ms.
+      const late = performance.now() + 50;
+      while (performance.now() < late) {
+        // the page's main thread is busy
+      }
+      const shownBefore = motion.shown()?.extent ?? null;
+      const end = performance.now() + 400;
+      while (performance.now() < end) {
+        // the page's main thread is busy
+      }
+      motion.end();
+      hold = AL.holdLayoutEdge(layout, panel, {
+        edge: 'inline-end',
+        shown: shownBefore,
+      });
+      report = AL.reportLayoutChange(layout, () => panel);
+      report.measureBefore();
+      panel.classList.remove('narrow');
+      report.animate();
+      AL.playLayoutEdge(hold!, panel, layout, {
+        edge: 'inline-end',
+        rideWith: column,
+      });
+      for (let i = 0; i < 60; i++) {
+        await frame();
+        read('expanding');
+      }
+      return {frames, shownBefore};
+    });
+    test.info().annotations.push({
+      type: 'a two-state reversal after a block',
+      description: JSON.stringify({
+        shownBefore: result.shownBefore,
+        first: result.frames[0],
+      }),
+    });
+    const moving = result.frames.filter(f => f.shown > 48.5 && f.shown < 259.5);
+    expect(moving.length).toBeGreaterThan(5);
+    for (const f of moving) {
+      expect(Math.abs(f.beside - f.edge), JSON.stringify(f)).toBeLessThan(1.5);
+    }
+    reportSkew(moving, browserName);
+  });
 
   for (const [side, direction, collapsed] of [
     ['start', 'ltr', 48],

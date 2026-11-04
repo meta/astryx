@@ -20,7 +20,12 @@
  * is the only thing that can paint a mouse or keyboard press.
  */
 
-import {expect, test, type Browser, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Browser,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 // @ts-expect-error -- pngjs ships no declarations; runtime support is pinned.
 import {PNG} from 'pngjs';
 import {

@@ -455,7 +455,7 @@ describe('stable and canary publication authority', () => {
       'git show origin/main:scripts/release/active-release.mjs',
       'git show origin/main:scripts/lib/workspace-globs.mjs',
       'validate-merge-back',
-      '--base origin/main',
+      '--base HEAD^1',
       '--release-ref "v$VERSION"',
       '--active-branches "$ACTIVE_BRANCHES"',
     ]) {
@@ -466,7 +466,7 @@ describe('stable and canary publication authority', () => {
       'Validate published bytes and consumed-only Changeset merge-back',
     ).run;
     expect(validation).toContain('validate-merge-back');
-    expect(validation).toContain('--base origin/main');
+    expect(validation).toContain('--base HEAD^1');
     expect(validation).toContain('--release-ref "v$VERSION"');
     expect(validation).toContain('--active-branches "$ACTIVE_BRANCHES"');
     expect(

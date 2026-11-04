@@ -464,9 +464,11 @@ jobs:
           printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'
           VALIDATOR="$RUNNER_TEMP/release-policy/scripts/release/active-release.mjs"
           ACTIVE_BRANCHES=$(node "$VALIDATOR" list-active --root "$GITHUB_WORKSPACE")
+          # The merge commit's first parent: the main commit it was built on.
+          # A main that moved since would read its new files as deletions.
           node "$VALIDATOR" validate-merge-back \
             --root "$GITHUB_WORKSPACE" \
-            --base origin/main \
+            --base HEAD^1 \
             --release-ref "v$VERSION" \
             --active-branches "$ACTIVE_BRANCHES"
 
@@ -2287,9 +2289,20 @@ jobs:
           delete-merged: true
 
   pr-interaction:
+    name: pr-interaction (${{ matrix.leg }}/${{ strategy.job-total }})
     needs: [room, admission, heavy-ci, build-storybook]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true')) }}
     # Frame evidence measures timing: four cores, one Playwright worker.
+    # One runner ran every proof in about ten minutes and passed the job's
+    # fifteen once its checkout was slow. Two legs share the spec files by
+    # their recorded times (interaction-legs.mjs), so each runs in about five
+    # minutes, and a leg with the slowest checkout seen still ends with about
+    # four minutes to spare. `test` reads the job's result, which is success
+    # only when every leg passed.
+    strategy:
+      fail-fast: false
+      matrix:
+        leg: [1, 2]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -2301,10 +2314,16 @@ jobs:
       # This job decides its own scope (no separate scope job): the step
       # reads the PR's file list and the base's trusted classifier, and
       # everything is in scope when it cannot decide.
+      # The workflow's own commit: the scope action, and the leg planner with
+      # the shared splitter it imports and the recorded times (in .github, a
+      # parent of the action, so the checkout's cone holds it).
       - name: Check out the scope action
         uses: actions/checkout@v7
         with:
-          sparse-checkout: .github/actions/test-scope
+          sparse-checkout: |
+            .github/actions/test-scope
+            .github/scripts
+            scripts/lib
           path: .test-scope
           persist-credentials: false
 
@@ -2312,7 +2331,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/actions/test-scope/)'
+          paths: '^(internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/[^/]+/src/|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(interaction-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/interaction-durations\.json$|\.github/actions/test-scope/)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
 
@@ -2325,6 +2344,19 @@ jobs:
       - name: Skip the proofs outside their scope
         if: steps.scope.outputs.applies != 'true'
         run: echo "No interaction proofs for this change."
+
+      # The head checkout below replaces the workspace, scope checkout
+      # included, so the leg planner, the modules it imports (the shared
+      # splitter and the Playwright list reader) and the recorded times move
+      # to the runner's temporary directory first.
+      - name: Keep the leg planner from the workflow's commit
+        if: steps.scope.outputs.applies == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/interaction-legs/.github/scripts" "$RUNNER_TEMP/interaction-legs/scripts/lib"
+          cp .test-scope/.github/scripts/interaction-legs.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
+          cp .test-scope/scripts/lib/duration-split.mjs "$RUNNER_TEMP/interaction-legs/scripts/lib/"
+          cp .test-scope/.github/scripts/a11y-pr-contracts.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
+          cp .test-scope/.github/interaction-durations.json "$RUNNER_TEMP/interaction-legs/.github/"
 
       # The caps step comes from the merge commit, not the pull request's
       # head: a head that predates the step does not have it. The head
@@ -2375,10 +2407,25 @@ jobs:
         if: steps.scope.outputs.applies == 'true'
         run: pnpm install --frozen-lockfile && npx playwright install chromium
 
-      - name: Run interaction proofs
+      # This leg's share of the spec files, by their recorded times. Every
+      # spec file is in exactly one leg; one with no recorded time counts the
+      # median. The planner, the shared splitter it imports and the times come
+      # from the scope checkout, the workflow's own commit (kept above): a
+      # head cut before them has none.
+      - name: Plan this leg's interaction proofs
+        id: plan
         if: steps.scope.outputs.applies == 'true'
         run: |
+          node "$RUNNER_TEMP/interaction-legs/.github/scripts/interaction-legs.mjs" plan --project chromium \
+            --leg ${{ matrix.leg }} --of ${{ strategy.job-total }} \
+            --durations "$RUNNER_TEMP/interaction-legs/.github/interaction-durations.json" \
+            --out "$RUNNER_TEMP/interaction-leg.txt"
+
+      - name: Run interaction proofs
+        if: steps.scope.outputs.applies == 'true' && steps.plan.outputs.files != '0'
+        run: |
           pnpm exec playwright test \
+            --test-list "$RUNNER_TEMP/interaction-leg.txt" \
             --config playwright.interaction.config.ts \
             --project chromium \
             --output interaction-proof-output
@@ -2388,7 +2435,7 @@ jobs:
         if: always() && steps.scope.outputs.applies == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: interaction-evidence
+          name: interaction-evidence-${{ matrix.leg }}
           path: test-results/interaction-evidence
           if-no-files-found: ignore
           retention-days: 7
@@ -2405,9 +2452,16 @@ jobs:
   # required context. Specs that need Chromium-only evidence skip themselves
   # in WebKit.
   pr-interaction-webkit:
+    name: pr-interaction-webkit (${{ matrix.leg }}/${{ strategy.job-total }})
     needs: [room, admission, heavy-ci, build-storybook]
     if: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft && (github.event.pull_request.head.repo.full_name == github.repository || contains(github.event.pull_request.labels.*.name, 'ci:run'))) && (!cancelled() && needs.heavy-ci.outputs.deferred != 'true' && (github.event_name != 'workflow_dispatch' && always() && !cancelled() && needs.room.outputs.full != 'true' && needs.admission.outputs.full != 'true')) }}
     # Frame evidence measures timing: four cores, one Playwright worker.
+    # Two legs share the spec files by their recorded times, as the Chromium
+    # proofs' two do; the harness spec alone fills one.
+    strategy:
+      fail-fast: false
+      matrix:
+        leg: [1, 2]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -2419,10 +2473,16 @@ jobs:
       # This job decides its own scope (no separate scope job): the step
       # reads the PR's file list and the base's trusted classifier, and
       # everything is in scope when it cannot decide.
+      # The workflow's own commit: the scope action, and the leg planner with
+      # the shared splitter it imports and the recorded times (in .github, a
+      # parent of the action, so the checkout's cone holds it).
       - name: Check out the scope action
         uses: actions/checkout@v7
         with:
-          sparse-checkout: .github/actions/test-scope
+          sparse-checkout: |
+            .github/actions/test-scope
+            .github/scripts
+            scripts/lib
           path: .test-scope
           persist-credentials: false
 
@@ -2430,7 +2490,7 @@ jobs:
         id: scope
         uses: ./.test-scope/.github/actions/test-scope
         with:
-          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform|flatTree|inputStream|clickGuard|selectionLock|coarsePointer|sharedResizeObserver)|packages/core/src/privateAttributes/(hapticSwitch|reducedMotion)\.stylex\.ts$|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback|isRtlElement|useIsomorphicLayoutEffect|useAttachment|usePager|__tests__/(usePager|pagerBundle))|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/actions/test-scope/)'
+          paths: '^(packages/core/src/gestures/|packages/core/src/motion/|packages/core/src/internal/touch|packages/core/src/utils/(press|touch|primaryClick|isApplePlatform|flatTree|inputStream|clickGuard|selectionLock|coarsePointer|sharedResizeObserver)|packages/core/src/privateAttributes/(hapticSwitch|reducedMotion)\.stylex\.ts$|packages/core/src/hooks/(useMenuPress|menuPress|useLongPress|usePressFeedback|isRtlElement|useIsomorphicLayoutEffect|useAttachment|usePager|__tests__/(usePager|pagerBundle))|internal/interaction-harness/|internal/a11y-spec/|playwright\.interaction\.config\.ts$|packages/themes/[^/]+/src/|apps/storybook/|\.github/workflows/ci\.yml$|package\.json$|pnpm-lock\.yaml$|\.github/scripts/(interaction-legs|a11y-pr-contracts)\.mjs$|scripts/lib/duration-split\.mjs$|\.github/interaction-durations\.json$|\.github/actions/test-scope/)'
           outside-pull-request: skip
           requires-head-file: playwright.interaction.config.ts
 
@@ -2443,6 +2503,19 @@ jobs:
       - name: Skip the WebKit proofs outside their scope
         if: steps.scope.outputs.applies != 'true'
         run: echo "No WebKit interaction proofs for this change (it touches no gesture, motion, touch or press code, and none of their shared setup)."
+
+      # The head checkout below replaces the workspace, scope checkout
+      # included, so the leg planner, the modules it imports (the shared
+      # splitter and the Playwright list reader) and the recorded times move
+      # to the runner's temporary directory first.
+      - name: Keep the leg planner from the workflow's commit
+        if: steps.scope.outputs.applies == 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/interaction-legs/.github/scripts" "$RUNNER_TEMP/interaction-legs/scripts/lib"
+          cp .test-scope/.github/scripts/interaction-legs.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
+          cp .test-scope/scripts/lib/duration-split.mjs "$RUNNER_TEMP/interaction-legs/scripts/lib/"
+          cp .test-scope/.github/scripts/a11y-pr-contracts.mjs "$RUNNER_TEMP/interaction-legs/.github/scripts/"
+          cp .test-scope/.github/interaction-durations.json "$RUNNER_TEMP/interaction-legs/.github/"
 
       # The caps step comes from the merge commit, not the pull request's
       # head: a head that predates the step does not have it. The head
@@ -2495,6 +2568,23 @@ jobs:
         if: steps.scope.outputs.applies == 'true'
         run: pnpm install --frozen-lockfile && npx playwright install --with-deps webkit
 
+      # This leg's share of the WebKit spec files, from the paths the lane
+      # covers, by their recorded times. The planner and the times come from
+      # the scope checkout, as for the Chromium legs.
+      - name: Plan this leg's WebKit interaction proofs
+        id: plan
+        if: steps.scope.outputs.applies == 'true'
+        run: |
+          node "$RUNNER_TEMP/interaction-legs/.github/scripts/interaction-legs.mjs" plan --project webkit \
+            --leg ${{ matrix.leg }} --of ${{ strategy.job-total }} \
+            --durations "$RUNNER_TEMP/interaction-legs/.github/interaction-durations.json" \
+            --out "$RUNNER_TEMP/interaction-leg.txt" -- \
+            packages/core/src/gestures/ \
+            packages/core/src/motion/__tests__/animatedLayout.interaction \
+            packages/core/src/motion/__tests__/animator.interaction \
+            packages/core/src/hooks/__tests__/usePager.interaction \
+            internal/interaction-harness/
+
       # WebKit renders through Mesa's llvmpipe, which sizes its thread pool
       # from the CPUs the process may run on. A container's CPU quota is not
       # that mask, so a runner that shows the host's CPUs oversubscribes the
@@ -2502,7 +2592,7 @@ jobs:
       # set (the job's share, rounded up); without a quota the count stays
       # nproc, llvmpipe's own default.
       - name: Run WebKit interaction proofs
-        if: steps.scope.outputs.applies == 'true'
+        if: steps.scope.outputs.applies == 'true' && steps.plan.outputs.files != '0'
         run: |
           LP_NUM_THREADS="$(nproc)"
           if [ -r /sys/fs/cgroup/cpu.max ]; then
@@ -2517,11 +2607,7 @@ jobs:
           export LP_NUM_THREADS
           echo "llvmpipe threads: $LP_NUM_THREADS"
           pnpm exec playwright test \
-            packages/core/src/gestures/ \
-            packages/core/src/motion/__tests__/animatedLayout.interaction \
-            packages/core/src/motion/__tests__/animator.interaction \
-            packages/core/src/hooks/__tests__/usePager.interaction \
-            internal/interaction-harness/ \
+            --test-list "$RUNNER_TEMP/interaction-leg.txt" \
             --config playwright.interaction.config.ts \
             --project webkit \
             --output interaction-proof-output-webkit
@@ -2530,7 +2616,7 @@ jobs:
         if: always() && steps.scope.outputs.applies == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: interaction-evidence-webkit
+          name: interaction-evidence-webkit-${{ matrix.leg }}
           path: test-results/interaction-evidence
           if-no-files-found: ignore
           retention-days: 7

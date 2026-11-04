@@ -76,6 +76,7 @@ import {
 import {useMultiCombobox} from './hooks';
 import {getInputARIA, isImeKeyEvent, mergeProps} from '../utils';
 import {joinAriaIDs} from '../utils/inputAria';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {devWarn, warnOnce} from '../utils/devWarning';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
 import {useAnnounce} from '../hooks/useAnnounce';
@@ -2468,13 +2469,7 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
   // A disabled trigger stays focusable but, like a natively disabled button,
   // runs no caller event handler other than focus and blur, and a press on it
   // reaches no handler at all (`spec:AST-085` FR2).
-  const callerProps = isDisabled
-    ? Object.fromEntries(
-        Object.entries(rest).filter(
-          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
-        ),
-      )
-    : rest;
+  const callerProps = withholdCallerHandlers(rest, isDisabled);
   const triggerSharedProps: React.HTMLAttributes<HTMLElement> = {
     ...callerProps,
     id: triggerId,

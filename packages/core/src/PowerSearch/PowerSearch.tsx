@@ -8,8 +8,8 @@
  *   useAdaptivePresentation, and PowerSearchBottomSheet (lazy)
  * @output Structured filter bar with token-based filter management
  * @position Main component; forwards DOM ref and exposes tokenizer control via
- *   handleRef. The experimental `presentation` option swaps the tokenizer
- *   field and editor popover for one trigger that opens PowerSearchBottomSheet.
+ *   handleRef. The `presentation` prop swaps the tokenizer field and editor
+ *   popover for one trigger that opens PowerSearchBottomSheet.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/PowerSearch/index.ts
@@ -58,7 +58,10 @@ import {usePopover} from '../Popover/usePopover';
 import {useTooltip} from '../Tooltip/useTooltip';
 import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {useAnnounce} from '../hooks/useAnnounce';
-import {useAdaptivePresentation} from '../hooks/useAdaptivePresentation';
+import {
+  type AdaptivePresentation,
+  useAdaptivePresentation,
+} from '../hooks/useAdaptivePresentation';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {useIsHydrating} from '../hooks/useIsHydrating';
 import {
@@ -70,7 +73,7 @@ import {
   fontWeightVars,
 } from '../theme/tokens.stylex';
 import {useSize} from '../SizeContext/SizeContext';
-import {isFocusDetached} from '../utils/focusReturn';
+import {isFocusDetached} from '../utils/isFocusDetached';
 import {isRenderable} from '../utils/isRenderable';
 import {useInternalConfig} from './useInternalConfig';
 import {usePowerSearchSource} from './usePowerSearchSource';
@@ -382,8 +385,8 @@ export interface PowerSearchProps extends Omit<
    * IANA zone a date-only `date_absolute` value, and each absolute part of a
    * `date_range`, is read and written in: the token, the label and the editor
    * show its day there, and a picked day stores as that midnight. Unset, a
-   * day is its UTC day. A `date_absolute` with `isDateOnly: false` formats
-   * its label in it.
+   * day is its UTC day. A `date_absolute` with `isDateOnly: false` shows and
+   * edits its date and time in it; unset, in the viewer's zone.
    */
   timezoneID?: string;
   /**
@@ -416,38 +419,33 @@ export interface PowerSearchProps extends Omit<
    * Keys are operator value types (e.g. 'string', 'enum', 'date_absolute').
    */
   components?: PowerSearchComponents;
-
   /**
-   * Experimental options, outside the stable compatibility promise: anything
-   * in this object may change or be removed in a patch release. Omit it for
-   * the stable behavior.
-   * @experimental
+   * How the field presents filter editing.
+   * - `'popover'`: the tokenizer field with its typeahead and the editor
+   *   popover, on every device.
+   * - `'bottom-sheet'`: the whole field is one trigger showing display-only
+   *   filter tokens; it opens a stack of sheets. Filters lists the filters
+   *   as rows that edit or remove one, with Add filter, Done, and Clear
+   *   all, which asks first and keeps read-only filters. Add filter opens
+   *   above it with the fields (or the content search with inline
+   *   suggestions), and a value step opens above that, stages operator →
+   *   value, and confirms from its footer. Dismissing a step reveals the
+   *   one beneath. Suited to compact touch screens, where the editor
+   *   popover competes with the software keyboard.
+   * - `'adaptive'`: the bottom sheet on compact coarse-pointer screens,
+   *   otherwise the popover — the same resolution Selector uses. The server
+   *   render and the hydrating render are the popover.
+   *
+   * In the sheet presentation `menuWidth` and `tokenOverflowBehavior` have
+   * no surface to act on and warn in development. Pass `'popover'` to keep
+   * the tokenizer field and the editor popover on every device.
+   * @default 'adaptive'
    */
-  experimental?: {
-    /**
-     * How the field presents filter editing.
-     * - `'popover'`: the tokenizer field with its typeahead and the editor
-     *   popover — the stable behavior.
-     * - `'bottom-sheet'`: the whole field is one trigger showing display-only
-     *   filter tokens; it opens a stack of sheets. Filters lists the filters
-     *   as rows that edit or remove one, with Add filter, Done, and Clear
-     *   all, which asks first and keeps read-only filters. Add filter opens
-     *   above it with the fields (or the content search with inline
-     *   suggestions), and a value step opens above that, stages operator →
-     *   value, and confirms from its footer. Dismissing a step reveals the
-     *   one beneath. Suited to compact touch screens, where the editor
-     *   popover competes with the software keyboard.
-     * - `'adaptive'`: the bottom sheet on compact coarse-pointer screens,
-     *   otherwise the popover — the same resolution Selector uses.
-     *
-     * In the sheet presentation `menuWidth` and `tokenOverflowBehavior` have
-     * no surface to act on and warn in development.
-     * @experimental
-     * @default 'popover'
-     */
-    presentation?: 'popover' | 'bottom-sheet' | 'adaptive';
-  };
+  presentation?: PowerSearchPresentation;
 }
+
+/** How PowerSearch presents filter editing; see `PowerSearchProps.presentation`. */
+export type PowerSearchPresentation = AdaptivePresentation;
 
 // =============================================================================
 // State
@@ -583,7 +581,7 @@ export function PowerSearch({
   className,
   style,
   components: componentOverrides,
-  experimental,
+  presentation = 'adaptive',
 }: PowerSearchProps) {
   const size = useSize(sizeProp, 'md');
   const config = useInternalConfig(configProp);
@@ -597,11 +595,6 @@ export function PowerSearch({
     popoverSaveButtonLabelFromProps ?? t('@astryx.powersearch.editor.apply');
   const tokenizerRef = useRef<TokenizerHandle>(null);
 
-  // Experimental presentation. `adaptive`
-  // resolves through the policy the selection controls share; an open flow
-  // keeps its presentation until it closes, so a resolution change mid-task
-  // cannot pull the surface out from under the person.
-  const presentation = experimental?.presentation ?? 'popover';
   const resolvedPresentation = useAdaptivePresentation(presentation);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   // Latched for the flow's lifetime: the flow stays presented after it closes
@@ -687,12 +680,12 @@ export function PowerSearch({
   }
   useDevWarning(
     'PowerSearch',
-    '`menuWidth` has no surface in the bottom-sheet presentation: the sheet flow has no typeahead popover to size. Scope it to the popover presentation or leave it out.',
+    '`menuWidth` has no surface in the bottom-sheet presentation: the sheet flow has no typeahead popover to size. Pass `presentation="popover"` to keep the popover on every device, or leave it out.',
     isSheetPresentation && menuWidth != null,
   );
   useDevWarning(
     'PowerSearch',
-    '`tokenOverflowBehavior` has no surface in the bottom-sheet presentation: the trigger wraps its display-only tokens. Scope it to the popover presentation or leave it out.',
+    '`tokenOverflowBehavior` has no surface in the bottom-sheet presentation: the trigger wraps its display-only tokens. Pass `presentation="popover"` to keep the tokenizer field on every device, or leave it out.',
     isSheetPresentation && tokenOverflowBehavior != null,
   );
 

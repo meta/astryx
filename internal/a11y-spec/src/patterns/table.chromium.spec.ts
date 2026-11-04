@@ -9,7 +9,7 @@ import {
   type CDPSession,
   type Locator,
   type Page,
-} from '@playwright/test';
+} from '../playwright';
 import {describeExpectation, requiredLayers} from '../contract';
 import {checkAccessibilitySpec, type ExpectationResult} from '../check';
 import {

@@ -1,5 +1,9 @@
 # @xds/theme-stone
 
+# 0.7.7
+
+---
+
 # 0.7.6
 
 #### Fixes

@@ -35,6 +35,7 @@ import {
   type ResizeGesture,
   type ResizeGestureModel,
 } from './resizeGesture';
+import {separatorAttributes} from './separatorAttributes';
 import {themeProps} from '../utils/themeProps';
 
 import {useDevWarning} from '../hooks/useDevWarning';
@@ -529,19 +530,8 @@ export function ResizeHandle({
   }, [hasRegion, regionGesture]);
 
   // --- ARIA ---
-  // When collapsed the panel's real size (0) sits below aria-valuemin, which
-  // is invalid per WCAG 4.1.2. Clamp aria-valuenow to the minimum and announce
-  // the true state via aria-valuetext instead; the valuetext is removed as
-  // soon as the panel expands so the numeric value reads again.
   const sizeNow = resizable?._size;
   const minNow = resizable?._minSizePx;
-  const ariaValueNow =
-    sizeNow == null || minNow == null
-      ? undefined
-      : isCollapsed
-        ? Math.max(sizeNow, minNow)
-        : sizeNow;
-  const ariaValueMin = minNow;
   // A separator with a value needs a maximum (WAI-ARIA, APG window splitter).
   // Unbounded regions report the basis they can fill; a hand-built props
   // object without it reports only a configured maximum.
@@ -549,14 +539,22 @@ export function ResizeHandle({
     ? (getEffectiveMaxPx(resizable) ??
       (resizable._maxSizePx !== Infinity ? resizable._maxSizePx : undefined))
     : undefined;
-  const ariaValueMax =
-    effectiveMax != null && Number.isFinite(effectiveMax)
-      ? effectiveMax
-      : undefined;
-  const ariaValueText =
-    resizable != null && isCollapsed
-      ? t('@astryx.resizable.collapsed')
-      : undefined;
+  // The attributes createResizable writes on a plain element, from the same
+  // derivation.
+  const aria = separatorAttributes({
+    direction,
+    isDisabled,
+    value:
+      sizeNow == null || minNow == null
+        ? undefined
+        : {
+            size: sizeNow,
+            minPx: minNow,
+            maxPx: effectiveMax,
+            isCollapsed,
+            collapsedText: t('@astryx.resizable.collapsed'),
+          },
+  });
 
   // The Grip pill takes the pointer as the Grab zone does, so a pill drawn
   // outside the zone still resizes.
@@ -591,14 +589,8 @@ export function ResizeHandle({
     <div
       ref={useMergedRefs(ref, handleRef)}
       role="separator"
-      aria-orientation={isHorizontal ? 'vertical' : 'horizontal'}
-      aria-valuenow={ariaValueNow}
-      aria-valuemin={ariaValueMin}
-      aria-valuemax={ariaValueMax}
-      aria-valuetext={ariaValueText}
+      {...aria}
       aria-label={label}
-      aria-disabled={isDisabled || undefined}
-      tabIndex={isDisabled ? -1 : 0}
       onDoubleClick={() => {
         if (!isDisabled) {
           gesture?.doubleClick();

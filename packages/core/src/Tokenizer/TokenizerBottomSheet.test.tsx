@@ -25,7 +25,7 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
-import {createRef, useState} from 'react';
+import {StrictMode, createRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   Tokenizer,
@@ -192,38 +192,11 @@ describe('Tokenizer presentation (FR16)', () => {
 
   it('keeps the inline combobox with presentation="popover" on a compact coarse-pointer screen', () => {
     stubMatchMedia(() => true);
-    const {unmount} = render(<Harness presentation="popover" />);
+    render(<Harness presentation="popover" />);
     expect(screen.getByRole('combobox')).toBeInTheDocument();
     expect(
       screen.queryByRole('button', {name: 'Tags'}),
     ).not.toBeInTheDocument();
-    unmount();
-    // An empty experimental object leaves the default in place.
-    render(plain({experimental: {}}));
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-  });
-
-  it('still honors the deprecated experimental.presentation, and presentation wins over it with one development warning', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const {unmount} = render(
-      plain({experimental: {presentation: 'bottom-sheet'}}),
-    );
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-    expect(openTrigger()).toBeInTheDocument();
-    expect(warn).not.toHaveBeenCalled();
-    unmount();
-    render(
-      plain({
-        presentation: 'popover',
-        experimental: {presentation: 'bottom-sheet'},
-      }),
-    );
-    expect(screen.getByRole('combobox')).toBeInTheDocument();
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(String(warn.mock.calls[0][0])).toContain(
-      '`presentation` and `experimental.presentation` are both set',
-    );
-    warn.mockRestore();
   });
 
   it('forces the sheet trigger for bottom-sheet on every device', async () => {
@@ -1813,6 +1786,38 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     expect(within(row).queryByRole('button')).not.toBeInTheDocument();
     await waitFor(() => expect(warn).toHaveBeenCalledTimes(1));
     expect(warn.mock.calls[0][0]).toMatch(/`action`/);
+    expect(warn.mock.calls[0][0]).toMatch(/bottom-sheet rows/);
+    warn.mockRestore();
+  });
+
+  it('warns about a row action once under StrictMode double renders', async () => {
+    __resetDevWarnings();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const withAction: SearchSource<SearchableItem> = {
+      search: () => [],
+      bootstrap: () => [
+        {
+          id: 'design',
+          label: 'Design',
+          action: <button type="button">Go</button>,
+        },
+      ],
+    };
+    render(
+      <StrictMode>
+        <Tokenizer
+          label="Tags"
+          searchSource={withAction}
+          value={[]}
+          onChange={() => {}}
+          debounceMs={0}
+          presentation="bottom-sheet"
+        />
+      </StrictMode>,
+    );
+    fireEvent.click(openTrigger());
+    await screen.findByRole('checkbox', {name: 'Design'});
+    expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0][0]).toMatch(/bottom-sheet rows/);
     warn.mockRestore();
   });

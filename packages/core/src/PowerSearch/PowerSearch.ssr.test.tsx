@@ -4,11 +4,12 @@
  * @file PowerSearch.ssr.test.tsx
  * @input PowerSearch server markup and React hydration under a compact
  *   coarse-pointer `matchMedia`
- * @output Proves an `adaptive` PowerSearch server-renders and hydrates as the
- *   popover presentation's field without a recoverable error, then swaps to
- *   the sheet presentation's trigger on a touch screen with focus undisturbed
+ * @output Proves a PowerSearch with the default `adaptive` presentation
+ *   server-renders and hydrates as the popover presentation's field without
+ *   a recoverable error, with the same markup as `popover`, then swaps to the
+ *   sheet presentation's trigger on a touch screen with focus undisturbed
  *   (component:PowerSearch FR10)
- * @position SSR acceptance test for PowerSearch's experimental presentation
+ * @position SSR acceptance test for PowerSearch's presentation
  */
 
 import {act} from 'react';
@@ -86,7 +87,6 @@ async function hydrateAdaptiveOnTouchScreen({
       hasAutoFocus={hasAutoFocus}
       onFocus={onFocus}
       onBlur={onBlur}
-      experimental={{presentation: 'adaptive'}}
     />
   );
 
@@ -149,7 +149,22 @@ async function hydrateAdaptiveOnTouchScreen({
 }
 
 describe('PowerSearch — SSR', () => {
-  it('server-renders and hydrates an adaptive field as the popover field, then swaps to the trigger on a touch screen without a mismatch or moving focus (FR10)', async () => {
+  it('server-renders the default the same as presentation="popover"', async () => {
+    vi.resetModules();
+    const {PowerSearch} = await import('./PowerSearch');
+    const render = (presentation?: 'popover') =>
+      renderToString(
+        <PowerSearch
+          config={config}
+          filters={filters}
+          onChange={() => {}}
+          presentation={presentation}
+        />,
+      );
+    expect(render()).toBe(render('popover'));
+  });
+
+  it('server-renders and hydrates the default adaptive field as the popover field, then swaps to the trigger on a touch screen without a mismatch or moving focus (FR10)', async () => {
     const {unmount} = await hydrateAdaptiveOnTouchScreen();
     // Nothing had focus before the swap, and nothing takes it.
     expect(document.activeElement).toBe(document.body);
