@@ -6,7 +6,7 @@
  * @file DocsShell.tsx
  * @input Route metadata, component registry, and the rendered AppShell header
  * @output Docs navigation with a stable sidebar offset before hydration
- * @position Docsite-only shell and first-paint header measurement
+ * @position Docsite-only shell
  */
 
 import {useState, useMemo} from 'react';
@@ -18,6 +18,7 @@ import {SideNav, SideNavItem, SideNavSection} from '@astryxdesign/core/SideNav';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Icon} from '@astryxdesign/core/Icon';
 import {SharedTopNav} from './SharedTopNav';
+import {HeaderHeightSeed} from './HeaderHeightSeed';
 import {DocsBanner} from './InternalDocsPrompt';
 import type {PackageMeta} from '../generated/packageRegistry';
 import type {DocTopic} from '../generated/docsRegistry';
@@ -61,24 +62,6 @@ const foundationsSort = (a: DocTopic, b: DocTopic) => {
   }
   return a.title.localeCompare(b.title);
 };
-
-// Seed the full header height while parsing, before restored scroll can put
-// the sidebar under it, and refresh once its fonts settle. CSSOM leaves React's
-// DOM unchanged; the existing observer's inline value takes over after hydration.
-const initialHeaderHeightScript = `(() => {
-  const script = document.currentScript;
-  const header = script?.closest('.astryx-app-shell-header');
-  const style = script?.previousElementSibling;
-  const sheet = style?.sheet;
-  const publish = () => {
-    if (!header?.isConnected || !style?.isConnected || !sheet) return;
-    if (sheet.cssRules.length === 0) sheet.insertRule(':root {}');
-    sheet.cssRules[0].style.setProperty('--appshell-header-height',
-      header.getBoundingClientRect().height + 'px');
-  };
-  publish();
-  document.fonts.ready.then(publish);
-})();`;
 
 // ── Shell ──────────────────────────────────────────────────────────────
 
@@ -188,12 +171,7 @@ export function DocsShell({children, packages, docTopics}: DocsShellProps) {
       topNav={
         <>
           <SharedTopNav />
-          {/* Parser-blocking measurement precedes all sidebar markup, including
-              when the response is streamed. Stylesheets above it are loaded. */}
-          <style />
-          <script
-            dangerouslySetInnerHTML={{__html: initialHeaderHeightScript}}
-          />
+          <HeaderHeightSeed />
         </>
       }
       sideNav={
