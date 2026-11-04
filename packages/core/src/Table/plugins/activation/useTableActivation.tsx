@@ -34,7 +34,7 @@ import {useEffect, useMemo, useRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars} from '../../../theme/tokens.stylex';
 import {focusOutlineStyles} from '../../../utils/focusOutline.stylex';
-import {mergeRefs} from '../../../utils';
+import {mergeRefs} from '../../../utils/mergeRefs';
 import {warnOnce} from '../../../utils/devWarning';
 import {
   hasInteractiveAncestor,
@@ -133,17 +133,13 @@ const ACTIVE_BAR_WIDTH_PX = 3;
 /**
  * Apply or remove active styling on a `<tr>` element.
  *
- * Active state is a `data-active` attribute plus a component-owned fallback
- * on the existing row anatomy: an accent wash (a stylesheet class, so a
- * selected row deterministically keeps the selection fill however the two
- * plugins interleave) and a leading-edge accent bar on the first cell, which
- * keeps the state legible independent of colour. The wash rides the shared
- * row-overlay variable so pinned cells replay it through the freeze line;
- * the bar is painted as an inset shadow on the first cell, which a pinned
- * column's opaque overlay covers — the wash remains the pinned-cell cue
- * until the OQ3 paint matrix settles effective pinned paint. No selection
- * or navigation semantics are inferred: `aria-selected` and `aria-current`
- * are never written here.
+ * Active state is a `data-active` attribute plus paint on the existing row
+ * anatomy: an accent wash class and a leading-edge accent bar on the first
+ * cell. The wash rides the shared row-overlay variable so pinned cells
+ * replay it through the freeze line. The bar is an inset shadow on the
+ * first cell; a pinned column's opaque overlay covers it, so pinned cells
+ * keep only the wash cue. No selection or navigation semantics are
+ * inferred: `aria-selected` and `aria-current` are never written here.
  */
 function applyRowActivationStyle(
   row: HTMLTableRowElement,
