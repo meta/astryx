@@ -738,7 +738,7 @@ describe('usePowerSearchSource', () => {
     });
 
     it.each(['title', 'title '])(
-      'gives no free-text rows for a bare field label (%p)',
+      'gives no free-text rows for a bare field label (%j)',
       query => {
         const source = createSource(allStringsConfig);
         const valueItems = syncSearch(source, query).filter(r =>
