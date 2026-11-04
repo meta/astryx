@@ -1,5 +1,36 @@
 # @xds/cli
 
+# 0.7.7
+
+#### New Components
+
+- `astryx discover` no longer lists `InfoTip` among the components `@astryxdesign/lab` contributes: InfoTip is a Core component now, described by `astryx component InfoTip`.
+
+#### Performance
+
+- With TypeScript 5.3 or later, `validateIntegration()`, `integrationComponentConflicts()` and `integrationCheck()` from `@astryxdesign/cli/api`, and the commands that run them, reuse each TypeScript file a check parsed for later checks in the same process that parse it the same way, while the file is unchanged, instead of parsing it again for every check. Their results are unchanged.
+
+#### Documentation
+
+- Hook docs for `useOutlineFromMarkdown`, so `astryx hook useOutlineFromMarkdown` and `astryx search` return it, and a `useOutlineFromMarkdown — Docs Article` example block: a Markdown article and an Outline built from the same string through the hook, with a button that adds a section and its linked entry.
+- The `usePressFeedback — Pressable Card` example now shows a small card in real playing-card proportions, with corner indices, a full face and a patterned back, and a line under it that says what to try: press and hold to see the press, tap, click, Enter or Space to flip. Copying the example (`astryx template`, the docsite's Code tab and Install) still gives you only the hook on a Card (`width={120}`, `padding={1}`) with one `<Text>` placeholder: the hint line is left out, not replaced.
+- A new `useCombobox — Assign To Field` example block spreads the field, listbox and option props from `useCombobox` onto a `TextInput` and a list of `Item` rows: typing filters a list of teammates, ArrowUp and ArrowDown move the active option while focus stays in the input, Enter or a press picks one, and Escape closes the list. Copy it with `astryx template useComboboxHookUsage <path>`.
+- A new `useGridFocus — Color Swatch Grid` example block wires `useGridFocus` to a color swatch picker in rows of eight: the grid has one Tab stop, the arrow keys move focus cell to cell, Home and End jump within a row, Ctrl+Home and Ctrl+End jump to the corners. Each swatch is a button, so Enter or a click picks it. Copy it with `astryx template useGridFocusHookUsage <path>`.
+- A new `useListFocus — Recent Files` example block gives a list of buttons keyboard navigation from `useListFocus`: ArrowUp and ArrowDown move between rows, Home and End jump to the first and last row, focus wraps at the ends, and only one row is in the tab order. Copy it with `astryx template useListFocusHookUsage <path>`.
+- A new `useOverflow — Editor Toolbar` example block shows the hook on its own: eight toolbar actions sit in a card you can resize, a hidden copy of the row holds every action plus the `More` menu marked `data-overflow-indicator`, and the actions that do not fit move into the `More` menu with no flicker. Copy it with `astryx template useOverflowHookUsage <path>`.
+
+#### Contributors
+
+Thanks to everyone who contributed to this release:
+
+- @cixzhang
+- @hskl18
+- @kyu-rong
+- @maheshrijal
+- @vjeux
+
+---
+
 # 0.7.6
 
 #### New Features

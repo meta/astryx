@@ -77,7 +77,11 @@ import {
   buildTypeDefinitionIndex,
   collectPropTypeRefs,
 } from '../src/lib/typeDefinitions.mjs';
-import {generateShadcnRegistryForTarget} from './generate-shadcn-registry.mjs';
+import {
+  generateShadcnRegistryForTarget,
+  registrySkipNotices,
+  reportRegistrySkips,
+} from './generate-shadcn-registry.mjs';
 import {createPublishedImportJudge} from './published-exports.mjs';
 import {
   blockRegistryIdentity,
@@ -2722,20 +2726,7 @@ async function main() {
         ? createPublishedImportJudge(CONTENT_ROOT, packages)
         : null,
   });
-  for (const skip of shadcnCounts.unpublishedImports) {
-    console.log(
-      `  ShadCN registry: not run until a release exports it: ${skip.block} ` +
-        `imports ${skip.names.join(', ')} from ${skip.specifier}, which ` +
-        `${skip.packageName}${skip.version ? ` ${skip.version}` : ''} does not export`,
-    );
-  }
-  for (const kept of shadcnCounts.unreadImports) {
-    console.log(
-      `  ShadCN registry: could not read what ${kept.specifier} exports in ` +
-        `${kept.packageName}${kept.version ? ` ${kept.version}` : ''}; ` +
-        `kept ${kept.block}`,
-    );
-  }
+  reportRegistrySkips(registrySkipNotices(shadcnCounts));
   checkShadcnRouteLock(shadcnCounts.contracts, {
     allowSubset: DOCSITE_TARGET === 'latest',
   });

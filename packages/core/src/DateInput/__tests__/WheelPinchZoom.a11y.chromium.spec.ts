@@ -3,12 +3,14 @@
 
 /**
  * @file WheelPinchZoom.a11y.chromium.spec.ts
- * @input The built TimeInput bottom-sheet story and real Chromium touch input
- *   (CDP) on a phone profile
+ * @input The built TimeInput bottom-sheet stories and real Chromium touch
+ *   input (CDP) on a phone profile
  * @output Browser evidence that a two-finger pinch over an open picker wheel
- *   zooms the page (WCAG 1.4.4) and changes no value
- * @position Real-engine proof for the wheel's `touch-action`; jsdom computes
- *   no touch-action. The menus and listboxes have the same proof in
+ *   zooms the page (WCAG 1.4.4) and changes no value, and that one finger
+ *   still turns the wheel and leaves the page at scale 1: the touch column,
+ *   which a finger gets on every engine
+ * @position Real-engine proof for each wheel's `touch-action`; jsdom
+ *   computes no touch-action. The menus and listboxes have the same proof in
  *   MenuPinchZoom.a11y.chromium.spec.ts.
  */
 
@@ -103,9 +105,8 @@ async function pinch(cdp: CDPSession, at: Point) {
   await sleep(600);
 }
 
-test('a pinch over an open picker wheel zooms the page and changes no value', async ({
-  page,
-}) => {
+/** The pinch over the open Minute wheel. */
+async function pinchOverWheel(page: Page) {
   await page.goto(
     `${storybook.origin}/iframe.html?id=core-timeinput--styling-parts&viewMode=story`,
   );
@@ -125,20 +126,29 @@ test('a pinch over an open picker wheel zooms the page and changes no value', as
   expect(await pageScale(page)).toBeGreaterThan(1.2);
   await expect(wheel).toBeVisible();
   expect(await field.inputValue()).toBe(valueBefore);
-});
+}
 
-test('one finger dragged up a wheel still scrolls it and leaves the page at scale 1', async ({
+test('a pinch over an open picker wheel zooms the page and changes no value', async ({
   page,
 }) => {
+  await pinchOverWheel(page);
+  // The touch column: a finger gets it on every engine.
+  await expect(page.locator('[data-wheel]').first()).toBeVisible();
+});
+
+test('one finger dragged up a wheel still turns it and leaves the page at scale 1', async ({
+  page,
+}) => {
+  // A field whose owner keeps its value, so the turn commits and shows.
   await page.goto(
-    `${storybook.origin}/iframe.html?id=core-timeinput--styling-parts&viewMode=story`,
+    `${storybook.origin}/iframe.html?id=core-timeinput--bottom-sheet-with-min-max&viewMode=story`,
   );
-  const field = page.locator('[data-parts-row="control-bottom-sheet"] input');
+  const field = page.getByRole('combobox', {name: 'Appointment time'});
+  await expect(field).toHaveValue('10:00 AM');
   await field.tap();
   const wheel = page.getByRole('listbox', {name: 'Minute'});
   await expect(wheel).toBeVisible();
   await sleep(800);
-  const scrollTopBefore = await wheel.evaluate(el => el.scrollTop);
 
   const cdp = await page.context().newCDPSession(page);
   const at = await centerOf(wheel);
@@ -157,15 +167,9 @@ test('one finger dragged up a wheel still scrolls it and leaves the page at scal
     type: 'touchEnd',
     touchPoints: [],
   });
-  // From :30 the drag has rows to go. The column snaps to its rows: this asks
-  // that one finger scrolled it by at least one row, and left the page at
-  // scale 1.
-  const row = await wheel
-    .locator('[role="option"]')
-    .first()
-    .evaluate(el => el.getBoundingClientRect().height);
-  await expect
-    .poll(async () => wheel.evaluate(el => el.scrollTop), {timeout: 5000})
-    .toBeGreaterThanOrEqual(scrollTopBefore + row);
+
+  // 120 px is more than three rows: whether or not the release coasts, the
+  // wheel rests on a later minute and commits it.
+  await expect(field).not.toHaveValue('10:00 AM', {timeout: 5000});
   expect(await pageScale(page)).toBe(1);
 });

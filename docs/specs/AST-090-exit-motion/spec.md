@@ -77,10 +77,14 @@ components read through two shared primitives is a system fact.
   `--duration-exit` and `--ease-exit`, and a gesture-driven exit keeps its
   velocity spring (FR14).
 - Surfaces that already animate out (`Drawer`, `BottomSheet`, `MobileNav`,
-  `Toast`, and the `TopNavMegaMenu` panel) keep their exits, durations, and
-  curves. `BottomSheet`'s close in a pointer presentation reads `--ease-exit`
-  at the curve it uses (FR12); moving the others onto the exit vocabulary is a
-  visual change for a separate decision.
+  `Toast`, and the `TopNavMegaMenu` panel) keep their durations and curves
+  only for an exit a gesture drives, a swipe or a drag with velocity, which
+  keeps its measured spring. In a touch presentation, an exit that a tap, a
+  key or the program starts plays `--duration-exit` and `--ease-exit` (FR14),
+  `BottomSheet`'s close included. `BottomSheet`'s close in a pointer
+  presentation reads `--ease-exit` at the curve it uses (FR12); moving the
+  others' pointer-presentation exits onto the exit vocabulary is a visual
+  change for a separate decision.
 - Layers with no entrance (`Typeahead` suggestions, `MultiSelector`,
   `Tokenizer`, the date and time pickers, the `TabList` overflow menu, the
   `TopNav` and `SideNav` menus, and Chat trigger menus) gain no exit here.
@@ -247,8 +251,11 @@ governs them in a touch presentation.
 - `component:Popover`: AR4 keeps its focus-return claim; FR6 states when the
   return happens for a layer.
 - `component:BottomSheet`: its close in a pointer presentation reads
-  `--ease-exit`. Its touch close keeps its own motion, which the exit tokens do
-  not reach (`spec:AST-094` FR7, DEC-15).
+  `--ease-exit`. In a touch presentation, a close that a tap, a key or the
+  program starts plays `--duration-exit` and `--ease-exit`, and a swipe or a
+  drag that closes it keeps its measured spring (`spec:AST-094` FR7, FR45).
+  Implementation gap: a coarse-pointer close started by a tap or key plays
+  `--duration-medium` today.
 - Consumer docs: `motion` describes both curves, that exits are off by default
   in a pointer presentation, how a theme turns each kind on, that a touch
   exit is never removed and a tap-started one plays the theme's exit timing, and that callers keep content rendered

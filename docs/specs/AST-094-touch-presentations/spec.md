@@ -213,6 +213,10 @@ a measured, sourced difference exists.
   plays the theme's duration and easing tokens (FR45); today it plays a
   300 ms scroll on a sinusoidal curve.
 
+  Implementation gap: the sheet picker wheel's snap rate (UIKit's measured
+  picker deceleration) plays from an internal constant and is not yet a named
+  role; a role kind for rates comes with a later change.
+
 ### Motion
 
 - **FR5 — Motion runs on the compositor.** Every release and every
@@ -842,8 +846,11 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   coarse pointer; ProgressBar's fill still moves linearly for
   `progress.fillTrackMs` times the share of the track moved under a coarse
   pointer (`component:ProgressBar` FR4); and DateInput's sheet wheel turns
-  onto a clamped row with the browser's smooth scroll, not the theme's move
-  tokens (`component:DateInput` FR14).
+  onto a clamped or a tapped row on its measured tap spin, not the theme's
+  move tokens (`component:DateInput` FR14).
+- Under FR45, an open swipe row closed by a tap or Escape (`spec:AST-057`
+  FR5, FR7) plays the theme's exit tokens; a swipe that closes it keeps its
+  measured spring.
 - Under FR45, `spec:AST-105` FR4's glide, which `component:SideNav` FR6 and
   `component:AppShell` FR17 ride, and `spec:AST-107`'s `settleTo` and an
   `animate` call without a velocity play a spring for motion that no gesture
@@ -855,8 +862,9 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   FR10's settle after a mouse or a pen release, and `component:DateInput`
   FR15's wheel under a trackpad wherever the sheet shows. Implementation gap:
   Switch's thumb does not follow a mouse or a pen, Slider's mouse and pen
-  releases do not coast, and SegmentedControl's mouse and pen releases slide
-  on the theme's duration.
+  releases do not coast, SegmentedControl's mouse and pen releases slide on
+  the theme's duration, and DateInput's wheel takes a trackpad only under a
+  coarse primary pointer.
 - `design:user-states` DR1 and DR3, `spec:AST-025` FR14 and `spec:AST-013` FR3
   each carry an amendment for touch presentations (FR11, FR14, Platform
   support); `design:motion` DR3 and DR5 (draft) are departed from or met as
@@ -881,7 +889,7 @@ Motion that FR45 moves, by component. Each component's record carries its own li
 | Lightbox              | Controls fade on a tap, a double tap's zoom, the grow from its source   | Named measured roles                                     | Theme tokens                                                           |
 | TreeList              | Group slide under a coarse pointer                                      | Measured motion                                          | Theme tokens                                                           |
 | ProgressBar           | Determinate fill on a value change under a coarse pointer               | Linear, `progress.fillTrackMs` times the share moved     | `--duration-medium` and the theme's easing, every pointer              |
-| DateInput             | Sheet wheel turning onto a clamped row                                  | Unstated                                                 | Theme move tokens                                                      |
+| DateInput             | Sheet wheel turning onto a clamped or a tapped row                      | `picker.tapSpin.durationMs` on `timing.curves.move`      | Theme move tokens                                                      |
 | DateInput             | Sheet wheel under a trackpad                                            | Coarse primary pointer only                              | Wherever the sheet shows                                               |
 | Carousel              | Paging under a trackpad swipe                                           | Coarse primary pointer only                              | Every pointer                                                          |
 | Every overlay         | A touch exit that a tap, a key or an outside press starts               | The native counterpart's timing                          | `--duration-exit` and `--ease-exit`; the exit switches never remove it |

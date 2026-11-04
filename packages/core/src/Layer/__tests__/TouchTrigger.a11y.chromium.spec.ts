@@ -201,7 +201,7 @@ for (const {name, story, trigger, action, layer} of cases) {
   });
 }
 
-test.describe('Tooltip press-to-pin through InfoTip (component:Tooltip FR9, FR10)', () => {
+test.describe('InfoTip press-to-pin (component:InfoTip FR2)', () => {
   const STORY = 'a11y-tooltip-toggle-behavior--button-toggle';
   const CARD_STORY = 'a11y-tooltip-toggle-behavior--in-a-clickable-card';
   const LAYER = '.astryx-tooltip:popover-open';
@@ -323,7 +323,7 @@ test.describe('Tooltip and InfoTip under a finger and a pen (component:Tooltip F
   }
 });
 
-test.describe('a pinned layer under a mouse (component:Tooltip FR9)', () => {
+test.describe('a pinned InfoTip under a mouse (component:InfoTip FR2)', () => {
   test.use({
     hasTouch: false,
     isMobile: false,
