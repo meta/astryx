@@ -77,6 +77,18 @@ function pressable(tag = 'div'): HTMLElement {
   return element;
 }
 
+/** Make `element` a scroller with content to scroll, as jsdom lays out nothing. */
+function makeScroller(element: HTMLElement): void {
+  element.style.overflowY = 'auto';
+  Object.defineProperty(element, 'clientHeight', {
+    configurable: true,
+    value: 100,
+  });
+  Object.defineProperty(element, 'scrollHeight', {
+    configurable: true,
+    value: 400,
+  });
+}
 /**
  * The primary pointer is coarse (a phone, a tablet) until the returned
  * restore runs: jsdom's matchMedia models a desktop, where touch work stays
@@ -111,6 +123,9 @@ beforeEach(() => {
     scroller.appendChild(row);
     rows.push(row);
   }
+  // The rows sit in a list that scrolls, as on a phone: a finger's press
+  // waits the content-touch delay there (`spec:AST-094` FR11).
+  makeScroller(scroller);
   document.body.appendChild(scroller);
   release = installPressFeedback();
 });
@@ -515,6 +530,111 @@ describe('a scroll takes it away and nothing brings it back', () => {
     vi.advanceTimersByTime(PRESS_ONSET_MS);
     rows[1].dispatchEvent(new Event('dragstart', {bubbles: true}));
     expect(pressedRow()).toBe(-1);
+  });
+});
+
+describe('a finger waits only inside a scroller (spec:AST-094 FR11)', () => {
+  it('outside a scroller, paints in the frame the finger lands', () => {
+    const control = pressable('button');
+    document.body.appendChild(control);
+    press(control, 'pointerdown', 10, 10);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('inside a scroller, waits the content-touch delay', () => {
+    const control = pressable('button');
+    scroller.appendChild(control);
+    press(control, 'pointerdown', 10, 10);
+    expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('is cancelled by travel past the slop, with no fade', () => {
+    const control = pressable('button');
+    document.body.appendChild(control);
+    press(control, 'pointerdown', 10, 10);
+    press(control, 'pointermove', 10, 10 + PRESS_SLOP_PX + 1);
+    expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('slotted into a scroller inside a shadow tree, waits the content-touch delay', () => {
+    // The browser scrolls the flat tree: a slotted pressable sits in the
+    // shadow tree's scroller, not beside it in the light tree.
+    const host = document.createElement('div');
+    const shadowScroller = document.createElement('div');
+    makeScroller(shadowScroller);
+    shadowScroller.appendChild(document.createElement('slot'));
+    host.attachShadow({mode: 'open'}).appendChild(shadowScroller);
+    const control = pressable('button');
+    host.appendChild(control);
+    document.body.appendChild(host);
+    expect(control.assignedSlot).not.toBeNull();
+    press(control, 'pointerdown', 10, 10);
+    expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('in a fixed bar above a scrolling list, paints in the frame the finger lands', () => {
+    const bar = document.createElement('div');
+    bar.style.position = 'fixed';
+    const control = pressable('button');
+    bar.appendChild(control);
+    scroller.appendChild(bar);
+    press(control, 'pointerdown', 10, 10);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('fades at the lift, then leaves no attribute behind', () => {
+    const control = pressable('button');
+    document.body.appendChild(control);
+    press(control, 'pointerdown', 10, 10);
+    press(control, 'pointerup', 10, 10);
+    expect(control.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+    vi.advanceTimersByTime(PRESS_FADE_MS);
+    expect(control.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+  });
+
+  it('a menu row in a menu that cannot scroll highlights at once (DEC-14)', () => {
+    // A menu whose rows fit: overflow set, but nothing to scroll.
+    const menu = document.createElement('div');
+    menu.setAttribute('role', 'menu');
+    menu.style.overflowY = 'auto';
+    Object.defineProperty(menu, 'clientHeight', {
+      configurable: true,
+      value: 200,
+    });
+    Object.defineProperty(menu, 'scrollHeight', {
+      configurable: true,
+      value: 200,
+    });
+    const row = pressable('div');
+    row.setAttribute('role', 'menuitem');
+    menu.appendChild(row);
+    document.body.appendChild(menu);
+    press(row, 'pointerdown', 10, 10);
+    expect(row.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+
+  it('a menu row in a menu that can scroll waits the content-touch delay (DEC-14)', () => {
+    const menu = document.createElement('div');
+    menu.setAttribute('role', 'menu');
+    makeScroller(menu);
+    const row = pressable('div');
+    row.setAttribute('role', 'menuitem');
+    menu.appendChild(row);
+    document.body.appendChild(menu);
+    press(row, 'pointerdown', 10, 10);
+    expect(row.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
+    vi.advanceTimersByTime(PRESS_ONSET_MS);
+    expect(row.getAttribute(PRESSED_ATTRIBUTE)).toBe('on');
+  });
+});
+
+describe('the release clock the browser specs read', () => {
+  it('is 200 ms (ButtonPress.interaction.browser.spec.ts RELEASE_MS)', () => {
+    expect(PRESS_FADE_MS).toBe(200);
   });
 });
 

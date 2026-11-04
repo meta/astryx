@@ -330,3 +330,48 @@ describe('on a touch-first device, a mouse button or the Space key presses at on
     expect(paints).toEqual(['on', 'fading', 'on']);
   });
 });
+
+describe('a control with no scroller above it does not wait', () => {
+  const now = (x = 100, y = 100): PressEvent => ({
+    kind: 'down',
+    x,
+    y,
+    delayed: false,
+  });
+
+  it('paints in the frame the finger lands, with no timer', () => {
+    const step = pressGestureStep(idlePressGesture(), now());
+    expect(step.paint).toBe('on');
+    expect(step.gesture.phase).toBe('pressed');
+    expect(step.timer).toBeNull();
+  });
+
+  it('is still cancelled by travel past the slop, with no fade', () => {
+    expect(run([now(), move(100, 100 + PRESS_SLOP_PX + 1)]).paints).toEqual([
+      'on',
+      'none',
+    ]);
+  });
+
+  it('is still cancelled by the scroll that takes the touch', () => {
+    expect(run([now(), {kind: 'cancel'}]).paints).toEqual(['on', 'none']);
+  });
+
+  it('fades at the lift', () => {
+    const {paints, gesture} = run([now(), {kind: 'up'}]);
+    expect(paints).toEqual(['on', 'fading']);
+    expect(gesture.phase).toBe('fading');
+  });
+
+  it('a delayed touch still waits, which is the default', () => {
+    expect(
+      pressGestureStep(idlePressGesture(), {
+        kind: 'down',
+        x: 100,
+        y: 100,
+        delayed: true,
+      }).paint,
+    ).toBe('none');
+    expect(pressGestureStep(idlePressGesture(), down()).paint).toBe('none');
+  });
+});
