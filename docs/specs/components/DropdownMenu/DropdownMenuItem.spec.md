@@ -91,13 +91,13 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Public concepts
 
-| Concept      | Closed values or states                             | Meaning                                                                        | Availability                | Default | Owner                           | Stability | Invalid-value behavior                                       |
-| ------------ | --------------------------------------------------- | ------------------------------------------------------------------------------ | --------------------------- | ------- | ------------------------------- | --------- | ------------------------------------------------------------ |
-| Row act      | action; destination                                 | Runs a callback or exposes a browser/router destination from the row itself.   | Every enabled row           | action  | component and navigation family | stable    | A blocked destination is inert; a disabled link has no href. |
-| Availability | enabled; disabled                                   | Controls whether the row can receive focus or activate.                        | Every row                   | enabled | component and parent menu       | stable    | Disabled suppresses activation and destination.              |
-| Close policy | close; remain open                                  | Whether successful activation closes the parent menu.                          | Action and destination rows | close   | component                       | stable    | Omission closes.                                             |
-| Visual state | default; destructive; hover; focus; press; disabled | Paints row meaning and interaction state without changing menuitem semantics.  | Pointer row                 | default | component                       | stable    | Unknown variants are rejected by the public type.            |
-| Root surface | ref; DOM/data/ARIA; class/style/xstyle/events       | Extends the row root while preserving component-owned role and keyboard state. | Every pointer row           | omitted | public component API            | stable    | Accepted inputs compose; owned role/tab stop remain fixed.   |
+| Concept      | Closed values or states                             | Meaning                                                                                 | Availability                | Default | Owner                           | Stability | Invalid-value behavior                                              |
+| ------------ | --------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------- | ------- | ------------------------------- | --------- | ------------------------------------------------------------------- |
+| Row act      | action; destination                                 | Runs a callback or exposes a browser/router destination from the row itself.            | Every enabled row           | action  | component and navigation family | stable    | A blocked destination is inert; a disabled link has no href.        |
+| Availability | enabled; disabled                                   | Controls whether the row can activate; a disabled row still takes keyboard focus (FR7). | Every row                   | enabled | component and parent menu       | stable    | Disabled suppresses activation and destination, not keyboard focus. |
+| Close policy | close; remain open                                  | Whether successful activation closes the parent menu.                                   | Action and destination rows | close   | component                       | stable    | Omission closes.                                                    |
+| Visual state | default; destructive; hover; focus; press; disabled | Paints row meaning and interaction state without changing menuitem semantics.           | Pointer row                 | default | component                       | stable    | Unknown variants are rejected by the public type.                   |
+| Root surface | ref; DOM/data/ARIA; class/style/xstyle/events       | Extends the row root while preserving component-owned role and keyboard state.          | Every pointer row           | omitted | public component API            | stable    | Accepted inputs compose; owned role/tab stop remain fixed.          |
 
 ## Behavioral and layout contract
 
@@ -109,7 +109,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | FR4 | The parent menu is the only keyboard owner. It synthesizes click activation with modifiers, moves focus, and runs typeahead; the row focuses itself on mouse hover and creates no second roving-focus model.                                                                                                                                                                                              | `architecture:interaction-modality`; current parent tests          |
 | FR5 | The visible root carries `dropdown-menu-item`; size and destructive state reflect on it (`data-size`, `data-variant`); semantic tokens own layout and paint before caller styling inputs compose.                                                                                                                                                                                                         | `architecture:component-theming-surface`; current source and tests |
 | FR6 | Ref, supported host attributes and handlers, `className`, `style`, and `xstyle` reach or compose on the row root without replacing owned role, tab stop, disabled behavior, destination handling, or activation order.                                                                                                                                                                                    | `architecture:public-component-api` INV5–INV9; current tests       |
-| FR7 | Disabled menu rows remain inert, and the parent menu's keyboard reaches them as `component:DropdownMenu` FR17 states.                                                                                                                                                                                                                        | `component:DropdownMenu` FR17, DEC-11                              |
+| FR7 | Disabled menu rows remain inert, and the parent menu's keyboard reaches them as `component:DropdownMenu` FR17 states.                                                                                                                                                                                                                                                                                     | `component:DropdownMenu` FR17, DEC-11                              |
 | FR8 | Keyboard focus draws the shared focus ring inside the row, inset by the ring's own width, in every color mode; forced colors keep that ring as the focus indicator. After pointer input the row shows only its hover background (`architecture:interaction-modality` INV1), or the pressed overlay while a held finger or pen lights it (`spec:AST-094` FR27); the focused row owns the indicator (INV3). | Current source; `architecture:interaction-modality` INV1, INV3     |
 
 ### Allowed variation
@@ -194,7 +194,9 @@ No component-local visual decision is recorded.
 
 ## Current-state impact
 
-No known difference between shipped behavior and this contract.
+- **Disabled rows skipped (FR7).** A disabled row renders no `tabIndex`, so the
+  parent's arrow keys and type-ahead skip it instead of reaching it as
+  `component:DropdownMenu` FR17 and DEC-11 state.
 
 ## Decision log
 

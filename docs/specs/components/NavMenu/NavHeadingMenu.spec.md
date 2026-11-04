@@ -43,10 +43,10 @@ system_specs: [spec:AST-005/DEC-1, spec:AST-020, spec:AST-085]
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Public contract         | `NavHeadingMenu` with `children`, `size` (`sm`, `md`, `lg`; default `md`), and `minWidth`; `NavHeadingMenuItem` with `label`, `description`, `icon`, `href`, `onClick`, and `isDisabled`; targets `nav-heading-menu` and `nav-heading-menu-item` with a `size` state. |
 | Behavior                | A `role="menu"` list of `menuitem` rows inside a heading popover, with arrow, Home, End, typeahead, Enter, Space, and Escape support. Selecting an enabled item runs it and, where the host heading supplies a close action, closes the heading menu.                 |
-| End-user impact         | Users switch products or accounts from the heading menu by pointer or keyboard; disabled rows are skipped by keyboard and typeahead.                                                                                                                                  |
+| End-user impact         | Users switch products or accounts from the heading menu by pointer or keyboard; keyboard and typeahead reach disabled rows, which are announced as disabled and do nothing (FR6).                                                                                     |
 | Builder impact          | None.                                                                                                                                                                                                                                                                 |
 | Compatibility/readiness | Records shipped behavior; no public change. Five implementation gaps (see Current-state impact).                                                                                                                                                                      |
-| Review checks           | Reject losing `menu`/`menuitem` roles to caller props, keyboard focus landing on a disabled item, or a caller `onKeyDown` that silently disables the keyboard model.                                                                                                  |
+| Review checks           | Reject losing `menu`/`menuitem` roles to caller props, keyboard movement or typeahead that skips a disabled item, a disabled item that acts or closes the menu, or a caller `onKeyDown` that silently disables the keyboard model.                                    |
 | Governing rules         | `family:navigation-destinations` FR7; `architecture:interaction-modality`; `architecture:component-theming-surface`; `architecture:layer-runtime`.                                                                                                                    |
 
 This table is a review projection; the body below is authoritative.
@@ -90,6 +90,9 @@ Consumer migration instructions belong in consumer docs and release notes.
   `tabIndex=-1` enabled items carry: a disabled link item becomes a page tab
   stop, and a disabled action item cannot take focus at all. `spec:AST-085` FR1
   keeps a disabled control's focus order as it is when enabled.
+- **Disabled items skipped (FR5, FR6).** Keyboard movement and typeahead skip
+  disabled items instead of reaching them as `component:DropdownMenu` FR17 and
+  DEC-11 state.
 - **Focus is shown only by fill.** An item removes the outline and marks focus
   with the hover fill; it does not use the shared focus outline that
   `architecture:interaction-modality` provides.
@@ -132,8 +135,8 @@ Consumer migration instructions belong in consumer docs and release notes.
 | FR2 | NavHeadingMenuItem renders one Item carrying `role="menuitem"` and the current `nav-heading-menu-item` target with the menu's size, as the `LinkProvider` link (else `<a>`) when `href` is supplied and a `div` otherwise. Caller props cannot replace its role, tab index, or disabled state.                                                                                                                                                                                                                                                                                                                                                                              | Current source, docs, and tests |
 | FR3 | An optional Icon-rendered icon delegates to Icon's `icon` target. String labels and all descriptions render through Text's `text` target on one line; non-string labels render directly as caller-owned content.                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Current source and target docs  |
 | FR4 | The host heading owns the popup runtime. Where it supplies a close callback (TopNavHeading and the collapsed SideNavHeading), NavHeadingMenu calls it on Escape and on successful Item selection; an expanded SideNavHeading supplies none, so the menu stays open after a choice (`component:SideNavHeading` FR7).                                                                                                                                                                                                                                                                                                                                                         | Current source and tests        |
-| FR5 | Enabled items are focusable but not tab stops. In a standalone menu, ArrowDown and ArrowUp move one enabled item and wrap; Home and End go to the first and last; typing a character moves to the matching enabled item; Enter or Space activates the focused item.                                                                                                                                                                                                                                                                                                                                                                                                         | Current source and tests        |
-| FR6 | Activating an enabled item runs its `onClick` and then the close callback; a disabled item carries `aria-disabled="true"`, MUST stay focusable outside the tab order as an enabled item is (`spec:AST-085` FR1), is reached by keyboard movement and typeahead as `component:DropdownMenu` FR17 states (proposed, DEC-11), and does not run `onClick` or close the menu. Implementation gap: a disabled item drops `tabIndex=-1` (Current-state impact).                                                                                                                                                                                                                    | Current source and tests        |
+| FR5 | Items, disabled ones included, are focusable but not tab stops. In a standalone menu, ArrowDown and ArrowUp move one item, disabled included, and wrap; Home and End go to the first and last item; typing a character moves to the matching item, disabled included (FR6, `component:DropdownMenu` FR17); Enter or Space activates the focused item. Implementation gap: movement and typeahead skip disabled items (Current-state impact).                                                                                                                                                                                                                                | Current source and tests        |
+| FR6 | Activating an enabled item runs its `onClick` and then the close callback; a disabled item carries `aria-disabled="true"`, MUST stay focusable outside the tab order as an enabled item is (`spec:AST-085` FR1), is reached by keyboard movement and typeahead as `component:DropdownMenu` FR17 states (owner decision, 2026-11-04, `component:DropdownMenu` DEC-11), and does not run `onClick` or close the menu. Implementation gap: a disabled item drops `tabIndex=-1`, and keyboard movement and typeahead skip it (Current-state impact).                                                                                                                            | Current source and tests        |
 | FR7 | A caller `onKeyDown` on the menu runs first; the keyboard model still runs unless that caller calls `preventDefault()` on an event no item handler has already cancelled; an item handler that cancels does not stop arrow navigation.                                                                                                                                                                                                                                                                                                                                                                                                                                      | Current source and tests        |
 | FR8 | In the open menu, a press (finger, pen or mouse) that lands on an enabled item and slides across the items acts on the one it lifts on, once, through that item's own activation, with the highlight following the pointer; a lift outside acts on nothing, and a mouse released outside closes the menu. The menu adopts `module:DropdownMenu/useMenuPress` for this (`family:action-groups` FR1–FR5; `module:DropdownMenu/useMenuPress` DEC-7). A press on caller content that is not an item, and a Ctrl-, Cmd- or Shift-click or a middle click on a link item, stays that content's or the browser's own, and keyboard and assistive-technology behavior is unchanged. | Current source and tests        |
 
@@ -149,14 +152,14 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ### Representative states
 
-| State             | Required invariant                                                | Allowed variation                                         |
-| ----------------- | ----------------------------------------------------------------- | --------------------------------------------------------- |
-| Link Item         | Item is an anchor with menuitem semantics and its current target. | Destination, text, description, and icon may vary.        |
-| Action Item       | Item is a div with menuitem semantics and its current target.     | Selection callback may vary.                              |
-| Disabled Item     | Item remains present and reflects disabled semantics.             | It is skipped by keyboard navigation and typeahead.       |
-| String-label Item | Text-rendered item label delegates to Text's current target.      | Label value, destination, description, and icon may vary. |
-| Custom-label Item | Caller-rendered item label remains caller-owned.                  | Caller controls the non-string label content.             |
-| Described Item    | Item description delegates to Text's current target.              | Description content may vary or be absent.                |
+| State             | Required invariant                                                | Allowed variation                                                               |
+| ----------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Link Item         | Item is an anchor with menuitem semantics and its current target. | Destination, text, description, and icon may vary.                              |
+| Action Item       | Item is a div with menuitem semantics and its current target.     | Selection callback may vary.                                                    |
+| Disabled Item     | Item remains present and reflects disabled semantics.             | Keyboard movement and typeahead reach it; it does nothing when activated (FR6). |
+| String-label Item | Text-rendered item label delegates to Text's current target.      | Label value, destination, description, and icon may vary.                       |
+| Custom-label Item | Caller-rendered item label remains caller-owned.                  | Caller controls the non-string label content.                                   |
+| Described Item    | Item description delegates to Text's current target.              | Description content may vary or be absent.                                      |
 
 ### Transformation and precedence order
 
@@ -173,8 +176,8 @@ Consumer migration instructions belong in consumer docs and release notes.
   named only by a caller `aria-label`; inside a heading, the heading names its
   own wrapper `menu`, not this one (Current-state impact).
 - **AR2 — Keyboard.** FR5 and FR6.
-- **AR3 — Disabled.** Disabled items are exposed as disabled and unreachable by
-  keyboard movement.
+- **AR3 — Disabled.** Disabled items are exposed as disabled, reached by
+  keyboard movement and typeahead, and inert (FR6).
 
 ## Design relationships
 

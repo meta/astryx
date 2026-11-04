@@ -111,7 +111,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | ID  | Invariant                                                                                                                                                                                                                                                                                | Basis                                                              |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | FR1 | The row exposes `role="menuitem"`, `aria-haspopup="menu"` (`"dialog"` with a header or footer), `aria-expanded` matching its surface, and `aria-controls` naming the surface while open. The surface is labelled by the row.                                                             | `spec:AST-020`; current source and tests                           |
-| FR2 | A click, Enter, Space, or the inline-end arrow (inline-start under RTL) opens the surface; a keyboard open focuses its first row. Escape or the close arrow closes only this level and returns focus to the row. A hover opens a flyout after an intent delay.                           | `spec:AST-020`; `architecture:interaction-modality`; current tests |
+| FR2 | A click, Enter, Space, or the inline-end arrow (inline-start under RTL) opens the surface; a keyboard open focuses its first enabled row. Escape or the close arrow closes only this level and returns focus to the row. A hover opens a flyout after an intent delay.                   | `spec:AST-020`; `architecture:interaction-modality`; current tests |
 | FR3 | A flyout sits beside the row on the inline-end side, flips with direction, and stays within the viewport; its block size caps at the smaller of its own cap and the viewport.                                                                                                            | `architecture:layer-runtime`; current source                       |
 | FR4 | A drilled-in view replaces the root's rows with a Back row named after the parent menu and then this row's children; Back, Escape, and the close arrow return to the row.                                                                                                                | Current source and focused tests                                   |
 | FR5 | Selecting a leaf row inside the surface closes every level and the root menu.                                                                                                                                                                                                            | Current source and tests                                           |
@@ -207,6 +207,9 @@ No component-local visual decision is recorded.
 
 ## Current-state impact
 
+- **Disabled rows skipped (FR7).** A disabled row renders no `tabindex`, so the
+  parent's arrow keys and type-ahead skip it instead of reaching it as
+  `component:DropdownMenu` FR17 and DEC-11 state.
 - **Drill-in close report (FR6).** When the root menu closes a drilled-in view,
   `onOpenChange(false)` does not run (OQ1).
 
