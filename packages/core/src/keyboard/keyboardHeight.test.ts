@@ -130,6 +130,17 @@ describe('the layout viewport WebKit reports under a pinch zoom (FR2)', () => {
     expect(Math.abs(measureKeyboardHeight(window) - 337)).toBeLessThan(1);
   });
 
+  // The root's client box. Safari keeps its height at the layout viewport's,
+  // and its width at the visual viewport's.
+  function rootHeight(clientHeight: number, clientWidth = 402) {
+    for (const [key, value] of Object.entries({clientHeight, clientWidth})) {
+      Object.defineProperty(document.documentElement, key, {
+        configurable: true,
+        value,
+      });
+    }
+  }
+
   it('follows the layout viewport WebKit clamps to the document after a scroll', () => {
     safari({
       innerHeight: 666,
@@ -138,7 +149,46 @@ describe('the layout viewport WebKit reports under a pinch zoom (FR2)', () => {
       scale: 1,
       offsetTop: 120,
     });
+    rootHeight(714);
     expect(measureKeyboardHeight(window)).toBe(289);
+  });
+
+  it('reads no keyboard on a layout wider than the screen at a scale of 1', () => {
+    // A width=1024 page at initial-scale=1: the root spans the whole layout.
+    safari({innerHeight: 714, innerWidth: 402, height: 714, scale: 1});
+    rootHeight(1819, 1024);
+    expect(measureKeyboardHeight(window)).toBe(0);
+  });
+
+  it('reads no keyboard on a zoomed-out page with none shown', () => {
+    // No width=device-width viewport: a 980 px layout viewport at a scale of
+    // 402 / 980.
+    safari({
+      innerHeight: 1741,
+      innerWidth: 980,
+      height: 1741,
+      scale: 402 / 980,
+    });
+    rootHeight(1741);
+    expect(measureKeyboardHeight(window)).toBeCloseTo(0);
+  });
+
+  it('reads the keyboard while Safari pans the page to a focused field, where innerHeight follows the visual viewport', () => {
+    safari({
+      innerHeight: 377,
+      innerWidth: 402,
+      height: 377,
+      scale: 1,
+      offsetTop: 337,
+    });
+    rootHeight(714);
+    expect(measureKeyboardHeight(window)).toBe(337);
+  });
+
+  it('reads none where the layout viewport truly shrinks for the keyboard, as under resizes-content', () => {
+    safari({innerHeight: 377, innerWidth: 402, height: 377, scale: 1});
+    rootHeight(377);
+    expect(measureKeyboardHeight(window)).toBe(0);
   });
 
   it('reads the same keyboard scrolled and pinch-zoomed', () => {

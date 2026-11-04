@@ -17,7 +17,11 @@ that times motion with it. Everything here is internal to
   `innerWidth` matching the visual viewport's width tells apart. A classic
   horizontal scrollbar, which `innerHeight` counts and the visual viewport
   does not, is taken out, so a desktop page wider than its window reads no
-  keyboard. BottomSheet's obstruction reads it too.
+  keyboard. While Safari pans the page to a focused field, it reports
+  `innerHeight` as the visual viewport's height; the root's client height
+  keeps the layout viewport's. At a scale of 1, where the two heights are
+  equal and the root is as wide as the visual viewport, the function takes the
+  larger. BottomSheet's obstruction reads it too.
 - **Where it measures (FR6, FR7, DEC-4):** `isKeyboardMeasurable(window)` is
   true for a top-level document with a visual viewport, a browser with its own
   keyboard geometry API (`navigator.virtualKeyboard`, Chrome on Android)
@@ -90,7 +94,7 @@ that times motion with it. Everything here is internal to
 
 Layout follows the height (FR3), through a functional style on your own
 element, so it is right with no animation running; for an element docked at
-the bottom, `lift = height > 0 ? max(0, restingBottom − (innerHeight − height)) : 0`.
+the bottom, `lift = height > 0 ? max(0, restingBottom − (layoutViewportHeight(window) − height)) : 0`.
 An animation that rides the keyboard is optional polish on top, timed by the
 guide:
 

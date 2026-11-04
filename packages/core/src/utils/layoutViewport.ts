@@ -21,6 +21,12 @@
  * viewport's height times its scale stay in layout px. So, read as is, a zoom
  * shrinks the layout viewport by the zoom, and the function scales the height
  * back.
+ *
+ * While Safari on iOS 26.2 pans the page to a focused field, it reports
+ * `innerHeight` as the visual viewport's height. With the keyboard up, that is
+ * 377 of 714. The root's client height stays 714. So at a scale of 1, where
+ * `innerHeight` equals the visual viewport's height, the function takes the
+ * larger of the two. The root must also be as wide as the visual viewport.
  */
 export function layoutViewportHeight(win: Window): number {
   const viewport = win.visualViewport;
@@ -40,7 +46,28 @@ export function layoutViewportHeight(win: Window): number {
   const fromLayout = Math.abs(win.innerWidth - width * scale);
   const height =
     fromVisual < fromLayout ? win.innerHeight * scale : win.innerHeight;
-  return height - horizontalScrollbarHeight(win);
+  const layout = height - horizontalScrollbarHeight(win);
+  // At a scale of 1, an `innerHeight` equal to the visual viewport's height
+  // can be Safari's pan. A layout wider than the screen gives a root taller
+  // than the screen too, so the root must span only the visual viewport.
+  const root = viewportRoot(win.document);
+  if (
+    root != null &&
+    Math.abs(scale - 1) < 0.001 &&
+    Math.abs(win.innerHeight - viewport.height) < 1 &&
+    Math.abs(root.clientWidth - width) < 1
+  ) {
+    return Math.max(layout, root.clientHeight);
+  }
+  return layout;
+}
+
+/**
+ * The element whose client box reports the viewport: the root in standards
+ * mode, the body in quirks mode.
+ */
+function viewportRoot(doc: Document): Element | null {
+  return doc.compatMode === 'BackCompat' ? doc.body : doc.documentElement;
 }
 
 /**
