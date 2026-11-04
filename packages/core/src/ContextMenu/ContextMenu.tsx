@@ -712,14 +712,14 @@ export function ContextMenu({
   );
   const handleTriggerTouchEnd = useCallback(
     (event: React.TouchEvent<HTMLElement>) => {
-      handleLongPressTouchEnd();
+      handleLongPressTouchEnd(event);
       onTouchEndProp?.(event);
     },
     [handleLongPressTouchEnd, onTouchEndProp],
   );
   const handleTriggerTouchCancel = useCallback(
     (event: React.TouchEvent<HTMLElement>) => {
-      handleLongPressTouchCancel();
+      handleLongPressTouchCancel(event);
       onTouchCancelProp?.(event);
     },
     [handleLongPressTouchCancel, onTouchCancelProp],

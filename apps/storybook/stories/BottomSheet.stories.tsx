@@ -3,8 +3,8 @@
 /**
  * @file BottomSheet.stories.tsx
  * @input BottomSheet, content primitives, and controlled story state
- * @output BottomSheet examples plus keyboard delegation and nested-layer
- *   Escape browser fixtures
+ * @output BottomSheet examples plus keyboard delegation, nested-layer
+ *   Escape, and exit-focus browser fixtures
  * @position Storybook coverage for BottomSheet presentation and interaction
  */
 
@@ -928,4 +928,54 @@ export const ModalAutofocus: Story = {
       </>
     );
   },
+};
+
+type ExitFocusChange = 'remove' | 'disable';
+
+function ExitFocusChangeFixture({change}: {change: ExitFocusChange}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [isDoneChanged, setIsDoneChanged] = useState(false);
+  const open = () => {
+    setIsDoneChanged(false);
+    setIsOpen(true);
+  };
+  const close = () => {
+    setIsOpen(false);
+    // The control changes after the close starts, during the exit motion.
+    window.setTimeout(() => setIsDoneChanged(true), 100);
+  };
+  return (
+    <>
+      <Button label="Open sheet" onClick={open} />
+      <BottomSheet isOpen={isOpen} onOpenChange={setIsOpen} label="Exit focus">
+        <Section>
+          {change === 'remove' && isDoneChanged ? null : (
+            <Button
+              label="Done"
+              onClick={close}
+              isDisabled={change === 'disable' && isDoneChanged}
+            />
+          )}
+        </Section>
+      </BottomSheet>
+    </>
+  );
+}
+
+/**
+ * Browser fixture: Done closes the sheet, and 100 ms into the exit the Done
+ * control is removed. The sheet goes inert and hidden as focus leaves it.
+ */
+export const ExitFocusControlRemoved: Story = {
+  tags: ['!autodocs'],
+  render: () => <ExitFocusChangeFixture change="remove" />,
+};
+
+/**
+ * Browser fixture: Done closes the sheet, and 100 ms into the exit the Done
+ * control is disabled. The sheet goes inert and hidden as focus leaves it.
+ */
+export const ExitFocusControlDisabled: Story = {
+  tags: ['!autodocs'],
+  render: () => <ExitFocusChangeFixture change="disable" />,
 };

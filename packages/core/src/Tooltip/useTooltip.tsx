@@ -4,8 +4,9 @@
 
 /**
  * @file useTooltip.tsx
- * @input Uses useLayer, useTouchTrigger, React hooks
+ * @input Uses useLayer, useTouchTriggerInternal, React hooks
  * @output Exports useTooltip hook with stable trigger refs for hover/focus/tap tooltips
+ *   and imperative show() and hide() for an app-built toggle trigger
  * @position Layer hook; builds on useLayer for tooltip behavior
  *
  * SYNC: When modified, update:
@@ -16,9 +17,11 @@ import {
   useCallback,
   useEffect,
   useRef,
+  useState,
   type ReactNode,
   type RefCallback,
 } from 'react';
+import {createTriggerFocusGate} from '../utils/triggerFocus';
 import * as stylex from '@stylexjs/stylex';
 import {
   useLayerInternal,
@@ -27,9 +30,11 @@ import {
   type LayerPlacement,
 } from '../Layer/useLayer';
 import {
-  useTouchTrigger,
+  useTouchTriggerInternal,
   type LayerTouchTrigger,
 } from '../Layer/useTouchTrigger';
+import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {registerLayerSurface} from '../Layer/layerSurfacePress';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
@@ -124,9 +129,7 @@ export interface TooltipOptions {
    * - `auto`: tap opens the tooltip, unless the trigger performs an action of
    *   its own (a button, a link, a form control) — that tap belongs to the
    *   control, and a hint about a control the user just operated is noise
-   * - `tap`: tap always opens the tooltip. This is what an info icon rendered
-   *   as a button wants: it looks like an action to the DOM, but revealing the
-   *   tooltip is the only thing it does
+   * - `tap`: tap always opens the tooltip, even on a trigger that acts
    * - `none`: touch never opens the tooltip
    *
    * @default 'auto'
@@ -217,29 +220,27 @@ export interface TooltipReturn {
     children: ReactNode,
     props?: Omit<ContextRenderProps, 'positioning'>,
   ) => ReactNode;
-}
 
-/**
- * Check if an element is naturally focusable
- */
-function isFocusable(element: HTMLElement): boolean {
-  // Elements with explicit tabindex
-  if (element.hasAttribute('tabindex')) {
-    return element.tabIndex >= 0;
-  }
+  /**
+   * Opens the tooltip now and keeps it open until `hide()`, Escape, a press
+   * outside, or focus leaving its trigger. If a press on the trigger is down
+   * when you call it, and the press ends off the trigger with no click, the
+   * hold ends. The hover rules then decide.
+   * Its text is announced once. Reports through `onShow`. Under a controlled `isOpen`,
+   * it calls `onShow` and does not change `isOpen`. Does nothing while
+   * `isEnabled` is false.
+   *
+   * Use `show()` and `hide()` to build a toggle-style trigger: your own button
+   * calls them, sets `aria-describedby` and `aria-controls` to `describedBy`
+   * and `aria-expanded` (true while shown), and keeps its own accessible name.
+   */
+  show: () => void;
 
-  // Naturally focusable elements
-  const focusableTags = ['A', 'BUTTON', 'INPUT', 'SELECT', 'TEXTAREA'];
-  if (focusableTags.includes(element.tagName)) {
-    return !(element as HTMLButtonElement).disabled;
-  }
-
-  // Elements with contenteditable
-  if (element.isContentEditable) {
-    return true;
-  }
-
-  return false;
+  /**
+   * Closes the tooltip now. Reports through `onHide`. Under a controlled
+   * `isOpen`, it calls `onHide` and does not change `isOpen`.
+   */
+  hide: () => void;
 }
 
 /**
@@ -332,22 +333,126 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     hideLayer();
   }, [clearTimeouts, hideLayer]);
 
+  // DOM listeners read the latest controlled state through a ref.
+  const latestRef = useRef({isOpen, isLayerOpen, onShow, onHide});
+  latestRef.current = {isOpen, isLayerOpen, onShow, onHide};
+
+  // The app's show() holds the tooltip open until hide(), Escape, a press or
+  // scroll outside, or focus leaving the trigger and the tooltip.
+  const isHeldRef = useRef(false);
+  const [isHeldState, setIsHeldState] = useState(false);
+  const setHeld = useCallback((next: boolean) => {
+    isHeldRef.current = next;
+    setIsHeldState(next);
+  }, []);
+
+  // Whether the current hold began during a press on the trigger. Such a
+  // hold ends with the press when the press ends off the trigger, as no click
+  // pins it. The hover rules then decide. isHoldInThisTaskRef covers a show()
+  // that runs before the hook's own pointerdown listener.
+  const isHoldFromPressRef = useRef(false);
+  const isHoldInThisTaskRef = useRef(false);
+  const handleReleaseInLayer = useCallback(() => {
+    if (isHoldFromPressRef.current && isHeldRef.current) {
+      isHoldFromPressRef.current = false;
+      setHeld(false);
+    }
+  }, [setHeld]);
+
+  // The touch trigger's outside dismissal (a press or scroll outside) ends a
+  // hold with the tooltip.
+  const hideFromTouch = useCallback(() => {
+    if (isHeldRef.current) {
+      setHeld(false);
+      const latest = latestRef.current;
+      if (latest.isOpen !== undefined) {
+        latest.onHide?.();
+        return;
+      }
+    }
+    hideNow();
+  }, [setHeld, hideNow]);
+
   const {
     isTouchPointerRef,
     isTouchInteraction,
     handlePointerEnter,
     handlePointerDown: handleTouchPointerDown,
     clearTapOpen,
-  } = useTouchTrigger({
-    touchTrigger,
-    isEnabled,
-    isControlled: isOpen !== undefined,
-    isOpen: isLayerOpen,
-    layerId: layerId,
-    triggerRef,
-    show: showNow,
-    hide: hideNow,
-  });
+    armOutsideDismiss,
+  } = useTouchTriggerInternal(
+    {
+      touchTrigger,
+      isEnabled,
+      isControlled: isOpen !== undefined,
+      isOpen: isLayerOpen,
+      layerId,
+      triggerRef,
+      show: showNow,
+      hide: hideFromTouch,
+    },
+    handleReleaseInLayer,
+  );
+
+  const isHeldOpen = useCallback(() => {
+    const latest = latestRef.current;
+    return isHeldRef.current && latest.isLayerOpen && latest.isOpen !== false;
+  }, []);
+
+  const releaseHold = useCallback(() => {
+    clearTapOpen();
+    setHeld(false);
+    const latest = latestRef.current;
+    if (latest.isOpen !== undefined) {
+      latest.onHide?.();
+      return;
+    }
+    hideNow();
+  }, [clearTapOpen, setHeld, hideNow]);
+
+  const dropHold = useCallback(() => {
+    if (isHeldRef.current) {
+      setHeld(false);
+    }
+  }, [setHeld]);
+
+  // Focus leaving the trigger and the tooltip ends a hold, whatever
+  // `focusTrigger` is. Focus that leaves for no element is a press's to
+  // decide. The trigger can sit in another document, so the check uses its
+  // own window.
+  const handleHeldFocusOut = useCallback(
+    (event: FocusEvent) => {
+      if (!isHeldOpen()) {
+        return;
+      }
+      const next = event.relatedTarget;
+      const trigger = triggerRef.current;
+      const view = trigger?.ownerDocument.defaultView;
+      if (view == null || !(next instanceof view.Node)) {
+        return;
+      }
+      const surface = trigger?.ownerDocument.getElementById(layerId) ?? null;
+      if (
+        trigger?.contains(next) === true ||
+        surface?.contains(next) === true
+      ) {
+        return;
+      }
+      releaseHold();
+    },
+    [isHeldOpen, layerId, releaseHold],
+  );
+
+  const isHoldShown = isHeldState && isLayerOpen && isOpen !== false;
+
+  // Only a hold announces the text: a preview is already the trigger's
+  // description.
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  useAnnounceRenderedText(contentRef, isHoldShown, 'pinned');
+  const contentRefs = useMergedRefs<HTMLDivElement>(
+    contentRef,
+    registerLayerSurface,
+  );
 
   // Schedule show with delay (suppressed when isOpen is false)
   const scheduleShow = useCallback(() => {
@@ -376,7 +481,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // trigger onto the tooltip surface without the tooltip vanishing — required
   // for WCAG 1.4.13 (Content on Hover or Focus: hoverable).
   const scheduleHide = useCallback(() => {
-    if (isOpen === true) {
+    if (isOpen === true || isHeldOpen()) {
       return;
     }
     clearTimeouts();
@@ -384,7 +489,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     hideTimeoutRef.current = setTimeout(() => {
       hideLayer();
     }, effectiveHideDelay);
-  }, [isOpen, clearTimeouts, hideLayer, hideDelay]);
+  }, [isOpen, isHeldOpen, clearTimeouts, hideLayer, hideDelay]);
 
   // Cancel a pending hide (e.g. the pointer entered the tooltip surface).
   const cancelHide = useCallback(() => {
@@ -428,32 +533,13 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     [isTouchPointerRef, layerId, scheduleHide],
   );
 
-  // Under `auto`, whether focus counts is decided when it arrives, not when
-  // the listeners attach: a roving-tabindex member that was `tabindex="-1"`
-  // then can be the tab stop now. A trigger that receives focus is focusable
-  // by definition; focus inside it counts only while the trigger is
-  // focusable too, so a plain wrapper still ignores its children's focus.
-  const isFocusForTrigger = useCallback(
-    (e: Event): boolean => {
-      if (focusTrigger === 'always') {
-        return true;
-      }
-      const triggerEl = e.currentTarget as HTMLElement | null;
-      return (
-        triggerEl != null && (e.target === triggerEl || isFocusable(triggerEl))
-      );
-    },
-    [focusTrigger],
-  );
-
-  // Whether the trigger's current focus counted when it arrived, so its blur
-  // hides the tooltip even if the trigger has since left the tab order.
-  const focusCountedRef = useRef(false);
+  // Under `auto`, whether focus counts is decided when it arrives, and a
+  // focus that counted still hides on blur (utils/triggerFocus.ts).
+  const [focusGate] = useState(createTriggerFocusGate);
 
   const handleFocusIn = useCallback(
     (e: Event) => {
-      focusCountedRef.current = isFocusForTrigger(e);
-      if (!isEnabled || !focusCountedRef.current) {
+      if (!focusGate.focusIn(e, focusTrigger) || !isEnabled) {
         return;
       }
       // A tap focuses the trigger it activates, and `:focus-visible` does not
@@ -474,23 +560,26 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       showLayer();
     },
     [
+      focusGate,
+      focusTrigger,
       isEnabled,
-      isFocusForTrigger,
       isTouchInteraction,
       clearTimeouts,
       showLayer,
     ],
   );
 
+  // A held tooltip's focus-leave close is the hold's own: it listens on the
+  // trigger whatever `focusTrigger` is. This schedules the unheld hide, which
+  // a held tooltip skips.
   const handleFocusOut = useCallback(
     (e: Event) => {
-      if (!focusCountedRef.current && !isFocusForTrigger(e)) {
+      if (!focusGate.focusOut(e, focusTrigger)) {
         return;
       }
-      focusCountedRef.current = false;
       scheduleHide();
     },
-    [isFocusForTrigger, scheduleHide],
+    [focusGate, focusTrigger, scheduleHide],
   );
 
   // Pressing the trigger hides its own tooltip: once the control is activated
@@ -500,9 +589,56 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
   // is owned by the consumer. `hideLayer()` self-guards when already closed.
   // A touch press is a different gesture (it may be the only way to open the
   // tooltip at all), so the touch path answers it first.
+  // Whether a press on the trigger is down, from the hook's pointerdown to
+  // the press's end.
+  const isTriggerPressedRef = useRef(false);
+  const stopPressTrackingRef = useRef<(() => void) | null>(null);
+  const trackTriggerPress = useCallback(() => {
+    stopPressTrackingRef.current?.();
+    const view = triggerRef.current?.ownerDocument.defaultView;
+    if (view == null) {
+      return;
+    }
+    isTriggerPressedRef.current = true;
+    const trigger = triggerRef.current;
+    const stop = (event?: Event) => {
+      // A press that ends on the trigger keeps its hold, as a click does.
+      if (
+        event?.type === 'pointerup' &&
+        event.target instanceof view.Node &&
+        trigger?.contains(event.target) === true
+      ) {
+        isHoldFromPressRef.current = false;
+      }
+      view.removeEventListener('pointerup', stop, true);
+      view.removeEventListener('pointercancel', stop, true);
+      isTriggerPressedRef.current = false;
+      stopPressTrackingRef.current = null;
+    };
+    view.addEventListener('pointerup', stop, true);
+    view.addEventListener('pointercancel', stop, true);
+    stopPressTrackingRef.current = stop;
+  }, []);
+
   const handlePointerDown = useCallback(
     (event: PointerEvent) => {
+      trackTriggerPress();
+      // The app's hide() closes a held tooltip. A press neither hides it here
+      // nor waits for a tap verdict. A show() in a capture handler of this
+      // press runs before this listener. Tie that hold to the press.
+      if (isHeldRef.current) {
+        if (isHoldInThisTaskRef.current) {
+          isHoldFromPressRef.current = true;
+        }
+        return;
+      }
       if (handleTouchPointerDown(event)) {
+        // A pen in range starts the hover show before it lands. Left pending,
+        // that show opens the layer during the press. The tap then closes it.
+        if (showTimeoutRef.current) {
+          clearTimeout(showTimeoutRef.current);
+          showTimeoutRef.current = null;
+        }
         return;
       }
       if (isOpen !== undefined) {
@@ -511,7 +647,13 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       clearTimeouts();
       hideLayer();
     },
-    [handleTouchPointerDown, isOpen, clearTimeouts, hideLayer],
+    [
+      handleTouchPointerDown,
+      trackTriggerPress,
+      isOpen,
+      clearTimeouts,
+      hideLayer,
+    ],
   );
 
   // Interaction ref that handles event listeners only
@@ -523,6 +665,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         triggerRef.current.removeEventListener('mouseleave', handleMouseLeave);
         triggerRef.current.removeEventListener('focusin', handleFocusIn);
         triggerRef.current.removeEventListener('focusout', handleFocusOut);
+        triggerRef.current.removeEventListener('focusout', handleHeldFocusOut);
+        stopPressTrackingRef.current?.();
         triggerRef.current.removeEventListener(
           'pointerenter',
           handlePointerEnter,
@@ -544,16 +688,19 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         el.addEventListener('pointerdown', handlePointerDown);
 
         // Focus listeners unless focus never opens the tooltip; `auto` decides
-        // per event (isFocusForTrigger).
+        // per event (utils/triggerFocus.ts).
         if (focusTrigger !== 'never') {
           el.addEventListener('focusin', handleFocusIn);
           el.addEventListener('focusout', handleFocusOut);
         }
       }
 
+      // Its own focus-leave listener: `focusTrigger="never"` attaches none.
+      el?.addEventListener('focusout', handleHeldFocusOut);
       triggerRef.current = el;
     },
     [
+      handleHeldFocusOut,
       focusTrigger,
       handleMouseEnter,
       handleMouseLeave,
@@ -598,9 +745,11 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       showLayer();
     } else {
       clearTimeouts();
+      // A hold ends when the consumer closes the tooltip.
+      dropHold();
       hideLayer();
     }
-  }, [isOpen, clearTimeouts, showLayer, hideLayer]);
+  }, [isOpen, clearTimeouts, showLayer, hideLayer, dropHold]);
 
   // Dismiss on Escape (WCAG 1.4.13 — dismissible) through the shared layer
   // stack. A visible tip is the top-most layer, so it takes the press and
@@ -641,6 +790,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     onDismiss: () => {
       clearTimeouts();
       clearTapOpen();
+      dropHold();
       if (isOpen !== undefined) {
         onHide?.();
         return;
@@ -677,7 +827,8 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
         // something else in the shared interactive-ancestor walk, so a
         // clickable container around the trigger leaves the press alone while
         // document listeners still see it.
-        <div ref={registerLayerSurface} {...stylex.props(styles.content)}>
+        // The hold's announcement reads this element's text.
+        <div ref={contentRefs} {...stylex.props(styles.content)}>
           {children}
         </div>,
         renderProps,
@@ -690,8 +841,34 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
       popoverXstyle,
       cancelHide,
       scheduleHide,
+      contentRefs,
     ],
   );
+
+  const show = useCallback(() => {
+    clearTimeouts();
+    if (!isEnabled) {
+      return;
+    }
+    setHeld(true);
+    armOutsideDismiss();
+    isHoldFromPressRef.current = isTriggerPressedRef.current;
+    isHoldInThisTaskRef.current = true;
+    triggerRef.current?.ownerDocument.defaultView?.setTimeout(() => {
+      isHoldInThisTaskRef.current = false;
+    }, 0);
+    const latest = latestRef.current;
+    if (latest.isOpen !== undefined) {
+      latest.onShow?.();
+      return;
+    }
+    showLayer();
+  }, [clearTimeouts, isEnabled, setHeld, armOutsideDismiss, showLayer]);
+
+  const hide = useCallback(() => {
+    clearTimeouts();
+    releaseHold();
+  }, [clearTimeouts, releaseHold]);
 
   return {
     ref,
@@ -700,5 +877,7 @@ export function useTooltip(options: TooltipOptions = {}): TooltipReturn {
     anchorId: layerAnchorId,
     describedBy: layerId,
     renderTooltip,
+    show,
+    hide,
   };
 }

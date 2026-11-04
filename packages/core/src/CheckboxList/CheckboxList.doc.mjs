@@ -128,6 +128,13 @@ export const docs = {
       description: 'Description text displayed below the label.',
     },
     {
+      name: 'isOptional',
+      type: 'boolean',
+      description:
+        'Whether the group is optional. Shows the optional indicator after the group label, unless a surrounding FormLayout already makes fields optional by default.',
+      default: 'false',
+    },
+    {
       name: 'density',
       type: "'compact' | 'balanced' | 'spacious'",
       description: 'Spacing density for list items.',
@@ -178,12 +185,14 @@ export const docs = {
     {
       name: 'containerClassName',
       type: 'string',
-      description: 'Class name for the field container. Same targeting as `containerXstyle`.',
+      description:
+        'Class name for the field container. Same targeting as `containerXstyle`.',
     },
     {
       name: 'containerStyle',
       type: 'CSSProperties',
-      description: 'Inline styles for the field container. Same targeting as `containerXstyle`.',
+      description:
+        'Inline styles for the field container. Same targeting as `containerXstyle`.',
     },
     {
       name: 'controlXstyle',

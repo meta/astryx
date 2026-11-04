@@ -1,5 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+import {useRef, useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, radiusVars} from '@astryxdesign/core/theme/tokens.stylex';
@@ -563,4 +564,184 @@ export const WithEmbeddedFrame: Story = {
       </div>
     );
   },
+};
+
+const cal = stylex.create({
+  column: {
+    position: 'relative',
+    width: 240,
+    height: 192,
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: colorVars['--color-border'],
+    borderRadius: radiusVars['--radius-container'],
+  },
+  // A calendar event: its body moves it, and the Handle on its bottom edge
+  // changes how long it lasts.
+  event: (top: number, height: number) => ({
+    position: 'absolute',
+    insetInlineStart: 8,
+    insetInlineEnd: 8,
+    top,
+    height,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'visible',
+    borderRadius: radiusVars['--radius-element'],
+    backgroundColor: colorVars['--color-background-muted'],
+  }),
+  eventBody: {
+    flexGrow: 1,
+    minHeight: 0,
+    cursor: 'move',
+    touchAction: 'none',
+  },
+});
+
+/** At 48px an hour, as a day view draws it. */
+const PX_PER_HOUR = 48;
+
+/**
+ * One event of a calendar column: dragging its body moves it, and its
+ * ResizeHandle changes its length. The event keeps its own drag however short
+ * it is: the Grab zone stays on the Handle, whatever `pillPlacement` says, and
+ * takes at most half the event (component:Resizable FR1).
+ */
+function CalendarEvent({
+  testId,
+  minutes,
+  initialTop,
+  pillPlacement,
+  position,
+}: {
+  testId: string;
+  minutes: number;
+  initialTop: number;
+  pillPlacement: 'auto' | 'start' | 'center' | 'end';
+  position: 'inline' | 'overlay';
+}) {
+  const length = useResizable({
+    defaultSize: (minutes / 60) * PX_PER_HOUR,
+    minSize: PX_PER_HOUR / 8,
+    direction: 'vertical',
+  });
+  const [top, setTop] = useState(initialTop);
+  const moveRef = useRef<{y: number; top: number} | null>(null);
+  return (
+    <div
+      data-testid={testId}
+      data-top={top}
+      {...stylex.props(cal.event(top, length.size))}>
+      <div
+        data-testid={`${testId}-body`}
+        {...stylex.props(cal.eventBody)}
+        onPointerDown={event => {
+          moveRef.current = {y: event.clientY, top};
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={event => {
+          const move = moveRef.current;
+          if (move != null) {
+            setTop(move.top + event.clientY - move.y);
+          }
+        }}
+        onPointerUp={() => {
+          moveRef.current = null;
+        }}>
+        <Text type="supporting">{minutes} min</Text>
+      </div>
+      <ResizeHandle
+        direction="vertical"
+        position={position}
+        pillPlacement={pillPlacement}
+        resizable={length.props}
+        label={`Resize the ${minutes}-minute event`}
+      />
+    </div>
+  );
+}
+
+/**
+ * Browser fixture for the Grab zone on a short item: a 30-minute and a
+ * 15-minute event, each resized from its bottom edge.
+ */
+function ShortItems({
+  pillPlacement,
+  position,
+}: {
+  pillPlacement: 'auto' | 'start' | 'center' | 'end';
+  position: 'inline' | 'overlay';
+}) {
+  return (
+    <div {...stylex.props(cal.column)}>
+      <CalendarEvent
+        testId="thirty"
+        minutes={30}
+        initialTop={24}
+        pillPlacement={pillPlacement}
+        position={position}
+      />
+      <CalendarEvent
+        testId="fifteen"
+        minutes={15}
+        initialTop={120}
+        pillPlacement={pillPlacement}
+        position={position}
+      />
+    </div>
+  );
+}
+
+export const GrabZoneOnShortItems: StoryObj<typeof ShortItems> = {
+  tags: ['!autodocs', 'no-visual'],
+  args: {pillPlacement: 'auto', position: 'inline'},
+  render: args => <ShortItems {...args} />,
+};
+
+/**
+ * Browser fixture for a pill that shows on hover beside an overlay Handle.
+ * The pill can sit outside the Grab zone, so the pointer crosses a gap to
+ * reach it.
+ */
+function HoverPillOnOverlay({
+  pillPlacement,
+  dir,
+}: {
+  pillPlacement: 'start' | 'end';
+  dir: 'ltr' | 'rtl';
+}) {
+  const sidebar = useResizable({defaultSize: 250, minSize: 150, maxSize: 500});
+  return (
+    <div dir={dir} {...stylex.props(ps.shell)}>
+      <Layout
+        height="fill"
+        start={
+          <>
+            <LayoutPanel width={sidebar.size} hasDivider={false}>
+              <Text>{sidebar.size}px</Text>
+            </LayoutPanel>
+            <ResizeHandle
+              direction="horizontal"
+              position="overlay"
+              pillPlacement={pillPlacement}
+              isAlwaysVisible={false}
+              resizable={sidebar.props}
+              label="Resize sidebar"
+            />
+          </>
+        }
+        content={
+          <LayoutContent>
+            <Heading level={4}>Content</Heading>
+          </LayoutContent>
+        }
+      />
+    </div>
+  );
+}
+
+export const HoverPillOnOverlayHandle: StoryObj<typeof HoverPillOnOverlay> = {
+  tags: ['!autodocs', 'no-visual'],
+  args: {pillPlacement: 'start', dir: 'ltr'},
+  render: args => <HoverPillOnOverlay {...args} />,
 };

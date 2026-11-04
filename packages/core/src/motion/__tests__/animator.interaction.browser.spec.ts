@@ -24,9 +24,10 @@
 import {fileURLToPath} from 'node:url';
 import {
   blockMainThread,
-  type BusyWindow,
+  type BlockedWindow,
   busyWindowProof,
   CONTROL_RGB,
+  controlClock,
   countBetween,
   markElement,
   startBusyControl,
@@ -34,11 +35,10 @@ import {
   traceRendering,
   trackMarker,
 } from '@astryxdesign/interaction-harness';
-import {expect, test, type Page} from '@playwright/test';
+import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {build} from 'esbuild';
 import type {Animator, MotionHandle} from '../animator';
 import type * as MotionBundle from './motionBundle';
-import {controlClock} from './controlClock';
 
 let script = '';
 
@@ -109,7 +109,7 @@ async function open(page: Page) {
 </style>
 <div id="box"></div>
 <script>${script}</script>
-<script>window.animator = Motion.createAnimator(document.getElementById('box'));</script>`;
+<script>window.animator = Motion.createMotionAnimator(document.getElementById('box'));</script>`;
   await page.route('http://motion.test/', async route =>
     route.fulfill({contentType: 'text/html', body: html}),
   );
@@ -174,7 +174,7 @@ test('a spring keeps advancing every frame through a 1 s main-thread block, on i
     type: 'busy window',
     description: `${proof.summary} | without the control: ${alone.verdict.failures.join('; ') || 'pass'}`,
   });
-  expect(busy.to - busy.from).toBeGreaterThanOrEqual(1000);
+  expect(busy.spanMs).toBeGreaterThanOrEqual(1000);
   // The harness's verdict against the control: the spring moved on every
   // frame the control moved, and stalled no longer than it (what a
   // main-thread animation never does; see the next test).
@@ -221,18 +221,17 @@ test('a spring keeps advancing every frame through a 1 s main-thread block, on i
     },
   );
   const [curve, faster] = curveMs;
-  const controlAt = new Map(
-    control.flatMap(f => (f.box == null ? [] : [[f.t, f.box.x] as const])),
-  );
   // The control's own time at each frame (controlClock): 240 px out in
   // 400 ms, back in 400 ms, read from its position on the origin most frames
   // agree with, so no one frame's stamp or direction sets it.
-  const clock = controlClock(
-    inside.map(f => ({t: f.t, x: controlAt.get(f.t) ?? null})),
-  );
+  const clock = controlClock(control);
+  const timed = inside.flatMap((f, i) => {
+    const ms = clock.get(f.t);
+    return ms == null ? [] : [{i, ms}];
+  });
   /** How far the box's curve time drifts from the control's, ms. */
   const drift = (times: number[]) => {
-    const gaps = clock.map(({i, ms}) => times[i] - ms).sort((x, y) => x - y);
+    const gaps = timed.map(({i, ms}) => times[i] - ms).sort((x, y) => x - y);
     return (
       gaps[Math.floor(gaps.length * 0.9)] - gaps[Math.floor(gaps.length * 0.1)]
     );
@@ -246,7 +245,7 @@ test('a spring keeps advancing every frame through a 1 s main-thread block, on i
     sorted[Math.floor(sorted.length * 0.9)] -
     sorted[Math.floor(sorted.length * 0.1)];
   const read = {
-    frames: clock.length,
+    frames: timed.length,
     drift: drift(curve),
     faster: drift(faster),
     median,
@@ -258,7 +257,7 @@ test('a spring keeps advancing every frame through a 1 s main-thread block, on i
   });
   // Placed on its curve and on the control's, every frame is the same time
   // apart, to within the 1 px steps of both; a spring 10% off drifts.
-  expect(clock.length, JSON.stringify(read)).toBeGreaterThan(20);
+  expect(timed.length, JSON.stringify(read)).toBeGreaterThan(20);
   expect(read.drift, JSON.stringify(read)).toBeLessThan(12);
   expect(read.faster, JSON.stringify(read)).toBeGreaterThan(24);
   if (browserName === 'chromium') {
@@ -290,14 +289,15 @@ test('a move driven from the main thread freezes through the same block, and the
       frames += 1;
       if (frames === 8) {
         setTimeout(() => {
-          const from = performance.timeOrigin + performance.now();
-          const until = performance.now() + 1000;
-          while (performance.now() < until) {
-            // Busy: nothing else runs.
+          const blockStart = performance.now();
+          let now = blockStart;
+          while (now - blockStart < 1000) {
+            now = performance.now();
           }
-          (window as unknown as {busy: BusyWindow}).busy = {
-            from,
-            to: performance.timeOrigin + performance.now(),
+          (window as unknown as {busy: BlockedWindow}).busy = {
+            from: performance.timeOrigin + blockStart,
+            to: performance.timeOrigin + now,
+            spanMs: now - blockStart,
           };
         }, 0);
       }
@@ -308,12 +308,12 @@ test('a move driven from the main thread freezes through the same block, and the
     requestAnimationFrame(step);
   }, TRAVEL);
   const signal = await page.waitForFunction(
-    () => (window as unknown as {busy?: BusyWindow}).busy,
+    () => (window as unknown as {busy?: BlockedWindow}).busy,
     undefined,
     {polling: 50, timeout: 0},
   );
-  const busy = (await signal.jsonValue()) as BusyWindow;
-  expect(busy.to - busy.from).toBeGreaterThanOrEqual(1000);
+  const busy = (await signal.jsonValue()) as BlockedWindow;
+  expect(busy.spanMs).toBeGreaterThanOrEqual(1000);
   await page.waitForTimeout(200);
   const frames = await cast.stop();
   const tracked = await trackMarker(page, frames);
@@ -373,7 +373,7 @@ test('a frame painted before the compositor has the curve shows the element wher
         document.body.append(element);
         return {
           element,
-          animator: Motion.createAnimator(element, now ? {now} : {}),
+          animator: Motion.createMotionAnimator(element, now ? {now} : {}),
         };
       };
       const x = (element: HTMLElement) =>
@@ -909,7 +909,7 @@ test('a role variable set on a scope changes nothing while touch motion stays in
     const report: Record<string, {worst: number; lowest: number}> = {};
     for (const id of ['plain', 'themed'] as const) {
       const element = document.getElementById(id) as HTMLElement;
-      const animator = Motion.createAnimator(element);
+      const animator = Motion.createMotionAnimator(element);
       animator.set({y: 300});
       const handle = animator.animate({y: 0}, {spring: Motion.springs.settle});
       await handle.started;
@@ -1013,7 +1013,7 @@ test('a fade-in on an element its stylesheet hides stays visible once it retires
       element.style.cssText =
         'position:absolute;top:120px;left:0;width:48px;height:48px;background:#c63';
       document.body.append(element);
-      const animator = Motion.createAnimator(element);
+      const animator = Motion.createMotionAnimator(element);
       animator.set({opacity: 0});
       animator.animate({opacity: 1}, {spring});
       await new Promise<void>(resolve => {
@@ -1085,7 +1085,7 @@ test('a dialog\u2019s ::backdrop plays the curve and holds its end state', async
     const dialog = document.createElement('dialog');
     document.body.append(dialog);
     dialog.showModal();
-    const backdrop = Motion.createAnimator(dialog, {
+    const backdrop = Motion.createMotionAnimator(dialog, {
       pseudoElement: '::backdrop',
     });
     backdrop.set({opacity: 0});
