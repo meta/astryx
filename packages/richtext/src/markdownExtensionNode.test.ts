@@ -39,10 +39,10 @@ function inEditor<T>(work: () => T): T {
 }
 
 describe('RichTextExtensionNode construction', () => {
-  // Lexical builds one instance of every registered class to read its
-  // properties, and a Yjs binding does the same when it creates a binding.
-  // Neither passes arguments, so a throw here takes down every editor that
-  // registers this node, not only a document that holds one.
+  // A Yjs binding builds one instance of every registered node class, with no
+  // arguments, to read its default properties. A throw here stops collaboration
+  // for every editor that registers this node, not only a document that holds
+  // one.
   it('is constructible with no arguments', () => {
     expect(() => inEditor(() => new RichTextExtensionNode())).not.toThrow();
   });
