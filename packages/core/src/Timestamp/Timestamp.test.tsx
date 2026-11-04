@@ -1840,9 +1840,11 @@ describe('Timestamp calendar systems', () => {
     }
   });
 
-  it('reads the calendar from a -u-ca- keyword in the provider locale', () => {
+  it('keeps Gregorian dates for a -u-ca- keyword in the provider locale', () => {
     renderTimestamp({locale: 'th-TH-u-ca-buddhist'}, 'date_long');
-    expect(screen.getByTestId('ts')).toHaveTextContent('2569');
+    const ts = screen.getByTestId('ts');
+    expect(ts).toHaveTextContent('2026');
+    expect(ts).not.toHaveTextContent('2569');
   });
 
   it('keeps Gregorian dates when the locale names no calendar', () => {

@@ -87,10 +87,9 @@ present-tense implementation gap note.
   change with no public API change. DEC-3 adds the stable `presentation` prop
   and its `adaptive` default, as the two DEC-3 bullets below state.
 - Controlled/uncontrolled behavior: unchanged.
-- Calendar: date values follow the provider's calendar. A provider locale with
-  an explicit `-u-ca-` keyword shows that calendar; the keyword is the
-  application's explicit request (`spec:AST-111` DEC-2): nonbreaking;
-  `calendar="gregory"` keeps Gregorian.
+- Calendar: date values follow the provider's calendar. A provider locale with a
+  `-u-ca-` keyword keeps Gregorian dates (`spec:AST-111` DEC-2); set the
+  provider's `calendar` to choose one.
 - Migration decisions: `component:PowerSearch/DEC-1`,
   `component:PowerSearch/DEC-2`, and, for the `adaptive` default,
   `presentation="popover"` (below).
