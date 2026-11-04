@@ -647,6 +647,8 @@ export function AppShell({
   if (isMobileNavOpen && !isMobileNavCloseHeld) {
     setIsMobileNavCloseHeld(true);
   }
+  // Syncs the mobile-nav close hold with a timer. The hold ends after the
+  // slide-out delay.
   useEffect(() => {
     if (!HasActivity || isMobileNavOpen) {
       return;
@@ -814,6 +816,8 @@ export function AppShell({
   const headerRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
 
+  // Syncs the header-height CSS variable with a ResizeObserver while the height
+  // is automatic.
   useEffect(() => {
     if (!isAuto || !headerRef.current || !shellRef.current) {
       return;

@@ -11,6 +11,7 @@
  *   `useMenuPress` for the held-finger menu open
  *
  * SYNC: When modified, update the hooks barrel /packages/core/src/hooks/index.ts
+ * and the detector it wraps, /packages/core/src/hooks/longPressDetector.ts
  */
 
 // iOS Safari sends no `contextmenu` event on a long press. So a long press is
@@ -18,64 +19,24 @@
 //
 // A caller can spread the touch handlers, or call `start`, `moveTo` and
 // `cancel` from its own pointer events, as `useMenuPress` does. Both ways use
-// this hook's hold time, movement tolerance and timer, so a long press means
-// the same thing on a context menu and on a menu trigger.
+// the hold time, movement tolerance and timer of createLongPressDetector. So a
+// long press means the same thing on a context menu and on a menu trigger.
 //
 // The defaults come from the long-press recognizer. The recognizer measures
 // its tolerance as a distance, as UIKit does. This hook measures it on each
 // axis. The context menu's own movement allowance is a guess and is not
 // measured yet (AST-094).
 //
-// The hold is a deadline on the touch events' timestamps, on the clock of the
-// touch's own window. A busy main thread can delay the timer past the
-// deadline. A touch stamped after the deadline then reports the press before
-// it acts.
+// The hold is a deadline on the touch events' own clock (longPressDetector.ts).
 
-import {useCallback, useEffect, useRef} from 'react';
+import {useCallback, useEffect, useState} from 'react';
 import {
-  LONG_PRESS_ALLOWABLE_MOVEMENT_PX,
-  LONG_PRESS_DURATION_MS,
-} from '../motion/uikit/longPress';
+  createLongPressDetector,
+  type LongPressTolerance,
+} from './longPressDetector';
+import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 
-// The long-press numbers have one source, shared with the gesture
-// recognizers (motion/uikit/longPress.ts).
-const DEFAULT_DELAY_MS = LONG_PRESS_DURATION_MS;
-const DEFAULT_MOVE_CANCEL_PX = LONG_PRESS_ALLOWABLE_MOVEMENT_PX;
-
-/** The part of a window's performance timeline a press reads. */
-type EventClock = Pick<Performance, 'now'>;
-
-function clockOf(e: React.TouchEvent): EventClock | null {
-  const view = e.view as unknown as {performance?: EventClock} | null;
-  return (
-    view?.performance ??
-    (typeof performance === 'undefined' ? null : performance)
-  );
-}
-
-/**
- * An event's time on its window's clock. jsdom stamps events with
- * `Date.now()`. The hook reads the age of such a stamp on that clock, so a
- * frozen system time keeps the hold's length. A stamp nearer `Date.now()` than
- * the window's clock is that kind of stamp.
- */
-function timeOn(
-  clock: EventClock | null,
-  timeStamp: number | undefined,
-): number | undefined {
-  // A stamp of 0 means the event carries no time, so the hold falls back to
-  // the full delay on the page's timer.
-  if (timeStamp == null || !Number.isFinite(timeStamp) || timeStamp <= 0) {
-    return undefined;
-  }
-  if (
-    clock != null &&
-    Math.abs(Date.now() - timeStamp) < Math.abs(clock.now() - timeStamp)
-  ) {
-    return clock.now() - (Date.now() - timeStamp);
-  }
-  return timeStamp;
-}
+export type {LongPressTolerance};
 
 export interface UseLongPressOptions {
   /** Fired with the touch start point once the press is held for `delayMs`. */
@@ -85,14 +46,6 @@ export interface UseLongPressOptions {
   /** Hold duration before the press fires, in ms. Defaults to 500. */
   delayMs?: number;
   /** Movement past this distance (px, either axis) cancels the press. Defaults to 10. */
-  moveCancelPx?: number;
-}
-
-/**
- * @internal A press's own movement tolerance, for a core caller that decides
- * it as the press starts (useMenuPress's trigger). Not in the hooks entry.
- */
-export interface LongPressTolerance {
   moveCancelPx?: number;
 }
 
@@ -153,186 +106,22 @@ export function useLongPress(
 export function useLongPressDetector(
   options: UseLongPressOptions,
 ): LongPressDetectorHandlers {
-  const {
-    onLongPress,
-    disabled = false,
-    delayMs = DEFAULT_DELAY_MS,
-    moveCancelPx = DEFAULT_MOVE_CANCEL_PX,
-  } = options;
-
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const startRef = useRef<{x: number; y: number} | null>(null);
-  // The pending press's deadline and clock, when it started from a touch.
-  const deadlineRef = useRef<number | null>(null);
-  const clockRef = useRef<EventClock | null>(null);
-  // The press in progress's tolerance, when its caller chose one at start.
-  const pressToleranceRef = useRef<LongPressTolerance | null>(null);
-  // Keep the latest callback without re-creating handlers on every render.
-  const onLongPressRef = useRef(onLongPress);
-  onLongPressRef.current = onLongPress;
-
-  const clear = useCallback(() => {
-    if (timerRef.current != null) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-    startRef.current = null;
-    deadlineRef.current = null;
-    clockRef.current = null;
-  }, []);
-
-  const fire = useCallback(() => {
-    const from = startRef.current;
-    if (from == null) {
-      return;
-    }
-    clear();
-    onLongPressRef.current({x: from.x, y: from.y});
-  }, [clear]);
-
-  // A touch stamped at or past the deadline: the finger was down for the
-  // whole delay, so the press reports before the touch acts.
-  const fireIfDue = useCallback(
-    (e: React.TouchEvent | undefined) => {
-      const deadline = deadlineRef.current;
-      const eventTime =
-        e == null ? undefined : timeOn(clockRef.current, e.timeStamp);
-      if (deadline != null && eventTime != null && eventTime >= deadline) {
-        fire();
-      }
-    },
-    [fire],
-  );
-
-  const begin = useCallback(
-    (
-      point: {x: number; y: number},
-      tolerance: LongPressTolerance | undefined,
-      started: {at: number; clock: EventClock} | undefined,
-    ) => {
-      if (disabled) {
-        return;
-      }
-      // Clear a stale timer first, then record the start point. The clear
-      // also sets startRef to null.
-      clear();
-      startRef.current = {x: point.x, y: point.y};
-      pressToleranceRef.current = tolerance ?? null;
-      const clock = started?.clock ?? null;
-      const deadline = started == null ? null : started.at + delayMs;
-      clockRef.current = clock;
-      deadlineRef.current = deadline;
-      // Wait only for the rest of the hold, so a touch handled late does not
-      // lengthen it, and never past the delay.
-      const remaining =
-        clock == null || deadline == null
-          ? delayMs
-          : Math.min(delayMs, Math.max(0, deadline - clock.now()));
-      // A late timer yields to queued input once, so a lift stamped before
-      // the deadline still cancels the press. The gesture arena does the same.
-      const run = (mayYield: boolean) => {
-        timerRef.current = null;
-        if (
-          mayYield &&
-          clock != null &&
-          deadline != null &&
-          clock.now() > deadline
-        ) {
-          timerRef.current = setTimeout(() => run(false), 0);
-          return;
-        }
-        fire();
-      };
-      timerRef.current = setTimeout(() => run(true), remaining);
-    },
-    [disabled, delayMs, clear, fire],
-  );
-
-  const start = useCallback(
-    (point: {x: number; y: number}, tolerance?: LongPressTolerance) =>
-      begin(point, tolerance, undefined),
-    [begin],
-  );
-
-  const moveTo = useCallback(
-    (point: {x: number; y: number}): boolean => {
-      const from = startRef.current;
-      if (from == null) {
-        return false;
-      }
-      // This press's own tolerance when its caller chose one, on either axis.
-      const limit = pressToleranceRef.current?.moveCancelPx ?? moveCancelPx;
-      if (
-        Math.abs(point.x - from.x) > limit ||
-        Math.abs(point.y - from.y) > limit
-      ) {
-        clear();
-        return false;
-      }
-      return true;
-    },
-    [moveCancelPx, clear],
-  );
-
-  const onTouchStart = useCallback(
-    (e: React.TouchEvent) => {
-      if (disabled) {
-        return;
-      }
-      if (e.touches.length !== 1) {
-        // A second finger ends the press, unless the press was already due.
-        fireIfDue(e);
-        clear();
-        return;
-      }
-      const touch = e.touches[0];
-      const clock = clockOf(e);
-      const at = timeOn(clock, e.timeStamp);
-      begin(
-        {x: touch.clientX, y: touch.clientY},
-        undefined,
-        clock == null || at == null ? undefined : {at, clock},
-      );
-    },
-    [disabled, clear, begin, fireIfDue],
-  );
-
-  const onTouchMove = useCallback(
-    (e: React.TouchEvent) => {
-      if (startRef.current == null) {
-        return;
-      }
-      fireIfDue(e);
-      if (startRef.current == null) {
-        return;
-      }
-      if (e.touches.length !== 1) {
-        clear();
-        return;
-      }
-      const touch = e.touches[0];
-      moveTo({x: touch.clientX, y: touch.clientY});
-    },
-    [clear, moveTo, fireIfDue],
-  );
-
-  const onTouchEnd = useCallback(
-    (e?: React.TouchEvent) => {
-      fireIfDue(e);
-      clear();
-    },
-    [clear, fireIfDue],
-  );
-
-  useEffect(() => clear, [clear]);
+  const [detector] = useState(() => createLongPressDetector(options));
+  // The detector reads only committed options. A render that React discards
+  // never reaches it.
+  useIsomorphicLayoutEffect(() => {
+    detector.setOptions(options);
+  });
+  // The detector's pending timer ends with the component.
+  useEffect(() => detector.cancel, [detector]);
 
   return {
-    onTouchStart,
-    onTouchMove,
-    onTouchEnd,
-    onTouchCancel: onTouchEnd,
-    start,
-    moveTo,
-    cancel: clear,
+    onTouchStart: detector.touchStart,
+    onTouchMove: detector.touchMove,
+    onTouchEnd: detector.touchEnd,
+    onTouchCancel: detector.touchEnd,
+    start: detector.start,
+    moveTo: detector.moveTo,
+    cancel: detector.cancel,
   };
 }

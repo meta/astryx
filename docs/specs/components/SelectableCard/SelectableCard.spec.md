@@ -117,6 +117,10 @@ Consumer migration instructions belong in consumer docs and release notes.
   the delegated focus indicator, and the disabled treatment.
 - The `selectable-card` target and the public `--selectable-card-ring-color`
   variable.
+- Internal note: through an internal channel, Lab's SelectableCardGroup can
+  render the card's hidden input as a radio in a native radio group. No public
+  prop exposes this; single-select stays outside the public contract until the
+  group is promoted to Core.
 
 **Does not own / non-goals**
 

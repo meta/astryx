@@ -501,6 +501,37 @@ describe('gapReport handler isolation', () => {
     ]);
   });
 
+  it('gives a handler its whole budget after its module loads slower than that budget', async () => {
+    // The module's load outlasts the 200 ms budget, as a busy machine's
+    // worker start can. The handler then answers at once. `malformedExport`
+    // writes this module source as given.
+    addIntegration({
+      name: '@test/slow-load',
+      malformedExport:
+        'await new Promise(resolve => setTimeout(resolve, 400));\n' +
+        "export const gapReport = {audience: 'internal', handle: async () => ({status: 'filed', message: 'loaded late'})};\n",
+    });
+    configure(['@test/slow-load']);
+    const project = await Project.load(projectDir);
+
+    const deliveries = await deliverGapReportHandlers(
+      collectGapReportHandlers(project),
+      /** @type {any} */ ({component: 'Button'}),
+      {timeoutMs: 200},
+    );
+
+    expect(deliveries).toEqual([
+      {
+        handlerType: 'integration',
+        handler: '@test/slow-load',
+        audience: 'internal',
+        status: 'filed',
+        url: null,
+        message: 'loaded late',
+      },
+    ]);
+  });
+
   it('a timed-out late process.exit cannot terminate the caller', () => {
     addIntegration({
       name: '@test/late-exit',

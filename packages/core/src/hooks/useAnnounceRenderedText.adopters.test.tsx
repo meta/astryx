@@ -196,7 +196,7 @@ const ADOPTERS: Record<string, () => Promise<void>> = {
         onChange={() => {}}
         debounceMs={0}
         emptySearchText={<em>Nothing called that</em>}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     fireEvent.click(screen.getByRole('button', {name: 'Tags'}));
@@ -231,7 +231,7 @@ const ADOPTERS: Record<string, () => Promise<void>> = {
         label="Filters"
         isLabelHidden={false}
         onChange={() => {}}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     fireEvent.click(screen.getByRole('button', {name: /^Filters/}));
