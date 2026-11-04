@@ -174,6 +174,26 @@ function eagerText(outputs, byPath, entryOutput) {
   return text;
 }
 
+// Each entry's output key in a build over the entries, by the path the caller
+// passed. esbuild names an entry by its path from the working directory, with
+// links resolved, so the match compares real paths.
+function entryOutputKeys(entries, outputs, workingDir) {
+  const byRealPath = new Map();
+  for (const [key, output] of Object.entries(outputs)) {
+    if (output.entryPoint === undefined) continue;
+    byRealPath.set(
+      fs.realpathSync(path.resolve(workingDir, output.entryPoint)),
+      key,
+    );
+  }
+  const keys = new Map();
+  for (const entry of entries) {
+    const key = byRealPath.get(fs.realpathSync(entry));
+    if (key !== undefined) keys.set(entry, key);
+  }
+  return keys;
+}
+
 // What importing each entry loads eagerly, from one build over every entry.
 // The build parses the modules the entries share once, not once per entry. A
 // file the entries share goes into one chunk with every part that any entry
@@ -188,19 +208,9 @@ function bundleImportsByEntry(entries) {
   try {
     const workingDir = process.cwd();
     const {outputs, byPath} = splitBuild({entryPoints: existing}, workingDir);
-    const byRealPath = new Map();
-    for (const [key, output] of Object.entries(outputs)) {
-      if (output.entryPoint === undefined) continue;
-      byRealPath.set(
-        fs.realpathSync(path.resolve(workingDir, output.entryPoint)),
-        eagerText(outputs, byPath, key),
-      );
-    }
-    // Key by the paths callers passed, which may differ from real paths.
     const texts = new Map();
-    for (const entry of existing) {
-      const text = byRealPath.get(fs.realpathSync(entry));
-      if (text !== undefined) texts.set(entry, text);
+    for (const [entry, key] of entryOutputKeys(existing, outputs, workingDir)) {
+      texts.set(entry, eagerText(outputs, byPath, key));
     }
     return texts;
   } catch {
@@ -230,20 +240,19 @@ function bundleInputsByEntry(entries) {
       write: false,
       logLevel: 'silent',
     });
-    const reach = new Map();
-    for (const output of Object.values(result.metafile.outputs)) {
-      if (output.entryPoint === undefined) continue;
-      reach.set(
-        fs.realpathSync(path.resolve(workingDir, output.entryPoint)),
-        Object.keys(output.inputs).map(input =>
-          path.resolve(workingDir, input),
-        ),
-      );
-    }
-    // Key by the paths callers passed, which may differ from real paths.
+    const outputs = result.metafile.outputs;
+    const keys = entryOutputKeys(existing, outputs, workingDir);
     const byEntry = new Map();
     for (const entry of existing) {
-      byEntry.set(entry, reach.get(fs.realpathSync(entry)) ?? []);
+      const key = keys.get(entry);
+      byEntry.set(
+        entry,
+        key === undefined
+          ? []
+          : Object.keys(outputs[key].inputs).map(input =>
+              path.resolve(workingDir, input),
+            ),
+      );
     }
     return byEntry;
   } catch {
