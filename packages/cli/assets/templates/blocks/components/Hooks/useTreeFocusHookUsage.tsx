@@ -7,6 +7,7 @@ import {useTreeFocus} from '@astryxdesign/core/hooks';
 import {Icon} from '@astryxdesign/core/Icon';
 import {HStack, VStack} from '@astryxdesign/core/Layout';
 import {Text} from '@astryxdesign/core/Text';
+import {rtlStyles} from '@astryxdesign/core/utils';
 import {ChevronDownIcon, ChevronRightIcon} from '@heroicons/react/24/outline';
 
 type FileNode = {name: string; children?: FileNode[]};
@@ -62,9 +63,14 @@ export default function UseTreeFocusHookUsage() {
         vAlign="center"
         paddingInlineStart={isFolder ? 0 : level === 1 ? 5 : 10}
         onClick={() => (isFolder ? toggle(node.name) : setOpenFile(node.name))}>
-        {isFolder && (
-          <Icon icon={isExpanded ? ChevronDownIcon : ChevronRightIcon} />
-        )}
+        {isFolder &&
+          (isExpanded ? (
+            <Icon icon={ChevronDownIcon} />
+          ) : (
+            // The collapsed chevron points toward the inline end, where
+            // ArrowRight (ArrowLeft under RTL) opens the folder.
+            <Icon icon={ChevronRightIcon} xstyle={rtlStyles.mirror} />
+          ))}
         <Text type="body">{node.name}</Text>
       </HStack>
     );
