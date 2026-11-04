@@ -5,6 +5,7 @@ date: '2026-11-03'
 type: 'story'
 authors:
   - 'liya'
+  - 'cvkxx'
 tags:
   - 'AI'
   - 'Community'
