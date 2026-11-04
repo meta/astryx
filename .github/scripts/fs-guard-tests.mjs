@@ -274,6 +274,20 @@ function recordPathsIn(file, source, isPath) {
  * @param {string} config the source of vitest.config.ts
  * @returns {string[]} directory prefixes, each ending in `/`
  */
+export function uiTestRoots(config) {
+  const block = /name:\s*'ui'[\s\S]*?include:\s*\[([\s\S]*?)\]/.exec(config);
+  if (!block) throw new Error('vitest.config.ts: no ui project include list');
+  const roots = [...block[1].matchAll(/'([^']+)'/g)].map(([, glob]) => {
+    const match = /^(.+\/)\*\*\/\*\.test\.\{ts,tsx,mjs\}$/.exec(glob);
+    if (!match)
+      throw new Error(`vitest.config.ts: unexpected ui include ${glob}`);
+    return match[1];
+  });
+  if (roots.length === 0)
+    throw new Error('vitest.config.ts: empty ui project include list');
+  return roots;
+}
+
 /**
  * The repository-relative test paths in `text`: Vitest `list --json` output
  * (an array of `{file}`), or one path per line. Absolute paths under `root`
@@ -301,20 +315,6 @@ export function readTestList(text, root) {
 export function withoutAlreadyRun(tests, alreadyRun) {
   const ran = new Set(alreadyRun);
   return tests.filter(test => !ran.has(test));
-}
-
-export function uiTestRoots(config) {
-  const block = /name:\s*'ui'[\s\S]*?include:\s*\[([\s\S]*?)\]/.exec(config);
-  if (!block) throw new Error('vitest.config.ts: no ui project include list');
-  const roots = [...block[1].matchAll(/'([^']+)'/g)].map(([, glob]) => {
-    const match = /^(.+\/)\*\*\/\*\.test\.\{ts,tsx,mjs\}$/.exec(glob);
-    if (!match)
-      throw new Error(`vitest.config.ts: unexpected ui include ${glob}`);
-    return match[1];
-  });
-  if (roots.length === 0)
-    throw new Error('vitest.config.ts: empty ui project include list');
-  return roots;
 }
 
 /**

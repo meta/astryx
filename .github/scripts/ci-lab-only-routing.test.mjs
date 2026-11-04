@@ -132,7 +132,7 @@ describe('Lab-only lane (spec:AST-030 FR26)', () => {
     );
     // The guards leave out the Lab tests the run above already ran.
     expect(labBranch).toContain(
-      'pnpm exec vitest list --project ui packages/lab/ --filesOnly --passWithNoTests --json="$RUNNER_TEMP/already-run.json"',
+      '.github/scripts/run-named.sh "List the tests the first run ran" -- pnpm exec vitest list --project ui packages/lab/ --filesOnly --passWithNoTests --json="$RUNNER_TEMP/already-run.json"',
     );
     expect(labBranch).toContain(
       'pnpm test:ui --passWithNoTests --shard=${{ matrix.shard }}/${{ strategy.job-total }} "${GUARDS[@]}"',
