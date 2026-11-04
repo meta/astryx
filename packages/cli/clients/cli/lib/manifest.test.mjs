@@ -14,12 +14,51 @@
  *      surfaces emit valid, enriched JSON.
  */
 
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 import {describe, it, expect} from 'vitest';
 import {program, JSON_SUPPORTED} from '../index.mjs';
-import {buildManifest, RESPONSE_TYPES} from './manifest.mjs';
+import {buildManifest} from './manifest.mjs';
 import {runCli} from '../../../test-utils/run-cli.mjs';
 
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Import every `*.doc.mjs` under `dir` whose doc has the given type, keyed by
+ * its `name`.
+ * @param {string} dir @param {string} type @returns {Promise<Map<string, any>>}
+ */
+async function loadDocs(dir, type) {
+  const out = new Map();
+  for (const entry of fs.readdirSync(dir, {withFileTypes: true, recursive: true})) {
+    if (!entry.isFile() || !entry.name.endsWith('.doc.mjs')) continue;
+    const file = path.join(entry.parentPath, entry.name);
+    const {doc} = await import(pathToFileURL(file).href);
+    if (doc?.type === type) out.set(doc.name, doc);
+  }
+  return out;
+}
+
+const commandDocs = await loadDocs(path.join(HERE, '../commands'), 'command');
+const functionDocs = await loadDocs(path.join(HERE, '../../../api'), 'function');
+
+/**
+ * Envelopes built in the CLI layer, which no FunctionDoc can declare. Pinned so
+ * an entry is dropped once its type moves behind an API function.
+ */
+const CLI_LAYER_TYPES = {
+  manifest: ['manifest'],
+  'theme build': ['theme.build.batch'],
+  'theme add': ['theme.list'],
+};
+
 const manifest = buildManifest(program, {jsonSupported: JSON_SUPPORTED, version: '0.0.0-test'});
+/** Hidden commands (a package-script hook): documented, never in the manifest. */
+const HIDDEN = new Set(
+  program.commands.filter((c) => /** @type {any} */ (c)._hidden).map((c) => c.name()),
+);
 
 /** Flatten the manifest command tree into fully-qualified names. */
 function flatten(cmds, out = []) {
@@ -64,17 +103,81 @@ describe('manifest: drift guards', () => {
 
   it('declares response types for every JSON-supported command', () => {
     for (const name of JSON_SUPPORTED) {
+      const entry = allEntries.find((c) => c.name === name);
       expect(
-        RESPONSE_TYPES[name],
-        `JSON-supported command "${name}" has no response-type entry`,
-      ).toBeDefined();
-      expect(RESPONSE_TYPES[name].length).toBeGreaterThan(0);
+        entry?.responseTypes?.length,
+        `JSON-supported command "${name}" has no response types`,
+      ).toBeGreaterThan(0);
+      expect(manifest.responseTypes[name]).toEqual(entry.responseTypes);
     }
   });
 
   it('has no response-type entry for a command that does not exist', () => {
-    for (const name of Object.keys(RESPONSE_TYPES)) {
-      expect(allNames.has(name), `RESPONSE_TYPES key "${name}" is not a real command`).toBe(true);
+    for (const name of Object.keys(manifest.responseTypes)) {
+      expect(allNames.has(name), `responseTypes key "${name}" is not a real command`).toBe(true);
+    }
+  });
+
+  it('takes every command example from its CommandDoc', () => {
+    for (const [name, doc] of commandDocs) {
+      if (HIDDEN.has(name)) continue;
+      const entry = allEntries.find((c) => c.name === name);
+      expect(entry, `CommandDoc "${name}" has no manifest entry`).toBeDefined();
+      expect(entry.examples ?? [], name).toEqual((doc.examples ?? []).map((e) => e.cli));
+    }
+  });
+
+  it('documents the hidden postinstall hook and keeps it out of the manifest', () => {
+    expect([...HIDDEN]).toEqual(['postinstall']);
+    expect(commandDocs.has('postinstall')).toBe(true);
+    expect(allNames.has('postinstall')).toBe(false);
+  });
+
+  it('lists every response type the wrapped API function returns', () => {
+    for (const [name, doc] of commandDocs) {
+      if (!doc.fn) continue;
+      const entry = allEntries.find((c) => c.name === name);
+      for (const {type} of functionDocs.get(doc.fn).returns) {
+        expect(entry.responseTypes, `${name} can emit ${type}`).toContain(type);
+      }
+    }
+  });
+
+  it('lists upgrade.registry, which `upgrade --registry --json` emits', async () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-manifest-'));
+    fs.writeFileSync(path.join(cwd, 'package.json'), '{"name":"app","version":"1.0.0"}');
+    const {status, stdout} = await runCli(['--json', 'upgrade', '--registry'], {cwd});
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout).type).toBe('upgrade.registry');
+    expect(manifest.responseTypes.upgrade).toContain('upgrade.registry');
+  });
+
+  it('lists theme.list for theme add, which lists themes when given no slug', async () => {
+    const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'astryx-manifest-'));
+    fs.writeFileSync(path.join(cwd, 'package.json'), '{"name":"app","version":"1.0.0"}');
+    const {status, stdout} = await runCli(['--json', 'theme', 'add'], {cwd});
+    expect(status).toBe(0);
+    expect(JSON.parse(stdout).type).toBe('theme.list');
+    expect(manifest.responseTypes['theme add']).toContain('theme.list');
+  });
+
+  it('takes response types from the wrapped FunctionDoc, plus CLI-layer envelopes', () => {
+    for (const [name, doc] of commandDocs) {
+      if (HIDDEN.has(name)) continue;
+      const entry = allEntries.find((c) => c.name === name);
+      const returns = doc.fn ? functionDocs.get(doc.fn).returns.map((r) => r.type) : [];
+      const expected = [...returns, ...(CLI_LAYER_TYPES[name] ?? [])];
+      expect(entry.responseTypes ?? [], name).toEqual(expected);
+    }
+  });
+
+  it('pins only CLI-layer envelopes that no FunctionDoc declares', () => {
+    for (const [name, types] of Object.entries(CLI_LAYER_TYPES)) {
+      const fn = commandDocs.get(name)?.fn;
+      const declared = fn ? functionDocs.get(fn).returns.map((r) => r.type) : [];
+      for (const type of types) {
+        expect(declared, `${type} is declared by ${fn}(); unpin it`).not.toContain(type);
+      }
     }
   });
 
@@ -156,7 +259,10 @@ describe('manifest: shape', () => {
 
   it('derives arguments from Commander metadata', () => {
     const component = allEntries.find((c) => c.name === 'component');
-    expect(component.arguments.map((a) => a.name)).toContain('name');
+    const names = component.arguments.find((a) => a.name === 'names');
+    expect(names.required).toBe(false);
+    expect(names.variadic).toBe(true);
+    expect(names.description).toContain('Two or more return one ordered batch');
     const themeBuild = allEntries.find((c) => c.name === 'theme build');
     expect(themeBuild.arguments.map((a) => a.name)).toContain('files');
     const files = themeBuild.arguments.find((a) => a.name === 'files');
@@ -193,7 +299,7 @@ describe('manifest: e2e', () => {
     // Enriched: the full structured manifest is embedded.
     expect(parsed.data.manifest).toBeDefined();
     expect(parsed.data.manifest.commands.find((c) => c.name === 'component').responseTypes)
-      .toContain('component.list');
+      .toEqual(expect.arrayContaining(['component.list', 'component.batch']));
   });
 });
 
@@ -211,5 +317,30 @@ describe('manifest: text projection', () => {
     );
     expect(textKeys).toContain('name');
     for (const key of textKeys) expect(jsonKeys).toContain(key);
+  });
+});
+
+describe('global mode is discoverable (spec:AST-017 FR14)', () => {
+  it('the manifest names what a run may do beyond its command, and the docs topic that explains it', () => {
+    expect(manifest.globalMode.docs).toBe('astryx docs global');
+    for (const word of ['hands the run', 'once a day', 'agent skill']) {
+      expect(manifest.globalMode.summary).toContain(word);
+    }
+  });
+
+  it('--help carries one line pointing to the global mode docs', () => {
+    const help = program.helpInformation() + '';
+    let after = '';
+    program.emit('afterHelp', {
+      error: false,
+      write: (/** @type {string} */ s) => {
+        after += s;
+      },
+    });
+    const lines = `${help}${after}`
+      .split('\n')
+      .filter(line => line.startsWith('Global mode:'));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/docs global\.$/u);
   });
 });

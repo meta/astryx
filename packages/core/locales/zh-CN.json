@@ -132,23 +132,23 @@
     "description": "\"Entities\" is jargon — plural noun form-label above an entity picker (people, teams, projects). Prefer a natural collective like \"items\" if your language has no equivalent."
   },
   "@astryx.powersearch.valueEditor.searchPlaceholder": {
-    "defaultMessage": "搜索…",
+    "defaultMessage": "搜索……",
     "description": "Placeholder inside the search input in the PowerSearch entity/typeahead picker. Imperative verb; trailing `…` is one character."
   },
   "@astryx.powersearch.valueEditor.enterValuePlaceholder": {
-    "defaultMessage": "输入值…",
+    "defaultMessage": "输入值……",
     "description": "Placeholder inside a free-text single-value input in the PowerSearch value editor. Imperative verb; trailing `…` is one character."
   },
   "@astryx.powersearch.valueEditor.addValuesPlaceholder": {
-    "defaultMessage": "添加值…",
+    "defaultMessage": "添加值……",
     "description": "Placeholder inside a multi-value chip input where the user types items and presses Enter to add each as a chip. Imperative verb; trailing `…` is one character."
   },
   "@astryx.powersearch.valueEditor.enterNumberPlaceholder": {
-    "defaultMessage": "输入数字…",
+    "defaultMessage": "输入数字……",
     "description": "Placeholder inside a numeric input in the PowerSearch value editor. Imperative verb; trailing `…` is one character."
   },
   "@astryx.powersearch.valueEditor.selectValuesPlaceholder": {
-    "defaultMessage": "选择值…",
+    "defaultMessage": "选择值……",
     "description": "Placeholder on a dropdown for choosing values from a fixed enum list in the PowerSearch value editor. Imperative verb (user selects, not types)."
   },
   "@astryx.powersearch.operator.contains": {
@@ -409,7 +409,7 @@
   },
   "@astryx.commandPalette.noResultsFor": {
     "defaultMessage": "没有关于 {query} 的结果",
-    "description": "Screen-reader-only announcement when a CommandPalette query matches nothing. `{query}` is the user's verbatim search text; keep it last if your language allows so truncation-by-AT still conveys the outcome."
+    "description": "Not read by any component: CommandPalette announces its rendered empty-search message (`emptySearchText`) instead. Formerly the screen-reader-only announcement when a query matched nothing; `{query}` was the user's verbatim search text."
   },
   "@astryx.commandPalette.loading": {
     "defaultMessage": "加载中",
@@ -448,11 +448,11 @@
     "description": "Screen-reader-only label on the right-arrow button in a Lightbox (navigates to next media item). Pairs with `lightbox.previous`."
   },
   "@astryx.chatTypingIndicator.one": {
-    "defaultMessage": "{name} 正在输入…",
+    "defaultMessage": "{name} 正在输入……",
     "description": "Politely announced status naming the single person currently typing in a chat. `name` is a display name supplied by the app. Present-progressive form; the trailing ellipsis is the single … character."
   },
   "@astryx.chatTypingIndicator.many": {
-    "defaultMessage": "{names} 正在输入…",
+    "defaultMessage": "{names} 正在输入……",
     "description": "Politely announced status when more than one person is typing in a chat. `names` is already joined for the locale by Intl.ListFormat, so translations must not add their own conjunction — place `{names}` where the joined list belongs."
   },
   "@astryx.chatTypingIndicator.others": {
@@ -540,7 +540,7 @@
     "description": "Label on the checkbox/toggle at the top of a MultiSelector dropdown that selects every option. \"All\" is a determiner here (as in \"all the options\"), not the pronoun."
   },
   "@astryx.multiSelector.searchPlaceholder": {
-    "defaultMessage": "搜索…",
+    "defaultMessage": "搜索……",
     "description": "Placeholder inside the search input at the top of a MultiSelector's dropdown panel. Imperative verb; trailing `…` is one character."
   },
   "@astryx.multiSelector.searchOptions": {
@@ -560,7 +560,7 @@
     "description": "\"Close\" = shut/dismiss, not \"nearby\". Screen-reader-only label on the close button inside a Popover."
   },
   "@astryx.selector.searchPlaceholder": {
-    "defaultMessage": "搜索…",
+    "defaultMessage": "搜索……",
     "description": "Placeholder inside the search input at the top of a Selector's dropdown panel (for filtering options). Imperative verb; trailing `…` is one character."
   },
   "@astryx.selector.searchOptions": {
@@ -580,7 +580,7 @@
     "description": "Screen-reader-only label on the vertical drag handle at the right edge of the SideNav that lets the user resize the sidebar's width."
   },
   "@astryx.sideNav.heading.openMenu": {
-    "defaultMessage": "打开菜单",
+    "defaultMessage": "{heading}, 打开菜单",
     "description": "Screen-reader-only label on the `⋯` overflow-menu button embedded in a SideNav section heading. Same string as `topNav.heading.openMenu` — translations may share."
   },
   "@astryx.tabList.label": {
@@ -635,26 +635,6 @@
     "defaultMessage": "清除排序",
     "description": "Screen-reader-only label on a column header button that will remove the current sort. \"Clear\" here means remove, not transparent. Part of the sort set."
   },
-  "@astryx.table.sort.direction.ascending": {
-    "defaultMessage": "升序",
-    "description": "Localized direction word interpolated as `direction` into @astryx.table.sort.sortedBy and @astryx.table.sort.sortedByWithPriority."
-  },
-  "@astryx.table.sort.direction.descending": {
-    "defaultMessage": "降序",
-    "description": "Localized direction word interpolated as `direction` into @astryx.table.sort.sortedBy and @astryx.table.sort.sortedByWithPriority."
-  },
-  "@astryx.table.sort.sortBy": {
-    "defaultMessage": "按 {label} 排序",
-    "description": "Aria label for a sortable Table header button when the column is unsorted. `label` is the column header text."
-  },
-  "@astryx.table.sort.sortedBy": {
-    "defaultMessage": "按 {label} 排序，{direction}",
-    "description": "Aria label for a sorted Table header button. `direction` is the localized direction word from @astryx.table.sort.direction.*."
-  },
-  "@astryx.table.sort.sortedByWithPriority": {
-    "defaultMessage": "按 {label} 排序，{direction}，优先级 {rank, number}/{total, number}",
-    "description": "Aria label for a sorted Table header button in multi-sort. `rank` is the 1-based position of this column in the sort order; `total` is the number of sorted columns."
-  },
   "@astryx.toast.dismiss": {
     "defaultMessage": "关闭通知",
     "description": "Screen-reader-only label on the X button of a Toast (transient notification popup). Distinct from `banner.dismiss` (persistent banner)."
@@ -668,7 +648,7 @@
     "description": "Label on the \"×\" button that removes every token/chip from a Tokenizer input. Imperative verb + determiner \"all\"; short."
   },
   "@astryx.topNav.heading.openMenu": {
-    "defaultMessage": "打开菜单",
+    "defaultMessage": "{hasHeading, select, true {{heading}, } other {}}打开菜单",
     "description": "Screen-reader-only label on the `⋯` overflow button in a TopNav section heading. Kept separate from `sideNav.heading.openMenu` so translations may diverge."
   },
   "@astryx.topNav.landmarkLabel": {
@@ -700,7 +680,7 @@
     "description": "Screen-reader-only fallback name for the breadcrumb trail (e.g. `Home > Section > Page`). Singular in English per ARIA convention; plural is fine if natural in your locale."
   },
   "@astryx.chat.composer.placeholder": {
-    "defaultMessage": "输入消息…",
+    "defaultMessage": "输入消息……",
     "description": "Grey placeholder text inside the empty chat composer textarea. Imperative verb; trailing `…` is one character."
   },
   "@astryx.chat.composerDrawer.label": {
@@ -720,7 +700,7 @@
     "description": "Screen-reader-only fallback name for a keyboard-driven command menu (usually opened with Cmd/Ctrl-K). If unfamiliar, prefer a natural equivalent like \"quick actions\"."
   },
   "@astryx.commandPalette.input.placeholder": {
-    "defaultMessage": "搜索…",
+    "defaultMessage": "搜索……",
     "description": "Grey placeholder inside the CommandPalette's search input. Imperative verb; trailing `…` is one character."
   },
   "@astryx.commandPalette.list.label": {
@@ -872,7 +852,7 @@
     "description": "Screen-reader-only name for the small `⋯` (three-dots) overflow button that opens a menu of additional actions. Very short — sits on a tiny icon button."
   },
   "@astryx.multiSelector.selectPlaceholder": {
-    "defaultMessage": "选择…",
+    "defaultMessage": "选择……",
     "description": "Placeholder on an empty MultiSelector trigger button. Same English as `selector.placeholder` but a separate key — plural phrasing like \"Choose items…\" is fine."
   },
   "@astryx.outline.label": {
@@ -884,7 +864,7 @@
     "description": "Screen-reader-only accessible name for the PowerSearch input (a filter-builder). The visible placeholder is separate; noun form often reads better than the verb."
   },
   "@astryx.powersearch.placeholder": {
-    "defaultMessage": "搜索…",
+    "defaultMessage": "搜索……",
     "description": "Grey placeholder text inside the empty PowerSearch input. Imperative verb; trailing `…` is one character."
   },
   "@astryx.resizable.collapsed": {
@@ -896,7 +876,7 @@
     "description": "Screen-reader-only accessible name for the small draggable divider between two Resizable panels (users drag it to change the split ratio)."
   },
   "@astryx.selector.placeholder": {
-    "defaultMessage": "选择…",
+    "defaultMessage": "选择……",
     "description": "Placeholder text on an empty Selector trigger button (a dropdown). Imperative verb; trailing `…` is one character. Very short — appears on the button face."
   },
   "@astryx.sideNav.heading.dialogLabel": {
@@ -932,7 +912,7 @@
     "description": "Screen-reader-only accessible name for the dropdown dialog opened from a TopNavHeading's overflow menu. Kept separate from the SideNav sibling."
   },
   "@astryx.typeahead.searchPlaceholder": {
-    "defaultMessage": "搜索…",
+    "defaultMessage": "搜索……",
     "description": "Placeholder inside an empty Typeahead input (a search field that suggests results as the user types). Imperative verb; trailing `…` is one character."
   },
   "@astryx.banner.collapse": {
@@ -1376,7 +1356,7 @@
     "description": "Heading for the bucket of available options that have no `group` set, shown only when some options are grouped and some are not so the ungrouped ones still have a heading."
   },
   "@astryx.transferList.searchPlaceholder": {
-    "defaultMessage": "搜索…",
+    "defaultMessage": "搜索……",
     "description": "Placeholder in the single search field that filters both panels of a lab TransferList. Same English as `selector.searchPlaceholder` but a separate key so it can be phrased for two lists."
   },
   "@astryx.transferList.searchLabel": {
@@ -1480,4 +1460,3 @@
     "description": "Default summary on the closed trigger of a lab TransferListSelector, stating how many options are currently chosen. Consumers usually override this with a domain phrase (e.g. \"7 columns\")."
   }
 }
-

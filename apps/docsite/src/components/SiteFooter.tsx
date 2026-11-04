@@ -117,6 +117,8 @@ const FOOTER_LINKS: ReadonlyArray<{
   {label: 'Templates', href: '/templates'},
   {label: 'Themes', href: '/themes'},
   {label: 'Playground', href: '/playground'},
+  {label: 'Storybook', href: '/storybook/'},
+  {label: 'Sandbox', href: '/sandbox/'},
   {label: 'Blog', href: '/blog'},
   {label: 'Community', href: '/community'},
   {label: 'Changelog', href: '/changelog'},

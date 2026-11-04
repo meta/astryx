@@ -15,8 +15,11 @@
  * which is bound to the region's `_size`.
  */
 
+import {useRef} from 'react';
 import {describe, it, expect, vi} from 'vitest';
-import {render, screen, fireEvent, act} from '@testing-library/react';
+import {render, screen, fireEvent, act, waitFor} from '@testing-library/react';
+import {hydrateRoot} from 'react-dom/client';
+import {renderToString} from 'react-dom/server';
 import {ResizeHandle} from './ResizeHandle';
 import type {ResizeHandleProps} from './ResizeHandle';
 import {useResizable} from './useResizable';
@@ -130,6 +133,192 @@ describe('ResizeHandle', () => {
     expect(separator).toHaveAttribute('aria-valuenow', '100');
   });
 
+  it('reports the window basis as aria-valuemax when no maximum is configured; End leaves an unbounded region alone', () => {
+    const previous = window.innerWidth;
+    window.innerWidth = 1000;
+    try {
+      render(<Harness config={{defaultSize: 200, minSize: 100}} />);
+      const separator = getSeparator();
+      // ARIA needs a maximum on a separator with a value: the basis the hook
+      // resolves against stands in for an unbounded one.
+      expect(separator).toHaveAttribute('aria-valuemax', '1000');
+      // End still moves only to a configured maximum: the stand-in says how
+      // far the pane could reach, not where the handle may safely go
+      // (component:Resizable records the End gap).
+      act(() => separator.focus());
+      fireEvent.keyDown(separator, {key: 'End'});
+      expect(separator).toHaveAttribute('aria-valuenow', '200');
+    } finally {
+      window.innerWidth = previous;
+    }
+  });
+
+  it('server-renders an unbounded handle with no maximum and reports the window extent after hydration, with no hydration error', async () => {
+    const previous = window.innerWidth;
+    window.innerWidth = 1000;
+    const probe = <Harness config={{defaultSize: 200, minSize: 100}} />;
+    const serverHTML = renderToString(probe);
+    // The server has no window: no aria-valuemax in the markup.
+    expect(serverHTML).not.toContain('aria-valuemax');
+    const container = document.createElement('div');
+    container.innerHTML = serverHTML;
+    document.body.appendChild(container);
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    const recoverableErrors: unknown[] = [];
+    let root: ReturnType<typeof hydrateRoot>;
+    try {
+      await act(async () => {
+        root = hydrateRoot(container, probe, {
+          onRecoverableError: error => recoverableErrors.push(error),
+        });
+      });
+      // The first client render reads the window through the store and
+      // reports it; a render-time window read would mismatch the server
+      // markup (or, read only once, leave the attribute missing).
+      await waitFor(() =>
+        expect(container.querySelector('[role="separator"]')).toHaveAttribute(
+          'aria-valuemax',
+          '1000',
+        ),
+      );
+      expect(recoverableErrors).toEqual([]);
+      expect(
+        consoleError.mock.calls.filter(call =>
+          String(call[0] ?? '')
+            .toLowerCase()
+            .includes('hydrat'),
+        ),
+      ).toEqual([]);
+    } finally {
+      await act(async () => root!.unmount());
+      consoleError.mockRestore();
+      container.remove();
+      window.innerWidth = previous;
+    }
+  });
+
+  it('never reports a maximum below the current size, and End does not shrink the region', () => {
+    const previous = window.innerWidth;
+    window.innerWidth = 500;
+    try {
+      // A default (or saved, or pre-resize) size larger than the window.
+      render(<Harness config={{defaultSize: 800, minSize: 100}} />);
+      const separator = getSeparator();
+      expect(separator).toHaveAttribute('aria-valuenow', '800');
+      expect(separator).toHaveAttribute('aria-valuemax', '800');
+      act(() => separator.focus());
+      fireEvent.keyDown(separator, {key: 'End'});
+      expect(separator).toHaveAttribute('aria-valuenow', '800');
+    } finally {
+      window.innerWidth = previous;
+    }
+  });
+
+  it('never reports aria-valuemax below aria-valuemin while collapsed in a small window', () => {
+    const previous = window.innerWidth;
+    window.innerWidth = 375;
+    try {
+      render(
+        <Harness
+          config={{defaultSize: 500, minSize: 400, collapsible: true}}
+        />,
+      );
+      const separator = getSeparator();
+      act(() => separator.focus());
+      fireEvent.keyDown(separator, {key: 'Enter'});
+      expect(separator).toHaveAttribute('aria-valuetext', 'Collapsed');
+      expect(separator).toHaveAttribute('aria-valuemin', '400');
+      expect(
+        Number(separator.getAttribute('aria-valuemax')),
+      ).toBeGreaterThanOrEqual(400);
+    } finally {
+      window.innerWidth = previous;
+    }
+  });
+
+  it('reports the window height, not the width, for an unbounded vertical region', () => {
+    const previousWidth = window.innerWidth;
+    const previousHeight = window.innerHeight;
+    window.innerWidth = 1000;
+    window.innerHeight = 700;
+    try {
+      render(
+        <Harness
+          config={{defaultSize: 200, minSize: 100, direction: 'vertical'}}
+          handleProps={{direction: 'vertical'}}
+        />,
+      );
+      const separator = getSeparator();
+      expect(separator).toHaveAttribute('aria-valuemax', '700');
+    } finally {
+      window.innerWidth = previousWidth;
+      window.innerHeight = previousHeight;
+    }
+  });
+
+  it('reports the container basis as aria-valuemax while a percentage bound already observes it', () => {
+    function ContainerHarness() {
+      const containerRef = useRef<HTMLDivElement>(null);
+      const region = useResizable({
+        defaultSize: 200,
+        minSize: '10%',
+        containerRef,
+      });
+      return (
+        <div ref={containerRef}>
+          <ResizeHandle resizable={region.props} label="Resize" />
+        </div>
+      );
+    }
+    // jsdom has no ResizeObserver; a stub lets the hook subscribe, and the
+    // content box is measured through clientWidth minus padding.
+    class StubResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', StubResizeObserver);
+    const clientWidth = vi
+      .spyOn(HTMLElement.prototype, 'clientWidth', 'get')
+      .mockReturnValue(640);
+    const computedStyle = vi.spyOn(window, 'getComputedStyle').mockReturnValue({
+      paddingTop: '0px',
+      paddingBottom: '0px',
+      paddingLeft: '0px',
+      paddingRight: '0px',
+    } as unknown as CSSStyleDeclaration);
+    try {
+      render(<ContainerHarness />);
+      expect(getSeparator()).toHaveAttribute('aria-valuemax', '640');
+    } finally {
+      clientWidth.mockRestore();
+      computedStyle.mockRestore();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('reports no aria-valuemax for an unbounded pixel-only region in a container, which stays unobserved', () => {
+    function ContainerHarness() {
+      const containerRef = useRef<HTMLDivElement>(null);
+      const region = useResizable({
+        defaultSize: 200,
+        minSize: 100,
+        containerRef,
+      });
+      return (
+        <div ref={containerRef}>
+          <ResizeHandle resizable={region.props} label="Resize" />
+        </div>
+      );
+    }
+    render(<ContainerHarness />);
+    // component:Resizable Performance: atomic pixel paths add no observer, so
+    // the hook never measures this container and reports no stand-in.
+    expect(getSeparator()).not.toHaveAttribute('aria-valuemax');
+  });
+
   it('jumps to the maximum on End', () => {
     render(<Harness />);
     const separator = getSeparator();
@@ -202,6 +391,379 @@ describe('ResizeHandle', () => {
     expect(separator).toHaveAttribute('aria-valuetext', 'Collapsed');
   });
 
+  it('restores the previous size, not the minimum, when Enter reopens a collapsed pane', () => {
+    render(
+      <Harness
+        config={{
+          defaultSize: 300,
+          minSize: 100,
+          maxSize: 400,
+          collapsible: true,
+        }}
+      />,
+    );
+    const separator = getSeparator();
+    act(() => separator.focus());
+    expect(separator).toHaveAttribute('aria-valuenow', '300');
+    fireEvent.keyDown(separator, {key: 'Enter'});
+    expect(separator).toHaveAttribute('aria-valuetext', 'Collapsed');
+    fireEvent.keyDown(separator, {key: 'Enter'});
+    expect(separator).not.toHaveAttribute('aria-valuetext');
+    expect(separator).toHaveAttribute('aria-valuenow', '300');
+  });
+
+  it('restores the previous size, not the minimum, when a double-click reopens a collapsed pane', () => {
+    render(
+      <Harness
+        config={{
+          defaultSize: 300,
+          minSize: 100,
+          maxSize: 400,
+          collapsible: true,
+        }}
+      />,
+    );
+    const separator = getSeparator();
+    expect(separator).toHaveAttribute('aria-valuenow', '300');
+    fireEvent.doubleClick(separator);
+    expect(separator).toHaveAttribute('aria-valuetext', 'Collapsed');
+    fireEvent.doubleClick(separator);
+    expect(separator).not.toHaveAttribute('aria-valuetext');
+    expect(separator).toHaveAttribute('aria-valuenow', '300');
+  });
+
+  it('reopens on a double-click even when the minimum size sits below the collapse threshold', () => {
+    render(
+      <Harness
+        config={{
+          defaultSize: 200,
+          minSize: 20,
+          maxSize: 400,
+          collapsible: true,
+          collapsedSize: 50,
+        }}
+      />,
+    );
+    const separator = getSeparator();
+    fireEvent.doubleClick(separator);
+    expect(separator).toHaveAttribute('aria-valuetext', 'Collapsed');
+    fireEvent.doubleClick(separator);
+    expect(separator).not.toHaveAttribute('aria-valuetext');
+    expect(separator).toHaveAttribute('aria-valuenow', '200');
+  });
+
+  it('a grow arrow opens a collapsed pane one step above its minimum; the shrink arrow leaves it collapsed', () => {
+    render(
+      <Harness
+        config={{
+          defaultSize: 200,
+          minSize: 100,
+          maxSize: 400,
+          collapsible: true,
+        }}
+      />,
+    );
+    const separator = getSeparator();
+    act(() => separator.focus());
+    fireEvent.keyDown(separator, {key: 'Enter'});
+    expect(separator).toHaveAttribute('aria-valuetext', 'Collapsed');
+    // Shrinking a collapsed pane changes nothing.
+    fireEvent.keyDown(separator, {key: 'ArrowLeft'});
+    expect(separator).toHaveAttribute('aria-valuetext', 'Collapsed');
+    // One bare grow step would stay below the collapse threshold (40px) and
+    // leave the pane collapsed; instead the arrow opens it one step above the
+    // minimum it announced (100 → 110).
+    fireEvent.keyDown(separator, {key: 'ArrowRight'});
+    expect(separator).not.toHaveAttribute('aria-valuetext');
+    expect(separator).toHaveAttribute('aria-valuenow', '110');
+  });
+
+  it('a grow arrow opens a collapsed pane at its collapsedSize when the minimum sits below it', () => {
+    render(
+      <Harness
+        config={{
+          defaultSize: 200,
+          minSize: 20,
+          maxSize: 400,
+          collapsible: true,
+          collapsedSize: 50,
+        }}
+      />,
+    );
+    const separator = getSeparator();
+    act(() => separator.focus());
+    fireEvent.keyDown(separator, {key: 'Enter'});
+    expect(separator).toHaveAttribute('aria-valuetext', 'Collapsed');
+    // min + step (30) would still be below the 50px threshold, so the pane
+    // opens at the threshold instead.
+    fireEvent.keyDown(separator, {key: 'ArrowRight'});
+    expect(separator).not.toHaveAttribute('aria-valuetext');
+    expect(separator).toHaveAttribute('aria-valuenow', '50');
+  });
+
+  it('a grow arrow opens a collapsed pane in the reversed layout and under RTL too', () => {
+    const rtl = vi
+      .spyOn(window, 'getComputedStyle')
+      .mockImplementation(
+        () => ({direction: 'rtl'}) as unknown as CSSStyleDeclaration,
+      );
+    try {
+      // Reversed + RTL: the pane sits on the right and grows to the left on
+      // screen, which under RTL is ArrowRight again.
+      render(
+        <Harness
+          config={{
+            defaultSize: 200,
+            minSize: 100,
+            maxSize: 400,
+            collapsible: true,
+          }}
+          handleProps={{isReversed: true}}
+        />,
+      );
+      const separator = getSeparator();
+      act(() => separator.focus());
+      fireEvent.keyDown(separator, {key: 'Enter'});
+      expect(separator).toHaveAttribute('aria-valuetext', 'Collapsed');
+      fireEvent.keyDown(separator, {key: 'ArrowLeft'});
+      expect(separator).toHaveAttribute('aria-valuetext', 'Collapsed');
+      fireEvent.keyDown(separator, {key: 'ArrowRight'});
+      expect(separator).not.toHaveAttribute('aria-valuetext');
+      expect(separator).toHaveAttribute('aria-valuenow', '110');
+    } finally {
+      rtl.mockRestore();
+    }
+  });
+
+  it('in a reversed layout, ArrowLeft opens a collapsed pane and ArrowRight leaves it collapsed', () => {
+    // Reversed: the pane sits on the right and grows to the left.
+    render(
+      <Harness
+        config={{
+          defaultSize: 200,
+          minSize: 100,
+          maxSize: 400,
+          collapsible: true,
+        }}
+        handleProps={{isReversed: true}}
+      />,
+    );
+    const separator = getSeparator();
+    act(() => separator.focus());
+    fireEvent.keyDown(separator, {key: 'Enter'});
+    expect(separator).toHaveAttribute('aria-valuetext', 'Collapsed');
+    fireEvent.keyDown(separator, {key: 'ArrowRight'});
+    expect(separator).toHaveAttribute('aria-valuetext', 'Collapsed');
+    fireEvent.keyDown(separator, {key: 'ArrowLeft'});
+    expect(separator).not.toHaveAttribute('aria-valuetext');
+    expect(separator).toHaveAttribute('aria-valuenow', '110');
+  });
+
+  it('under RTL, ArrowLeft opens a collapsed pane and ArrowRight leaves it collapsed', () => {
+    const rtl = vi
+      .spyOn(window, 'getComputedStyle')
+      .mockImplementation(
+        () => ({direction: 'rtl'}) as unknown as CSSStyleDeclaration,
+      );
+    try {
+      // Not reversed, right-to-left: the pane sits on the right and grows
+      // toward the left edge of the screen.
+      render(
+        <Harness
+          config={{
+            defaultSize: 200,
+            minSize: 100,
+            maxSize: 400,
+            collapsible: true,
+          }}
+        />,
+      );
+      const separator = getSeparator();
+      act(() => separator.focus());
+      fireEvent.keyDown(separator, {key: 'Enter'});
+      expect(separator).toHaveAttribute('aria-valuetext', 'Collapsed');
+      fireEvent.keyDown(separator, {key: 'ArrowRight'});
+      expect(separator).toHaveAttribute('aria-valuetext', 'Collapsed');
+      fireEvent.keyDown(separator, {key: 'ArrowLeft'});
+      expect(separator).not.toHaveAttribute('aria-valuetext');
+      expect(separator).toHaveAttribute('aria-valuenow', '110');
+    } finally {
+      rtl.mockRestore();
+    }
+  });
+
+  it('with snap points, an arrow moves to the adjacent point in its direction and Shift moves two, clamped to the ends', () => {
+    render(
+      <Harness
+        config={{
+          defaultSize: 200,
+          minSize: 100,
+          maxSize: 400,
+          snaps: [100, 200, 300, 400],
+        }}
+      />,
+    );
+    const separator = getSeparator();
+    act(() => separator.focus());
+    // A 10px step would snap straight back to 200; the arrow reaches the
+    // next point instead.
+    fireEvent.keyDown(separator, {key: 'ArrowRight'});
+    expect(separator).toHaveAttribute('aria-valuenow', '300');
+    fireEvent.keyDown(separator, {key: 'ArrowLeft'});
+    expect(separator).toHaveAttribute('aria-valuenow', '200');
+    fireEvent.keyDown(separator, {key: 'ArrowRight', shiftKey: true});
+    expect(separator).toHaveAttribute('aria-valuenow', '400');
+    // Already at the last point: the grow arrow changes nothing.
+    fireEvent.keyDown(separator, {key: 'ArrowRight'});
+    expect(separator).toHaveAttribute('aria-valuenow', '400');
+    // Shift past the first point clamps to it.
+    fireEvent.keyDown(separator, {key: 'ArrowLeft', shiftKey: true});
+    expect(separator).toHaveAttribute('aria-valuenow', '200');
+    fireEvent.keyDown(separator, {key: 'ArrowLeft', shiftKey: true});
+    expect(separator).toHaveAttribute('aria-valuenow', '100');
+    fireEvent.keyDown(separator, {key: 'ArrowLeft'});
+    expect(separator).toHaveAttribute('aria-valuenow', '100');
+  });
+
+  it('with snap points past the bounds, a point beyond maxSize or minSize counts as that bound', () => {
+    render(
+      <Harness
+        config={{
+          defaultSize: 200,
+          minSize: 100,
+          maxSize: 400,
+          snaps: [50, 100, 200, 300, 450],
+        }}
+      />,
+    );
+    const separator = getSeparator();
+    act(() => separator.focus());
+    fireEvent.keyDown(separator, {key: 'End'});
+    expect(separator).toHaveAttribute('aria-valuenow', '400');
+    fireEvent.keyDown(separator, {key: 'ArrowLeft'});
+    expect(separator).toHaveAttribute('aria-valuenow', '300');
+    // The 450 point counts as the 400 bound.
+    fireEvent.keyDown(separator, {key: 'ArrowRight'});
+    expect(separator).toHaveAttribute('aria-valuenow', '400');
+    fireEvent.keyDown(separator, {key: 'Home'});
+    expect(separator).toHaveAttribute('aria-valuenow', '100');
+    // The 50 point counts as the 100 bound: nothing below it.
+    fireEvent.keyDown(separator, {key: 'ArrowLeft'});
+    expect(separator).toHaveAttribute('aria-valuenow', '100');
+  });
+
+  it('with snap points, the arrows follow the reversed layout and the reading direction', () => {
+    const rtl = vi
+      .spyOn(window, 'getComputedStyle')
+      .mockImplementation(
+        () => ({direction: 'rtl'}) as unknown as CSSStyleDeclaration,
+      );
+    try {
+      // Reversed under RTL: the two inversions cancel, so ArrowRight grows.
+      render(
+        <Harness
+          config={{
+            defaultSize: 200,
+            minSize: 100,
+            maxSize: 400,
+            snaps: [100, 200, 300, 400],
+          }}
+          handleProps={{isReversed: true}}
+        />,
+      );
+      const separator = getSeparator();
+      act(() => separator.focus());
+      fireEvent.keyDown(separator, {key: 'ArrowRight'});
+      expect(separator).toHaveAttribute('aria-valuenow', '300');
+      fireEvent.keyDown(separator, {key: 'ArrowLeft'});
+      expect(separator).toHaveAttribute('aria-valuenow', '200');
+    } finally {
+      rtl.mockRestore();
+    }
+  });
+
+  it('with snap points in a reversed layout, ArrowLeft moves to the next point and ArrowRight to the previous', () => {
+    render(
+      <Harness
+        config={{
+          defaultSize: 200,
+          minSize: 100,
+          maxSize: 400,
+          snaps: [100, 200, 300, 400],
+        }}
+        handleProps={{isReversed: true}}
+      />,
+    );
+    const separator = getSeparator();
+    act(() => separator.focus());
+    fireEvent.keyDown(separator, {key: 'ArrowLeft'});
+    expect(separator).toHaveAttribute('aria-valuenow', '300');
+    fireEvent.keyDown(separator, {key: 'ArrowRight'});
+    expect(separator).toHaveAttribute('aria-valuenow', '200');
+  });
+
+  it('with snap points, the grow arrow opens a collapsed pane at the snap point nearest one step above its minimum', () => {
+    render(
+      <Harness
+        config={{
+          defaultSize: 200,
+          minSize: 100,
+          maxSize: 400,
+          collapsible: true,
+          snaps: [100, 200, 300, 400],
+        }}
+      />,
+    );
+    const separator = getSeparator();
+    act(() => separator.focus());
+    fireEvent.keyDown(separator, {key: 'Enter'});
+    expect(separator).toHaveAttribute('aria-valuetext', 'Collapsed');
+    // min + step is 110; the region can rest only on a point, so it opens
+    // on the nearest one (100).
+    fireEvent.keyDown(separator, {key: 'ArrowRight'});
+    expect(separator).not.toHaveAttribute('aria-valuetext');
+    expect(separator).toHaveAttribute('aria-valuenow', '100');
+    // From there the arrows move between points.
+    fireEvent.keyDown(separator, {key: 'ArrowRight'});
+    expect(separator).toHaveAttribute('aria-valuenow', '200');
+  });
+
+  it('a grow arrow opens a hand-built collapsed region one step above its minimum', () => {
+    const props: ResizableProps = {
+      ...makeResizable(),
+      _isCollapsed: true,
+      _size: 0,
+      _collapsible: true,
+    };
+    render(<ResizeHandle resizable={props} label="Resize" />);
+    const separator = getSeparator();
+    act(() => separator.focus());
+    fireEvent.keyDown(separator, {key: 'ArrowRight'});
+    // The same move as the hook's own region: minimum plus one step.
+    expect(props._onResizeMove).toHaveBeenCalledWith(props._minSizePx + 10);
+  });
+
+  it('reopens on Enter even when the minimum size sits below the collapse threshold', () => {
+    render(
+      <Harness
+        config={{
+          defaultSize: 200,
+          minSize: 20,
+          maxSize: 400,
+          collapsible: true,
+          collapsedSize: 50,
+        }}
+      />,
+    );
+    const separator = getSeparator();
+    act(() => separator.focus());
+    fireEvent.keyDown(separator, {key: 'Enter'});
+    expect(separator).toHaveAttribute('aria-valuetext', 'Collapsed');
+    fireEvent.keyDown(separator, {key: 'Enter'});
+    expect(separator).not.toHaveAttribute('aria-valuetext');
+    expect(separator).toHaveAttribute('aria-valuenow', '200');
+  });
+
   it('keeps aria-valuenow >= aria-valuemin and announces "Collapsed" while collapsed', () => {
     render(
       <Harness
@@ -243,7 +805,8 @@ describe('ResizeHandle', () => {
 
     fireEvent.keyDown(separator, {key: 'Enter'}); // expand again
     expect(separator).not.toHaveAttribute('aria-valuetext');
-    expect(separator).toHaveAttribute('aria-valuenow', '100');
+    // Back to the size it had before collapsing, not the minimum.
+    expect(separator).toHaveAttribute('aria-valuenow', '200');
   });
 
   // --- Disabled guard ---
@@ -383,6 +946,111 @@ describe('ResizeHandle', () => {
     expect(resizable._onResizeMove).toHaveBeenCalledTimes(1);
     expect(document.body.style.cursor).toBe('');
     expect(document.body.style.userSelect).toBe('');
+  });
+
+  // --- Persistence ---
+
+  it.each([
+    ['pointerup', fireEvent.pointerUp],
+    ['pointercancel', fireEvent.pointerCancel],
+    ['lostpointercapture', fireEvent.lostPointerCapture],
+  ])('saves the size once, when a drag ends on %s', (name, finish) => {
+    // Every write reaches each other open document of the origin as a
+    // `storage` event, so the sizes a drag passes through stay out of
+    // storage: only the size it ends on is written.
+    const key = `astryx-resizable:drag-${name}`;
+    render(
+      <Harness
+        config={{
+          defaultSize: 200,
+          minSize: 100,
+          maxSize: 400,
+          autoSaveId: `drag-${name}`,
+        }}
+      />,
+    );
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    const writes = () => setItem.mock.calls.filter(([k]) => k === key);
+    try {
+      const hitArea = getHitArea();
+      fireEvent.pointerDown(hitArea, {pointerId: 1, clientX: 0, clientY: 0});
+      for (let x = 1; x <= 30; x++) {
+        fireEvent.pointerMove(hitArea, {pointerId: 1, clientX: x, clientY: 0});
+      }
+      expect(getSeparator()).toHaveAttribute('aria-valuenow', '230');
+      expect(writes()).toHaveLength(0);
+
+      finish(hitArea, {pointerId: 1, clientX: 30, clientY: 0});
+      expect(writes()).toEqual([
+        [key, JSON.stringify({size: 230, isCollapsed: false})],
+      ]);
+    } finally {
+      setItem.mockRestore();
+      localStorage.removeItem(key);
+    }
+  });
+
+  it('saves the dragged size once when the split unmounts mid-drag', () => {
+    // The handle's own cleanup ends the gesture, so the size it reached
+    // still reaches storage without a per-move write.
+    const key = 'astryx-resizable:drag-unmount';
+    const {unmount} = render(
+      <Harness
+        config={{
+          defaultSize: 200,
+          minSize: 100,
+          maxSize: 400,
+          autoSaveId: 'drag-unmount',
+        }}
+      />,
+    );
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    const writes = () => setItem.mock.calls.filter(([k]) => k === key);
+    try {
+      const hitArea = getHitArea();
+      fireEvent.pointerDown(hitArea, {pointerId: 1, clientX: 0, clientY: 0});
+      for (let x = 1; x <= 30; x++) {
+        fireEvent.pointerMove(hitArea, {pointerId: 1, clientX: x, clientY: 0});
+      }
+      expect(getSeparator()).toHaveAttribute('aria-valuenow', '230');
+      expect(writes()).toHaveLength(0);
+
+      unmount();
+      expect(writes()).toEqual([
+        [key, JSON.stringify({size: 230, isCollapsed: false})],
+      ]);
+    } finally {
+      setItem.mockRestore();
+      localStorage.removeItem(key);
+    }
+  });
+
+  it('still saves each keyboard step at once', () => {
+    const key = 'astryx-resizable:keyboard-steps';
+    render(
+      <Harness
+        config={{
+          defaultSize: 200,
+          minSize: 100,
+          maxSize: 400,
+          autoSaveId: 'keyboard-steps',
+        }}
+      />,
+    );
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    try {
+      for (let i = 0; i < 3; i++) {
+        fireEvent.keyDown(getSeparator(), {key: 'ArrowRight'});
+      }
+      expect(
+        setItem.mock.calls
+          .filter(([k]) => k === key)
+          .map(([, value]) => (JSON.parse(value) as {size: number}).size),
+      ).toEqual([210, 220, 230]);
+    } finally {
+      setItem.mockRestore();
+      localStorage.removeItem(key);
+    }
   });
 
   // --- RTL pointer-drag direction ---

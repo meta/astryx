@@ -1,6 +1,13 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
+/**
+ * @input Page content and site-wide metadata
+ * @output Server-rendered document with root-owned optional reachability
+ * @position Docsite root; page shells own the URL-aware info banner
+ */
+
 import type {Metadata} from 'next';
+import {InternalDocsReachabilityProvider} from '../components/InternalDocsPrompt';
 import {Analytics} from '@vercel/analytics/next';
 import {SpeedInsights} from '@vercel/speed-insights/next';
 import './globals.css';
@@ -26,8 +33,7 @@ import {
 // Default social card image: the launch banner that the announcement blog post
 // uses for its cover. Reusing the same branded banner keeps the shared-link
 // preview consistent with the launch creative across the site and the post.
-const OG_IMAGE =
-  '/images/Astryx-Banner.png';
+const OG_IMAGE = '/images/Astryx-Banner.png';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -94,7 +100,11 @@ export default function RootLayout({children}: {children: React.ReactNode}) {
       <body>
         <Analytics />
         <SpeedInsights />
-        <Providers>{children}</Providers>
+        <Providers>
+          <InternalDocsReachabilityProvider>
+            {children}
+          </InternalDocsReachabilityProvider>
+        </Providers>
       </body>
     </html>
   );

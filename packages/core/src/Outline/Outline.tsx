@@ -44,9 +44,16 @@ import type {OutlineItem} from './types';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
-import {useTranslator} from '../i18n';
+import {usePressFeedback} from '../hooks/usePressFeedback';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Outline/Outline.generated';
+
+registerEnglishFallback(english);
 export type {OutlineItem} from './types';
 
 export interface OutlineProps extends BaseProps<HTMLElement> {
@@ -198,7 +205,6 @@ const styles = stylex.create({
     },
     display: 'flex',
     fontWeight: fontWeightVars['--font-weight-normal'],
-    outline: 'none',
     position: 'relative',
     textAlign: 'start',
     textDecoration: 'none',
@@ -256,6 +262,28 @@ function getIndentStyle(level: number) {
       return indentStyles.level3;
     default:
       return indentStyles.level4;
+  }
+}
+
+/**
+ * A followed in-page link moves the sequential focus starting point to its
+ * target, so the next Tab continues inside that section. Outline cancels the
+ * link's default to scroll itself, so it restores that by focusing the target
+ * without scrolling (WCAG 2.4.3). A target that is not focusable becomes
+ * programmatically focusable only.
+ */
+function moveFocusTo(id: string) {
+  const target = document.getElementById(id);
+  if (target == null) {
+    return;
+  }
+  // A target that already takes focus (a link, a button) keeps its place in
+  // the Tab order; only one that refuses focus is made focusable by script.
+  target.focus({preventScroll: true});
+  // A caller's own tabindex is never overwritten.
+  if (document.activeElement !== target && !target.hasAttribute('tabindex')) {
+    target.setAttribute('tabindex', '-1');
+    target.focus({preventScroll: true});
   }
 }
 
@@ -324,7 +352,8 @@ export function Outline({
   'data-testid': testId,
   ...props
 }: OutlineProps) {
-  const t = useTranslator();
+  const pressable = usePressFeedback();
+  const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.outline.label');
   const rootRef = useRef<HTMLElement | null>(null);
   const LinkComponent = useLinkComponent();
@@ -391,6 +420,7 @@ export function Outline({
   const navigate = (id: string) => {
     if (scrollTo(id)) {
       window.history.pushState(null, '', `#${id}`);
+      moveFocusTo(id);
     }
   };
 
@@ -466,6 +496,7 @@ export function Outline({
                 aria-current={isActive ? 'location' : undefined}
                 onClick={handleClick(item.id)}
                 onKeyDown={handleKeyDown(item.id)}
+                {...pressable}
                 {...mergeProps(
                   themeProps('outline-item', {
                     active: isActive ? 'active' : null,

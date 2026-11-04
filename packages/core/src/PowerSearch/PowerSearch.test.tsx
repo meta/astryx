@@ -9,7 +9,7 @@
  * SYNC: When PowerSearch.tsx changes, update tests to match
  */
 
-import {useState} from 'react';
+import {StrictMode, useState} from 'react';
 import {describe, it, expect, vi, beforeAll, afterAll, afterEach} from 'vitest';
 import {
   render,
@@ -163,6 +163,117 @@ describe('PowerSearch', () => {
     });
 
     expect(screen.getByRole('combobox')).toHaveFocus();
+  });
+
+  it('clears all added filters when the clear button is clicked', async () => {
+    const user = userEvent.setup();
+    render(<PowerSearchWrapper config={config} />);
+    const input = screen.getByRole('combobox', {name: 'Search'});
+    await user.type(input, 'status open');
+    await user.click(
+      await screen.findByRole('option', {name: 'Status is Open', hidden: true}),
+    );
+    await user.type(input, 'title login');
+    await user.click(
+      await screen.findByRole('option', {
+        name: 'Title contains "login"',
+        hidden: true,
+      }),
+    );
+
+    await user.type(input, 'status closed');
+    await user.click(
+      await screen.findByRole('option', {
+        name: 'Status is Closed',
+        hidden: true,
+      }),
+    );
+
+    expect(screen.getAllByRole('button', {name: /^Remove /})).toHaveLength(3);
+
+    await user.click(screen.getByRole('button', {name: 'Clear all'}));
+
+    expect(screen.queryAllByRole('button', {name: /^Remove /})).toHaveLength(0);
+    expect(
+      screen.queryByRole('button', {name: 'Clear all'}),
+    ).not.toBeInTheDocument();
+  });
+
+  it('clicking the remove button on a filter removes only that filter', async () => {
+    const user = userEvent.setup();
+    render(<PowerSearchWrapper config={config} />);
+    const input = screen.getByRole('combobox', {name: 'Search'});
+    await user.type(input, 'status open');
+    await user.click(
+      await screen.findByRole('option', {name: 'Status is Open', hidden: true}),
+    );
+    await user.type(input, 'title login');
+    await user.click(
+      await screen.findByRole('option', {
+        name: 'Title contains "login"',
+        hidden: true,
+      }),
+    );
+
+    expect(screen.getAllByRole('button', {name: /^Remove /})).toHaveLength(2);
+
+    await user.click(
+      screen.getAllByRole('button', {name: 'Remove Status: is'})[0],
+    );
+
+    expect(screen.getAllByRole('button', {name: /^Remove /})).toHaveLength(1);
+    expect(screen.getByText('login')).toBeInTheDocument();
+  });
+
+  it('Backspace on an empty input removes only the last filter', async () => {
+    const user = userEvent.setup();
+    render(<PowerSearchWrapper config={config} />);
+    const input = screen.getByRole('combobox', {name: 'Search'});
+    await user.type(input, 'status open');
+    await user.click(
+      await screen.findByRole('option', {name: 'Status is Open', hidden: true}),
+    );
+    await user.type(input, 'title login');
+    await user.click(
+      await screen.findByRole('option', {
+        name: 'Title contains "login"',
+        hidden: true,
+      }),
+    );
+
+    expect(screen.getAllByRole('button', {name: /^Remove /})).toHaveLength(2);
+
+    await user.click(input);
+    await user.keyboard('{Backspace}');
+
+    expect(screen.getAllByRole('button', {name: /^Remove /})).toHaveLength(1);
+    expect(screen.getByText('Open')).toBeInTheDocument();
+  });
+
+  it('a read-only field removes no filter, by control or by Backspace', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <PowerSearch
+        config={config}
+        filters={[
+          {
+            field: 'title',
+            operator: 'contains',
+            value: {type: 'string', value: 'login'},
+          },
+        ]}
+        onChange={onChange}
+        isReadOnly
+      />,
+    );
+    expect(
+      screen.queryByRole('button', {name: 'Clear all'}),
+    ).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('button', {name: /^Remove /})).toHaveLength(0);
+    await user.click(screen.getByRole('combobox', {name: 'Search'}));
+    await user.keyboard('{Backspace}');
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   describe('token value truncation (#4759)', () => {
@@ -352,7 +463,7 @@ describe('PowerSearch', () => {
       expect((input as HTMLInputElement).value).toBe('');
     });
 
-    it('keeps the input natively disabled when disabled without a reason', () => {
+    it("keeps the input's tab stop when disabled without a reason", () => {
       render(
         <PowerSearch
           config={config}
@@ -361,7 +472,9 @@ describe('PowerSearch', () => {
           isDisabled
         />,
       );
-      expect(screen.getByRole('combobox')).toBeDisabled();
+      const input = screen.getByRole('combobox');
+      expect(input).not.toBeDisabled();
+      expect(input).toHaveAttribute('aria-disabled', 'true');
     });
   });
 
@@ -388,6 +501,61 @@ describe('PowerSearch', () => {
       );
       await waitFor(() => {
         expect(politeRegion()).toHaveTextContent('5 results');
+      });
+    });
+
+    it('announces Clear all in its own words, "All filters removed" (component:PowerSearch; Tokenizer AR7)', async () => {
+      const onChange = vi.fn();
+      render(
+        <PowerSearch
+          config={config}
+          filters={[
+            {
+              field: 'status',
+              operator: 'is',
+              value: {type: 'enum', value: 'open'},
+            },
+          ]}
+          onChange={onChange}
+        />,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Clear all'}));
+      expect(onChange).toHaveBeenCalledWith([], 'remove', 0);
+      await waitFor(() => {
+        expect(politeRegion()).toHaveTextContent('All filters removed');
+      });
+      // Not the Tokenizer's own words.
+      expect(politeRegion()).not.toHaveTextContent('All items removed');
+    });
+
+    it('does not announce the result count present on mount under StrictMode, only a later change', async () => {
+      // StrictMode replays the mount effects: a mounted-flag guard is reset by
+      // the replay and speaks the initial count unprompted; comparing against
+      // the last announced text does not.
+      const {rerender} = render(
+        <StrictMode>
+          <PowerSearch
+            config={config}
+            filters={[]}
+            onChange={() => {}}
+            resultCount={12}
+          />
+        </StrictMode>,
+      );
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(politeRegion()?.textContent ?? '').toBe('');
+      rerender(
+        <StrictMode>
+          <PowerSearch
+            config={config}
+            filters={[]}
+            onChange={() => {}}
+            resultCount={1}
+          />
+        </StrictMode>,
+      );
+      await waitFor(() => {
+        expect(politeRegion()).toHaveTextContent('1 result');
       });
     });
 
@@ -464,6 +632,68 @@ describe('PowerSearch', () => {
         expect(politeRegion()?.textContent).toMatch(/\d+ results?/);
       });
     });
+  });
+});
+
+describe('filter token focus', () => {
+  it('opens the editor with the mouse without opening search suggestions', async () => {
+    const user = userEvent.setup();
+    render(
+      <PowerSearch
+        config={config}
+        filters={[
+          {
+            field: 'status',
+            operator: 'is',
+            value: {type: 'enum', value: 'open'},
+          },
+        ]}
+        onChange={() => {}}
+      />,
+    );
+    const input = screen.getByRole('combobox', {name: 'Search'});
+
+    await user.pointer({
+      target: screen.getByText('Status: is'),
+      keys: '[MouseLeft>]',
+    });
+    expect(input).not.toHaveFocus();
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+    expect(
+      screen.queryByRole('button', {name: 'Apply', hidden: true}),
+    ).toBeNull();
+
+    await user.pointer({keys: '[/MouseLeft]'});
+    expect(
+      await screen.findByRole('button', {name: 'Apply', hidden: true}),
+    ).toBeInTheDocument();
+  });
+
+  it('preserves search entry and token editing with the keyboard', async () => {
+    const user = userEvent.setup();
+    render(
+      <PowerSearch
+        config={config}
+        filters={[
+          {
+            field: 'status',
+            operator: 'is',
+            value: {type: 'enum', value: 'open'},
+          },
+        ]}
+        onChange={() => {}}
+      />,
+    );
+    await user.tab();
+    expect(screen.getByRole('combobox', {name: 'Search'})).toHaveFocus();
+
+    await user.tab({shift: true}); // Remove button
+    await user.tab({shift: true}); // Token label
+    expect(screen.getByRole('button', {name: 'Status: is'})).toHaveFocus();
+    await user.keyboard('{Enter}');
+    expect(
+      await screen.findByRole('button', {name: 'Apply', hidden: true}),
+    ).toBeInTheDocument();
   });
 });
 
@@ -645,9 +875,11 @@ describe('field menu sizing', () => {
     const listbox = screen.getByRole('listbox', {hidden: true});
     const popover = listbox.closest('[popover]');
     expect(popover).not.toBeNull();
-    expect((popover as HTMLElement).style.getPropertyValue('--x-width')).toBe(
-      '480px',
-    );
+    // Clamped to the layer runtime's viewport cap, never to the room beside
+    // the field (spec:AST-059 FR2, FR7).
+    expect(
+      (popover as HTMLElement).style.getPropertyValue('--x-width'),
+    ).toMatch(/^min\(480px, calc\(100vw - /);
   });
 });
 
@@ -728,6 +960,96 @@ describe('field menu grouping', () => {
           {hidden: true},
         ),
       ).toHaveLength(0);
+    });
+  });
+});
+
+describe('field menu highlight under a resting pointer', () => {
+  it('keeps the first field highlighted when the menu opens under the pointer', async () => {
+    const user = userEvent.setup();
+    render(<PowerSearchWrapper config={config} />);
+    const input = screen.getByRole('combobox', {name: 'Search'});
+
+    // Open the field menu from the keyboard; the option that lands under a
+    // resting pointer receives mouseenter but no mousemove.
+    await user.tab();
+    const status = await screen.findByRole('option', {
+      name: 'Status',
+      hidden: true,
+    });
+    const title = screen.getByRole('option', {name: 'Title', hidden: true});
+    expect(input.getAttribute('aria-activedescendant')).toBe(title.id);
+
+    fireEvent.mouseEnter(status);
+    expect(input.getAttribute('aria-activedescendant')).toBe(title.id);
+
+    // Enter acts on the highlighted first field, not the one under the
+    // pointer.
+    await user.keyboard('{Enter}');
+    expect(
+      await screen.findByRole('button', {name: 'Apply', hidden: true}),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('combobox', {name: 'Field', hidden: true}),
+    ).toHaveTextContent('Title');
+  });
+
+  it('moves the highlight when the pointer moves over a field', async () => {
+    const user = userEvent.setup();
+    render(<PowerSearchWrapper config={config} />);
+    const input = screen.getByRole('combobox', {name: 'Search'});
+
+    await user.tab();
+    const status = await screen.findByRole('option', {
+      name: 'Status',
+      hidden: true,
+    });
+    fireEvent.mouseMove(status);
+    expect(input.getAttribute('aria-activedescendant')).toBe(status.id);
+  });
+});
+
+describe('field menu after the search source changes', () => {
+  it('opens the new field menu on the first click after a config change', async () => {
+    const user = userEvent.setup();
+    // A caller that loads field options asynchronously hands PowerSearch a
+    // new config, which builds a new search source.
+    const loadedConfig: PowerSearchConfig = {
+      ...config,
+      fields: [
+        ...config.fields,
+        {
+          key: 'owner',
+          label: 'Owner',
+          defaultOperator: 'is',
+          operators: [{key: 'is', label: 'is', value: {type: 'string'}}],
+        },
+      ],
+    };
+    const renderSearch = (searchConfig: PowerSearchConfig) => (
+      <>
+        <PowerSearch config={searchConfig} filters={[]} onChange={() => {}} />
+        <button type="button">Sort</button>
+      </>
+    );
+    const {rerender} = render(renderSearch(config));
+    const input = screen.getByRole('combobox');
+
+    await user.click(input);
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+    });
+    await user.click(screen.getByRole('button', {name: 'Sort'}));
+    expect(input).toHaveAttribute('aria-expanded', 'false');
+
+    rerender(renderSearch(loadedConfig));
+    await user.click(input);
+
+    await waitFor(() => {
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(
+        screen.getByRole('option', {name: /Owner/, hidden: true}),
+      ).toBeInTheDocument();
     });
   });
 });

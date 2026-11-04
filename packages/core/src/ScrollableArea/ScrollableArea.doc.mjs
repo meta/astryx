@@ -5,7 +5,7 @@ export const docs = {
   name: 'ScrollableArea',
   displayName: 'Scrollable Area',
   category: 'Layout',
-  keywords: ['scroll', 'overflow', 'viewport', 'logical axis', 'keyboard', 'overscroll', 'sticky', 'scrollbar', 'padding', 'full bleed'],
+  keywords: ['scroll', 'overflow', 'viewport', 'logical axis', 'keyboard', 'overscroll', 'sticky', 'scrollbar', 'padding', 'full bleed', 'scrollarea', 'scrollview'],
   usage: {
     description: 'Provides a native scroll viewport and a real observed content box. The viewport enters the tab order only while a requested logical axis is effectively scrollable, and containment applies only to effective axes.',
     bestPractices: [

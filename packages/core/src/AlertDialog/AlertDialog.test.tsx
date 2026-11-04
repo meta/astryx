@@ -93,11 +93,9 @@ describe('AlertDialog', () => {
     onAction: vi.fn(),
   };
 
-  it('renders with alertdialog role', () => {
-    render(<AlertDialog {...defaultProps} />);
-    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
-  });
-
+  // The alertdialog role and the aria-describedby link are asserted by the
+  // Alert Dialog accessibility contract binding (AlertDialog.a11y.test.tsx /
+  // .chromium.spec.ts), not here.
   it('renders title and description', () => {
     render(<AlertDialog {...defaultProps} />);
     expect(screen.getByText('Delete item?')).toBeInTheDocument();
@@ -113,15 +111,6 @@ describe('AlertDialog', () => {
     expect(labelledBy).toBeTruthy();
     const titleEl = document.getElementById(labelledBy!);
     expect(titleEl).toHaveTextContent('Delete item?');
-  });
-
-  it('links description via aria-describedby', () => {
-    render(<AlertDialog {...defaultProps} />);
-    const dialog = screen.getByRole('alertdialog');
-    const describedBy = dialog.getAttribute('aria-describedby');
-    expect(describedBy).toBeTruthy();
-    const descEl = document.getElementById(describedBy!);
-    expect(descEl).toHaveTextContent('This action cannot be undone.');
   });
 
   it('renders cancel and action buttons', () => {

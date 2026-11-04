@@ -30,6 +30,8 @@ import {
   type TokenizerHandle,
   type TokenizerOverflowBehavior,
 } from '../Tokenizer';
+import {TokenizerClearAllMessageContext} from '../Tokenizer/TokenizerClearAllMessageContext';
+import {TokenizerItemRemovableContext} from '../Tokenizer/TokenizerItemRemovableContext';
 import {TypeaheadItem} from '../Typeahead/TypeaheadItem';
 import {Token} from '../Token';
 import {Avatar} from '../Avatar';
@@ -37,8 +39,9 @@ import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import {Icon} from '../Icon';
 import type {IconType} from '../Icon';
 import type {IconName} from '../Icon/globalIconRegistry';
-import type {InputStatus, FieldStatusVariant} from '../Field';
+import type {InputStatus} from '../Field';
 import {usePopover} from '../Popover/usePopover';
+import {layerViewportInset} from '../Layer/layerViewportInset.stylex';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {
   spacingVars,
@@ -57,7 +60,6 @@ import {PowerSearchEditPopover} from './PowerSearchEditPopover';
 import {resolveOperatorLabel} from './resolveOperatorLabel';
 import {themeProps} from '../utils/themeProps';
 import {truncateCharacters} from '../utils/characters';
-import {useTranslator} from '../i18n';
 import {useLocale} from '../i18n/useLocale';
 import type {Locale} from '../i18n/types';
 import type {
@@ -75,6 +77,14 @@ import type {
 } from './types';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import type {FieldStatusPlacement} from '../Field/fieldStatusPlacement';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/PowerSearch/PowerSearch.generated';
+
+registerEnglishFallback(english);
 // =============================================================================
 // Icon mapping for typeahead entries
 // =============================================================================
@@ -117,12 +127,14 @@ const tokenValueStyles = stylex.create({
 const popoverLayerStyles = stylex.create({
   layer: {
     width: 'anchor-size(width)',
-    // Floor for comfortable editing, yielding when the available inline
-    // space cannot fit it, so the editor stays on-screen at narrow viewport
-    // widths (#4761). Percentages resolve against the position-area region
-    // (anchor start edge to viewport end), falling back to the viewport
-    // where area sizing is not honored.
-    minWidth: `min(400px, calc(100% - ${spacingVars['--spacing-4']}))`,
+    // Floor for comfortable editing, clamped by the layer runtime's viewport
+    // cap (spec:AST-059 FR7) rather than by the room beside the anchor; the
+    // runtime flips or slides the editor into view when it does not fit there
+    // (#4761).
+    minWidth: stylex.firstThatWorks(
+      `min(400px, ${layerViewportInset.maxInlineSize})`,
+      `min(400px, ${layerViewportInset.maxInlineSizeFallback})`,
+    ),
   },
 });
 
@@ -409,7 +421,7 @@ export interface PowerSearchProps extends Omit<
    * - 'detached': message floats below as a separate element with spacing
    * @default 'attached'
    */
-  statusVariant?: FieldStatusVariant;
+  statusVariant?: FieldStatusPlacement;
   /** Max width for dropdown menu. */
   menuWidth?: number;
   /** Max display length for filter token values. @default 40 */
@@ -582,7 +594,7 @@ export function PowerSearch({
   const size = useSize(sizeProp, 'md');
   const config = useInternalConfig(configProp);
   const searchSource = usePowerSearchSource(config, maxSearchResults);
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const locale = useLocale();
   const label = labelFromProps ?? t('@astryx.powersearch.label');
   const placeholder =
@@ -730,8 +742,8 @@ export function PowerSearch({
       } else if (change.type === 'remove' && change.item) {
         const auxData = change.item.auxiliaryData as PowerSearchAuxData;
         if (auxData?.filterIndex != null) {
-          const newFilters = filters.filter(
-            (_, i) => i !== auxData.filterIndex,
+          const newFilters = filters.filter((_, i) =>
+            _items.some(item => item.auxiliaryData?.filterIndex === i),
           );
           onChange(newFilters, 'remove', auxData.filterIndex);
         }
@@ -739,6 +751,10 @@ export function PowerSearch({
     },
     [config, filters, onChange, setPopoverState],
   );
+
+  // Tokenizer's Backspace does not go through renderToken. This predicate
+  // locks every token of a read-only field.
+  const isItemRemovable = useCallback(() => !isReadOnly, [isReadOnly]);
 
   // Handle clicking a token to edit
   const handleTokenClick = useCallback(
@@ -752,6 +768,25 @@ export function PowerSearch({
         return;
       }
 
+      // An "empty" operator filter has no value for the built-in editor to
+      // edit: commit it as that editor's save would, the way adding one does,
+      // instead of opening it. A consumer's `empty` Editor override still opens.
+      const operator = config.getOperator(filter.field, filter.operator);
+      if (
+        operator?.value.type === 'empty' &&
+        componentOverrides?.empty?.Editor == null
+      ) {
+        const newFilters = [...filters];
+        newFilters[index] = {
+          field: filter.field,
+          operator: filter.operator,
+          value: {type: 'empty'},
+        };
+        onChange(newFilters, 'edit', index);
+        setPopoverState({type: 'idle'});
+        return;
+      }
+
       setPopoverState({
         type: 'editing',
         filterIndex: index,
@@ -762,7 +797,15 @@ export function PowerSearch({
         },
       });
     },
-    [filters, isReadOnly, isDisabled, setPopoverState],
+    [
+      filters,
+      isReadOnly,
+      isDisabled,
+      config,
+      componentOverrides,
+      onChange,
+      setPopoverState,
+    ],
   );
 
   // Handle popover save
@@ -870,6 +913,15 @@ export function PowerSearch({
           size={size}
           icon={tokenIcon}
           endContent={valueContent}
+          onMouseDown={
+            handleClick
+              ? e => {
+                  // Keep a token press from entering Tokenizer's input-focus
+                  // redirect. Click still edits/removes; Tab entry is unchanged.
+                  e.preventDefault();
+                }
+              : undefined
+          }
           onClick={
             handleClick
               ? (e: React.MouseEvent) => {
@@ -1018,15 +1070,23 @@ export function PowerSearch({
   // Announce result-count changes to screen readers through a polite live
   // region, mirroring the way Typeahead announces its dropdown result count.
   // The count is otherwise only shown visually and stays silent to assistive
-  // tech. Skip the first run so the count already present on mount isn't
-  // announced unprompted — only user-driven changes are spoken.
+  // tech. Only a change after mount is spoken: the guard compares against the
+  // last announced text rather than a mounted flag, so StrictMode's effect
+  // replay (which resets a flag and would speak the count present on mount
+  // unprompted) announces nothing until the count changes.
   const announce = useAnnounce();
-  const hasMountedRef = useRef(false);
+  // PowerSearch words its Clear all as its record does; the field announces
+  // these words instead of Tokenizer's (component:Tokenizer AR7).
+  const clearAllMessage = useMemo(
+    () => t('@astryx.powersearch.allFiltersRemoved'),
+    [t],
+  );
+  const announcedResultCountRef = useRef(resultCountText);
   useEffect(() => {
-    if (!hasMountedRef.current) {
-      hasMountedRef.current = true;
+    if (resultCountText === announcedResultCountRef.current) {
       return;
     }
+    announcedResultCountRef.current = resultCountText;
     if (resultCountText != null) {
       announce(resultCountText);
     }
@@ -1035,6 +1095,7 @@ export function PowerSearch({
   // Build combined endContent from resultCount + endContent props
   const combinedEndContent = useMemo((): React.ReactNode => {
     const resultCountNode =
+      // eslint-disable-next-line @astryx/no-nullish-jsx-guard -- `resultCountText` is a formatted string, not a slot
       resultCountText != null ? (
         <span {...stylex.props(resultCountStyles.text)}>{resultCountText}</span>
       ) : null;
@@ -1058,37 +1119,43 @@ export function PowerSearch({
           popover.triggerRef as React.Ref<HTMLDivElement>,
         )}
         {...themeProps('power-search')}>
-        <Tokenizer
-          handleRef={tokenizerRef}
-          label={label}
-          isLabelHidden={isLabelHidden}
-          searchSource={searchSource}
-          value={tokenizerValue}
-          onChange={handleTokenizerChange}
-          renderToken={renderToken}
-          renderItem={renderItem}
-          maxMenuItems={MAX_BROWSE_MENU_ITEMS}
-          menuWidth={menuWidth}
-          placeholder={filters.length === 0 ? placeholder : ''}
-          hasAutoFocus={hasAutoFocus}
-          hasClear={hasClear && !isReadOnly}
-          startIcon={startIcon}
-          endContent={combinedEndContent}
-          isDisabled={isDisabled}
-          disabledMessage={disabledMessage}
-          size={size}
-          tokenOverflowBehavior={tokenOverflowBehavior}
-          hasEntriesOnFocus
-          debounceMs={0}
-          status={status}
-          statusVariant={statusVariant}
-          onFocus={onFocus}
-          onBlur={onBlur}
-          xstyle={xstyle}
-          className={className}
-          style={style}
-          data-testid={testId}
-        />
+        {/* The field's Clear all announces PowerSearch's own words
+            (component:PowerSearch; component:Tokenizer AR7). */}
+        <TokenizerClearAllMessageContext value={clearAllMessage}>
+          <TokenizerItemRemovableContext value={isItemRemovable}>
+            <Tokenizer
+              handleRef={tokenizerRef}
+              label={label}
+              isLabelHidden={isLabelHidden}
+              searchSource={searchSource}
+              value={tokenizerValue}
+              onChange={handleTokenizerChange}
+              renderToken={renderToken}
+              renderItem={renderItem}
+              maxMenuItems={MAX_BROWSE_MENU_ITEMS}
+              menuWidth={menuWidth}
+              placeholder={filters.length === 0 ? placeholder : ''}
+              hasAutoFocus={hasAutoFocus}
+              hasClear={hasClear && !isReadOnly}
+              startIcon={startIcon}
+              endContent={combinedEndContent}
+              isDisabled={isDisabled}
+              disabledMessage={disabledMessage}
+              size={size}
+              tokenOverflowBehavior={tokenOverflowBehavior}
+              hasEntriesOnFocus
+              debounceMs={0}
+              status={status}
+              statusVariant={statusVariant}
+              onFocus={onFocus}
+              onBlur={onBlur}
+              containerXstyle={xstyle}
+              containerClassName={className}
+              containerStyle={style}
+              data-testid={testId}
+            />
+          </TokenizerItemRemovableContext>
+        </TokenizerClearAllMessageContext>
       </div>
       {popover.render(popoverContent, {
         placement: 'below',

@@ -3,7 +3,8 @@
 'use client';
 /**
  * @file CommandPalette.tsx
- * @input Uses React, Dialog, Layout, CommandPaletteContext, SearchSource, useCombobox, useAnnounce
+ * @input Uses React, Dialog, Layout, CommandPaletteContext, SearchSource,
+ *   useCombobox, useAnnounce, useAnnounceRenderedText
  * @output Exports CommandPalette root component and props
  * @position Core root component; dialog shell with searchSource-driven items
  *
@@ -29,6 +30,7 @@ import type {SearchSource, SearchableItem} from '../Typeahead';
 import {useCombobox} from '../Selector';
 import type {SelectorOptionData} from '../Selector';
 import {CommandPaletteContext} from './CommandPaletteContext';
+import {BusyStartSettleContext} from './busyStartSettle';
 import {CommandPaletteList} from './CommandPaletteList';
 import {CommandPaletteItem} from './CommandPaletteItem';
 import {CommandPaletteGroup} from './CommandPaletteGroup';
@@ -37,7 +39,14 @@ import {CommandPaletteFooter} from './CommandPaletteFooter';
 import {CommandPaletteEmpty} from './CommandPaletteEmpty';
 import type {BaseProps} from '../BaseProps';
 import {useAnnounce} from '../hooks/useAnnounce';
-import {useTranslator} from '../i18n';
+import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/CommandPalette/CommandPalette.generated';
+
+registerEnglishFallback(english);
 
 export interface CommandPaletteProps<
   T extends SearchableItem = SearchableItem,
@@ -78,7 +87,9 @@ export interface CommandPaletteProps<
 
   /**
    * Per-item render function. Receives the item and whether it is currently selected.
-   * Auto-grouping by `auxiliaryData.group` is preserved.
+   * Return non-interactive presentation content; buttons and links cannot be
+   * nested inside the rendered option. Auto-grouping by `auxiliaryData.group`
+   * is preserved.
    * When omitted, renders each item's `label` text.
    */
   renderItem?: (item: T, isSelected: boolean) => ReactNode;
@@ -253,9 +264,10 @@ function ItemRenderer<T extends SearchableItem>({
  * Uses `searchSource` for all search logic — same interface as Typeahead.
  * For static lists, use `createStaticSource` from `@astryxdesign/core/Typeahead`.
  *
- * Keyboard navigation is handled by `useCombobox` from Selector,
- * ensuring consistent arrow key, Home/End, Enter, and Escape behavior
- * across all combobox-pattern components.
+ * Keyboard navigation is handled by `useCombobox` from Selector for arrows,
+ * PageUp/PageDown, and Enter. Home/End remain native caret keys. Modal Escape
+ * dismissal delegates to Dialog's shared layer stack so nested surfaces handle
+ * the first press.
  *
  * Input and footer are rendered by default — only pass them to replace the defaults.
  *
@@ -291,7 +303,7 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
   maxHeight = 480,
   ...rest
 }: CommandPaletteProps<T>) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.commandPalette.label');
   const emptySearchText =
     emptySearchTextFromProps ?? t('@astryx.commandPalette.emptySearch');
@@ -311,12 +323,20 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
     useOptimistic(searchResults);
   const isBusy = isPending;
   const searchVersionRef = useRef(0);
+  const emptyStateRef = useRef<HTMLDivElement>(null);
+  const settleBusyAnnouncementRef = useRef<(() => void) | null>(null);
+  const registerBusyAnnouncementSettle = useCallback(
+    (settle: (() => void) | null) => {
+      settleBusyAnnouncementRef.current = settle;
+    },
+    [],
+  );
 
-  // Announce search status to screen readers through the shared polite live
+  // Announce search results to screen readers through the shared polite live
   // region (comboboxes-7 announce path, mirroring Selector / BaseTypeahead).
-  // The busy spinner and the empty states are otherwise purely visual, so a
-  // screen-reader user typing a query would hear nothing when loading starts
-  // or results disappear.
+  // The empty states are otherwise purely visual, so a screen-reader user
+  // typing a query would hear nothing when results disappear. The busy start
+  // is announced by CommandPaletteInput.
   const announce = useAnnounce();
 
   const value = controlledValue ?? internalValue;
@@ -393,17 +413,16 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
     (query: string) => {
       searchSource.cancel?.();
       const version = ++searchVersionRef.current;
+      // A highlight belongs to the query that created it. Clear it before any
+      // optimistic narrowing so aria-activedescendant never shifts to a
+      // different command at the same index while the next result set loads.
+      combobox.setHighlightedIndex(-1);
 
       startTransition(async () => {
         const isBootstrap = query === '';
 
-        // Loading started for a user query: tell screen-reader users the
-        // spinner appeared. The polite region coalesces rapid updates, so for
-        // fast sources the result-count announcement below simply replaces
-        // this instead of stacking one "Loading" per keystroke.
-        if (!isBootstrap) {
-          announce(t('@astryx.commandPalette.loading'));
-        }
+        // The busy start ("Loading") is announced by CommandPaletteInput,
+        // from a region inside the palette's dialog (spec:AST-086 FR8, FR3).
 
         // Client-filter previous results for instant narrowing while fetch is in flight
         if (!isBootstrap && searchResults.length > 0) {
@@ -422,6 +441,12 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
         const items = await Promise.resolve(result);
 
         if (searchVersionRef.current === version) {
+          if (!isBootstrap) {
+            // This query's outcome is announced below (a count) or from the
+            // rendered empty state; a busy start not yet announced would
+            // follow it, so the input drops it (spec:AST-086 FR8).
+            settleBusyAnnouncementRef.current?.();
+          }
           // Commit query and results together
           setSearch(query);
           setOptimisticResults(items);
@@ -429,16 +454,12 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
 
           // Announce the outcome from the search commit (not a reactive
           // effect), matching Selector / BaseTypeahead: exactly one
-          // announcement per committed query, and the version check above
-          // already discards stale keystrokes. Bootstrap stays silent — the
-          // same role PowerSearch's mount guard plays — so opening the
-          // palette announces nothing; clearing the query only clears any
-          // lingering status text.
+          // announcement per committed non-empty query. Empty results are
+          // announced from their rendered content below so a caller-supplied
+          // ReactNode reaches assistive technology as written.
           if (isBootstrap) {
             announce('');
-          } else if (items.length === 0) {
-            announce(t('@astryx.commandPalette.noResultsFor', {query}));
-          } else {
+          } else if (items.length > 0) {
             announce(
               t('@astryx.commandPalette.resultCount', {count: items.length}),
             );
@@ -494,14 +515,19 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
     }
   }, [isOpen]);
 
-  // Wrap combobox's onKeyDown to intercept Escape (close palette) and
-  // Enter on highlight (select + close), since we're not using combobox's
-  // built-in open/close lifecycle.
+  // Wrap combobox's onKeyDown to preserve inline-preview Escape handling and
+  // select + close on Enter. Modal Escape stays unclaimed here so Dialog's
+  // shared dismissal stack can route it to the topmost surface.
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       if (e.key === 'Escape') {
-        e.preventDefault();
-        handleClose();
+        // Modal CommandPalette delegates Escape to Dialog's shared dismissal
+        // stack so a nested layer handles the first press. Inline previews do
+        // not join that stack, so preserve their local close behavior.
+        if (isInline) {
+          e.preventDefault();
+          handleClose();
+        }
         return;
       }
       if (e.key === 'Enter') {
@@ -518,13 +544,18 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
         }
         return;
       }
+      // Home and End remain native caret-movement keys for this editable
+      // combobox. PageUp/PageDown provide first/last result navigation.
+      if (e.key === 'Home' || e.key === 'End') {
+        return;
+      }
       // Space should type in the input, not trigger selection
       if (e.key === ' ') {
         return;
       }
       combobox.onKeyDown(e);
     },
-    [combobox, handleClose, selectableItems, selectItem],
+    [combobox, handleClose, isInline, selectableItems, selectItem],
   );
 
   // Hover highlight is owned here by a single delegated handler on the list
@@ -599,20 +630,44 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
     ],
   );
 
-  // `search` is the committed query the on-screen results correspond to (it
-  // still holds the previous query while a transition is pending). Keeping both
-  // flags ungated by `isPending` makes them exhaustive over the empty case, so
-  // the empty state is never unmounted and re-added mid-search (which flashed).
-  const showEmptyBootstrap = search === '' && optimisticResults.length === 0;
-  const showEmptySearch = search !== '' && optimisticResults.length === 0;
+  // "No query" is the field's current value (`optimisticSearch`), so the
+  // bootstrap text never shows over a query the person has typed
+  // (component:CommandPaletteEmpty FR2). The search-empty text belongs to a
+  // committed query (`search`, which still holds the previous query while a
+  // transition is pending): it stays mounted across keystrokes after a query
+  // settled empty, so it never flashes. While the first query is pending and
+  // nothing is committed, neither text shows: the result surface keeps the
+  // Empty container's size with no message, so the dialog does not jump, and
+  // the Input's Loading spinner is the indicator (component:CommandPalette
+  // FR1 and its Pending search state row).
+  const hasQuery = optimisticSearch !== '';
+  const showEmptyBootstrap = !hasQuery && optimisticResults.length === 0;
+  const showEmptySearch =
+    hasQuery && search !== '' && optimisticResults.length === 0;
+  // Announce only once the search settles: while it is pending, optimistic
+  // narrowing can empty the list before the source answers, which would
+  // speak "No results" early or wrongly.
+  useAnnounceRenderedText(emptyStateRef, showEmptySearch && !isPending, search);
 
   let listContent: ReactNode;
   if (showEmptyBootstrap) {
     listContent = (
-      <CommandPaletteEmpty>{emptyBootstrapText}</CommandPaletteEmpty>
+      <CommandPaletteEmpty ref={emptyStateRef}>
+        {emptyBootstrapText}
+      </CommandPaletteEmpty>
     );
   } else if (showEmptySearch) {
-    listContent = <CommandPaletteEmpty>{emptySearchText}</CommandPaletteEmpty>;
+    listContent = (
+      <CommandPaletteEmpty ref={emptyStateRef}>
+        {emptySearchText}
+      </CommandPaletteEmpty>
+    );
+  } else if (optimisticResults.length === 0) {
+    // A no-break space gives the empty container one line of height; it is
+    // hidden from assistive technology, which hears the busy start instead.
+    listContent = (
+      <CommandPaletteEmpty aria-hidden="true">{'\u00a0'}</CommandPaletteEmpty>
+    );
   } else {
     listContent = (
       <ItemRenderer
@@ -645,7 +700,9 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
           defaultHasDividers
           header={
             <LayoutHeader hasDivider padding={0}>
-              {input ?? <CommandPaletteInput />}
+              <BusyStartSettleContext value={registerBusyAnnouncementSettle}>
+                {input ?? <CommandPaletteInput />}
+              </BusyStartSettleContext>
             </LayoutHeader>
           }
           content={

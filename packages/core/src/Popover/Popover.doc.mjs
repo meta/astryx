@@ -90,9 +90,17 @@ export const docs = {
           default: "'auto'",
         },
         {
+          name: 'padding',
+          type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
+          description:
+            'Inner padding of the popover surface on the spacing scale (0, 0.5, 1, 1.5, 2, 3, 4, 5, 6, 8, 10), matching the padding prop on Card and Stack. Pass 0 for a flush surface when the content owns its own edges, such as a list of rows or a header with a rule, and pad the content itself. The padding sits on the painted popover target, so a theme padding on that target replaces it.',
+          default: '3',
+        },
+        {
           name: 'label',
           type: 'string',
-          description: 'Accessible label for the popover dialog.',
+          description:
+            'Accessible label for the popover dialog. A sheet without one is named by the trigger\u2019s text.',
         },
         {
           name: 'role',
@@ -143,12 +151,44 @@ export const docs = {
           default: 'true',
         },
         {
+          name: 'presentation',
+          type: "'popover' | 'bottom-sheet' | 'adaptive'",
+          description:
+            "The surface that holds the content. 'popover' anchors it to the trigger, 'bottom-sheet' presents it in a modal BottomSheet labeled by label, and 'adaptive' uses the BottomSheet on a compact touch screen (a coarse pointer on a screen the theme counts as compact: narrower than its md width point or shorter than 500 px, so a phone in either orientation) and the anchored popover elsewhere. In a sheet, placement, alignment, width, role, isModal and hasAutoFocus do not apply, and xstyle, className and style style the sheet's panel; the sheet always light-dismisses (a tap outside it or a swipe down closes it, whatever hasLightDismiss says), Escape follows hasEscapeDismiss, and the fallback close stays hidden. The surface is chosen as it opens and kept until it closes.",
+          default: "'popover'",
+        },
+        {
           name: 'xstyle',
           type: 'StyleXStyles',
           description:
             'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value, not an inline style object like style={{}}.',
         },
       ],
+    },
+  ],
+  examples: [
+    {
+      label: 'Flush surface for a list of rows',
+      code: `<Popover
+  label="Recent files"
+  padding={0}
+  content={
+    <List>
+      <ListItem label="Quarterly report.pdf" />
+      <ListItem label="Roadmap.key" />
+    </List>
+  }>
+  <Button label="Recent" variant="secondary" />
+</Popover>`,
+    },
+    {
+      label: 'Roomier surface for a form',
+      code: `<Popover
+  label="Save search"
+  padding={4}
+  content={<SaveSearchForm />}>
+  <Button label="Save search" variant="secondary" />
+</Popover>`,
     },
   ],
   playground: {
@@ -168,12 +208,6 @@ export const docs = {
     targets: [
       // Canonical broad target for the painted Popover surface.
       {className: 'astryx-popover'},
-      // Deprecated compatibility alias. Existing themes remain supported;
-      // new themes target `popover`.
-      {
-        className: 'astryx-popover-surface',
-        deprecatedFor: 'popover',
-      },
     ],
     vars: [
       {
@@ -202,7 +236,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Theme the painted surface through popover. Existing popover-surface overrides remain supported for compatibility, while new themes use the canonical target.',
+          'Theme the painted surface through the canonical popover target.',
       },
       {
         guidance: false,
@@ -231,7 +265,13 @@ export const docs = {
         name: 'Popover surface',
         required: true,
         description:
-          'Painted surface owned by Popover. Theme it through the canonical popover target; popover-surface remains supported as a deprecated compatibility alias.',
+          'Painted surface owned and themed by Popover through the canonical popover target.',
+      },
+      {
+        name: 'Touch sheet',
+        required: false,
+        description:
+          'BottomSheet surface that holds the same content in place of the popover surface for presentation="bottom-sheet", or "adaptive" on a compact touch screen; themed through the bottom-sheet target.',
       },
       {
         name: 'Popover content',
@@ -313,9 +353,17 @@ export const docsZh = {
           default: "'auto'",
         },
         {
+          name: 'padding',
+          type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
+          description:
+            '弹出框表面的内边距，使用间距刻度（0、0.5、1、1.5、2、3、4、5、6、8、10），与 Card 和 Stack 的 padding 属性一致。当内容自行管理边缘（如行列表或带分隔线的标题）时传入 0 使表面无内边距，并由内容自行设置内边距。',
+          default: '3',
+        },
+        {
           name: 'label',
           type: 'string',
-          description: '弹出框对话框的无障碍标签。',
+          description:
+            '弹出框对话框的无障碍标签。没有标签的底部面板以触发器的文本命名。',
         },
         {
           name: 'role',
@@ -364,6 +412,13 @@ export const docsZh = {
             '按 Escape 是否关闭弹出框。仅在 hasLightDismiss={false} 时生效，因为原生 light dismiss 行为同样响应 Escape。',
           default: 'true',
         },
+        {
+          name: 'presentation',
+          type: "'popover' | 'bottom-sheet' | 'adaptive'",
+          description:
+            "承载内容的界面。'popover' 锚定在触发器上，'bottom-sheet' 以模态 BottomSheet 呈现（由 label 命名），'adaptive' 在紧凑触屏（粗指针，且屏幕按主题定义为紧凑：宽度小于其 md 断点或高度小于 500 px，即任意方向的手机）上使用 BottomSheet，在其他设备上使用锚定的弹出框。在底部面板中，placement、alignment、width、role、isModal 和 hasAutoFocus 不生效，xstyle、className 和 style 作用于面板；底部面板始终支持轻触关闭（点按面板外部或向下轻扫即可关闭，不受 hasLightDismiss 影响），Escape 遵循 hasEscapeDismiss，后备关闭按钮保持隐藏。界面在打开时选定，并保持到关闭。",
+          default: "'popover'",
+        },
       ],
     },
   ],
@@ -371,12 +426,6 @@ export const docsZh = {
     targets: [
       // Canonical broad target for the painted Popover surface.
       {className: 'astryx-popover'},
-      // Deprecated compatibility alias. Existing themes remain supported;
-      // new themes target `popover`.
-      {
-        className: 'astryx-popover-surface',
-        deprecatedFor: 'popover',
-      },
     ],
     vars: [
       {
@@ -405,7 +454,7 @@ export const docsZh = {
       {
         guidance: true,
         description:
-          'Theme the painted surface through popover. Existing popover-surface overrides remain supported for compatibility, while new themes use the canonical target.',
+          'Theme the painted surface through the canonical popover target.',
       },
       {
         guidance: false,
@@ -434,7 +483,13 @@ export const docsZh = {
         name: 'Popover surface',
         required: true,
         description:
-          'Painted surface owned by Popover. Theme it through the canonical popover target; popover-surface remains supported as a deprecated compatibility alias.',
+          'Painted surface owned and themed by Popover through the canonical popover target.',
+      },
+      {
+        name: 'Touch sheet',
+        required: false,
+        description:
+          'BottomSheet surface that holds the same content in place of the popover surface for presentation="bottom-sheet", or "adaptive" on a compact touch screen; themed through the bottom-sheet target.',
       },
       {
         name: 'Popover content',
@@ -472,7 +527,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          'Theme the painted surface through popover. Existing popover-surface overrides remain supported for compatibility, while new themes use the canonical target.',
+          'Theme the painted surface through the canonical popover target.',
       },
       {
         guidance: false,
@@ -501,7 +556,13 @@ export const docsDense = {
         name: 'Popover surface',
         required: true,
         description:
-          'Painted surface owned by Popover. Theme it through the canonical popover target; popover-surface remains supported as a deprecated compatibility alias.',
+          'Painted surface owned and themed by Popover through the canonical popover target.',
+      },
+      {
+        name: 'Touch sheet',
+        required: false,
+        description:
+          'BottomSheet surface that holds the same content in place of the popover surface for presentation="bottom-sheet", or "adaptive" on a compact touch screen; themed through the bottom-sheet target.',
       },
       {
         name: 'Popover content',
@@ -546,6 +607,8 @@ export const docsDense = {
           'Outside click dismisses; false for explicit-dismiss surfaces (coachmarks).',
         hasEscapeDismiss:
           'Escape dismisses; full effect only with hasLightDismiss=false.',
+        presentation:
+          "Surface: 'popover' (anchored), 'bottom-sheet' (modal BottomSheet), or 'adaptive' (BottomSheet on a coarse pointer on a compact screen, popover elsewhere); chosen on open, kept until close.",
       },
     },
   ],

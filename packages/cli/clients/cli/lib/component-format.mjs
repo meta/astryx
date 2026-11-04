@@ -4,7 +4,11 @@
  * @file Component doc formatting — render ComponentDoc objects to text
  */
 
-import {discoverComponents, findComponentReadme, resolveImportPath} from '../../../foundation/discovery/component-discovery.mjs';
+import {
+  discoverComponents,
+  findComponentReadme,
+  resolveImportPath,
+} from '../../../foundation/discovery/component-discovery.mjs';
 import {loadDocs} from '../../../foundation/discovery/component-loader.mjs';
 import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
 
@@ -17,22 +21,13 @@ import {getCliInvocation} from '../../../foundation/env/package-manager.mjs';
  * (→ `.astryx-table-cell`), and `astryx-button` → key `button`.
  *
  * Keep the `astryx-` literal in sync with packages/core/src/naming.ts
- * (NAMESPACE / classPrefix), the same way build-theme.mjs mirrors it.
+ * (NAMESPACE / classPrefix), the same way commands/theme.mjs mirrors it.
  * <!-- SYNC: packages/core/src/naming.ts (namespace prefix source of truth) -->
  * @param {import('@astryxdesign/cli/authoring').ComponentThemingTarget} target
  * @returns {string}
  */
 function targetKey(target) {
   return target.className.replace(/^astryx-/, '');
-}
-
-/**
- * Keep deprecated targets visible in reference tables while excluding them from
- * snippets readers copy into newly authored themes.
- * @param {import('@astryxdesign/cli/authoring').ComponentThemingTarget[]} targets
- */
-function canonicalTargets(targets) {
-  return targets.filter(target => target.deprecatedFor == null);
 }
 
 /** @param {string} name @returns {string} */
@@ -73,8 +68,12 @@ function formatPropsTable(props) {
   for (const p of props) {
     const def = p.default ? `\`${mdCell(p.default)}\`` : '-';
     const req = p.required ? ' **(required)**' : '';
+    // The text projection of the prop doc's `stability` field: an
+    // experimental prop is outside the stable compatibility promise.
+    const stability =
+      p.stability === 'experimental' ? ' **(experimental)**' : '';
     lines.push(
-      `| \`${mdCell(p.name)}\` | \`${mdCell(p.type)}\` | ${def} | ${mdCell(p.description)}${req} |`,
+      `| \`${mdCell(p.name)}\` | \`${mdCell(p.type)}\` | ${def} | ${mdCell(p.description)}${req}${stability} |`,
     );
   }
   return lines.join('\n');
@@ -117,7 +116,9 @@ function formatSubComponent(comp) {
   if (table) {
     out.push(table + '\n');
   } else {
-    out.push(`See \`${getCliInvocation()} component ${comp.name}\` for props and usage.\n`);
+    out.push(
+      `See \`${getCliInvocation()} component ${comp.name}\` for props and usage.\n`,
+    );
   }
   return out;
 }
@@ -136,8 +137,10 @@ function getTargetVariants(target, docs) {
 
   // If variant is a visualProp, try to resolve the actual variant values from props
   if (target.visualProps.includes('variant')) {
-    const allProps = docs.props || (docs.components?.[0]?.props) || [];
-    const variantProp = allProps.find((/** @type {any} */ p) => p.name === 'variant');
+    const allProps = docs.props || docs.components?.[0]?.props || [];
+    const variantProp = allProps.find(
+      (/** @type {any} */ p) => p.name === 'variant',
+    );
     if (variantProp && variantProp.type.includes('|')) {
       return variantProp.type
         .replace(/['"]/g, '')
@@ -172,8 +175,12 @@ function formatTargetsTable(docs, themeData) {
 
   /** @type {string[]} */
   const lines = [];
-  lines.push('| Component class | Preferred data attributes | Props | States |');
-  lines.push('|-----------------|---------------------------|-------|--------|');
+  lines.push(
+    '| Component class | Preferred data attributes | Props | States |',
+  );
+  lines.push(
+    '|-----------------|---------------------------|-------|--------|',
+  );
 
   for (const target of docs.theming.targets) {
     const coreVariants = getTargetVariants(target, docs);
@@ -194,11 +201,11 @@ function formatTargetsTable(docs, themeData) {
     const statesStr = states.length > 0 ? states.join(', ') : '-';
     const dataAttrs = getTargetDataAttributes(target);
     const dataAttrsStr =
-      dataAttrs.length > 0 ? dataAttrs.map(attr => `\`${attr}\``).join(', ') : '-';
+      dataAttrs.length > 0
+        ? dataAttrs.map(attr => `\`${attr}\``).join(', ')
+        : '-';
 
-    const className = target.deprecatedFor
-      ? `\`${target.className}\` _(deprecated; use \`${target.deprecatedFor}\`)_`
-      : `\`${target.className}\``;
+    const className = `\`${target.className}\``;
     lines.push(
       `| ${className} | ${dataAttrsStr} | ${variantsStr} | ${statesStr} |`,
     );
@@ -229,7 +236,9 @@ export function formatFull(docs, options = {}) {
     // agents to conflate the primary with a sub-component and hallucinate props
     // (origin/main #2860). Bare name per the un-prefix migration (P5a).
     const displayName = docs.name;
-    sections.push(`**Import:** \`import {${displayName}} from '${options.importHint}';\`\n`);
+    sections.push(
+      `**Import:** \`import {${displayName}} from '${options.importHint}';\`\n`,
+    );
   }
 
   if (docs.usage?.anatomy?.length) {
@@ -238,7 +247,9 @@ export function formatFull(docs, options = {}) {
     sections.push('|---------|----------|-------------|');
     for (const el of docs.usage.anatomy) {
       const req = el.required ? 'Yes' : 'No';
-      sections.push(`| ${mdCell(el.name)} | ${req} | ${mdCell(el.description)} |`);
+      sections.push(
+        `| ${mdCell(el.name)} | ${req} | ${mdCell(el.description)} |`,
+      );
     }
     sections.push('');
   }
@@ -246,7 +257,7 @@ export function formatFull(docs, options = {}) {
   if (docs.usage?.bestPractices?.length) {
     sections.push('## Best Practices\n');
     for (const bp of docs.usage.bestPractices) {
-      const badge = bp.guidance ? '**Do:**' : '**Don\'t:**';
+      const badge = bp.guidance ? '**Do:**' : "**Don't:**";
       sections.push(`- ${badge} ${bp.description}`);
     }
     sections.push('');
@@ -283,24 +294,30 @@ export function formatFull(docs, options = {}) {
   }
 
   if (docs.theming) {
-    const { themeData = null } = options;
+    const {themeData = null} = options;
     sections.push('## Theming\n');
-// Targets table with theme variant merging
+    // Targets table with theme variant merging
     if (docs.theming.targets?.length) {
       const targetsTable = formatTargetsTable(docs, themeData);
       sections.push(targetsTable + '\n');
 
       // Note about theme variants if any are present
       if (themeData?.variants) {
-        const componentKeys = docs.theming.targets.map((/** @type {any} */ t) => targetKey(t));
-        const hasThemeVariants = componentKeys.some((/** @type {any} */ k) => themeData.variants[k]?.length > 0);
+        const componentKeys = docs.theming.targets.map((/** @type {any} */ t) =>
+          targetKey(t),
+        );
+        const hasThemeVariants = componentKeys.some(
+          (/** @type {any} */ k) => themeData.variants[k]?.length > 0,
+        );
         if (hasThemeVariants) {
-          sections.push(`_\\* = custom variant from ${themeData.name || 'active'} theme_\n`);
+          sections.push(
+            `_\\* = custom variant from ${themeData.name || 'active'} theme_\n`,
+          );
         }
       }
 
       // Generate defineTheme example with canonical component selectors only.
-      const exampleTargets = canonicalTargets(docs.theming.targets);
+      const exampleTargets = docs.theming.targets;
       if (exampleTargets.length > 0) {
         const exampleLines = ['Override in defineTheme:\n```ts\ncomponents: {'];
         const rootTarget = exampleTargets[0];
@@ -309,7 +326,9 @@ export function formatFull(docs, options = {}) {
         exampleLines.push(`    base: { /* CSS properties */ },`);
         if (rootTarget.visualProps?.length) {
           const firstVariant = rootTarget.visualProps[0];
-          exampleLines.push(`    '${firstVariant}:value': { /* variant-specific */ },`);
+          exampleLines.push(
+            `    '${firstVariant}:value': { /* variant-specific */ },`,
+          );
         }
         if (rootTarget.states?.length) {
           const firstState = rootTarget.states[0];
@@ -339,10 +358,14 @@ export function formatFull(docs, options = {}) {
 
     // Component CSS vars — split into public (directly settable) and private (set via derived)
     if (docs.theming?.vars?.length) {
-      const publicVars = docs.theming.vars.filter((/** @type {any} */ v) => !v.private && !v.derived);
+      const publicVars = docs.theming.vars.filter(
+        (/** @type {any} */ v) => !v.private && !v.derived,
+      );
 
       if (publicVars.length > 0) {
-        sections.push('**Themeable CSS variables** - additional properties that can be overridden in `defineTheme` component overrides.\n');
+        sections.push(
+          '**Themeable CSS variables** - additional properties that can be overridden in `defineTheme` component overrides.\n',
+        );
         const varLines = [];
         varLines.push('| CSS Variable | Default | Description |');
         varLines.push('|-------------|---------|-------------|');
@@ -356,24 +379,36 @@ export function formatFull(docs, options = {}) {
 
       // Show derived property examples — the recommended way to theme
       if (docs.theming?.derived?.length) {
-        const canonical = canonicalTargets(docs.theming.targets || []);
-        const varsKey = canonical.length ? targetKey(canonical[0]) : docs.theming.componentKey || '';
+        const canonical = docs.theming.targets || [];
+        const varsKey = canonical.length
+          ? targetKey(canonical[0])
+          : docs.theming.componentKey || '';
         const derivedExamples = docs.theming.derived
           .filter((/** @type {any} */ d) => d.vars?.length)
           .map((/** @type {any} */ d) => `      ${d.property}: '...',`)
           .join('\n');
         const expandExamples = docs.theming.derived
           .filter((/** @type {any} */ d) => d.expand === 'container')
-          .map((/** @type {any} */ d) => `      ${d.property}: '...',  // expands to container layout tokens`)
+          .map(
+            (/** @type {any} */ d) =>
+              `      ${d.property}: '...',  // expands to container layout tokens`,
+          )
           .join('\n');
-        const allExamples = [derivedExamples, expandExamples].filter(Boolean).join('\n');
+        const allExamples = [derivedExamples, expandExamples]
+          .filter(Boolean)
+          .join('\n');
         if (allExamples) {
-          sections.push('Some properties are set via standard CSS in component overrides:\n```ts\ncomponents: {\n  ' + varsKey + ': {\n    base: {\n' + allExamples + '\n    },\n  },\n}\n```\n');
+          sections.push(
+            'Some properties are set via standard CSS in component overrides:\n```ts\ncomponents: {\n  ' +
+              varsKey +
+              ': {\n    base: {\n' +
+              allExamples +
+              '\n    },\n  },\n}\n```\n',
+          );
         }
       }
     }
   }
-
 
   return sections.join('\n');
 }
@@ -401,21 +436,29 @@ export function formatCompact(docs, componentName, importHint) {
   sections.push(desc + '\n');
 
   if (docs.usage?.anatomy?.length) {
-    sections.push('Anatomy: ' + docs.usage.anatomy.map((/** @type {any} */ el) => {
-      const req = el.required ? '' : ' (optional)';
-      return `${el.name}${req}`;
-    }).join(', ') + '\n');
+    sections.push(
+      'Anatomy: ' +
+        docs.usage.anatomy
+          .map((/** @type {any} */ el) => {
+            const req = el.required ? '' : ' (optional)';
+            return `${el.name}${req}`;
+          })
+          .join(', ') +
+        '\n',
+    );
   }
 
   if (importHint) {
     sections.push('## Import\n');
-    sections.push(`\`\`\`tsx\nimport { ${displayName} } from '${importHint}';\n\`\`\`\n`);
+    sections.push(
+      `\`\`\`tsx\nimport { ${displayName} } from '${importHint}';\n\`\`\`\n`,
+    );
   }
 
   if (docs.usage?.bestPractices?.length) {
     sections.push('## Best Practices\n');
     for (const bp of docs.usage.bestPractices) {
-      const badge = bp.guidance ? '**Do:**' : '**Don\'t:**';
+      const badge = bp.guidance ? '**Do:**' : "**Don't:**";
       sections.push(`- ${badge} ${bp.description}`);
     }
     sections.push('');
@@ -453,7 +496,12 @@ export function formatCompact(docs, componentName, importHint) {
     propLines.push('| CSS Property | Sets |');
     propLines.push('|-------------|------|');
     for (const d of docs.theming.derived) {
-      const target = d.expand === 'container' ? 'container layout tokens' : (d.vars || []).map((/** @type {any} */ v) => `\`${mdCell(v)}\``).join(', ');
+      const target =
+        d.expand === 'container'
+          ? 'container layout tokens'
+          : (d.vars || [])
+              .map((/** @type {any} */ v) => `\`${mdCell(v)}\``)
+              .join(', ');
       propLines.push(`| \`${mdCell(d.property)}\` | ${target} |`);
     }
     sections.push(propLines.join('\n') + '\n');
@@ -504,7 +552,9 @@ export function formatBrief(docs, componentName, importHint, options = {}) {
   if ('props' in docs) {
     props = docs.props;
   } else if ('components' in docs) {
-    const entry = docs.components.find((/** @type {any} */ c) => c.name === displayName);
+    const entry = docs.components.find(
+      (/** @type {any} */ c) => c.name === displayName,
+    );
     if (entry) {
       props = entry.props;
       description = entry.description;
@@ -549,9 +599,7 @@ export function formatBrief(docs, componentName, importHint, options = {}) {
   // Description (shortened)
   if (description) {
     const shortDesc =
-      description.length > 80
-        ? description.slice(0, 77) + '...'
-        : description;
+      description.length > 80 ? description.slice(0, 77) + '...' : description;
     output.push(`  ${shortDesc}`);
   }
 
@@ -569,25 +617,33 @@ export function formatBrief(docs, componentName, importHint, options = {}) {
   // Derived properties (if any)
   if (docs.theming?.derived?.length) {
     const derivedNames = docs.theming.derived
-      .map((/** @type {any} */ d) => d.expand === 'container' ? `${d.property} -> container tokens` : `${d.property} -> ${(d.vars || []).join(', ')}`)
+      .map((/** @type {any} */ d) =>
+        d.expand === 'container'
+          ? `${d.property} -> container tokens`
+          : `${d.property} -> ${(d.vars || []).join(', ')}`,
+      )
       .join('; ');
     output.push(`  Derived: ${derivedNames}`);
   }
 
-// Theme targets (component class, preferred data attrs, props, states) with theme variant merging
+  // Theme targets (component class, preferred data attrs, props, states) with theme variant merging
   if (docs.theming?.targets?.length) {
-    const { themeData = null } = options;
+    const {themeData = null} = options;
     const targetParts = docs.theming.targets.map((/** @type {any} */ t) => {
       const parts = [t.className];
-      if (t.deprecatedFor) parts.push(`deprecated->${t.deprecatedFor}`);
       const dataAttrs = getTargetDataAttributes(t);
-      if (dataAttrs.length) parts.push(`preferred attrs: ${dataAttrs.join(', ')}`);
-      if (t.visualProps?.length) parts.push(`variants: ${t.visualProps.join(', ')}`);
+      if (dataAttrs.length)
+        parts.push(`preferred attrs: ${dataAttrs.join(', ')}`);
+      if (t.visualProps?.length)
+        parts.push(`variants: ${t.visualProps.join(', ')}`);
       if (t.states?.length) parts.push(`states: ${t.states.join(', ')}`);
       // Merge theme variants
       const componentKey = targetKey(t);
       const themeVars = themeData?.variants?.[componentKey];
-      if (themeVars?.length) parts.push(`theme: ${themeVars.map((/** @type {any} */ v) => v + '*').join(', ')}`);
+      if (themeVars?.length)
+        parts.push(
+          `theme: ${themeVars.map((/** @type {any} */ v) => v + '*').join(', ')}`,
+        );
       return parts.join(' ');
     });
     output.push(`  Targets: ${targetParts.join(' | ')}`);
@@ -602,7 +658,9 @@ export function formatBrief(docs, componentName, importHint, options = {}) {
   if (examples.length > 0) {
     const code = examples[0].code;
     const codeLine =
-      code.split('\n').find((/** @type {string} */ l) => l.trim().startsWith('<XDS')) ||
+      code
+        .split('\n')
+        .find((/** @type {string} */ l) => l.trim().startsWith('<XDS')) ||
       code.split('\n')[0];
     output.push(`  ${codeLine.trim()}`);
   }
@@ -636,26 +694,53 @@ export function formatProps(docs, componentName) {
 
 /**
  * Format brief summaries for ALL components in one output.
+ * `replacements` maps a replaced Core name to the full list entry of the
+ * integration component that takes its slot; that entry is printed in its
+ * place, naming its package. `categories`, when given, limits the output to
+ * those group keys (the keys of the list result it renders), so the text shows
+ * the same groups as the JSON and `replacements` covers every slot it prints.
  * @param {string} coreDir
- * @param {{zh?: boolean, lang?: string, themeData?: any}} [options]
+ * @param {{zh?: boolean, lang?: string, themeData?: any, replacements?: Map<string, any>, categories?: string[]}} [options]
  * @returns {Promise<string>}
  */
-export async function formatBriefAll(coreDir, {zh = false, lang, themeData = null} = {}) {
+export async function formatBriefAll(
+  coreDir,
+  {
+    zh = false,
+    lang,
+    themeData = null,
+    replacements = new Map(),
+    categories,
+  } = {},
+) {
   const components = discoverComponents(coreDir);
+  const shown = categories ? new Set(categories) : null;
   /** @type {string[]} */
   const output = [];
 
   for (const [key, comps] of Object.entries(components)) {
+    if (shown && !shown.has(key)) continue;
     const isUngrouped = comps.length === 1 && comps[0] === key;
     if (!isUngrouped) {
       output.push(`## ${key}\n`);
     }
     for (const comp of comps) {
+      const replacement = replacements.get(comp);
+      if (replacement) {
+        const [first, ...rest] = formatBrief(
+          replacement,
+          replacement.name,
+          replacement.import,
+          {themeData},
+        ).split('\n');
+        output.push([`${first}  [${replacement.package}]`, ...rest].join('\n'));
+        continue;
+      }
       const readmePath = findComponentReadme(coreDir, comp);
       if (readmePath && readmePath.endsWith('.doc.mjs')) {
         const docs = await loadDocs(readmePath, {zh, lang});
         const importPath = resolveImportPath(coreDir, comp);
-        output.push(formatBrief(docs, comp, importPath, { themeData }));
+        output.push(formatBrief(docs, comp, importPath, {themeData}));
       } else {
         output.push(`${comp}\n  (no docs)\n`);
       }

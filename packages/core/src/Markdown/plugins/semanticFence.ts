@@ -11,6 +11,7 @@ import type {
   MarkdownAstBlockContent,
   MarkdownAstCode,
   MarkdownAstListItem,
+  MarkdownAstPosition,
 } from '../ast';
 import {
   getMarkdownHelperOwnership,
@@ -153,6 +154,7 @@ function createProposal(
   >,
   pluginName: string,
   hasRenderer: (nodeName: string) => boolean,
+  sourceLines: MarkdownAstPosition | undefined,
 ): MarkdownFenceProposal {
   if (
     node == null ||
@@ -189,6 +191,9 @@ function createProposal(
       name: node.name,
       display: 'block' as const,
       data,
+      // The fence's Core-authored source lines, recorded only while the
+      // source-lines plugin is installed (module:Markdown/sourceLines FR5).
+      ...(sourceLines == null ? null : {position: sourceLines}),
     }),
   });
 }
@@ -254,7 +259,12 @@ function annotateCode(
   Object.defineProperty(annotated, markdownFenceProposal, {
     configurable: false,
     enumerable: true,
-    value: createProposal(proposalNode, pluginName, hasRenderer),
+    value: createProposal(
+      proposalNode,
+      pluginName,
+      hasRenderer,
+      node.position?.start.line == null ? undefined : node.position,
+    ),
     writable: false,
   });
   return annotated;

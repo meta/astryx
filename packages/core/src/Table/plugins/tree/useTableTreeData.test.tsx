@@ -297,6 +297,113 @@ describe('useTableTreeData — row-click expansion', () => {
     ).toBeInTheDocument();
   });
 
+  it('does not toggle when a contenteditable cell is clicked', async () => {
+    const user = userEvent.setup();
+    function TreeWithEditable() {
+      const {visibleData, treeConfig} = useTableTreeState<FileRow>({
+        data: fileTree,
+        idKey: 'id',
+      });
+      const tree = useTableTreeData({
+        ...treeConfig,
+        hasRowClickExpansion: true,
+      });
+      return (
+        <Table
+          data={visibleData}
+          columns={[
+            {
+              key: 'name',
+              header: 'Name',
+              renderCell: item => (
+                <div contentEditable data-testid={`editable-${item.id}`}>
+                  {item.name}
+                </div>
+              ),
+            },
+          ]}
+          idKey="id"
+          plugins={{tree}}
+        />
+      );
+    }
+    render(<TreeWithEditable />);
+    await user.click(screen.getByTestId('editable-src'));
+    expect(screen.queryByText('components')).toBeNull();
+  });
+
+  it('does not toggle when a nested element inside contenteditable is clicked', async () => {
+    const user = userEvent.setup();
+    function TreeWithNestedEditable() {
+      const {visibleData, treeConfig} = useTableTreeState<FileRow>({
+        data: fileTree,
+        idKey: 'id',
+      });
+      const tree = useTableTreeData({
+        ...treeConfig,
+        hasRowClickExpansion: true,
+      });
+      return (
+        <Table
+          data={visibleData}
+          columns={[
+            {
+              key: 'name',
+              header: 'Name',
+              renderCell: item => (
+                <div contentEditable>
+                  <span data-testid={`inner-${item.id}`}>{item.name}</span>
+                </div>
+              ),
+            },
+          ]}
+          idKey="id"
+          plugins={{tree}}
+        />
+      );
+    }
+    render(<TreeWithNestedEditable />);
+    await user.click(screen.getByTestId('inner-src'));
+    expect(screen.queryByText('components')).toBeNull();
+  });
+
+  it('still toggles on contenteditable="false"', async () => {
+    const user = userEvent.setup();
+    function TreeWithReadonly() {
+      const {visibleData, treeConfig} = useTableTreeState<FileRow>({
+        data: fileTree,
+        idKey: 'id',
+      });
+      const tree = useTableTreeData({
+        ...treeConfig,
+        hasRowClickExpansion: true,
+      });
+      return (
+        <Table
+          data={visibleData}
+          columns={[
+            {
+              key: 'name',
+              header: 'Name',
+              renderCell: item => (
+                <div
+                  contentEditable="false"
+                  data-testid={`readonly-${item.id}`}>
+                  {item.name}
+                </div>
+              ),
+            },
+          ]}
+          idKey="id"
+          plugins={{tree}}
+        />
+      );
+    }
+    render(<TreeWithReadonly />);
+    await user.click(screen.getByTestId('readonly-src'));
+    expect(screen.getByText('components')).toBeInTheDocument();
+  });
+
   it('is a no-op on flat data even when hasRowClickExpansion is set', async () => {
     const user = userEvent.setup();
     const flat: FileRow[] = [

@@ -35,7 +35,7 @@ export interface InternationalizationContextValue {
 }
 
 /**
- * Default value falls through to the shipped en catalog in resolve().
+ * Default value falls through to the shipped English fallback in resolve().
  * A consumer that doesn't render a provider still gets English defaults.
  */
 export const InternationalizationContext =

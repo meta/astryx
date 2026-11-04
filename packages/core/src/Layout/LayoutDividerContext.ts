@@ -4,7 +4,7 @@
 
 /**
  * @file LayoutDividerContext.ts
- * @input Uses React createContext
+ * @input Layer-scoped React context
  * @output Exports LayoutDividerContext and LayoutDividerContextValue type
  * @position Context for container-controlled default divider visibility;
  *   consumed by LayoutHeader.tsx, LayoutFooter.tsx, provided by Layout.tsx
@@ -16,7 +16,7 @@
  * - /packages/core/src/Layout/LayoutFooter.tsx
  */
 
-import {createContext} from 'react';
+import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
 
 export interface LayoutDividerContextValue {
   defaultHasDividers: boolean;

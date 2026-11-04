@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /**
  * @file ChatLayoutScrollButtonSurface.a11y.chromium.spec.ts
@@ -15,12 +16,11 @@
  * output—not an event wrapper, speculative internal structure, or a node
  * created only for layout plumbing."
  *
- * This is not observable in the unit lane and not observable to the probe-reach
- * gate either. jsdom resolves no cascade, so it cannot say which element paints.
- * The gate's reach check asks whether a target's override lands on the element
- * carrying the class, and it does — that element simply is not the one a reader
- * sees. Only a real engine can be asked the question that matters: does styling
- * the documented target change the pill?
+ * This is not observable in the unit lane: jsdom resolves no cascade, so it
+ * cannot say which element paints. An override can land on the element carrying
+ * the class while that element is not the one a reader sees. Only a real engine
+ * can be asked the question that matters: does styling the documented target
+ * change the pill?
  *
  * The pill is identified structurally, as the button's parent element, so every
  * measurement below is independent of where the class currently sits.

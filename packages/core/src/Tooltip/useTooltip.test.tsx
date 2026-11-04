@@ -3,7 +3,8 @@
 /**
  * @file useTooltip.test.tsx
  * @input Uses vitest, @testing-library/react, useTooltip hook
- * @output Unit tests for the tooltip show/hide timers and controlled state
+ * @output Unit tests for the tooltip show/hide timers and controlled state,
+ *   and for a press on a caller's trigger under `triggerBehavior="toggle"`
  * @position Testing; validates useTooltip.tsx timing contract. Component-level
  *   behavior lives in Tooltip.test.tsx — this file pins the delays, the
  *   hover-bridge constant, and timer teardown, which are invisible from there.
@@ -23,6 +24,9 @@ import {
 } from 'vitest';
 import {render, screen, fireEvent, act} from '@testing-library/react';
 import {useTooltip, type TooltipOptions} from './useTooltip';
+import {useLayer} from '../Layer/useLayer';
+import {ClickableCard} from '../ClickableCard/ClickableCard';
+import type {MouseEvent as ReactMouseEvent} from 'react';
 
 // jsdom implements neither the Popover API nor `:popover-open`; mirror
 // Tooltip.test.tsx's shims so the layer can open.
@@ -146,6 +150,19 @@ describe('useTooltip — show delay', () => {
 
     expect(onShow).not.toHaveBeenCalled();
   });
+
+  it('drops a pending show when isEnabled turns false before the delay elapses', () => {
+    const onShow = vi.fn();
+    const {rerender} = render(<Harness onShow={onShow} />);
+
+    fireEvent.mouseEnter(trigger());
+    tick(100);
+    rerender(<Harness isEnabled={false} onShow={onShow} />);
+    tick(1000);
+
+    expect(onShow).not.toHaveBeenCalled();
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+  });
 });
 
 describe('useTooltip — touch suppression', () => {
@@ -197,6 +214,29 @@ describe('useTooltip — hide delay', () => {
     expect(onHide).not.toHaveBeenCalled();
 
     tick(1);
+    expect(onHide).toHaveBeenCalledTimes(1);
+  });
+
+  it('stays open when the pointer crosses onto the tooltip in one step', () => {
+    const onHide = vi.fn();
+    showTooltip(onHide);
+    const surface = tooltipElement();
+
+    // A one-step crossing dispatches in browser order: the trigger's mouseout
+    // (React derives the surface's onMouseEnter from it), then the trigger's
+    // native mouseleave, both pointing at the surface. fireEvent.mouseLeave
+    // would add a mouseout after the leave, so the leave is dispatched raw.
+    fireEvent.mouseOut(trigger(), {relatedTarget: surface});
+    act(() => {
+      trigger().dispatchEvent(
+        new MouseEvent('mouseleave', {relatedTarget: surface}),
+      );
+    });
+    tick(500);
+    expect(onHide).not.toHaveBeenCalled();
+
+    fireEvent.mouseOut(surface, {relatedTarget: document.body});
+    tick(100);
     expect(onHide).toHaveBeenCalledTimes(1);
   });
 
@@ -314,5 +354,304 @@ describe('useTooltip — teardown', () => {
     unmount();
 
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe('useTooltip — focus returning from a popover the keyboard closed', () => {
+  const shimmedShowPopover = HTMLElement.prototype.showPopover;
+  const shimmedHidePopover = HTMLElement.prototype.hidePopover;
+
+  afterEach(() => {
+    HTMLElement.prototype.showPopover = shimmedShowPopover;
+    HTMLElement.prototype.hidePopover = shimmedHidePopover;
+  });
+
+  /**
+   * The Popover API's re-entrancy rule, which the file-level shims leave out:
+   * hiding hands focus back to the previously focused element while the
+   * document still counts the popover as hiding, and `showPopover()` throws
+   * while any popover in the document is being shown or hidden.
+   */
+  function installReentrantPopoverApi() {
+    let operationsInFlight = 0;
+    const previouslyFocused = new WeakMap<HTMLElement, Element | null>();
+    const showSpy = vi.fn(function (this: HTMLElement) {
+      if (operationsInFlight > 0) {
+        throw new DOMException(
+          "Failed to execute 'showPopover' on 'HTMLElement': Invalid to show a popover during another show operation",
+          'InvalidStateError',
+        );
+      }
+      operationsInFlight += 1;
+      try {
+        previouslyFocused.set(this, this.ownerDocument.activeElement);
+        popoverOpenState.set(this, true);
+      } finally {
+        operationsInFlight -= 1;
+      }
+    });
+    HTMLElement.prototype.showPopover = showSpy;
+    HTMLElement.prototype.hidePopover = vi.fn(function (this: HTMLElement) {
+      operationsInFlight += 1;
+      try {
+        popoverOpenState.set(this, false);
+        const target = previouslyFocused.get(this);
+        previouslyFocused.delete(this);
+        if (
+          target instanceof HTMLElement &&
+          this.contains(document.activeElement)
+        ) {
+          target.focus();
+        }
+      } finally {
+        operationsInFlight -= 1;
+      }
+    });
+    return showSpy;
+  }
+
+  /** A popover whose trigger also carries a tooltip. */
+  function PopoverWithTooltipTrigger({onShow}: {onShow: () => void}) {
+    const popover = useLayer({mode: 'context'});
+    const tooltip = useTooltip({onShow});
+    return (
+      <div>
+        <button
+          type="button"
+          ref={el => {
+            popover.ref(el);
+            tooltip.ref(el);
+          }}
+          aria-describedby={tooltip.describedBy}
+          onClick={popover.show}>
+          Trigger
+        </button>
+        {popover.render(
+          <button
+            type="button"
+            onKeyDown={event => {
+              if (event.key === 'Escape') {
+                popover.hide();
+              }
+            }}>
+            Inside
+          </button>,
+          {role: 'dialog'},
+        )}
+        {tooltip.renderTooltip('Helpful text')}
+      </div>
+    );
+  }
+
+  it('shows the tooltip after the hide returns instead of nesting a show inside it', async () => {
+    const showSpy = installReentrantPopoverApi();
+    const errors: unknown[] = [];
+    const onError = (event: ErrorEvent) => {
+      errors.push(event.error);
+      event.preventDefault();
+    };
+    window.addEventListener('error', onError);
+    const onShow = vi.fn();
+    render(<PopoverWithTooltipTrigger onShow={onShow} />);
+    const inside = screen.getByRole('button', {name: 'Inside', hidden: true});
+    // Keyboard focus: jsdom does not model `:focus-visible`.
+    const realMatches = trigger().matches.bind(trigger());
+    vi.spyOn(trigger(), 'matches').mockImplementation((selector: string) =>
+      selector === ':focus-visible' ? true : realMatches(selector),
+    );
+
+    // Tab to the trigger (tooltip shows), open the popover, move inside.
+    act(() => trigger().focus());
+    fireEvent.click(trigger());
+    act(() => inside.focus());
+    tick(100);
+    expect(onShow).toHaveBeenCalledTimes(1);
+    expect(tooltipElement().matches(':popover-open')).toBe(false);
+
+    // Escape closes the popover; the browser returns focus to the trigger
+    // inside that hide, and the tooltip's focus-in asks to show.
+    fireEvent.keyDown(inside, {key: 'Escape'});
+    window.removeEventListener('error', onError);
+
+    expect(errors).toEqual([]);
+    expect(document.activeElement).toBe(trigger());
+    // The press that closed the popover is not also the tooltip's to take:
+    // the show waits until the dispatch has unwound, then runs once.
+    expect(onShow).toHaveBeenCalledTimes(1);
+    await act(async () => {});
+    expect(showSpy.mock.results.every(r => r.type === 'return')).toBe(true);
+    expect(onShow).toHaveBeenCalledTimes(2);
+    expect(tooltipElement().matches(':popover-open')).toBe(true);
+  });
+});
+
+describe('useTooltip — focusTrigger="auto" decides when focus arrives', () => {
+  /** jsdom does not match `:focus-visible`; stand it up for keyboard focus. */
+  function asKeyboardFocus(element: HTMLElement) {
+    const realMatches = element.matches.bind(element);
+    vi.spyOn(element, 'matches').mockImplementation((selector: string) =>
+      selector === ':focus-visible' ? true : realMatches(selector),
+    );
+  }
+
+  function RovingMember({onShow}: {onShow: () => void}) {
+    const tooltip = useTooltip({onShow, delay: 0});
+    return (
+      <div>
+        {/* A roving-tabindex member that is not the tab stop when the
+            tooltip attaches. */}
+        <button type="button" tabIndex={-1} ref={tooltip.ref}>
+          Filter
+        </button>
+        {tooltip.renderTooltip('Filter (F)')}
+      </div>
+    );
+  }
+
+  it('opens on keyboard focus of a trigger that was tabindex="-1" when it attached', () => {
+    const onShow = vi.fn();
+    render(<RovingMember onShow={onShow} />);
+    const member = screen.getByRole('button', {name: 'Filter'});
+    asKeyboardFocus(member);
+    // The roving hook moves the tab stop, then focus, as an arrow key does.
+    member.setAttribute('tabindex', '0');
+    fireEvent.focusIn(member);
+    tick(0);
+    expect(onShow).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens on keyboard focus of a focusable trigger it does not list, such as a summary', () => {
+    const onShow = vi.fn();
+    function SummaryTrigger() {
+      const tooltip = useTooltip({onShow, delay: 0});
+      return (
+        <details>
+          <summary ref={tooltip.ref}>More</summary>
+          {tooltip.renderTooltip('Show details')}
+        </details>
+      );
+    }
+    render(<SummaryTrigger />);
+    const summary = screen.getByText('More');
+    asKeyboardFocus(summary);
+    fireEvent.focusIn(summary);
+    tick(0);
+    expect(onShow).toHaveBeenCalledTimes(1);
+  });
+
+  function WrapperTrigger(options: TooltipOptions) {
+    const tooltip = useTooltip({delay: 0, ...options});
+    return (
+      <div>
+        <div ref={tooltip.ref} data-testid="wrapper">
+          <input aria-label="Amount" />
+        </div>
+        {tooltip.renderTooltip('About amounts')}
+      </div>
+    );
+  }
+
+  it('still ignores focus inside a trigger that is not focusable', () => {
+    const onShow = vi.fn();
+    render(<WrapperTrigger onShow={onShow} />);
+    const input = screen.getByLabelText('Amount');
+    asKeyboardFocus(input);
+    fireEvent.focusIn(input);
+    tick(0);
+    expect(onShow).not.toHaveBeenCalled();
+  });
+
+  it('hides when focus that counted leaves, even after the trigger left the tab order', () => {
+    const onShow = vi.fn();
+    const onHide = vi.fn();
+    function FocusableContainer() {
+      const tooltip = useTooltip({onShow, onHide, delay: 0});
+      return (
+        <div>
+          <div ref={tooltip.ref} tabIndex={0} data-testid="container">
+            <button type="button">Inside</button>
+          </div>
+          {tooltip.renderTooltip('About the group')}
+        </div>
+      );
+    }
+    render(<FocusableContainer />);
+    const inside = screen.getByRole('button', {name: 'Inside'});
+    asKeyboardFocus(inside);
+    fireEvent.focusIn(inside);
+    tick(0);
+    expect(onShow).toHaveBeenCalledTimes(1);
+    // A roving hook resets the container's tab stop before moving focus on.
+    screen.getByTestId('container').setAttribute('tabindex', '-1');
+    fireEvent.focusOut(inside);
+    tick(100);
+    expect(onHide).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not hide a hover-opened tooltip when focus leaves a child of a non-focusable trigger', () => {
+    const onHide = vi.fn();
+    render(<WrapperTrigger onHide={onHide} />);
+    fireEvent.mouseEnter(screen.getByTestId('wrapper'));
+    tick(0);
+    fireEvent.focusOut(screen.getByLabelText('Amount'));
+    tick(100);
+    expect(onHide).not.toHaveBeenCalled();
+  });
+});
+
+describe('useTooltip with a caller’s trigger under triggerBehavior="toggle" (component:Tooltip FR9)', () => {
+  function Tip({
+    onTriggerClick,
+  }: {
+    onTriggerClick?: (event: ReactMouseEvent) => void;
+  }) {
+    const tooltip = useTooltip({triggerBehavior: 'toggle', delay: 0});
+    return (
+      <>
+        <button type="button" ref={tooltip.ref} onClick={onTriggerClick}>
+          What is this?
+        </button>
+        {tooltip.renderTooltip('Billed monthly')}
+      </>
+    );
+  }
+  const trigger = () => screen.getByRole('button', {name: 'What is this?'});
+
+  it('the trigger’s own onClick runs, and an Astryx ClickableCard around it does not activate', () => {
+    const onCard = vi.fn();
+    const onTrigger = vi.fn();
+    render(
+      <ClickableCard label="Card" onClick={onCard}>
+        <Tip onTriggerClick={onTrigger} />
+      </ClickableCard>,
+    );
+
+    fireEvent.click(trigger());
+
+    expect(onTrigger).toHaveBeenCalledTimes(1);
+    expect(onCard).not.toHaveBeenCalled();
+    expect(trigger()).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('a plain onClick element around it receives the press, unless the trigger’s onClick stops it', () => {
+    const onRow = vi.fn();
+    const {unmount} = render(
+      <div onClick={onRow}>
+        <Tip />
+      </div>,
+    );
+    fireEvent.click(trigger());
+    expect(onRow).toHaveBeenCalledTimes(1);
+    expect(trigger()).toHaveAttribute('aria-expanded', 'true');
+    unmount();
+
+    onRow.mockClear();
+    render(
+      <div onClick={onRow}>
+        <Tip onTriggerClick={event => event.stopPropagation()} />
+      </div>,
+    );
+    fireEvent.click(trigger());
+    expect(onRow).not.toHaveBeenCalled();
   });
 });

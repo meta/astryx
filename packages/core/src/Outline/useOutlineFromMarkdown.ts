@@ -29,7 +29,11 @@ export function useOutlineFromMarkdown<
   const plugins = options?.plugins;
   const isFinal = options?.isFinal;
   return useMemo(
-    () => parseOutlineFromMarkdown(markdown, {plugins, isFinal}),
+    () =>
+      parseOutlineFromMarkdown(markdown, {
+        plugins,
+        isFinal,
+      }),
     [markdown, plugins, isFinal],
   );
 }

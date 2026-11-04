@@ -120,7 +120,7 @@ export async function runCli(args, cwdOrOpts) {
       // CommanderError from exitOverride() (parse error / --help / --version).
       // Mirror bin/astryx.mjs's error boundary: route it through the JSON shim
       // so --json consumers get a valid envelope (with the mapped ERR_ code)
-      // and non-JSON callers keep Commander's stderr line. handleCommanderError
+      // and non-JSON callers get the Astryx `Error: …` line. handleCommanderError
       // calls process.exit, which our trap re-raises as an ExitSignal.
       try {
         handleCommanderError(e);

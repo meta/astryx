@@ -1,4 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
+// @pr-a11y release-only
 
 /**
  * @file ChatLayoutScrollButton.a11y.chromium.spec.ts
@@ -44,6 +45,7 @@ const STORY_ID = 'core-chatlayout--scroll-affordance-states';
  * a stable handle for it.
  */
 const PILL = '.astryx-chat-layout-scroll-button';
+const AFFORDANCE = `${PILL} button`;
 
 /** One observed tab stop, identified structurally rather than by its text. */
 type FocusStop = {
@@ -126,7 +128,11 @@ test.afterAll(async () => {
 
 async function openStory(
   page: Page,
-  {theme = 'neutral', colorMode = 'light'} = {},
+  {
+    theme = 'neutral',
+    colorMode = 'light',
+    holdMotion = true,
+  }: {theme?: string; colorMode?: string; holdMotion?: boolean} = {},
 ): Promise<Locator> {
   page.on('pageerror', error => pageErrors.push(String(error)));
   browserVersion = page.context().browser()?.version() ?? 'unknown';
@@ -136,7 +142,9 @@ async function openStory(
   );
   const root = page.locator('.astryx-chat-layout');
   await root.waitFor({state: 'visible'});
-  await holdMotionStill(page);
+  if (holdMotion) {
+    await holdMotionStill(page);
+  }
   await page.evaluate(async () => document.fonts.ready);
   return root;
 }
@@ -169,21 +177,25 @@ async function pillVisibility(page: Page): Promise<string> {
 }
 
 /**
- * Can the affordance take focus at all? This is the mechanism under test:
- * `visibility: hidden` removes an element from sequential focus navigation AND
- * refuses programmatic focus, which `opacity: 0` does neither of. A CSS locator
- * is used rather than a role query because a hidden button is not in the
- * accessibility tree and a role query would not resolve it.
+ * Can the affordance take new focus at all? This is one half of the mechanism
+ * under test: `inert` refuses programmatic focus immediately, while delayed
+ * `visibility: hidden` removes the control from sequential navigation after the
+ * fade. A CSS locator is used rather than a role query because a hidden button
+ * is not in the accessibility tree and a role query would not resolve it.
  */
-async function affordanceAcceptsFocus(page: Page): Promise<boolean> {
-  return page
-    .locator('.astryx-chat-layout-scroll-button button')
-    .evaluate(element => {
-      // preventScroll: focusing must not move the scroll position, or the
-      // probe would change the very state the next assertion reads.
-      (element as HTMLElement).focus({preventScroll: true});
-      return document.activeElement === element;
-    });
+async function affordanceAcceptsFocus(
+  page: Page,
+  resetFocus: Locator,
+): Promise<boolean> {
+  // Start outside the affordance so this probe proves a NEW focus transfer;
+  // equality alone would also be true when a button stayed active as it hid.
+  await resetFocus.focus();
+  return page.locator(AFFORDANCE).evaluate(element => {
+    // preventScroll: focusing must not move the scroll position, or the
+    // probe would change the very state the next assertion reads.
+    (element as HTMLElement).focus({preventScroll: true});
+    return document.activeElement === element;
+  });
 }
 
 /**
@@ -340,6 +352,53 @@ async function capture(
   return receipt;
 }
 
+test('the hiding affordance releases focus before its fade finishes', async ({
+  page,
+}) => {
+  const root = await openStory(page, {holdMotion: false});
+  const pill = page.locator(PILL);
+  const affordance = page.locator(AFFORDANCE);
+
+  await scrollToTop(root);
+  await expect(pill).toHaveCSS('visibility', 'visible');
+  await affordance.focus();
+  await expect(affordance).toBeFocused();
+
+  // `visibility` flips only after the fade. Focus leaving while it is still
+  // visible proves the immediate `inert` state rather than the delayed CSS.
+  // Read it as focus leaves: a check after the focus poll can land after the
+  // fade on a slow runner, and then says nothing about when focus left.
+  await affordance.evaluate((element, pillSelector) => {
+    element.addEventListener(
+      'blur',
+      () => {
+        const pillElement = document.querySelector(pillSelector);
+        (window as unknown as {__visibilityAtBlur: string}).__visibilityAtBlur =
+          pillElement ? getComputedStyle(pillElement).visibility : '';
+      },
+      {once: true},
+    );
+  }, PILL);
+  await page.keyboard.press('Enter');
+  await expect
+    .poll(
+      async () =>
+        affordance.evaluate(element => document.activeElement === element),
+      {timeout: 5000},
+    )
+    .toBe(false);
+  expect(
+    await page.evaluate(
+      () =>
+        (window as unknown as {__visibilityAtBlur?: string}).__visibilityAtBlur,
+    ),
+  ).toBe('visible');
+  await expect
+    .poll(async () => distanceFromBottom(root), {timeout: 5000})
+    .toBeLessThan(2);
+  await expect(pill).toHaveCSS('visibility', 'hidden');
+});
+
 test('the scroll affordance is keyboard reachable exactly while it is visible', async ({
   page,
 }) => {
@@ -367,7 +426,7 @@ test('the scroll affordance is keyboard reachable exactly while it is visible', 
   expect(await distanceFromBottom(root)).toBeLessThan(2);
   await expect(pill).toHaveCSS('visibility', 'hidden');
   expect(
-    await affordanceAcceptsFocus(page),
+    await affordanceAcceptsFocus(page, before),
     'a control that paints nothing must refuse focus (WCAG 2.2 SC 2.4.7)',
   ).toBe(false);
   const restFrame = await capture(page, 'rest-hidden', {
@@ -384,7 +443,7 @@ test('the scroll affordance is keyboard reachable exactly while it is visible', 
   await expect(pill).toHaveCSS('visibility', 'visible');
   expect(await distanceFromBottom(root)).toBeGreaterThan(100);
   expect(
-    await affordanceAcceptsFocus(page),
+    await affordanceAcceptsFocus(page, before),
     'the visible affordance must keep its keyboard access',
   ).toBe(true);
   await expect(
@@ -415,8 +474,12 @@ test('the scroll affordance is keyboard reachable exactly while it is visible', 
     .poll(async () => distanceFromBottom(root), {timeout: 5000})
     .toBeLessThan(2);
   await expect(pill).toHaveCSS('visibility', 'hidden');
+  await expect(
+    page.locator(AFFORDANCE),
+    'the affordance must relinquish focus when it hides',
+  ).not.toBeFocused();
   expect(
-    await affordanceAcceptsFocus(page),
+    await affordanceAcceptsFocus(page, before),
     'after returning to the bottom the affordance must refuse focus again',
   ).toBe(false);
   const returnedFrame = await capture(page, 'returned-hidden', {

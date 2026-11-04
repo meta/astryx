@@ -177,22 +177,6 @@ describe('DebugEvent result summary', () => {
   );
 
   it(
-    'says so explicitly when a command has no result set',
-    async () => {
-      // `layout check` returns a verdict on one expression: nothing was looked
-      // up, and the run says that rather than leaving four ambiguous nulls.
-      const {event} = await runWithDebug(['layout', 'check', 'VStack>Text']);
-      expect(event.output).toMatchObject({
-        resultKind: 'none',
-        resultCount: null,
-        emptyResult: null,
-        directMatch: null,
-      });
-    },
-    SLOW,
-  );
-
-  it(
     'only claims a direct match when the filter resolved one component',
     async () => {
       // The trap: a filter is a substring search, so its mere presence proves

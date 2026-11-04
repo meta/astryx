@@ -1,0 +1,1439 @@
+{
+  "author-a-theme": {
+    "type": "docs.detail",
+    "sections": [
+      "creating-a-custom-theme",
+      "palette",
+      "definetheme",
+      "extending-a-theme",
+      "component-style-overrides",
+      "custom-variants",
+      "theme-adaptations",
+      "adaptation-rules",
+      "building-themes-for-production",
+      "icon-registry",
+      "building-a-theme-family",
+      "token-utilities",
+      "usetheme-hook"
+    ],
+    "mentions": []
+  },
+  "authoring": {
+    "type": "docs.node",
+    "children": [
+      "authoring/quick-start",
+      "authoring/building-blocks",
+      "authoring/global-integrations",
+      "authoring/ship",
+      "authoring/help",
+      "authoring/field-reference"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks": {
+    "type": "docs.node",
+    "children": [
+      "authoring/building-blocks/components",
+      "authoring/building-blocks/templates",
+      "authoring/building-blocks/themes",
+      "authoring/building-blocks/docs",
+      "authoring/building-blocks/codemods",
+      "authoring/building-blocks/configuration"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/codemods": {
+    "type": "docs.detail",
+    "sections": [
+      "add-a-codemod",
+      "write-the-transform",
+      "which-codemods-run",
+      "run-codemods-in-an-app",
+      "global-mode"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/components": {
+    "type": "docs.node",
+    "children": [
+      "authoring/building-blocks/components/add-a-component",
+      "authoring/building-blocks/components/describe-the-component",
+      "authoring/building-blocks/components/component-imports",
+      "authoring/building-blocks/components/see-it-in-an-app",
+      "authoring/building-blocks/components/replace-a-core-component"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/components/add-a-component": {
+    "type": "docs.detail",
+    "sections": [
+      "pick-a-component-name",
+      "run-the-add-command",
+      "document-an-existing-component",
+      "global-mode"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/components/component-imports": {
+    "type": "docs.detail",
+    "sections": [
+      "export-the-component",
+      "verify-the-packed-import",
+      "global-mode"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/components/describe-the-component": {
+    "type": "docs.node",
+    "children": [
+      "authoring/building-blocks/components/describe-the-component/single-component",
+      "authoring/building-blocks/components/describe-the-component/component-family",
+      "authoring/building-blocks/components/describe-the-component/subcomponent",
+      "authoring/building-blocks/components/describe-the-component/check-the-props"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/components/describe-the-component/check-the-props": {
+    "type": "docs.detail",
+    "sections": [
+      "run-the-props-check",
+      "fix-each-finding",
+      "write-types-the-check-can-judge",
+      "when-a-component-is-not-compared"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/components/describe-the-component/component-family": {
+    "type": "docs.detail",
+    "sections": [
+      "choose-the-family-shape",
+      "document-the-family-inline",
+      "give-a-member-its-own-file"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/components/describe-the-component/single-component": {
+    "type": "docs.detail",
+    "sections": [
+      "start-from-the-generated-doc",
+      "explain-when-to-use-it",
+      "document-every-public-prop",
+      "add-focused-examples",
+      "read-the-result"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/components/describe-the-component/subcomponent": {
+    "type": "docs.detail",
+    "sections": [
+      "choose-a-separate-doc",
+      "reference-it-from-the-parent",
+      "write-the-subcomponent-doc"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/components/replace-a-core-component": {
+    "type": "docs.detail",
+    "sections": [
+      "decide-whether-to-replace",
+      "set-the-replacement",
+      "check-replacement-resolution",
+      "global-mode"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/components/see-it-in-an-app": {
+    "type": "docs.detail",
+    "sections": [
+      "read-the-installed-component",
+      "test-the-packed-package",
+      "global-mode"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/configuration": {
+    "type": "docs.node",
+    "children": [
+      "authoring/building-blocks/configuration/agent-guidance",
+      "authoring/building-blocks/configuration/cli-command",
+      "authoring/building-blocks/configuration/debug-and-gap-reports"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/configuration/agent-guidance": {
+    "type": "docs.detail",
+    "sections": [
+      "add-a-guidance-line",
+      "keep-within-the-limits",
+      "see-what-agents-read",
+      "refresh-the-block",
+      "global-mode"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/configuration/cli-command": {
+    "type": "docs.detail",
+    "sections": [
+      "when-to-set-it",
+      "set-it",
+      "how-the-cli-picks",
+      "when-two-packages-disagree",
+      "check-it",
+      "global-mode"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/configuration/debug-and-gap-reports": {
+    "type": "docs.detail",
+    "sections": [
+      "record-runs-with-debug",
+      "turn-off-debug-in-an-app",
+      "handle-gap-reports",
+      "ask-before-filing-in-public",
+      "fall-back-to-issues-url",
+      "choose-a-destination",
+      "global-mode"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/docs": {
+    "type": "docs.node",
+    "children": [
+      "authoring/building-blocks/docs/add-a-topic",
+      "authoring/building-blocks/docs/doc-syntax",
+      "authoring/building-blocks/docs/sections-and-placement",
+      "authoring/building-blocks/docs/links",
+      "authoring/building-blocks/docs/extend-or-replace",
+      "authoring/building-blocks/docs/short-and-findable",
+      "authoring/building-blocks/docs/check-your-docs"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/docs/add-a-topic": {
+    "type": "docs.detail",
+    "sections": [
+      "add-a-topic-with-the-cli",
+      "write-the-sections",
+      "write-commands-without-a-runner",
+      "pick-the-doc-kind",
+      "keep-topics-in-the-docs-root",
+      "global-mode"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/docs/check-your-docs": {
+    "type": "docs.detail",
+    "sections": [
+      "run-the-docs-check",
+      "know-what-fails-the-check",
+      "check-each-doc-against-its-type",
+      "check-read-size",
+      "check-the-cli-peer"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/docs/doc-syntax": {
+    "type": "docs.detail",
+    "sections": [
+      "the-tokens",
+      "package-manager-steps",
+      "one-package-manager",
+      "what-doctor-checks"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/docs/extend-or-replace": {
+    "type": "docs.detail",
+    "sections": [
+      "replace-a-topic",
+      "extend-a-topic",
+      "replace-or-extend-a-cli-guide",
+      "check-overlaps-with-core-topics",
+      "global-mode"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/docs/links": {
+    "type": "docs.detail",
+    "sections": [
+      "link-another-doc",
+      "link-another-packages-docs",
+      "fix-a-link-that-names-no-doc"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/docs/sections-and-placement": {
+    "type": "docs.detail",
+    "sections": [
+      "add-a-docs-section",
+      "place-a-doc",
+      "fix-a-failed-placement"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/docs/short-and-findable": {
+    "type": "docs.detail",
+    "sections": [
+      "keep-each-read-short",
+      "lead-with-the-summary",
+      "make-docs-findable",
+      "test-with-search"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/templates": {
+    "type": "docs.node",
+    "children": [
+      "authoring/building-blocks/templates/start-a-template",
+      "authoring/building-blocks/templates/document-the-template",
+      "authoring/building-blocks/templates/build-the-template",
+      "authoring/building-blocks/templates/write-good-templates"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/templates/build-the-template": {
+    "type": "docs.node",
+    "children": [
+      "authoring/building-blocks/templates/build-the-template/write-the-template-file",
+      "authoring/building-blocks/templates/build-the-template/template-assets",
+      "authoring/building-blocks/templates/build-the-template/package-and-test"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/templates/build-the-template/package-and-test": {
+    "type": "docs.node",
+    "children": [
+      "authoring/building-blocks/templates/build-the-template/package-and-test/export-template-assets",
+      "authoring/building-blocks/templates/build-the-template/package-and-test/verify-packed-template",
+      "authoring/building-blocks/templates/build-the-template/package-and-test/test-template-in-app"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/templates/build-the-template/package-and-test/export-template-assets": {
+    "type": "docs.detail",
+    "sections": [
+      "keep-the-generated-template-export",
+      "export-package-owned-support-files",
+      "include-every-file",
+      "declare-what-the-copied-file-imports"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/templates/build-the-template/package-and-test/test-template-in-app": {
+    "type": "docs.detail",
+    "sections": [
+      "install-the-packed-package",
+      "copy-the-template",
+      "build-every-supported-app",
+      "render-the-behavior-matrix",
+      "grade-the-result"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/templates/build-the-template/package-and-test/verify-packed-template": {
+    "type": "docs.detail",
+    "sections": [
+      "run-the-package-check",
+      "know-what-it-does-not-prove"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/templates/build-the-template/template-assets": {
+    "type": "docs.node",
+    "children": [
+      "authoring/building-blocks/templates/build-the-template/template-assets/template-styles",
+      "authoring/building-blocks/templates/build-the-template/template-assets/template-fonts",
+      "authoring/building-blocks/templates/build-the-template/template-assets/template-icons",
+      "authoring/building-blocks/templates/build-the-template/template-assets/template-images-media"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/templates/build-the-template/template-assets/template-fonts": {
+    "type": "docs.detail",
+    "sections": [
+      "prefer-host-typography",
+      "package-a-required-font",
+      "check-fonts-in-the-app"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/templates/build-the-template/template-assets/template-icons": {
+    "type": "docs.detail",
+    "sections": [
+      "use-astryx-icon",
+      "ship-a-custom-icon",
+      "check-icons-in-the-app"
+    ],
+    "mentions": [
+      "Do not paste raw `svg` and `path` markup when an existing icon definition fits.",
+      "Export a compatible icon definition from a public package path, then import that path from the template.",
+      "For a component icon prop, pass what that prop accepts: most, such as `Button` and `IconButton`, take an element like `<Icon icon={BellIcon} />`, and some menu and navigation items also accept the icon definition itself.",
+      "Use one supported icon set consistently inside a template."
+    ]
+  },
+  "authoring/building-blocks/templates/build-the-template/template-assets/template-images-media": {
+    "type": "docs.detail",
+    "sections": [
+      "do-not-copy-relative-media",
+      "understand-template-assets",
+      "design-a-useful-placeholder",
+      "check-media-in-the-app"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/templates/build-the-template/template-assets/template-styles": {
+    "type": "docs.detail",
+    "sections": [
+      "start-with-astryx",
+      "keep-editable-styles-with-the-source",
+      "publish-shared-css"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/templates/build-the-template/write-the-template-file": {
+    "type": "docs.detail",
+    "sections": [
+      "know-what-gets-copied",
+      "keep-edited-code-in-one-file",
+      "use-imports-that-work",
+      "export-one-component"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/templates/document-the-template": {
+    "type": "docs.node",
+    "children": [
+      "authoring/building-blocks/templates/document-the-template/template-doc-overview",
+      "authoring/building-blocks/templates/document-the-template/page-template",
+      "authoring/building-blocks/templates/document-the-template/block-template",
+      "authoring/building-blocks/templates/document-the-template/replace-a-core-template"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/templates/document-the-template/block-template": {
+    "type": "docs.detail",
+    "sections": [
+      "start-with-a-standalone-block",
+      "choose-the-component-relationship",
+      "choose-a-useful-preview"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/templates/document-the-template/page-template": {
+    "type": "docs.detail",
+    "sections": [
+      "start-from-the-generated-page-doc",
+      "help-people-find-the-page"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/templates/document-the-template/replace-a-core-template": {
+    "type": "docs.detail",
+    "sections": [
+      "replace-only-on-purpose",
+      "declare-the-replacement",
+      "require-a-compatible-cli",
+      "what-apps-receive",
+      "check-the-replacement"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/templates/document-the-template/template-doc-overview": {
+    "type": "docs.detail",
+    "sections": [
+      "understand-the-two-files",
+      "document-the-shared-fields",
+      "check-how-astryx-lists-it"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/templates/start-a-template": {
+    "type": "docs.detail",
+    "sections": [
+      "what-a-template-is",
+      "why-share-one",
+      "choose-page-or-block",
+      "pick-a-template-id",
+      "run-the-add-command",
+      "global-mode"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/templates/write-good-templates": {
+    "type": "docs.node",
+    "children": [
+      "authoring/building-blocks/templates/write-good-templates/template-grading-rubric",
+      "authoring/building-blocks/templates/write-good-templates/grade-template-with-agent"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/templates/write-good-templates/grade-template-with-agent": {
+    "type": "docs.detail",
+    "sections": [
+      "give-the-agent-the-rubric",
+      "require-a-scorecard",
+      "improve-and-regrade"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/templates/write-good-templates/template-grading-rubric": {
+    "type": "docs.detail",
+    "sections": [
+      "understand-the-score",
+      "component-purity",
+      "icon-purity",
+      "custom-css",
+      "layout-and-structure",
+      "doc-metadata",
+      "image-handling",
+      "code-quality"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/themes": {
+    "type": "docs.node",
+    "children": [
+      "authoring/building-blocks/themes/add-a-theme",
+      "authoring/building-blocks/themes/generate-a-palette",
+      "authoring/building-blocks/themes/define-the-theme",
+      "authoring/building-blocks/themes/fonts-and-assets",
+      "authoring/building-blocks/themes/use-a-theme-in-an-app",
+      "authoring/building-blocks/themes/document-the-theme"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/themes/add-a-theme": {
+    "type": "docs.detail",
+    "sections": [
+      "add-a-theme",
+      "start-from-an-existing-theme",
+      "ship-several-themes",
+      "global-mode"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/themes/define-the-theme": {
+    "type": "docs.detail",
+    "sections": [
+      "map-the-palette-to-tokens",
+      "build-on-another-theme",
+      "keep-light-dark-to-colors",
+      "avoid-core-internals",
+      "declare-the-peers"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/themes/document-the-theme": {
+    "type": "docs.detail",
+    "sections": [
+      "extend-the-theme-topic",
+      "not-agent-guidance"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/themes/fonts-and-assets": {
+    "type": "docs.detail",
+    "sections": [
+      "name-the-font",
+      "ship-the-font-loader",
+      "verify-in-an-app"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/themes/generate-a-palette": {
+    "type": "docs.detail",
+    "sections": [
+      "generate-a-palette"
+    ],
+    "mentions": []
+  },
+  "authoring/building-blocks/themes/use-a-theme-in-an-app": {
+    "type": "docs.detail",
+    "sections": [
+      "apply-the-theme",
+      "extend-the-theme",
+      "global-mode"
+    ],
+    "mentions": []
+  },
+  "authoring/field-reference": {
+    "type": "docs.detail",
+    "sections": [
+      "integration",
+      "config",
+      "debug-event",
+      "gap-report-handler",
+      "discover-source",
+      "codemod",
+      "provider-identity",
+      "authored-doc-graph-fields",
+      "component-doc",
+      "hook-doc",
+      "function-doc",
+      "command-doc",
+      "enum-doc",
+      "namespace-doc",
+      "reference-doc",
+      "schema-doc",
+      "template-doc",
+      "integration-template-doc",
+      "theme-doc"
+    ]
+  },
+  "authoring/global-integrations": {
+    "type": "docs.detail",
+    "sections": [
+      "peer-range",
+      "where-it-works",
+      "checklist",
+      "try-it",
+      "more"
+    ],
+    "mentions": []
+  },
+  "authoring/help": {
+    "type": "docs.node",
+    "children": [
+      "authoring/help/troubleshooting"
+    ],
+    "mentions": []
+  },
+  "authoring/help/troubleshooting": {
+    "type": "docs.detail",
+    "sections": [
+      "fix-setup-errors",
+      "fix-verify-failures",
+      "fix-problems-in-an-app"
+    ],
+    "mentions": []
+  },
+  "authoring/quick-start": {
+    "type": "docs.detail",
+    "sections": [
+      "quick-start",
+      "fill-in-package-json",
+      "the-integration-file",
+      "global-mode"
+    ],
+    "mentions": []
+  },
+  "authoring/ship": {
+    "type": "docs.node",
+    "children": [
+      "authoring/ship/test-in-an-app",
+      "authoring/ship/checks",
+      "authoring/ship/versioning",
+      "authoring/ship/publishing",
+      "authoring/ship/upgrading"
+    ],
+    "mentions": []
+  },
+  "authoring/ship/checks": {
+    "type": "docs.detail",
+    "sections": [
+      "pick-a-check",
+      "run-every-check-in-ci",
+      "what-integration-verify-does"
+    ],
+    "mentions": []
+  },
+  "authoring/ship/publishing": {
+    "type": "docs.detail",
+    "sections": [
+      "check-before-you-publish",
+      "keep-private-files-out",
+      "publish-to-npm",
+      "check-the-published-package"
+    ],
+    "mentions": []
+  },
+  "authoring/ship/test-in-an-app": {
+    "type": "docs.detail",
+    "sections": [
+      "install-the-packed-package",
+      "check-what-the-app-sees",
+      "run-doctor-in-the-app"
+    ],
+    "mentions": []
+  },
+  "authoring/ship/upgrading": {
+    "type": "docs.detail",
+    "sections": [
+      "update-for-a-new-astryx-release",
+      "upgrade-an-app",
+      "know-which-files-upgrades-skip"
+    ],
+    "mentions": []
+  },
+  "authoring/ship/versioning": {
+    "type": "docs.detail",
+    "sections": [
+      "pick-a-version",
+      "know-what-breaks-apps",
+      "declare-peer-ranges",
+      "support-older-clis",
+      "codemods-and-versions"
+    ],
+    "mentions": []
+  },
+  "browser-support": {
+    "type": "docs.detail",
+    "sections": [
+      "overview",
+      "support-tiers",
+      "which-features-set-the-floor",
+      "which-components-are-affected",
+      "what-astryx-guarantees",
+      "supporting-older-browsers",
+      "how-these-tiers-move-over-time"
+    ],
+    "mentions": []
+  },
+  "color": {
+    "type": "docs.detail",
+    "sections": [
+      "overview",
+      "surface-colors",
+      "usage",
+      "best-practices"
+    ],
+    "mentions": []
+  },
+  "elevation": {
+    "type": "docs.detail",
+    "sections": [
+      "overview",
+      "elevation-scale",
+      "choosing-a-level",
+      "the-elevation-prop",
+      "usage",
+      "best-practices"
+    ],
+    "mentions": []
+  },
+  "foundations": {
+    "type": "docs.node",
+    "children": [
+      "color",
+      "elevation",
+      "icons",
+      "illustrations",
+      "motion",
+      "shape",
+      "spacing"
+    ],
+    "mentions": []
+  },
+  "getting-started": {
+    "type": "docs.detail",
+    "sections": [
+      "quick-start-with-ai",
+      "install",
+      "install-once",
+      "add-base-css-and-a-theme",
+      "add-your-first-component",
+      "customize-with-stylex",
+      "example-apps",
+      "explore-the-cli"
+    ],
+    "mentions": []
+  },
+  "global": {
+    "type": "docs.node",
+    "children": [
+      "global/project-global-or-both",
+      "global/install-once",
+      "global/who-answers",
+      "global/updates",
+      "global/computer-agent-guide",
+      "global/computer-integrations",
+      "global/monorepos",
+      "global/ci-and-containers",
+      "global/problems",
+      "global/uninstall",
+      "global/reference"
+    ],
+    "mentions": []
+  },
+  "global/ci-and-containers": {
+    "type": "docs.detail",
+    "sections": [
+      "in-ci",
+      "cache",
+      "read-only",
+      "short-lived",
+      "more"
+    ],
+    "mentions": []
+  },
+  "global/computer-agent-guide": {
+    "type": "docs.detail",
+    "sections": [
+      "what",
+      "where",
+      "cloud-and-apps",
+      "other-agents",
+      "choose",
+      "more"
+    ],
+    "mentions": []
+  },
+  "global/computer-integrations": {
+    "type": "docs.detail",
+    "sections": [
+      "install",
+      "outside",
+      "inside",
+      "check",
+      "more"
+    ],
+    "mentions": []
+  },
+  "global/install-once": {
+    "type": "docs.detail",
+    "sections": [
+      "install",
+      "eacces",
+      "versions-for-projects",
+      "offline",
+      "more"
+    ],
+    "mentions": []
+  },
+  "global/monorepos": {
+    "type": "docs.detail",
+    "sections": [
+      "find",
+      "workspaces",
+      "nested",
+      "more"
+    ],
+    "mentions": []
+  },
+  "global/problems": {
+    "type": "docs.detail",
+    "sections": [
+      "answered-by",
+      "installing",
+      "notices",
+      "old-astryx",
+      "fallback",
+      "not-global",
+      "core-offline",
+      "unavailable",
+      "needs-a-project",
+      "install-problems",
+      "more"
+    ],
+    "mentions": []
+  },
+  "global/project-global-or-both": {
+    "type": "docs.detail",
+    "sections": [
+      "both",
+      "compare",
+      "set-up",
+      "what-happens",
+      "more"
+    ],
+    "mentions": []
+  },
+  "global/reference": {
+    "type": "docs.detail",
+    "sections": [
+      "paths",
+      "env",
+      "json",
+      "errors",
+      "changes",
+      "glossary",
+      "more"
+    ],
+    "mentions": []
+  },
+  "global/uninstall": {
+    "type": "docs.detail",
+    "sections": [
+      "agent-guide",
+      "uninstall",
+      "reset",
+      "more"
+    ],
+    "mentions": []
+  },
+  "global/updates": {
+    "type": "docs.detail",
+    "sections": [
+      "notice",
+      "project-notice",
+      "turn-off",
+      "more"
+    ],
+    "mentions": []
+  },
+  "global/who-answers": {
+    "type": "docs.detail",
+    "sections": [
+      "in-a-project",
+      "outside",
+      "see-it",
+      "printed-commands",
+      "more"
+    ],
+    "mentions": []
+  },
+  "guides": {
+    "type": "docs.node",
+    "children": [
+      "author-a-theme",
+      "browser-support",
+      "getting-started",
+      "is-my-code-good",
+      "principles",
+      "styling-overview",
+      "theme",
+      "use-a-theme",
+      "use-integrations",
+      "working-with-ai"
+    ],
+    "mentions": []
+  },
+  "icons": {
+    "type": "docs.detail",
+    "sections": [
+      "available-names",
+      "custom-icons",
+      "theme-overrides",
+      "icon-variants",
+      "component-and-library-icons"
+    ],
+    "mentions": [
+      "This lets you swap the icon set (e.g."
+    ]
+  },
+  "illustrations": {
+    "type": "docs.detail",
+    "sections": [
+      "when-to-use",
+      "guidelines",
+      "placement"
+    ],
+    "mentions": []
+  },
+  "internationalization": {
+    "type": "docs.node",
+    "children": [
+      "internationalization/i18n-quick-start",
+      "internationalization/i18n-library-integration",
+      "internationalization/i18n-rtl-and-testing"
+    ],
+    "mentions": []
+  },
+  "internationalization/i18n-library-integration": {
+    "type": "docs.detail",
+    "sections": [
+      "overriding-astryx-s-default-text",
+      "using-astryx-with-your-own-i18n-library",
+      "using-astryx-as-your-i18n-library"
+    ],
+    "mentions": []
+  },
+  "internationalization/i18n-quick-start": {
+    "type": "docs.detail",
+    "sections": [
+      "quick-start",
+      "runtime-language-swap"
+    ],
+    "mentions": []
+  },
+  "internationalization/i18n-rtl-and-testing": {
+    "type": "docs.detail",
+    "sections": [
+      "text-direction-rtl",
+      "testing-your-translations",
+      "for-contributors"
+    ],
+    "mentions": []
+  },
+  "is-my-code-good": {
+    "type": "docs.detail",
+    "sections": [
+      "understand-the-app",
+      "choose-the-review",
+      "apply-the-rubric",
+      "collect-the-evidence",
+      "ask-an-agent",
+      "verify-and-repeat"
+    ],
+    "mentions": []
+  },
+  "layout": {
+    "type": "docs.node",
+    "children": [
+      "layout/scaffold",
+      "layout/structure",
+      "layout/headers-and-footers",
+      "layout/side-panels",
+      "layout/layout-spacing",
+      "layout/responsive"
+    ],
+    "mentions": []
+  },
+  "layout/headers-and-footers": {
+    "type": "docs.detail",
+    "sections": [
+      "headers-and-footers"
+    ],
+    "mentions": []
+  },
+  "layout/layout-spacing": {
+    "type": "docs.detail",
+    "sections": [
+      "spacing",
+      "alignment",
+      "rhythm",
+      "density"
+    ],
+    "mentions": []
+  },
+  "layout/responsive": {
+    "type": "docs.detail",
+    "sections": [
+      "breakpoints",
+      "responsive-contract",
+      "columns-that-reflow"
+    ],
+    "mentions": []
+  },
+  "layout/scaffold": {
+    "type": "docs.detail",
+    "sections": [
+      "scaffold",
+      "shell",
+      "navigation"
+    ],
+    "mentions": []
+  },
+  "layout/side-panels": {
+    "type": "docs.detail",
+    "sections": [
+      "side-panels"
+    ],
+    "mentions": []
+  },
+  "layout/structure": {
+    "type": "docs.detail",
+    "sections": [
+      "structure",
+      "type-hierarchy",
+      "containers"
+    ],
+    "mentions": []
+  },
+  "migration": {
+    "type": "docs.node",
+    "children": [
+      "migration/migration-setup",
+      "migration/component-migration",
+      "migration/migration-verification"
+    ],
+    "mentions": []
+  },
+  "migration/component-migration": {
+    "type": "docs.detail",
+    "sections": [
+      "move-the-app-frame-first",
+      "map-shadcn-and-radix-primitives",
+      "command-palette"
+    ],
+    "mentions": []
+  },
+  "migration/migration-setup": {
+    "type": "docs.detail",
+    "sections": [
+      "overview",
+      "recommended-order",
+      "cli-workflow",
+      "theme-and-css-setup",
+      "cascade-layer-safety",
+      "layer-audit",
+      "foundation-smoke-test"
+    ],
+    "mentions": []
+  },
+  "migration/migration-verification": {
+    "type": "docs.detail",
+    "sections": [
+      "verification-checklist",
+      "ai-migration-prompt"
+    ],
+    "mentions": []
+  },
+  "motion": {
+    "type": "docs.detail",
+    "sections": [
+      "overview",
+      "duration",
+      "easing",
+      "where-motion-helps",
+      "where-motion-hurts",
+      "movement-principles",
+      "respecting-user-preferences",
+      "usage",
+      "theme-motion",
+      "best-practices"
+    ],
+    "mentions": []
+  },
+  "principles": {
+    "type": "docs.detail",
+    "sections": [
+      "design-philosophy",
+      "rules",
+      "styling-approach",
+      "anti-patterns",
+      "design-tokens"
+    ],
+    "mentions": []
+  },
+  "shape": {
+    "type": "docs.detail",
+    "sections": [
+      "overview",
+      "radius-scale",
+      "concentric-radius",
+      "best-practices"
+    ],
+    "mentions": []
+  },
+  "spacing": {
+    "type": "docs.detail",
+    "sections": [
+      "overview",
+      "scale",
+      "usage",
+      "best-practices"
+    ],
+    "mentions": []
+  },
+  "styling": {
+    "type": "docs.node",
+    "children": [
+      "styling/styling-basics",
+      "styling/styling-advanced",
+      "styling/tokens-and-setup"
+    ],
+    "mentions": []
+  },
+  "styling-libraries": {
+    "type": "docs.node",
+    "children": [
+      "styling-libraries/css-and-stylex",
+      "styling-libraries/tailwind",
+      "styling-libraries/other-libraries",
+      "styling-libraries/non-css-processing"
+    ],
+    "mentions": []
+  },
+  "styling-libraries/css-and-stylex": {
+    "type": "docs.detail",
+    "sections": [
+      "core-principle",
+      "choose-an-integration-path",
+      "best-practices",
+      "plain-css-and-css-modules",
+      "stylex"
+    ],
+    "mentions": []
+  },
+  "styling-libraries/non-css-processing": {
+    "type": "docs.detail",
+    "sections": [
+      "non-css-processing",
+      "non-css-best-practices"
+    ],
+    "mentions": []
+  },
+  "styling-libraries/other-libraries": {
+    "type": "docs.detail",
+    "sections": [
+      "semantic-token-systems",
+      "mui-and-palette-based-themes",
+      "css-in-js",
+      "unocss",
+      "interop-checklist"
+    ],
+    "mentions": []
+  },
+  "styling-libraries/tailwind": {
+    "type": "docs.detail",
+    "sections": [
+      "tailwind"
+    ],
+    "mentions": []
+  },
+  "styling-overview": {
+    "type": "docs.detail",
+    "sections": [
+      "pick-a-path",
+      "plain",
+      "tailwind",
+      "stylex-own-code",
+      "other-packages",
+      "what-each-file-does",
+      "further-reading"
+    ],
+    "mentions": []
+  },
+  "styling/styling-advanced": {
+    "type": "docs.detail",
+    "sections": [
+      "compound-components",
+      "preferred-selector-surface-data-attributes",
+      "deprecated-classes",
+      "what-not-to-do"
+    ],
+    "mentions": []
+  },
+  "styling/styling-basics": {
+    "type": "docs.detail",
+    "sections": [
+      "overview",
+      "xstyle-prop",
+      "tailwind-integration",
+      "classname-and-style-props",
+      "rest-props-prop-drilling"
+    ],
+    "mentions": []
+  },
+  "styling/tokens-and-setup": {
+    "type": "docs.detail",
+    "sections": [
+      "design-tokens",
+      "stylex-setup"
+    ],
+    "mentions": []
+  },
+  "theme": {
+    "type": "docs.detail",
+    "sections": [
+      "quick-start",
+      "creating-a-custom-theme",
+      "icon-sizes",
+      "light-dark-mode",
+      "integration-themes"
+    ],
+    "mentions": []
+  },
+  "tokens": {
+    "type": "docs.node",
+    "children": [
+      "tokens/tokens-color",
+      "tokens/tokens-data",
+      "tokens/tokens-syntax",
+      "tokens/tokens-spacing",
+      "tokens/tokens-size",
+      "tokens/tokens-border",
+      "tokens/tokens-focus",
+      "tokens/tokens-radius",
+      "tokens/tokens-shadow",
+      "tokens/tokens-duration",
+      "tokens/tokens-ease",
+      "tokens/tokens-typography",
+      "tokens/tokens-text-size",
+      "tokens/tokens-font-weight",
+      "tokens/tokens-type-scale",
+      "tokens/tokens-usage"
+    ],
+    "mentions": []
+  },
+  "tokens/tokens-border": {
+    "type": "docs.detail",
+    "sections": [
+      "border-tokens"
+    ],
+    "mentions": []
+  },
+  "tokens/tokens-color": {
+    "type": "docs.detail",
+    "sections": [
+      "color-tokens"
+    ],
+    "mentions": []
+  },
+  "tokens/tokens-data": {
+    "type": "docs.detail",
+    "sections": [
+      "data-visualization-tokens"
+    ],
+    "mentions": []
+  },
+  "tokens/tokens-duration": {
+    "type": "docs.detail",
+    "sections": [
+      "duration-tokens"
+    ],
+    "mentions": []
+  },
+  "tokens/tokens-ease": {
+    "type": "docs.detail",
+    "sections": [
+      "easing-tokens"
+    ],
+    "mentions": []
+  },
+  "tokens/tokens-focus": {
+    "type": "docs.detail",
+    "sections": [
+      "focus-tokens"
+    ],
+    "mentions": []
+  },
+  "tokens/tokens-font-weight": {
+    "type": "docs.detail",
+    "sections": [
+      "font-weight-tokens"
+    ],
+    "mentions": []
+  },
+  "tokens/tokens-radius": {
+    "type": "docs.detail",
+    "sections": [
+      "radius-tokens"
+    ],
+    "mentions": []
+  },
+  "tokens/tokens-shadow": {
+    "type": "docs.detail",
+    "sections": [
+      "shadow-tokens"
+    ],
+    "mentions": []
+  },
+  "tokens/tokens-size": {
+    "type": "docs.detail",
+    "sections": [
+      "size-tokens"
+    ],
+    "mentions": []
+  },
+  "tokens/tokens-spacing": {
+    "type": "docs.detail",
+    "sections": [
+      "spacing-tokens"
+    ],
+    "mentions": []
+  },
+  "tokens/tokens-syntax": {
+    "type": "docs.detail",
+    "sections": [
+      "syntax-tokens"
+    ],
+    "mentions": []
+  },
+  "tokens/tokens-text-size": {
+    "type": "docs.detail",
+    "sections": [
+      "font-size-tokens"
+    ],
+    "mentions": []
+  },
+  "tokens/tokens-type-scale": {
+    "type": "docs.detail",
+    "sections": [
+      "type-scale-tokens"
+    ],
+    "mentions": []
+  },
+  "tokens/tokens-typography": {
+    "type": "docs.detail",
+    "sections": [
+      "font-family-tokens"
+    ],
+    "mentions": []
+  },
+  "tokens/tokens-usage": {
+    "type": "docs.detail",
+    "sections": [
+      "usage-in-stylex"
+    ],
+    "mentions": []
+  },
+  "typography": {
+    "type": "docs.node",
+    "children": [
+      "typography/font-setup",
+      "typography/type-scale",
+      "typography/typography-best-practices"
+    ],
+    "mentions": []
+  },
+  "typography/font-setup": {
+    "type": "docs.detail",
+    "sections": [
+      "overview",
+      "font-families",
+      "loading-custom-fonts",
+      "font-sizes",
+      "font-weights"
+    ],
+    "mentions": []
+  },
+  "typography/type-scale": {
+    "type": "docs.detail",
+    "sections": [
+      "line-height",
+      "type-scale",
+      "display-text",
+      "usage",
+      "custom-type-scale"
+    ],
+    "mentions": []
+  },
+  "typography/typography-best-practices": {
+    "type": "docs.detail",
+    "sections": [
+      "best-practices"
+    ],
+    "mentions": []
+  },
+  "use-a-theme": {
+    "type": "docs.detail",
+    "sections": [
+      "quick-start",
+      "migrating-earlier-theme-copies",
+      "available-themes",
+      "theme-props",
+      "integration-themes",
+      "light-dark-mode",
+      "nesting-themes",
+      "runtime-vs-built-themes"
+    ],
+    "mentions": []
+  },
+  "use-integrations": {
+    "type": "docs.detail",
+    "sections": [
+      "discover-integrations",
+      "install-an-integration",
+      "use-what-it-adds",
+      "check-for-problems"
+    ],
+    "mentions": []
+  },
+  "working-with-ai": {
+    "type": "docs.detail",
+    "sections": [
+      "overview",
+      "quick-start",
+      "what-gets-generated",
+      "cursor-setup",
+      "checking-your-setup",
+      "the-astryx-pattern",
+      "the-dense-flag",
+      "mcp-server",
+      "global-mode"
+    ],
+    "mentions": []
+  }
+}

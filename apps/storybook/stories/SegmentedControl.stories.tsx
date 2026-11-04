@@ -6,7 +6,11 @@ import {
   SegmentedControl,
   SegmentedControlItem,
 } from '@astryxdesign/core/SegmentedControl';
+import {Button} from '@astryxdesign/core/Button';
+import {Card} from '@astryxdesign/core/Card';
+import {Heading} from '@astryxdesign/core/Heading';
 import {Icon} from '@astryxdesign/core/Icon';
+import {Text} from '@astryxdesign/core/Text';
 import {VStack} from '@astryxdesign/core/Stack';
 import {
   Squares2X2Icon,
@@ -79,6 +83,67 @@ export const InVerticalStack: Story = {
       </VStack>
     );
   },
+};
+
+const WORKSPACE_SUMMARY: Record<string, string> = {
+  overview: '4 projects, 2 due this week.',
+  activity: '18 updates since Monday.',
+  members: '12 members, 3 pending invites.',
+  billing: 'Next invoice on October 1.',
+};
+
+function WorkspaceCard() {
+  const [view, setView] = useState('overview');
+  return (
+    <Card maxWidth={480}>
+      <VStack gap={3}>
+        <Heading level={3}>Team workspace</Heading>
+        <SegmentedControl
+          label="Workspace view"
+          value={view}
+          onChange={setView}>
+          <SegmentedControlItem value="overview" label="Overview" />
+          <SegmentedControlItem value="activity" label="Activity" />
+          <SegmentedControlItem value="members" label="Members" />
+          <SegmentedControlItem value="billing" label="Billing" />
+        </SegmentedControl>
+        <Text color="secondary">{WORKSPACE_SUMMARY[view]}</Text>
+      </VStack>
+    </Card>
+  );
+}
+
+/**
+ * The SegmentedControl.doc.mjs "In a narrow card" example at 320px, 390px, and
+ * 480px. With room (390px and 480px) the hug control keeps its content width
+ * inside the VStack instead of stretching. At 320px it caps at the card width
+ * and its labels truncate instead of running past the card edge.
+ */
+export const InNarrowCard: Story = {
+  name: 'In a narrow card',
+  render: () => (
+    <div
+      style={{
+        display: 'flex',
+        gap: 24,
+        flexWrap: 'wrap',
+        alignItems: 'flex-start',
+      }}>
+      {[320, 390, 480].map(width => (
+        <div key={width} style={{width}}>
+          <p
+            style={{
+              fontSize: 12,
+              color: 'var(--color-text-secondary)',
+              marginBottom: 8,
+            }}>
+            {width}px
+          </p>
+          <WorkspaceCard />
+        </div>
+      ))}
+    </div>
+  ),
 };
 
 export const WithIcons: Story = {
@@ -289,6 +354,57 @@ export const PressedState: Story = {
           isDisabled
         />
       </SegmentedControl>
+    );
+  },
+};
+
+const PERIODS = [
+  {value: 'day', label: 'Day'},
+  {value: 'week', label: 'Week'},
+  {value: 'month', label: 'Month'},
+  {value: 'year', label: 'Year to date'},
+];
+
+/**
+ * On a touch screen the selection slides from one segment to the next on
+ * UIKit's spring, whether a finger, a key or the app changed the value. With a
+ * mouse or a pen every change, a click included, slides on the theme's
+ * duration and easing, and a drag carries it as a finger does.
+ */
+export const SelectionMotion: Story = {
+  name: 'Selection motion',
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Under a finger the selection slides between segments on UIKit’s spring, for taps, arrow keys and programmatic changes alike (the button changes the value from outside). Drag the selected segment to another one and let go: the segment under the finger is chosen, and letting go outside the control selects nothing. Under Reduce Motion nothing travels: the old selection fades out as the new one fades in. With a mouse or a pen every change, a click included, slides on the theme’s duration and easing, and a drag carries the selection as a finger does.',
+      },
+    },
+  },
+  render: () => {
+    const [value, setValue] = useState('day');
+    const next = () => {
+      const index = PERIODS.findIndex(period => period.value === value);
+      setValue(PERIODS[(index + 1) % PERIODS.length].value);
+    };
+    return (
+      <VStack gap={4} width="100%">
+        <SegmentedControl value={value} onChange={setValue} label="Period">
+          {PERIODS.map(period => (
+            <SegmentedControlItem key={period.value} {...period} />
+          ))}
+        </SegmentedControl>
+        <SegmentedControl
+          value={value}
+          onChange={setValue}
+          label="Period, filling the row"
+          layout="fill">
+          {PERIODS.map(period => (
+            <SegmentedControlItem key={period.value} {...period} />
+          ))}
+        </SegmentedControl>
+        <Button label="Next period" onClick={next} />
+      </VStack>
     );
   },
 };

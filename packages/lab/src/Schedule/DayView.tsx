@@ -20,23 +20,20 @@ import {ScheduleMonthTitle, ScheduleFrame} from './shared';
 import {TimeGridView} from './TimeGridView';
 import {scheduleRangeToZonedDateTimeRange} from './zonedDateTime';
 import type {
+  ScheduleTimeGridViewOptions,
   PlainDate,
   ScheduleView,
   ScheduleViewComponentProps,
 } from './types';
 
-export interface ScheduleDayViewOptions {
-  minHour?: number;
-  maxHour?: number;
-  hourHeight?: number;
-}
+export type ScheduleDayViewOptions = ScheduleTimeGridViewOptions;
 
 function ScheduleDayView({
   options,
 }: ScheduleViewComponentProps<ScheduleDayViewOptions>) {
   const {events, date, focusDate, timezoneID, locale, range, isLoading} =
     useScheduleContext();
-  const {minHour = 0, maxHour = 24, hourHeight = 100} = options;
+  const {minHour = 0, maxHour = 24, hourHeight = 100, renderPopover} = options;
   const rangeDate = date.toPlainDate();
   const days = enumerateDates(range.startDate, range.endDate);
   const titleLabel = plainDateFormat(
@@ -58,6 +55,8 @@ function ScheduleDayView({
         minHour={minHour}
         maxHour={maxHour}
         hourHeight={hourHeight}
+        label={titleLabel}
+        renderPopover={renderPopover}
       />
     </ScheduleFrame>
   );
@@ -67,10 +66,11 @@ export function createScheduleDayView({
   minHour = 0,
   maxHour = 24,
   hourHeight = 100,
+  renderPopover,
 }: ScheduleDayViewOptions = {}): ScheduleView<ScheduleDayViewOptions> {
   return {
     component: ScheduleDayView,
-    options: {minHour, maxHour, hourHeight},
+    options: {minHour, maxHour, hourHeight, renderPopover},
     getDateRange: date => {
       const range = getDayDateRange({
         date: date.toPlainDate(),

@@ -534,6 +534,42 @@ describe('TransferList', () => {
       expect(screen.getByTestId('popover-host')).toContainElement(layer);
     });
 
+    it('cancels a pointer reorder when a second pointer lands, as a pinch does', () => {
+      const onValueChange = vi.fn();
+      const {container} = render(
+        <ControlledTransferList
+          initialValue={['name', 'owner', 'status']}
+          onValueChange={onValueChange}
+        />,
+      );
+      const rows = [
+        ...container.querySelectorAll<HTMLElement>('[data-transfer-list-row]'),
+      ];
+      mockRowBounds(rows);
+      const handle = screen.getByRole('button', {name: 'Reorder Name'});
+
+      fireEvent.pointerDown(handle, {
+        button: 0,
+        pointerId: 7,
+        clientX: 300,
+        clientY: 10,
+      });
+      fireEvent.pointerMove(handle, {pointerId: 7, clientX: 300, clientY: 34});
+      expect(
+        container.querySelector('[data-transfer-list-reorder-source]'),
+      ).toBeInTheDocument();
+
+      // The second finger of a pinch lands elsewhere on the page.
+      fireEvent.pointerDown(document.body, {pointerId: 8, clientX: 600});
+      expect(
+        container.querySelector('[data-transfer-list-reorder-source]'),
+      ).not.toBeInTheDocument();
+
+      fireEvent.pointerMove(handle, {pointerId: 7, clientX: 300, clientY: 140});
+      fireEvent.pointerUp(handle, {pointerId: 7, clientX: 300, clientY: 140});
+      expect(onValueChange).not.toHaveBeenCalled();
+    });
+
     it('keeps rows stationary, locks X, follows pointer Y, and commits once', () => {
       const onValueChange = vi.fn();
       const {container} = render(

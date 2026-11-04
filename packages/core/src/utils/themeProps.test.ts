@@ -8,38 +8,26 @@ describe('themeProps', () => {
     expect(themeProps('card').className).toBe('astryx-card');
   });
 
-  it('continues to emit released bare prop and state classes through 0.7.0', () => {
+  it('emits only the stable target class while reflecting props and state', () => {
     expect(
       themeProps('button', {variant: 'secondary', size: 'sm'}).className,
-    ).toBe('astryx-button secondary sm');
+    ).toBe('astryx-button');
     expect(themeProps('switch', {checked: 'checked'}).className).toBe(
-      'astryx-switch checked',
+      'astryx-switch',
     );
   });
 
-  it('prefixes numeric compatibility classes with the prop name', () => {
-    expect(themeProps('heading', {level: 1}).className).toBe(
-      'astryx-heading level-1',
-    );
+  it('does not turn numeric values into classes', () => {
+    expect(themeProps('heading', {level: 1}).className).toBe('astryx-heading');
     expect(themeProps('heading', {level: '3'}).className).toBe(
-      'astryx-heading level-3',
+      'astryx-heading',
     );
   });
 
-  it('skips nullish compatibility classes', () => {
+  it('ignores nullish reflected values in the class name', () => {
     expect(
       themeProps('button', {variant: 'primary', size: undefined}).className,
-    ).toBe('astryx-button primary');
-  });
-
-  it('continues to emit deprecated target-name aliases when requested', () => {
-    expect(
-      themeProps(
-        'progress-bar',
-        {variant: 'positive'},
-        {legacyNames: ['progressbar']},
-      ).className,
-    ).toBe('astryx-progress-bar positive astryx-progressbar');
+    ).toBe('astryx-button');
   });
 
   it('reflects visual props as data attributes', () => {
@@ -64,9 +52,9 @@ describe('themeProps', () => {
     });
   });
 
-  it('returns compatibility classes and canonical data attributes together', () => {
+  it('returns the stable target and canonical data attributes together', () => {
     expect(themeProps('button', {variant: 'primary', size: 'sm'})).toEqual({
-      className: 'astryx-button primary sm',
+      className: 'astryx-button',
       'data-variant': 'primary',
       'data-size': 'sm',
     });

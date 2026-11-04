@@ -6,9 +6,12 @@
  * Both config loading and integration loading need to (a) import a
  * user-authored module (`.ts` via jiti, `.mjs`/`.js` via native dynamic
  * import) and (b) find conventional files by basename in a fixed
- * load-precedence order. These helpers centralize that so the two callers stay
- * in lockstep. A module's stdout writes go to stderr while it loads, so
- * project code that prints cannot corrupt a `--json` envelope.
+ * load-precedence order. Generated theme artifacts also use a dedicated jiti
+ * path that resolves extensionless JSX/TSX registry imports and loads the
+ * stylesheets they import as empty modules. These helpers centralize that
+ * behavior so callers stay in lockstep. A module's stdout writes go to stderr
+ * while it loads, so project code that prints cannot corrupt a `--json`
+ * envelope.
  *
  * `loadModuleWithParser` builds on these primitives to provide the single
  * load/validation boundary shared by config, integration, codemod, and
@@ -101,8 +104,9 @@ async function withStdoutOnStderr(load) {
  * no-cache jiti instance. A fresh CommonJS `.js` read evicts and reloads through
  * `require`; an ESM `.js` or `.mjs` read uses a cache-busted file URL. The
  * nearest package.json `type` decides `.js`, matching Node's package scopes.
- * Normal loads retain module caching. `fresh` is an explicit migration-only
- * escape hatch for rereading files that a codemod changed during this process.
+ * Normal loads retain module caching. `fresh` rereads a file that changed
+ * during this process: one a codemod rewrote, or an edited doc file (the doc
+ * importers in ../doc-compiler/import.mjs read each change once).
  * Anything the module writes to stdout while it loads goes to stderr.
  *
  * @param {string} file absolute path
@@ -111,6 +115,128 @@ async function withStdoutOnStderr(load) {
  */
 export async function importUserModule(file, {fresh = false} = {}) {
   return await withStdoutOnStderr(() => importModule(file, fresh));
+}
+
+const THEME_ARTIFACT_EXTENSIONS = [
+  '.js',
+  '.jsx',
+  '.ts',
+  '.tsx',
+  '.mjs',
+  '.cjs',
+  '.mts',
+  '.cts',
+];
+
+/**
+ * @param {string | symbol} specifier
+ * @returns {specifier is string}
+ */
+function isStylesheetSpecifier(specifier) {
+  return typeof specifier === 'string' && specifier.endsWith('.css');
+}
+
+/**
+ * Whether `specifier`, resolved from the module at `from`, names an existing
+ * `.css` file.
+ * @param {string} specifier
+ * @param {string} from
+ */
+function resolvesToStylesheet(specifier, from) {
+  try {
+    return createRequire(from).resolve(specifier).endsWith('.css');
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A built theme module may import a stylesheet so that the app's bundler emits
+ * it. Node cannot load a stylesheet, so an import that ends in `.css` and
+ * resolves from the theme module to an existing `.css` file loads as an empty
+ * module. Any other import loads as before: a missing stylesheet fails like
+ * any missing import, and `./tokens.css` loads `tokens.css.js` when that is
+ * the file it names. jiti shows only the import text, so the check resolves it
+ * from the theme module's folder, not from the importing module's. A module in
+ * another folder fails on a stylesheet it reaches by a different relative
+ * path, and passes on a missing stylesheet whose path exists from the theme
+ * module's folder.
+ * @param {() => string} themeModule returns the theme module's path
+ * @returns {Record<string, unknown>}
+ */
+function themeArtifactStylesheets(themeModule) {
+  return new Proxy(
+    {},
+    {
+      has: (_target, specifier) =>
+        specifier !== themeModule() &&
+        isStylesheetSpecifier(specifier) &&
+        resolvesToStylesheet(specifier, themeModule()),
+      get: (_target, specifier) =>
+        isStylesheetSpecifier(specifier) ? {} : undefined,
+    },
+  );
+}
+
+class ThemeArtifactNotFoundError extends Error {
+  code = 'ERR_THEME_ARTIFACT_NOT_FOUND';
+
+  /** @param {string} specifier @param {unknown} [cause] */
+  constructor(specifier, cause) {
+    super(`Theme artifact "${specifier}" does not resolve.`, {cause});
+    this.name = 'ThemeArtifactNotFoundError';
+  }
+}
+
+/** @param {unknown} error */
+function isMissingPackageExport(error) {
+  if (error == null || typeof error !== 'object' || !('code' in error)) {
+    return false;
+  }
+  return (
+    typeof error.code === 'string' &&
+    [
+      'ERR_MODULE_NOT_FOUND',
+      'ERR_PACKAGE_PATH_NOT_EXPORTED',
+      'MODULE_NOT_FOUND',
+    ].includes(error.code)
+  );
+}
+
+/**
+ * Load a generated theme artifact and its extensionless JS/JSX/TS/TSX graph.
+ * Package specifiers resolve from the consumer project, while relative paths
+ * resolve from that same project root. An import of an existing `.css` file
+ * loads as an empty module.
+ * @param {string} specifier
+ * @param {string} cwd
+ * @returns {Promise<Record<string, unknown>>}
+ */
+export async function importThemeArtifact(specifier, cwd) {
+  let themeModule = path.join(cwd, 'package.json');
+  const loader = createJiti(path.join(cwd, 'package.json'), {
+    moduleCache: false,
+    jsx: true,
+    interopDefault: true,
+    extensions: THEME_ARTIFACT_EXTENSIONS,
+    virtualModules: themeArtifactStylesheets(() => themeModule),
+  });
+  let target;
+  if (specifier.startsWith('.') || path.isAbsolute(specifier)) {
+    target = path.resolve(cwd, specifier);
+  } else {
+    try {
+      target = loader.resolve(specifier);
+    } catch (error) {
+      if (!isMissingPackageExport(error)) throw error;
+      throw new ThemeArtifactNotFoundError(specifier, error);
+    }
+  }
+  if (!fs.existsSync(target)) {
+    throw new ThemeArtifactNotFoundError(specifier);
+  }
+  themeModule = target;
+  return await withStdoutOnStderr(() => loader.import(target));
 }
 
 /**

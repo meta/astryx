@@ -10,6 +10,7 @@ import {describe, it, expect} from 'vitest';
 import {parse, parseCompact, parseOutline, detectForm, XLEParseError} from './parse.mjs';
 import {toCompact, toOutline} from './print.mjs';
 import {validate} from './validate.mjs';
+import {expand} from './expand.mjs';
 import {parseEnumValues, SPACING_STEPS} from './registry.mjs';
 
 // ─── parser: compact ───────────────────────────────────────────────────────
@@ -307,6 +308,18 @@ describe('validate', () => {
     const doc = parse('Bx{card-callout}');
     expect(validate(doc, registry, BLOCKS).errors).toEqual([]);
     expect(doc.roots[0].hint.block.name).toBe('CardCallout');
+  });
+
+  it('includes --type block when a known block source is unavailable', () => {
+    const doc = parse('Bx{card-callout}');
+    expect(validate(doc, registry, BLOCKS).errors).toEqual([]);
+    const result = expand(doc, registry, {
+      componentName: 'Demo',
+      blockModules: new Map(),
+    });
+    expect(result.code).toContain(
+      'astryx template CardCallout --type block',
+    );
   });
 
   it('enforces structural pairings', () => {

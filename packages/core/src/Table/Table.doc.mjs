@@ -106,7 +106,18 @@ export const docs = {
   displayName: 'Table',
   group: 'Table',
   category: 'Table & List',
-  keywords: ["table","datatable","datagrid","spreadsheet","sorting","virtualized","columns","rows","selection","pinning"],
+  keywords: [
+    'table',
+    'datatable',
+    'datagrid',
+    'spreadsheet',
+    'sorting',
+    'virtualized',
+    'columns',
+    'rows',
+    'selection',
+    'pinning',
+  ],
   playground: {
     defaults: {
       data: [
@@ -131,27 +142,28 @@ export const docs = {
       {className: 'astryx-table-row'},
       {className: 'astryx-table-cell', visualProps: ['density']},
       {className: 'astryx-table-header-cell', visualProps: ['density']},
-      // Retained beside the canonical names for backwards compatibility.
-      // New themes use the canonical targets above.
-      {className: 'astryx-base-table', deprecatedFor: 'table'},
     ],
   },
-  description: 'Styled, data-driven table with density, dividers, hover highlight, striped rows, and named plugin support. T must extend Record<string, unknown>.',
+  description:
+    'Styled, data-driven table with density, dividers, hover highlight, striped rows, and named plugin support. T must extend Record<string, unknown>.',
   props: [
     {
       name: 'data',
       type: 'T[]',
-      description: 'Array of data items to render as rows. T must extend Record<string, unknown> (use `interface MyRow extends Record<string, unknown>` for custom types).',
+      description:
+        'Array of data items to render as rows. T must extend Record<string, unknown> (use `interface MyRow extends Record<string, unknown>` for custom types).',
     },
     {
       name: 'columns',
       type: 'TableColumn<T>[]',
-      description: 'Column definitions: each column has {key, header, width?, align?, renderCell?}. The `header` field sets the column heading text. If omitted, columns are auto-generated from data object keys. The `width` field is typed as `ColumnWidth` (not a number); use `proportional(n)` or `pixel(n)` helpers imported from `@astryxdesign/core/Table`. Example: `width: pixel(120)` for 120px fixed, `width: proportional(1)` for flex distribution.',
+      description:
+        'Column definitions: each column has {key, header, width?, align?, renderCell?}. The `header` field sets the column heading text. If omitted, columns are auto-generated from data object keys. The `width` field is typed as `ColumnWidth` (not a number); use `proportional(n)` or `pixel(n)` helpers imported from `@astryxdesign/core/Table`. Omitting `width` keeps an equal flexible share with a compact 60px readability floor. To give one column a different floor, set `width: proportional(1, {minWidth: 80})`; its `minWidth` replaces the 60px floor for that column. Example: `width: pixel(120)` for 120px fixed, `width: proportional(1)` for a flexible column with a 120px default minimum.',
     },
     {
       name: 'idKey',
       type: '(keyof T & string) | ((item: T) => string | number)',
-      description: 'Row key for React reconciliation. Pass a property name string or a function. Falls back to row index if omitted.',
+      description:
+        'Row key for React reconciliation. Pass a property name string or a function. Falls back to row index if omitted.',
     },
     {
       name: 'density',
@@ -174,46 +186,54 @@ export const docs = {
     {
       name: 'hasHover',
       type: 'boolean',
-      description: 'Applies a hover highlight background to rows on pointer devices.',
+      description:
+        'Applies a hover highlight background to rows on pointer devices.',
       default: 'false',
     },
     {
       name: 'verticalAlign',
       type: "'middle' | 'top' | 'bottom'",
-      description: 'Vertical alignment for body row cells. Controls `vertical-align` on the `<td>` elements.',
+      description:
+        'Vertical alignment for body row cells. Controls `vertical-align` on the `<td>` elements.',
       default: "'middle'",
     },
     {
       name: 'textOverflow',
       type: "'wrap' | 'truncate'",
-      description: "How body cell text behaves when it exceeds the column width. 'wrap' lets text wrap and the row grow taller; 'truncate' clips with an ellipsis (default-rendered cells show a tooltip on hover when truncated). Header cells always truncate.",
+      description:
+        "How body cell text behaves when it exceeds the column width. 'wrap' lets text wrap and the row grow taller; 'truncate' clips with an ellipsis (default-rendered cells show a tooltip on hover when truncated). Header cells always truncate.",
       default: "'wrap'",
     },
     {
       name: 'plugins',
       type: 'Record<string, TablePlugin<T>>',
-      description: 'Named plugins that extend table behavior via the transform pipeline. Converted to an ordered array internally.',
+      description:
+        'Named plugins that extend table behavior via the transform pipeline. Converted to an ordered array internally.',
     },
     {
       name: 'rowIndexStart',
       type: 'number',
-      description: 'ARIA row index (1-based) for the first rendered body row. The row ordinal is an accessibility concern independent of any visible index column, so setting this (or rowCount) makes the table emit aria-rowindex on body rows and aria-rowcount on the table. For a paginated/windowed view, pass the offset of the first visible row (e.g. (page - 1) * pageSize + 1) so aria-rowindex reflects position in the full dataset. Data-driven mode only.',
+      description:
+        'ARIA row index (1-based) for the first rendered body row. The row ordinal is an accessibility concern independent of any visible index column, so setting this (or rowCount) makes the table emit aria-rowindex on body rows and aria-rowcount on the table. For a paginated/windowed view, pass the offset of the first visible row (e.g. (page - 1) * pageSize + 1) so aria-rowindex reflects position in the full dataset. Data-driven mode only.',
       default: '1',
     },
     {
       name: 'rowCount',
       type: 'number',
-      description: 'Total number of body rows across all pages/windows, used for aria-rowcount so assistive tech can announce "row X of Y" against the full dataset. When omitted but rowIndexStart is set (windowed view with an unknown total), aria-rowcount is set to -1 per the ARIA unknown-count convention. Data-driven mode only.',
+      description:
+        'Total number of body rows across all pages/windows, used for aria-rowcount so assistive tech can announce "row X of Y" against the full dataset. When omitted but rowIndexStart is set (windowed view with an unknown total), aria-rowcount is set to -1 per the ARIA unknown-count convention. Data-driven mode only.',
     },
     {
       name: 'children',
       type: 'ReactNode',
-      description: 'Children mode: compose the table yourself from TableHeader / TableBody / TableFooter, each holding TableRow and TableCell, instead of using data-driven rendering. The children are passed straight to the <table>, so the section is yours to supply. A TableRow placed directly in Table emits <table><tr>, which is invalid HTML and mismatches on hydration (the parser inserts an implied <tbody> for server-rendered markup; React does not on the client). Data-driven mode renders the sections for you.',
+      description:
+        'Children mode: compose the table yourself from TableHeader / TableBody / TableFooter, each holding TableRow and TableCell, instead of using data-driven rendering. The children are passed straight to the <table>, so the section is yours to supply. A TableRow placed directly in Table emits <table><tr>, which is invalid HTML and mismatches on hydration (the parser inserts an implied <tbody> for server-rendered markup; React does not on the client). Data-driven mode renders the sections for you.',
     },
     {
       name: 'xstyle',
       type: 'StyleXStyles',
-      description: 'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value: not an inline style object like style={{}}.',
+      description:
+        'StyleX styles for layout customization (margins, positioning, sizing). Must be a stylex.create() value: not an inline style object like style={{}}.',
     },
   ],
   components: [
@@ -225,6 +245,7 @@ export const docs = {
     {name: 'TableHeaderCell'},
     {name: 'useTableSelection'},
     {name: 'useTableSelectionState'},
+    {name: 'TableSelectionToolbar'},
     {name: 'useTableSortable'},
     {name: 'useTableTreeData'},
     {name: 'useTableTreeState'},
@@ -237,14 +258,46 @@ export const docs = {
     description:
       'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
     bestPractices: [
-      { guidance: true, description: 'Use density and divider variants to match the information density and scanning needs of your data.' },
-      { guidance: true, description: 'Compose rich cell content with Astryx components like Badge, StatusDot, and Avatar via renderCell.' },
-      { guidance: true, description: 'In children mode, put every row inside TableHeader, TableBody, or TableFooter. <table> cannot contain a <tr> directly: the HTML parser inserts an implied <tbody> for server-rendered markup and React does not on the client, so unwrapped rows mismatch on hydration.' },
-      { guidance: true, description: 'Set explicit width on every column using proportional() or pixel(). proportional(1) gives equal flex distribution with a 120px minimum that prevents columns from collapsing on narrow viewports. Omitting width skips the minimum.' },
-      { guidance: true, description: 'Use the data-driven API from React Server Components: proportional(), pixel(), and column definitions without function props are server-safe. Columns using renderCell (or any function prop) need the table wrapped in a "use client" component, since functions cannot cross the server-client boundary.' },
-      { guidance: false, description: 'Use a table for data without consistent columns. Use a list or card layout for heterogeneous content.' },
-      { guidance: false, description: 'Enable every plugin at once. Add only the features your use case requires to keep the interface focused.' },
-      { guidance: false, description: 'Omit width on text-heavy columns; without an explicit proportional() width they have no minimum and can squish to near-zero on mobile.' },
+      {
+        guidance: true,
+        description:
+          'Use density and divider variants to match the information density and scanning needs of your data.',
+      },
+      {
+        guidance: true,
+        description:
+          'Compose rich cell content with Astryx components like Badge, StatusDot, and Avatar via renderCell.',
+      },
+      {
+        guidance: true,
+        description:
+          'In children mode, put every row inside TableHeader, TableBody, or TableFooter. <table> cannot contain a <tr> directly: the HTML parser inserts an implied <tbody> for server-rendered markup and React does not on the client, so unwrapped rows mismatch on hydration.',
+      },
+      {
+        guidance: true,
+        description:
+          'Omit width for equal flexible columns with a compact 60px readability floor. Give one column its own floor with proportional(1, {minWidth}), weight columns with proportional(n), and fix widths with pixel(); the Table scroll region activates when the combined floors no longer fit.',
+      },
+      {
+        guidance: true,
+        description:
+          'Use the data-driven API from React Server Components: proportional(), pixel(), and column definitions without function props are server-safe. Columns using renderCell (or any function prop) need the table wrapped in a "use client" component, since functions cannot cross the server-client boundary.',
+      },
+      {
+        guidance: false,
+        description:
+          'Use a table for data without consistent columns. Use a list or card layout for heterogeneous content.',
+      },
+      {
+        guidance: false,
+        description:
+          'Enable every plugin at once. Add only the features your use case requires to keep the interface focused.',
+      },
+      {
+        guidance: false,
+        description:
+          'Rely on the 60px omitted-width floor when a text-heavy column needs more room; set proportional(1, {minWidth}) on that column instead.',
+      },
     ],
     anatomy,
   },
@@ -256,10 +309,26 @@ export const docsZh = {
     description:
       'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
     bestPractices: [
-      { guidance: true, description: 'Use density and divider variants to match the information density and scanning needs of your data.' },
-      { guidance: true, description: 'Compose rich cell content with Astryx components like Badge, StatusDot, and Avatar via renderCell.' },
-      { guidance: false, description: 'Use a table for data without consistent columns. Use a list or card layout for heterogeneous content.' },
-      { guidance: false, description: 'Enable every plugin at once. Add only the features your use case requires to keep the interface focused.' },
+      {
+        guidance: true,
+        description:
+          'Use density and divider variants to match the information density and scanning needs of your data.',
+      },
+      {
+        guidance: true,
+        description:
+          'Compose rich cell content with Astryx components like Badge, StatusDot, and Avatar via renderCell.',
+      },
+      {
+        guidance: false,
+        description:
+          'Use a table for data without consistent columns. Use a list or card layout for heterogeneous content.',
+      },
+      {
+        guidance: false,
+        description:
+          'Enable every plugin at once. Add only the features your use case requires to keep the interface focused.',
+      },
     ],
     anatomy,
   },
@@ -267,19 +336,52 @@ export const docsZh = {
 
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsDense = {
-  description: 'Data-driven table w/ rich cell content via renderCell. Compose cells w/ Badge, StatusDot, Text, Avatar, layout primitives. BaseTable provides unstyled structural core w/ composable plugin pipeline.',
+  description:
+    'Data-driven table w/ rich cell content via renderCell. Compose cells w/ Badge, StatusDot, Text, Avatar, layout primitives. BaseTable provides unstyled structural core w/ composable plugin pipeline.',
   usage: {
     description:
       'Table displays structured data in rows and columns with consistent dimensionality. It supports rich cell content, sorting, selection, pagination, and column management through a composable plugin system. Use Table for data sets with uniform structure; for simpler or inconsistent data, consider a list or card layout instead.',
     bestPractices: [
-      { guidance: true, description: 'Use density and divider variants to match the information density and scanning needs of your data.' },
-      { guidance: true, description: 'Compose rich cell content with Astryx components like Badge, StatusDot, and Avatar via renderCell.' },
-      { guidance: true, description: 'Children mode: wrap rows in TableHeader/TableBody/TableFooter. <table> cannot hold a <tr> directly; the parser adds an implied <tbody> for SSR markup, React does not on the client, so unwrapped rows mismatch on hydration.' },
-      { guidance: true, description: 'Set explicit width on every column via proportional() or pixel(). proportional(1) = equal flex w/ 120px min preventing collapse on narrow viewports. Omitting width skips the minimum.' },
-      { guidance: true, description: 'Data-driven API is RSC-safe: proportional(), pixel(), column defs w/o function props work in Server Components. renderCell (any function prop) requires a "use client" wrapper.' },
-      { guidance: false, description: 'Use a table for data without consistent columns. Use a list or card layout for heterogeneous content.' },
-      { guidance: false, description: 'Enable every plugin at once. Add only the features your use case requires to keep the interface focused.' },
-      { guidance: false, description: 'Omit width on text-heavy columns; w/o explicit proportional() width they have no minimum and can squish to near-zero on mobile.' },
+      {
+        guidance: true,
+        description:
+          'Use density and divider variants to match the information density and scanning needs of your data.',
+      },
+      {
+        guidance: true,
+        description:
+          'Compose rich cell content with Astryx components like Badge, StatusDot, and Avatar via renderCell.',
+      },
+      {
+        guidance: true,
+        description:
+          'Children mode: wrap rows in TableHeader/TableBody/TableFooter. <table> cannot hold a <tr> directly; the parser adds an implied <tbody> for SSR markup, React does not on the client, so unwrapped rows mismatch on hydration.',
+      },
+      {
+        guidance: true,
+        description:
+          'Omitted width = equal flex w/ compact 60px readability floor. Per-column floor: proportional(1, {minWidth}). Weighted: proportional(n). Fixed: pixel(). Table scrolls when combined floors do not fit.',
+      },
+      {
+        guidance: true,
+        description:
+          'Data-driven API is RSC-safe: proportional(), pixel(), column defs w/o function props work in Server Components. renderCell (any function prop) requires a "use client" wrapper.',
+      },
+      {
+        guidance: false,
+        description:
+          'Use a table for data without consistent columns. Use a list or card layout for heterogeneous content.',
+      },
+      {
+        guidance: false,
+        description:
+          'Enable every plugin at once. Add only the features your use case requires to keep the interface focused.',
+      },
+      {
+        guidance: false,
+        description:
+          'Rely on the 60px omitted-width floor for a text-heavy column that needs more room; set proportional(1, {minWidth}) on it instead.',
+      },
     ],
     anatomy,
   },

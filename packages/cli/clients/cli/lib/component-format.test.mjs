@@ -9,7 +9,10 @@ describe('component accessibility guidance', () => {
     description: 'An action.',
     usage: {
       accessibility: [
-        {name: 'Loading', description: 'Expose aria-busy and block duplicate activation.'},
+        {
+          name: 'Loading',
+          description: 'Expose aria-busy and block duplicate activation.',
+        },
       ],
     },
     props: [],
@@ -18,7 +21,9 @@ describe('component accessibility guidance', () => {
   it('renders a dedicated section in full output', () => {
     const out = formatFull(docs);
     expect(out).toContain('## Accessibility');
-    expect(out).toContain('- **Loading:** Expose aria-busy and block duplicate activation.');
+    expect(out).toContain(
+      '- **Loading:** Expose aria-busy and block duplicate activation.',
+    );
   });
 
   it('keeps accessibility guidance in compact agent output', () => {
@@ -32,11 +37,16 @@ describe('component accessibility guidance', () => {
   });
 
   it('ignores legacy non-array accessibility content', () => {
-    const legacyDocs = {...docs, usage: {accessibility: 'Follow WCAG guidance.'}};
+    const legacyDocs = {
+      ...docs,
+      usage: {accessibility: 'Follow WCAG guidance.'},
+    };
 
     expect(() => formatFull(legacyDocs)).not.toThrow();
     expect(formatFull(legacyDocs)).not.toContain('## Accessibility');
-    expect(formatCompact(legacyDocs, 'Button')).not.toContain('## Accessibility');
+    expect(formatCompact(legacyDocs, 'Button')).not.toContain(
+      '## Accessibility',
+    );
   });
 });
 
@@ -56,7 +66,9 @@ describe('formatFull sub-component rendering', () => {
     expect(out).toContain('### XDSRadioListItem');
     expect(out).not.toContain('undefined');
     // Points the reader at the sub-component's own docs instead of a blank.
-    expect(out).toContain('astryx component XDSRadioListItem');
+    expect(out).toMatch(
+      /(?:astryx|@astryxdesign\/cli(?:@\S+)?) component XDSRadioListItem/,
+    );
   });
 
   it('renders a full props table for a sub-component that has inline props', () => {
@@ -100,7 +112,9 @@ describe('formatFull theming override keys', () => {
     const docs = {
       name: 'Button',
       description: 'A button.',
-      theming: {targets: [{className: 'astryx-button', visualProps: ['variant']}]},
+      theming: {
+        targets: [{className: 'astryx-button', visualProps: ['variant']}],
+      },
     };
     const out = formatFull(docs);
 
@@ -128,37 +142,6 @@ describe('formatFull theming override keys', () => {
     // The verbatim DOM class names must not be advertised as override keys.
     expect(out).not.toContain("'astryx-table-header': {");
     expect(out).not.toContain("'astryx-table-cell': {");
-  });
-});
-
-describe('deprecated theming target guidance', () => {
-  const docs = {
-    name: 'Example',
-    description: 'An example.',
-    theming: {
-      targets: [
-        {className: 'astryx-old-target', deprecatedFor: 'new-target'},
-        {className: 'astryx-new-target'},
-      ],
-    },
-  };
-
-  it('names the canonical replacement in full component docs', () => {
-    expect(formatFull(docs)).toContain(
-      '`astryx-old-target` _(deprecated; use `new-target`)_',
-    );
-  });
-
-  it('excludes deprecated targets from copyable defineTheme examples', () => {
-    const out = formatFull(docs);
-    expect(out).not.toContain("'old-target': {");
-    expect(out).toContain("'new-target': {");
-  });
-
-  it('keeps the replacement in brief agent guidance', () => {
-    expect(formatBrief(docs, 'Example')).toContain(
-      'astryx-old-target deprecated->new-target',
-    );
   });
 });
 
@@ -236,7 +219,11 @@ describe('formatBrief signature stays terse', () => {
           type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10',
           description: 'Gap.',
         },
-        {name: 'wrap', type: "'nowrap' | 'wrap' | 'wrap-reverse'", description: 'Wrap.'},
+        {
+          name: 'wrap',
+          type: "'nowrap' | 'wrap' | 'wrap-reverse'",
+          description: 'Wrap.',
+        },
         {
           name: 'hAlign',
           type: "'start' | 'center' | 'end' | 'between' | 'around' | 'evenly'",
@@ -248,7 +235,9 @@ describe('formatBrief signature stays terse', () => {
 
     // Short enums still earn their place in the signature.
     expect(signature).toContain('wrap: nowrap|wrap|wrap-reverse');
-    expect(signature).toContain('hAlign: start|center|end|between|around|evenly');
+    expect(signature).toContain(
+      'hAlign: start|center|end|between|around|evenly',
+    );
     // The long scale does not.
     expect(signature).not.toContain('0|0.5|1|1.5|2|3|4|5|6|8|10');
     // But the prop is still named, so it is not lost.

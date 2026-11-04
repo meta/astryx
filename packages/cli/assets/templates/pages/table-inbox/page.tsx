@@ -1652,8 +1652,8 @@ const COMPOSER_TOOLS: {
 /**
  * The compose sheet.
  *
- * **`BottomSheet hasScrim={false}`, which is the only non-modal surface in
- * core.** With the scrim off the sheet opens with `show()` rather than
+ * **`BottomSheet hasScrim={false}` keeps this bottom-edge composer non-modal.**
+ * With the scrim off the sheet opens with `show()` rather than
  * `showModal()`, so it never enters the top layer, never makes the page inert
  * and never locks body scroll: the inbox behind it stays live. That matters
  * more here than anywhere else in this template, because writing a message is
@@ -1661,12 +1661,14 @@ const COMPOSER_TOOLS: {
  * actually said, copy an order number out of a thread. A modal composer
  * answers that with "close me first".
  *
- * The trade is position, and it is worth naming. A sheet rises from the bottom
- * edge, centred: its positioner is `inset-inline: 0` with
- * `justify-content: center`, and there is no anchor, side or width prop. So
- * this cannot be docked to the inline-end corner the way a `Dialog` can be.
- * `Dialog` takes a static `position` and would put the window in that corner —
- * but `Dialog` is always modal, so buying the corner costs the live inbox.
+ * The trade is bottom-edge geometry, and it is worth naming. A non-modal
+ * `Drawer` keeps page context live from an inline edge, but it is a full-height
+ * side panel; this composer intentionally rises from the bottom. A sheet's
+ * positioner is `inset-inline: 0` with `justify-content: center`, and there is
+ * no anchor, side or width prop. So this cannot be docked to the inline-end
+ * corner the way a `Dialog` can be. `Dialog` takes a static `position` and would
+ * put the window in that corner — but `Dialog` is always modal, so buying the
+ * corner costs the live inbox.
  * `ChatComposerDrawer` is a false friend: despite the name it is an in-flow
  * disclosure tray for a ChatComposer's attachments, with no positioning of its
  * own.
@@ -1773,7 +1775,9 @@ function ComposeWindow({
       // cheaper answer to the same problem: there is not much to drag out of
       // the way in the first place.
       height="hug"
-      hasScrim={false}>
+      hasScrim={false}
+      // The Layout below owns the inset; the sheet adds none of its own.
+      padding={0}>
       {/* The grab handle floats over the top edge, out of flow, about 12px
           down. The Layout's own padding is not quite enough to clear it — the
           heading came up level with the pill, four pixels under it — so the

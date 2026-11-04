@@ -7,7 +7,9 @@
  * @position Core implementation; lives in own Code/ dir, re-exported by CodeBlock/
  *
  * SYNC: When modified, update:
- * - /packages/core/src/CodeBlock/index.ts (exports if types change)
+ * - /packages/core/src/Code/Code.doc.mjs (consumer API and theming metadata)
+ * - /docs/specs/components/Code/Code.spec.md (behavior and verification map)
+ * - /packages/core/src/CodeBlock/index.ts (compatibility re-exports if types change)
  * - /packages/cli/assets/templates/blocks/components/Code/ (showcase blocks)
  * - /packages/cli/assets/templates/blocks/components/CodeBlock/ (showcase blocks)
  */

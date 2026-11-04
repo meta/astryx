@@ -82,6 +82,8 @@ const SUBTRACTED = [
 const CLEARED = [
   '--layout-padding-outer-x',
   '--layout-padding-outer-y',
+  '--layout-padding-own-outer-x',
+  '--layout-padding-own-outer-y',
   '--layout-padding-inner-x',
   '--layout-padding-inner-y',
   '--_section-padding-propagated',

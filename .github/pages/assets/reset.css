@@ -1,0 +1,403 @@
+/* Copyright (c) Meta Platforms, Inc. and affiliates. */
+
+/**
+ * Astryx Reset Stylesheet
+ *
+ * An opinionated CSS reset that provides a clean, predictable base for
+ * Astryx applications. Built on the same principles as Tailwind Preflight
+ * and modern-normalize, adapted for the Astryx design system.
+ *
+ * This reset:
+ * - Normalizes cross-browser inconsistencies
+ * - Sets box-sizing: border-box universally
+ * - Removes default margins, padding, and list styles
+ * - Makes images block-level and responsive
+ * - Resets form elements to inherit font styles
+ * - Uses :where() for zero specificity (pseudo-elements go outside it)
+ *
+ * Usage:
+ *
+ * 1. Import directly (global reset):
+ *    import '@astryxdesign/core/reset.css';
+ *
+ * 2. Combine with base styles and theme:
+ *    import '@astryxdesign/core/reset.css';        // @layer reset  — clean slate
+ *    import '@astryxdesign/core/astryx.css';        // @layer astryx-base — component styles
+ *    import '@astryxdesign/theme-neutral/theme.css'; // @layer astryx-theme — theme overrides
+ *
+ * Layer order: reset → astryx-base → astryx-theme. This file registers that
+ * order itself, like every Astryx stylesheet, so it holds in any load order.
+ * Consumer styles (unlayered) always override all Astryx layers.
+ * The reset has the lowest priority and can be overridden by any other layer.
+ *
+ * Similar to:
+ * - Tailwind CSS Preflight
+ * - Chakra UI's preflight (v3)
+ * - Bootstrap Reboot
+ * - modern-normalize
+ */
+
+@layer reset, astryx-base, astryx-theme;
+
+@layer reset {
+
+  /* ===========================================================================
+     Box Model
+     =========================================================================== */
+
+  /*
+   * Use border-box globally. Prevents padding/border from affecting
+   * element dimensions — the single most impactful reset.
+   */
+  :where(*), :where(*)::before, :where(*)::after {
+    box-sizing: border-box;
+  }
+
+  /*
+   * Reset borders to 0-width solid. This lets you add a border by just
+   * setting border-width — no need to also specify border-style.
+   */
+  :where(*), :where(*)::before, :where(*)::after {
+    border-width: 0;
+    border-style: solid;
+    border-color: currentColor;
+  }
+
+  /* ===========================================================================
+     Document
+     =========================================================================== */
+
+  /*
+   * Consistent line-height, prevent text size adjustment on orientation
+   * change in iOS, and set a readable tab size.
+   *
+   * color-scheme: light dark — declares that this page supports both modes,
+   * enabling CSS light-dark() to resolve correctly. Also ensures that CSS
+   * tools (e.g. LightningCSS) which polyfill light-dark() for older browsers
+   * inject their toggle-variable initialization in the same CSS bundle.
+   * XDSTheme overrides color-scheme per-wrapper as needed.
+   */
+  :where(html) {
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+    tab-size: 4;
+    color-scheme: light dark;
+  }
+
+  /*
+   * Remove default body margin and set font smoothing for sharper text
+   * rendering on macOS/iOS.
+   */
+  :where(body) {
+    margin: 0;
+    line-height: inherit;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* ===========================================================================
+     Typography
+     =========================================================================== */
+
+  /*
+   * Reset headings to inherit size and weight. Headings should be styled
+   * intentionally — not rely on browser defaults that vary across browsers.
+   */
+  :where(h1, h2, h3, h4, h5, h6) {
+    font-size: inherit;
+    font-weight: inherit;
+  }
+
+  /*
+   * Remove default margins on all block-level text elements.
+   */
+  :where(h1, h2, h3, h4, h5, h6, p, blockquote, figure, pre, dl, dd) {
+    margin: 0;
+  }
+
+  /*
+   * Links inherit color and text-decoration. Style them intentionally
+   * rather than relying on browser-default blue/purple.
+   */
+  :where(a) {
+    color: inherit;
+    text-decoration: inherit;
+  }
+
+  /*
+   * Correct font-weight rendering in Chrome and Safari.
+   */
+  :where(b, strong) {
+    font-weight: bolder;
+  }
+
+  /*
+   * Use the configured monospace font stack and fix the odd em sizing
+   * that browsers apply to code elements.
+   */
+  :where(code, kbd, samp, pre) {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+      'Liberation Mono', 'Courier New', monospace;
+    font-size: 1em;
+  }
+
+  /*
+   * Correct font-size for small elements.
+   */
+  :where(small) {
+    font-size: 80%;
+  }
+
+  /*
+   * Prevent sub and sup from affecting line-height.
+   */
+  :where(sub, sup) {
+    font-size: 75%;
+    line-height: 0;
+    position: relative;
+    vertical-align: baseline;
+  }
+
+  :where(sub) {
+    bottom: -0.25em;
+  }
+
+  :where(sup) {
+    top: -0.5em;
+  }
+
+  /* ===========================================================================
+     Lists
+     =========================================================================== */
+
+  /*
+   * Remove default list styles, margin, and padding. Lists used for
+   * navigation or layout shouldn't carry prose styling by default.
+   * Use explicit styles for prose lists.
+   */
+  :where(ol, ul, menu) {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* ===========================================================================
+     Media
+     =========================================================================== */
+
+  /*
+   * Make replaced elements block-level. Eliminates the "mystery gap"
+   * below inline images and aligns with how these elements are
+   * actually used in modern layouts.
+   */
+  :where(img, svg, video, canvas, audio, iframe, embed, object) {
+    display: block;
+    vertical-align: middle;
+  }
+
+  /*
+   * Constrain images and video to their container. Responsive by default.
+   */
+  :where(img, video) {
+    max-width: 100%;
+    height: auto;
+  }
+
+  /* ===========================================================================
+     Forms
+     =========================================================================== */
+
+  /*
+   * Form elements should inherit font styles from their parent rather
+   * than using the browser's default font stack.
+   */
+  :where(button, input, optgroup, select, textarea) {
+    font: inherit;
+    color: inherit;
+    margin: 0;
+    padding: 0;
+  }
+
+  /*
+   * Remove default button styling. Buttons should be styled intentionally.
+   */
+  :where(button, [type='button'], [type='reset'], [type='submit']) {
+    -webkit-appearance: button;
+    appearance: button;
+    background-color: transparent;
+    background-image: none;
+  }
+
+  /*
+   * Pointer cursor for interactive elements.
+   */
+  :where(button, [role='button']) {
+    cursor: pointer;
+  }
+
+  /*
+   * Disabled elements take back any interactive cursor: a control that will
+   * not respond must not answer the pointer as though it will. `default`
+   * rather than `not-allowed` — a disabled control sealed behind
+   * `pointer-events: none` shows whatever its ancestor shows, and one cursor
+   * everywhere beats a stronger one we can only paint on half of them.
+   * Covers [aria-disabled] too: astryx keeps a disabled control focusable
+   * that way wherever its reason must stay discoverable (Button with a
+   * tooltip, Selector's trigger, SideNavItem).
+   */
+  :where(:disabled, [aria-disabled='true']) {
+    cursor: default;
+  }
+
+  /*
+   * Only allow vertical resizing of textareas to prevent layout breakage.
+   */
+  :where(textarea) {
+    resize: vertical;
+  }
+
+  /*
+   * Normalize placeholder opacity (Firefox renders at reduced opacity)
+   * and color it with the --color-text-secondary token, or its default.
+   */
+  :where(input, textarea)::placeholder {
+    opacity: 1;
+    color: var(--color-text-secondary, light-dark(#4E606F, #AAAFB5));
+  }
+
+  /*
+   * Chromium draws the dropdown marker of a field with a `list` as a glyph
+   * set on the line-height the field inherits, so with any line-height above
+   * 1 the marker sits below the middle of the field.
+   */
+  :where([list])::-webkit-calendar-picker-indicator {
+    line-height: 1;
+  }
+
+  /*
+   * Remove the inner padding and cancel buttons in search inputs
+   * for Chrome and Safari.
+   */
+  :where([type='search'])::-webkit-search-decoration,
+  :where([type='search'])::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+  }
+
+  /*
+   * Remove default fieldset styles.
+   */
+  :where(fieldset) {
+    margin: 0;
+    padding: 0;
+  }
+
+  :where(legend) {
+    padding: 0;
+  }
+
+  /* ===========================================================================
+     Tables
+     =========================================================================== */
+
+  /*
+   * Collapse table borders and fix text-indent/border-color inheritance.
+   */
+  :where(table) {
+    text-indent: 0;
+    border-color: inherit;
+    border-collapse: collapse;
+  }
+
+  /* ===========================================================================
+     Misc
+     =========================================================================== */
+
+  /*
+   * Simplify hr to a single border-top line.
+   */
+  :where(hr) {
+    height: 0;
+    color: inherit;
+    border-top-width: 1px;
+  }
+
+  /*
+   * Correct display for summary elements.
+   */
+  :where(summary) {
+    display: list-item;
+  }
+
+  /*
+   * Reset dialog padding and outline.
+   */
+  :where(dialog) {
+    padding: 0;
+    outline: none;
+  }
+
+  /*
+   * Ensure hidden elements are actually hidden. `hidden="until-found"` keeps
+   * the browser's own rendering, `content-visibility: hidden`, so find in page
+   * and text fragment links can still find its content and reveal it.
+   */
+  :where([hidden]:not([hidden='until-found' i])) {
+    display: none;
+  }
+
+  /*
+   * Remove tap highlight on iOS.
+   */
+  :where(html) {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* ===========================================================================
+     Color Scheme
+     =========================================================================== */
+
+  /*
+   * Map data-theme attribute to CSS color-scheme.
+   *
+   * Setting data-theme on <html> tells the browser which color scheme
+   * to use for native UI elements (scrollbars, form controls, date
+   * pickers) and enables CSS light-dark() to resolve correctly.
+   *
+   * XDSTheme auto-detects when it's the root provider and syncs this
+   * attribute on the client. For RSC / SSR, set it on <html> in your
+   * root layout to avoid a flash of wrong theme:
+   *
+   *   <html lang="en" data-theme="dark">
+   *
+   * Values: "light" | "dark" | omitted (defaults to light dark = system)
+   */
+  :where(html[data-theme="light"]) {
+    color-scheme: light;
+  }
+
+  :where(html[data-theme="dark"]) {
+    color-scheme: dark;
+  }
+
+  :where(html:not([data-theme])) {
+    color-scheme: light dark;
+  }
+
+  /* ===========================================================================
+     Media Theme Baseline
+     =========================================================================== */
+
+  /*
+   * color-scheme flip for [data-*-media] — makes light-dark() base
+   * tokens resolve correctly on inverted surfaces without a theme.
+   * Token overrides (text/icon/accent) are theme-level (generateOnMediaCSS).
+   * Dual-prefix (astryx + legacy xds) during the compat window.
+   */
+  :where([data-astryx-media="dark"]) {
+    color-scheme: dark;
+  }
+
+  :where([data-astryx-media="light"]) {
+    color-scheme: light;
+  }
+}

@@ -3,11 +3,17 @@
 import {defineConfig} from 'eslint/config';
 import {includeIgnoreFile} from '@eslint/compat';
 import path from 'node:path';
+import {readFileSync} from 'node:fs';
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import eslintReact from '@eslint-react/eslint-plugin';
 import reactCompiler from 'eslint-plugin-react-compiler';
 import astryxPlugin from './internal/eslint-plugin-astryx/index.js';
+import {scope as internalBarrelScope} from './internal/eslint-plugin-astryx/no-internal-barrel-import.js';
+import {scope as nullishGuardScope} from './internal/eslint-plugin-astryx/no-nullish-jsx-guard.js';
+import {scope as truthyGuardScope} from './internal/eslint-plugin-astryx/no-truthy-jsx-guard.js';
+import {scope as privateAttributeScope} from './internal/eslint-plugin-astryx/no-raw-private-attribute.js';
+import {scope as commentProvenanceScope} from './internal/eslint-plugin-astryx/no-comment-provenance.js';
 
 /* global process */
 
@@ -30,6 +36,45 @@ const astryxConfig = isStrictMode
   ? astryxPlugin.configs.strict
   : astryxPlugin.configs.recommended;
 const reactSeverity = isStrictMode ? 'error' : 'warn';
+
+// Barrel imports that existed when `@astryx/no-internal-barrel-import` arrived,
+// by repo-relative file. The list only shrinks.
+const internalBarrelBaseline = JSON.parse(
+  readFileSync(
+    path.join(
+      import.meta.dirname,
+      'internal/eslint-plugin-astryx/no-internal-barrel-import.baseline.json',
+    ),
+    'utf8',
+  ),
+);
+
+// Private `data-astryx-*` attributes written by hand before
+// `@astryx/no-raw-private-attribute` arrived, by repo-relative file, once per
+// site. The list only shrinks.
+const privateAttributeBaseline = JSON.parse(
+  readFileSync(
+    path.join(
+      import.meta.dirname,
+      'internal/eslint-plugin-astryx/no-raw-private-attribute.baseline.json',
+    ),
+    'utf8',
+  ),
+);
+
+// Record ids, claim ids, pull request and issue references, date stamps, and
+// quote blocks in source comments that predate
+// `@astryx/no-comment-provenance`, by repo-relative file, once per site. The
+// list only shrinks.
+const commentProvenanceBaseline = JSON.parse(
+  readFileSync(
+    path.join(
+      import.meta.dirname,
+      'internal/eslint-plugin-astryx/no-comment-provenance.baseline.json',
+    ),
+    'utf8',
+  ),
+);
 
 // The internal plugin is plain untyped JS (kept out of the lint/type surface),
 // so its inferred shape doesn't satisfy ESLint's strict `Plugin` type. One
@@ -259,6 +304,18 @@ export default defineConfig(
       '@typescript-eslint/switch-exhaustiveness-check': reactSeverity,
     },
   },
+  // Core's internal subpaths (`@astryxdesign/core/internal/*`) and its
+  // gesture, motion and touch-support source are for Core and Lab only.
+  {
+    files: ['**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}'],
+    ignores: ['packages/core/**', 'packages/lab/**', '**/dist/**'],
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-core-internal-import': 'error',
+    },
+  },
   // Copyright header — all source files must have the Meta copyright notice
   {
     files: ['**/*.{ts,tsx}'],
@@ -307,7 +364,10 @@ export default defineConfig(
   },
   // Astryx design token enforcement - applies to core package (excluding theme files)
   {
-    files: ['packages/core/src/**/*.{ts,tsx}'],
+    files: [
+      'packages/core/src/**/*.{ts,tsx}',
+      'packages/richtext/src/**/*.{ts,tsx}',
+    ],
     ignores: ['packages/core/src/theme/**'],
     ...astryxConfig,
     rules: {
@@ -326,22 +386,40 @@ export default defineConfig(
       ],
       // announce() live-region messages are user-facing text; the rule checks
       // them as call arguments (callees defaults to ['announce']).
-      '@astryx/no-hardcoded-i18n-string': isStrictMode ? 'error' : 'warn',
-    },
-  },
-  // Temporary relationship-only exemption for the three known coarse-pointer
-  // centering defects. Every other no-physical-properties check remains active.
-  // Remove this block when #5170 lands.
-  {
-    files: [
-      'packages/core/src/CheckboxInput/CheckboxInput.tsx',
-      'packages/core/src/RadioList/RadioListItem.tsx',
-      'packages/core/src/Switch/Switch.tsx',
-    ],
-    rules: {
-      '@astryx/no-physical-properties': [
-        'error',
-        {allowLogicalCentering: true},
+      '@astryx/no-hardcoded-i18n-string': [
+        isStrictMode ? 'error' : 'warn',
+        {
+          // Exact reported chunks exempted per file. Remove an entry when its
+          // site moves into the catalog; the list should only shrink.
+          allowedStringsByFile: {
+            // Developer diagnostics, not interface copy.
+            'BottomSheet/BottomSheetPanel.tsx': ['snapPoints ignored '],
+            'Markdown/plugins/protocol.ts': [
+              'plugin "',
+              '" failed in ',
+              '; rendered readable fallback.',
+            ],
+            // Pre-existing hardcoded text awaiting catalog keys.
+            'Chat/useChatPasteAsToken.ts': [' lines, ', ' chars'],
+            'Chat/useTriggerMenu.tsx': ['No results'],
+            'CodeBlock/CodeBlock.tsx': [' diff'],
+            'MultiSelector/MultiSelector.tsx': [' selected'],
+            'PowerSearch/PowerSearch.tsx': [
+              'date range',
+              '1 filter',
+              ' filters',
+              ' items',
+            ],
+            'PowerSearch/PowerSearchValueEditor.tsx': [' ago', ' from now'],
+            'Slider/Slider.tsx': ['Minimum value', 'Maximum value', 'Required'],
+            'Table/plugins/columnResize/useTableColumnResize.tsx': [
+              'Resize column ',
+            ],
+            'TimeInput/TimeInput.tsx': ['e.g., 2:30 PM', 'e.g., 14:30'],
+            'Timer/Timer.tsx': ['m ', 'h '],
+            'Tokenizer/Tokenizer.tsx': ['Create "', ' more'],
+          },
+        },
       ],
     },
   },
@@ -349,13 +427,34 @@ export default defineConfig(
   // ships, so these two rules reach past core: lab components are consumed
   // the same way, and lab is where the next core component comes from.
   {
-    files: ['packages/lab/src/**/*.{ts,tsx}'],
+    files: [
+      'packages/lab/src/**/*.{ts,tsx}',
+      'packages/richtext/src/**/*.{ts,tsx}',
+    ],
     plugins: {
       '@astryx': astryxEslintPlugin,
     },
     rules: {
       '@astryx/no-hover-on-disabled': 'error',
       '@astryx/disabled-cursor': 'error',
+    },
+  },
+  // StyleX compiles a `border` shorthand unevenly, and @astryxdesign/build's
+  // strict default refuses it, so a lab or charts component written with one
+  // ships without its border in the prebuilt stylesheet. Core already gets the
+  // rule from its config above; lab and charts get it at the same severity
+  // (error in strict mode, warning otherwise).
+  {
+    files: [
+      'packages/lab/src/**/*.{ts,tsx}',
+      'packages/charts/src/**/*.{ts,tsx}',
+    ],
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-border-shorthand':
+        astryxConfig.rules['@astryx/no-border-shorthand'],
     },
   },
   // `light-dark()` is the theme layer's mechanism, and reaches lab for the
@@ -369,7 +468,10 @@ export default defineConfig(
   // they should read — a token decision, not a mechanical one. Flip to
   // 'error' once that lands.
   {
-    files: ['packages/lab/src/**/*.{ts,tsx}'],
+    files: [
+      'packages/lab/src/**/*.{ts,tsx}',
+      'packages/richtext/src/**/*.{ts,tsx}',
+    ],
     plugins: {
       '@astryx': astryxEslintPlugin,
     },
@@ -413,7 +515,10 @@ export default defineConfig(
   // Uses @eslint-react for bugs that TypeScript alone cannot catch.
   // Children.*/cloneElement are already covered by @astryx/no-react-introspection.
   {
-    files: ['packages/core/src/**/*.{ts,tsx}'],
+    files: [
+      'packages/core/src/**/*.{ts,tsx}',
+      'packages/richtext/src/**/*.{ts,tsx}',
+    ],
     plugins: {
       ...eslintReact.configs.recommended.plugins,
       'react-compiler': reactCompiler,
@@ -521,6 +626,11 @@ export default defineConfig(
       // Test harnesses wrap components in sized/positioned <div>s to set up a
       // scenario; that scaffolding is not shipped DOM.
       '@astryx/no-style-only-wrapper': 'off',
+      // Reading `.type` off a rendered element is how a test asserts which
+      // component a renderer chose. The rule exists to stop *shipped* code
+      // branching on child identity; a test making that assertion is the
+      // point, and has no data-driven API to prefer instead.
+      '@astryx/no-react-introspection': 'off',
     },
   },
   // Non-production code — allow console.log for demos, tools, and examples
@@ -729,6 +839,66 @@ export default defineConfig(
       ],
     },
   },
+  // ── INV23 + FR3: text-layout bans in command handlers ───────────────
+  // Handlers must use the formatter kit (section, text, list, record,
+  // records, code) rather than string padding or manual layout.
+  // Extends the Commander-registration ban to the same file scope.
+  {
+    files: ['packages/cli/clients/cli/commands/**/*.mjs'],
+    ignores: ['**/*.test.mjs', '**/*.doc.mjs'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression[callee.type='MemberExpression'][callee.property.name='command']",
+          message:
+            'Register commands with defineCommand(parent, doc, {fn, action}) so --help and the manifest come from the colocated CommandDoc. See CONTRIBUTING > Working on the astryx CLI.',
+        },
+        {
+          selector: "CallExpression[callee.property.name='padEnd']",
+          message:
+            'Use the formatter kit — record(), records({layout: "inline"}), list() — not .padEnd() (INV23, FR3). See architecture:cli-surface.',
+        },
+        {
+          selector: "CallExpression[callee.property.name='padStart']",
+          message:
+            'Use the formatter kit — record(), records({layout: "inline"}), list() — not .padStart() (INV23, FR3). See architecture:cli-surface.',
+        },
+        {
+          selector: "CallExpression[callee.property.name='repeat']",
+          message:
+            'Use the formatter kit — section(), text(), code() — not .repeat() for layout (INV23, FR3). See architecture:cli-surface.',
+        },
+        {
+          selector: "NewExpression[callee.name='Block']",
+          message:
+            'Use the formatter kit constructors — section(), text(), list(), record(), records(), code() — not new Block() (INV23, FR3). See architecture:cli-surface.',
+        },
+      ],
+    },
+  },
+  // Known gaps recorded in AST-042; remove an entry when the file is
+  // fixed; do not add entries. check-cli-structure.mjs enforces the
+  // exact-entry allowlist so a new text-layout violation in these files
+  // still fails there.
+  {
+    files: [
+      'packages/cli/clients/cli/commands/theme.mjs',
+      'packages/cli/clients/cli/commands/docs.mjs',
+    ],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "CallExpression[callee.type='MemberExpression'][callee.property.name='command']",
+          message:
+            'Register commands with defineCommand(parent, doc, {fn, action}) so --help and the manifest come from the colocated CommandDoc. See CONTRIBUTING > Working on the astryx CLI.',
+        },
+      ],
+    },
+  },
   // CLI tests — relax author-ergonomics rules (test files emit freely and may
   // keep intentionally-unused fixtures). Must come after the CLI block above.
   {
@@ -739,6 +909,126 @@ export default defineConfig(
       // Tests build fixtures directly against zod and Commander.
       'no-restricted-imports': 'off',
       'no-restricted-syntax': 'off',
+    },
+  },
+  // Inside a package's own shipped source, import the module that defines a
+  // name, not a folder's index (a barrel): a lazily imported module that goes
+  // through a barrel pulls every sibling export into its graph, which broke
+  // the single-file bundle. Public consumers keep importing from the package
+  // entry. The barrel imports that predate the rule are listed in the
+  // baseline and stay allowed until a codemod removes them; anything new is
+  // reported (an error in strict mode, so a pull request that adds one fails
+  // lint, while main stays green). Type-only imports are erased and allowed.
+  {
+    files: internalBarrelScope.files,
+    ignores: internalBarrelScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-internal-barrel-import': [
+        reactSeverity,
+        {baseline: internalBarrelBaseline, root: import.meta.dirname},
+      ],
+    },
+  },
+  // A slot's presence is decided by `isRenderable`, never a bare `!= null`
+  // guard or a hand-written copy of its checks (an error in strict mode). A
+  // check of a string, number or data value says so with a disable comment
+  // for this rule that gives its reason.
+  {
+    files: nullishGuardScope.files,
+    ignores: nullishGuardScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-nullish-jsx-guard': reactSeverity,
+    },
+  },
+  // A slot value can be `0`. A truthiness guard in front of its JSX then
+  // renders a stray "0" (`&&`) or drops the slot (`? :`), so a slot's
+  // presence is decided by `isRenderable` here too. The rule reads types, so
+  // its scope is core, which the type-aware block above parses with the
+  // project service. Every guard is reported (an error in strict mode).
+  {
+    files: truthyGuardScope.files,
+    ignores: truthyGuardScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-truthy-jsx-guard': reactSeverity,
+    },
+  },
+  // A private `data-astryx-*` attribute is written once, in its owner module
+  // under packages/<package>/src/privateAttributes, which exports ready-made
+  // styles, setter props and readers (`architecture:public-component-api`
+  // INV23, which also lists the public attributes the rule allows). The
+  // hand-written sites that predate this block are listed in the baseline,
+  // once per site, and that many stay allowed until they move into an owner
+  // module; one more is reported (an error in strict mode, so a pull request
+  // that adds one fails lint, while main stays green). Tests are out of scope:
+  // they assert the DOM a component renders.
+  {
+    files: privateAttributeScope.files,
+    ignores: privateAttributeScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-raw-private-attribute': [
+        reactSeverity,
+        {baseline: privateAttributeBaseline, root: import.meta.dirname},
+      ],
+    },
+  },
+  // A source comment explains a reason, a constraint, or a quirk. It does not
+  // cite a record, a claim, a pull request, an issue, or a date, and it does
+  // not quote requirement text: the record links the code, and
+  // `pnpm specs:for <path>` finds it. The sites that predate this block are
+  // listed in the baseline, once per site, and that many stay allowed until
+  // they are removed; one more is reported (an error in strict mode, so a pull
+  // request that adds one fails lint, while main stays green).
+  {
+    files: commentProvenanceScope.files,
+    ignores: commentProvenanceScope.ignores,
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-comment-provenance': [
+        reactSeverity,
+        {baseline: commentProvenanceBaseline, root: import.meta.dirname},
+      ],
+    },
+  },
+  // richtext — the pre-existing backlog, held at `warn` while it is worked
+  // off. Must come last so it overrides the blocks above.
+  //
+  // The package was outside these rules until now, so turning them on finds
+  // drift that predates this scope change: four props missing `ref` and six
+  // smaller API-shape items. Failing CI on work nobody has had the chance to
+  // do would mean either reverting the scope or
+  // landing a very large mixed change, so each one stays visible as a warning
+  // and is tracked separately. Everything the package is ALREADY clean on —
+  // the token and DOM rules, `no-classname-clobber`, `no-physical-properties`,
+  // `disabled-cursor`, the rest of the React set — is enforced at full
+  // strength, so new drift is an error from today.
+  //
+  // Remove an entry here as its backlog closes; the file is clean when the
+  // block is empty.
+  {
+    files: ['packages/richtext/src/**/*.{ts,tsx}'],
+    rules: {
+      // React 19 ref-in-props migration for the editor's public props.
+      '@astryx/require-ref-prop': 'warn',
+      '@eslint-react/no-forward-ref': 'warn',
+      '@eslint-react/naming-convention-ref-name': 'warn',
+      // Public API shape, settled with the package's stable-API decision.
+      '@astryx/require-base-props': 'warn',
+      '@astryx/boolean-prop-naming': 'warn',
+      '@eslint-react/no-unstable-default-props': 'warn',
     },
   },
 );

@@ -19,7 +19,6 @@ import {Selector} from '../Selector';
 import {HStack, VStack} from '../Stack';
 import {Icon} from '../Icon';
 import {TreeList, type TreeListItemData} from '../TreeList';
-import {useTranslator} from '../i18n';
 import {isImeKeyEvent} from '../utils/ime';
 import {spacingVars, typeScaleVars} from '../theme/tokens.stylex';
 import {
@@ -33,7 +32,15 @@ import type {
   PartialFilter,
   FilterValue,
   OperatorValue,
+  PowerSearchOperator,
 } from './types';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/PowerSearch/PowerSearchEditPopover.generated';
+
+registerEnglishFallback(english);
 
 // Below the popover layer's 400px floor (see popoverLayerStyles in
 // PowerSearch.tsx) the chip rows collapse from one line to wrapped lines.
@@ -263,7 +270,7 @@ function NestedSubFilterRow({
   maxMenuItems,
   isReadOnly,
 }: NestedSubFilterRowProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const fieldOptions = useMemo(
     () =>
       config.getVisibleFields().map(field => ({
@@ -396,7 +403,7 @@ function NestedEditor({
   maxMenuItems,
   isReadOnly,
 }: NestedEditorProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const [subFilters, setSubFilters] = useState<EditablePartialFilter[]>(() => {
     if (partialFilter.value && partialFilter.value.type === 'nested') {
       return partialFilter.value.value.map(f => initEditableFilter(config, f));
@@ -660,7 +667,7 @@ export function PowerSearchEditPopover({
   maxMenuItems,
   isReadOnly = false,
 }: PowerSearchEditPopoverProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const saveButtonLabel =
     saveButtonLabelFromProps ?? t('@astryx.powersearch.editor.apply');
   const [partialFilter, setPartialFilter] =
@@ -689,6 +696,26 @@ export function PowerSearchEditPopover({
     }));
   }, [config, partialFilter.field, t]);
 
+  // An "empty" operator takes no value, so choosing one completes the filter:
+  // save it from the choice itself, once, rather than reacting to the state.
+  // The save is queued as a microtask so it runs after the Selector reporting
+  // the choice has finished closing and refocusing its trigger; a parent that
+  // closes the editor on save can then move focus without the Selector taking
+  // it back onto a node that is about to unmount.
+  const saveIfEmptyOperator = useCallback(
+    (fieldKey: string, operator: PowerSearchOperator | undefined) => {
+      if (fieldKey && operator?.value.type === 'empty') {
+        const filter: PowerSearchFilter = {
+          field: fieldKey,
+          operator: operator.key,
+          value: {type: 'empty'},
+        };
+        queueMicrotask(() => onSave(filter));
+      }
+    },
+    [onSave],
+  );
+
   const handleFieldChange = useCallback(
     (fieldKey: string) => {
       const defaultOp = config.getDefaultOperator(fieldKey);
@@ -697,8 +724,16 @@ export function PowerSearchEditPopover({
         operator: defaultOp?.key,
         value: undefined,
       });
+      // Re-choosing the current field with its current operator changes
+      // nothing, so it saves nothing.
+      if (
+        fieldKey !== partialFilter.field ||
+        defaultOp?.key !== partialFilter.operator
+      ) {
+        saveIfEmptyOperator(fieldKey, defaultOp);
+      }
     },
-    [config],
+    [config, partialFilter.field, partialFilter.operator, saveIfEmptyOperator],
   );
 
   const handleOperatorChange = useCallback(
@@ -712,25 +747,31 @@ export function PowerSearchEditPopover({
         operator: operatorKey,
         value: keepValue ? prev.value : undefined,
       }));
+      // Re-choosing the current operator changes nothing, so it saves nothing.
+      if (operatorKey !== partialFilter.operator) {
+        saveIfEmptyOperator(partialFilter.field, newOp);
+      }
     },
-    [config, partialFilter.field, currentOperator],
+    [
+      config,
+      partialFilter.field,
+      partialFilter.operator,
+      currentOperator,
+      saveIfEmptyOperator,
+    ],
   );
 
   const handleValueChange = useCallback(
     (value: FilterValue, shouldSave?: boolean) => {
-      setPartialFilter(prev => {
-        const updated = {...prev, value};
-        if (shouldSave && updated.field && updated.operator && updated.value) {
-          onSave({
-            field: updated.field,
-            operator: updated.operator,
-            value: updated.value,
-          });
-        }
-        return updated;
-      });
+      setPartialFilter(prev => ({...prev, value}));
+      // Saved from the handler, not inside the state updater: React may call
+      // an updater more than once (StrictMode does), which would save twice.
+      const {field, operator} = partialFilter;
+      if (shouldSave && field && operator && value) {
+        onSave({field, operator, value});
+      }
     },
-    [onSave],
+    [partialFilter, onSave],
   );
 
   const handleSave = useCallback(() => {
@@ -758,6 +799,12 @@ export function PowerSearchEditPopover({
       if (isImeKeyEvent(e.nativeEvent)) {
         return;
       }
+      // A focused button owns its Enter: Cancel cancels, Delete deletes, and
+      // the date picker's calendar button opens the calendar. Enter in a
+      // text or number value field still saves.
+      if (e.key === 'Enter' && e.target instanceof HTMLButtonElement) {
+        return;
+      }
       if (e.key === 'Enter' && !isSaveDisabled && !e.defaultPrevented) {
         e.preventDefault();
         handleSave();
@@ -772,17 +819,6 @@ export function PowerSearchEditPopover({
   const operatorValue: OperatorValue | undefined = currentOperator?.value;
   const isEmptyType = operatorValue?.type === 'empty';
   const isNestedType = operatorValue?.type === 'nested';
-
-  // For empty type, auto-save on mount
-  useEffect(() => {
-    if (isEmptyType && partialFilter.field && partialFilter.operator) {
-      onSave({
-        field: partialFilter.field,
-        operator: partialFilter.operator,
-        value: {type: 'empty'},
-      });
-    }
-  }, [isEmptyType, partialFilter.field, partialFilter.operator, onSave]);
 
   const showOperatorSelector = operatorOptions.length > 1 || !isEmptyType;
 

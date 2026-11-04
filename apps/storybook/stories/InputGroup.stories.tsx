@@ -2,6 +2,7 @@
 
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
+import {Button} from '@astryxdesign/core/Button';
 import {InputGroup} from '@astryxdesign/core/InputGroup';
 import {InputGroupText} from '@astryxdesign/core/InputGroup';
 import {TextInput} from '@astryxdesign/core/TextInput';
@@ -53,6 +54,7 @@ export default meta;
 type Story = StoryObj<typeof InputGroup>;
 
 const TEAM_OPTIONS = ['Design Systems', 'Infrastructure', 'Product'];
+const VISIBILITY_OPTIONS = ['Only me', 'Members', 'Anyone'];
 
 export const WithPrefix: Story = {
   render: args => {
@@ -253,6 +255,99 @@ export const WithSelector: Story = {
   },
   args: {
     label: 'Default owner',
+  },
+};
+
+export const WithActionButton: Story = {
+  render: args => {
+    const [value, setValue] = useState<string | undefined>('Members');
+    return (
+      <InputGroup {...args}>
+        <Selector
+          label="Audience"
+          isLabelHidden
+          options={VISIBILITY_OPTIONS}
+          value={value}
+          onChange={setValue}
+        />
+        <Button label="Save" />
+      </InputGroup>
+    );
+  },
+  args: {
+    label: 'Visibility',
+  },
+};
+
+export const ActionButtonCombinations: Story = {
+  render: () => {
+    const [prefixValue, setPrefixValue] = useState('');
+    const [suffixValue, setSuffixValue] = useState('');
+    const [visibility, setVisibility] = useState<string | undefined>('Members');
+
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 16,
+          maxWidth: 520,
+        }}>
+        <InputGroup label="Prefix action" size="sm">
+          <Button label="Paste" />
+          <TextInput
+            label="Code"
+            isLabelHidden
+            value={prefixValue}
+            onChange={setPrefixValue}
+            placeholder="Enter code"
+          />
+        </InputGroup>
+        <InputGroup label="Text action" size="md">
+          <TextInput
+            label="Query"
+            isLabelHidden
+            value={suffixValue}
+            onChange={setSuffixValue}
+            placeholder="Search"
+          />
+          <Button label="Search" variant="primary" />
+        </InputGroup>
+        <InputGroup label="Selector action" size="lg">
+          <Selector
+            label="Audience"
+            isLabelHidden
+            options={VISIBILITY_OPTIONS}
+            value={visibility}
+            onChange={setVisibility}
+          />
+          <Button label="Save" tooltip="Save visibility" />
+        </InputGroup>
+      </div>
+    );
+  },
+};
+
+export const Disabled: Story = {
+  render: args => {
+    const [value, setValue] = useState('example');
+    return (
+      <InputGroup {...args}>
+        <TextInput
+          label="URL"
+          value={value}
+          onChange={setValue}
+          htmlName="website"
+          disabledMessage="Website editing is unavailable"
+        />
+        <Button label="Clear" onClick={() => setValue('')} />
+      </InputGroup>
+    );
+  },
+  args: {
+    label: 'Website',
+    description: 'The input and action inherit the group disabled state.',
+    isDisabled: true,
   },
 };
 

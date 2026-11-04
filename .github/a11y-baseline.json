@@ -1,7 +1,7 @@
 {
-  "$comment": "Known axe violations tolerated by the pr-a11y CI gate. Entries are keyed Component::Story::rule-id. Regenerate with `pnpm a11y:baseline` (requires a built Storybook + Playwright chromium). Remove entries as violations are fixed.",
+  "$comment": "Known axe violations tolerated by the pr-a11y CI gate. Entries are keyed package/component::story-id::rule-id; legacy Component::Story::rule-id entries are preserved until their exact story can be migrated. Regenerate with `pnpm a11y:baseline` (requires a built Storybook + Playwright chromium). Remove entries as violations are fixed.",
   "version": 1,
-  "generatedAt": "2026-07-31T09:21:12.717Z",
+  "generatedAt": "2026-10-24T15:57:55.439Z",
   "entries": [
     {
       "key": "Badge::Status Labels::color-contrast",
@@ -74,11 +74,6 @@
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
     },
     {
-      "key": "ChatToolCalls::Error With Detail::color-contrast",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
-    },
-    {
       "key": "ChatToolCalls::Interactive::color-contrast",
       "impact": "serious",
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
@@ -90,26 +85,6 @@
     },
     {
       "key": "ChatToolCalls::Multiple Calls::color-contrast",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
-    },
-    {
-      "key": "ChatToolCalls::Running::color-contrast",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
-    },
-    {
-      "key": "ChatToolCalls::Single Call::color-contrast",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
-    },
-    {
-      "key": "ChatToolCalls::With Errors::color-contrast",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
-    },
-    {
-      "key": "ChatToolCalls::With Nodes::color-contrast",
       "impact": "serious",
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
     },
@@ -130,21 +105,6 @@
     },
     {
       "key": "CheckboxList::Disabled::color-contrast",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
-    },
-    {
-      "key": "CheckboxList::Inside Card::color-contrast",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
-    },
-    {
-      "key": "CheckboxList::Standalone Mode::color-contrast",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
-    },
-    {
-      "key": "CheckboxList::With End Content::color-contrast",
       "impact": "serious",
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
     },
@@ -322,11 +282,6 @@
       "key": "Collapsible::Controlled::color-contrast",
       "impact": "serious",
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
-    },
-    {
-      "key": "DateRangeInput::Required::aria-allowed-attr",
-      "impact": "critical",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-allowed-attr?application=playwright"
     },
     {
       "key": "FileInput::All Variations::color-contrast",
@@ -589,71 +544,6 @@
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
     },
     {
-      "key": "RichTextEditor::Controlled Persistence::aria-input-field-name",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-input-field-name?application=playwright"
-    },
-    {
-      "key": "RichTextEditor::Custom Transformers::aria-input-field-name",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-input-field-name?application=playwright"
-    },
-    {
-      "key": "RichTextEditor::Default::aria-input-field-name",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-input-field-name?application=playwright"
-    },
-    {
-      "key": "RichTextEditor::Error Status::aria-input-field-name",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-input-field-name?application=playwright"
-    },
-    {
-      "key": "RichTextEditor::Imperative Ref::aria-input-field-name",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-input-field-name?application=playwright"
-    },
-    {
-      "key": "RichTextEditor::Markdown Serializers::aria-input-field-name",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-input-field-name?application=playwright"
-    },
-    {
-      "key": "RichTextEditor::Markdown Serializers::label",
-      "impact": "critical",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/label?application=playwright"
-    },
-    {
-      "key": "RichTextEditor::Read Only::aria-input-field-name",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-input-field-name?application=playwright"
-    },
-    {
-      "key": "RichTextEditor::Required::aria-input-field-name",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-input-field-name?application=playwright"
-    },
-    {
-      "key": "RichTextEditor::With Character Limit::aria-input-field-name",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-input-field-name?application=playwright"
-    },
-    {
-      "key": "RichTextEditor::With Description::aria-input-field-name",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-input-field-name?application=playwright"
-    },
-    {
-      "key": "RichTextEditor::With Initial Value::aria-input-field-name",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-input-field-name?application=playwright"
-    },
-    {
-      "key": "RichTextEditor::With Toolbar::aria-input-field-name",
-      "impact": "serious",
-      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/aria-input-field-name?application=playwright"
-    },
-    {
       "key": "Schedule::Async Loader::color-contrast",
       "impact": "serious",
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
@@ -857,6 +747,11 @@
       "key": "Tokenizer::Disabled::color-contrast",
       "impact": "serious",
       "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/color-contrast?application=playwright"
+    },
+    {
+      "key": "core/Tooltip::core-tooltip--tall-content-moving-host::scrollable-region-focusable",
+      "impact": "serious",
+      "helpUrl": "https://dequeuniversity.com/rules/axe/4.12/scrollable-region-focusable?application=playwright"
     }
   ]
 }

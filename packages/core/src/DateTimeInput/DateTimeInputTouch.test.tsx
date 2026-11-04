@@ -25,7 +25,7 @@ import {
   beforeEach,
   afterEach,
 } from 'vitest';
-import {useState} from 'react';
+import {Profiler, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {readFileSync} from 'node:fs';
 import {render, screen, fireEvent, within} from '@testing-library/react';
@@ -984,5 +984,88 @@ describe('DateTimeInput touch surface', () => {
     );
     fireEvent.click(field);
     expect(field).toHaveAttribute('aria-expanded', 'false');
+  });
+});
+
+describe('DateTimeInput touch surface: disabled without a reason', () => {
+  it('stays focusable and inert, and skips a caller onClick (AST-085 FR1, FR2)', () => {
+    const onClick = vi.fn();
+    render(
+      <DateTimeInput
+        label="Meeting"
+        isDisabled
+        onClick={onClick}
+        onChange={() => {}}
+      />,
+    );
+    for (const field of [dateField(), timeField()]) {
+      expect(field).not.toHaveAttribute('disabled');
+      expect(field).toHaveAttribute('aria-disabled', 'true');
+      field.focus();
+      expect(field).toHaveFocus();
+      fireEvent.click(field);
+      fireEvent.keyDown(field, {key: 'Enter'});
+      expect(field).toHaveAttribute('aria-expanded', 'false');
+    }
+    expect(onClick).not.toHaveBeenCalled();
+  });
+});
+
+describe('DateTimeInput touch surface: no stale commit', () => {
+  // Records what each commit painted, so a value that is corrected one render
+  // later (by an effect) shows up as a stale intermediate frame.
+  function paintedFrames(read: () => string) {
+    const frames: string[] = [];
+    const onRender = () => frames.push(read());
+    return {frames, onRender};
+  }
+
+  it('clears the time display in the same commit as an external clear', () => {
+    const {frames, onRender} = paintedFrames(
+      () => (timeField() as HTMLInputElement).value,
+    );
+    const ui = (value: ISODateTimeString | undefined) => (
+      <Profiler id="field" onRender={onRender}>
+        <DateTimeInput label="Meeting" value={value} onChange={() => {}} />
+      </Profiler>
+    );
+    const {rerender} = render(ui('2026-03-15T10:00' as ISODateTimeString));
+    expect(timeField()).toHaveValue('10:00 AM');
+
+    frames.length = 0;
+    rerender(ui(undefined));
+
+    expect(frames.length).toBeGreaterThan(0);
+    expect(frames).not.toContain('10:00 AM');
+    expect(timeField()).toHaveValue('');
+  });
+
+  it('shows an in-range month in the same commit that narrows max', () => {
+    withMonthLayout(() => {
+      const visibleMonth = () =>
+        ['March', 'April', 'May', 'June']
+          .map(m => `${m} 2026`)
+          .find(label => screen.queryByText(label) != null) ?? '';
+      const {frames, onRender} = paintedFrames(visibleMonth);
+      const ui = (max: ISODateTimeString) => (
+        <Profiler id="field" onRender={onRender}>
+          <DateTimeInput label="Meeting" max={max} onChange={() => {}} />
+        </Profiler>
+      );
+      const {rerender} = render(ui('2026-12-31T23:59' as ISODateTimeString));
+      openDateSheet();
+      const next = screen.getByRole('button', {name: 'Next month'});
+      fireEvent.click(next);
+      fireEvent.click(next);
+      fireEvent.click(next);
+      expect(screen.getByText('June 2026')).toBeInTheDocument();
+
+      frames.length = 0;
+      rerender(ui('2026-04-30T23:59' as ISODateTimeString));
+
+      expect(frames.length).toBeGreaterThan(0);
+      expect(frames).not.toContain('June 2026');
+      expect(screen.getByText('April 2026')).toBeInTheDocument();
+    });
   });
 });

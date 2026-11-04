@@ -21,8 +21,54 @@ export {
   type SyntaxToken,
 } from '@astryxdesign/core/CodeBlock';
 
-// InfoTip — accessible info-icon help affordance (RFC facebook/astryx#3349)
+// InfoTip — accessible info-icon help affordance (RFC meta/astryx#3349)
 export {InfoTip, type InfoTipProps, type InfoTipSize} from './InfoTip';
+
+// EmojiPicker — standalone searchable emoji panel
+export {
+  EmojiPicker,
+  DEFAULT_FREQUENT_EMOJIS,
+  type EmojiPickerProps,
+  type EmojiOption,
+  type EmojiCategory,
+} from './EmojiPicker';
+
+// CommentPin — avatar-first anchor for one or grouped annotation threads
+export {
+  CommentPin,
+  type CommentPinParticipant,
+  type CommentPinProps,
+} from './CommentPin';
+
+// Comments family — a panel, standalone thread, and controlled composer
+export {
+  Comments,
+  type CommentsProps,
+  CommentThread,
+  type CommentThreadProps,
+  CommentComposer,
+  type CommentComposerProps,
+  DEFAULT_COMMENT_REACTIONS,
+  COMMENT_ICON_KEYS,
+  type CommentAgentCommand,
+  type CommentAnchor,
+  type CommentComposerContext,
+  type CommentComposerRenderProps,
+  type CommentData,
+  type CommentStatus,
+  type CommentHighlightColor,
+  type CommentImageUploader,
+  type CommentMode,
+  type CommentProgress,
+  type CommentReaction,
+  type CommentReactionOption,
+  type CommentThreadData,
+  type CommentThreadSharedProps,
+  type CommentUploadedImage,
+  type CommentUser,
+  type CommentVersion,
+  type CommentActivityEvent,
+} from './Comments';
 
 // TransferList — controlled dual-panel collection input
 export {
@@ -42,10 +88,7 @@ export {
 } from './ChatReasoning/ChatReasoning';
 export * from './Chat';
 
-// Drawer — experimental overlay panel
-export {Drawer, type DrawerProps} from './Drawer';
-
-// Tour — guided product-tour / NUX walkthrough (facebook/astryx#4239)
+// Tour — guided product-tour / NUX walkthrough (meta/astryx#4239)
 export {
   Tour,
   type TourProps,
@@ -253,6 +296,25 @@ export {
   type LogStreamLevel,
 } from './LogStream';
 
+// DiffViewer — read-only file diff (unified/split) for code review surfaces
+export {
+  DiffViewer,
+  parseUnifiedDiff,
+  createDiffFile,
+  type DiffViewerProps,
+  type DiffViewerViewMode,
+  type CreateDiffFileOptions,
+  type DiffViewerChangeIndicator,
+  type DiffViewerInlineHighlight,
+  type DiffViewerFile,
+  type DiffViewerFileStatus,
+  type DiffViewerHunk,
+  type DiffViewerLine,
+  type DiffViewerLineKind,
+  type DiffViewerLineRef,
+  type DiffViewerSide,
+} from './DiffViewer';
+
 // MobileTokenizer — Lab prototype (stack layer 1) of the touch Tokenizer
 // flow: summary trigger + stacked manage/add BottomSheets. Graduates to
 // Core Tokenizer presentation="bottom-sheet" (stack layer 2).
@@ -262,7 +324,15 @@ export {
   type MobileTokenizerChange,
 } from './MobileTokenizer';
 
-// RichTextEditor (RFC facebook/astryx#3899) has graduated out of @astryxdesign/lab
-// into its own canary-only package, @astryxdesign/richtext, so it can be canaried
-// independently (e.g. into EPS/Nest). Import it from there:
+// MobilePowerSearch — Lab prototype (stack layer 1) of the touch PowerSearch
+// flow: field-wide "Manage filters" trigger with display-only tokens, a
+// Filters sheet, and a field → operator → value drill-down. The caller picks
+// it explicitly on touch layouts; the API mirrors Core PowerSearch.
+export {
+  MobilePowerSearch,
+  type MobilePowerSearchProps,
+} from './MobilePowerSearch';
+
+// RichTextEditor (RFC meta/astryx#3899) moved out of @astryxdesign/lab into
+// its own package, @astryxdesign/richtext. Import it from there:
 //   import {RichTextEditor, RichTextView} from '@astryxdesign/richtext';

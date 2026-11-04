@@ -4,55 +4,109 @@
 
 /**
  * @file useMenuHover.ts
- * @input Uses React hooks, useListFocus, useMediaQuery
- * @output Exports useMenuHover hook
- * @position Internal hook; used by nav heading components, TopNavMenu,
- *           TopNavMegaMenu and DropdownMenuSubMenu
- *
- * Hover as a progressive enhancement over standard popover behavior: click
- * toggles, Escape and outside-click close, arrows navigate; on top of that,
- * mouseenter opens after a delay and mouseleave closes one that hover opened.
- *
- * Three behaviors here are not obvious and are load-bearing:
- *
- * 1. Hover→click guard (#3121). A hover-opened menu is already open under the
- *    cursor when the pointer arrives, so the click that naturally follows would
- *    toggle it shut. Within `clickGuardMs` a click instead confirms it: the menu
- *    pins and behaves like a click-open from then on.
- *
- * 2. Focus moves synchronously. `useLayer.show()` calls `showPopover()` in the
- *    same tick and the layer's children are always mounted, so items are
- *    focusable the moment `show()` returns — a `requestAnimationFrame` here
- *    lands after paint and races anything else moving focus. Hover-opens are the
- *    exception: the pointer is driving, so focus stays on the trigger. The hook
- *    always passes `skipAutoFocus` and owns focus itself, because the popover's
- *    auto-focus targets the first *tabbable* node while a menu wants its first
- *    item — under roving tabindex those are different elements.
- *
- * 3. Native light dismiss. A `popover="auto"` is dismissed by the browser on
- *    pointer interaction outside the panel, and a trigger outside the panel
- *    counts — before React's click handler runs. `popoverId` makes the trigger
- *    the panel's invoker, which exempts it. jsdom implements neither light
- *    dismiss nor invokers, so that wiring is only verifiable in a browser.
+ * @input React hooks, useListFocus, useMediaQuery
+ * @output useMenuHover hook
+ * @position Internal hook for nav heading components, TopNavMenu,
+ *   TopNavMegaMenu and DropdownMenuSubMenu
  */
+
+// Hover adds to the standard popover behavior. A click toggles, Escape and an
+// outside click close, and arrows navigate. Also, mouseenter opens after a
+// delay, and mouseleave closes a menu that hover opened.
+//
+// - A hover-opened menu is open when the click that follows arrives. Within
+//   `clickGuardMs`, that click pins the menu and does not close it.
+// - Focus moves synchronously. `useLayer.show()` shows the popover in the
+//   same tick, and the items are always mounted. A frame delay lands after
+//   paint and races other focus moves. A hover open keeps focus on the
+//   trigger.
+// - The hook passes `skipAutoFocus` and moves focus itself. Popover
+//   auto-focus goes to the first tabbable node, but under roving tabindex a
+//   menu wants its first item.
+// - The browser light-dismisses a `popover="auto"` on a pointer press
+//   outside the panel, also on the trigger. `popoverId` makes the trigger the
+//   panel's invoker, which exempts it. jsdom has neither feature, so only a
+//   browser can test this.
 
 import {useCallback, useEffect, useRef} from 'react';
 import {useIsomorphicLayoutEffect} from './useIsomorphicLayoutEffect';
 import {useListFocus} from './useListFocus';
 import {useMediaQuery} from './useMediaQuery';
+import {focusForLastInput} from '../utils/focusReturn';
 
 const DEFAULT_CLICK_GUARD_MS = 500;
 
 /**
- * How long after a close a mouseenter on the trigger is ignored.
- *
- * A panel positioned over its own trigger puts that trigger back under a
- * stationary pointer when it closes, and the browser fires a fresh mouseenter —
- * which reopened the menu the user had just dismissed. Time-bounded rather than
- * a one-shot flag, so a deliberate re-hover seconds later still opens; a real
- * mouseleave clears it early.
+ * How long after a close a mouseenter on the trigger is ignored. A panel over
+ * its own trigger puts the trigger back under a still pointer when it closes,
+ * and the browser fires a new mouseenter. A time limit, not a one-shot flag,
+ * lets a later re-hover open the menu. A real mouseleave clears it early.
  */
 const REOPEN_SUPPRESS_MS = 300;
+
+/**
+ * Slack added to the flyout's near edge when building the safe triangle, so a
+ * pointer skimming the edge's corners still counts as heading for the flyout.
+ */
+const SAFE_TRIANGLE_PADDING_PX = 8;
+
+interface Point {
+  x: number;
+  y: number;
+}
+
+interface EdgeRect {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+function sign(p1: Point, p2: Point, p3: Point): number {
+  return (p1.x - p3.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p3.y);
+}
+
+function isPointInTriangle(p: Point, a: Point, b: Point, c: Point): boolean {
+  const d1 = sign(p, a, b);
+  const d2 = sign(p, b, c);
+  const d3 = sign(p, c, a);
+  const hasNegative = d1 < 0 || d2 < 0 || d3 < 0;
+  const hasPositive = d1 > 0 || d2 > 0 || d3 > 0;
+  return !(hasNegative && hasPositive);
+}
+
+/**
+ * Whether `point` lies inside the safe triangle from `origin` (where the
+ * pointer left the trigger row) to the flyout's NEAR edge — the edge of
+ * `flyout` facing the origin. A pointer travelling inside it is heading for
+ * the flyout, so the flyout must stay open. Exported for unit tests.
+ */
+export function isPointInSafeTriangle(
+  point: Point,
+  origin: Point,
+  flyout: EdgeRect,
+): boolean {
+  const pad = SAFE_TRIANGLE_PADDING_PX;
+  let edgeStart: Point;
+  let edgeEnd: Point;
+  if (origin.x <= flyout.left) {
+    edgeStart = {x: flyout.left, y: flyout.top - pad};
+    edgeEnd = {x: flyout.left, y: flyout.bottom + pad};
+  } else if (origin.x >= flyout.right) {
+    edgeStart = {x: flyout.right, y: flyout.top - pad};
+    edgeEnd = {x: flyout.right, y: flyout.bottom + pad};
+  } else if (origin.y <= flyout.top) {
+    edgeStart = {x: flyout.left - pad, y: flyout.top};
+    edgeEnd = {x: flyout.right + pad, y: flyout.top};
+  } else if (origin.y >= flyout.bottom) {
+    edgeStart = {x: flyout.left - pad, y: flyout.bottom};
+    edgeEnd = {x: flyout.right + pad, y: flyout.bottom};
+  } else {
+    // The origin is over the flyout itself: nothing to travel toward.
+    return false;
+  }
+  return isPointInTriangle(point, origin, edgeStart, edgeEnd);
+}
 
 export interface UseMenuHoverOptions {
   show: (options?: {skipAutoFocus?: boolean}) => void;
@@ -87,19 +141,29 @@ export interface UseMenuHoverOptions {
    * collapsed flyout) has no items for the hook to focus. @default true
    */
   ownsFocus?: boolean;
+  /**
+   * The flyout element, for consumers that manage their own list and do not
+   * attach the hook's `menuRef`. The safe triangle toward the flyout's near
+   * edge is built from it; without it the triangle is off.
+   */
+  flyoutRef?: React.RefObject<HTMLElement | null>;
 }
 
 export interface UseMenuHoverReturn<T extends HTMLElement = HTMLElement> {
   triggerProps: {
     onClick: (event?: React.MouseEvent) => void;
     onMouseEnter: () => void;
-    onMouseLeave: () => void;
+    /**
+     * Pass the event through: the pointer's position when it leaves the
+     * trigger is the apex of the safe triangle toward the flyout.
+     */
+    onMouseLeave: (event?: React.MouseEvent) => void;
     /** Present only when `popoverId` is supplied. */
     popoverTarget?: string;
   };
   contentProps: {
     onMouseEnter: () => void;
-    onMouseLeave: () => void;
+    onMouseLeave: (event?: React.MouseEvent) => void;
     onKeyDown: (e: React.KeyboardEvent) => void;
   };
   menuRef: React.RefObject<T | null>;
@@ -139,6 +203,7 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
     itemSelector,
     popoverId,
     ownsFocus = true,
+    flyoutRef,
   } = options;
 
   const hasHover = useMediaQuery('(hover: hover)');
@@ -146,25 +211,14 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
   const showTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const triggerElRef = useRef<HTMLElement | null>(null);
+  /** Removes the document pointer listener that watches the safe triangle. */
+  const safeTriangleCleanupRef = useRef<(() => void) | null>(null);
   /** Menu was hover-opened, so mouseleave may close it. */
   const hoverModeRef = useRef(false);
   const closedAtRef = useRef(0);
   /** When the current open began as a hover-open; 0 once confirmed or closed. */
   const hoverOpenedAtRef = useRef(0);
   const prevIsOpenRef = useRef(isOpen);
-
-  // Catches every close, whatever caused it. A layout effect, not render: it
-  // must land before the browser hit-tests the vanished panel and fires the
-  // mouseenter REOPEN_SUPPRESS_MS exists to swallow.
-  useIsomorphicLayoutEffect(() => {
-    const wasOpen = prevIsOpenRef.current;
-    prevIsOpenRef.current = isOpen;
-    if (wasOpen && !isOpen) {
-      hoverModeRef.current = false;
-      hoverOpenedAtRef.current = 0;
-      closedAtRef.current = Date.now();
-    }
-  }, [isOpen]);
 
   const clearTimeouts = useCallback(() => {
     if (showTimerRef.current) {
@@ -175,7 +229,26 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
       clearTimeout(hideTimerRef.current);
       hideTimerRef.current = null;
     }
+    safeTriangleCleanupRef.current?.();
+    safeTriangleCleanupRef.current = null;
   }, []);
+
+  // Catches every close, whatever caused it. A layout effect, not render: it
+  // must land before the browser hit-tests the vanished panel and fires the
+  // mouseenter REOPEN_SUPPRESS_MS exists to swallow.
+  useIsomorphicLayoutEffect(() => {
+    const wasOpen = prevIsOpenRef.current;
+    prevIsOpenRef.current = isOpen;
+    if (wasOpen && !isOpen) {
+      // Cancel a hover-open that was scheduled before the close. Otherwise it
+      // reopens a menu that closed from elsewhere, such as a submenu flyout
+      // that the root menu light-dismissed. A new mouseenter still opens.
+      clearTimeouts();
+      hoverModeRef.current = false;
+      hoverOpenedAtRef.current = 0;
+      closedAtRef.current = Date.now();
+    }
+  }, [isOpen, clearTimeouts]);
 
   // useListFocus needs an onEscape that is defined in terms of its own listRef;
   // the indirection avoids the use-before-declare.
@@ -195,10 +268,27 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
     const menuHadFocus =
       menuRef.current?.contains(document.activeElement) ?? false;
     hide();
-    if (menuHadFocus) {
-      triggerElRef.current?.focus();
+    const trigger = triggerElRef.current;
+    if (menuHadFocus && trigger != null) {
+      // A pointer pick leaves no keyboard ring on the trigger. A keyboard pick
+      // keeps it.
+      focusForLastInput(trigger);
     }
   }, [hide, menuRef]);
+
+  // A menu placed in the content can own its own list keys (NavHeadingMenu
+  // runs useListFocus over the same `menuitem`s); a key it consumed must not
+  // move focus a second time here as it bubbles out (APG menu: one item per
+  // arrow press).
+  const handleContentKeyDown = useCallback(
+    (event: React.KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+      handleListKeyDown(event);
+    },
+    [handleListKeyDown],
+  );
 
   useEffect(() => {
     escapeHandlerRef.current = () => {
@@ -210,6 +300,16 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
   useEffect(() => {
     return () => clearTimeouts();
   }, [clearTimeouts]);
+
+  // A trigger disabled while a hover is in flight must stay closed. Returning
+  // inert handlers below is not enough on its own: the open this hover already
+  // scheduled would still fire, and it would open a surface whose handlers can
+  // no longer close it.
+  useEffect(() => {
+    if (!isEnabled) {
+      clearTimeouts();
+    }
+  }, [isEnabled, clearTimeouts]);
 
   const focusMenu = useCallback(() => {
     // An empty or still-loading menu has no focusable item; focus the container
@@ -250,9 +350,10 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
       }
       clearTimeouts();
 
-      // Enter/Space arrive as a click with detail 0, and always open. A keyboard
-      // user reaches the trigger of an open menu only because a hover-open left
-      // focus behind; closing there would stranded them outside a visible menu.
+      // Enter and Space arrive as a click with detail 0, and always open. A
+      // keyboard user reaches the trigger of an open menu only when a
+      // hover-open left focus there. A close would leave them outside a
+      // visible menu.
       const isKeyboardActivation = event != null && event.detail === 0;
       if (isKeyboardActivation) {
         closedAtRef.current = 0;
@@ -327,18 +428,73 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
     }
   }, [hasHover, isOpen, clearTimeouts, show, showDelay]);
 
-  const handleMouseLeave = useCallback(() => {
-    // A real leave ends the stationary-pointer case the suppression window
-    // exists for, so the next enter is deliberate whenever it arrives.
-    closedAtRef.current = 0;
-    if (!hoverModeRef.current) {
-      return;
-    }
-    clearTimeouts();
-    hideTimerRef.current = setTimeout(() => {
-      hide();
-    }, hideDelay);
-  }, [clearTimeouts, hide, hideDelay]);
+  const handleMouseLeave = useCallback(
+    (event?: React.MouseEvent) => {
+      // A real leave ends the stationary-pointer case the suppression window
+      // exists for, so the next enter is deliberate whenever it arrives.
+      closedAtRef.current = 0;
+      if (!hoverModeRef.current) {
+        return;
+      }
+      clearTimeouts();
+      // Where the pointer was last seen, so the delay can ask whether it is
+      // still heading for the flyout rather than only reacting to movement.
+      let lastPoint: Point | null = null;
+      let isTracking = false;
+      let isInside: (point: Point) => boolean = () => false;
+      const scheduleHide = () => {
+        if (hideTimerRef.current) {
+          clearTimeout(hideTimerRef.current);
+        }
+        hideTimerRef.current = setTimeout(() => {
+          // A pointer that stops mid-diagonal is still heading for the
+          // flyout. Restart the delay, and do not close under it. The first
+          // move outside the triangle ends this.
+          if (isTracking && lastPoint != null && isInside(lastPoint)) {
+            scheduleHide();
+            return;
+          }
+          hide();
+        }, hideDelay);
+      };
+      scheduleHide();
+
+      // The safe triangle: while the pointer travels from where it left
+      // the trigger toward the flyout's near edge, it is heading for the
+      // flyout, and every move inside the triangle restarts the hide delay.
+      // The first move outside it lets the delay run out.
+      const menu = flyoutRef?.current ?? menuRef.current;
+      const apex: Point | null =
+        event != null ? {x: event.clientX, y: event.clientY} : null;
+      if (menu == null || apex == null || !isOpen) {
+        return;
+      }
+      const rect = menu.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) {
+        return;
+      }
+      const doc = menu.ownerDocument;
+      isInside = point => isPointInSafeTriangle(point, apex, rect);
+      isTracking = true;
+      lastPoint = apex;
+      const onPointerMove = (move: PointerEvent) => {
+        const point = {x: move.clientX, y: move.clientY};
+        lastPoint = point;
+        if (isInside(point)) {
+          scheduleHide();
+          return;
+        }
+        isTracking = false;
+        safeTriangleCleanupRef.current?.();
+        safeTriangleCleanupRef.current = null;
+      };
+      doc.addEventListener('pointermove', onPointerMove, true);
+      safeTriangleCleanupRef.current = () => {
+        doc.removeEventListener('pointermove', onPointerMove, true);
+      };
+    },
+    [clearTimeouts, hide, hideDelay, isOpen, menuRef, flyoutRef],
+  );
 
   const handleContentMouseEnter = useCallback(() => {
     clearTimeouts();
@@ -379,7 +535,7 @@ export function useMenuHover<T extends HTMLElement = HTMLElement>(
     contentProps: {
       onMouseEnter: handleContentMouseEnter,
       onMouseLeave: handleMouseLeave,
-      onKeyDown: handleListKeyDown,
+      onKeyDown: handleContentKeyDown,
     },
     menuRef,
     focusFirst,

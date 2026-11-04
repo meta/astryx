@@ -6,7 +6,12 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import {afterEach, describe, expect, it} from 'vitest';
 import {isErrorCode} from '../../../../foundation/response/error-codes.mjs';
-import {themePaletteGenerate} from './generate.mjs';
+import {
+  PALETTE_JSON_FORMAT_VERSION,
+  PALETTE_TYPESCRIPT_FORMAT_VERSION,
+  themePaletteGenerate,
+} from './generate.mjs';
+import {PALETTE_GENERATOR_VERSION} from './generator.mjs';
 
 const temporaryDirectories = [];
 
@@ -79,7 +84,12 @@ describe('themePaletteGenerate', () => {
       fs.readFileSync(path.join(cwd, 'ocean.palette.receipt.json'), 'utf-8'),
     );
     expect(receipt.recipe).toBe('astryx-oklch-v1');
-    expect(receipt.candidateSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(receipt.generatorVersion).toBe('palette-generator-v1');
+    expect(receipt.candidateFormatVersion).toBe('palette-typescript-v1');
+    expect(receipt.candidateSha256).toBe(
+      createHash('sha256').update(candidate).digest('hex'),
+    );
+    expect(receipt).toEqual(result.data.generationReceipt);
     expect(candidate).toContain('// prettier-ignore');
     expect(candidate).toContain("export const black = '#000000' as const;");
     expect(candidate).toContain("export const white = '#ffffff' as const;");
@@ -101,6 +111,69 @@ describe('themePaletteGenerate', () => {
     expect(written).toEqual(result.data.candidate);
     expect(written).toMatchObject({black: '#000000', white: '#ffffff'});
     expect(result.data.receipt).toBe('ocean.palette.receipt.json');
+  });
+
+  it('names the generator and the format of the exact bytes each receipt covers', () => {
+    expect(PALETTE_GENERATOR_VERSION).toBe('palette-generator-v1');
+    expect(PALETTE_TYPESCRIPT_FORMAT_VERSION).toBe('palette-typescript-v1');
+    expect(PALETTE_JSON_FORMAT_VERSION).toBe('palette-json-v1');
+
+    const cwd = fixture();
+    const sha256 = file =>
+      createHash('sha256')
+        .update(fs.readFileSync(path.join(cwd, file)))
+        .digest('hex');
+    const printed = themePaletteGenerate('palette.config.json', {}, {cwd}).data
+      .generationReceipt;
+    const typescript = themePaletteGenerate(
+      'palette.config.json',
+      {out: 'ocean.palette.ts'},
+      {cwd},
+    ).data.generationReceipt;
+    const json = themePaletteGenerate(
+      'palette.config.json',
+      {out: 'ocean-json.palette.json'},
+      {cwd},
+    ).data.generationReceipt;
+
+    // Existing receipt fields keep their positions; the versions sit beside
+    // the digest they qualify.
+    expect(Object.keys(typescript)).toEqual([
+      'schemaVersion',
+      'recipe',
+      'generatorVersion',
+      'candidateFormatVersion',
+      'candidateSha256',
+      'request',
+      'diagnostics',
+    ]);
+    expect(typescript).toMatchObject({
+      generatorVersion: PALETTE_GENERATOR_VERSION,
+      candidateFormatVersion: PALETTE_TYPESCRIPT_FORMAT_VERSION,
+      candidateSha256: sha256('ocean.palette.ts'),
+    });
+    expect(json).toMatchObject({
+      generatorVersion: PALETTE_GENERATOR_VERSION,
+      candidateFormatVersion: PALETTE_JSON_FORMAT_VERSION,
+      candidateSha256: sha256('ocean-json.palette.json'),
+    });
+    // Without an output path, the receipt covers the canonical JSON bytes.
+    expect(printed).toEqual(json);
+    // Only the serialized bytes differ between formats, never the generation.
+    expect(typescript.candidateSha256).not.toBe(json.candidateSha256);
+    expect({
+      ...typescript,
+      candidateFormatVersion: null,
+      candidateSha256: null,
+    }).toEqual({...json, candidateFormatVersion: null, candidateSha256: null});
+    for (const [file, receipt] of [
+      ['ocean.palette.receipt.json', typescript],
+      ['ocean-json.palette.receipt.json', json],
+    ]) {
+      expect(
+        JSON.parse(fs.readFileSync(path.join(cwd, file), 'utf-8')),
+      ).toEqual(receipt);
+    }
   });
 
   it('writes candidate JSON byte-identical to the recipe fixtures', () => {
@@ -164,7 +237,10 @@ describe('themePaletteGenerate', () => {
       );
 
       const printed = themePaletteGenerate('palette.config.json', {}, {cwd});
-      expect(printed.data.generationReceipt.candidateSha256).toBe(sha256);
+      expect(printed.data.generationReceipt).toMatchObject({
+        candidateFormatVersion: 'palette-json-v1',
+        candidateSha256: sha256,
+      });
 
       const result = themePaletteGenerate(
         'palette.config.json',
@@ -174,7 +250,10 @@ describe('themePaletteGenerate', () => {
       const written = fs.readFileSync(path.join(cwd, 'candidate.json'));
       expect(written.length).toBe(bytes);
       expect(createHash('sha256').update(written).digest('hex')).toBe(sha256);
-      expect(result.data.generationReceipt.candidateSha256).toBe(sha256);
+      expect(result.data.generationReceipt).toMatchObject({
+        candidateFormatVersion: 'palette-json-v1',
+        candidateSha256: sha256,
+      });
     }
   });
 

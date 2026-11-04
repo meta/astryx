@@ -6,8 +6,8 @@ export const docs = {
   name: 'getting-started',
   title: 'Getting Started',
   category: 'guide',
-  description:
-    'Add the design system to your project and start building.',
+  description: 'Add the design system to your project and start building.',
+  keywords: ['quick start', 'setup', 'install'],
 
   sections: [
     {
@@ -21,7 +21,7 @@ export const docs = {
           type: 'code',
           lang: 'text',
           label: 'Set up the design system',
-          code: 'Install @astryxdesign/core, @stylexjs/stylex, @astryxdesign/theme-neutral, and @astryxdesign/cli in this project, then run `npx @astryxdesign/cli init` to set up agent docs. Read the generated files to learn the conventions.',
+          code: 'Install @astryxdesign/core, @stylexjs/stylex, @astryxdesign/theme-neutral, and @astryxdesign/cli in this project, then run `{@command init}` to set up agent docs. Read the generated files to learn the conventions.',
         },
         {
           type: 'prose',
@@ -31,7 +31,7 @@ export const docs = {
           type: 'code',
           lang: 'text',
           label: 'Give it a look',
-          code: "Ask me what look and feel this app should have. Run `npx @astryxdesign/cli theme list` and start from the closest available theme with `theme add <slug>`; the list includes bundled themes and themes from installed integrations, with each owner shown. Use `--package` if owners share a slug. The command copies the theme in as editable source. If none fit, run `npx @astryxdesign/cli theme template` and fill in the annotated template it writes. Default to neutral if I have no preference, and show me the result before moving on.",
+          code: 'Ask me what look and feel this app should have. Run `{@command theme list}`, install the closest theme package, and run `theme add <slug>`; use `--package` when owners share a slug. Import `themes` and `defaultThemeSlug` from the generated module once and pass `themes[defaultThemeSlug]` to `<Theme>`. Customize with `defineTheme({extends: importedTheme, ...})`. Use `theme eject` only when I ask for an independent source fork. Default to neutral if I have no preference, and show me the result before moving on.',
         },
       ],
     },
@@ -50,38 +50,66 @@ export const docs = {
           type: 'code',
           lang: 'bash',
           label: 'Terminal',
-          code: `npm install @astryxdesign/core @stylexjs/stylex @astryxdesign/theme-neutral @astryxdesign/cli`,
+          code: `{@pm install @astryxdesign/core @stylexjs/stylex @astryxdesign/theme-neutral @astryxdesign/cli}`,
         },
         {
           type: 'prose',
-          text: "Then run `astryx init` to install the AI agent cheat sheet (AGENTS.md/CLAUDE.md). It's non-interactive; no prompts; so it's safe for AI agents, CI, and scripts. Add `--all` for pointers to the theme and page-building workflows.",
+          text: "Then run `{@command init}` to install the AI agent cheat sheet (AGENTS.md/CLAUDE.md). It's non-interactive; no prompts; so it's safe for AI agents, CI, and scripts. Add `--all` for pointers to the theme and page-building workflows.",
         },
         {
           type: 'code',
           lang: 'bash',
           label: 'Terminal',
-          code: `npx astryx init`,
+          code: `{@command init}`,
         },
       ],
     },
     {
-      title: 'Add the theme CSS',
+      id: 'install-once',
+      title: 'Install once, use everywhere',
       content: [
         {
           type: 'prose',
-          text: 'Import the reset stylesheet and a theme in your global CSS file. Themes provide all design tokens (colors, spacing, radius, typography) as CSS custom properties.',
+          text: "Install the CLI once for your computer too, and the astryx command works in any folder, for you and for any coding agent, even before a project exists. Inside a project, the project's own version still answers, so a global install never changes what your team and CI get. Keep it in the project as well; that is the recommended setup.",
+        },
+        {
+          type: 'code',
+          lang: 'bash',
+          label: 'Terminal',
+          code: `{@pm install @astryxdesign/cli --global}`,
+        },
+        {
+          type: 'prose',
+          text: 'Project, global, or both: {@link generic:project-global-or-both}. Everything else about global mode: {@link namespace:global}.',
+        },
+      ],
+    },
+    {
+      title: 'Add base CSS and a theme',
+      content: [
+        {
+          type: 'prose',
+          text: 'Import the reset and base styles in your global CSS. Then run `{@command theme add neutral}`; the generated app module imports the theme’s production CSS and font CSS.',
         },
         {
           type: 'code',
           lang: 'css',
           label: 'globals.css',
           code: `@import '@astryxdesign/core/reset.css';
-@import '@astryxdesign/core/astryx.css';
-@import '@astryxdesign/theme-neutral/theme.css';`,
+@import '@astryxdesign/core/astryx.css';`,
         },
         {
           type: 'prose',
-          text: 'Available themes:',
+          text: 'Run `{@command theme list}` to see every theme.',
+        },
+        {
+          type: 'code',
+          lang: 'tsx',
+          label: 'App root',
+          code: `import {Theme} from '@astryxdesign/core/theme';
+import {themes, defaultThemeSlug} from './astryx-themes';
+
+<Theme theme={themes[defaultThemeSlug]}><App /></Theme>`,
         },
         {
           type: 'list',
@@ -98,11 +126,11 @@ export const docs = {
         },
         {
           type: 'prose',
-          text: 'These stylesheets are cascade-layered: the reset loads in @layer reset and component styles in @layer astryx-base. If your project has existing global CSS, a legacy reset, or Tailwind, declare the layer order explicitly and assign every stylesheet to a layer deliberately: unlayered styles and later layers both override astryx-base regardless of specificity. See the Cascade Layer Safety section in `astryx docs migration` before building screens.',
+          text: 'These stylesheets are cascade-layered: the reset loads in @layer reset and component styles in @layer astryx-base. If your project has existing global CSS, a legacy reset, or Tailwind, declare the layer order explicitly and assign every stylesheet to a layer deliberately: unlayered styles and later layers both override astryx-base regardless of specificity. Before building screens, read the two cascade layer sections of {@link generic:migration-setup}.',
         },
         {
           type: 'prose',
-          text: 'Run `astryx docs theme` for the full theming guide.',
+          text: 'Run {@link generic:use-a-theme} for the full theming guide.',
         },
       ],
     },
@@ -111,14 +139,14 @@ export const docs = {
       content: [
         {
           type: 'prose',
-          text: 'Components are imported from per-category subpath entrypoints. This keeps bundles small and makes intent clear.',
+          text: 'Import each component from its own entry, the path `{@command component <Name>}` prints. This keeps bundles small and makes intent clear.',
         },
         {
           type: 'code',
           lang: 'tsx',
           label: 'app/page.tsx',
           code: `import {Button} from '@astryxdesign/core/Button';
-import {VStack} from '@astryxdesign/core/Layout';
+import {VStack} from '@astryxdesign/core/VStack';
 
 export default function Page() {
   return (
@@ -135,7 +163,7 @@ export default function Page() {
       content: [
         {
           type: 'prose',
-          text: 'Astryx components support various styling solutions, from plain CSS and `className` to Tailwind and CSS-in-JS. See the [styling docs](/docs/styling) for the full guide. Astryx also has a deep integration with [StyleX](https://stylexjs.com/), an atomic CSS-in-JS library: create styles with `stylex.create()` and pass them to components with the `xstyle` prop.',
+          text: 'Astryx components support various styling solutions, from plain CSS and `className` to Tailwind and CSS-in-JS. See {@link namespace:styling} for the full guide. Astryx also has a deep integration with [StyleX](https://stylexjs.com/), an atomic CSS-in-JS library: create styles with `stylex.create()` and pass them to components with the `xstyle` prop.',
         },
         {
           type: 'code',
@@ -162,21 +190,36 @@ const overrides = stylex.create({
           type: 'table',
           headers: ['Example', 'Stack', 'Path'],
           rows: [
-            ['Next.js', 'Next.js + theme CSS', '[apps/example-nextjs](https://github.com/facebook/astryx/tree/main/apps/example-nextjs)'],
-            ['Next.js + StyleX', 'Next.js + StyleX for custom styles', '[apps/example-nextjs-stylex](https://github.com/facebook/astryx/tree/main/apps/example-nextjs-stylex)'],
-            ['Next.js + Tailwind', 'Next.js + Tailwind bridge', '[apps/example-nextjs-tailwind](https://github.com/facebook/astryx/tree/main/apps/example-nextjs-tailwind)'],
-            ['Next.js Source', 'Next.js importing from source', '[apps/example-nextjs-source](https://github.com/facebook/astryx/tree/main/apps/example-nextjs-source)'],
-            ['Vite', 'Vite', '[apps/example-vite](https://github.com/facebook/astryx/tree/main/apps/example-vite)'],
+            [
+              'Next.js',
+              'Next.js + theme CSS',
+              '[apps/example-nextjs](https://github.com/meta/astryx/tree/main/apps/example-nextjs)',
+            ],
+            [
+              'Next.js + StyleX',
+              'Next.js + StyleX for custom styles',
+              '[apps/example-nextjs-stylex](https://github.com/meta/astryx/tree/main/apps/example-nextjs-stylex)',
+            ],
+            [
+              'Next.js + Tailwind',
+              'Next.js + Tailwind bridge',
+              '[apps/example-nextjs-tailwind](https://github.com/meta/astryx/tree/main/apps/example-nextjs-tailwind)',
+            ],
+            [
+              'Vite + Tailwind',
+              'Vite + Tailwind bridge',
+              '[apps/example-vite-tailwind](https://github.com/meta/astryx/tree/main/apps/example-vite-tailwind)',
+            ],
           ],
         },
         {
           type: 'code',
           lang: 'bash',
           label: 'Clone and run an example',
-          code: `git clone https://github.com/facebook/astryx.git
+          code: `git clone https://github.com/meta/astryx.git
 cd astryx/apps/example-nextjs
-pnpm install
-pnpm dev`,
+{@pm install}
+{@pm run dev}`,
         },
       ],
     },
@@ -197,17 +240,17 @@ pnpm dev`,
         },
         {
           type: 'prose',
-          text: 'Then discover what\'s available:',
+          text: "Then discover what's available:",
         },
         {
           type: 'code',
           lang: 'bash',
           label: 'Terminal',
-          code: `astryx component          # list all components
-astryx component Button   # props, usage, theming for Button
-astryx docs               # list all doc topics
-astryx template --list    # available page templates
-astryx docs tokens        # spacing, color, radius reference`,
+          code: `{@command component}          # list all components
+{@command component Button}   # props, usage, theming for Button
+{@command docs}               # list all doc topics
+{@command template --list}    # available page templates
+{@command docs tokens}        # spacing, color, radius reference`,
         },
       ],
     },

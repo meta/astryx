@@ -444,3 +444,45 @@ export const WithTabNavigation: Story = {
     );
   },
 };
+
+/**
+ * Tabs in the center slot of a divided toolbar. The selected-tab indicator
+ * sits on the divider rail, just outside the slot's box, so the slot must not
+ * clip its content (the same goes for box-shadows and focus rings).
+ */
+export const WithCenterTabNavigation: Story = {
+  name: 'Composition: Center Tab Navigation',
+  render: () => {
+    const [tab, setTab] = useState('overview');
+    return (
+      <Card>
+        <Toolbar
+          label="Center tab navigation"
+          dividers={['bottom']}
+          startContent={
+            <Button
+              label="Back"
+              variant="ghost"
+              icon={<ArrowLeftIcon style={{width: 16, height: 16}} />}
+              isIconOnly
+            />
+          }
+          centerContent={
+            <TabList
+              value={tab}
+              onChange={setTab}
+              aria-label="Center tab navigation">
+              <Tab value="overview" label="Overview" />
+              <Tab value="analytics" label="Analytics" />
+              <Tab value="settings" label="Settings" />
+            </TabList>
+          }
+          endContent={<Button label="New item" />}
+        />
+        <Section>
+          <Text type="body">Content for the center tab navigation</Text>
+        </Section>
+      </Card>
+    );
+  },
+};

@@ -44,8 +44,9 @@ content surfaces. Block templates provide focused patterns and component example
 This record owns their source shapes, catalog identity, validation boundary,
 consumer projections, and copy semantics.
 
-It does not copy contributor instructions, visual-design guidance, or the grading
-rubric. Those facts have separate owners under [Delegated authority](#delegated-authority).
+It does not copy contributor instructions or internal audit-publication workflow.
+The shipped template-quality guide owns the public grading rubric, and the
+public contributor guide links to that source.
 
 ## System model
 
@@ -97,7 +98,7 @@ entry and pass one validation boundary. That boundary uses these requirements:
 
 | Scope                | Required                                                                                                                 | Optional or conditional                                                               |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
-| Every entry          | `id`, `package`, `type`, `name`, `displayName`, non-empty `description`, explicit `isReady`, and an existing source file | Source-specific provenance and diagnostics                                            |
+| Every entry          | `id`, `package`, `type`, `name`, `displayName`, non-empty `description`, explicit `isReady`, and an existing source file | `keywords`; source-specific provenance and diagnostics                                |
 | Page                 | Everything above; `category` when eligible for the overview                                                              | `scaffold`, `isHiddenFromOverview`; a hidden special-purpose page may omit `category` |
 | Block                | Everything above plus `exampleFor`, positive `aspectRatio`, and complete `componentsUsed`                                | `scale`, `isShowcase`, `alsoExampleFor`, `alsoShowcaseFor`                            |
 | Primary showcase     | Block requirements plus `isShowcase: true`; at most one resolved primary showcase per `(package, target)`                | The same block may serve additional targets through `alsoShowcaseFor`                 |
@@ -149,9 +150,14 @@ authoring check; it does not replace runtime catalog validation.
   own `AppShell` and global navigation because demonstrating that chrome is its
   purpose. The contributor guide owns the exact root-component recipe.
 - **INV8 — Copying is a self-contained snapshot.** The emitted source belongs to the
-  adopting project. Repository-only demo assets are replaced during copy so the
-  scaffold does not depend on Astryx preview hosting. Later catalog updates do not
-  mutate copied projects.
+  adopting project. Repository-only demo assets and demo-content elements are
+  replaced with generic placeholders, and docs-only presentation wrappers are
+  removed, during copy; `template copy` and the docsite's shadcn Install item
+  are copies. `template show` returns the same source a copy writes. Other
+  example source handed out without a copy replaces only demo-content elements
+  and removes docs-only presentation wrappers. Live previews render the
+  originals.
+  Later catalog updates do not mutate copied projects.
 - **INV9 — Catalog values may evolve.** Template ids, labels, metadata, categories,
   example data, and starter source are mutable catalog data under
   `spec:AST-017/DEC-2`.
@@ -169,11 +175,13 @@ authoring check; it does not replace runtime catalog validation.
 
 This record does not absorb adjacent facts:
 
-- The public [Contributing Templates](https://github.com/facebook/astryx/wiki/Contributing-Templates)
-  guide owns contributor workflow, naming and description guidance, implementation
-  recipes, grading rules, rubric versioning, and the score-ledger procedure. Its
-  current statement that renaming is breaking is superseded by
-  `spec:AST-017/DEC-2`.
+- The shipped `authoring/building-blocks/templates/write-good-templates` guides own the public
+  grading rules, rubric version, grade bands, categories, weights, and agent
+  workflow. The public
+  [Contributing Templates](https://github.com/meta/astryx/wiki/Contributing-Templates)
+  guide owns contributor workflow and the score-ledger publication procedure,
+  and links to the shipped rubric instead of copying it. Its current statement
+  that renaming is breaking is superseded by `spec:AST-017/DEC-2`.
 - `design:template-composition` owns shared human visual, hierarchy, responsive, and
   interaction intent. It remains a candidate record while its authority is `draft`.
 - Component, module, and family records own the behavior of components composed by a
@@ -198,18 +206,40 @@ This record does not absorb adjacent facts:
   target and regenerates the showcase/example registries.
 - A visual or interaction change follows applicable current design, family, and
   component records. One review does not substitute for another.
-- A rubric scoring change increments the rubric version and updates the score-ledger
-  contract. It changes this architecture only when it moves a system boundary.
+- A rubric scoring change updates the shipped template-quality guide's version
+  and score-ledger contract together. It changes this architecture only when it
+  moves a system boundary.
 - A proposal to share behavior across several templates updates the relevant family,
   design, or system record rather than inferring a contract from similarity.
 
 ## Owning code
 
+- `packages/cli/assets/docs/tree/template-quality.doc.mjs` and its child guides —
+  the canonical public rubric and agent grading workflow.
+- `scripts/template-score-ledger.mjs` — rubric score persistence; imports the
+  canonical version, grade bands, categories, and weights from the guide.
 - `packages/cli/assets/templates/` — built-in page and block source plus metadata.
 - `packages/cli/authoring/doctypes/template/` — first-party authoring types and the
   runtime template envelope.
 - `packages/cli/foundation/discovery/template-adapter.mjs` — current source loaders,
   normalization, projections, and shared template IO.
+- `replaceDemoMedia` in `template-adapter.mjs` — the INV8 replacement step that
+  copy and displayed code share. It replaces `/template-assets/` media URLs. In
+  motion and gesture examples, where a real Astryx component wraps docs-only
+  contents, such as `<Card><PlayingCardContents /></Card>`, it also replaces each
+  demo-content element with a generic placeholder and keeps the outer
+  component. A demo-content element is an element imported from the one
+  repository-only demo-content module; the step drops that import. The module
+  and the import rule are internal mechanism, not a public contract
+  (`architecture:knowledge-contracts/INV18`); `spec:AST-028` FR13 states the
+  outcome. `template copy`, `template show`, and the docsite's shadcn Install
+  item run both passes; the copy receipt and the `template show` response
+  report the element count as `demoContentReplaced`. The docsite Code tab, Open
+  in Playground, the Sandbox code view, the docsite MCP server's `get()`, and
+  `astryx component <Name> --showcase` run only the element pass, so they keep
+  their fixture media (`spec:AST-033` FR23). Implementation gap:
+  the demo-content module, the element pass, and `demoContentReplaced` are not
+  built, and the shadcn Install item runs neither pass.
 - `packages/cli/foundation/config/project.mjs` — project diagnostics and current
   integration-template re-collection.
 - `packages/cli/api/template/` — list, show, skeleton, and copy operations.
@@ -226,14 +256,15 @@ This record does not absorb adjacent facts:
 
 ## Verification
 
-| Scope                                 | Current evidence                                                              | Missing before `current`                                                                        |
-| ------------------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| Source shapes and integration parsing | `parse.test.mjs`, `template-suffix.test.mjs`, `template-integration.test.mjs` | One corpus check that runs every shipped page and block through the normalized boundary         |
-| Catalog membership and diagnostics    | `template-adapter.test.mjs`, `project.test.mjs`                               | One catalog implementation; no duplicate collection; every invalid source reported consistently |
-| `init` projection                     | `init.test.mjs`                                                               | Selection of every named built-in page from the catalog instead of a directory scan             |
-| Docsite and sandbox projections       | `data-extraction.test.ts`, generated registry checks                          | Membership parity and live-preview coverage derived from catalog metadata                       |
-| Copy boundary                         | `template.test.mjs`, `template-suffix.test.mjs`                               | Mutation coverage for preview-only asset removal and snapshot independence                      |
-| Rubric evidence                       | Versioned scorecards carrying `commit` and `rubricVersion`                    | None for architecture; scores remain audit evidence rather than authority                       |
+| Scope                                 | Current evidence                                                              | Missing before `current`                                                                                                                                                                                                                                                                                                                                                                                               |
+| ------------------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Source shapes and integration parsing | `parse.test.mjs`, `template-suffix.test.mjs`, `template-integration.test.mjs` | One corpus check that runs every shipped page and block through the normalized boundary                                                                                                                                                                                                                                                                                                                                |
+| Catalog membership and diagnostics    | `template-adapter.test.mjs`, `project.test.mjs`                               | One catalog implementation; no duplicate collection; every invalid source reported consistently                                                                                                                                                                                                                                                                                                                        |
+| `init` projection                     | `init.test.mjs`                                                               | Selection of every named built-in page from the catalog instead of a directory scan                                                                                                                                                                                                                                                                                                                                    |
+| Docsite and sandbox projections       | `data-extraction.test.ts`, generated registry checks                          | Membership parity and live-preview coverage derived from catalog metadata                                                                                                                                                                                                                                                                                                                                              |
+| Copy boundary                         | `template.test.mjs`, `template-suffix.test.mjs`                               | Mutation coverage for preview-only asset removal and snapshot independence                                                                                                                                                                                                                                                                                                                                             |
+| Demo-content replacement              | None; not built                                                               | Copy, `template show`, shadcn Install item, Code-tab, Open in Playground, Sandbox code-view, MCP `get()`, and `--showcase` output contain no demo-content element or demo-content import; copy receipt and `template show` count the elements; the shadcn Install item contains no `/template-assets/` reference; the surfaces that only hand out source keep their fixture media; a live preview renders the original |
+| Rubric evidence                       | Versioned scorecards carrying `commit` and `rubricVersion`                    | None for architecture; scores remain audit evidence rather than authority                                                                                                                                                                                                                                                                                                                                              |
 
 ## Shipped-catalog audit
 
@@ -265,13 +296,6 @@ An exact-source audit at `067b176` found:
   `current`.
 
 ## Decision log
-
-### Recovered draft — 2026-09-02
-
-This record recovers the architecture half of [#5915](https://github.com/facebook/astryx/pull/5915)
-without copying the rubric or changing `design:template-composition`. It replaces
-that draft's proposed stable-slug invariant with the accepted
-`spec:AST-017/DEC-2` boundary.
 
 ### Catalog convergence direction — 2026-09-05
 

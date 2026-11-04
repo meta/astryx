@@ -33,6 +33,12 @@ export const doc = {
         'Validate and return the same receipt without writing; data.written is false and data.dryRun is true.',
       default: 'false',
     },
+    {
+      name: 'options.from',
+      type: 'string',
+      description:
+        'Slug of an existing theme to fork as the starting point. The new theme copies the base and has no link back, and package.json `dependencies` gains the npm packages the copied files import (other than Core and React).',
+    },
   ],
   returns: [
     {
@@ -75,6 +81,10 @@ export const doc = {
     {
       label: 'Add a theme',
       code: "await integrationAddTheme('ocean');",
+    },
+    {
+      label: 'Fork an existing theme',
+      code: "await integrationAddTheme('ocean', {from: 'neutral'});",
     },
     {
       label: 'Preview writes',

@@ -24,15 +24,21 @@ import {
   useTransition,
   type ReactNode,
 } from 'react';
-import type {BaseProps} from '../BaseProps';
+import {
+  type FieldInputBaseProps,
+  useFieldInputStyling,
+} from '../Field/fieldParts';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import type {SizeValue} from '../utils/types';
 import {Field} from '../Field/Field';
 import type {InputStatus} from '../Field/types';
 import {List} from '../List/List';
 import type {ListDensity} from '../List/ListContext';
 import {useTooltip} from '../Tooltip';
+import * as stylex from '@stylexjs/stylex';
 import {mergeProps} from '../utils';
 import {themeProps} from '../utils/themeProps';
+import {joinAriaIDs} from '../utils/inputAria';
 import {
   CheckboxListContext,
   type CheckboxListContextValue,
@@ -41,10 +47,10 @@ import {
 const EMPTY_ARRAY: string[] = [];
 
 export interface CheckboxListProps extends Omit<
-  BaseProps<HTMLDivElement>,
+  FieldInputBaseProps<HTMLDivElement>,
   'onChange'
 > {
-  /** Ref forwarded to the root element */
+  /** Ref forwarded to the `role="group"` element. */
   ref?: React.Ref<HTMLDivElement>;
   /**
    * Label text for the checkbox group (always rendered for accessibility).
@@ -159,12 +165,21 @@ export function CheckboxList({
   children,
   ref,
   width,
-  xstyle,
-  className,
-  style,
-  'data-testid': dataTestId,
-  ...rest
+  containerXstyle,
+  containerClassName,
+  containerStyle,
+  controlXstyle,
+  controlClassName,
+  controlStyle,
+  'aria-labelledby': ariaLabelledByProp,
+  'aria-describedby': ariaDescribedByProp,
+  ...restProps
 }: CheckboxListProps) {
+  const {rest, container} = useFieldInputStyling('CheckboxList', restProps, {
+    containerXstyle,
+    containerClassName,
+    containerStyle,
+  });
   const inputID = useId();
   const labelID = useId();
   const descriptionID = useId();
@@ -174,14 +189,22 @@ export function CheckboxList({
   const isCollectionMode = value !== undefined;
   const effectiveValue = value ?? EMPTY_ARRAY;
   const [optimisticValue, setOptimisticValue] = useOptimistic(effectiveValue);
-  // Tracks which item has a pending `changeAction`. Auto-reverts to null when
-  // the transition settles, so the spinner clears without manual cleanup.
-  const [loadingValue, setLoadingValue] = useOptimistic<string | null>(null);
+  // Values whose `changeAction` is pending. React settles concurrent
+  // transitions together, so each toggled value stays listed until they all
+  // finish, then reverts to empty without manual cleanup.
+  const [loadingValues, addLoadingValue] = useOptimistic<
+    ReadonlyArray<string>,
+    string
+  >(EMPTY_ARRAY, (pending, toggled) =>
+    pending.includes(toggled) ? pending : [...pending, toggled],
+  );
 
   // Disabled-reason tooltip. Applies to the whole-group disabled state. Disabled
   // controls swallow pointer events, so the tooltip listeners attach to the
   // group container and the checkboxes stay perceivable via aria-disabled
-  // instead of the disabled attribute. Toggling is blocked in the item.
+  // instead of the disabled attribute. Toggling is blocked in the item. The
+  // reason describes the group and each checkbox (see
+  // CheckboxListContextValue.disabledMessageID).
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
@@ -198,7 +221,7 @@ export function CheckboxList({
         startTransition(async () => {
           setOptimisticValue(newValues);
           if (toggledValue !== undefined) {
-            setLoadingValue(toggledValue);
+            addLoadingValue(toggledValue);
           }
           await changeAction(newValues);
         });
@@ -209,7 +232,7 @@ export function CheckboxList({
       changeAction,
       startTransition,
       setOptimisticValue,
-      setLoadingValue,
+      addLoadingValue,
     ],
   );
 
@@ -219,8 +242,11 @@ export function CheckboxList({
       onChange: isCollectionMode ? handleChange : undefined,
       isDisabled,
       hasDisabledMessage: showsDisabledMessage,
+      disabledMessageID: showsDisabledMessage
+        ? disabledMessageTooltip.describedBy
+        : undefined,
       isReadOnly,
-      loadingValue,
+      loadingValues,
     }),
     [
       isCollectionMode,
@@ -228,16 +254,14 @@ export function CheckboxList({
       handleChange,
       isDisabled,
       showsDisabledMessage,
+      disabledMessageTooltip.describedBy,
       isReadOnly,
-      loadingValue,
+      loadingValues,
     ],
   );
 
   return (
     <Field
-      {...rest}
-      ref={ref}
-      data-testid={dataTestId}
       label={label}
       isLabelHidden={isLabelHidden}
       description={description}
@@ -257,20 +281,28 @@ export function CheckboxList({
       }
       statusVariant="detached"
       width={width}
-      xstyle={xstyle}
-      {...mergeProps(themeProps('checkbox-list'), {className, style})}>
+      xstyle={container.xstyle}
+      {...mergeProps(themeProps('checkbox-list'), {
+        className: container.className,
+        style: container.style,
+      })}>
       <CheckboxListContext value={contextValue}>
         <div
-          ref={el => {
-            // Anchor + hover/focus listeners for the disabled-message tooltip.
-            // Handlers are gated internally by isEnabled, so attaching
-            // unconditionally is safe.
-            disabledMessageTooltip.ref(el);
-          }}
+          {...rest}
+          // The disabled-message tooltip anchors here; its handlers are gated
+          // internally by isEnabled, so attaching unconditionally is safe.
+          ref={useMergedRefs(ref, disabledMessageTooltip.ref)}
+          {...mergeProps(
+            stylex.props(controlXstyle),
+            controlClassName,
+            controlStyle,
+          )}
           role="group"
-          aria-labelledby={labelID}
+          // A caller aria-labelledby names the group together with its label.
+          aria-labelledby={joinAriaIDs(labelID, ariaLabelledByProp)}
           aria-describedby={
             [
+              ariaDescribedByProp,
               description ? descriptionID : null,
               status?.message ? statusMessageID : null,
               showsDisabledMessage ? disabledMessageTooltip.describedBy : null,

@@ -4,14 +4,11 @@
 
 /**
  * @file BottomSheetPanel.tsx
- * @input Uses React, StyleX, theme tokens, sheet gestures, shared scroll behavior, and the host label
+ * @input Uses React, StyleX, theme tokens, text/provider boundaries, container padding, sheet gestures, shared scroll behavior, and the host label
  * @output Internal BottomSheetPanel with a keyboard-reachable scrolling body and motion-state types
- * @position Shared presentation layer for standalone and switcher BottomSheets
- *
- * This component owns everything intrinsic to a sheet surface: height budgets,
- * drag and snap gestures, the handle and scrolling body, motion styles, and
- * transition completion. It owns the body's keyboard access; dialog focus
- * entry/return, inert state, and switcher registration belong to the host.
+ * @position Shared presentation layer for standalone and switcher
+ *   BottomSheets. It owns the sheet surface and the body's keyboard access.
+ *   The host owns dialog focus, inert state and switcher registration.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/BottomSheet/BottomSheet.tsx
@@ -19,6 +16,7 @@
  * - /packages/core/src/BottomSheet/snapOffsets.ts
  * - /packages/core/src/BottomSheet/useMobileKeyboard.ts
  * - /packages/core/src/BottomSheet/useSheetGestures.ts
+ * - /packages/core/src/Layout/container.stylex.ts (bottom-sheet padding chain)
  */
 
 import {
@@ -32,7 +30,8 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import type {BaseProps} from '../BaseProps';
-import {useDevWarning} from '../hooks';
+import {useDevWarning} from '../hooks/useDevWarning';
+import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useScrollableArea} from '../hooks/useScrollableArea';
 import {
   borderVars,
@@ -45,16 +44,34 @@ import {
   sizeVars,
   spacingVars,
 } from '../theme/tokens.stylex';
-import {mergeProps, themeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
+import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
-import {overlayPaddingReset} from '../Layout/padding.stylex';
+import {layerTextReset} from '../Layer/layerTextReset.stylex';
+import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
+import {LayerContentBoundary} from '../Layer/layerScopedContext';
+import {container} from '../Layout/container.stylex';
+import type {SpacingToken} from '../Layout/container.stylex';
+import {
+  containerPaddingBlockEndVarStyles,
+  containerPaddingBlockStartVarStyles,
+  containerPaddingInlineVarStyles,
+  overlayPaddingReset,
+  paddingStyles,
+  spacingStepToToken,
+} from '../Layout/padding.stylex';
+import type {SpacingStep} from '../utils/types';
 import {
   isValidSnapPoint,
   resolveSnapPoints,
   type BottomSheetSnapPoint,
 } from './snapOffsets';
 import {useMobileKeyboard} from './useMobileKeyboard';
-import {useSheetGestures} from './useSheetGestures';
+import {
+  scrollPreservationPadding,
+  sheetLayoutHeight,
+  useSheetGestures,
+} from './useSheetGestures';
 
 const HEIGHT_BUDGETS = {
   hug: '92dvh',
@@ -75,12 +92,10 @@ const TRANSITION_BACKSTOP_BUFFER_MS = 50;
 // padding already provides.
 const HANDLE_BAR_HEIGHT = spacingVars['--spacing-6'];
 
-// Measure the same viewport the height budgets are written against. Those are
-// `dvh`, which the virtual keyboard does not shrink, so reading
-// `visualViewport` here would make the two disagree by exactly the keyboard's
-// height: every detent would move while the sheet it measures did not. A
-// keyboard is `useMobileKeyboard`'s business — it holds the sheet still and
-// scrolls the body — and it does not redefine the sheet's detents.
+// Measure the viewport that the height budgets use. They are `dvh`, which
+// the virtual keyboard does not shrink, so `visualViewport` would differ by
+// the keyboard's height. `useMobileKeyboard` handles the keyboard and does
+// not change the detents.
 function layoutViewportHeight(): number {
   return typeof window === 'undefined' ? 0 : window.innerHeight;
 }
@@ -103,6 +118,16 @@ function snapPointsKeyFor(
   return key;
 }
 
+/**
+ * The reduced-motion queries. With a coarse primary pointer the sheet
+ * cross-fades, else it changes at once. The cross-fade lasts at most 200 ms.
+ */
+const REDUCED_MOTION_COARSE =
+  '@media (prefers-reduced-motion: reduce) and (pointer: coarse)';
+export const REDUCED_MOTION_COARSE_QUERY =
+  '(prefers-reduced-motion: reduce) and (pointer: coarse)';
+const CROSS_FADE_MS = 200;
+
 const styles = stylex.create({
   sheet: {
     pointerEvents: 'auto',
@@ -116,13 +141,10 @@ const styles = stylex.create({
     width: '100%',
     maxWidth: 640,
     backgroundColor: colorVars['--color-background-surface'],
-    // Hairline on the three edges that face the scrim. The surface fill alone
-    // separates sheet from scrim in light mode, but not in dark: there the two
-    // sit within a few RGB steps of each other and the drop shadow is black on
-    // near-black, so the sheet's left and right edges disappear. Same
-    // treatment MobileNav gives its scrim-facing edge. The block-end edge is
-    // deliberately left bare; it sits below the viewport, under the overscroll
-    // padding.
+    // A hairline on the three edges that face the scrim. In dark mode the
+    // surface and the scrim are only a few RGB steps apart, and the shadow is
+    // black on near-black, so the side edges disappear. The block-end edge
+    // stays bare, below the viewport.
     borderBlockStartWidth: borderVars['--border-width'],
     borderBlockStartStyle: 'solid',
     borderBlockStartColor: colorVars['--color-border'],
@@ -139,40 +161,75 @@ const styles = stylex.create({
     overflow: 'hidden',
     paddingBlockEnd: `calc(env(safe-area-inset-bottom, 0px) + ${OVERSCROLL_PADDING}px)`,
     marginBlockEnd: `${-OVERSCROLL_PADDING}px`,
+    // Under reduced motion no transform runs. On a coarse primary pointer the
+    // entrance is an opacity cross-fade of at most 200 ms. A fine pointer gets
+    // the change at once (the 0.01s collapse).
     transform: {
       default: 'translateY(0)',
-      '@starting-style': 'translateY(100%)',
+      '@starting-style': {
+        default: 'translateY(100%)',
+        '@media (prefers-reduced-motion: reduce)': 'translateY(0)',
+      },
     },
-    opacity: 1,
+    opacity: {
+      default: 1,
+      '@starting-style': {
+        default: 1,
+        [REDUCED_MOTION_COARSE]: 0,
+      },
+    },
     transitionProperty: 'transform, opacity',
-    transitionDuration: durationVars['--duration-medium'],
+    transitionDuration: {
+      default: durationVars['--duration-medium'],
+      '@media (prefers-reduced-motion: reduce)': {
+        default: '0.01s',
+        '@media (pointer: coarse)': `0.01s, ${CROSS_FADE_MS}ms`,
+      },
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
     willChange: 'transform, opacity',
-    '@media (prefers-reduced-motion: reduce)': {
-      transitionDuration: '0.01s',
+  },
+  // A sheet present on page load opens where it rests (spec:AST-013 FR13):
+  // the collapse reduced motion uses, so the transition still ends.
+  sheetSettled: {
+    transitionDuration: '0.01s',
+  },
+  /**
+   * The exit is its own motion, not the entrance played backwards. The
+   * decelerate `--ease-standard` put the sheet half off-screen in 59ms of a
+   * 410ms close, so the travel ended before the eye followed it. An exit
+   * accelerates instead (`--ease-exit`). The curve is gentle, so the sheet
+   * moves within ~50ms and the close reads as one departure. The duration is
+   * the entrance's band, because a shorter band leaves too little travel when
+   * a theme scales motion down.
+   */
+  sheetClosing: {
+    // Under reduced motion the exit does not travel. On a coarse pointer it
+    // fades out where it is, and on a fine one it ends at once.
+    transform: {
+      default: 'translateY(100%)',
+      '@media (prefers-reduced-motion: reduce)': 'translateY(0)',
+    },
+    opacity: {
+      default: null,
+      [REDUCED_MOTION_COARSE]: 0,
+    },
+    // A pointer presentation closes on the theme's exit curve. A touch
+    // presentation keeps its own curve.
+    transitionTimingFunction: {
+      default: easeVars['--ease-exit'],
+      '@media (pointer: coarse)': 'cubic-bezier(0.3, 0, 0.6, 0.6)',
     },
   },
   /**
-   * The exit is its own motion, not the entrance played backwards.
-   *
-   * `--ease-standard` is `cubic-bezier(0.24, 1, 0.4, 1)`, a decelerate curve:
-   * it spends its speed immediately and coasts. That is right for an entrance,
-   * where the sheet arrives fast and settles, and wrong for an exit. Measured
-   * on device, it put the sheet half off-screen in 59ms of a 410ms close and
-   * 90% off in 163ms -- the travel is over before the eye has followed it, and
-   * the rest of the duration moves pixels already below the fold.
-   *
-   * An exit accelerates instead: away from rest, gathering speed, quickest as
-   * it leaves the screen. The curve is deliberately gentle rather than a hard
-   * `ease-in` -- it is moving within ~50ms, so the close reads as one
-   * departure rather than a hesitation and a snap. The duration is the
-   * entrance's own band, so only the curve differs between the two
-   * directions; a shorter band leaves too little visible travel once a theme
-   * scales the motion scale down (neutral's medium is 300ms against 410ms).
+   * An exit that cross-fades on a pointer that the media query does not
+   * cover: a touch swipe dismissal under reduced motion fades out in place on
+   * every pointer. It uses the opacity and ceiling of the coarse-pointer rule.
    */
-  sheetClosing: {
-    transform: 'translateY(100%)',
-    transitionTimingFunction: 'cubic-bezier(0.3, 0, 0.6, 0.6)',
+  sheetClosingCrossFade: {
+    transform: 'translateY(0)',
+    opacity: 0,
+    transitionDuration: `0.01s, ${CROSS_FADE_MS}ms`,
   },
   sheetFading: {
     opacity: 0,
@@ -198,23 +255,26 @@ const styles = stylex.create({
     // surface behind the pill itself, fading out across the lower half so the
     // content emerging below has no visible cut line.
     backgroundImage: `linear-gradient(to bottom, ${colorVars['--color-background-surface']} 60%, transparent)`,
-    touchAction: 'none',
+    // Drags are the handle's; a pinch still zooms the page (WCAG 1.4.4).
+    touchAction: 'pinch-zoom',
     cursor: {
       default: 'grab',
       ':is(:disabled,[aria-disabled="true"])': 'default',
     },
-  },
-  handlePill: {
-    width: sizeVars['--size-element-lg'],
-    height: spacingVars['--spacing-1'],
-    borderRadius: radiusVars['--radius-full'],
-    backgroundColor: colorVars['--color-border'],
+    // The pill is drawn on the grab bar itself, as decoration with no role.
+    '::before': {
+      content: '""',
+      width: sizeVars['--size-element-lg'],
+      height: spacingVars['--spacing-1'],
+      borderRadius: radiusVars['--radius-full'],
+      backgroundColor: colorVars['--color-border'],
+    },
   },
   body: {
     flexGrow: 1,
     minHeight: 0,
     boxSizing: 'border-box',
-    touchAction: 'pan-y',
+    touchAction: 'pan-y pinch-zoom',
     outlineOffset: {
       default: 0,
       ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
@@ -238,6 +298,8 @@ const styles = stylex.create({
     // Preserve the body's block formatting (including margin/float isolation)
     // and its definite percentage-height basis. min-content lets this real
     // observed box grow with async content beyond a fixed-height viewport.
+    // This box is also the sheet's container: it carries the padding and
+    // publishes it, so a lone Section child escapes it exactly as in Dialog.
     display: 'flow-root',
     boxSizing: 'border-box',
     height: '100%',
@@ -278,10 +340,32 @@ interface BottomSheetPanelProps extends BaseProps<HTMLDivElement> {
   /** Ref forwarded to the visual sheet panel. */
   ref?: React.Ref<HTMLDivElement>;
   state: BottomSheetPanelState;
+  /**
+   * Whether the sheet was open on page load: it then opens where it rests,
+   * with no entry motion.
+   */
+  isEntrySettled?: boolean;
+  /**
+   * Called when the settled entry's transition ends, so the host can release
+   * it and later motion in the same open (a drag's settle) animates as usual.
+   */
+  onEntrySettled?: () => void;
+  /**
+   * The host's controlled open state — false as soon as the host has taken
+   * a close, true while it is open or has refused one — distinct from
+   * `state`, which stays `open` until the close settles. Decides whether a
+   * swipe release's dismissal was honored (the reduced-motion cross-fade).
+   */
+  isOpenRequested?: boolean;
   height: BottomSheetHeight | number | string;
   /** Existing host name, reused for the keyboard scrolling group. */
   label: string;
   children: ReactNode;
+  /**
+   * Content padding on the spacing scale. Omitted, the content box reads the
+   * theme's bottom-sheet padding, then --spacing-4 (Dialog's default).
+   */
+  padding?: SpacingStep;
   snapPoints?: ReadonlyArray<BottomSheetSnapPoint>;
   isSwipeDismissAllowed?: boolean;
   /** Whether the host has locked page scrolling (a modal, scrim-backed sheet). */
@@ -291,6 +375,18 @@ interface BottomSheetPanelProps extends BaseProps<HTMLDivElement> {
   onElementChange?: (element: HTMLDivElement | null) => void;
   onMotionStart?: (motion: BottomSheetPanelMotion) => void;
   onMotionComplete?: (motion: BottomSheetPanelMotion) => void;
+}
+
+/**
+ * A hidden sheet observes nothing. The scroll area's measuring ref attaches
+ * as the sheet presents and detaches when it is hidden, so a closed sheet
+ * that stays mounted holds no resize, mutation or viewport observers.
+ */
+function whilePresented<P extends {ref?: unknown}>(
+  isPresented: boolean,
+  props: P,
+): P {
+  return isPresented ? props : {...props, ref: undefined};
 }
 
 function motionForState(
@@ -406,14 +502,19 @@ function parseTransitionTime(value: string): number | null {
 export function BottomSheetPanel({
   ref,
   state,
+  isOpenRequested,
   height,
   label,
   children,
+  padding,
   snapPoints,
   className,
   style,
   tabIndex,
   xstyle,
+  isEntrySettled = false,
+  onEntrySettled,
+  onTransitionEnd,
   isSwipeDismissAllowed = true,
   isPageScrollLocked = false,
   onDismiss,
@@ -452,7 +553,11 @@ export function BottomSheetPanel({
   const isInactive = isRetained || state.kind === 'exiting';
   const isClosing = state.kind === 'exiting';
   const isFading = isRetained && state.motion === 'fading';
-  const alignmentOffset = isRetained ? state.alignmentOffset : 0;
+  // Under reduced motion a retained sheet does not align down to a shorter
+  // entering sheet, because that is travel. It fades where it is.
+  const isReducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
+  const alignmentOffset =
+    isRetained && !isReducedMotion ? state.alignmentOffset : 0;
 
   // Everything derived from the snap points keys off their identity, not the
   // array's: the resolver's identity is the hook's signal that the stops
@@ -484,6 +589,8 @@ export function BottomSheetPanel({
     ignoredSnapPointsMessage !== '',
   );
 
+  // A caller's height owns the element's height: the drag never writes it.
+  const consumerHeight = style?.height;
   const {
     contentProps,
     handleProps,
@@ -493,6 +600,8 @@ export function BottomSheetPanel({
     dragOffset,
     settledOffset,
     isDragging,
+    isTraveling,
+    isDismissedByTouchDrag,
     sheetHeight,
     scrollPreservationInset,
     settlingLayoutOffset,
@@ -500,11 +609,13 @@ export function BottomSheetPanel({
     completeScrollAreaSettle,
   } = useSheetGestures({
     isOpen: isInteractive,
+    isOpenRequested: isOpenRequested ?? isInteractive,
     canDismiss: isSwipeDismissAllowed,
     offscreenBlockEndInset: OVERSCROLL_PADDING,
     onDismiss,
     snapHeights,
     onScrimOpacity,
+    hasFixedHeight: consumerHeight != null,
   });
 
   const {getViewportProps, getContentProps} = useScrollableArea({
@@ -518,21 +629,31 @@ export function BottomSheetPanel({
     stickyContainment: 'always',
   });
 
+  // The sheet measures its own height only while it is presented; a hidden
+  // sheet that stays mounted observes nothing.
+  const isPresentedRef = useRef(isPresented);
   const setElement = useCallback(
     (element: HTMLDivElement | null) => {
-      sheetRef(element);
+      sheetRef(isPresentedRef.current ? element : null);
       elementRef.current = element;
       onElementChange?.(element);
     },
     [onElementChange, sheetRef],
   );
+  useLayoutEffect(() => {
+    if (isPresentedRef.current === isPresented) {
+      return;
+    }
+    isPresentedRef.current = isPresented;
+    sheetRef(isPresented ? elementRef.current : null);
+  }, [isPresented, sheetRef]);
   useMobileKeyboard({
     bodyRef: bodyElementRef,
     bottomClearance: MOBILE_KEYBOARD_BOTTOM_CLEARANCE,
     isEnabled: height === 'tall',
     isFullyExpanded: settledOffset === 0,
     isPageScrollLocked,
-    isSheetTraveling: isDragging && dragOffset !== settledOffset,
+    isSheetTraveling: isTraveling,
     isOpen: isInteractive,
     isPresented,
     sheetRef: elementRef,
@@ -544,28 +665,47 @@ export function BottomSheetPanel({
   useImperativeHandle(ref, () => elementRef.current as HTMLDivElement, []);
 
   const motion = motionForState(state);
+  // The cross-fade applies on a coarse pointer, and to a transition that a
+  // touch drag's release started: a finger's swipe dismissal fades in place on
+  // every pointer. A mouse or pen drag is not a touch drag.
+  const isCoarseCrossFade = useMediaQuery(REDUCED_MOTION_COARSE_QUERY);
+  const isCrossFade =
+    isCoarseCrossFade || (isReducedMotion && isDismissedByTouchDrag);
   useLayoutEffect(() => {
     if (motion == null) {
       return;
     }
-    startedMotionRef.current = null;
+    // React can run this effect again for the same motion, for example when
+    // a Suspense boundary shows this content again. The passive effect below
+    // does not run again then, so the motion it started stays started, and a
+    // completion completes at once instead of waiting for that effect.
+    if (startedMotionRef.current !== motion) {
+      startedMotionRef.current = null;
+    }
     pendingMotionCompleteRef.current = null;
+    const complete = () => {
+      if (startedMotionRef.current === motion) {
+        onMotionCompleteRef.current?.(motion);
+      } else {
+        pendingMotionCompleteRef.current = motion;
+      }
+    };
     if (motion === 'entering' && reactivatedEntranceRef.current) {
-      pendingMotionCompleteRef.current = motion;
+      complete();
       return;
     }
+    // What ends a motion: the fade is opacity, and the entrance, alignment and
+    // exit are transforms. Under the reduced-motion cross-fade an exit fades
+    // where it is, and its dialog closes only after the fade, so it waits on
+    // opacity. The entrance still waits on its instant transform, so the
+    // retained sheet's fade starts at once and the two fades cross.
+    const crossFadeMotion = isCrossFade && motion === 'exiting';
     return waitForTransition(
       elementRef.current,
-      motion === 'fading' ? 'opacity' : 'transform',
-      () => {
-        if (startedMotionRef.current === motion) {
-          onMotionCompleteRef.current?.(motion);
-        } else {
-          pendingMotionCompleteRef.current = motion;
-        }
-      },
+      motion === 'fading' || crossFadeMotion ? 'opacity' : 'transform',
+      complete,
     );
-  }, [motion]);
+  }, [motion, isCrossFade]);
   // The snap is transform-only; the layout height reconciles when it lands.
   // waitForTransition — the same helper the motion states use — resolves that
   // even when no `transitionend` is coming: inline or computed
@@ -600,6 +740,13 @@ export function BottomSheetPanel({
     };
   }, [motion]);
 
+  // Same lowering as Dialog: with no padding prop the content box reads the
+  // theme's --astryx-bottom-sheet-padding chain (--spacing-4 when unset), else
+  // the explicit step.
+  const usesThemePadding = padding == null;
+  const effectivePadding = padding ?? 4;
+  const paddingToken = spacingStepToToken[effectivePadding] as SpacingToken;
+
   const isNamedHeight = typeof height === 'string' && height in HEIGHT_BUDGETS;
   const budget = isNamedHeight
     ? HEIGHT_BUDGETS[height as BottomSheetHeight]
@@ -616,6 +763,8 @@ export function BottomSheetPanel({
     // transform — the layout height changes at rest, in one reconciling render
     // whose visible geometry is identical (see useSheetGestures).
     //   - dragging above the base restores the full height below the viewport
+    //     (the move that crosses writes that height to the element itself,
+    //     so this render only catches up to it)
     //   - a peek settles with layout 0, so it slides rather than reflowing
     const layoutOffset = isDragging
       ? dragOffset < settledOffset
@@ -632,7 +781,7 @@ export function BottomSheetPanel({
     const isTraveling = isDragging || settlingLayoutOffset != null;
     resizedHeight =
       layoutOffset > 0 || isTraveling
-        ? `${Math.max(0, sheetHeight - Math.max(0, layoutOffset))}px`
+        ? sheetLayoutHeight(sheetHeight, layoutOffset)
         : undefined;
     gestureTransform =
       translation !== 0 ? `translateY(${translation}px)` : undefined;
@@ -643,25 +792,75 @@ export function BottomSheetPanel({
           .filter(Boolean)
           .join(' ')
       : gestureTransform;
+  const sheetTransform = isInteractive
+    ? gestureTransform
+    : isRetained
+      ? retainedTransform
+      : undefined;
+  const consumerTransform = style?.transform;
+  const hostHeight =
+    isInteractive || isRetained || isClosing ? resizedHeight : undefined;
+  const bodyEndPadding = scrollPreservationPadding(scrollPreservationInset);
+  // The transform is written to the element here, not through the style
+  // prop. A drag writes it straight to the element and renders nothing, so
+  // React never sees those writes. Through the prop, React would skip the
+  // resting value as unchanged, and the sheet would stay where the finger
+  // left it. Written after each commit outside a drag, the resting value
+  // lands with the restored transition, so a settle animates from the live
+  // position.
+  //
+  // A drag that crosses its base detent also writes the height and the end
+  // inset. If the release runs before that move's render commits, React sees
+  // no change and writes nothing, so these are written here too. A caller's
+  // height stays in the style prop, because the drag does not write it.
+  useLayoutEffect(() => {
+    if (isDragging) {
+      return;
+    }
+    const element = elementRef.current;
+    if (element != null) {
+      if (consumerTransform == null) {
+        element.style.transform = sheetTransform ?? '';
+      }
+      if (consumerHeight == null) {
+        element.style.height = hostHeight ?? '';
+      }
+    }
+    const body = bodyElementRef.current;
+    if (body != null) {
+      body.style.paddingBlockEnd = bodyEndPadding ?? '';
+    }
+  });
   const gestureStyle = {
-    ...contentProps.style,
-    transform: gestureTransform,
-    height: resizedHeight,
+    transition: contentProps.style.transition,
+    touchAction: contentProps.style.touchAction,
+    overscrollBehavior: contentProps.style.overscrollBehavior,
+    height: hostHeight,
   };
   return (
     <div
       {...props}
       ref={setElement}
       tabIndex={tabIndex ?? -1}
+      onTransitionEnd={event => {
+        onTransitionEnd?.(event);
+        if (isEntrySettled && event.target === event.currentTarget) {
+          onEntrySettled?.();
+        }
+      }}
       {...mergeProps(
         themeProps('bottom-sheet'),
         stylex.props(
+          layerTextReset.reset,
+          layerStructureReset.reset,
           styles.sheet,
           overlayPaddingReset.reset,
           height === 'hug' ? styles.hugHeight : styles.budget,
           isClosing && styles.sheetClosing,
+          isClosing && isCrossFade && styles.sheetClosingCrossFade,
           isFading && styles.sheetFading,
           isInactive && styles.sheetInactive,
+          isEntrySettled && styles.sheetSettled,
           xstyle,
         ),
         className,
@@ -669,36 +868,66 @@ export function BottomSheetPanel({
           ['--_sheet-budget' as string]: budget,
           ...(isInteractive
             ? gestureStyle
-            : isRetained
-              ? {transform: retainedTransform, height: resizedHeight}
-              : isClosing
-                ? {height: resizedHeight}
-                : {}),
+            : isRetained || isClosing
+              ? {height: hostHeight}
+              : {}),
           ...style,
         },
       )}>
       <div
         {...stylex.props(styles.handleBar)}
         {...handleProps}
-        aria-hidden="true">
-        <div {...stylex.props(styles.handlePill)} />
-      </div>
+        aria-hidden="true"
+      />
       <div
-        {...getViewportProps<HTMLDivElement>({
-          ...bodyProps,
-          ...mergeProps(
-            stylex.props(
-              focusOutlineStyles.focusVisible,
-              styles.body,
-              height === 'tall' && styles.tallKeyboardBody,
+        {...whilePresented(
+          isPresented,
+          getViewportProps<HTMLDivElement>({
+            ...bodyProps,
+            ...mergeProps(
+              stylex.props(
+                focusOutlineStyles.focusVisible,
+                styles.body,
+                height === 'tall' && styles.tallKeyboardBody,
+              ),
+              bodyEndPadding != null
+                ? {style: {paddingBlockEnd: bodyEndPadding}}
+                : {},
             ),
-            scrollPreservationInset > 0
-              ? {style: {paddingBlockEnd: `${scrollPreservationInset}px`}}
-              : {},
-          ),
-        })}>
-        <div {...getContentProps<HTMLDivElement>(stylex.props(styles.content))}>
-          {children}
+          }),
+        )}>
+        <div
+          {...whilePresented(
+            isPresented,
+            getContentProps<HTMLDivElement>(
+              stylex.props(
+                styles.content,
+                ...container(
+                  usesThemePadding
+                    ? {useThemeDefault: 'bottom-sheet'}
+                    : {
+                        paddingInnerX: paddingToken,
+                        paddingInnerY: paddingToken,
+                        paddingOuterX: paddingToken,
+                        paddingOuterY: paddingToken,
+                      },
+                ),
+                !usesThemePadding &&
+                  effectivePadding !== 4 &&
+                  paddingStyles[effectivePadding],
+                !usesThemePadding &&
+                  effectivePadding !== 4 &&
+                  containerPaddingInlineVarStyles[effectivePadding],
+                !usesThemePadding &&
+                  effectivePadding !== 4 &&
+                  containerPaddingBlockStartVarStyles[effectivePadding],
+                !usesThemePadding &&
+                  effectivePadding !== 4 &&
+                  containerPaddingBlockEndVarStyles[effectivePadding],
+              ),
+            ),
+          )}>
+          <LayerContentBoundary>{children}</LayerContentBoundary>
         </div>
       </div>
     </div>

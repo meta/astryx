@@ -2,8 +2,8 @@
 
 /**
  * @file layerDismissalFamilies.test.tsx
- * @input Uses vitest, @testing-library/react, Dialog, Lightbox, MobileNav,
- *   HoverCard, Tooltip
+ * @input Uses vitest, @testing-library/react, BottomSheet, Dialog, Lightbox,
+ *   MobileNav, HoverCard, Tooltip (also pinned by `triggerBehavior="toggle"`)
  * @output Tests that every overlay family shares the one dismissal stack
  * @position Colocated with layerStack; the families' own behavior is tested in
  *   their own files, this one only asks who takes the press
@@ -12,7 +12,9 @@
  * preventDefault()s it, so a family that is not on the stack cannot be reached
  * once anything else is. Lightbox and MobileNav were that gap: both closed via
  * the native `cancel` event alone, and a `required` Dialog underneath swallowed
- * every press before it got there.
+ * every press before it got there. Standalone BottomSheet was the same gap from
+ * the other side: its own keydown handler closed the sheet before a layer
+ * opened inside it could take the press.
  *
  * SYNC: When a new overlay family joins the stack, add it here.
  */
@@ -27,8 +29,10 @@ import {
   afterAll,
   afterEach,
 } from 'vitest';
-import {render, screen} from '@testing-library/react';
+import {act, fireEvent, render, screen} from '@testing-library/react';
+import {useState} from 'react';
 
+import {BottomSheet} from '../BottomSheet/BottomSheet';
 import {Dialog} from '../Dialog/Dialog';
 import {HoverCard} from '../HoverCard/HoverCard';
 import {Lightbox} from '../Lightbox/Lightbox';
@@ -71,6 +75,9 @@ beforeEach(() => {
   HTMLDialogElement.prototype.showModal = vi.fn(function (
     this: HTMLDialogElement,
   ) {
+    this.setAttribute('open', '');
+  });
+  HTMLDialogElement.prototype.show = vi.fn(function (this: HTMLDialogElement) {
     this.setAttribute('open', '');
   });
   HTMLDialogElement.prototype.close = vi.fn(function (this: HTMLDialogElement) {
@@ -228,6 +235,127 @@ describe('overlay families on the shared dismissal stack', () => {
     });
   });
 
+  describe('BottomSheet', () => {
+    function SheetWithDialog({onSheetChange}: {onSheetChange: () => void}) {
+      const [isDialogOpen, setIsDialogOpen] = useState(true);
+      return (
+        <BottomSheet
+          isOpen={true}
+          onOpenChange={onSheetChange}
+          hasScrim={false}
+          label="Sheet">
+          <Dialog
+            isOpen={isDialogOpen}
+            onOpenChange={setIsDialogOpen}
+            aria-label="Nested">
+            Nested
+          </Dialog>
+        </BottomSheet>
+      );
+    }
+
+    it('lets a layer opened inside it take the first Escape', () => {
+      const onSheetChange = vi.fn();
+      render(<SheetWithDialog onSheetChange={onSheetChange} />);
+
+      let first: KeyboardEvent | undefined;
+      act(() => {
+        first = pressEscape();
+      });
+
+      expect(getDialog('Nested')).not.toHaveAttribute('open');
+      expect(onSheetChange).not.toHaveBeenCalled();
+      expect(first?.defaultPrevented).toBe(true);
+
+      act(() => {
+        pressEscape();
+      });
+
+      expect(onSheetChange).toHaveBeenCalledTimes(1);
+      expect(onSheetChange).toHaveBeenCalledWith(false);
+    });
+
+    it('swallows the press when required, so nothing behind it closes', () => {
+      const onSheetChange = vi.fn();
+      const onDialogChange = vi.fn();
+
+      render(
+        <Dialog isOpen={true} onOpenChange={onDialogChange} aria-label="Host">
+          <BottomSheet
+            isOpen={true}
+            onOpenChange={onSheetChange}
+            purpose="required"
+            label="Required sheet">
+            Choose one
+          </BottomSheet>
+        </Dialog>,
+      );
+
+      const event = pressEscape();
+
+      expect(onSheetChange).not.toHaveBeenCalled();
+      expect(onDialogChange).not.toHaveBeenCalled();
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it('stays open on a browser-initiated cancel when it is not top-most', () => {
+      const onSheetChange = vi.fn();
+      render(<SheetWithDialog onSheetChange={onSheetChange} />);
+
+      const event = fireCancel(getDialog('Sheet'));
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(onSheetChange).not.toHaveBeenCalled();
+    });
+
+    it('closes on a browser-initiated cancel when it is top-most', () => {
+      const onSheetChange = vi.fn();
+      render(
+        <BottomSheet isOpen={true} onOpenChange={onSheetChange} label="Sheet">
+          Content
+        </BottomSheet>,
+      );
+
+      const event = fireCancel(getDialog('Sheet'));
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(onSheetChange).toHaveBeenCalledWith(false);
+    });
+
+    it('keeps the press while it animates out, then hands it to the layer below', () => {
+      const onDialogChange = vi.fn();
+      function ClosingSheet() {
+        const [isOpen, setIsOpen] = useState(true);
+        return (
+          <BottomSheet isOpen={isOpen} onOpenChange={setIsOpen} label="Sheet">
+            <button type="button" onClick={() => setIsOpen(false)}>
+              Close sheet
+            </button>
+          </BottomSheet>
+        );
+      }
+
+      render(
+        <Dialog isOpen={true} onOpenChange={onDialogChange} aria-label="Host">
+          <ClosingSheet />
+        </Dialog>,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Close sheet'}));
+      expect(getDialog('Sheet')).toHaveAttribute('open');
+
+      pressEscape();
+      expect(onDialogChange).not.toHaveBeenCalled();
+
+      fireEvent.transitionEnd(document.querySelector('.astryx-bottom-sheet')!, {
+        propertyName: 'transform',
+      });
+      expect(getDialog('Sheet')).not.toHaveAttribute('open');
+
+      pressEscape();
+      expect(onDialogChange).toHaveBeenCalledWith(false);
+    });
+  });
+
   describe('required Dialog', () => {
     it('still swallows an Escape when it is alone', () => {
       const onDialogChange = vi.fn();
@@ -301,6 +429,38 @@ describe('overlay families on the shared dismissal stack', () => {
 
       expect(onCardChange).toHaveBeenCalledWith(false);
       expect(HTMLElement.prototype.hidePopover).not.toHaveBeenCalled();
+      expect(onDialogChange).not.toHaveBeenCalled();
+      expect(event.defaultPrevented).toBe(true);
+    });
+
+    it('a Tooltip a press pinned takes the Escape first, and the Dialog stays open (spec:AST-003 FR4)', () => {
+      const onDialogChange = vi.fn();
+
+      render(
+        <Dialog isOpen={true} onOpenChange={onDialogChange} aria-label="Host">
+          <Tooltip content="Pinned tip" triggerBehavior="toggle">
+            <button type="button">Info</button>
+          </Tooltip>
+        </Dialog>,
+      );
+      fireEvent.click(screen.getByRole('button', {name: 'Info'}));
+      expect(HTMLElement.prototype.showPopover).toHaveBeenCalled();
+      expect(screen.getByRole('button', {name: 'Info'})).toHaveAttribute(
+        'aria-expanded',
+        'true',
+      );
+      vi.mocked(HTMLElement.prototype.hidePopover).mockClear();
+
+      let event = new KeyboardEvent('keydown');
+      act(() => {
+        event = pressEscape();
+      });
+
+      expect(HTMLElement.prototype.hidePopover).toHaveBeenCalled();
+      expect(screen.getByRole('button', {name: 'Info'})).toHaveAttribute(
+        'aria-expanded',
+        'false',
+      );
       expect(onDialogChange).not.toHaveBeenCalled();
       expect(event.defaultPrevented).toBe(true);
     });

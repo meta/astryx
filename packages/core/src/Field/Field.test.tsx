@@ -2,7 +2,7 @@
 
 /**
  * @file Field.test.tsx
- * @input Uses vitest, @testing-library/react, Field component
+ * @input Uses Vitest, Testing Library, StyleX, Field, FormLayoutContext
  * @output Unit tests for Field component behavior
  * @position Testing; validates Field.tsx implementation
  *
@@ -10,10 +10,17 @@
  */
 
 import {describe, it, expect, vi, afterEach} from 'vitest';
-import {render, screen, waitFor} from '@testing-library/react';
+import {render, screen, waitFor, fireEvent} from '@testing-library/react';
+import * as stylex from '@stylexjs/stylex';
 import {Field} from './Field';
 import {FormLayoutContext} from '../FormLayout/FormLayoutContext';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
+
+const testStyles = stylex.create({
+  root: {
+    minWidth: '123px',
+  },
+});
 
 function politeRegion(): HTMLElement | null {
   return document.querySelector('[data-astryx-live-region="polite"]');
@@ -337,6 +344,129 @@ describe('Field', () => {
     });
   });
 
+  // The tooltip placement renders no FieldStatus, so Field itself must speak
+  // the message; otherwise a screen-reader user is never told it appeared.
+  describe('tooltip status placement', () => {
+    /** Every non-empty text written into a live region, in order. */
+    function recordAnnouncements(): string[] {
+      const spoken: string[] = [];
+      const observer = new MutationObserver(records => {
+        for (const record of records) {
+          const target =
+            record.target instanceof HTMLElement
+              ? record.target
+              : record.target.parentElement;
+          const text = target
+            ?.closest('[data-astryx-live-region]')
+            ?.textContent?.trim();
+          if (text) {
+            spoken.push(text);
+          }
+        }
+      });
+      observer.observe(document.body, {
+        childList: true,
+        characterData: true,
+        subtree: true,
+      });
+      return spoken;
+    }
+
+    it('announces a warning that appears after mount, politely', async () => {
+      const {rerender} = render(
+        <Field label="Email" inputID="email-input" statusVariant="tooltip">
+          <input id="email-input" />
+        </Field>,
+      );
+      expect(politeRegion()).toBeNull();
+
+      rerender(
+        <Field
+          label="Email"
+          inputID="email-input"
+          statusVariant="tooltip"
+          status={{type: 'warning', message: 'Check this'}}>
+          <input id="email-input" />
+        </Field>,
+      );
+      // No message box renders for this placement; the text lives only in
+      // the live region (and in the member's tooltip, which Field does not own).
+      expect(screen.queryByText('Check this')).toBeNull();
+      await waitFor(() => {
+        expect(politeRegion()).toHaveTextContent('Check this');
+      });
+      expect(assertiveRegion()).toHaveTextContent('');
+    });
+
+    it('announces an error assertively, matching the message box placements', async () => {
+      render(
+        <Field
+          label="Email"
+          inputID="email-input"
+          statusVariant="tooltip"
+          status={{type: 'error', message: 'Email is required'}}>
+          <input id="email-input" />
+        </Field>,
+      );
+      await waitFor(() => {
+        expect(assertiveRegion()).toHaveTextContent('Email is required');
+      });
+    });
+
+    it('speaks a message once, and again only when it changes', async () => {
+      const spoken = recordAnnouncements();
+      const field = (message: string) => (
+        <Field
+          label="Email"
+          inputID="email-input"
+          statusVariant="tooltip"
+          status={{type: 'warning', message}}>
+          <input id="email-input" />
+        </Field>
+      );
+      const {rerender} = render(field('First'));
+      await waitFor(() => expect(spoken).toEqual(['First']));
+
+      rerender(field('First'));
+      rerender(field('Second'));
+      await waitFor(() => expect(spoken).toEqual(['First', 'Second']));
+    });
+
+    it.each(['attached', 'detached'] as const)(
+      'does not add a second announcement to the %s message box',
+      async statusVariant => {
+        const spoken = recordAnnouncements();
+        render(
+          <Field
+            label="Email"
+            inputID="email-input"
+            statusVariant={statusVariant}
+            status={{type: 'warning', message: 'Check this'}}>
+            <input id="email-input" />
+          </Field>,
+        );
+        await waitFor(() => expect(spoken).toEqual(['Check this']));
+        // Give a duplicate announcement's animation frame time to land.
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(spoken).toEqual(['Check this']);
+      },
+    );
+
+    it('does not announce a status without a message', () => {
+      render(
+        <Field
+          label="Email"
+          inputID="email-input"
+          statusVariant="tooltip"
+          status={{type: 'error'}}>
+          <input id="email-input" />
+        </Field>,
+      );
+      expect(assertiveRegion()).toBeNull();
+      expect(politeRegion()).toBeNull();
+    });
+  });
+
   it('auto-generates description ID as {inputID}-desc when descriptionID is not provided', () => {
     render(
       <Field label="Email" inputID="my-input" description="Help text">
@@ -448,6 +578,57 @@ describe('Field', () => {
         {children}
       </FormLayoutContext>
     );
+
+    it('composes root props without letting callers replace layout semantics', () => {
+      const onClick = vi.fn();
+      const expectedXstyleClass = stylex.props(testStyles.root).className;
+      if (expectedXstyleClass == null) {
+        throw new Error('Expected the test xstyle to produce a class name.');
+      }
+
+      render(
+        <Field
+          label="Name"
+          inputID="name-input"
+          data-testid="field"
+          data-layout="consumer"
+          data-owner="consumer"
+          className="consumer-class"
+          style={{width: '321px'}}
+          xstyle={testStyles.root}
+          onClick={onClick}>
+          <input id="name-input" />
+        </Field>,
+        {wrapper: horizontalLabelsWrapper},
+      );
+
+      const field = screen.getByTestId('field');
+      expect(field).toHaveClass('astryx-field', 'consumer-class');
+      expect(field).toHaveClass(expectedXstyleClass);
+      expect(field).toHaveAttribute('data-layout', 'horizontal-labels');
+      expect(field).toHaveAttribute('data-owner', 'consumer');
+      expect(field).toHaveStyle({width: '321px'});
+      fireEvent.click(field);
+      expect(onClick).toHaveBeenCalledOnce();
+    });
+
+    it('visually hides the description in horizontal-label mode when the label is hidden', () => {
+      render(
+        <Field
+          label="Search"
+          inputID="search-input"
+          isLabelHidden
+          description="Search for items"
+          descriptionID="search-desc">
+          <input id="search-input" aria-describedby="search-desc" />
+        </Field>,
+        {wrapper: horizontalLabelsWrapper},
+      );
+
+      const description = screen.getByText('Search for items');
+      expect(description.className).toContain('visuallyHidden');
+      expect(description).toHaveAttribute('id', 'search-desc');
+    });
 
     it('applies display:contents when in horizontal-labels context', () => {
       const {container} = render(
@@ -579,5 +760,41 @@ describe('Field', () => {
       const field = screen.getByTestId('field');
       expect(getComputedStyle(field).isolation).toBe('isolate');
     });
+  });
+});
+
+describe('Field in a narrow row', () => {
+  it('lets a row shrink the field below its control width', () => {
+    const {container} = render(
+      <Field label="Search" inputID="search">
+        <input id="search" />
+      </Field>,
+    );
+    const root = container.querySelector('.astryx-field')!;
+    expect(getComputedStyle(root).minWidth).toBe('0');
+  });
+
+  it('keeps an explicit width, which a row may still shrink', () => {
+    const {container} = render(
+      <Field label="Search" inputID="search" width={240}>
+        <input id="search" />
+      </Field>,
+    );
+    const root = container.querySelector('.astryx-field')!;
+    expect(root.getAttribute('style')).toContain('240');
+    expect(getComputedStyle(root).minWidth).toBe('0');
+  });
+
+  it('leaves horizontal-labels mode (display: contents) untouched', () => {
+    const {container} = render(
+      <FormLayoutContext value={{direction: 'horizontal-labels'}}>
+        <Field label="Name" inputID="name">
+          <input id="name" />
+        </Field>
+      </FormLayoutContext>,
+    );
+    const root = container.firstChild as HTMLElement;
+    expect(getComputedStyle(root).display).toBe('contents');
+    expect(getComputedStyle(root).minWidth).not.toBe('0');
   });
 });

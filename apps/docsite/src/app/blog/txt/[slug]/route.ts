@@ -14,10 +14,11 @@
  * @output text/plain (the post's Markdown body) or 404
  */
 
-import {blogPosts} from '../../../../generated/blogRegistry';
+import {blogFixturePosts, blogPosts} from '../../../../generated/blogRegistry';
+import {toStaticLiveBlocks} from '../../../../lib/blog/liveBlocks.mjs';
 
 export function generateStaticParams() {
-  return blogPosts.map(p => ({slug: p.slug}));
+  return [...blogPosts, ...blogFixturePosts].map(p => ({slug: p.slug}));
 }
 
 export async function GET(
@@ -25,7 +26,9 @@ export async function GET(
   {params}: {params: Promise<{slug: string}>},
 ) {
   const {slug} = await params;
-  const post = blogPosts.find(p => p.slug === slug);
+  const post =
+    blogPosts.find(p => p.slug === slug) ??
+    blogFixturePosts.find(p => p.slug === slug);
   if (!post) {
     return new Response('Not found\n', {
       status: 404,
@@ -48,7 +51,9 @@ export async function GET(
     '',
   ].join('\n');
 
-  return new Response(header + post.body + '\n', {
+  // A live example cannot run here: its source shows as an ordinary code
+  // block instead (spec:AST-033 FR22).
+  return new Response(header + toStaticLiveBlocks(post.body) + '\n', {
     headers: {'content-type': 'text/plain; charset=utf-8'},
   });
 }

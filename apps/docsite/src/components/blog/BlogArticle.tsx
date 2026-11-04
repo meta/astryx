@@ -6,7 +6,6 @@
  */
 
 import * as stylex from '@stylexjs/stylex';
-import {Markdown} from '@astryxdesign/core/Markdown';
 import {Text, Heading} from '@astryxdesign/core/Text';
 import {VStack, HStack} from '@astryxdesign/core/Layout';
 import {Grid} from '@astryxdesign/core/Grid';
@@ -23,7 +22,7 @@ import {POST_TYPE_LABELS} from '../../lib/blog/schema';
 import {MarkdownText} from '../MarkdownText';
 import {AuthorByline} from './AuthorByline';
 import {ReleaseCoverArt} from './ReleaseCoverArt';
-import {MarkdownImage} from './ThemedImage';
+import {BlogPostBody} from './BlogPostBody';
 import {parseReleaseVersion} from '../../lib/blog/release';
 import {layout} from '../../layout.stylex';
 
@@ -108,12 +107,7 @@ export function BlogArticle({post}: BlogArticleProps) {
           </AspectRatio>
         ) : null}
 
-        <Markdown
-          headingLevelStart={2}
-          contentWidth="100%"
-          components={{image: MarkdownImage}}>
-          {post.body}
-        </Markdown>
+        <BlogPostBody body={post.body} slug={post.slug} />
 
         {post.tags.length > 0 ? (
           <HStack gap={1} xstyle={styles.tagRow}>

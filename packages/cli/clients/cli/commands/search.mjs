@@ -4,9 +4,9 @@
  * @file search command — unified ranked search with a stable result summary.
  *
  * One "I'm looking for X" entry point spanning components, hooks, docs topics,
- * and templates (page + block). Results are ranked by relevance and tagged
- * with their domain, with a follow-up command so the user knows what to run
- * next.
+ * templates (page + block), and themes. Results are ranked by relevance and
+ * tagged with their domain, with a follow-up command so the user knows what to
+ * run next.
  *
  * The command surface (description, args, flags) is sourced from the colocated
  * `search.doc.mjs` CommandDoc via `defineCommand`; this file supplies only the
@@ -14,6 +14,7 @@
  *
  * Usage:
  *   astryx search button                 Ranked results across all domains
+ *   astryx search dark mode              Every word is part of the query
  *   astryx search modal --type component Filter to a single domain
  *   astryx search forms --limit 5        Cap the result count
  *   astryx search button --verbose       Also print score / reason
@@ -42,14 +43,17 @@ export function registerSearch(program) {
   defineCommand(program, searchCommand, {
     fn: searchFn,
     action: async (
-      /** @type {string} */ query,
+      /** @type {string[] | string} */ words,
       /** @type {{type?: import('../../../api/search/search.type.mjs').SearchDomain, limit?: string, verbose?: boolean}} */ options,
     ) => {
       const json = program.opts().json || false;
+      // The query is variadic: `astryx search dark mode` is one query, "dark
+      // mode". Taking only the first word dropped the rest without a word.
+      const query = Array.isArray(words) ? words.join(' ') : words;
 
       try {
         const project = await Project.load(process.cwd());
-        await warnOnIntegrationIssues(project.loadedIntegrations, {json});
+        await warnOnIntegrationIssues(project, {json});
       } catch {
         // Never let the nudge break the command.
       }
@@ -99,12 +103,32 @@ export function registerSearch(program) {
       // ── Text output ──────────────────────────────────────────────
       const run = getCliInvocation();
       const {query: q, matchCount, results} = result.data;
+      // When Core could not be had, an open search covers the rest alone. Say
+      // so, on standard error and in the output, so the list does not read as
+      // "Astryx has no such component".
+      const partial = result.meta?.partial;
+      if (partial) {
+        console.error(
+          `astryx: components, hooks, and templates were not searched: ${partial.reason}`,
+        );
+      }
+      const note = partial
+        ? [
+            text(
+              'Components, hooks, and templates need @astryxdesign/core, which could not be found (see the line above), so only the docs and themes were searched.',
+            ),
+          ]
+        : [];
 
       // No matches is a valid, successful outcome — clean message, exit 0.
       if (results.length === 0) {
         emit(
           text(`No results for "${q}".`),
-          text(`Try a broader term, or browse: ${run} component --list`),
+          ...note,
+          text(
+            `Try a broader term, or browse: ${run} ${note.length > 0 ? 'docs' : 'component --list'}`,
+          ),
+          ...discoverHint(run, q, options.type),
         );
         return answered;
       }
@@ -115,7 +139,9 @@ export function registerSearch(program) {
       const fields = options.verbose
         ? [
             'name',
+            'section',
             'domain',
+            'package',
             'title',
             'displayName',
             'kind',
@@ -124,16 +150,20 @@ export function registerSearch(program) {
             'import',
             'description',
             'command',
+            'parent',
           ]
         : [
             'name',
+            'section',
             'domain',
+            'package',
             'title',
             'displayName',
             'kind',
             'import',
             'description',
             'command',
+            'parent',
           ];
 
       // The heading mirrors the JSON: `matchCount` is what matched, and the
@@ -145,11 +175,38 @@ export function registerSearch(program) {
             ? `Results for "${q}" (${results.length} of ${matchCount})`
             : `Results for "${q}" (${results.length})`,
         ),
-        records(results, {fields, format: {command: formatCliCommand}}),
+        records(results, {
+          fields,
+          format: {command: formatCliCommand, parent: formatCliCommand},
+        }),
+        ...note,
+        ...discoverHint(run, q, options.type),
       );
       return answered;
     },
   });
+}
+
+/**
+ * Search reads only what is installed. Point at `discover` for the packages
+ * that could add more, except for hooks, which no integration adds.
+ * @param {string} run - The caller's CLI invocation prefix.
+ * @param {string} query
+ * @param {string | undefined} type
+ */
+function discoverHint(run, query, type) {
+  if (type === 'hook') return [];
+  return [
+    text(`More in packages you could add: ${run} discover ${shellWord(query)}`),
+  ];
+}
+
+/**
+ * One shell word: the value itself when it is plain, else single-quoted.
+ * @param {string} value
+ */
+function shellWord(value) {
+  return /^[\w@./:-]+$/.test(value) ? value : `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 // Re-export the API for external consumers.

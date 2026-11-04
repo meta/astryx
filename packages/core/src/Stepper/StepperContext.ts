@@ -4,7 +4,7 @@
 
 /**
  * @file StepperContext.ts
- * @input Uses React createContext/use
+ * @input Layer-scoped React context/use
  * @output Exports the public Stepper context hook and package-internal
  *   coordination used by Stepper and Step
  * @position Context for Stepper <-> Step communication
@@ -25,7 +25,8 @@
  * - /packages/core/src/Stepper/Stepper.public.test.ts
  */
 
-import {createContext, use, type Context} from 'react';
+import {use, type Context} from 'react';
+import {createLayerScopedContext as createContext} from '../Layer/layerScopedContext';
 
 export type StepperOrientation = 'horizontal' | 'vertical';
 export type StepperDensity = 'compact' | 'balanced' | 'spacious';

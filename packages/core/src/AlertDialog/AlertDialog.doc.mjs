@@ -90,6 +90,12 @@ export const docs = {
         description:
           'Overlay behind the dialog that blocks page interaction. Clicking it does not dismiss.',
       },
+      {
+        name: 'Dialog surface',
+        required: true,
+        description:
+          'The modal panel that holds the title, description, and buttons.',
+      },
     ],
   },
   // Intentionally a contained isInline preview, not playground.overlay: the

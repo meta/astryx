@@ -46,11 +46,21 @@ import {
 } from '../theme/tokens.stylex';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {mergeProps, rtlStyles} from '../utils';
-import type {ResizableProps} from './useResizable';
+import {
+  getCollapseControls,
+  getEffectiveMaxPx,
+  type ResizableProps,
+} from './useResizable';
 import {themeProps} from '../utils/themeProps';
-import {useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  registerEnglishFallback,
+  useComponentTranslator,
+} from '../i18n/useComponentTranslator';
+import english from '../i18n/generated-english/Resizable/ResizeHandle.generated';
+
+registerEnglishFallback(english);
 const KEYBOARD_STEP = 10;
 const KEYBOARD_LARGE_STEP = 50;
 
@@ -361,6 +371,60 @@ export interface ResizeHandleProps extends Omit<
 }
 
 /**
+ * The snap point `count` points away from the region's current size in
+ * `direction` (+1 grows, -1 shrinks). A point beyond `minSize` or `maxSize`
+ * counts as that bound; the nearest end point serves when fewer remain, and
+ * the current size when it is already there.
+ */
+function adjacentSnapPoint(
+  resizable: ResizableProps,
+  direction: 1 | -1,
+  count: number,
+): number {
+  const points = [
+    ...new Set(
+      resizable._snaps.map(p =>
+        Math.min(resizable._maxSizePx, Math.max(resizable._minSizePx, p)),
+      ),
+    ),
+  ].sort((a, b) => a - b);
+  const size = resizable._size;
+  const ahead =
+    direction > 0
+      ? points.filter(p => p > size)
+      : points.filter(p => p < size).reverse();
+  if (ahead.length === 0) {
+    return size;
+  }
+  return ahead[Math.min(count, ahead.length) - 1];
+}
+
+/**
+ * Collapse an open pane, or restore a collapsed one to the size it had before
+ * it collapsed (APG window splitter: Enter "restores the splitter to its
+ * previous position"). The hook's own collapse/expand do exactly that; a
+ * hand-built `ResizableProps` (no registered controls) falls back to a resize
+ * gesture to the minimum, which also cannot reopen a pane whose minimum sits below its
+ * collapse threshold.
+ */
+function toggleCollapse(resizable: ResizableProps): void {
+  const controls = getCollapseControls(resizable);
+  if (controls) {
+    if (resizable._isCollapsed) {
+      controls.expand();
+    } else {
+      controls.collapse();
+    }
+    return;
+  }
+  resizable._onResizeStart();
+  resizable._onResizeMove(
+    resizable._isCollapsed ? resizable._minSizePx : -resizable._size,
+  );
+  resizable._onResizeEnd();
+}
+
+/**
  * Draggable resize handle placed between resizable panels. Renders as a thin
  * divider line with a wider invisible hit area and optional pill grip indicator.
  * Supports keyboard resizing via arrow keys and WAI-ARIA separator role.
@@ -375,6 +439,7 @@ export interface ResizeHandleProps extends Omit<
  *   hasDivider />
  * ```
  */
+
 export function ResizeHandle({
   direction = 'horizontal',
   position: positionMode = 'inline',
@@ -391,7 +456,7 @@ export function ResizeHandle({
   ref,
   ...props
 }: ResizeHandleProps) {
-  const t = useTranslator();
+  const t = useComponentTranslator();
   const label = labelFromProps ?? t('@astryx.resizable.handle.label');
   const handleRef = useRef<HTMLDivElement>(null);
   // The pointer that owns the in-flight drag, plus the values its deltas are
@@ -528,20 +593,64 @@ export function ResizeHandle({
       const step = e.shiftKey ? KEYBOARD_LARGE_STEP : KEYBOARD_STEP;
       const rtl = isHorizontal ? getRTLMultiplier() : 1;
 
+      // The pane's grow direction on this key: ArrowRight/Down grow unless the
+      // layout is reversed or, on the inline axis, right-to-left.
+      const grows = (key: string) =>
+        (key === 'ArrowRight' || key === 'ArrowDown'
+          ? 1
+          : key === 'ArrowLeft' || key === 'ArrowUp'
+            ? -1
+            : 0) *
+          (isHorizontal ? rtl : 1) *
+          sign >
+        0;
+
       switch (e.key) {
         case 'ArrowRight':
-        case 'ArrowDown': {
-          e.preventDefault();
-          resizable._onResizeStart();
-          resizable._onResizeMove(step * (isHorizontal ? rtl : 1) * sign);
-          resizable._onResizeEnd();
-          break;
-        }
+        case 'ArrowDown':
         case 'ArrowLeft':
         case 'ArrowUp': {
           e.preventDefault();
+          if (resizable._isCollapsed) {
+            // A collapsed pane answers only the grow arrow: it opens one step
+            // above its minimum, the value the separator announces while
+            // collapsed, or at the collapse threshold when that is larger (APG
+            // window splitter: the arrow moves the separator from where it is;
+            // a bare step would stay below the threshold and leave it in
+            // place). The shrink arrow is a no-op.
+            if (grows(e.key)) {
+              resizable._onResizeStart();
+              // At least the collapse threshold, or the move would stay
+              // collapsed when the minimum sits below it.
+              resizable._onResizeMove(
+                Math.max(resizable._minSizePx + step, resizable._collapsedSize),
+              );
+              resizable._onResizeEnd();
+            }
+            break;
+          }
+          if (resizable._snaps.length > 0) {
+            // With snap points the region can rest only on a point, so a
+            // pixel step would snap straight back; the arrow moves to the
+            // adjacent point in its direction instead (Shift, two points),
+            // staying within the bounds.
+            resizable._onResizeStart();
+            resizable._onResizeMove(
+              adjacentSnapPoint(
+                resizable,
+                grows(e.key) ? 1 : -1,
+                e.shiftKey ? 2 : 1,
+              ) - resizable._size,
+            );
+            resizable._onResizeEnd();
+            break;
+          }
+          const direction =
+            e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1;
           resizable._onResizeStart();
-          resizable._onResizeMove(-step * (isHorizontal ? rtl : 1) * sign);
+          resizable._onResizeMove(
+            direction * step * (isHorizontal ? rtl : 1) * sign,
+          );
           resizable._onResizeEnd();
           break;
         }
@@ -554,6 +663,9 @@ export function ResizeHandle({
         }
         case 'End': {
           e.preventDefault();
+          // Only a configured maximum is the region's own limit; the reported
+          // stand-in for an unbounded region is where the pane *could* reach,
+          // not where End may safely move it (a recorded gap).
           if (resizable._maxSizePx !== Infinity) {
             resizable._onResizeStart();
             resizable._onResizeMove(resizable._maxSizePx - resizable._size);
@@ -564,11 +676,7 @@ export function ResizeHandle({
         case 'Enter': {
           e.preventDefault();
           if (resizable._collapsible) {
-            resizable._onResizeStart();
-            resizable._onResizeMove(
-              resizable._isCollapsed ? resizable._minSizePx : -resizable._size,
-            );
-            resizable._onResizeEnd();
+            toggleCollapse(resizable);
           }
           break;
         }
@@ -582,11 +690,7 @@ export function ResizeHandle({
     if (isDisabled || !resizable || !resizable._collapsible) {
       return;
     }
-    resizable._onResizeStart();
-    resizable._onResizeMove(
-      resizable._isCollapsed ? resizable._minSizePx : -resizable._size,
-    );
-    resizable._onResizeEnd();
+    toggleCollapse(resizable);
   }, [isDisabled, resizable]);
 
   // --- Cleanup on unmount ---
@@ -620,9 +724,16 @@ export function ResizeHandle({
       : resizable._size
     : undefined;
   const ariaValueMin = resizable ? resizable._minSizePx : undefined;
+  // A separator with a value needs a maximum (WAI-ARIA, APG window splitter).
+  // Unbounded regions report the basis they can fill; a hand-built props
+  // object without it reports only a configured maximum.
+  const effectiveMax = resizable
+    ? (getEffectiveMaxPx(resizable) ??
+      (resizable._maxSizePx !== Infinity ? resizable._maxSizePx : undefined))
+    : undefined;
   const ariaValueMax =
-    resizable && resizable._maxSizePx !== Infinity
-      ? resizable._maxSizePx
+    effectiveMax != null && Number.isFinite(effectiveMax)
+      ? effectiveMax
       : undefined;
   const ariaValueText =
     resizable && isCollapsed ? t('@astryx.resizable.collapsed') : undefined;

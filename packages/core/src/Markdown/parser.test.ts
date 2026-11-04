@@ -283,6 +283,148 @@ describe('parseInline', () => {
     }
   });
 
+  it('keeps a link title out of the destination', () => {
+    const cases = [
+      ['[t](https://example.com/notes "Notes")', 'https://example.com/notes'],
+      ["[t](https://example.com/notes 'Notes')", 'https://example.com/notes'],
+      ['[t](https://example.com/notes (Notes))', 'https://example.com/notes'],
+      ['[t](https://example.com "Say \\"hi\\"")', 'https://example.com'],
+      ['[t](<https://example.com/a b> "Spaced")', 'https://example.com/a b'],
+      [
+        '[t](https://example.com/wiki/Foo_(bar) "Wiki")',
+        'https://example.com/wiki/Foo_(bar)',
+      ],
+    ] as const;
+    for (const [source, href] of cases) {
+      expect(parseInline(source)[0], source).toMatchObject({
+        type: 'link',
+        href,
+      });
+    }
+  });
+
+  it('keeps an image title out of the source, inline and standalone', () => {
+    expect(parseInline('![alt](img.png "Caption")')).toEqual([
+      {type: 'image', src: 'img.png', alt: 'alt'},
+    ]);
+    expect(parseMarkdown('![alt](img.png "Caption")')[0]).toMatchObject({
+      type: 'image',
+      src: 'img.png',
+    });
+  });
+
+  it('keeps link content that has no title shape as the destination', () => {
+    // A space without a quoted title is not a destination and title pair, so
+    // the content keeps its released meaning.
+    expect(parseInline('[t](https://example.com/a b)')[0]).toMatchObject({
+      type: 'link',
+      href: 'https://example.com/a b',
+    });
+  });
+
+  it('decodes named and numeric character references in text', () => {
+    expect(
+      parseInline('Fish &amp; chips &copy; &#169; &#x1F600; a&nbsp;b'),
+    ).toEqual([
+      {type: 'text', content: 'Fish & chips \u00a9 \u00a9 \u{1F600} a\u00a0b'},
+    ]);
+  });
+
+  it('keeps unknown names, missing semicolons, and escaped ampersands literal', () => {
+    const nodes = parseInline('&notareference; &amp no semicolon \\&amp;');
+    expect(nodes.every(node => node.type === 'text')).toBe(true);
+    expect(
+      nodes.map(node => (node.type === 'text' ? node.content : '')).join(''),
+    ).toBe('&notareference; &amp no semicolon &amp;');
+  });
+
+  it('replaces NUL, surrogate, and out-of-range numeric references', () => {
+    expect(parseInline('&#0; &#xD800; &#1114112;')).toEqual([
+      {type: 'text', content: '\uFFFD \uFFFD \uFFFD'},
+    ]);
+  });
+
+  it('never turns a decoded character into markup', () => {
+    expect(
+      parseInline('&ast;not emphasis&ast; &lsqb;not a link&rsqb;(x)'),
+    ).toEqual([{type: 'text', content: '*not emphasis* [not a link](x)'}]);
+  });
+
+  it('keeps character references literal in inline and fenced code', () => {
+    expect(parseInline('`&amp;`')).toEqual([{type: 'code', content: '&amp;'}]);
+    expect(parseMarkdown('```\n&copy; &#169;\n```')[0]).toMatchObject({
+      type: 'codeblock',
+      content: '&copy; &#169;',
+    });
+  });
+
+  it('decodes character references and escapes in image alt text', () => {
+    expect(parseInline('![Fish &amp; chips \\*fresh\\*](fish.png)')).toEqual([
+      {type: 'image', src: 'fish.png', alt: 'Fish & chips *fresh*'},
+    ]);
+    expect(parseMarkdown('![&copy; 2026 &#169;](logo.png)')[0]).toMatchObject({
+      type: 'image',
+      alt: '\u00a9 2026 \u00a9',
+    });
+    expect(
+      parseMarkdown('![Q&amp;A][logo]\n\n[logo]: /logo.png')[0],
+    ).toMatchObject({
+      type: 'paragraph',
+      children: [{type: 'image', src: '/logo.png', alt: 'Q&A'}],
+    });
+  });
+
+  it('keeps an escaped ampersand and unknown names literal in alt text', () => {
+    expect(parseInline('![\\&amp; &nope;](x.png)')).toEqual([
+      {type: 'image', src: 'x.png', alt: '&amp; &nope;'},
+    ]);
+  });
+
+  it('makes two spaces or a backslash before a CRLF line ending a hard break', () => {
+    expect(parseInline('two  \r\nspaces')).toEqual([
+      {type: 'text', content: 'two'},
+      {type: 'break'},
+      {type: 'text', content: 'spaces'},
+    ]);
+    expect(parseInline('back\\\r\nslash')).toEqual([
+      {type: 'text', content: 'back'},
+      {type: 'break'},
+      {type: 'text', content: 'slash'},
+    ]);
+    // A Windows path ending a line keeps its other backslashes.
+    expect(parseInline('C:\\Users\\Ada\\\r\nnext')).toEqual([
+      {type: 'text', content: 'C:\\Users\\Ada'},
+      {type: 'break'},
+      {type: 'text', content: 'next'},
+    ]);
+  });
+
+  it('escapes only ASCII punctuation and keeps other backslashes literal', () => {
+    const textOf = (source: string) =>
+      parseInline(source)
+        .map(node => (node.type === 'text' ? node.content : `<${node.type}>`))
+        .join('');
+    expect(textOf('C:\\Users\\Ada')).toBe('C:\\Users\\Ada');
+    expect(textOf('\\*not emphasis\\* and \\\\ one backslash')).toBe(
+      '*not emphasis* and \\ one backslash',
+    );
+    expect(textOf('caf\\\u00e9 \\a \\1')).toBe('caf\\\u00e9 \\a \\1');
+  });
+
+  it('makes a backslash before a line break a hard break', () => {
+    expect(parseInline('line\\\nnext')).toEqual([
+      {type: 'text', content: 'line'},
+      {type: 'break'},
+      {type: 'text', content: 'next'},
+    ]);
+  });
+
+  it('keeps non-punctuation backslashes in image alt text', () => {
+    expect(parseInline('![C:\\Users \\& more](x.png)')).toEqual([
+      {type: 'image', src: 'x.png', alt: 'C:\\Users & more'},
+    ]);
+  });
+
   it('handles parentheses in image URLs', () => {
     const result = parseInline('![alt](https://example.com/img_(1).png)');
     expect(result[0].type).toBe('image');
@@ -312,6 +454,77 @@ describe('parseInline', () => {
 });
 
 describe('parseMarkdown', () => {
+  describe('hard breaks in CRLF documents', () => {
+    const hasBreak = (value: unknown): boolean =>
+      JSON.stringify(value).includes('"type":"break"');
+    const lf = (source: string) => source.replace(/\r\n/g, '\n');
+    // The parser keeps each CRLF line's `\r` in its text; drop it, and any text
+    // node left empty, to compare structure with the LF document. Parsed
+    // blocks are plain JSON data, so the comparison works on that shape.
+    type Json =
+      string | number | boolean | null | Json[] | {[key: string]: Json};
+    const isEmptyText = (node: Json): boolean =>
+      typeof node === 'object' &&
+      node !== null &&
+      !Array.isArray(node) &&
+      node.type === 'text' &&
+      node.content === '';
+    const withoutCarriageReturns = (value: Json): Json => {
+      if (Array.isArray(value)) {
+        return value
+          .map(withoutCarriageReturns)
+          .filter(node => !isEmptyText(node));
+      }
+      if (typeof value === 'object' && value !== null) {
+        return Object.fromEntries(
+          Object.entries(value).map(([key, entry]) => [
+            key,
+            withoutCarriageReturns(entry),
+          ]),
+        );
+      }
+      return typeof value === 'string' ? value.replace(/\r/g, '') : value;
+    };
+    const asJson = (blocks: ReadonlyArray<BlockNode>): Json =>
+      JSON.parse(JSON.stringify(blocks)) as Json;
+
+    it('breaks lines the same way as the LF document', () => {
+      for (const source of [
+        'Line one  \r\nLine two\r\n',
+        'C:\\Users\\Ada\\\r\nnext\r\n',
+        '[two  \r\nlines](https://example.com)\r\n',
+        '> quoted  \r\n> lines\r\n',
+      ]) {
+        const crlf = parseMarkdown(source);
+        expect(hasBreak(crlf), source).toBe(true);
+        expect(withoutCarriageReturns(asJson(crlf)), source).toEqual(
+          asJson(parseMarkdown(lf(source))),
+        );
+      }
+    });
+
+    it('leaves code spans, code blocks, and table cells without breaks', () => {
+      for (const source of [
+        '`a  \r\nb` and `c\\\r\nd`\r\n',
+        '```\r\ncode  \r\nmore\\\r\n```\r\n',
+        '| a |\r\n| --- |\r\n| x  |\r\n',
+      ]) {
+        expect(hasBreak(parseMarkdown(source)), source).toBe(false);
+      }
+    });
+
+    it('streams to the same result when chunks split the line ending', () => {
+      const source = 'One  \r\ntwo\\\r\nthree\r\n\r\nC:\\Users\r\n';
+      const state = createIncrementalState();
+      let blocks: BlockNode[] = [];
+      for (let end = 1; end <= source.length; end++) {
+        blocks = parseMarkdownIncremental(source.slice(0, end), state);
+      }
+      expect(blocks).toEqual(parseMarkdown(source));
+      expect(hasBreak(blocks)).toBe(true);
+    });
+  });
+
   it('parses headings', () => {
     const result = parseMarkdown('# Hello');
     expect(result[0].type).toBe('heading');
@@ -420,6 +633,177 @@ describe('parseMarkdown', () => {
   it('parses blockquotes', () => {
     const result = parseMarkdown('> This is a quote');
     expect(result[0].type).toBe('blockquote');
+  });
+
+  it('keeps lazy paragraph continuations inside blockquotes and list items', () => {
+    expect(parseMarkdown('> quoted\ncontinued lazily')).toEqual([
+      {
+        type: 'blockquote',
+        children: [
+          {
+            type: 'paragraph',
+            children: [{type: 'text', content: 'quoted\ncontinued lazily'}],
+          },
+        ],
+      },
+    ]);
+
+    for (const marker of ['-', '1.', '- [ ]']) {
+      const [list] = parseMarkdown(`${marker} listed\ncontinued lazily`);
+      expect(list).toMatchObject({
+        type: 'list',
+        items: [
+          {
+            children: [
+              {
+                type: 'paragraph',
+                children: [{type: 'text', content: 'listed\ncontinued lazily'}],
+              },
+            ],
+          },
+        ],
+      });
+    }
+    expect(parseMarkdown('> # Foo\n> bar\nbaz')).toMatchObject([
+      {
+        type: 'blockquote',
+        children: [
+          {type: 'heading', level: 1},
+          {
+            type: 'paragraph',
+            children: [{type: 'text', content: 'bar\nbaz'}],
+          },
+        ],
+      },
+    ]);
+    expect(parseMarkdown('> bar\nbaz\n> foo')).toMatchObject([
+      {
+        type: 'blockquote',
+        children: [
+          {
+            type: 'paragraph',
+            children: [{type: 'text', content: 'bar\nbaz\nfoo'}],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('keeps lazy continuations in the deepest open paragraph', () => {
+    expect(parseMarkdown('> 1. > Blockquote\ncontinued here.')).toMatchObject([
+      {
+        type: 'blockquote',
+        children: [
+          {
+            type: 'list',
+            items: [
+              {
+                children: [
+                  {
+                    type: 'blockquote',
+                    children: [
+                      {
+                        type: 'paragraph',
+                        children: [
+                          {
+                            type: 'text',
+                            content: 'Blockquote\ncontinued here.',
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+
+    expect(
+      parseMarkdown('- Outer item\n  > Nested quote\ncontinued here.'),
+    ).toMatchObject([
+      {
+        type: 'list',
+        items: [
+          {
+            children: [
+              {type: 'paragraph'},
+              {
+                type: 'blockquote',
+                children: [
+                  {
+                    type: 'paragraph',
+                    children: [
+                      {
+                        type: 'text',
+                        content: 'Nested quote\ncontinued here.',
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('resumes lazy continuation for a later blockquote paragraph', () => {
+    expect(parseMarkdown('> para1\n>\n> para2\nlazy')).toMatchObject([
+      {
+        type: 'blockquote',
+        children: [
+          {
+            type: 'paragraph',
+            children: [{type: 'text', content: 'para1'}],
+          },
+          {
+            type: 'paragraph',
+            children: [{type: 'text', content: 'para2\nlazy'}],
+          },
+        ],
+      },
+    ]);
+
+    expect(parseMarkdown('> > para1\n> >\n> > para2\nlazy')).toMatchObject([
+      {
+        type: 'blockquote',
+        children: [
+          {
+            type: 'blockquote',
+            children: [
+              {
+                type: 'paragraph',
+                children: [{type: 'text', content: 'para1'}],
+              },
+              {
+                type: 'paragraph',
+                children: [{type: 'text', content: 'para2\nlazy'}],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('does not continue a container paragraph across a blank or block start', () => {
+    expect(
+      parseMarkdown('> quoted\n\noutside').map(block => block.type),
+    ).toEqual(['blockquote', 'paragraph']);
+    expect(
+      parseMarkdown('- listed\n\noutside').map(block => block.type),
+    ).toEqual(['list', 'paragraph']);
+    expect(
+      parseMarkdown('> quoted\n# Outside').map(block => block.type),
+    ).toEqual(['blockquote', 'heading']);
+    expect(parseMarkdown('- listed\n```\noutside\n```')).toMatchObject([
+      {type: 'list'},
+      {type: 'codeblock', content: 'outside'},
+    ]);
   });
 
   it('parses horizontal rules', () => {

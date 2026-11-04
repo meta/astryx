@@ -85,6 +85,11 @@ const KEYS: Record<Key, string> = {
   ArrowRight: 'ArrowRight',
   ArrowUp: 'ArrowUp',
   ArrowDown: 'ArrowDown',
+  Home: 'Home',
+  End: 'End',
+  PageUp: 'PageUp',
+  PageDown: 'PageDown',
+  Escape: 'Escape',
 };
 
 interface AxValue {
@@ -215,6 +220,7 @@ async function computedNode(
         multiline: null,
         readOnly: null,
         required: null,
+        pressed: null,
         checked: null,
         selected: null,
         disabled: false,
@@ -241,6 +247,7 @@ async function computedNode(
       }
     }
     const live = property(node, 'live');
+    const pressed = property(node, 'pressed');
     const checked = property(node, 'checked');
     const selected = optionalFlag(node, 'selected');
     const invalid = property(node, 'invalid');
@@ -279,6 +286,14 @@ async function computedNode(
       multiline: optionalFlag(node, 'multiline'),
       readOnly: optionalFlag(node, 'readonly'),
       required: optionalFlag(node, 'required'),
+      pressed:
+        pressed === 'true' || pressed === true
+          ? 'true'
+          : pressed === 'false' || pressed === false
+            ? 'false'
+            : pressed === 'mixed'
+              ? 'mixed'
+              : null,
       checked:
         checked === 'true' || checked === true
           ? 'true'
@@ -298,6 +313,13 @@ async function computedNode(
     );
   }
 }
+
+/**
+ * How long `abortedPress` holds the press before sliding off: past the
+ * longest press-timing delay a component uses (DropdownMenu's 300 ms settle
+ * delay, the 500 ms long press).
+ */
+const ABORTED_PRESS_HOLD_MS = 700;
 
 /**
  * Stop transitions before an expectation reads state, so nothing measures a
@@ -646,6 +668,7 @@ export function createChromiumHarness(
       locator.evaluate(node =>
         (node.textContent ?? '').replace(/\s+/g, ' ').trim(),
       ),
+    descendantCount: selector => locator.locator(selector).count(),
     currentExists: async () => (await locator.count()) > 0,
     isConnected: async () => {
       const element = await capturedElement();
@@ -956,6 +979,7 @@ export function createChromiumHarness(
         related.evaluate(node =>
           (node.textContent ?? '').replace(/\s+/g, ' ').trim(),
         ),
+      descendantCount: selector => related.locator(selector).count(),
       currentExists: async () => (await related.count()) > 0,
       isConnected: () => related.evaluate(node => node.isConnected),
       computed: () => computedNode(cdp, related),
@@ -1080,6 +1104,42 @@ export function createChromiumHarness(
         throw error;
       }
     },
+    clickBeside: async targetSubject => {
+      const target = pointerTargets.get(targetSubject);
+      if (target == null) {
+        throw new Error(
+          'the Chromium harness was asked to click beside a subject it did not create',
+        );
+      }
+      const box = await target.boundingBox();
+      if (box == null) {
+        throw new Error('the subject has no box to click beside');
+      }
+      const viewport = page.viewportSize() ?? {width: 1280, height: 720};
+      // A point outside the box but inside the viewport: above-left when
+      // there is room, else below-right.
+      const x =
+        box.x >= 8
+          ? box.x - 4
+          : Math.min(viewport.width - 2, box.x + box.width + 4);
+      const y =
+        box.y >= 8
+          ? box.y - 4
+          : Math.min(viewport.height - 2, box.y + box.height + 4);
+      const inside =
+        x >= box.x &&
+        x <= box.x + box.width &&
+        y >= box.y &&
+        y <= box.y + box.height;
+      if (inside) {
+        // A subject that fills the viewport leaves no point beside it; a
+        // click on the subject itself would prove nothing about dismissal.
+        throw new Error(
+          'the subject fills the viewport, so there is no point beside it to click',
+        );
+      }
+      await page.mouse.click(x, y);
+    },
     abortedPress: async () => {
       const box = await pointerLocator.boundingBox();
       if (box == null) {
@@ -1133,8 +1193,88 @@ export function createChromiumHarness(
       }
       await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
       await page.mouse.down();
+      // Hold the press before sliding off, as a person who changes their mind
+      // does. A press released at once has a duration set by the machine: a
+      // component that times the press (DropdownMenu ignores the release of an
+      // opening press shorter than its settle delay) then reports a different
+      // outcome on a loaded runner than on an idle one. Holding past any such
+      // delay gives every machine the same gesture.
+      await page.waitForTimeout(ABORTED_PRESS_HOLD_MS);
       await page.mouse.move(releaseX, releaseY);
       await page.mouse.up();
+    },
+    hover: async targetSubject => {
+      const target = pointerTargets.get(targetSubject);
+      if (target == null) {
+        throw new Error(
+          'the Chromium harness was asked to hover a subject it did not create',
+        );
+      }
+      // The same bounded reach as `click`: a subject a pointer can never rest
+      // on reports why instead of sitting out the whole test timeout.
+      try {
+        await target.hover({timeout: POINTER_REACH_BUDGET_MS});
+      } catch (error) {
+        if (isTimeout(error)) {
+          throw new Error(
+            `a pointer could not reach this subject within ${POINTER_REACH_BUDGET_MS}ms: the browser never found it visible, stable, and able to receive a pointer event. Something is covering it, or it is clipped to nothing.`,
+            {cause: error},
+          );
+        }
+        throw error;
+      }
+    },
+    pointerAway: async () => {
+      const viewport = await page.evaluate(() => ({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      }));
+      // Corners first, then edge midpoints: the first point that is off the
+      // subject and every related subject. A point over one of them would
+      // leave the pointer where the outcome is being judged.
+      const candidates = [
+        [viewport.width - 2, viewport.height - 2],
+        [2, viewport.height - 2],
+        [viewport.width - 2, 2],
+        [2, 2],
+        [viewport.width / 2, viewport.height - 2],
+        [viewport.width - 2, viewport.height / 2],
+      ] as const;
+      // The pointer target is watched too: `hover` rests on it, and a binding's
+      // pointer target can differ from its semantic subject.
+      const watched = [
+        locator,
+        pointerLocator,
+        ...Object.values(options.related ?? {}),
+      ];
+      for (const [x, y] of candidates) {
+        const handles = (
+          await Promise.all(watched.map(item => item.elementHandles()))
+        ).flat();
+        try {
+          const clear = await page.evaluate(
+            ([pointX, pointY, elements]) => {
+              const hit = document.elementFromPoint(pointX, pointY);
+              return (
+                hit != null &&
+                !elements.some(
+                  element => element === hit || element.contains(hit),
+                )
+              );
+            },
+            [x, y, handles] as const,
+          );
+          if (clear) {
+            await page.mouse.move(x, y);
+            return;
+          }
+        } finally {
+          await Promise.all(handles.map(handle => handle.dispose()));
+        }
+      }
+      throw new Error(
+        'every edge of the viewport is covered by the subject or a related subject, so there is nowhere to move the pointer away to',
+      );
     },
     typeText: async (_subject, text) => {
       await locator.focus();

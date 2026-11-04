@@ -5,7 +5,6 @@ import {render, cleanup} from '@testing-library/react';
 import React from 'react';
 import {Theme} from './Theme';
 import {defineTheme} from './defineTheme';
-import {dataTokenDefaults} from './domainTokens';
 import type * as DefineThemeModule from './defineTheme';
 
 const {generateThemeCSSSpy} = vi.hoisted(() => ({
@@ -214,68 +213,104 @@ describe('Theme', () => {
     expect(nestedWrapper?.getAttribute('data-theme')).toBe('light');
   });
 
+  it('rebinds a default status role inside a nested theme that authors its source token', () => {
+    const outer = defineTheme({
+      name: 'status-role-outer',
+      tokens: {
+        '--color-text-blue': '#0074E2',
+        '--color-text-info': '#0074E2',
+      },
+    });
+    const inner = defineTheme({
+      name: 'status-role-inner',
+      tokens: {'--color-text-blue': '#A000C8'},
+    });
+
+    render(
+      <Theme theme={outer}>
+        <Theme theme={inner}>
+          <span>nested</span>
+        </Theme>
+      </Theme>,
+    );
+
+    const innerCss = document.head.querySelector(
+      'style[data-astryx-theme="status-role-inner"]',
+    )?.textContent;
+    expect(innerCss).toContain('--color-text-blue: #A000C8;');
+    expect(innerCss).toContain('--color-text-info: var(--color-text-blue);');
+  });
+
   // =========================================================================
-  // Data token defaults — one shared :root block, not one per theme scope
+  // Data token ownership — StyleX defaults, sparse Theme overrides
   // =========================================================================
 
-  const baseTags = () =>
-    Array.from(document.head.querySelectorAll('style[data-astryx-theme-base]'));
-
-  it('injects the data token defaults into @layer astryx-base', () => {
+  it('does not inject canonical data defaults', () => {
     render(
       <Theme theme={testTheme}>
         <span>child</span>
       </Theme>,
     );
 
-    expect(baseTags()).toHaveLength(1);
-    const css = baseTags()[0].textContent ?? '';
-    expect(css).toContain('@layer astryx-base {');
-    expect(css).toContain(':root {');
-    expect(css).toContain(
-      `--color-data-categorical-blue: ${dataTokenDefaults['--color-data-categorical-blue']};`,
-    );
+    expect(
+      document.head.querySelector('style[data-astryx-theme-base]'),
+    ).toBeNull();
+    const injected = Array.from(document.head.querySelectorAll('style'))
+      .map(tag => tag.textContent ?? '')
+      .join('\n');
+    expect(injected).not.toContain('--color-data-');
+    expect(injected).not.toContain(':root {');
   });
 
-  it('injects one shared block for nested themes, not one per scope', () => {
+  it('injects only an authored data override inside the theme donut', () => {
+    const theme = defineTheme({
+      name: 'data-override',
+      tokens: {'--color-data-categorical-blue': '#00A3FF'},
+    });
     render(
-      <Theme theme={testTheme}>
-        <Theme theme={altTheme}>
+      <Theme theme={theme}>
+        <span>child</span>
+      </Theme>,
+    );
+
+    const css = Array.from(
+      document.head.querySelectorAll(
+        'style[data-astryx-theme="data-override"]',
+      ),
+    )
+      .map(tag => tag.textContent ?? '')
+      .join('\n');
+    expect(css).toContain('@layer reset, astryx-base, astryx-theme;');
+    expect(css).toContain(
+      '@scope ([data-astryx-theme="data-override"]) to ([data-astryx-theme])',
+    );
+    expect(css).toContain('--color-data-categorical-blue: #00A3FF;');
+    expect(css.match(/--color-data-/g)).toHaveLength(1);
+    expect(css).not.toContain(':root {');
+  });
+
+  it('lets a nested theme inherit an unspecified parent data override', () => {
+    const parent = defineTheme({
+      name: 'data-parent',
+      tokens: {'--color-data-categorical-blue': '#00A3FF'},
+    });
+    const child = defineTheme({name: 'data-child'});
+    render(
+      <Theme theme={parent}>
+        <Theme theme={child}>
           <span>nested</span>
         </Theme>
       </Theme>,
     );
 
-    expect(baseTags()).toHaveLength(1);
-
-    // The nested theme declares no --color-data-* of its own, so nothing
-    // shadows a value the parent theme set: that is what lets the override
-    // inherit through the ordinary cascade.
-    const themeTags = Array.from(
-      document.head.querySelectorAll('style[data-astryx-theme]'),
-    );
-    for (const tag of themeTags) {
-      expect(tag.textContent).not.toContain('--color-data-');
-    }
-  });
-
-  it('keeps the defaults while any theme is still mounted', () => {
-    const outer = render(
-      <Theme theme={testTheme}>
-        <span>a</span>
-      </Theme>,
-    );
-    render(
-      <Theme theme={altTheme}>
-        <span>b</span>
-      </Theme>,
-    );
-
-    outer.unmount();
-    expect(baseTags()).toHaveLength(1);
-
-    cleanup();
-    expect(baseTags()).toHaveLength(0);
+    const parentCss = document.head.querySelector(
+      'style[data-astryx-theme="data-parent"]',
+    )?.textContent;
+    const childCss = document.head.querySelector(
+      'style[data-astryx-theme="data-child"]',
+    )?.textContent;
+    expect(parentCss).toContain('--color-data-categorical-blue: #00A3FF;');
+    expect(childCss ?? '').not.toContain('--color-data-');
   });
 
   it('generates a theme once across nested and sibling mounts', () => {
@@ -293,11 +328,10 @@ describe('Theme', () => {
     );
 
     expect(generateThemeCSSSpy).toHaveBeenCalledTimes(1);
-    expect(baseTags()).toHaveLength(1);
-
     const injected = Array.from(document.querySelectorAll('style'))
       .map(tag => tag.textContent ?? '')
       .join('\n');
-    expect(injected.match(/:root\s*\{/g)).toHaveLength(1);
+    expect(injected).toContain('@layer reset, astryx-base, astryx-theme;');
+    expect(injected).not.toContain(':root {');
   });
 });

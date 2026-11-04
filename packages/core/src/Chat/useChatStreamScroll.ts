@@ -17,6 +17,8 @@
  * - `scrollToBottom({behavior: 'instant'})` jumps in one frame, no animation
  * - Under `prefers-reduced-motion`, every spring path falls back to the
  *   same instant jump — following still works, it just doesn't animate
+ * - Fractional spring position is retained between frames so browsers that
+ *   round scrollTop do not strand the animation short of the bottom
  *
  * Reads user intent from position: a scroll that lands above the last
  * position this hook set or saw is the reader — wheel, touch, scrollbar
@@ -165,6 +167,7 @@ export function useChatStreamScroll({
   // scrollIfLocked that sees scrollable content.
   const initialFillPendingRef = useRef(true);
   const velocityRef = useRef(0);
+  const springPositionRef = useRef<number | undefined>(undefined);
   const animatingRef = useRef(false);
   const lastTickRef = useRef<number | undefined>(undefined);
   // The spring's pending frame, so a jump can cancel it for real.
@@ -208,7 +211,11 @@ export function useChatStreamScroll({
     }
 
     const target = el.scrollHeight - el.clientHeight;
-    const diff = target - el.scrollTop;
+    const position = Math.max(
+      0,
+      Math.min(target, springPositionRef.current ?? el.scrollTop),
+    );
+    const diff = target - position;
 
     if (Math.abs(diff) < 0.5 && Math.abs(velocityRef.current) < 0.1) {
       // eslint-disable-next-line react-compiler/react-compiler -- imperative DOM: scrollTop assignment
@@ -227,7 +234,8 @@ export function useChatStreamScroll({
 
     velocityRef.current =
       (damping * velocityRef.current + stiffness * diff) / mass;
-    el.scrollTop += velocityRef.current * tickDelta;
+    springPositionRef.current = position + velocityRef.current * tickDelta;
+    el.scrollTop = springPositionRef.current;
     lastScrollTopRef.current = el.scrollTop;
 
     rafRef.current = requestAnimationFrame(animate);
@@ -265,9 +273,10 @@ export function useChatStreamScroll({
     if (!animatingRef.current) {
       animatingRef.current = true;
       lastTickRef.current = undefined;
+      springPositionRef.current = scrollRef.current?.scrollTop;
       rafRef.current = requestAnimationFrame(animate);
     }
-  }, [animate, jumpToBottom, prefersReducedMotion]);
+  }, [animate, jumpToBottom, prefersReducedMotion, scrollRef]);
 
   // --- Public API ---
 

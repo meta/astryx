@@ -80,6 +80,28 @@ describe('validate-integration API', () => {
     expect(errors).toBe(0);
   });
 
+  it('warns, with a fix and the file, on docs no reader can serve', async () => {
+    const pkgDir = path.join(tmpDir, 'pkg');
+    writePackage(pkgDir, {
+      manifest: `export default { docs: './docs' };\n`,
+    });
+    fs.mkdirSync(path.join(pkgDir, 'docs'), {recursive: true});
+    fs.writeFileSync(
+      path.join(pkgDir, 'docs', 'ghost.doc.zh.mjs'),
+      "export default {title: 'ghost'};\n",
+    );
+
+    const result = await validateLocalIntegration(pkgDir);
+
+    expect(byCode(result.issues, 'orphan_doc_overlay')).toEqual([
+      expect.objectContaining({
+        severity: 'warning',
+        file: 'docs/ghost.doc.zh.mjs',
+        fix: expect.stringContaining('Delete docs/ghost.doc.zh.mjs'),
+      }),
+    ]);
+  });
+
   it('reports an unknown manifest key as a warning, and still loads the rest', async () => {
     // The manifest used to be parsed with a strict schema, so a single unknown
     // key failed the parse — and an integration whose manifest fails to parse
@@ -160,7 +182,7 @@ describe('validate-integration API', () => {
     fs.mkdirSync(componentsDir);
     fs.writeFileSync(
       path.join(componentsDir, 'Widget.doc.mjs'),
-      `export default {name: 'Widget'};\n`,
+      `export default {name: 'Widget', props: []};\n`,
     );
     fs.writeFileSync(
       path.join(componentsDir, 'Widget.tsx'),
@@ -174,6 +196,17 @@ describe('validate-integration API', () => {
     const agentDocsIssues = byCode(result.issues, 'invalid_agent_docs');
     expect(agentDocsIssues).toHaveLength(1);
     expect(agentDocsIssues[0].severity).toBe('error');
+  });
+
+  it('reports nothing for a docsiteUrl', async () => {
+    const pkgDir = path.join(tmpDir, 'pkg');
+    writePackage(pkgDir, {
+      manifest: `export default {docsiteUrl: 'https://widgets.example.com'};\n`,
+    });
+
+    const result = await validateLocalIntegration(pkgDir);
+
+    expect(result.issues).toEqual([]);
   });
 
   it('flags a broken codemod as invalid_codemod error', async () => {
@@ -307,6 +340,36 @@ export default {type: 'theme', name: 'ocean', displayName: 'Ocean', description:
       byCode(result.issues, 'source_without_component_doc')[0].message,
     ).toContain(
       "Fix: add InvisibleWidget.doc.mjs beside it with type: 'component'",
+    );
+  });
+
+  it('warns when a template source has no same-stem metadata, skipping test files', async () => {
+    const pkgDir = path.join(tmpDir, 'pkg');
+    writePackage(pkgDir, {
+      manifest: `export default { templates: './templates' };\n`,
+    });
+    fs.mkdirSync(path.join(pkgDir, 'templates'));
+    fs.writeFileSync(
+      path.join(pkgDir, 'templates', 'stray.tsx'),
+      'export default function Stray() { return null; }\n',
+    );
+    fs.writeFileSync(
+      path.join(pkgDir, 'templates', 'stray.test.tsx'),
+      "import {it} from 'vitest';\nit('renders', () => {});\n",
+    );
+
+    const result = await validateLocalIntegration(pkgDir);
+
+    const warnings = byCode(result.issues, 'source_without_template_doc');
+    expect(warnings).toEqual([
+      expect.objectContaining({
+        severity: 'warning',
+        message: expect.stringContaining('"stray.tsx"'),
+      }),
+    ]);
+    expect(warnings[0].message).not.toContain('stray.test.tsx');
+    expect(warnings[0].message).toContain(
+      "Fix: add stray.doc.mjs beside it with type: 'page' or 'block'",
     );
   });
 
@@ -485,7 +548,7 @@ export default {type: 'theme', name: 'ocean', displayName: 'Ocean', description:
     fs.mkdirSync(cDir, {recursive: true});
     fs.writeFileSync(
       path.join(cDir, 'Widget.doc.mjs'),
-      `export default { name: 'Widget' };\n`,
+      `export default { type: 'component', name: 'Widget', props: [] };\n`,
     );
     fs.writeFileSync(
       path.join(cDir, 'Widget.tsx'),
@@ -507,7 +570,7 @@ export default {type: 'theme', name: 'ocean', displayName: 'Ocean', description:
     // Doc with no sibling Widget.tsx.
     fs.writeFileSync(
       path.join(cDir, 'Widget.doc.mjs'),
-      `export default { name: 'Widget' };\n`,
+      `export default { type: 'component', name: 'Widget', props: [] };\n`,
     );
 
     const result = await validateLocalIntegration(pkgDir);
@@ -582,7 +645,10 @@ describe('integration diagnostics are read-only', () => {
       'components/Orphan.doc.mjs',
       "export default {type: 'component', name: 'Orphan', props: []};\n",
     );
-    write('templates/dash.doc.mjs', "export default {type: 'page', name: 'Dash'};\n");
+    write(
+      'templates/dash.doc.mjs',
+      "export default {type: 'page', name: 'Dash'};\n",
+    );
     write(
       'docs/theme.doc.mjs',
       "export default {type: 'generic', name: 'theme', title: 'Theme', description: 'x', sections: [{title: 'A', content: [{type: 'prose', text: 'x'}]}]};\n",
@@ -603,7 +669,9 @@ describe('integration diagnostics are read-only', () => {
       path.join(consumer, 'package.json'),
       JSON.stringify({name: 'consumer'}),
     );
-    writeDiagnosedPackage(path.join(consumer, 'node_modules', '@acme', 'widgets'));
+    writeDiagnosedPackage(
+      path.join(consumer, 'node_modules', '@acme', 'widgets'),
+    );
     const before = {pkg: snapshot(pkgDir), consumer: snapshot(consumer)};
 
     const local = await validateIntegration(undefined, {cwd: pkgDir});
@@ -620,8 +688,148 @@ describe('integration diagnostics are read-only', () => {
     }
 
     expect(summarizeIssues(local.data.issues).errors).toBeGreaterThan(0);
-    expect(byCode(local.data.issues, 'unreachable_contribution')).toHaveLength(1);
+    expect(byCode(local.data.issues, 'unreachable_contribution')).toHaveLength(
+      1,
+    );
     expect(summarizeIssues(installed.data.issues).errors).toBeGreaterThan(0);
-    expect({pkg: snapshot(pkgDir), consumer: snapshot(consumer)}).toEqual(before);
+    expect({pkg: snapshot(pkgDir), consumer: snapshot(consumer)}).toEqual(
+      before,
+    );
+  });
+});
+
+describe('validated separates "checked and clean" from "never checked"', () => {
+  // `doctor integration validate --json` from a directory with no manifest
+  // returned {name: null, version: null, issues: []} and exit 0 — the same
+  // envelope a healthy, fully validated integration produces. Wire that into
+  // CI from the wrong directory and it is green forever.
+  it('is false for every check when no manifest is found', async () => {
+    const dir = path.join(tmpDir, 'plain');
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(
+      path.join(dir, 'package.json'),
+      JSON.stringify({name: 'plain-app', version: '1.0.0'}),
+    );
+
+    const validate = await validateIntegration(undefined, {cwd: dir});
+    expect(validate.data.validated).toBe(false);
+    expect(validate.data.issues).toEqual([]);
+
+    const templates = await integrationTemplateConflicts(undefined, {cwd: dir});
+    const components = await integrationComponentConflicts(undefined, {
+      cwd: dir,
+    });
+    const docs = await integrationDocConflicts(undefined, {cwd: dir});
+    expect(templates.data.validated).toBe(false);
+    expect(components.data.validated).toBe(false);
+    expect(docs.data.validated).toBe(false);
+  });
+
+  it('is true for a real integration, whose empty issue list then means healthy', async () => {
+    const dir = path.join(tmpDir, 'integration');
+    writePackage(dir, {manifest: 'export default {};\n'});
+
+    const validate = await validateIntegration(undefined, {cwd: dir});
+    expect(validate.data.validated).toBe(true);
+    expect(validate.data.name).toBe('@acme/widgets');
+
+    const templates = await integrationTemplateConflicts(undefined, {cwd: dir});
+    const components = await integrationComponentConflicts(undefined, {
+      cwd: dir,
+    });
+    const docs = await integrationDocConflicts(undefined, {cwd: dir});
+    expect(templates.data.validated).toBe(true);
+    expect(components.data.validated).toBe(true);
+    expect(docs.data.validated).toBe(true);
+  });
+
+  it('is true for an installed package that could not be found — that is a real finding', async () => {
+    const consumer = path.join(tmpDir, 'consumer');
+    fs.mkdirSync(consumer, {recursive: true});
+    fs.writeFileSync(
+      path.join(consumer, 'package.json'),
+      JSON.stringify({name: 'consumer', version: '1.0.0'}),
+    );
+
+    const res = await validateIntegration('@acme/nope', {cwd: consumer});
+    expect(res.data.validated).toBe(true);
+    expect(summarizeIssues(res.data.issues).errors).toBeGreaterThan(0);
+  });
+});
+
+describe('unreadable folders are reported, never fatal', () => {
+  // Root reads every folder, so permission cases cannot be staged as root.
+  const asRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+  /** @type {string[]} */
+  const locked = [];
+  afterEach(() => {
+    while (locked.length) fs.chmodSync(locked.pop(), 0o755);
+  });
+  /** @param {string} dir */
+  const lock = dir => {
+    fs.chmodSync(dir, 0o000);
+    locked.push(dir);
+  };
+
+  it.skipIf(asRoot)(
+    'names a folder it cannot read and checks the rest of the package',
+    async () => {
+      const pkgDir = path.join(tmpDir, 'pkg');
+      writePackage(pkgDir, {
+        manifest: "export default { components: './components' };\n",
+      });
+      fs.mkdirSync(path.join(pkgDir, 'components'));
+      fs.mkdirSync(path.join(pkgDir, 'cache'));
+      lock(path.join(pkgDir, 'cache'));
+      const result = await validateLocalIntegration(pkgDir);
+      expect(byCode(result.issues, 'unreadable_folder')).toEqual([
+        expect.objectContaining({
+          severity: 'warning',
+          message: expect.stringContaining('Could not read "cache/" (EACCES)'),
+        }),
+      ]);
+      expect(summarizeIssues(result.issues).errors).toBe(0);
+    },
+  );
+
+  it.skipIf(asRoot)(
+    'reports a declared root it cannot read as unreadable_root',
+    async () => {
+      const pkgDir = path.join(tmpDir, 'pkg');
+      writePackage(pkgDir, {
+        manifest:
+          "export default { codemods: './codemods', themes: './themes' };\n",
+      });
+      fs.mkdirSync(path.join(pkgDir, 'codemods'));
+      fs.mkdirSync(path.join(pkgDir, 'themes'));
+      lock(path.join(pkgDir, 'codemods'));
+      lock(path.join(pkgDir, 'themes'));
+      const result = await validateLocalIntegration(pkgDir);
+      expect(
+        byCode(result.issues, 'unreadable_root').map(issue => issue.message),
+      ).toEqual([
+        expect.stringMatching(
+          /^Declared codemods root cannot be read \(EACCES\)/,
+        ),
+        expect.stringMatching(
+          /^Declared themes root cannot be read \(EACCES\)/,
+        ),
+      ]);
+    },
+  );
+
+  it('reports a declared root that is a file as invalid_root', async () => {
+    const pkgDir = path.join(tmpDir, 'pkg');
+    writePackage(pkgDir, {
+      manifest: "export default { codemods: './codemods.mjs' };\n",
+    });
+    fs.writeFileSync(path.join(pkgDir, 'codemods.mjs'), 'export default {};\n');
+    const result = await validateLocalIntegration(pkgDir);
+    expect(byCode(result.issues, 'invalid_root')).toEqual([
+      expect.objectContaining({
+        severity: 'error',
+        message: expect.stringContaining('is a file, not a folder'),
+      }),
+    ]);
   });
 });

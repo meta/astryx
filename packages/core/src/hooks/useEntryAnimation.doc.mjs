@@ -18,12 +18,12 @@ export const docs = {
     {
       name: 'entryStyle',
       type: 'StyleXStyles | null',
-      description: 'A StyleX style object for the entry animation, or null if the element was rendered on initial page load (no animation needed).',
+      description: 'A StyleX style object for the entry animation, or null if the element was rendered on initial page load or hydrated from server HTML (no animation needed).',
     },
   ],
   usage: {
     description:
-      'Returns a StyleX style for animating an element on mount. Only animates when the element is dynamically inserted after the initial page paint; elements rendered on page load are not animated. Uses Astryx motion tokens (duration, easing) for consistent animation timing. Requires "use client"; does not support SSR.',
+      'Returns a StyleX style for animating an element on mount. Only animates when the element is dynamically inserted after the initial page paint; elements rendered on page load are not animated. Uses Astryx motion tokens (duration, easing) for consistent animation timing. Server-rendered elements hydrate without the entry style and never animate; elements mounted after hydration animate.',
     bestPractices: [
       { guidance: true, description: 'Use for conditionally rendered elements like validation messages, toasts, or expanding sections.' },
       { guidance: true, description: 'Spread the returned style into stylex.props() alongside other styles.' },
@@ -39,7 +39,7 @@ export const docs = {
 /** @type {import('@astryxdesign/cli/authoring').HookTranslationDoc} */
 export const docsDense = {
   description:
-    'Returns StyleX style for animating element on mount. Only animates when element dynamically inserted after initial page paint; elements rendered on page load not animated. Uses Astryx motion tokens (duration, easing) for consistent timing. Requires "use client"; does not support SSR.',
+    'Returns StyleX style for animating element on mount. Only animates when element dynamically inserted after initial page paint; elements rendered on page load not animated. Uses Astryx motion tokens (duration, easing) for consistent timing. Server-rendered elements hydrate without entry style, never animate; elements mounted after hydration animate.',
   paramDescriptions: {
     preset: 'animation preset applied on mount.',
   },
@@ -48,7 +48,7 @@ export const docsDense = {
   },
   usage: {
     description:
-      'Returns StyleX style for animating element on mount. Only animates when element dynamically inserted after initial page paint; elements rendered on page load not animated. Uses Astryx motion tokens (duration, easing) for consistent timing. Requires "use client"; does not support SSR.',
+      'Returns StyleX style for animating element on mount. Only animates when element dynamically inserted after initial page paint; elements rendered on page load not animated. Uses Astryx motion tokens (duration, easing) for consistent timing. Server-rendered elements hydrate without entry style, never animate; elements mounted after hydration animate.',
     bestPractices: [
       { guidance: true, description: 'Use for conditionally rendered elements like validation messages, toasts, expanding sections.' },
       { guidance: true, description: 'Spread returned style into stylex.props() alongside other styles.' },

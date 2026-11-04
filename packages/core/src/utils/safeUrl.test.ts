@@ -16,6 +16,8 @@ const accepted = [
   'custom:open/document',
   'data:image/png;base64,iVBORw0KGgo=',
   'data:text/plain,download',
+  'data: text/plain,download',
+  'mailto: a@example.com',
 ];
 const rejected = [
   'javascript:alert(1)',
@@ -28,6 +30,17 @@ const rejected = [
   'java\nscript:alert(1)',
   '\x00javascript:alert(1)',
   'java\x7fscript:alert(1)',
+  // A data URL's media type ignores the spaces before it.
+  'data: text/html,<script>alert(1)</script>',
+  'data:   text/html,<script>alert(1)</script>',
+  'DATA: TEXT/HTML;base64,PHNjcmlwdD4=',
+  '  data: text/html,x',
+  'data:\t text/html,x',
+  'data: \ttext/html,x',
+  'data:\x00 text/html,x',
+  'data: \x7ftext/html,x',
+  'javascript: alert(1)',
+  'vbscript: MsgBox(1)',
 ];
 
 describe('navigation strings', () => {

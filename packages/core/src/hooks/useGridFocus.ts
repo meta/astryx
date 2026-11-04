@@ -298,7 +298,22 @@ export function useGridFocus<T extends HTMLElement = HTMLElement>(
     for (const el of targets) {
       setTabIndex(el, el === tabbable ? 0 : -1);
     }
-  }, [getFocusTargets, setTabIndex]);
+    // A cell that stopped being focusable (an aria-disabled day, for example,
+    // which stays reachable by focus) can still hold the stop from earlier
+    // navigation; it never stays tabbable, so the grid keeps one Tab stop.
+    for (const cell of getCells()) {
+      const el = cellFocusable(cell) ? null : resolveFocusTarget(cell);
+      if (el != null) {
+        setTabIndex(el, -1);
+      }
+    }
+  }, [
+    getFocusTargets,
+    getCells,
+    cellFocusable,
+    resolveFocusTarget,
+    setTabIndex,
+  ]);
 
   // Keep the tab stop valid across renders (cells added/removed, focusability
   // toggled). Runs after every commit but only when roving tabindex is on.

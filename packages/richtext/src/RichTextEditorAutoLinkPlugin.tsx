@@ -9,7 +9,7 @@
  *   `linkUtils`.
  * @output Exports `RichTextEditorAutoLinkPlugin` and its props type, plus the
  *   default `DEFAULT_LINK_MATCHERS`.
- * @position Experimental (lab). Drop into RichTextEditor's `plugins` slot to
+ * @position @astryxdesign/richtext. Drop into RichTextEditor's `plugins` slot to
  *   auto-linkify URLs and emails as they are typed or pasted. Requires
  *   `AutoLinkNode` to be registered (it is, by default).
  *
@@ -19,19 +19,18 @@
  * - /packages/richtext/src/RichTextEditor.test.tsx (tests)
  * - /apps/storybook/stories/RichTextEditor.stories.tsx (story)
  *
- * NOTE: Experimental `@astryxdesign/richtext` component (canary). `lexical` and
- * `@lexical/*` are OPTIONAL peer dependencies — install them to use this.
+ * NOTE: `lexical` and `@lexical/*` are OPTIONAL peer dependencies — install them
+ * to use this.
  *
- * COMPATIBILITY: astryx aims for its RichTextEditor internals to eventually
- * back Meta's EPS `EPSRichTextArea` (nest/libs/eps-lexical). EPS's auto-link is
- * matcher-driven and applies `target="_blank"` + `rel="noopener noreferrer"` to
- * created links (its `NEW_TAB_LINK_ATTRIBUTES`). This plugin uses the same
- * matcher shape (`createLinkMatcherWithRegExp` + `attributes`) and the same
- * new-tab defaults, so EPS can pass its own richer matcher set (e.g. shortform
- * `D123` / `T456` / `S789` intern URLs) through the `matchers` prop without
- * changing the contract. EPS ships a hardened fork of the transform itself
- * (expanded separators, code-block exclusion) — astryx stays on the OSS
- * `AutoLinkPlugin`, and EPS can substitute its own plugin in the same slot.
+ * COMPATIBILITY: the plugin is deliberately a thin pass-through so an
+ * application with its own link conventions can adopt it without forking. It
+ * uses the stock matcher shape (`createLinkMatcherWithRegExp` + `attributes`)
+ * and new-tab defaults, so a consumer supplies a richer matcher set — an
+ * application-specific identifier or ticket syntax, say — through the
+ * `matchers` prop without changing the contract. An application needing a
+ * hardened transform (expanded separators, code-block exclusion) substitutes
+ * its own plugin in the same slot; astryx stays on the upstream
+ * `AutoLinkPlugin`.
  */
 
 import {
@@ -44,7 +43,7 @@ import {URL_MATCHER, EMAIL_MATCHER, sanitizeUrl} from './linkUtils';
 /**
  * Attributes written onto every auto-created link so it opens in a new tab.
  * `rel="noopener noreferrer"` is required whenever `target="_blank"` is set, to
- * prevent reverse-tabnabbing. Matches EPS eps-lexical's `NEW_TAB_LINK_ATTRIBUTES`.
+ * prevent reverse-tabnabbing.
  */
 export const NEW_TAB_LINK_ATTRIBUTES = {
   target: '_blank',

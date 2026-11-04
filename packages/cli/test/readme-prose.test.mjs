@@ -18,9 +18,13 @@ const README = fs
   .readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '../README.md'), 'utf8')
   .replace(/<!-- BEGIN GENERATED: (\S+) -->[\s\S]*?<!-- END GENERATED: \1 -->/g, '');
 
-/** INV2: success is {apiVersion, type, data} + meta?; failure is {apiVersion, error, code} + suggestions?. */
+/**
+ * INV2: success is {apiVersion, type, data} + package?, meta? (INV28 adds
+ * `package` for a result about one artifact); failure is
+ * {apiVersion, error, code} + suggestions?.
+ */
 const SHAPES = {
-  success: {required: ['apiVersion', 'type', 'data'], optional: ['meta']},
+  success: {required: ['apiVersion', 'type', 'data'], optional: ['package', 'meta']},
   failure: {required: ['apiVersion', 'error', 'code'], optional: ['suggestions']},
 };
 

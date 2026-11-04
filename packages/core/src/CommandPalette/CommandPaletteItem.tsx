@@ -27,6 +27,7 @@ import {useCommandPaletteContext} from './CommandPaletteContext';
 import {useDialogContext} from '../Dialog/DialogContext';
 import {themeProps} from '../utils/themeProps';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {usePressFeedback} from '../hooks/usePressFeedback';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 
@@ -43,7 +44,8 @@ const styles = stylex.create({
     fontSize: typeScaleVars['--text-label-size'],
     color: colorVars['--color-text-primary'],
     backgroundColor: 'transparent',
-    border: 'none',
+    borderWidth: 0,
+    borderStyle: 'none',
     cursor: {
       default: 'pointer',
       ':is(:disabled,[aria-disabled="true"])': 'default',
@@ -72,7 +74,11 @@ export interface CommandPaletteItemProps extends Omit<
   ref?: React.Ref<HTMLDivElement>;
   /** Unique value for identification and selection. */
   value: string;
-  /** Called when this item is selected (via click or Enter). */
+  /**
+   * Called after this item is activated by pointer.
+   * Keyboard selection inside CommandPalette reports through the root
+   * `onValueChange` callback.
+   */
   onSelect?: (value: string) => void;
   /**
    * Whether this item is visually highlighted (keyboard focus).
@@ -82,6 +88,7 @@ export interface CommandPaletteItemProps extends Omit<
   isHighlighted?: boolean;
   /**
    * Whether this item is currently selected (picker mode).
+   * When omitted inside CommandPalette, derived from the palette value.
    * @default false
    */
   isSelected?: boolean;
@@ -90,7 +97,7 @@ export interface CommandPaletteItemProps extends Omit<
    * @default false
    */
   isDisabled?: boolean;
-  /** Item content. Fully custom — render icons, descriptions, shortcuts, etc. */
+  /** Non-interactive item content: labels, icons, descriptions, shortcuts, etc. */
   children: ReactNode;
 }
 
@@ -98,9 +105,10 @@ export interface CommandPaletteItemProps extends Omit<
  * A selectable item in the command palette.
  * Accepts arbitrary children for full rendering control.
  *
- * When used inside CommandPalette, registers with context for
- * keyboard navigation and selection. Can also be used
- * standalone with explicit isHighlighted/isSelected props.
+ * When used inside CommandPalette, context supplies identity, highlight,
+ * selection, and close behavior. Standalone use supports explicit visual
+ * state and pointer activation but does not provide a composite listbox
+ * keyboard model.
  *
  * @compositionHint Place inside CommandPaletteList or CommandPaletteGroup.
  *
@@ -122,10 +130,12 @@ export function CommandPaletteItem({
   xstyle,
   className,
   style,
+  id: idProp,
   onClick: onClickProp,
   onMouseEnter: onMouseEnterProp,
   ...props
 }: CommandPaletteItemProps) {
+  const pressable = usePressFeedback();
   const ctx = useCommandPaletteContext();
   const dialogContext = useDialogContext();
   const isInlineDialog = dialogContext?.isInline === true;
@@ -171,29 +181,33 @@ export function CommandPaletteItem({
   }, [ctx, isHighlighted, isInlineDialog]);
 
   const handleClick = useCallback(() => {
-    if (isDisabled) {
-      return;
-    }
     onSelect?.(value);
     if (ctx) {
       ctx.selectItem(value);
       ctx.onClose();
     }
-  }, [isDisabled, value, onSelect, ctx]);
+  }, [value, onSelect, ctx]);
 
   return (
     <div
       ref={useMergedRefs(ref, itemRef)}
       {...props}
-      id={ctx && itemIndex >= 0 ? ctx.getItemId(itemIndex) : undefined}
+      id={ctx && itemIndex >= 0 ? ctx.getItemId(itemIndex) : idProp}
       role="option"
       aria-selected={isSelected}
       aria-disabled={isDisabled || undefined}
       data-value={value}
-      onClick={composeEventHandlers(onClickProp, handleClick)}
+      {...pressable}
+      onClick={
+        isDisabled ? undefined : composeEventHandlers(onClickProp, handleClick)
+      }
       onMouseEnter={onMouseEnterProp}
       {...mergeProps(
-        themeProps('command-palette-item'),
+        themeProps('command-palette-item', {
+          highlighted: isHighlighted ? 'highlighted' : null,
+          selected: isSelected ? 'selected' : null,
+          disabled: isDisabled ? 'disabled' : null,
+        }),
         stylex.props(
           styles.item,
           !isDisabled && interactionOverlayStyles.backgroundColor,

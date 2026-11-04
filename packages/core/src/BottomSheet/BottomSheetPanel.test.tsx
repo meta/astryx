@@ -3,7 +3,8 @@
 /**
  * @file BottomSheetPanel.test.tsx
  * @input Uses vitest, Testing Library, BottomSheetPanel
- * @output Tests the shared sheet surface motion and keyboard scroll contracts
+ * @output Tests the shared sheet surface motion, keyboard scroll, and container
+ *   padding contracts
  * @position Internal presentation tests shared by standalone and switcher modes
  */
 
@@ -157,16 +158,26 @@ describe('BottomSheetPanel', () => {
   });
 
   it('completes immediately when the rendered transition is disabled', () => {
-    vi.mocked(matchMedia).mockReturnValue({
-      matches: true,
-      media: '(prefers-reduced-motion: reduce)',
-      onchange: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    });
+    // The stylesheet decides reduced motion (its transform transition
+    // collapses under the preference); the gesture hook no longer pins an
+    // inline `none` for it, so this models a rendered `transition: none`
+    // directly, as a mid-drag reconcile writes.
+    const nativeGetComputedStyle = window.getComputedStyle;
+    const spy = vi
+      .spyOn(window, 'getComputedStyle')
+      .mockImplementation((element, pseudo) => {
+        const declaration = nativeGetComputedStyle(element, pseudo);
+        if (
+          element instanceof HTMLElement &&
+          element.classList.contains('astryx-bottom-sheet')
+        ) {
+          Object.defineProperty(declaration, 'transition', {
+            value: 'none',
+            configurable: true,
+          });
+        }
+        return declaration;
+      });
     const onMotionComplete = vi.fn();
     render(
       <BottomSheetPanel
@@ -181,6 +192,7 @@ describe('BottomSheetPanel', () => {
     );
 
     expect(onMotionComplete).toHaveBeenCalledWith('entering');
+    spy.mockRestore();
   });
 
   it('derives its transition backstop from the rendered timing', () => {
@@ -342,10 +354,13 @@ describe('BottomSheetPanel', () => {
    *
    * `--ease-standard` is a decelerate curve: on it the sheet was half gone in
    * 59ms of a 410ms transition and 90% gone in 163ms, so the close was over
-   * before it could be seen. The closing state therefore carries its own
-   * accelerating curve, and only the closing state does.
+   * before it could be seen. The closing state therefore reads the
+   * accelerating `--ease-exit` curve (its default is pinned in
+   * theme/tokens.test.ts), and only the closing state does. A touch
+   * presentation keeps its own curve, which the exit tokens do not change
+   * (spec:AST-090 FR12).
    */
-  it('closes on an accelerating curve of its own, not the entrance timing', () => {
+  it('closes on the exit curve, not the entrance timing', () => {
     const declarationsFor = (element: HTMLElement) => {
       const classes = new Set(element.className.split(/\s+/));
       const out: string[] = [];
@@ -366,6 +381,35 @@ describe('BottomSheetPanel', () => {
       }
       return out.join('\n');
     };
+    // The rules inside an `@media` block with the given condition.
+    const mediaDeclarationsFor = (element: HTMLElement, condition: string) => {
+      const classes = new Set(element.className.split(/\s+/));
+      const out: string[] = [];
+      for (const styleSheet of Array.from(document.styleSheets)) {
+        let rules: CSSRuleList;
+        try {
+          rules = styleSheet.cssRules;
+        } catch {
+          continue;
+        }
+        for (const rule of Array.from(rules)) {
+          if (
+            !(rule instanceof CSSMediaRule) ||
+            rule.media.mediaText.replace(/\s/g, '') !== condition
+          ) {
+            continue;
+          }
+          for (const inner of Array.from(rule.cssRules)) {
+            const selector = (inner as CSSStyleRule).selectorText;
+            const owner = selector?.match(/^\.([\w-]+)/)?.[1];
+            if (owner != null && classes.has(owner)) {
+              out.push(inner.cssText);
+            }
+          }
+        }
+      }
+      return out.join('\n');
+    };
 
     const {container: closing} = render(
       <BottomSheetPanel
@@ -377,14 +421,25 @@ describe('BottomSheetPanel', () => {
         Panel content
       </BottomSheetPanel>,
     );
-    const closingRules = declarationsFor(
-      closing.querySelector('.astryx-bottom-sheet') as HTMLElement,
-    );
-    // An accelerating curve: no vertical rise at the start (y1 = 0), so the
-    // travel lands inside the duration instead of ahead of it.
+    const closingSheet = closing.querySelector(
+      '.astryx-bottom-sheet',
+    ) as HTMLElement;
+    const closingRules = declarationsFor(closingSheet);
+    // The theme's exit curve, not a curve restated locally.
     expect(closingRules).toContain(
+      'transition-timing-function: var(--ease-exit)',
+    );
+    expect(closingRules).not.toContain('cubic-bezier(.3,0,.6,.6)');
+    // Under a coarse pointer the close keeps its own curve, so a theme's
+    // `--ease-exit` does not reach a touch presentation.
+    const coarseClosingRules = mediaDeclarationsFor(
+      closingSheet,
+      '(pointer:coarse)',
+    );
+    expect(coarseClosingRules).toContain(
       'transition-timing-function: cubic-bezier(.3,0,.6,.6)',
     );
+    expect(coarseClosingRules).not.toContain('--ease-exit');
 
     const {container: resting} = render(
       <BottomSheetPanel
@@ -402,6 +457,93 @@ describe('BottomSheetPanel', () => {
     expect(restingRules).toContain(
       'transition-timing-function: var(--ease-standard)',
     );
-    expect(restingRules).not.toContain('cubic-bezier(.3,0,.6,.6)');
+    expect(restingRules).not.toContain('--ease-exit');
+  });
+
+  describe('container padding', () => {
+    // StyleX lowers the block edges to their physical properties.
+    const EDGES = [
+      ['inline-start', 'padding-inline-start'],
+      ['inline-end', 'padding-inline-end'],
+      ['block-start', 'padding-top'],
+      ['block-end', 'padding-bottom'],
+    ] as const;
+
+    function renderWithPadding(padding?: 0 | 2) {
+      render(
+        <BottomSheetPanel
+          label="Sheet details"
+          state={{kind: 'open', entering: false}}
+          height="hug"
+          padding={padding}
+          onDismiss={() => {}}
+          onScrimOpacity={() => {}}>
+          <span data-testid="sheet-child">Panel content</span>
+        </BottomSheetPanel>,
+      );
+      // The content box is the child's parent: the observed box inside the
+      // scrolling body, not the body itself.
+      return getComputedStyle(screen.getByTestId('sheet-child').parentElement!);
+    }
+
+    it("pads by Dialog's default chain and publishes the inset it applies", () => {
+      const computed = renderWithPadding();
+      for (const [edge, property] of EDGES) {
+        const published = computed
+          .getPropertyValue(`--container-padding-${edge}`)
+          .replace(/\s+/g, '');
+        expect(published, edge).toContain(
+          `var(--astryx-bottom-sheet-padding-${edge}`,
+        );
+        expect(published, edge).toContain(
+          'var(--astryx-bottom-sheet-padding,var(--spacing-4))',
+        );
+        // Applied padding reads the published value, so bleed children
+        // subtract exactly the inset they sit in.
+        expect(computed.getPropertyValue(property), edge).toBe(
+          `var(--container-padding-${edge})`,
+        );
+      }
+      for (const name of [
+        '--layout-padding-outer-x',
+        '--layout-padding-outer-y',
+        '--layout-padding-inner-x',
+        '--layout-padding-inner-y',
+      ]) {
+        expect(
+          computed.getPropertyValue(name).replace(/\s+/g, ''),
+          name,
+        ).toContain('var(--astryx-bottom-sheet-padding,var(--spacing-4))');
+      }
+    });
+
+    it.each([0, 2] as const)(
+      'applies and publishes an explicit padding step (%s)',
+      padding => {
+        const computed = renderWithPadding(padding);
+        const expected = `var(--spacing-${padding})`;
+        for (const [edge, property] of EDGES) {
+          expect(
+            computed.getPropertyValue(`--container-padding-${edge}`),
+            edge,
+          ).toBe(expected);
+          expect(computed.getPropertyValue(property), edge).toBe(expected);
+        }
+        expect(computed.getPropertyValue('--layout-padding-inner-x')).toBe(
+          expected,
+        );
+      },
+    );
+
+    it('keeps the panel itself unpadded and free of a padding attribute', () => {
+      renderWithPadding(2);
+      const panel = getPanel();
+      expect(panel.hasAttribute('padding')).toBe(false);
+      expect(
+        getComputedStyle(panel).getPropertyValue(
+          '--container-padding-inline-start',
+        ),
+      ).toBe('0px');
+    });
   });
 });

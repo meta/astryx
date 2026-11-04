@@ -1,3 +1,5 @@
+package: @acme/kit
+
 # Acme guide
 
 How zorblax cards fit together.
@@ -11,3 +13,6 @@ Install the kit.
 Cards use the core tokens.
 
 [token-ref: unknown topic "no-such-topic"]
+
+Up: pnpm exec astryx docs guides
+Previous: pnpm exec astryx docs working-with-ai

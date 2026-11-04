@@ -2,7 +2,11 @@
 
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
+import {expect, userEvent, waitFor, within} from 'storybook/test';
 import {DateInput} from '@astryxdesign/core/DateInput';
+import {FormLayout} from '@astryxdesign/core/FormLayout';
+import {Text} from '@astryxdesign/core/Text';
+import {InputGroup, InputGroupText} from '@astryxdesign/core/InputGroup';
 import type {ISODateString} from '@astryxdesign/core/Calendar';
 import {Layout, LayoutContent} from '@astryxdesign/core/Layout';
 import {Theme, defineTheme} from '@astryxdesign/core/theme';
@@ -68,7 +72,7 @@ const meta: Meta<typeof DateInput> = {
     disabledMessage: {
       control: 'text',
       description:
-        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the field focusable via aria-disabled (activation stays blocked). Use this instead of wrapping a disabled DateInput in Tooltip.',
+        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and describes the focusable controls of the field (activation stays blocked). Use this instead of wrapping a disabled DateInput in Tooltip.',
     },
     size: {
       control: 'radio',
@@ -107,11 +111,23 @@ const meta: Meta<typeof DateInput> = {
       description:
         "Display format for the committed value, reusing Timestamp's vocabulary. Defaults to 'date_long' (long-month date).",
     },
+    presentation: {
+      control: 'select',
+      options: [
+        'popover',
+        'bottom-sheet',
+        'native',
+        'adaptive-bottom-sheet',
+        'adaptive-native',
+      ],
+      description:
+        'Which surface draws the picker (spec:AST-043); nativePicker is deprecated',
+    },
     nativePicker: {
       control: 'radio',
       options: ['touch', 'always', 'never'],
       description:
-        'Whether the browser or Astryx draws the picker for each pointer type',
+        "Deprecated — use presentation ('touch' → 'adaptive-native', 'always' → 'native', 'never' → 'adaptive-bottom-sheet'); presentation wins when both are set",
     },
   },
 };
@@ -216,25 +232,25 @@ export const NativePickerModes: Story = {
     return (
       <div style={{display: 'flex', flexDirection: 'column', gap: 16}}>
         <DateInput
-          label="nativePicker='touch' (default)"
+          label="presentation='adaptive-native' (default)"
           description="Native picker on a coarse pointer; Astryx picker otherwise"
           value={value}
           onChange={setValue}
-          nativePicker="touch"
+          presentation="adaptive-native"
         />
         <DateInput
-          label="nativePicker='always'"
+          label="presentation='native'"
           description="Native picker wherever the browser supports it"
           value={value}
           onChange={setValue}
-          nativePicker="always"
+          presentation="native"
         />
         <DateInput
-          label="nativePicker='never'"
+          label="presentation='adaptive-bottom-sheet'"
           description="Astryx picker on every pointer type"
           value={value}
           onChange={setValue}
-          nativePicker="never"
+          presentation="adaptive-bottom-sheet"
         />
       </div>
     );
@@ -304,9 +320,9 @@ export const Disabled: Story = {
 
 // Disabled with an explanation tooltip. Hover or keyboard-focus the field to
 // see why it's disabled — the reason is announced to assistive tech via
-// aria-describedby, and the field stays focusable (activation is still
-// blocked). Use disabledMessage instead of wrapping a disabled DateInput in Tooltip:
-// disabled controls swallow the pointer events a Tooltip wrapper needs.
+// aria-describedby on the field's focusable controls (activation is still
+// blocked). Use disabledMessage instead of wrapping a disabled DateInput in
+// Tooltip, so the reason is tied to the field.
 export const DisabledWithMessage: Story = {
   render: args => {
     const [value, setValue] = useState<ISODateString | undefined>(undefined);
@@ -428,7 +444,39 @@ export const WithSuccessStatus: Story = {
   },
 };
 
+export const OpenCalendarAudit: Story = {
+  tags: ['visual-theme-matrix'],
+  render: args => {
+    const [value, setValue] = useState<ISODateString | undefined>(
+      '2026-01-25' as ISODateString,
+    );
+    return <DateInput {...args} value={value} onChange={setValue} />;
+  },
+  args: {
+    label: 'Appointment date',
+    presentation: 'popover',
+  },
+  play: async ({canvasElement}) => {
+    const input =
+      canvasElement.querySelector<HTMLInputElement>('[role="combobox"]');
+    if (input == null) {
+      throw new Error('DateInput audit fixture is missing its combobox');
+    }
+    input.click();
+    await new Promise<void>(resolve =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    );
+    if (input.getAttribute('aria-expanded') !== 'true') {
+      throw new Error('DateInput audit fixture did not open its calendar');
+    }
+    if (canvasElement.ownerDocument.querySelector('[role="dialog"]') == null) {
+      throw new Error('DateInput audit fixture rendered no Calendar dialog');
+    }
+  },
+};
+
 export const AllVariations: Story = {
+  tags: ['visual-theme-matrix'],
   render: () => {
     const [value1, setValue1] = useState<ISODateString | undefined>(undefined);
     const [value2, setValue2] = useState<ISODateString | undefined>(
@@ -508,6 +556,42 @@ export const Clearable: Story = {
   args: {
     label: 'Event date',
     placeholder: 'Select a date',
+  },
+};
+
+/**
+ * Selects a date, clears the controlled value, and reopens the calendar. The
+ * final frame is the regression endpoint: an empty field with no selected day.
+ */
+export const ClearedCalendarSelection: Story = {
+  tags: ['visual-baseline'],
+  render: args => {
+    const [value, setValue] = useState<ISODateString | undefined>('2026-04-06');
+    return <DateInput {...args} value={value} onChange={setValue} />;
+  },
+  args: {
+    label: 'Event date',
+    hasClear: true,
+    min: '2026-04-01',
+    max: '2026-04-30',
+    presentation: 'popover',
+  },
+  play: async ({canvasElement}) => {
+    const canvas = within(canvasElement);
+
+    await userEvent.click(canvas.getByRole('button', {name: 'Open calendar'}));
+    await userEvent.click(canvas.getByRole('button', {name: /April 15, 2026/}));
+    await userEvent.click(
+      canvas.getByRole('button', {name: 'Clear Event date'}),
+    );
+    await expect(canvas.getByRole('combobox')).toHaveValue('');
+    await userEvent.click(canvas.getByRole('button', {name: 'Open calendar'}));
+
+    await waitFor(() => {
+      expect(
+        canvas.queryAllByRole('gridcell', {selected: true, hidden: true}),
+      ).toHaveLength(0);
+    });
   },
 };
 
@@ -636,4 +720,115 @@ export const ThemedCalendarToggleIcon: Story = {
       </Theme>
     );
   },
+};
+
+const CONTROL_STYLE = {outline: '2px dashed #c800ff', outlineOffset: 3};
+const CONTAINER_STYLE = {
+  backgroundColor: 'rgba(0, 150, 255, 0.16)',
+  padding: 8,
+  borderRadius: 8,
+};
+
+/**
+ * Where each styling part lands (family:input-fields FR10). The dashed outline
+ * is `controlStyle` on the visual control box. The blue tint is
+ * `containerStyle` on the Field box; in a `horizontal-labels` FormLayout and
+ * inside InputGroup no Field box renders, so there it has no effect (and warns
+ * in development).
+ */
+export const StylingParts: Story = {
+  render: () => (
+    <div style={{display: 'grid', gap: 24, maxWidth: 360}}>
+      <div style={{display: 'grid', gap: 12}}>
+        <Text type="label">controlStyle</Text>
+        <div data-parts-row="control-popover" style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">presentation="popover"</Text>
+          <DateInput
+            label="Due date"
+            presentation="popover"
+            controlStyle={CONTROL_STYLE}
+          />
+        </div>
+        <div data-parts-row="control-native" style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">presentation="native"</Text>
+          <DateInput
+            label="Due date"
+            presentation="native"
+            controlStyle={CONTROL_STYLE}
+          />
+        </div>
+        <div
+          data-parts-row="control-bottom-sheet"
+          style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">presentation="bottom-sheet"</Text>
+          <DateInput
+            label="Due date"
+            presentation="bottom-sheet"
+            controlStyle={CONTROL_STYLE}
+          />
+        </div>
+        <div
+          data-parts-row="control-form-layout"
+          style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">horizontal-labels FormLayout</Text>
+          <FormLayout direction="horizontal-labels">
+            <DateInput label="Due date" controlStyle={CONTROL_STYLE} />
+          </FormLayout>
+        </div>
+        <div
+          data-parts-row="control-input-group"
+          style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">InputGroup</Text>
+          <InputGroup label="Due date group">
+            <InputGroupText>At</InputGroupText>
+            <DateInput
+              label="Due date"
+              isLabelHidden
+              controlStyle={CONTROL_STYLE}
+            />
+          </InputGroup>
+        </div>
+      </div>
+      <div style={{display: 'grid', gap: 12}}>
+        <Text type="label">containerStyle and controlStyle</Text>
+        <div
+          data-parts-row="container-popover"
+          style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">presentation="popover"</Text>
+          <DateInput
+            label="Due date"
+            presentation="popover"
+            containerStyle={CONTAINER_STYLE}
+            controlStyle={CONTROL_STYLE}
+          />
+        </div>
+        <div
+          data-parts-row="container-form-layout"
+          style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">horizontal-labels FormLayout</Text>
+          <FormLayout direction="horizontal-labels">
+            <DateInput
+              label="Due date"
+              containerStyle={CONTAINER_STYLE}
+              controlStyle={CONTROL_STYLE}
+            />
+          </FormLayout>
+        </div>
+        <div
+          data-parts-row="container-input-group"
+          style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">InputGroup</Text>
+          <InputGroup label="Due date group">
+            <InputGroupText>At</InputGroupText>
+            <DateInput
+              label="Due date"
+              isLabelHidden
+              containerStyle={CONTAINER_STYLE}
+              controlStyle={CONTROL_STYLE}
+            />
+          </InputGroup>
+        </div>
+      </div>
+    </div>
+  ),
 };

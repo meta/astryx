@@ -41,7 +41,6 @@ import * as stylex from '@stylexjs/stylex';
 import type {ThemeMode} from './types';
 import {colorVars, typographyVars} from './tokens.stylex';
 import {generateThemeCSS, type DefinedTheme} from './defineTheme';
-import {generateDataTokenDefaultsCSS} from './generateThemeRules';
 import {registerTheme} from './themeRegistry';
 import {dataAttr} from '../naming';
 import {ThemeContext} from './useTheme';
@@ -84,11 +83,15 @@ const wrapperStyles = stylex.create({
 // =============================================================================
 
 /**
- * Context to detect whether this Theme is nested inside another.
- * The root provider (no parent context) syncs data-theme to <html>.
- * @internal
+ * True below a Theme; the root Theme (no parent context) syncs data-theme
+ * to <html>. A detached React root that conceptually sits inside the app
+ * (useToast's fallback viewport) provides it as `true` itself, so a Theme
+ * rendered in toast content themes its subtree without claiming <html> as
+ * if it were the app's root Theme.
+ * @internal Not exported from the theme barrel; useToast imports it from
+ * './theme/Theme' directly.
  */
-const ThemeNestingContext = React.createContext(false);
+export const ThemeNestingContext = React.createContext(false);
 ThemeNestingContext.displayName = 'ThemeNestingContext';
 
 // =============================================================================
@@ -97,16 +100,7 @@ ThemeNestingContext.displayName = 'ThemeNestingContext';
 
 /** Track which themes have already been injected */
 const injectedThemes = new Set<string>();
-
-/**
- * How many mounted `Theme`s are relying on the injected data-token defaults.
- *
- * The defaults are one document-wide `:root` block, shared by every theme, so
- * they are injected once and removed only when the last theme that took a
- * reference unmounts — tearing them down with whichever provider happened to
- * inject them would strip the palette from the providers still mounted.
- */
-let dataTokenDefaultsRefCount = 0;
+const THEME_LAYER_ORDER = '@layer reset, astryx-base, astryx-theme;';
 
 /**
  * Hook to inject theme CSS into the document.
@@ -142,27 +136,8 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
     );
 
     const {prose, component} = generateThemeCSS(theme);
-    const base = generateDataTokenDefaultsCSS();
     injectedThemes.add(themeKey);
     const cleanups: (() => void)[] = [() => injectedThemes.delete(themeKey)];
-
-    // Data token defaults go into @layer astryx-base, where StyleX puts the
-    // core token defaults, so a theme's own `--color-data-*` outranks them by
-    // layer. Appended (never prepended) so it cannot register `astryx-base`
-    // ahead of `reset` and invert the layer order.
-    if (base) {
-      if (dataTokenDefaultsRefCount++ === 0) {
-        const baseStyle = document.createElement('style');
-        baseStyle.setAttribute(dataAttr('theme-base'), '');
-        baseStyle.textContent = `@layer astryx-base {\n${base}\n}`;
-        document.head.appendChild(baseStyle);
-      }
-      cleanups.push(() => {
-        if (--dataTokenDefaultsRefCount === 0) {
-          document.querySelector(`style[${dataAttr('theme-base')}]`)?.remove();
-        }
-      });
-    }
 
     // Prose defaults go into @layer reset — lowest priority, scoped to
     // the theme region. Any class-based style (StyleX, .xds-*) wins.
@@ -170,7 +145,7 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
       const proseStyle = document.createElement('style');
       proseStyle.setAttribute(dataAttr('theme-prose'), theme.name);
       proseStyle.setAttribute(dataAttr('id'), id);
-      proseStyle.textContent = `@layer reset {\n${prose}\n}`;
+      proseStyle.textContent = `${THEME_LAYER_ORDER}\n@layer reset {\n${prose}\n}`;
       document.head.appendChild(proseStyle);
     }
 
@@ -180,7 +155,7 @@ function useThemeStyleInjection(theme: DefinedTheme): void {
       const compStyle = document.createElement('style');
       compStyle.setAttribute(dataAttr('theme'), theme.name);
       compStyle.setAttribute(dataAttr('id'), id);
-      compStyle.textContent = `@layer astryx-theme {\n${component}\n}`;
+      compStyle.textContent = `${THEME_LAYER_ORDER}\n@layer astryx-theme {\n${component}\n}`;
       document.head.appendChild(compStyle);
     }
 

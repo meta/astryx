@@ -46,7 +46,7 @@ export const docs = {
     {
       name: 'isLoading',
       type: 'boolean',
-      description: 'Shows a loading spinner and disables interaction.',
+      description: 'Shows a loading spinner and blocks re-activation while staying focusable (aria-busy + aria-disabled, not native disabled).',
       default: 'false',
     },
     {
@@ -141,7 +141,7 @@ export const docsDense = {
     variant: 'visual style variant',
     size: 'size variant',
     elevation: 'resting shadow depth: none|low|med|high; raise for a floating action button (FAB)',
-    isLoading: 'shows loading spinner + disables interaction',
+    isLoading: 'shows loading spinner, blocks re-activation but stays focusable (aria-disabled, not native disabled)',
     isDisabled: 'disables button',
     tooltip: 'tooltip text shown on hover',
     onClick: 'standard click handler',

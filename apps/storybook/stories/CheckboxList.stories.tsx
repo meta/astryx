@@ -4,8 +4,10 @@ import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {CheckboxList, CheckboxListItem} from '@astryxdesign/core/CheckboxList';
 import {List} from '@astryxdesign/core/List';
+import {Badge} from '@astryxdesign/core/Badge';
 import {Card} from '@astryxdesign/core/Card';
 import {Link} from '@astryxdesign/core/Link';
+import CheckboxListSelectAllPattern from '../../../packages/cli/assets/templates/blocks/components/CheckboxList/CheckboxListSelectAllPattern';
 
 const meta: Meta<typeof CheckboxList> = {
   title: 'Core/CheckboxList',
@@ -242,6 +244,14 @@ export const SelectAllWithIndeterminate: Story = {
   },
 };
 
+/**
+ * The select-all block exactly as the CLI ships it, so browser and axe audits
+ * cover the copied template rather than a look-alike.
+ */
+export const SelectAllPatternBlock: Story = {
+  render: () => <CheckboxListSelectAllPattern />,
+};
+
 export const Disabled: Story = {
   render: args => {
     const [value, setValue] = useState<string[]>(['email']);
@@ -352,19 +362,19 @@ export const WithEndContent: Story = {
           label="Free tier"
           value="free"
           description="Basic features included"
-          endContent={<span style={{color: '#0D8626'}}>$0/mo</span>}
+          endContent={<Badge variant="success" label="$0/mo" />}
         />
         <CheckboxListItem
           label="Pro tier"
           value="pro"
           description="Advanced features"
-          endContent={<span style={{color: '#0064E0'}}>$9/mo</span>}
+          endContent={<Badge variant="info" label="$9/mo" />}
         />
         <CheckboxListItem
           label="Enterprise"
           value="enterprise"
           description="Custom solutions"
-          endContent={<span style={{color: '#5B08D8'}}>Custom</span>}
+          endContent={<Badge variant="purple" label="Custom" />}
         />
       </CheckboxList>
     );
@@ -496,6 +506,48 @@ export const InsideCardWithDividers: Story = {
         </Card>
       </div>
     );
+  },
+};
+
+// Long option content in a sized field. String labels and descriptions stay on
+// one line with an ellipsis (the full string still names the checkbox); rich
+// labels and descriptions wrap. `width` sizes the label, list, and status
+// together.
+export const LongContent: Story = {
+  render: args => {
+    const [value, setValue] = useState<string[]>(['comments']);
+    const {value: _value, onChange: _onChange, ...restArgs} = args;
+    return (
+      <CheckboxList {...restArgs} value={value} onChange={setValue}>
+        <CheckboxListItem
+          label="Comments, mentions, and replies across every shared workspace"
+          value="comments"
+          description="Delivered to the primary address listed in your account settings"
+        />
+        <CheckboxListItem
+          label={
+            <span>
+              Security alerts for new sign-ins on phones, tablets, and desktops
+            </span>
+          }
+          value="security"
+          description={
+            <span>
+              Includes a weekly summary of every device that accessed your
+              account
+            </span>
+          }
+        />
+        <CheckboxListItem label="SMS" value="sms" />
+      </CheckboxList>
+    );
+  },
+  args: {
+    label: 'Notification channels for workspace activity and account security',
+    description:
+      'Choose every channel that should receive these notifications. You can change this at any time.',
+    width: 280,
+    hasDividers: true,
   },
 };
 

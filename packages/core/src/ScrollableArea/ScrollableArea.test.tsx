@@ -188,7 +188,7 @@ describe('ScrollableArea', () => {
     );
     const viewport = screen.getByTestId('viewport');
     const content = viewport.firstElementChild as HTMLElement;
-    const inlineViewportClass = viewport.className;
+    expect(viewport).toHaveAttribute('data-axis', 'inline');
     expect(viewport.style.overflowInline).toBe('');
     expect(viewport.style.overflowBlock).toBe('');
     const inlineContentClass = content.className;
@@ -200,7 +200,7 @@ describe('ScrollableArea', () => {
         Timeline
       </ScrollableArea>,
     );
-    expect(viewport.className).not.toBe(inlineViewportClass);
+    expect(viewport).toHaveAttribute('data-axis', 'block');
     expect(viewport.style.overflowInline).toBe('');
     expect(viewport.style.overflowBlock).toBe('');
     expect(content.className).not.toBe(inlineContentClass);
@@ -388,6 +388,11 @@ describe('ScrollableArea', () => {
     expect(
       forcedRules.some(match => viewport.classList.contains(match[1])),
     ).toBe(true);
+  });
+
+  it("keeps the platform's own scroll indicator on touch screens", () => {
+    const source = stylesSource();
+    expect(source).toContain("'@media (pointer: coarse)': 'auto'");
   });
 
   it('guards scroll-state query containment as a progressive enhancement', () => {

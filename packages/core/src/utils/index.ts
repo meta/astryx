@@ -111,3 +111,10 @@ export {rtlStyles} from './rtlStyles';
 export {focusOutlineStyles, focusOutlineProps} from './focusOutline.stylex';
 
 export {isImeKeyEvent} from './ime';
+
+// The touch press model's one composable: the shared hover and pressed overlay
+// styles, which carry the press's strength, its release and its paint. A local
+// pressable spreads the result of the `usePressFeedback` hook on the element
+// that paints and composes one of these on it; the controller, its attributes
+// and its clocks are internals.
+export {interactionOverlayStyles} from './interactionOverlay.stylex';

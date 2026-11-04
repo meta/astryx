@@ -13,9 +13,11 @@ import {describe, expect, expectTypeOf, it} from 'vitest';
 import {
   createMarkdownFrontmatter,
   createMarkdownPlugin,
+  getMarkdownPluginCapabilities,
 } from '@astryxdesign/core/Markdown/plugins';
 import {
   createIncrementalState,
+  decodeMarkdownCharacterReferences,
   parseInline,
   parseInlineAst,
   parseMarkdown,
@@ -30,6 +32,15 @@ import type {
 } from '@astryxdesign/core/Markdown/parser';
 
 describe('@astryxdesign/core/Markdown/parser', () => {
+  it('exports the character reference decoder Markdown renders with (spec:AST-061 DEC-5)', () => {
+    expectTypeOf(decodeMarkdownCharacterReferences).toEqualTypeOf<
+      (text: string) => string
+    >();
+    expect(decodeMarkdownCharacterReferences('&copy; &unknown;')).toBe(
+      '© &unknown;',
+    );
+  });
+
   it('is a generated public package subpath', () => {
     const packageJson = JSON.parse(
       readFileSync(join(process.cwd(), 'packages/core/package.json'), 'utf8'),
@@ -52,6 +63,36 @@ describe('@astryxdesign/core/Markdown/parser', () => {
     for (const entrySource of entrySources) {
       expect(entrySource).not.toMatch(/^\s*['"]use client['"]/m);
     }
+  });
+
+  it('reports plugin capabilities from the server-safe plugin entry, and renders one node only from the client-only renderer entry (spec:AST-064 DEC-6)', () => {
+    const packageJson = JSON.parse(
+      readFileSync(join(process.cwd(), 'packages/core/package.json'), 'utf8'),
+    ) as {
+      exports: Record<string, unknown>;
+    };
+    expect(packageJson.exports['./Markdown/plugin-renderer']).toEqual({
+      source: './src/Markdown/plugin-renderer/index.ts',
+      types: './dist/Markdown/plugin-renderer/index.d.ts',
+      default: './dist/Markdown/plugin-renderer/index.js',
+    });
+    for (const path of [
+      'packages/core/src/Markdown/plugin-renderer/index.ts',
+      'packages/core/src/Markdown/plugin-renderer/MarkdownPluginNodeRenderer.tsx',
+    ]) {
+      expect(readFileSync(join(process.cwd(), path), 'utf8')).toMatch(
+        /^(?:\/\/[^\n]*\n|\s)*['"]use client['"]/,
+      );
+    }
+    const transformOnly = createMarkdownPlugin({
+      name: 'server-capabilities',
+      apiVersion: 1,
+      transform: root => root,
+    });
+    expect(getMarkdownPluginCapabilities(transformOnly)).toEqual({
+      syntax: false,
+      transform: true,
+    });
   });
 
   it('exposes legacy and canonical parser results from a server-only entry point', () => {

@@ -3,6 +3,8 @@
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
 import {DateRangeInput} from '@astryxdesign/core/DateRangeInput';
+import {FormLayout} from '@astryxdesign/core/FormLayout';
+import {Text} from '@astryxdesign/core/Text';
 import type {DateRange} from '@astryxdesign/core/DateRangeInput';
 import type {ISODateString} from '@astryxdesign/core/Calendar';
 import {Theme, defineTheme} from '@astryxdesign/core/theme';
@@ -59,7 +61,7 @@ const meta: Meta<typeof DateRangeInput> = {
     disabledMessage: {
       control: 'text',
       description:
-        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the field focusable via aria-disabled (activation stays blocked). Use this instead of wrapping a disabled DateRangeInput in Tooltip.',
+        'Explains why the input is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and describes the trigger (activation stays blocked). Use this instead of wrapping a disabled DateRangeInput in Tooltip.',
     },
     size: {
       control: 'radio',
@@ -230,9 +232,9 @@ export const Disabled: Story = {
 
 // Disabled with an explanation tooltip. Hover or keyboard-focus the field to
 // see why it's disabled — the reason is announced to assistive tech via
-// aria-describedby, and the field stays focusable (activation is still
-// blocked). Use disabledMessage instead of wrapping a disabled DateRangeInput in Tooltip:
-// disabled controls swallow the pointer events a Tooltip wrapper needs.
+// aria-describedby on the trigger (activation is still blocked). Use
+// disabledMessage instead of wrapping a disabled DateRangeInput in Tooltip, so
+// the reason is tied to the field.
 export const DisabledWithMessage: Story = {
   render: args => {
     const [value, setValue] = useState<DateRange | null>(null);
@@ -454,4 +456,83 @@ export const ThemedIcons: Story = {
       </Theme>
     );
   },
+};
+
+// The StylingParts fields are uncontrolled demos; nothing reads their value.
+const noop = () => {};
+const CONTROL_STYLE = {outline: '2px dashed #c800ff', outlineOffset: 3};
+const CONTAINER_STYLE = {
+  backgroundColor: 'rgba(0, 150, 255, 0.16)',
+  padding: 8,
+  borderRadius: 8,
+};
+
+/**
+ * Where each styling part lands (family:input-fields FR10). The dashed outline
+ * is `controlStyle` on the visual control box. The blue tint is
+ * `containerStyle` on the Field box; in a `horizontal-labels` FormLayout and
+ * inside InputGroup no Field box renders, so there it has no effect (and warns
+ * in development).
+ */
+export const StylingParts: Story = {
+  render: () => (
+    <div style={{display: 'grid', gap: 24, maxWidth: 360}}>
+      <div style={{display: 'grid', gap: 12}}>
+        <Text type="label">controlStyle</Text>
+        <div
+          data-parts-row="control-standalone"
+          style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">Standalone</Text>
+          <DateRangeInput
+            value={null}
+            onChange={noop}
+            label="Stay"
+            controlStyle={CONTROL_STYLE}
+          />
+        </div>
+        <div
+          data-parts-row="control-form-layout"
+          style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">horizontal-labels FormLayout</Text>
+          <FormLayout direction="horizontal-labels">
+            <DateRangeInput
+              value={null}
+              onChange={noop}
+              label="Stay"
+              controlStyle={CONTROL_STYLE}
+            />
+          </FormLayout>
+        </div>
+      </div>
+      <div style={{display: 'grid', gap: 12}}>
+        <Text type="label">containerStyle and controlStyle</Text>
+        <div
+          data-parts-row="container-standalone"
+          style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">Standalone</Text>
+          <DateRangeInput
+            value={null}
+            onChange={noop}
+            label="Stay"
+            containerStyle={CONTAINER_STYLE}
+            controlStyle={CONTROL_STYLE}
+          />
+        </div>
+        <div
+          data-parts-row="container-form-layout"
+          style={{display: 'grid', gap: 4}}>
+          <Text type="supporting">horizontal-labels FormLayout</Text>
+          <FormLayout direction="horizontal-labels">
+            <DateRangeInput
+              value={null}
+              onChange={noop}
+              label="Stay"
+              containerStyle={CONTAINER_STYLE}
+              controlStyle={CONTROL_STYLE}
+            />
+          </FormLayout>
+        </div>
+      </div>
+    </div>
+  ),
 };

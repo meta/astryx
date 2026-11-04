@@ -14,6 +14,11 @@ import {describe, it, expect} from 'vitest';
 import {components} from '../generated/componentRegistry';
 import {docTopics} from '../generated/docsRegistry';
 import {templates} from '../generated/templateRegistry';
+import {blocks} from '../generated/blockRegistry';
+import {
+  DEMO_CONTENT_MODULE,
+  replaceDemoContent,
+} from '../../../../packages/cli/foundation/discovery/template-adapter.mjs';
 
 import type {ComponentEntry} from '../generated/componentRegistry';
 
@@ -283,5 +288,24 @@ describe('MCP branding', () => {
     const source = fs.readFileSync(routePath, 'utf-8');
     expect(source).not.toContain('const ALIASES');
     expect(source).toContain('keywordIndex');
+  });
+});
+
+describe('MCP get() example source (spec:AST-033 FR23)', () => {
+  // get() returns `source` from these registries: a component's showcase and
+  // one more example, and a template's examples or else its page source.
+  it('hands out each block and template after the demo-content replacement', () => {
+    const sources = [
+      ...blocks.map(block => block.source),
+      ...templates.map(template => template.source),
+    ];
+    expect(sources.length).toBeGreaterThan(0);
+    for (const source of sources) {
+      expect(source).not.toContain(DEMO_CONTENT_MODULE);
+      expect(replaceDemoContent(source)).toEqual({
+        source,
+        demoContentReplaced: 0,
+      });
+    }
   });
 });

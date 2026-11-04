@@ -25,12 +25,18 @@ import * as stylex from '@stylexjs/stylex';
 import {
   useTooltip,
   type TooltipFocusTrigger,
+  type TooltipTriggerBehavior,
   type TooltipTouchTrigger,
 } from './useTooltip';
+import {stopPressPinClick} from '../Layer/usePressPin';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {colorVars} from '../theme/tokens.stylex';
 
-export type {TooltipFocusTrigger, TooltipTouchTrigger} from './useTooltip';
+export type {
+  TooltipFocusTrigger,
+  TooltipTriggerBehavior,
+  TooltipTouchTrigger,
+} from './useTooltip';
 
 const styles = stylex.create({
   wrapperContents: {
@@ -95,9 +101,10 @@ export interface TooltipProps {
 
   /**
    * When to trigger on focus:
-   * - `auto`: Only if element is naturally focusable
-   * - `always`: Always attach focus listeners
-   * - `never`: Never attach focus listeners (for composite widgets)
+   * - `auto`: focus on the trigger itself, or within a trigger that is
+   *   focusable when focus arrives
+   * - `always`: focus on the trigger or anything inside it
+   * - `never`: never on focus (for composite widgets)
    *
    * @default 'auto'
    */
@@ -108,14 +115,39 @@ export interface TooltipProps {
    * - `auto`: tap opens the tooltip, unless the trigger performs an action of
    *   its own (a button, a link, a form control) — that tap belongs to the
    *   control, and a hint about a control the user just operated is noise
-   * - `tap`: tap always opens the tooltip. This is what an info icon rendered
-   *   as a button wants: it looks like an action to the DOM, but revealing the
-   *   tooltip is the only thing it does
+   * - `tap`: tap always opens the tooltip, even on a trigger that acts
    * - `none`: touch never opens the tooltip
+   *
+   * It decides only under `triggerBehavior="adaptive"`, the default.
    *
    * @default 'auto'
    */
   touchTrigger?: TooltipTouchTrigger;
+
+  /**
+   * How the trigger opens the tooltip:
+   * - `adaptive` (the default): hover and focus preview it. A tap opens it
+   *   unless the trigger performs an action of its own. While `touchTrigger`
+   *   remains, it decides those taps.
+   * - `hover`: hover and focus preview it; no touch or pen tap opens it.
+   * - `toggle`: on a button trigger, a click, a tap, Enter, or Space pins the
+   *   tooltip open, and the same press closes it. Hover and keyboard focus
+   *   still preview it. A pinned tooltip stays until Escape, a second press,
+   *   a press outside, or focus leaving. The press stops at the trigger. Its
+   *   default action is prevented, and the trigger's own handlers still run.
+   *   No clickable row or card around the trigger activates. With
+   *   `anchorRef`, the anchor's own `onClick` runs, and a plain `onClick`
+   *   element around it receives the press unless that `onClick` stops it.
+   *   Astryx clickable rows, cards, and containers ignore it, except an Item
+   *   row when the anchor is not a native button. The trigger reports
+   *   `aria-expanded` and `aria-controls`, and the tooltip's text is
+   *   announced once when it pins. Use it for a trigger whose information
+   *   lives only in the tooltip, such as an info icon. `touchTrigger` is
+   *   ignored.
+   *
+   * @default 'adaptive'
+   */
+  triggerBehavior?: TooltipTriggerBehavior;
 
   /**
    * Whether the tooltip is enabled.
@@ -200,6 +232,7 @@ export function Tooltip({
   hideDelay = 0,
   focusTrigger = 'auto',
   touchTrigger = 'auto',
+  triggerBehavior = 'adaptive',
   isEnabled = true,
   onOpenChange,
   hasHoverIndication = 'auto',
@@ -229,6 +262,7 @@ export function Tooltip({
     hideDelay,
     focusTrigger,
     touchTrigger,
+    triggerBehavior,
     isEnabled,
     isOpen,
     isDefaultOpen,
@@ -242,28 +276,51 @@ export function Tooltip({
       return;
     }
 
+    const attach = (el: HTMLElement) => {
+      // Use combined ref for position + interaction
+      tooltip.ref(el);
+
+      // Set aria-describedby, merging with existing
+      const existingDescribedBy = el.getAttribute('aria-describedby');
+      el.setAttribute(
+        'aria-describedby',
+        mergeIds(existingDescribedBy, tooltip.describedBy) ?? '',
+      );
+
+      return () => {
+        tooltip.ref(null);
+        if (existingDescribedBy) {
+          el.setAttribute('aria-describedby', existingDescribedBy);
+        } else {
+          el.removeAttribute('aria-describedby');
+        }
+      };
+    };
+
     const el = anchorRef.current;
-    if (!el) {
-      return;
+    if (el) {
+      return attach(el);
     }
 
-    // Use combined ref for position + interaction
-    tooltip.ref(el);
-
-    // Set aria-describedby, merging with existing
-    const existingDescribedBy = el.getAttribute('aria-describedby');
-    el.setAttribute(
-      'aria-describedby',
-      mergeIds(existingDescribedBy, tooltip.describedBy) ?? '',
-    );
-
-    return () => {
-      tooltip.ref(null);
-      if (existingDescribedBy) {
-        el.setAttribute('aria-describedby', existingDescribedBy);
-      } else {
-        el.removeAttribute('aria-describedby');
+    // React attaches an ancestor's ref after its descendants' layout effects,
+    // so a tooltip rendered inside its own anchor (SideNavItem's collapsed
+    // rail tooltip) still sees null here on mount, and this effect's deps
+    // never change to re-run it. Re-check once the commit has attached all
+    // refs; if the anchor is still gone, this tooltip has no anchor, as before.
+    let detach: (() => void) | undefined;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) {
+        return;
       }
+      const el = anchorRef.current;
+      if (el) {
+        detach = attach(el);
+      }
+    });
+    return () => {
+      cancelled = true;
+      detach?.();
     };
   }, [anchorRef, tooltip.ref, tooltip.describedBy]);
 
@@ -319,6 +376,7 @@ export function Tooltip({
           ref={tooltip.ref}
           tabIndex={0}
           aria-describedby={tooltip.describedBy}
+          onClick={stopPressPinClick}
           {...stylex.props(
             styles.wrapperInline,
             showHoverIndication && styles.hoverIndication,
@@ -333,7 +391,10 @@ export function Tooltip({
   // For element children: use display:contents, ref on first child
   return (
     <>
-      <div ref={wrapperRef} {...stylex.props(styles.wrapperContents)}>
+      <div
+        ref={wrapperRef}
+        onClick={stopPressPinClick}
+        {...stylex.props(styles.wrapperContents)}>
         {children}
       </div>
       {tooltip.renderTooltip(content)}

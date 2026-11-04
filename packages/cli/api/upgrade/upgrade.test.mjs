@@ -246,6 +246,200 @@ describe('upgrade() — receipts', () => {
     expect(content).not.toMatch(/Astryx v0\.0\.1 ·/);
   });
 
+  it('leaves the block of a project at the top of a home settings folder, saying why and not pointing at init', async () => {
+    const saved = {
+      HOME: process.env.HOME,
+      USERPROFILE: process.env.USERPROFILE,
+    };
+    process.env.HOME = tmpDir;
+    process.env.USERPROFILE = tmpDir;
+    const warned = [];
+    const warn = vi
+      .spyOn(console, 'error')
+      .mockImplementation((...a) => warned.push(a.join(' ')));
+    logger.setSilent(false);
+    try {
+      const project = path.join(tmpDir, '.dotfiles');
+      fs.mkdirSync(project, {recursive: true});
+      writePkg(project, {'@astryxdesign/core': '0.0.15'});
+      writeInstalledCore(project, '0.0.15');
+      writeAgentBlock(project, 'AGENTS.md', '0.0.1');
+
+      const res = await upgrade({from: '0.0.15', apply: true}, {cwd: project});
+
+      expect(res.data.agentDocs.action).toBe('error');
+      expect(res.data.agentDocs.refreshed).toBe(false);
+      expect(fs.readFileSync(path.join(project, 'AGENTS.md'), 'utf-8')).toMatch(
+        /Astryx v0\.0\.1 ·/,
+      );
+      const text = warned.join('\n');
+      expect(text).toContain(
+        `Agent docs not refreshed: ${fs.realpathSync(project)} is the home folder or a settings folder in it, which every project's agents read. To keep agent docs, move the project into a folder of its own; otherwise update or remove the Astryx block there by hand.`,
+      );
+      expect(text).not.toContain('init --features agents');
+    } finally {
+      logger.setSilent(true);
+      warn.mockRestore();
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
+  it('with no block, in a project at the top of a home settings folder, says why instead of pointing at init', async () => {
+    const saved = {
+      HOME: process.env.HOME,
+      USERPROFILE: process.env.USERPROFILE,
+    };
+    process.env.HOME = tmpDir;
+    process.env.USERPROFILE = tmpDir;
+    const warned = [];
+    const warn = vi
+      .spyOn(console, 'error')
+      .mockImplementation((...a) => warned.push(a.join(' ')));
+    logger.setSilent(false);
+    try {
+      const project = path.join(tmpDir, '.dotfiles');
+      fs.mkdirSync(project, {recursive: true});
+      writePkg(project, {'@astryxdesign/core': '0.0.15'});
+      writeInstalledCore(project, '0.0.15');
+
+      const res = await upgrade({from: '0.0.15'}, {cwd: project});
+
+      expect(res.data.agentDocs.action).toBe('error');
+      const text = warned.join('\n');
+      expect(text).toContain(
+        `Agent docs not installed: ${fs.realpathSync(project)} is the home folder or a settings folder in it, which every project's agents read. To have agent docs, move the project into a folder of its own, or add the Astryx block to its agent file by hand.`,
+      );
+      expect(text).not.toContain('init --features agents');
+    } finally {
+      logger.setSilent(true);
+      warn.mockRestore();
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
+  it('a dry run in a project at the top of a home settings folder reports the refusal, not a refresh to apply', async () => {
+    const saved = {
+      HOME: process.env.HOME,
+      USERPROFILE: process.env.USERPROFILE,
+    };
+    process.env.HOME = tmpDir;
+    process.env.USERPROFILE = tmpDir;
+    const warned = [];
+    const warn = vi
+      .spyOn(console, 'error')
+      .mockImplementation((...a) => warned.push(a.join(' ')));
+    logger.setSilent(false);
+    try {
+      const project = path.join(tmpDir, '.dotfiles');
+      fs.mkdirSync(project, {recursive: true});
+      writePkg(project, {'@astryxdesign/core': '0.0.15'});
+      writeInstalledCore(project, '0.0.15');
+      writeAgentBlock(project, 'AGENTS.md', '0.0.1');
+
+      const res = await upgrade({from: '0.0.15'}, {cwd: project});
+
+      expect(res.data.agentDocs.action).toBe('error');
+      expect(res.data.agentDocs.refreshed).toBe(false);
+      const text = warned.join('\n');
+      expect(text).toContain(
+        `Agent docs not refreshed: ${fs.realpathSync(project)} is the home folder or a settings folder in it`,
+      );
+      expect(text).not.toContain('--apply to refresh');
+      expect(text).not.toContain('init --features agents');
+    } finally {
+      logger.setSilent(true);
+      warn.mockRestore();
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
+  it('refreshes the agent docs of a project in an agent worktree inside a home settings folder', async () => {
+    const saved = {
+      HOME: process.env.HOME,
+      USERPROFILE: process.env.USERPROFILE,
+    };
+    process.env.HOME = tmpDir;
+    process.env.USERPROFILE = tmpDir;
+    try {
+      const project = path.join(tmpDir, '.codex', 'worktrees', 'a1b2c3', 'web');
+      fs.mkdirSync(project, {recursive: true});
+      writePkg(project, {'@astryxdesign/core': '0.0.15'});
+      writeInstalledCore(project, '0.0.15');
+      writeAgentBlock(project, 'AGENTS.md', '0.0.1');
+
+      const res = await upgrade({from: '0.0.15', apply: true}, {cwd: project});
+
+      expect(res.data.agentDocs.action).toBe('refreshed');
+      expect(fs.readFileSync(path.join(project, 'AGENTS.md'), 'utf-8')).toMatch(
+        /Astryx v0\.0\.15 ·/,
+      );
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
+  it('refreshes the managed block in an ignored .claude/CLAUDE.md and keeps the text around it (INV31)', async () => {
+    writePkg(tmpDir);
+    writeInstalledCore(tmpDir, '0.0.15');
+    writeAgentBlock(tmpDir, 'AGENTS.md', '0.0.1');
+    fs.mkdirSync(path.join(tmpDir, '.claude'));
+    writeAgentBlock(tmpDir, '.claude/CLAUDE.md', '0.0.1');
+    const claude = path.join(tmpDir, '.claude', 'CLAUDE.md');
+    fs.writeFileSync(
+      claude,
+      `# Team notes\n\n${fs.readFileSync(claude, 'utf-8')}\nMore notes.\n`,
+    );
+    fs.writeFileSync(path.join(tmpDir, '.gitignore'), '.claude/\n');
+
+    const res = await upgrade({from: '0.0.15', apply: true}, {cwd: tmpDir});
+
+    expect(res.data.agentDocs.action).toBe('refreshed');
+    expect(res.data.agentDocs.files).toEqual([
+      'AGENTS.md',
+      '.claude/CLAUDE.md',
+    ]);
+    expect(res.data.agentDocs).not.toHaveProperty('protectedFiles');
+    const content = fs.readFileSync(claude, 'utf-8');
+    expect(content).toMatch(/^# Team notes\n/u);
+    expect(content).toMatch(/Astryx v0\.0\.15 ·/u);
+    expect(content).toMatch(/More notes\.\n$/u);
+  });
+
+  it('refreshes a committed .claude/CLAUDE.md that imports AGENTS.md and keeps a copy beside an ignored root CLAUDE.md', async () => {
+    writePkg(tmpDir);
+    writeInstalledCore(tmpDir, '0.0.15');
+    writeAgentBlock(tmpDir, 'AGENTS.md', '0.0.1');
+    writeAgentBlock(tmpDir, 'CLAUDE.md', '0.0.1');
+    fs.writeFileSync(path.join(tmpDir, '.gitignore'), '/CLAUDE.md\n');
+    fs.mkdirSync(path.join(tmpDir, '.claude'));
+    const copy = path.join(tmpDir, '.claude', 'CLAUDE.md');
+    fs.writeFileSync(
+      copy,
+      `@../AGENTS.md\n\n${generateCompressedIndex('0.0.1')}\n`,
+    );
+
+    for (let round = 0; round < 2; round++) {
+      await upgrade({from: '0.0.15', apply: true}, {cwd: tmpDir});
+      const content = fs.readFileSync(copy, 'utf-8');
+      expect(content, `round ${round}`).toMatch(/^@\.\.\/AGENTS\.md\n/u);
+      expect(content, `round ${round}`).toMatch(/Astryx v0\.0\.15 ·/u);
+    }
+    const dry = await upgrade({from: '0.0.15'}, {cwd: tmpDir});
+    expect(dry.data.agentDocs.status).toBe('current');
+  });
+
   it('reports would-refresh on a dry run without writing (honors cwd)', async () => {
     writePkg(tmpDir);
     writeInstalledCore(tmpDir, '0.0.15');

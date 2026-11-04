@@ -1,11 +1,12 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import {describe, it, expect} from 'vitest';
-import {expandRadiusScale} from '@astryxdesign/core/theme';
+import {expandRadiusScale, spacingDefaults} from '@astryxdesign/core/theme';
 import {UNIFIED_PRESETS} from '../app/playground/themeEditor/constants';
 import {
   buildSpacingScale,
   getConcentricityWarning,
+  spacingToPx,
 } from '../app/playground/themeEditor/helpers';
 
 const px = (value: string): number => parseInt(value, 10);
@@ -21,7 +22,7 @@ describe('theme editor presets — concentricity', () => {
   for (const [name, preset] of Object.entries(UNIFIED_PRESETS)) {
     it(`${name} preset nests its radius rungs concentrically`, () => {
       const radii = expandRadiusScale({base: preset.radius, multiplier: 1});
-      const gap = px(buildSpacingScale(preset.spacing)['--spacing-1']);
+      const gap = spacingToPx(buildSpacingScale(preset.spacing)['--spacing-1']);
       const inner = px(radii['--radius-inner']);
       const element = px(radii['--radius-element']);
       const container = px(radii['--radius-container']);
@@ -80,5 +81,19 @@ describe('getConcentricityWarning', () => {
   it('returns null when a base is not a usable number', () => {
     expect(getConcentricityWarning('radius', Number.NaN, 8)).toBeNull();
     expect(getConcentricityWarning('spacing', 12, Number.NaN)).toBeNull();
+  });
+});
+
+describe('buildSpacingScale', () => {
+  it('reproduces the default spacing scale from the default base', () => {
+    // Picking the default base must not write a single override, so the ramp
+    // it builds is the defaults themselves, unit included.
+    expect(buildSpacingScale(4)).toEqual(spacingDefaults);
+  });
+
+  it('reads a step in px whether it is written in rem or in px', () => {
+    expect(spacingToPx('0.5rem')).toBe(8);
+    expect(spacingToPx('12px')).toBe(12);
+    expect(spacingToPx('var(--spacing-2)')).toBeNaN();
   });
 });

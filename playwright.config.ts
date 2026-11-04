@@ -25,28 +25,55 @@
  * Cross-browser specs use `.a11y.browser.spec.ts`; Chromium-only contracts keep
  * `.a11y.chromium.spec.ts`. The WebKit project runs only the former.
  *
- * SYNC: When a package gains an accessibility binding, add its spec glob here.
+ * Pull requests run a scoped selection of the same files with
+ * `pnpm test:a11y-contract:pr`; each spec's `@pr-a11y` header lines decide when
+ * (`.github/scripts/a11y-pr-contracts.mjs`). A new spec needs no workflow edit.
+ *
+ * SYNC: The spec globs live in `.github/scripts/lib/a11y-spec-files.mjs`, which
+ *   the default touched-components check also reads to find changed specs. A
+ *   package with an accessibility binding outside them adds its glob there.
  */
 
 import {defineConfig, devices} from '@playwright/test';
+import {
+  A11Y_SPEC_GLOBS,
+  WEBKIT_A11Y_SPEC_GLOBS,
+} from './.github/scripts/lib/a11y-spec-files.mjs';
 
 // GitHub Actions sets CI=true; some runners set it to an empty string. One
 // definition, so `forbidOnly` and the reporter choice cannot disagree.
 const isCI = (process.env.CI ?? '') !== '';
 
+/**
+ * Worker count for the contract run: `A11Y_CONTRACT_WORKERS`, default 1 when
+ * unset or empty. Only a positive integer is accepted: Playwright would treat
+ * a `NaN` count as zero workers and exit green without running a test.
+ */
+function contractWorkers(): number {
+  const raw = process.env.A11Y_CONTRACT_WORKERS;
+  const workers = raw ? Number(raw) : 1;
+  if (!Number.isInteger(workers) || workers < 1) {
+    throw new Error(
+      `A11Y_CONTRACT_WORKERS must be a positive integer, got "${raw}"`,
+    );
+  }
+  return workers;
+}
+
 export default defineConfig({
   testDir: '.',
-  testMatch: [
-    // The contract's own conforming/violating fixture proof.
-    'internal/a11y-spec/src/**/*.chromium.spec.ts',
-    // Component bindings.
-    'packages/*/src/**/*.a11y.chromium.spec.ts',
-    'packages/*/src/**/*.a11y.browser.spec.ts',
-  ],
-  // The contract mounts, focuses, and types into one page at a time; parallel
-  // workers would race over real keyboard focus.
-  workers: 1,
+  testMatch: [...A11Y_SPEC_GLOBS],
+  // The contract mounts, focuses, and types into one page at a time, so a spec
+  // file's tests run in order on one worker (`fullyParallel: false`). Workers
+  // are separate processes, each with its own browser, so they share no
+  // keyboard focus: more than one only spreads whole files across them. One
+  // by default; the release job sets A11Y_CONTRACT_WORKERS.
+  workers: contractWorkers(),
   fullyParallel: false,
+  // Evidence captures photograph a whole state matrix in one test and take
+  // 25-29 s with four workers sharing four cores, against Playwright's 30 s
+  // default; a test that sets its own budget keeps it.
+  timeout: 60_000,
   forbidOnly: isCI,
   reporter: isCI ? [['list'], ['github']] : [['list']],
   // One `use` block, on the project. Motion is NOT held here: neither
@@ -57,7 +84,7 @@ export default defineConfig({
     {name: 'chromium', use: {...devices['Desktop Chrome']}},
     {
       name: 'webkit',
-      testMatch: ['packages/*/src/**/*.a11y.browser.spec.ts'],
+      testMatch: [...WEBKIT_A11Y_SPEC_GLOBS],
       use: {...devices['Desktop Safari']},
     },
   ],

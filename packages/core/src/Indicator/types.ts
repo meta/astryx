@@ -101,10 +101,12 @@ export type IndicatorPosition = 'start' | 'end';
  * excess-property checking, so a LITERAL `role=` is a compile error while
  * `aria-hidden` and `aria-label` are not — and a spread (`{...props}`, the
  * ordinary host idiom) bypasses the check for every member, `role` included.
- * Measured, not assumed. So the components also emit their own `aria-hidden`
- * AFTER `{...rest}` and drop a forwarded `tabIndex`: that ordering, not the
- * type, is what enforces the contract. Nothing else is stripped — a forwarded
- * `aria-label` still reaches the DOM, inert inside an `aria-hidden` subtree.
+ * Measured, not assumed. So the components emit their own `aria-hidden` AFTER
+ * `{...rest}`; that ordering, not the type, prevents a caller from un-hiding the
+ * root. A spread can still forward `tabIndex`, so callers must keep focus props
+ * on the owning control; the supported typed indicator API rejects them. Nothing
+ * else is stripped — a forwarded `aria-label` remains inert inside the hidden
+ * subtree.
  *
  * Interaction state is deliberately *not* a prop. Hover and focus reach an
  * indicator through the CSS ancestor marker ({@link indicatorScope}) applied

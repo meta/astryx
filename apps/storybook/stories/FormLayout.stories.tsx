@@ -2,6 +2,7 @@
 
 import {useState} from 'react';
 import type {Meta, StoryObj} from '@storybook/react';
+import {expect} from 'storybook/test';
 import {FormLayout} from '@astryxdesign/core/FormLayout';
 import {TextInput} from '@astryxdesign/core/TextInput';
 import {Selector} from '@astryxdesign/core/Selector';
@@ -109,6 +110,31 @@ export const HorizontalLabels: Story = {
         />
       </FormLayout>
     );
+  },
+  // Run by .github/scripts/story-play-guard.js at a phone and a 481px viewport.
+  play: async ({canvasElement}) => {
+    const layout = canvasElement.querySelector(
+      '[data-direction="horizontal-labels"]',
+    );
+    if (!layout) {
+      throw new Error('Expected a horizontal-labels FormLayout');
+    }
+    await expect(layout.children).toHaveLength(3);
+    const layoutWidth = layout.getBoundingClientRect().width;
+    const collapsed = window.matchMedia('(max-width: 480px)').matches;
+    // Each Field is display: contents, so its label wrapper and control
+    // wrapper are the layout's items.
+    for (const field of Array.from(layout.children)) {
+      const label = field.children[0].getBoundingClientRect();
+      const control = field.children[1].children[0].getBoundingClientRect();
+      if (collapsed) {
+        // Stacked: every control fills the column, whatever its value's width.
+        await expect(control.width).toBeCloseTo(layoutWidth, 0);
+      } else {
+        // Two columns: the label sits to the left of its control.
+        await expect(label.right).toBeLessThanOrEqual(control.left);
+      }
+    }
   },
 };
 
@@ -314,6 +340,122 @@ export const DefaultOptionalityRequired: Story = {
           isOptional
         />
       </FormLayout>
+    );
+  },
+};
+
+// ─── Audit matrix ─────────────────────────────────────────────────────────────
+
+/**
+ * Stable, always-rendered FormLayout states for exact-head visual, accessibility,
+ * RTL, and responsive verification. One fixture keeps all three arrangements and
+ * both optionality exceptions observable without duplicating one story per prop.
+ */
+export const AuditMatrix: Story = {
+  parameters: {layout: 'padded'},
+  render: () => (
+    <div data-form-layout-audit="matrix">
+      <Text type="label">Vertical</Text>
+      <FormLayout data-audit-layout="vertical">
+        <TextInput label="Name" value="Ada Lovelace" onChange={() => {}} />
+        <TextInput
+          label="Email"
+          value="ada.lovelace@example.com"
+          onChange={() => {}}
+        />
+      </FormLayout>
+
+      <Text type="label">Horizontal</Text>
+      <FormLayout direction="horizontal" data-audit-layout="horizontal">
+        <TextInput label="First name" value="Ada" onChange={() => {}} />
+        <TextInput label="Last name" value="Lovelace" onChange={() => {}} />
+        <TextInput label="Team" value="Analytical Engine" onChange={() => {}} />
+      </FormLayout>
+
+      <Text type="label">Horizontal labels</Text>
+      <FormLayout
+        direction="horizontal-labels"
+        data-audit-layout="horizontal-labels">
+        <TextInput
+          label="Display name"
+          value="Ada Lovelace"
+          onChange={() => {}}
+        />
+        <TextInput
+          label="Contact email"
+          value="ada.lovelace@example.com"
+          onChange={() => {}}
+        />
+      </FormLayout>
+
+      <Text type="label">Required by default</Text>
+      <FormLayout
+        defaultOptionality="required"
+        data-audit-layout="required-default">
+        <TextInput label="Account name" value="Ada" onChange={() => {}} />
+        <TextInput
+          label="Nickname"
+          value="Enchantress of Numbers"
+          onChange={() => {}}
+          isOptional
+        />
+      </FormLayout>
+    </div>
+  ),
+  play: async ({canvasElement}) => {
+    const layouts = Array.from(
+      canvasElement.querySelectorAll<HTMLElement>('[data-audit-layout]'),
+    );
+    await expect(layouts).toHaveLength(4);
+    for (const layout of layouts) {
+      await expect(layout).toHaveAttribute('data-direction');
+      await expect(layout.className).toContain('astryx-form-layout');
+      const box = layout.getBoundingClientRect();
+      await expect(box.width).toBeGreaterThan(0);
+      await expect(box.left).toBeGreaterThanOrEqual(0);
+      await expect(box.right).toBeLessThanOrEqual(
+        document.documentElement.clientWidth + 1,
+      );
+    }
+
+    const horizontal = canvasElement.querySelector<HTMLElement>(
+      '[data-audit-layout="horizontal"]',
+    );
+    if (!horizontal) {
+      throw new Error('Expected the horizontal audit layout');
+    }
+    const [first, second] = Array.from(horizontal.children).map(child =>
+      child.getBoundingClientRect(),
+    );
+    const isRtl = getComputedStyle(horizontal).direction === 'rtl';
+    if (isRtl) {
+      await expect(first.left).toBeGreaterThan(second.left);
+    } else {
+      await expect(first.left).toBeLessThan(second.left);
+    }
+
+    const horizontalLabels = canvasElement.querySelector<HTMLElement>(
+      '[data-audit-layout="horizontal-labels"]',
+    );
+    if (!horizontalLabels) {
+      throw new Error('Expected the horizontal-labels audit layout');
+    }
+    const shouldCollapse = window.matchMedia('(max-width: 480px)').matches;
+    await expect(getComputedStyle(horizontalLabels).display).toBe(
+      shouldCollapse ? 'flex' : 'grid',
+    );
+
+    const requiredDefault = canvasElement.querySelector<HTMLElement>(
+      '[data-audit-layout="required-default"]',
+    );
+    if (!requiredDefault) {
+      throw new Error('Expected the required-default audit layout');
+    }
+    await expect(
+      requiredDefault.querySelectorAll('[aria-required="true"]'),
+    ).toHaveLength(1);
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
+      document.documentElement.clientWidth + 1,
     );
   },
 };

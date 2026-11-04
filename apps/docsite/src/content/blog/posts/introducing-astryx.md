@@ -34,4 +34,4 @@ Astryx is built to end that trade-off. The system controls behavior, accessibili
 
 The way we build software is changing, and Astryx is designed for people and the agents building alongside them. Design systems have historically been designed for human consumption but as more code is written by agents, we have to rethink how design systems are structured and the role that they play. Astryx was built ground-up to be AI-operable, opposed to retrofitting existing design systems to play nicely with agent behaviors. It's an open source design system built for how we build in this new world.
 
-Astryx is in Beta and ready for you to build with today. Check out the [components](/components), the [docs](/docs), and the project on [GitHub](https://github.com/facebook/astryx) to get started.
+Astryx is in Beta and ready for you to build with today. Check out the [components](/components), the [docs](/docs), and the project on [GitHub](https://github.com/meta/astryx) to get started.

@@ -1,8 +1,22 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import type {Meta, StoryObj} from '@storybook/react';
+import * as stylex from '@stylexjs/stylex';
 import {Heading} from '@astryxdesign/core/Heading';
 import {Text} from '@astryxdesign/core/Text';
+import {spacingVars} from '@astryxdesign/core/theme/tokens.stylex';
+
+const auditStyles = stylex.create({
+  column: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: spacingVars['--spacing-4'],
+    boxSizing: 'border-box',
+    inlineSize: '100%',
+    maxInlineSize: 360,
+    minInlineSize: 0,
+  },
+});
 
 const meta: Meta<typeof Heading> = {
   title: 'Core/Heading',
@@ -353,6 +367,74 @@ export const CardGrid: Story = {
           </Text>
         </div>
       ))}
+    </div>
+  ),
+};
+
+// =============================================================================
+// Audit matrix
+// =============================================================================
+
+/**
+ * Bounded browser fixture for the Heading contract: outline levels, display
+ * types and weight, color, logical alignment, both truncation modes, and a
+ * long unbroken token, in one 360px column.
+ */
+export const AuditMatrix: Story = {
+  parameters: {layout: 'padded'},
+  render: () => (
+    <div {...stylex.props(auditStyles.column)}>
+      <Heading data-audit-case="level-2" level={2}>
+        Level two section
+      </Heading>
+      <Heading data-audit-case="outline-equal" level={3} accessibilityLevel={3}>
+        Matching outline level
+      </Heading>
+      <Heading
+        data-audit-case="outline-override"
+        level={2}
+        accessibilityLevel={4}>
+        Drawn as two, outlined as four
+      </Heading>
+      <Heading data-audit-case="display-1" level={2} type="display-1">
+        Display one
+      </Heading>
+      <Heading data-audit-case="display-2" level={2} type="display-2">
+        Display two
+      </Heading>
+      <Heading data-audit-case="display-3" level={2} type="display-3">
+        Display three
+      </Heading>
+      <Heading
+        data-audit-case="display-weight"
+        level={2}
+        type="display-2"
+        weight="bold">
+        Display two, bold
+      </Heading>
+      <Heading data-audit-case="secondary" level={3} color="secondary">
+        Secondary heading
+      </Heading>
+      <Heading data-audit-case="justify-center" level={4} justify="center">
+        Centered heading
+      </Heading>
+      <Heading data-audit-case="justify-end" level={4} justify="end">
+        End-aligned heading
+      </Heading>
+      <Heading data-audit-case="truncate-1" level={3} maxLines={1}>
+        A single-line heading that is far too long for this column
+      </Heading>
+      <Heading
+        data-audit-case="truncate-2"
+        level={3}
+        maxLines={2}
+        hasTruncateTooltip="below">
+        A two-line heading that keeps going well past its second line so the
+        clamp has something to cut
+      </Heading>
+      <Heading data-audit-case="long-token" level={3}>
+        Report_2026_quarterly_revenue_by_region_and_product_line_final
+      </Heading>
     </div>
   ),
 };

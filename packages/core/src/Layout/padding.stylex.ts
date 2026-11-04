@@ -187,37 +187,44 @@ export const containerPaddingBlockEndVarStyles = stylex.create({
 });
 
 /**
- * Layout outer X padding CSS variable styles.
+ * Layout outer X padding CSS variable styles for Layout's `padding` prop.
+ *
+ * These write `--layout-padding-own-outer-x`, which the Layout's regions read
+ * ahead of the inherited `--layout-padding-outer-x` that padding containers
+ * (Card, Section, Dialog) publish. Every Layout, padding container, and
+ * overlay root clears the `own` value, so one Layout's padding never reaches a
+ * nested Layout's regions.
  */
 export const layoutPaddingOuterXVarStyles = stylex.create({
-  0: {'--layout-padding-outer-x': spacingVars['--spacing-0']},
-  0.5: {'--layout-padding-outer-x': spacingVars['--spacing-0-5']},
-  1: {'--layout-padding-outer-x': spacingVars['--spacing-1']},
-  1.5: {'--layout-padding-outer-x': spacingVars['--spacing-1-5']},
-  2: {'--layout-padding-outer-x': spacingVars['--spacing-2']},
-  3: {'--layout-padding-outer-x': spacingVars['--spacing-3']},
-  4: {'--layout-padding-outer-x': spacingVars['--spacing-4']},
-  5: {'--layout-padding-outer-x': spacingVars['--spacing-5']},
-  6: {'--layout-padding-outer-x': spacingVars['--spacing-6']},
-  8: {'--layout-padding-outer-x': spacingVars['--spacing-8']},
-  10: {'--layout-padding-outer-x': spacingVars['--spacing-10']},
+  0: {'--layout-padding-own-outer-x': spacingVars['--spacing-0']},
+  0.5: {'--layout-padding-own-outer-x': spacingVars['--spacing-0-5']},
+  1: {'--layout-padding-own-outer-x': spacingVars['--spacing-1']},
+  1.5: {'--layout-padding-own-outer-x': spacingVars['--spacing-1-5']},
+  2: {'--layout-padding-own-outer-x': spacingVars['--spacing-2']},
+  3: {'--layout-padding-own-outer-x': spacingVars['--spacing-3']},
+  4: {'--layout-padding-own-outer-x': spacingVars['--spacing-4']},
+  5: {'--layout-padding-own-outer-x': spacingVars['--spacing-5']},
+  6: {'--layout-padding-own-outer-x': spacingVars['--spacing-6']},
+  8: {'--layout-padding-own-outer-x': spacingVars['--spacing-8']},
+  10: {'--layout-padding-own-outer-x': spacingVars['--spacing-10']},
 });
 
 /**
- * Layout outer Y padding CSS variable styles.
+ * Layout outer Y padding CSS variable styles; the block-axis counterpart of
+ * layoutPaddingOuterXVarStyles.
  */
 export const layoutPaddingOuterYVarStyles = stylex.create({
-  0: {'--layout-padding-outer-y': spacingVars['--spacing-0']},
-  0.5: {'--layout-padding-outer-y': spacingVars['--spacing-0-5']},
-  1: {'--layout-padding-outer-y': spacingVars['--spacing-1']},
-  1.5: {'--layout-padding-outer-y': spacingVars['--spacing-1-5']},
-  2: {'--layout-padding-outer-y': spacingVars['--spacing-2']},
-  3: {'--layout-padding-outer-y': spacingVars['--spacing-3']},
-  4: {'--layout-padding-outer-y': spacingVars['--spacing-4']},
-  5: {'--layout-padding-outer-y': spacingVars['--spacing-5']},
-  6: {'--layout-padding-outer-y': spacingVars['--spacing-6']},
-  8: {'--layout-padding-outer-y': spacingVars['--spacing-8']},
-  10: {'--layout-padding-outer-y': spacingVars['--spacing-10']},
+  0: {'--layout-padding-own-outer-y': spacingVars['--spacing-0']},
+  0.5: {'--layout-padding-own-outer-y': spacingVars['--spacing-0-5']},
+  1: {'--layout-padding-own-outer-y': spacingVars['--spacing-1']},
+  1.5: {'--layout-padding-own-outer-y': spacingVars['--spacing-1-5']},
+  2: {'--layout-padding-own-outer-y': spacingVars['--spacing-2']},
+  3: {'--layout-padding-own-outer-y': spacingVars['--spacing-3']},
+  4: {'--layout-padding-own-outer-y': spacingVars['--spacing-4']},
+  5: {'--layout-padding-own-outer-y': spacingVars['--spacing-5']},
+  6: {'--layout-padding-own-outer-y': spacingVars['--spacing-6']},
+  8: {'--layout-padding-own-outer-y': spacingVars['--spacing-8']},
+  10: {'--layout-padding-own-outer-y': spacingVars['--spacing-10']},
 });
 
 /**
@@ -519,6 +526,8 @@ export const overlayPaddingReset = stylex.create({
     // Added by descendants — fall through to each reader's own default.
     '--layout-padding-outer-x': 'initial',
     '--layout-padding-outer-y': 'initial',
+    '--layout-padding-own-outer-x': 'initial',
+    '--layout-padding-own-outer-y': 'initial',
     '--layout-padding-inner-x': 'initial',
     '--layout-padding-inner-y': 'initial',
     '--_section-padding-propagated': 'initial',

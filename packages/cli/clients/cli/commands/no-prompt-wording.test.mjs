@@ -50,13 +50,13 @@ async function optionText(command, flag) {
 }
 
 describe('no help text describes a prompt', () => {
-  it('theme add --overwrite states the refusal, and a refused run writes nothing', async () => {
-    const help = await optionText('theme add', '--overwrite');
+  it('theme eject --overwrite states the refusal, and a refused run writes nothing', async () => {
+    const help = await optionText('theme eject', '--overwrite');
     expect(help).not.toMatch(/prompt/i);
     expect(help).toContain('ERR_FILE_EXISTS');
     expect(help).toMatch(/nothing is written/);
 
-    const first = await runCli(['--json', 'theme', 'add', 'matcha'], tmpDir);
+    const first = await runCli(['--json', 'theme', 'eject', 'matcha'], tmpDir);
     expect(first.status).toBe(0);
     const {outputDir, files} = JSON.parse(first.stdout).data;
     expect(files.length).toBeGreaterThan(1);
@@ -64,7 +64,7 @@ describe('no help text describes a prompt', () => {
     fs.writeFileSync(path.join(dir, files[0]), '// edited\n');
     fs.rmSync(path.join(dir, files[1]));
 
-    const refused = await runCli(['--json', 'theme', 'add', 'matcha'], tmpDir);
+    const refused = await runCli(['--json', 'theme', 'eject', 'matcha'], tmpDir);
     expect(refused.status).toBe(1);
     expect(JSON.parse(refused.stdout).code).toBe('ERR_FILE_EXISTS');
     expect(fs.readFileSync(path.join(dir, files[0]), 'utf8')).toBe('// edited\n');

@@ -20,6 +20,7 @@ import {
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Pagination, generatePageRange} from './Pagination';
+import {InternationalizationProvider} from '../i18n';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 
 afterEach(() => {
@@ -117,6 +118,28 @@ describe('Pagination', () => {
       expect(
         screen.getByRole('button', {name: 'Go to next page'}),
       ).toBeInTheDocument();
+    });
+
+    it('does not introduce Stack theme targets around navigation controls', () => {
+      const {rerender} = render(
+        <Pagination page={3} onChange={() => {}} totalPages={5} />,
+      );
+      expect(
+        screen.getByRole('navigation').querySelector('.astryx-stack'),
+      ).toBeNull();
+
+      rerender(
+        <Pagination
+          page={3}
+          onChange={() => {}}
+          totalPages={5}
+          variant="compact"
+          hasFirstLast
+        />,
+      );
+      expect(
+        screen.getByRole('navigation').querySelector('.astryx-stack'),
+      ).toBeNull();
     });
 
     it('gives the prev/next carets a hover tooltip matching their accessible name', () => {
@@ -291,6 +314,225 @@ describe('Pagination', () => {
       );
       expect(screen.getByText('Page 3 of 10')).toBeInTheDocument();
     });
+
+    describe('first/last buttons', () => {
+      function navButtonNames(): string[] {
+        return within(screen.getByRole('navigation'))
+          .getAllByRole('button')
+          .map(button => button.getAttribute('aria-label') ?? '');
+      }
+
+      it('omits first/last when hasFirstLast is unset', () => {
+        render(
+          <Pagination
+            page={5}
+            onChange={() => {}}
+            totalPages={10}
+            variant="compact"
+          />,
+        );
+        expect(navButtonNames()).toEqual([
+          'Go to previous page',
+          'Go to next page',
+        ]);
+      });
+
+      it('omits first/last when hasFirstLast is false', () => {
+        render(
+          <Pagination
+            page={5}
+            onChange={() => {}}
+            totalPages={10}
+            variant="compact"
+            hasFirstLast={false}
+          />,
+        );
+        expect(navButtonNames()).toEqual([
+          'Go to previous page',
+          'Go to next page',
+        ]);
+      });
+
+      it('flanks prev/next with first/last when hasFirstLast is true', () => {
+        render(
+          <Pagination
+            page={5}
+            onChange={() => {}}
+            totalPages={10}
+            variant="compact"
+            hasFirstLast
+          />,
+        );
+        expect(navButtonNames()).toEqual([
+          'Go to first page',
+          'Go to previous page',
+          'Go to next page',
+          'Go to last page',
+        ]);
+        // The readout stays between prev and next.
+        const readout = within(screen.getByRole('navigation')).getByText(
+          'Page 5 of 10',
+        );
+        const prev = screen.getByRole('button', {name: 'Go to previous page'});
+        const next = screen.getByRole('button', {name: 'Go to next page'});
+        expect(
+          prev.compareDocumentPosition(readout) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+        expect(
+          next.compareDocumentPosition(readout) &
+            Node.DOCUMENT_POSITION_PRECEDING,
+        ).toBeTruthy();
+        // Compact never gains an editable box.
+        expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+      });
+
+      it('jumps to the first and last page through onChange and changeAction', async () => {
+        const user = userEvent.setup();
+        const onChange = vi.fn();
+        const changeAction = vi.fn();
+        render(
+          <Pagination
+            page={5}
+            onChange={onChange}
+            changeAction={changeAction}
+            totalItems={95}
+            pageSize={10}
+            variant="compact"
+            hasFirstLast
+          />,
+        );
+        await user.click(
+          screen.getByRole('button', {name: 'Go to first page'}),
+        );
+        expect(onChange).toHaveBeenLastCalledWith(1);
+        expect(changeAction).toHaveBeenLastCalledWith(1);
+        await waitFor(() => {
+          expect(politeRegion()).toHaveTextContent('Page 1 of 10');
+        });
+
+        await user.click(screen.getByRole('button', {name: 'Go to last page'}));
+        // 95 items at 10 per page is 10 pages.
+        expect(onChange).toHaveBeenLastCalledWith(10);
+        expect(changeAction).toHaveBeenLastCalledWith(10);
+        await waitFor(() => {
+          expect(politeRegion()).toHaveTextContent('Page 10 of 10');
+        });
+      });
+
+      it('disables first on the first page and last on the last page', () => {
+        const {rerender} = render(
+          <Pagination
+            page={1}
+            onChange={() => {}}
+            totalPages={10}
+            variant="compact"
+            hasFirstLast
+          />,
+        );
+        expect(
+          screen.getByRole('button', {name: 'Go to first page'}),
+        ).toBeDisabled();
+        expect(
+          screen.getByRole('button', {name: 'Go to last page'}),
+        ).not.toBeDisabled();
+
+        rerender(
+          <Pagination
+            page={10}
+            onChange={() => {}}
+            totalPages={10}
+            variant="compact"
+            hasFirstLast
+          />,
+        );
+        expect(
+          screen.getByRole('button', {name: 'Go to first page'}),
+        ).not.toBeDisabled();
+        expect(
+          screen.getByRole('button', {name: 'Go to last page'}),
+        ).toBeDisabled();
+      });
+
+      it('omits first/last when the total page count is unknown', async () => {
+        const user = userEvent.setup();
+        const onChange = vi.fn();
+        render(
+          <Pagination
+            page={2}
+            onChange={onChange}
+            hasMore
+            variant="compact"
+            hasFirstLast
+          />,
+        );
+        expect(navButtonNames()).toEqual([
+          'Go to previous page',
+          'Go to next page',
+        ]);
+        await user.click(screen.getByRole('button', {name: 'Go to next page'}));
+        expect(onChange).toHaveBeenLastCalledWith(3);
+      });
+
+      it('mirrors the first/last chevrons under RTL like prev/next', () => {
+        render(
+          <InternationalizationProvider locale="en" dir="rtl">
+            <div dir="rtl">
+              <Pagination
+                page={5}
+                onChange={() => {}}
+                totalPages={10}
+                variant="compact"
+                hasFirstLast
+              />
+            </div>
+          </InternationalizationProvider>,
+        );
+        // jsdom applies no CSS transforms, so assert the first/last icons carry
+        // every class the mirrored prev/next icons share (the mirror included).
+        const iconClasses = (name: string) =>
+          new Set(
+            screen
+              .getByRole('button', {name})
+              .querySelector('.astryx-icon')
+              ?.getAttribute('class')
+              ?.split(/\s+/) ?? [],
+          );
+        const prev = iconClasses('Go to previous page');
+        const shared = [...iconClasses('Go to next page')].filter(name =>
+          prev.has(name),
+        );
+        expect(shared.length).toBeGreaterThan(0);
+        for (const name of ['Go to first page', 'Go to last page']) {
+          const classes = iconClasses(name);
+          expect(shared.filter(c => !classes.has(c))).toEqual([]);
+        }
+      });
+    });
+  });
+
+  describe('hasFirstLast on other variants', () => {
+    it.each(['pages', 'count', 'dots', 'none'] as const)(
+      'does not add first/last to the %s variant',
+      variant => {
+        render(
+          <Pagination
+            page={3}
+            onChange={() => {}}
+            totalItems={50}
+            pageSize={10}
+            variant={variant}
+            hasFirstLast
+          />,
+        );
+        expect(
+          screen.queryByRole('button', {name: 'Go to first page'}),
+        ).not.toBeInTheDocument();
+        expect(
+          screen.queryByRole('button', {name: 'Go to last page'}),
+        ).not.toBeInTheDocument();
+      },
+    );
   });
 
   // ---------------------------------------------------------------------------
@@ -521,9 +763,13 @@ describe('Pagination', () => {
         />,
       );
       const dot = screen.getByRole('button', {name: 'Go to page 2'});
-      expect(dot).toBeDisabled();
+      // spec:AST-085 FR1: the active dot keeps its tab stop, exposed as disabled.
+      expect(dot).not.toHaveAttribute('disabled');
+      expect(dot).toHaveAttribute('aria-disabled', 'true');
       dot.focus();
+      expect(dot).toHaveFocus();
       await user.keyboard('{ArrowRight}');
+      await user.keyboard('{Enter} ');
       expect(onChange).not.toHaveBeenCalled();
     });
   });
@@ -719,7 +965,7 @@ describe('Pagination', () => {
         />,
       );
       const box = screen.getByRole('spinbutton', {name: 'Go to page'});
-      expect(box).toBeDisabled();
+      expect(box).toHaveAttribute('aria-disabled', 'true');
       // Disabled input never fires a change.
       await user.type(box, '5{Enter}');
       expect(onChange).not.toHaveBeenCalled();
@@ -753,7 +999,7 @@ describe('Pagination', () => {
       // editable box is inert rather than accepting entries it can't resolve.
       expect(
         screen.getByRole('spinbutton', {name: 'Go to page'}),
-      ).toBeDisabled();
+      ).toHaveAttribute('aria-disabled', 'true');
     });
 
     it('renders the localized "Page" label by default and a custom pageLabel', () => {

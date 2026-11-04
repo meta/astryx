@@ -293,27 +293,64 @@ async function observeTargets(page) {
   });
 }
 
+export async function waitForStoryFinished(page, storyId) {
+  await page.waitForFunction(
+    expectedStoryId => {
+      const preview = globalThis.__STORYBOOK_PREVIEW__;
+      return preview?.selectionStore?.selection?.storyId === expectedStoryId && preview?.currentRender?.phase === 'finished';
+    },
+    storyId,
+    {timeout: 30000},
+  );
+}
+
 /**
  * @param {import('playwright').Page} page
  * @param {{astryxTheme: string, colorMode: string}} globals
+ * @param {string} storyId
  */
-async function applyGlobals(page, globals) {
-  await page.evaluate(async next => {
-    const channel = globalThis.__STORYBOOK_ADDONS_CHANNEL__;
-    if (!channel) throw new Error('Storybook preview channel unavailable');
-    await new Promise((resolve, reject) => {
-      const settle = () => {
-        channel.off('storyRendered', settle);
-        resolve(undefined);
-      };
-      channel.on('storyRendered', settle);
-      channel.emit('updateGlobals', {globals: next});
-      setTimeout(() => {
-        channel.off('storyRendered', settle);
-        reject(new Error('timed out waiting for storyRendered'));
-      }, 15000);
-    });
-  }, globals);
+export async function storyUsesPlayFunction(page, storyId) {
+  return page.evaluate(expectedStoryId => {
+    const preview = globalThis.__STORYBOOK_PREVIEW__;
+    return (
+      preview?.selectionStore?.selection?.storyId === expectedStoryId &&
+      typeof preview?.currentRender?.story?.playFunction === 'function'
+    );
+  }, storyId);
+}
+
+/**
+ * @param {import('playwright').Page} page
+ * @param {{astryxTheme: string, colorMode: string}} globals
+ * @param {string} storyId
+ */
+export async function applyGlobals(page, globals, storyId) {
+  await page.evaluate(
+    async ({next, expectedStoryId}) => {
+      const channel = globalThis.__STORYBOOK_ADDONS_CHANNEL__;
+      if (!channel) throw new Error('Storybook preview channel unavailable');
+      await new Promise((resolve, reject) => {
+        let timer;
+        const cleanup = () => {
+          channel.off('storyFinished', finish);
+          clearTimeout(timer);
+        };
+        const finish = result => {
+          if (result?.storyId !== expectedStoryId) return;
+          cleanup();
+          if (result.status === 'success') resolve(undefined);
+          else reject(new Error('Storybook story failed after updating globals'));
+        };
+        timer = setTimeout(() => {
+          cleanup();
+          reject(new Error('timed out waiting for storyFinished'));
+        }, 15000);
+        channel.on('storyFinished', finish);
+        channel.emit('updateGlobals', {globals: next});
+      });
+    },
+    {next: globals, expectedStoryId: storyId},
+  );
 }
 
 /**
@@ -499,39 +536,61 @@ async function capturePartition({
   const shots = {};
   const observed = {};
   const failures = [];
+  const playStories = new Set();
   let currentStory = null;
+  const loadStory = async (shot, globals) => {
+    const globalsParam = `astryxTheme:${globals.astryxTheme};colorMode:${globals.colorMode}`;
+    await page.goto(
+      `${origin}/iframe.html?id=${encodeURIComponent(shot.storyId)}&viewMode=story&globals=${globalsParam}`,
+      {waitUntil: 'load', timeout: 30000},
+    );
+    await page.waitForSelector('#storybook-root > *', {timeout: 30000});
+    await waitForStoryFinished(page, shot.storyId);
+  };
 
   try {
     for (const shot of plan) {
       try {
-        const {initial, requested: globals, needsUpdate} = storyLoadGlobals(
+        const {initial, requested: globals} = storyLoadGlobals(
           shot,
           fastGlobals,
           bootstrapGlobals,
         );
-        const needsLoad = !fastGlobals || currentStory !== shot.storyId;
+        const knownPlayStory = playStories.has(shot.storyId);
+        const needsLoad =
+          !fastGlobals || currentStory !== shot.storyId || knownPlayStory;
         if (needsLoad) {
-          const globalsParam = `astryxTheme:${initial.astryxTheme};colorMode:${initial.colorMode}`;
-          await page.goto(
-            `${origin}/iframe.html?id=${encodeURIComponent(shot.storyId)}&viewMode=story&globals=${globalsParam}`,
-            {waitUntil: 'load', timeout: 30000},
-          );
-          await page.waitForSelector('#storybook-root > *', {timeout: 30000});
+          const loadGlobals = knownPlayStory ? globals : initial;
+          await loadStory(shot, loadGlobals);
+          const usesPlay =
+            knownPlayStory ||
+            (await storyUsesPlayFunction(page, shot.storyId));
+          if (usesPlay) playStories.add(shot.storyId);
           currentStory = shot.storyId;
-          if (needsUpdate) {
-            // Let mount-time state settle in one canonical environment before a
-            // fast global update. Otherwise a default-open layer remembers the
-            // first theme in the caller's plan and every later shot inherits it.
-            await page.addStyleTag({content: FREEZE_CSS});
-            await settle(page, settleMs);
-            await verifyApplied(page, {
-              theme: initial.astryxTheme,
-              mode: initial.colorMode,
-            });
-            await applyGlobals(page, globals);
+          if (
+            loadGlobals.astryxTheme !== globals.astryxTheme ||
+            loadGlobals.colorMode !== globals.colorMode
+          ) {
+            if (usesPlay) {
+              // A globals rerender does not replay Storybook interactions. Load
+              // the final environment directly so play state cannot leak from
+              // the bootstrap theme or disappear during the rerender.
+              await loadStory(shot, globals);
+            } else {
+              // Let mount-time state settle in one canonical environment before a
+              // fast global update. Otherwise a default-open layer remembers the
+              // first theme in the caller's plan and every later shot inherits it.
+              await page.addStyleTag({content: FREEZE_CSS});
+              await settle(page, settleMs);
+              await verifyApplied(page, {
+                theme: loadGlobals.astryxTheme,
+                mode: loadGlobals.colorMode,
+              });
+              await applyGlobals(page, globals, shot.storyId);
+            }
           }
         } else {
-          await applyGlobals(page, globals);
+          await applyGlobals(page, globals, shot.storyId);
         }
         await page.addStyleTag({content: FREEZE_CSS});
         await settle(page, settleMs);

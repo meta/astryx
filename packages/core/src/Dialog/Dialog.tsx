@@ -4,7 +4,8 @@
 
 /**
  * @file Dialog.tsx
- * @input Uses React, DialogHTMLAttributes, ReactNode, container (Layout), DialogContext
+ * @input Uses React, DialogHTMLAttributes, ReactNode, container (Layout), DialogContext, layerTextReset,
+ *   layerStructureReset, modalOutlet, interactionModality, chainEventHandlers
  * @output Exports Dialog component, DialogProps, DialogVariant, DialogPurpose types
  * @position Core implementation; consumed by index.ts, tested by Dialog.test.tsx
  *
@@ -14,6 +15,14 @@
  * Fullscreen dialogs add safe-area protection to the default padding fallback
  * while preserving explicit prop/theme padding overrides, and fade in without
  * the centered-dialog translate/scale motion.
+ *
+ * Under reduced motion the entrance never travels or scales
+ * (docs/design/reduced-motion.md): on a touch screen the dialog fades in
+ * where it lands, in 200 ms or less; with a mouse it appears at once.
+ *
+ * Initial focus and the focus returned on close follow the last input
+ * (docs/architecture/interaction-modality.md INV1): the shared focus indicator
+ * is hidden after a pointer press and shown after a key press.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Dialog/Dialog.doc.mjs (props table, features, implementation notes)
@@ -27,15 +36,24 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   type ReactNode,
 } from 'react';
+import {useIsHydrating} from '../hooks/useIsHydrating';
+import {useSettledOpen} from '../hooks/useSettledOpen';
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
 import {useScrollLock} from '../hooks/useScrollLock';
+import {layerTextReset} from '../Layer/layerTextReset.stylex';
+import {layerStructureReset} from '../Layer/layerStructureReset.stylex';
+import {LayerContentBoundary} from '../Layer/layerScopedContext';
+import {layerClickBoundary} from '../Layer/layerClickBoundary';
 import {LayerDepthProvider} from '../Layer/LayerDepthContext';
 import {useLayerDismissal} from '../Layer/useLayerDismissal';
+import {useBackdropPress} from '../Layer/useBackdropPress';
+import {useModalOutlet} from '../Layer/modalOutlet';
 import {
   colorVars,
   radiusVars,
@@ -55,14 +73,20 @@ import {
   overlayPaddingReset,
 } from '../Layout/padding.stylex';
 import type {SpacingStep} from '../utils/types';
-import {mergeProps} from '../utils';
+import {mergeProps} from '../utils/mergeProps';
+import {chainEventHandlers} from '../utils/chainEventHandlers';
 import {devWarn} from '../utils/devWarning';
 import {DialogContext} from './DialogContext';
 import {themeProps} from '../utils/themeProps';
 import type {DialogVariantMap} from './index';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
+import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {focusForLastInput, isFocusLost} from '../utils/focusReturn';
+import {ModalAnnounceProvider} from '../hooks/ModalAnnounceProvider';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+
+type PointerHandler = (event: React.PointerEvent<HTMLDialogElement>) => void;
 /**
  * Calculate a directional translate offset for dialog entry animation.
  * Returns a normalized vector from the trigger element toward the viewport
@@ -73,8 +97,11 @@ function getDialogDirection(
   distance = 16,
 ): {x: number; y: number} {
   const rect = triggerEl.getBoundingClientRect();
-  const dx = rect.left + rect.width / 2 - window.innerWidth / 2;
-  const dy = rect.top + rect.height / 2 - window.innerHeight / 2;
+  // The trigger's own window: its rect is measured in that window's viewport,
+  // which is not the page's when the dialog renders into a second document.
+  const view = triggerEl.ownerDocument.defaultView ?? window;
+  const dx = rect.left + rect.width / 2 - view.innerWidth / 2;
+  const dy = rect.top + rect.height / 2 - view.innerHeight / 2;
   const dist = Math.sqrt(dx * dx + dy * dy) || 1;
   return {
     x: Math.round((dx / dist) * distance),
@@ -162,7 +189,8 @@ const styles = stylex.create({
     position: 'fixed',
     margin: 'auto',
     padding: 0,
-    border: 'none',
+    borderWidth: 0,
+    borderStyle: 'none',
     backgroundColor: colorVars['--color-background-surface'],
     '--_dialog-radius': radiusVars['--radius-container'],
     borderRadius: 'var(--_dialog-radius)',
@@ -172,8 +200,19 @@ const styles = stylex.create({
     height: 'fit-content',
     overscrollBehavior: 'contain',
     opacity: 0,
-    animationDuration: durationVars['--duration-medium-max'],
-    animationTimingFunction: easeVars['--ease-standard'],
+    // Under reduced motion on a touch screen the entrance is the shared
+    // reduced-motion cross-fade, 200 ms on easeInOut whatever the theme's
+    // duration (design:reduced-motion DR2, DR4). Moves to
+    // reducedMotionFadeConsts once that is on main.
+    animationDuration: {
+      default: durationVars['--duration-medium-max'],
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)': '200ms',
+    },
+    animationTimingFunction: {
+      default: easeVars['--ease-standard'],
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        'cubic-bezier(0.42, 0, 0.58, 1)',
+    },
     animationFillMode: 'backwards' as const,
   },
   // Applied via isOpen prop — avoids :where([open]) attribute selectors
@@ -182,13 +221,20 @@ const styles = stylex.create({
   open: {
     display: 'flex',
     opacity: 1,
-    // Disable the entry keyframe animation under
-    // `prefers-reduced-motion: reduce` so the dialog appears instantly
-    // instead of translating/scaling in (same pattern as layerAnimations).
+    // Under `prefers-reduced-motion: reduce` the dialog never travels or
+    // scales in (design:reduced-motion DR1): on a touch screen it fades in
+    // where it lands (DR2), and with a mouse it appears at once (DR3).
     animationName: {
       default: enterDirectional,
-      '@media (prefers-reduced-motion: reduce)': 'none',
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        enterFullscreen,
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        'none',
     },
+  },
+  // A dialog present on page load opens where it rests (spec:AST-013 FR13).
+  openSettled: {
+    animationName: 'none',
   },
   // Backdrop using ::backdrop pseudo-element
   backdrop: {
@@ -209,7 +255,10 @@ const styles = stylex.create({
   fullscreenOpen: {
     animationName: {
       default: enterFullscreen,
-      '@media (prefers-reduced-motion: reduce)': 'none',
+      '@media (prefers-reduced-motion: reduce) and (pointer: coarse)':
+        enterFullscreen,
+      '@media (prefers-reduced-motion: reduce) and (not (pointer: coarse))':
+        'none',
     },
   },
   fullscreenSafeArea: {
@@ -235,7 +284,8 @@ const styles = stylex.create({
   // Inline wrapper mirrors the dialog's visual styles without <dialog> behavior
   inlineWrapper: {
     padding: 0,
-    border: 'none',
+    borderWidth: 0,
+    borderStyle: 'none',
     backgroundColor: colorVars['--color-background-surface'],
     '--_dialog-radius': radiusVars['--radius-container'],
     borderRadius: 'var(--_dialog-radius)',
@@ -423,7 +473,7 @@ export interface DialogProps extends BaseProps<HTMLDialogElement> {
  * ```
  */
 export function Dialog({
-  isOpen,
+  isOpen: isOpenProp,
   isInline = false,
   onOpenChange,
   width = 400,
@@ -439,6 +489,17 @@ export function Dialog({
   ref,
   ...props
 }: DialogProps) {
+  // A modal dialog open on the server renders closed until hydration, and
+  // opens in the render after it, the first one that can call showModal(): a
+  // <dialog> painted open with aria-modal before it is modal claims a state it
+  // does not have, over a live page (FR8). An inline dialog is not modal and
+  // renders as it is.
+  const isHydrating = useIsHydrating();
+  const isOpen = isOpenProp && (isInline || !isHydrating);
+  // A dialog open on the server was present on page load, so it opens settled,
+  // with no entry motion; its later opens animate as usual (spec:AST-013 FR13).
+  const [settledOpen] = useSettledOpen(isOpenProp && !isInline, isOpen, false);
+  const opensSettled = settledOpen && isOpen;
   // When no explicit padding prop, use theme default (--astryx-dialog-padding)
   const useThemeDefault = padding == null;
   const effectivePadding = padding ?? 4;
@@ -489,11 +550,39 @@ export function Dialog({
     [titleId, hasConsumerName],
   );
 
-  const mergedDialogRef = useMergedRefs(ref, attachDialog);
+  // Input in a second document (a same-origin iframe, a Document
+  // Picture-in-Picture window) never reaches the page's listeners, so the
+  // dialog's own document keeps its own last input for the focus return while
+  // this Dialog is mounted, from before it opens until it unmounts.
+  const {ref: modalityRef} = useInteractionModalityTracking();
 
-  // Capture the element that was focused when the dialog opened,
-  // for directional animation origin and focus restoration on close.
+  const mergedDialogRef = useMergedRefs(ref, attachDialog, modalityRef);
+
+  // Capture the element that was focused when the dialog opened, for
+  // directional animation origin and focus restoration on close.
   const triggerElementRef = useRef<HTMLElement | null>(null);
+
+  // This runs in a layout effect so the capture lands before any descendant's
+  // passive mount effect: all layout effects run before any passive effect,
+  // while a child's passive effect runs before this parent's passive effect.
+  // Content that mounts in the open commit — e.g. a DialogHeader focusing its
+  // own title on mount — would otherwise move document.activeElement inside
+  // the dialog before the capture ran, and closing would then restore focus
+  // to a detached node, stranding the user's focus on <body>.
+  useLayoutEffect(() => {
+    if (isInline || !isOpen) {
+      return;
+    }
+    // The dialog's own document while it holds focus: an app can render a
+    // dialog into a second document (a same-origin iframe, a Document
+    // Picture-in-Picture window) through a portal, and a control there that
+    // opens it is focused in that document, which the page's document reports
+    // only as the iframe element, or not at all. A control in the page that
+    // opens such a dialog leaves focus in the page.
+    const dialogDocument = dialogRef.current?.ownerDocument ?? document;
+    const doc = dialogDocument.hasFocus() ? dialogDocument : document;
+    triggerElementRef.current = doc.activeElement as HTMLElement | null;
+  }, [isOpen, isInline]);
 
   // Derive dismissal behavior from purpose
   const allowEscape = purpose !== 'required';
@@ -510,13 +599,11 @@ export function Dialog({
     }
 
     if (isOpen) {
-      // Capture the currently focused element as the trigger — used for
-      // directional animation origin and focus restoration on close.
-      triggerElementRef.current = document.activeElement as HTMLElement | null;
-
-      // Set directional CSS custom properties before opening
+      // Set directional CSS custom properties before opening. The trigger was
+      // captured by the layout effect above, before any descendant effect
+      // could move focus.
       const trigger = triggerElementRef.current;
-      if (trigger && trigger !== document.body) {
+      if (trigger && trigger !== trigger.ownerDocument.body) {
         const dir = getDialogDirection(trigger);
         dialog.style.setProperty('--dialog-dir-x', `${dir.x}px`);
         dialog.style.setProperty('--dialog-dir-y', `${dir.y}px`);
@@ -533,18 +620,62 @@ export function Dialog({
         const autofocusTarget =
           dialog.querySelector<HTMLElement>('[data-autofocus]');
         if (autofocusTarget) {
-          autofocusTarget.focus();
+          focusForLastInput(autofocusTarget);
         }
       }
     } else {
       if (dialog.open) {
         dialog.close();
       }
-      // Return focus to the element that opened the dialog
-      triggerElementRef.current?.focus();
+      // Return focus to the element that opened the dialog, with the ring
+      // the last input in that element's own document calls for.
+      const trigger = triggerElementRef.current;
+      if (trigger) {
+        focusForLastInput(trigger);
+      }
       triggerElementRef.current = null;
     }
   }, [isOpen, isInline]);
+
+  // A dialog that unmounts while open (rendered only while open, or removed
+  // with the rest of a view) never runs the close branch above, and removing a
+  // <dialog> does not run the browser's own focus return. Focus left inside
+  // it, or dropped to the body by the removal, goes back to the opener.
+  useEffect(() => {
+    if (isInline) {
+      return;
+    }
+    const dialog = dialogRef.current;
+    // Read now: a removed iframe's document has no window, so its frame
+    // element can no longer be found once the dialog is gone.
+    const host = dialog?.ownerDocument.defaultView?.frameElement ?? null;
+    return () => {
+      const trigger = triggerElementRef.current;
+      if (dialog == null || trigger == null) {
+        return;
+      }
+      // Checked once the commit has finished: StrictMode's simulated unmount
+      // leaves the dialog in the document, and only a real removal returns
+      // focus.
+      queueMicrotask(() => {
+        if (dialog.isConnected || !trigger.isConnected) {
+          return;
+        }
+        // isFocusLost reads the dialog's own document. For a dialog in an
+        // iframe, the document that hosts the frame must also have lost focus
+        // or keep it on that frame, wherever the opener is: a control the
+        // user pressed outside the frame to remove the dialog, or the frame
+        // itself, keeps its focus.
+        if (isFocusLost(dialog) && (host == null || isFocusLost(host))) {
+          focusForLastInput(trigger);
+        }
+      });
+    };
+  }, [isInline]);
+
+  // Host app-global surfaces (toasts) inside this modal while it is open, so
+  // they stay visible and operable above it.
+  useModalOutlet(dialogRef, isOpen && !isInline);
 
   // Lock body scroll when dialog is open (iOS Safari workaround)
   // Skip for inline rendering — no modal overlay to compensate for.
@@ -567,6 +698,9 @@ export function Dialog({
     onDismiss: () => {
       onOpenChange(false);
     },
+    // The dialog's document is this layer's: rendered into an iframe or a
+    // Picture-in-Picture window, it ranks with the layers opened inside it.
+    getContainer: () => dialogRef.current,
   });
 
   // Dev-time guardrail: an open modal should always have an accessible name.
@@ -592,27 +726,32 @@ export function Dialog({
     }
   }, [isOpen, isInline, hasConsumerName, titleId]);
 
-  // Handle backdrop click — when the user clicks the ::backdrop pseudo-element,
-  // the event target is the <dialog> element itself; clicks on child content
-  // always target the child. This avoids false positives from native browser
+  // A press on the ::backdrop targets the <dialog> itself, so native browser
   // popups (date pickers, selects, color pickers) that render outside the
-  // dialog's bounding rect.
-  const handleClick = (event: React.MouseEvent<HTMLDialogElement>) => {
-    if (event.target === event.currentTarget && allowBackdropClick) {
-      onOpenChange(false);
-    }
-  };
+  // dialog's rect never count. The press must start and end there.
+  const handleBackdropPress = useCallback(() => {
+    onOpenChange(false);
+  }, [onOpenChange]);
+  const backdropPress = useBackdropPress(
+    handleBackdropPress,
+    allowBackdropClick,
+  );
 
   // The native `cancel` event is the browser's own close-watcher firing: an
   // Android back gesture, or a close request the stack never saw a press for.
   // Escape presses the stack owns never arrive here — it preventDefault()s
   // those, which suppresses the close watcher.
   //
-  // Always preventDefault so the browser cannot close a controlled <dialog>
-  // behind React's back, then answer the request with the stack's own rules:
-  // only the top-most layer dismisses, a `required` dialog swallows it, and
-  // nothing dismisses while an IME composition is in progress.
+  // A `cancel` that bubbles up from inside is not a close request for this
+  // dialog: a file input fires one when its picker is dismissed. It is left
+  // alone. Otherwise always preventDefault so the browser cannot close a
+  // controlled <dialog> behind React's back, then answer the request with the
+  // stack's own rules: only the top-most layer dismisses, a `required` dialog
+  // swallows it, and nothing dismisses while an IME composition is in progress.
   const handleCancel = (event: React.SyntheticEvent<HTMLDialogElement>) => {
+    if (event.target !== event.currentTarget) {
+      return;
+    }
     event.preventDefault();
     if (!shouldDismissOnCloseRequest()) {
       return;
@@ -658,9 +797,19 @@ export function Dialog({
     </div>
   );
 
-  // Filter out native open to prevent InvalidStateError when accidentally passed
+  // Filter out native open to prevent InvalidStateError when accidentally passed.
+  // Keep the consumer click handler separate so the modal path can compose it
+  // with Dialog-owned behavior without changing the inline preview path.
   const hasPosition = position != null && !isFullscreen;
-  const {open: _open, ...safeProps} = props as Record<string, unknown>;
+  const {onClick: onClickProp, ...propsWithoutClick} = props;
+  const {open: _open, ...safeProps} = propsWithoutClick as Record<
+    string,
+    unknown
+  >;
+  const inlineSafeProps: Record<string, unknown> = {
+    ...safeProps,
+    onClick: onClickProp,
+  };
 
   // --- Inline rendering path (for documentation previews) ---
   if (isInline) {
@@ -670,10 +819,12 @@ export function Dialog({
 
     return (
       <div
-        {...safeProps}
+        {...inlineSafeProps}
         {...mergeProps(
           themeProps('dialog', {variant}),
           stylex.props(
+            layerTextReset.reset,
+            layerStructureReset.reset,
             styles.inlineWrapper,
             overlayPaddingReset.reset,
             standardSizing &&
@@ -692,7 +843,9 @@ export function Dialog({
           (props as Record<string, unknown>)['data-testid'] as
             string | undefined
         }>
-        <LayerDepthProvider>{innerContent}</LayerDepthProvider>
+        <LayerDepthProvider>
+          <LayerContentBoundary>{innerContent}</LayerContentBoundary>
+        </LayerDepthProvider>
       </div>
     );
   }
@@ -706,6 +859,8 @@ export function Dialog({
       {...mergeProps(
         themeProps('dialog', {variant}),
         focusOutlineProps.focusVisible(
+          layerTextReset.reset,
+          layerStructureReset.reset,
           styles.dialog,
           overlayPaddingReset.reset,
           isOpen && styles.open,
@@ -728,19 +883,41 @@ export function Dialog({
             })(),
           isFullscreen && styles.fullscreen,
           isFullscreen && isOpen && styles.fullscreenOpen,
+          opensSettled && styles.openSettled,
           xstyle,
         ),
         className,
         style,
       )}
-      onClick={handleClick}
+      // Presses inside the dialog do not reach handlers around where it is
+      // written.
+      {...layerClickBoundary({
+        ...safeProps,
+        onClick: chainEventHandlers(backdropPress.onClick, onClickProp),
+      })}
+      onPointerDownCapture={chainEventHandlers(
+        backdropPress.onPointerDownCapture,
+        safeProps.onPointerDownCapture as PointerHandler | undefined,
+      )}
+      onPointerUpCapture={chainEventHandlers(
+        backdropPress.onPointerUpCapture,
+        safeProps.onPointerUpCapture as PointerHandler | undefined,
+      )}
+      onPointerCancelCapture={chainEventHandlers(
+        backdropPress.onPointerCancelCapture,
+        safeProps.onPointerCancelCapture as PointerHandler | undefined,
+      )}
       onCancel={handleCancel}
-      aria-modal="true"
+      aria-modal={isHydrating ? undefined : 'true'}
       // The default aria-labelledby (from a DialogHeader title) is set
       // imperatively in `attachDialog`; a consumer-provided aria-labelledby
       // flows through {...safeProps} above and wins.
       {...(purpose === 'required' ? {role: 'alertdialog'} : undefined)}>
-      <LayerDepthProvider>{innerContent}</LayerDepthProvider>
+      <ModalAnnounceProvider dialogRef={dialogRef} isOpen={isOpen}>
+        <LayerDepthProvider>
+          <LayerContentBoundary>{innerContent}</LayerContentBoundary>
+        </LayerDepthProvider>
+      </ModalAnnounceProvider>
     </dialog>
   );
 }
