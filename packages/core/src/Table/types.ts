@@ -429,9 +429,11 @@ export interface TableRenderContext {
   readonly mode: 'data' | 'children';
   readonly rowModel: 'flat' | 'tree' | 'grouped' | 'detail' | 'custom';
   readonly canActivate: boolean;
+  readonly canLoad: boolean;
   readonly logicalRowCount: number;
   readonly headerRowCount: number;
   readonly viewport: RefObject<HTMLDivElement | null>;
+  readonly blockViewport?: RefObject<HTMLDivElement | null>;
 }
 
 export interface TableRowContext {
@@ -442,6 +444,13 @@ export interface TableRowContext {
   readonly logicalRowCount: number;
   readonly headerRowCount: number;
   readonly render: TableRenderContext;
+}
+
+export interface TablePluginRenderState {
+  subscribe(onChange: () => void): () => void;
+  /** Optional incremental availability; absent makes no remote-total claim. */
+  getSnapshot(): Readonly<{isLoading: boolean; hasMore?: boolean}>;
+  getServerSnapshot(): Readonly<{isLoading: boolean; hasMore?: boolean}>;
 }
 
 /**
@@ -475,6 +484,8 @@ export interface TablePlugin<
   readonly rowModel?: TableRenderContext['rowModel'];
   /** Whole-row action owner, independent from ordinary non-owning handlers. */
   readonly wholeRowOwner?: 'activation' | 'expansion' | 'navigation';
+  /** Observable loading state consumed before parent sections are constructed. */
+  readonly renderState?: TablePluginRenderState;
   /**
    * Transform the column definitions before rendering.
    * Runs before any element-level transforms. Use to filter, reorder,

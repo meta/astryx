@@ -2951,6 +2951,7 @@ hook useTableColumnSettingsState: <TColumnKey extends string = string>(config: U
 hook useTableFilterState: (initialState?: TableFilterState) => UseTableFilterStateResult
 hook useTableFiltering: <T extends Record<string, unknown>>(config: UseTableFilteringConfig) => TablePlugin<T>
 hook useTableGroupedRows: <T extends Record<string, unknown>>(config: UseTableGroupedRowsConfig<T>) => UseTableGroupedRowsResult<T>
+hook useTableInfiniteScroll: <T extends Record<string, unknown>>(config: UseTableInfiniteScrollConfig) => TablePlugin<T>
 hook useTablePagination: <T extends Record<string, unknown>>(config: UseTablePaginationConfig) => TablePlugin<T>
 hook useTableRowExpansion: <T extends Record<string, unknown>>(config: UseTableRowExpansionConfig<T>) => TablePlugin<T>
 hook useTableRowIndex: <T extends Record<string, unknown>>(config: UseTableRowIndexConfig<T>) => TablePlugin<T>
@@ -5415,6 +5416,7 @@ interface TableFooterProps extends BaseProps<HTMLTableSectionElement> (props of 
 interface TableHeaderCellProps extends BaseProps<HTMLTableCellElement> (props of TableHeaderCell)
 interface TableHeaderProps extends BaseProps<HTMLTableSectionElement> (props of TableHeader)
 interface TablePlugin<T extends Record<string, unknown> = Record<string, unknown>>
+  renderState?: TablePluginRenderState
   rowModel?: TableRenderContext['rowModel']
   transformBodyCell?: (props: BodyCellRenderProps, column: TableColumn<T>, item: T, columnIndex: number, columns: ReadonlyArray<TableColumn<T>>, context?: TableRowContext) => BodyCellRenderProps
   transformBodyRow?: (props: BodyRowRenderProps, item: T, index: number, context?: TableRowContext) => BodyRowRenderProps
@@ -5425,6 +5427,10 @@ interface TablePlugin<T extends Record<string, unknown> = Record<string, unknown
   transformTable?: (props: TableRenderProps) => TableRenderProps
   transformTableContext?: (children: ReactNode) => ReactNode
   wholeRowOwner?: 'activation' | 'expansion' | 'navigation'
+interface TablePluginRenderState
+  getServerSnapshot: () => Readonly<{ isLoading: boolean; hasMore?: boolean }>
+  getSnapshot: () => Readonly<{ isLoading: boolean; hasMore?: boolean }>
+  subscribe: (onChange: () => void) => () => void
 interface TableProps<T extends Record<string, unknown>> extends TableAppearanceProps<T>
   children?: ReactNode
   columns?: TableColumn<T>[]
@@ -5446,7 +5452,9 @@ interface TableProps<T extends Record<string, unknown>> extends TableAppearanceP
   xstyle?: StyleXStyles
   inherits AriaAttributes, DOMAttributes, HTMLAttributes
 interface TableRenderContext
+  blockViewport?: RefObject<HTMLDivElement | null>
   canActivate: boolean
+  canLoad: boolean
   headerRowCount: number
   logicalRowCount: number
   mode: 'data' | 'children'
@@ -6174,6 +6182,10 @@ interface UseTableGroupedRowsResult<T extends Record<string, unknown>>
   data: T[]
   idKey: (item: T) => string
   plugin: TablePlugin<T>
+interface UseTableInfiniteScrollConfig
+  hasMore: boolean
+  isLoading: boolean
+  onLoadMore: () => Promise<void>
 interface UseTablePaginationConfig
   align?: 'start' | 'center' | 'end' = 'center'
   hasMore?: boolean
@@ -8674,6 +8686,7 @@ TableHeaderCell (.)
 TableHeaderCellProps (.)
 TableHeaderProps (.)
 TablePlugin (.)
+TablePluginRenderState (.)
 TableProps (.)
 TableRenderContext (.)
 TableRenderProps (.)
@@ -8702,6 +8715,7 @@ UseTableColumnSettingsStateReturn (.)
 UseTableFilteringConfig (.)
 UseTableGroupedRowsConfig (.)
 UseTableGroupedRowsResult (.)
+UseTableInfiniteScrollConfig (.)
 UseTablePaginationConfig (.)
 UseTableRowExpansionConfig (.)
 UseTableRowIndexConfig (.)
@@ -8732,6 +8746,7 @@ useTableColumnSettingsState (.)
 useTableFilterState (.)
 useTableFiltering (.)
 useTableGroupedRows (.)
+useTableInfiniteScroll (.)
 useTablePagination (.)
 useTableRowExpansion (.)
 useTableRowIndex (.)

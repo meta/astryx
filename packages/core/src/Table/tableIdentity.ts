@@ -92,6 +92,7 @@ export function resolveTableAdmission<T extends Record<string, unknown>>(
   return {
     rowModel,
     canActivate: rowModel === 'flat' && wantsActivation && owners.length === 1,
+    canLoad: rowModel === 'flat',
     usesCanonicalIdentity: wantsActivation,
     hasOwnerConflict: wantsActivation && owners.length !== 1,
   };

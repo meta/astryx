@@ -19,6 +19,7 @@ import {
   useId,
   useRef,
   useMemo,
+  useSyncExternalStore,
   type ReactElement,
   type ReactNode,
   type Ref,
@@ -456,6 +457,7 @@ function areRowPropsEqual<T extends Record<string, unknown>>(
         prevProps.plugins.some(readsRowCount) ||
         prevProps.renderContext.mode !== nextProps.renderContext.mode ||
         prevProps.renderContext.rowModel !== nextProps.renderContext.rowModel ||
+        prevProps.renderContext.canLoad !== nextProps.renderContext.canLoad ||
         prevProps.renderContext.headerRowCount !==
           nextProps.renderContext.headerRowCount ||
         prevProps.renderContext.viewport !==
@@ -590,6 +592,41 @@ function BaseTableInner<T extends Record<string, unknown>>({
     () => identity.map((row, index) => row.key ?? index),
     [identity],
   );
+  const loadingSource = useMemo(() => {
+    const sources = plugins.flatMap(plugin =>
+      plugin.renderState ? [plugin.renderState] : [],
+    );
+    return {
+      subscribe(fn: () => void) {
+        const cleanups = sources.map(source => source.subscribe(fn));
+        return () => cleanups.forEach(cleanup => cleanup());
+      },
+      // useSyncExternalStore compares a primitive snapshot by value.
+      getSnapshot: () =>
+        sources.reduce((bits, source) => {
+          const value = source.getSnapshot();
+          return (
+            bits | (value.isLoading ? 1 : 0) | (value.hasMore === true ? 2 : 0)
+          );
+        }, 0),
+      getServerSnapshot: () =>
+        sources.reduce((bits, source) => {
+          const value = source.getServerSnapshot();
+          return (
+            bits | (value.isLoading ? 1 : 0) | (value.hasMore === true ? 2 : 0)
+          );
+        }, 0),
+    };
+  }, [plugins]);
+  const loadingSnapshot = useSyncExternalStore(
+    loadingSource.subscribe,
+    loadingSource.getSnapshot,
+    loadingSource.getServerSnapshot,
+  );
+  const canConsumeLoading =
+    mode === 'data' && ScrollWrapper != null && admission.canLoad;
+  const isLoading = canConsumeLoading && (loadingSnapshot & 1) !== 0;
+  const hasMore = canConsumeLoading && (loadingSnapshot & 2) !== 0;
   useDevWarningPerMessage(
     'Table',
     'Conflicting whole-row owners; activation is inactive.',
@@ -714,11 +751,21 @@ function BaseTableInner<T extends Record<string, unknown>>({
       mode,
       rowModel: admission.rowModel,
       canActivate: mode === 'data' && admission.canActivate,
+      canLoad: mode === 'data' && ScrollWrapper != null && admission.canLoad,
       logicalRowCount: data?.length ?? 0,
       headerRowCount,
       viewport: runtime.viewport,
+      blockViewport: windowPlan.isWindowed ? runtime.viewport : undefined,
     }),
-    [mode, admission, data?.length, headerRowCount, runtime],
+    [
+      mode,
+      admission,
+      data?.length,
+      headerRowCount,
+      ScrollWrapper,
+      runtime,
+      windowPlan.isWindowed,
+    ],
   );
   const textOverflow =
     textOverflowProp ?? (windowPlan.isWindowed ? 'truncate' : 'wrap');
@@ -882,7 +929,7 @@ function BaseTableInner<T extends Record<string, unknown>>({
     <table
       ref={useMergedRefs(ref, runtime.setTable)}
       {...(windowPlan.isWindowed
-        ? {'aria-rowcount': headerRowCount + (data?.length ?? 0)}
+        ? {'aria-rowcount': hasMore ? -1 : headerRowCount + (data?.length ?? 0)}
         : ariaRowCount != null
           ? {'aria-rowcount': ariaRowCount}
           : null)}
@@ -977,7 +1024,8 @@ function BaseTableInner<T extends Record<string, unknown>>({
                   return rows;
                 })
               : data != null &&
-                emptyState !== false && (
+                emptyState !== false &&
+                !(isLoading && emptyState == null) && (
                   <tr>
                     <td colSpan={resolvedColumns.length}>
                       {emptyState ?? (
