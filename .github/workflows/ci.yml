@@ -3851,8 +3851,10 @@ jobs:
         if: steps.scope.outputs.applies != 'true'
         run: echo "No component or browser accessibility spec changed; no contract to run."
 
-      # The tested merge commit, as the touched-components job checks out.
-      - name: Checkout
+      # The tested merge commit, as the touched-components job checks out: a
+      # head that predates these scripts does not have them. The specs run at
+      # the head (see "Check out the head that built the Storybook").
+      - name: Check out the selection scripts
         if: steps.scope.outputs.applies == 'true'
         uses: actions/checkout@v7
         with:
@@ -3923,6 +3925,17 @@ jobs:
             echo "No touched component and no changed spec; no contract to run."
           fi
 
+      # The specs, their helpers and the lockfile come from the same commit as
+      # the Storybook build. A merge commit has specs that the head Storybook
+      # does not have, and those specs fail. Merge-level interactions are the
+      # job of the post-merge and release checks.
+      - name: Check out the head that built the Storybook
+        if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
       - name: Setup Node and pnpm
         if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
         uses: ./.github/actions/setup
@@ -3940,9 +3953,11 @@ jobs:
         if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
         run: pnpm install --frozen-lockfile && npx playwright install chromium
 
-      # Routing lines come from this merge commit. A failing or unfinished
-      # spec fails the job, and so the test join. A file that does not fit the
-      # budget is not run and does not fail the job.
+      # The runner and the routing lines come from the merge commit, so an
+      # older head is routed by current policy. The specs run at the head; a
+      # spec that the head does not have is not listed and does not run. A
+      # failing or unfinished spec fails the job, and so the test join. A file
+      # that does not fit the budget is not run and does not fail the job.
       - name: Run the touched components' accessibility contracts
         id: contracts
         if: steps.touched.outputs.has_components == 'true' || steps.specs.outputs.has_specs == 'true'
@@ -3956,7 +3971,11 @@ jobs:
           FILES_PATH: ${{ steps.scope.outputs.changed_files_path }}
           OWNERS: ${{ steps.touched.outputs.has_components == 'true' && steps.touched.outputs.a11y_owners || '' }}
           A11Y_CONTRACT_WORKERS: 4
-        run: node .github/scripts/a11y-pr-contracts.mjs --changed-only "$SPECS_PATH" --changed-files "$FILES_PATH" --owned-by "$OWNERS"
+        run: |
+          runner="$RUNNER_TEMP/a11y-pr-contracts.mjs"
+          git cat-file -e "$WORKFLOW_SHA^{commit}" 2>/dev/null || git fetch --quiet --no-tags --depth=1 origin "$WORKFLOW_SHA"
+          git show "$WORKFLOW_SHA:.github/scripts/a11y-pr-contracts.mjs" > "$runner"
+          node "$runner" --changed-only "$SPECS_PATH" --changed-files "$FILES_PATH" --owned-by "$OWNERS"
 
       - name: Upload contract evidence
         if: always() && (steps.contracts.outcome == 'success' || steps.contracts.outcome == 'failure')
