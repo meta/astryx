@@ -4464,6 +4464,11 @@ const FREEZE_FIXTURE = `<!doctype html><meta name=viewport content="width=device
   }, true);
 </script>`;
 
+/** Now on the page's clock, in the epoch ms that run records use. */
+async function pageNow(page: Page): Promise<number> {
+  return page.evaluate(() => performance.timeOrigin + performance.now());
+}
+
 async function freezeFixture(page: Page) {
   await page.route('http://freeze.test/', route =>
     route.fulfill({contentType: 'text/html', body: FREEZE_FIXTURE}),
@@ -4920,7 +4925,10 @@ test.describe('page freeze', () => {
     await installTimerGate(page);
     const box = page.locator('#box');
     const watch = await watchAnimations(box);
-    const startedAt = Date.now();
+    // The run is dated on the page's clock, so the test reads that clock too.
+    // The test process's clock can stand apart from it, and `Date.now()`
+    // drops the fraction of a millisecond.
+    const startedAt = await pageNow(page);
     // Over before the freeze, and read only after the thaw. The freeze waits
     // for the run's own end. A run starts only at a frame, and a busy machine
     // can draw no frame for longer than any fixed wait.
@@ -4930,7 +4938,7 @@ test.describe('page freeze', () => {
         {duration: 200},
       ).finished;
     });
-    const frozenAt = Date.now();
+    const frozenAt = await pageNow(page);
     await freezePage(page);
     await page.waitForTimeout(600);
     await thawPage(page);
@@ -4938,7 +4946,9 @@ test.describe('page freeze', () => {
     expect(finished.from).toBeGreaterThan(startedAt - 50);
     expect(finished.from).toBeLessThan(frozenAt);
     expect(finished.finishedAt).not.toBeNull();
-    expect(Number(finished.finishedAt)).toBeLessThan(frozenAt);
+    // The clock is read after the run's end. Two equal readings come only
+    // from the clock's resolution.
+    expect(Number(finished.finishedAt)).toBeLessThanOrEqual(frozenAt);
   });
 
   test('the page’s clock and its runs stay together across ten freeze and thaw cycles', async ({
