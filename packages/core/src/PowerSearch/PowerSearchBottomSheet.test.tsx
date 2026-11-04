@@ -3852,6 +3852,36 @@ describe('PowerSearch sheet draft, Done and dismissal (FR15, FR15b, FR15c, FR22)
     ]);
   });
 
+  it('Done on a field that became read-only while the flow was open reports nothing and closes (FR15b)', () => {
+    const onChange = vi.fn();
+    function Harness() {
+      const [isReadOnly, setIsReadOnly] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setIsReadOnly(true)}>
+            Lock
+          </button>
+          <PowerSearch
+            config={config}
+            filters={[openFilter, authorFilter]}
+            onChange={onChange}
+            isReadOnly={isReadOnly}
+            presentation="bottom-sheet"
+          />
+        </>
+      );
+    }
+    render(<Harness />);
+    openSheet();
+    fireEvent.click(removeButton('Author'));
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', {name: 'Lock'}));
+    expect(isSheetOpen()).toBe(true);
+    done();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(isSheetOpen()).toBe(false);
+  });
+
   it('the popover presentation is unchanged: a token removal reports at once, with no draft and no Done (desktop)', async () => {
     const {onChange} = setup({
       presentation: 'popover',
