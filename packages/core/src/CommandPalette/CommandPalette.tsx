@@ -509,6 +509,7 @@ export function CommandPalette<T extends SearchableItem = SearchableItem>({
   const runSearchRef = useRef(runSearch);
   runSearchRef.current = runSearch;
 
+  // Syncs the search source with `isOpen`. An open runs the empty-query search.
   useEffect(() => {
     if (isOpen) {
       runSearchRef.current('');

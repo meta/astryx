@@ -117,9 +117,9 @@ export function focusRegionControl(element: HTMLElement): boolean {
 /**
  * Handle Tab in a menu with a header or footer: move to the next stop of the
  * header's controls, the menu as one stop, then the footer's controls,
- * wrapping at either end. The key is handled in full: its prevented default
- * tells a document-level focus trap to leave it alone. A row, or a row of an
- * open flyout below this menu, counts as the menu's stop; with no other stop,
+ * wrapping at either end. The key is handled in full, so a document-level
+ * focus trap never reads it a second time. A row, or a row of an open
+ * flyout below this menu, counts as the menu's stop; with no other stop,
  * focus stays in the menu (`isFromFlyout`: a flyout that has just closed
  * itself hands the focus back to the menu's own stop).
  */

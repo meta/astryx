@@ -1,10 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 /**
  * @file TokenizerBottomSheet.test.tsx
- * @input Uses vitest, Testing Library, Tokenizer with
- *   `experimental.presentation`
- * @output Tests for the experimental sheet presentation: the presentation
- *   resolution (`component:Tokenizer` FR16) and the single-sheet touch flow
+ * @input Uses vitest, Testing Library, Tokenizer with `presentation`
+ * @output Tests for the sheet presentation: the presentation resolution and
+ *   its default (`component:Tokenizer` FR16) and the single-sheet touch flow
  *   (FR17–FR24, AR6)
  * @position Core tests; validates Tokenizer.tsx and TokenizerBottomSheet.tsx
  */
@@ -26,9 +25,13 @@ import {
   waitFor,
   within,
 } from '@testing-library/react';
-import {createRef, useState} from 'react';
+import {StrictMode, createRef, useState} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {Tokenizer, type TokenizerChange} from './Tokenizer';
+import {
+  Tokenizer,
+  type TokenizerChange,
+  type TokenizerProps,
+} from './Tokenizer';
 import {__resetLiveRegionsForTest} from '../hooks/useAnnounce';
 import {__resetDevWarnings} from '../utils/devWarning';
 import {colorVars, sizeVars, spacingVars} from '../theme/tokens.stylex';
@@ -42,6 +45,12 @@ import {
   resetBottomSheetStackForTests,
 } from '../BottomSheet/bottomSheetStack';
 import {getActiveModalOutlet} from '../Layer/modalOutlet';
+
+// Tokenizer loads its sheet on demand, and a first load under the test
+// transform can take seconds on a busy machine. The file loads the sheet
+// module before any test runs, so that load counts against no wait or time
+// limit.
+await import('./TokenizerBottomSheet');
 
 const ITEMS: SearchableItem[] = [
   {id: 'design', label: 'Design'},
@@ -93,7 +102,7 @@ function Harness({
         setValue(items);
         spy?.(items, change);
       }}
-      experimental={{presentation}}
+      presentation={presentation}
       {...props}
     />
   );
@@ -140,19 +149,22 @@ const openTrigger = () => screen.getByRole('button', {name: 'Tags'});
 const list = () => document.querySelector<HTMLElement>('[data-total-count]')!;
 
 // The sheet surface is loaded with React.lazy, so the first sheet renders a
-// tick after it opens. Open one up front so the module is cached and every
-// later sheet renders synchronously.
+// tick after it opens. Open one up front so every later sheet renders
+// synchronously. `act` renders the sheet once its loaded module resolves,
+// with no wait.
 beforeAll(async () => {
   stubEnvironment();
   try {
     render(<Harness />);
-    fireEvent.click(openTrigger());
-    await screen.findByLabelText('Search Tags', undefined, {timeout: 15000});
+    await act(async () => {
+      fireEvent.click(openTrigger());
+    });
+    expect(screen.getByLabelText('Search Tags')).toBeInTheDocument();
   } finally {
     cleanup();
     vi.unstubAllGlobals();
   }
-}, 20000);
+});
 
 beforeEach(() => {
   __resetLiveRegionsForTest();
@@ -161,34 +173,34 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-describe('Tokenizer experimental.presentation (FR16)', () => {
-  it('keeps the inline combobox when experimental is omitted', () => {
-    render(
-      <Tokenizer
-        label="Tags"
-        searchSource={source}
-        value={[ITEMS[0]]}
-        onChange={() => {}}
-      />,
-    );
+describe('Tokenizer presentation (FR16)', () => {
+  const plain = (props: Partial<TokenizerProps<SearchableItem>> = {}) => (
+    <Tokenizer
+      label="Tags"
+      searchSource={source}
+      value={[ITEMS[0]]}
+      onChange={() => {}}
+      {...props}
+    />
+  );
+
+  it('keeps the inline combobox by default on a screen that is not compact coarse-pointer', () => {
+    render(plain());
     expect(screen.getByRole('combobox')).toBeInTheDocument();
     expect(
       screen.queryByRole('button', {name: 'Tags'}),
     ).not.toBeInTheDocument();
   });
 
-  it('keeps the inline combobox for an empty experimental object and for popover', () => {
-    const {unmount} = render(
-      <Tokenizer
-        label="Tags"
-        searchSource={source}
-        value={[]}
-        onChange={() => {}}
-        experimental={{}}
-      />,
-    );
-    expect(screen.getByRole('combobox')).toBeInTheDocument();
-    unmount();
+  it('defaults to adaptive: the sheet trigger on a compact coarse-pointer screen', () => {
+    stubMatchMedia(() => true);
+    render(plain());
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(openTrigger()).toHaveAttribute('aria-haspopup', 'dialog');
+  });
+
+  it('keeps the inline combobox with presentation="popover" on a compact coarse-pointer screen', () => {
+    stubMatchMedia(() => true);
     render(<Harness presentation="popover" />);
     expect(screen.getByRole('combobox')).toBeInTheDocument();
     expect(
@@ -510,7 +522,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         onChange={() => {}}
         maxMenuItems={120}
         debounceMs={0}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     fireEvent.click(screen.getByRole('button', {name: 'Items'}));
@@ -613,7 +625,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         onChange={() => {}}
         debounceMs={0}
         onChangeQuery={onChangeQuery}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     fireEvent.click(openTrigger());
@@ -644,7 +656,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         onChange={() => {}}
         debounceMs={0}
         emptySearchText="Nothing here"
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     expect(
@@ -677,7 +689,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           value={[]}
           onChange={() => {}}
           debounceMs={0}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />,
       );
       fireEvent.click(openTrigger());
@@ -768,7 +780,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     expect(screen.getAllByText('Design')).toHaveLength(1);
   });
 
-  it('mounts the Clear all confirmation only from the press until it closes: no alertdialog while none is pending, focus placed on cancel and on confirm (FR24; INV7)', async () => {
+  it('mounts the Clear all confirmation only from the press until it closes: no alertdialog while none is pending, focus back on Clear all on cancel and on confirm (FR24; INV7)', async () => {
     const matches = Element.prototype.matches;
     const modalSpy = vi
       .spyOn(Element.prototype, 'matches')
@@ -800,15 +812,15 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       expect(clearAll).toHaveFocus();
       expect(screen.getByRole('checkbox', {name: 'Design'})).toBeChecked();
 
-      // Confirm: the confirmation goes, the search field takes focus, the
-      // clear is announced inside the sheet.
+      // Confirm: the confirmation goes, Clear all keeps focus (now
+      // aria-disabled), the clear is announced inside the sheet.
       fireEvent.click(clearAll);
       const second = await screen.findByRole('alertdialog');
       fireEvent.click(
         within(second).getByRole('button', {name: 'Clear selection'}),
       );
       await waitFor(noConfirmation);
-      expect(screen.getByLabelText('Search Tags')).toHaveFocus();
+      expect(screen.getByRole('button', {name: 'Clear all'})).toHaveFocus();
       await waitFor(() =>
         expect(
           sheet.querySelector(
@@ -883,7 +895,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     expect(document.querySelector('[data-total-count]')).toBeNull();
   });
 
-  it('moves focus to the search field after a confirmed Clear all, since Clear all is disabled by then (FR24; AST-085 FR4)', async () => {
+  it('keeps focus on Clear all after a confirmed Clear all — aria-disabled, in the focus order — and never moves it to the search field, which would raise the keyboard (FR24; AST-085 FR4)', async () => {
     render(<Harness />);
     fireEvent.click(openTrigger());
     await screen.findByRole('dialog', {name: 'Tags'});
@@ -900,7 +912,8 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     const clearAllAfter = screen.getByRole('button', {name: 'Clear all'});
     expect(clearAllAfter).toHaveAttribute('aria-disabled', 'true');
     expect(clearAllAfter).not.toBeDisabled();
-    expect(screen.getByLabelText('Search Tags')).toHaveFocus();
+    expect(clearAllAfter).toHaveFocus();
+    expect(screen.getByLabelText('Search Tags')).not.toHaveFocus();
     expect(document.activeElement).not.toBe(document.body);
   });
 
@@ -925,7 +938,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         onChange={() => {}}
         debounceMs={0}
         maxMenuItems={5}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     fireEvent.click(openTrigger());
@@ -971,7 +984,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           debounceMs={0}
           maxMenuItems={2}
           hasCreate
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />,
       );
       fireEvent.click(openTrigger());
@@ -1079,7 +1092,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           value={value}
           onChange={items => setValue(items)}
           debounceMs={0}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       );
     }
@@ -1162,7 +1175,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       onChange: () => {},
       onChangeQuery,
       debounceMs: 0,
-      experimental: {presentation: 'bottom-sheet' as const},
+      presentation: 'bottom-sheet' as const,
     };
     const {rerender} = render(<Tokenizer {...props} />);
     fireEvent.click(openTrigger());
@@ -1193,7 +1206,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       onChange: () => {},
       debounceMs: 0,
       minQueryLength: 3,
-      experimental: {presentation: 'bottom-sheet' as const},
+      presentation: 'bottom-sheet' as const,
     };
     const {rerender} = render(<Tokenizer {...props} />);
     fireEvent.click(openTrigger());
@@ -1249,7 +1262,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         value={[ITEMS[0]]}
         onChange={() => {}}
         debounceMs={0}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     const trigger = openTrigger();
@@ -1267,7 +1280,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         onChange={() => {}}
         debounceMs={0}
         isDisabled
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
@@ -1288,7 +1301,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         value={[ITEMS[0]]}
         onChange={() => {}}
         debounceMs={0}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
@@ -1309,7 +1322,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           status={{type: 'error', message: 'Pick at least three'}}
           isDisabled
           disabledMessage="Locked while syncing"
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
       </>,
     );
@@ -1382,7 +1395,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         ref={ref}
         onFocus={onFocus}
         onKeyDown={onKeyDown}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     const trigger = openTrigger();
@@ -1415,7 +1428,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           debounceMs={0}
           onFocus={onFocus}
           onBlur={onBlur}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
         <button type="button">Elsewhere</button>
       </>,
@@ -1466,7 +1479,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           debounceMs={0}
           onFocus={onFocus}
           onBlur={onBlur}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
         <button type="button">Elsewhere</button>
       </>,
@@ -1510,7 +1523,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         onChange={() => {}}
         debounceMs={0}
         onClick={onClick}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     const trigger = openTrigger();
@@ -1538,7 +1551,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         onChange={() => {}}
         hasClear
         menuWidth={320}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     expect(warn).toHaveBeenCalledTimes(1);
@@ -1553,7 +1566,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         onChange={() => {}}
         hasClear
         menuWidth={320}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     expect(warn).toHaveBeenCalledTimes(1);
@@ -1601,7 +1614,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           value={[]}
           onChange={() => {}}
           hasCreate
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />,
       );
       fireEvent.click(openTrigger());
@@ -1775,7 +1788,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         value={[]}
         onChange={() => {}}
         debounceMs={0}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     fireEvent.click(openTrigger());
@@ -1783,6 +1796,38 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     expect(within(row).queryByRole('button')).not.toBeInTheDocument();
     await waitFor(() => expect(warn).toHaveBeenCalledTimes(1));
     expect(warn.mock.calls[0][0]).toMatch(/`action`/);
+    expect(warn.mock.calls[0][0]).toMatch(/bottom-sheet rows/);
+    warn.mockRestore();
+  });
+
+  it('warns about a row action once under StrictMode double renders', async () => {
+    __resetDevWarnings();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const withAction: SearchSource<SearchableItem> = {
+      search: () => [],
+      bootstrap: () => [
+        {
+          id: 'design',
+          label: 'Design',
+          action: <button type="button">Go</button>,
+        },
+      ],
+    };
+    render(
+      <StrictMode>
+        <Tokenizer
+          label="Tags"
+          searchSource={withAction}
+          value={[]}
+          onChange={() => {}}
+          debounceMs={0}
+          presentation="bottom-sheet"
+        />
+      </StrictMode>,
+    );
+    fireEvent.click(openTrigger());
+    await screen.findByRole('checkbox', {name: 'Design'});
+    expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0][0]).toMatch(/bottom-sheet rows/);
     warn.mockRestore();
   });
@@ -1845,7 +1890,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('types ref for the control it reaches: the input without experimental, input or trigger with it', () => {
+  it('gives ref the control it reaches: the input in the popover presentation, the trigger in the sheet', () => {
     const inputRef = createRef<HTMLInputElement>();
     const {unmount} = render(
       <Tokenizer
@@ -1866,7 +1911,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         value={[]}
         onChange={() => {}}
         ref={wideRef}
-        experimental={{presentation: 'popover'}}
+        presentation="popover"
       />,
     );
     expect(wideRef.current).toBe(screen.getByRole('combobox'));
@@ -1877,7 +1922,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         value={[]}
         onChange={() => {}}
         ref={wideRef}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     expect(wideRef.current).toBe(openTrigger());
@@ -1895,7 +1940,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         debounceMs={0}
         minQueryLength={3}
         hasCreate
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     fireEvent.click(openTrigger());
@@ -1950,7 +1995,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
               <span aria-hidden="true"> (decorative)</span>
             </p>
           }
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />,
       );
       fireEvent.click(openTrigger());
@@ -2046,7 +2091,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           value={[]}
           onChange={() => {}}
           debounceMs={0}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />,
       );
       fireEvent.click(openTrigger());
@@ -2114,7 +2159,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           onChange={() => {}}
           debounceMs={0}
           minQueryLength={3}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />,
       );
       fireEvent.click(openTrigger());
@@ -2180,7 +2225,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           onChangeQuery={onChangeQuery}
           debounceMs={0}
           hasCreate
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />,
       );
       fireEvent.click(openTrigger());
@@ -2273,7 +2318,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         debounceMs={0}
         minQueryLength={3}
         hasCreate
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     fireEvent.click(openTrigger());
@@ -2327,7 +2372,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
               onChange={() => {}}
               onChangeQuery={setQuery}
               debounceMs={0}
-              experimental={{presentation: 'bottom-sheet'}}
+              presentation="bottom-sheet"
             />
             <output data-testid="mirror">{query}</output>
           </>
@@ -2371,7 +2416,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           searchSource={source}
           value={[ITEMS[0]]}
           onChange={() => {}}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />,
       );
       fireEvent.click(openTrigger());
@@ -2449,7 +2494,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           value={[]}
           onChange={() => {}}
           debounceMs={0}
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />,
       );
       fireEvent.click(openTrigger());
@@ -2485,8 +2530,15 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
       dispatchEvent: vi.fn(),
     }));
     vi.stubGlobal('matchMedia', matchMedia);
-    // The default popover, with and without the experimental object: no
-    // query is evaluated and no listener is registered.
+    // A fixed presentation evaluates no query and registers no listener.
+    render(<Harness presentation="popover" />);
+    render(<Harness presentation="bottom-sheet" />);
+    expect(
+      matchMedia.mock.calls.filter(([q]) => q === COMPACT_TOUCH_QUERY),
+    ).toHaveLength(0);
+    expect(added.filter(q => q === COMPACT_TOUCH_QUERY)).toHaveLength(0);
+    // Only adaptive reads the policy, and subscribes once: by default and
+    // when it is passed.
     const {unmount} = render(
       <Tokenizer
         label="Tags"
@@ -2495,16 +2547,10 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         onChange={() => {}}
       />,
     );
-    render(<Harness presentation="popover" />);
-    render(<Harness presentation="bottom-sheet" />);
-    expect(
-      matchMedia.mock.calls.filter(([q]) => q === COMPACT_TOUCH_QUERY),
-    ).toHaveLength(0);
-    expect(added.filter(q => q === COMPACT_TOUCH_QUERY)).toHaveLength(0);
-    unmount();
-    // Only adaptive reads the policy, and subscribes once.
-    render(<Harness presentation="adaptive" />);
     expect(added.filter(q => q === COMPACT_TOUCH_QUERY)).toHaveLength(1);
+    unmount();
+    render(<Harness presentation="adaptive" />);
+    expect(added.filter(q => q === COMPACT_TOUCH_QUERY)).toHaveLength(2);
   });
 
   it('moves focus to the sheet panel on open, not the search field (FR18)', async () => {
@@ -2650,7 +2696,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         isDisabled={isDisabled}
         disabledMessage="You need the Editor role"
         ref={ref}
-        experimental={{presentation: 'popover'}}
+        presentation="popover"
       />
     );
     const {rerender} = render(field(false));
@@ -2684,7 +2730,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         onChange={() => {}}
         onFocus={onFocus}
         ref={() => {}}
-        experimental={{presentation: 'popover'}}
+        presentation="popover"
       />,
     );
     const input = screen.getByRole('combobox');
@@ -2700,7 +2746,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         onChange={() => {}}
         onFocus={onFocus}
         ref={() => {}}
-        experimental={{presentation: 'popover'}}
+        presentation="popover"
       />,
     );
     expect(input).toHaveFocus();
@@ -2715,7 +2761,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         onChange={() => {}}
         onFocus={onFocus}
         ref={() => {}}
-        experimental={{presentation: 'popover'}}
+        presentation="popover"
       />,
     );
     expect(document.body).toHaveFocus();
@@ -2730,7 +2776,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
         onChange={() => {}}
         htmlName="tags"
         status={{type: 'error', message: 'Pick at least three'}}
-        experimental={{presentation: 'bottom-sheet'}}
+        presentation="bottom-sheet"
       />,
     );
     const hidden = container.querySelectorAll('input[type="hidden"]');
@@ -2756,7 +2802,7 @@ describe('Tokenizer sheet presentation (single-sheet touch flow)', () => {
           onChange={() => {}}
           htmlName="tags"
           isDisabled={isDisabled}
-          experimental={{presentation}}
+          presentation={presentation}
         />
       </form>
     );
@@ -2992,7 +3038,7 @@ describe('Tokenizer sheet under the BottomSheet stack (component:BottomSheet FR8
             value={value}
             onChange={items => setValue(items)}
             debounceMs={0}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         </BottomSheet>
       </>
@@ -3068,9 +3114,11 @@ describe('Tokenizer sheet under the BottomSheet stack (component:BottomSheet FR8
     await waitFor(() =>
       expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument(),
     );
-    // Back in the field's sheet: focus on its search field, the sheet the
+    // Back in the field's sheet: focus on its Clear all, the sheet the
     // outlet again, the host still covered beneath.
-    expect(screen.getByLabelText('Search Tags')).toHaveFocus();
+    expect(
+      within(sheet).getByRole('button', {name: 'Clear all'}),
+    ).toHaveFocus();
     expect(getActiveModalOutlet()).toBe(sheet);
     expect(stackSummary()).toEqual(['Value:covered:1', 'Tags:top:0']);
   });

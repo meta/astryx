@@ -70,6 +70,7 @@ import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
 import {usePressFeedback} from '../hooks/usePressFeedback';
 import {getInitialFocusDate} from './getInitialFocusDate';
+import {getWeekdayHeaders} from './getWeekdayHeaderNames';
 import {
   computeDayCellState,
   computeRangeRounding,
@@ -107,8 +108,8 @@ import english from '../i18n/generated-english/Calendar/Calendar.generated';
 
 registerEnglishFallback(english);
 
-/** How a month navigation moves the focused day: by its row offset in days, or by whole months. */
-type NavigationUnit = 'days' | 'months';
+/** How a month navigation moves the focused day: by its row offset in days, or by whole months or years. */
+type NavigationUnit = 'days' | 'months' | 'years';
 
 /** Imperative handle for Calendar handleRef */
 export interface CalendarHandle {
@@ -521,13 +522,14 @@ export function Calendar({ref, ...props}: CalendarProps) {
         !(minDateForKeys && plainDateIsBefore(pd, minDateForKeys)) &&
         !(maxDateForKeys && plainDateIsAfter(pd, maxDateForKeys));
       let targetPd: PlainDate;
-      if (unit === 'months') {
-        // A page targets the same day of the month a month away (clamped to
-        // that month's length). Past `min`/`max` nothing moves; a month with
-        // no enabled day is no destination either, the same as an arrow with
-        // no enabled day in its direction; a target disabled by a constraint
-        // lands on that month's first enabled day instead.
-        const candidate = plainDateAddMonths(currentPd, delta);
+      if (unit === 'months' || unit === 'years') {
+        // A page or a year step keeps the day of the month and clamps it to the
+        // target month's length. A month with no enabled day is no target, the
+        // same as for an arrow.
+        const candidate = plainDateAddMonths(
+          currentPd,
+          unit === 'years' ? delta * 12 : delta,
+        );
         if (!inRange(candidate)) {
           return;
         }
@@ -854,19 +856,15 @@ function MonthGrid({
   const year = month.year;
 
   // Use hooks for days generation and constraints
-  const {days, weeks, dayNames} = useCalendarDays({
+  const {days, weeks} = useCalendarDays({
     year,
     month: month.month,
     weekStartsOn,
     hasVariableRowCount,
   });
   const dayNameHeaders = useMemo(
-    () =>
-      dayNames.map((name, offset) => ({
-        dayOfWeek: ((weekStartsOn + offset) % 7) as DayOfWeek,
-        name,
-      })),
-    [dayNames, weekStartsOn],
+    () => getWeekdayHeaders(locale, weekStartsOn),
+    [locale, weekStartsOn],
   );
 
   const rangeAnchor = useMemo(
@@ -964,20 +962,27 @@ function MonthGrid({
     [getFocusedDate, onNavigateNext],
   );
 
-  // Handle PageUp/PageDown
-  const handlePageUp = useCallback(() => {
-    const focusedDate = getFocusedDate();
-    if (focusedDate) {
-      onNavigatePrevious?.(focusedDate, 1, 'months');
-    }
-  }, [getFocusedDate, onNavigatePrevious]);
+  // PageUp/PageDown move by a month, and with Shift by a year (APG date
+  // picker dialog).
+  const handlePageUp = useCallback(
+    (e: React.KeyboardEvent) => {
+      const focusedDate = getFocusedDate();
+      if (focusedDate) {
+        onNavigatePrevious?.(focusedDate, 1, e.shiftKey ? 'years' : 'months');
+      }
+    },
+    [getFocusedDate, onNavigatePrevious],
+  );
 
-  const handlePageDown = useCallback(() => {
-    const focusedDate = getFocusedDate();
-    if (focusedDate) {
-      onNavigateNext?.(focusedDate, 1, 'months');
-    }
-  }, [getFocusedDate, onNavigateNext]);
+  const handlePageDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      const focusedDate = getFocusedDate();
+      if (focusedDate) {
+        onNavigateNext?.(focusedDate, 1, e.shiftKey ? 'years' : 'months');
+      }
+    },
+    [getFocusedDate, onNavigateNext],
+  );
 
   // Grid focus navigation.
   //

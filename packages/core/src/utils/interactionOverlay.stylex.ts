@@ -9,7 +9,8 @@
  * @input StyleX and the semantic interaction-overlay color tokens
  * @output Reusable background-color and background-image state styles, the
  *   touch press's registered strength variable (`pressVars`) and its clocks
- *   (`pressConsts`)
+ *   (`pressConsts`). The list row's compositor press layer and its clocks
+ *   are internal (privateAttributes/press.stylex.ts, utils/rowPressLayer.stylex.ts)
  * @position Internal styling utility for interactive core surfaces
  *
  * SYNC: When modified, update pressFeedback.ts, pressGesture.ts (the fade
@@ -76,8 +77,9 @@ export const pressVars = stylex.defineVars({
  *
  * `defineConsts`, so the one number is inlined here at build time and is the
  * controller's constant at run time (`PRESS_FADE_MS` in pressGesture.ts):
- * the release animation and the timer that removes the attribute after it
- * cannot drift apart.
+ * the release animation and the controller's clock cannot drift apart. When
+ * that clock runs out, the controller waits for a release animation that a
+ * busy main thread started late, then removes the attribute.
  */
 export const pressConsts = stylex.defineConsts({
   /** How long the release takes, in ms. UIKit's deselect clock. */
@@ -147,7 +149,11 @@ const pressRelease = stylex.keyframes({
  * (strength ≈ 0.2 at the midpoint), which is what a deselect crossfade reads
  * as. Not the system's `--ease-standard`: that curve is for things that move,
  * and is so front-loaded (strength 0.05 at the midpoint) that the release
- * would read as half its clock.
+ * would read as half its clock. It is the constants table's
+ * `timing.press.highlightOutCurve`, which the list row's layer mirrors too
+ * (rowPressLayer.stylex.ts); interactionOverlay.cell.test.ts fails if either
+ * drifts. A copy, not an import: this module reaches nearly every component,
+ * and the row layer's constants stay with the rows.
  */
 const RELEASE_EASE = 'cubic-bezier(0, 0, 0.2, 1)';
 

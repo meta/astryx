@@ -16,6 +16,8 @@ verified_by:
     .github/visual-baseline/manifest.json,
     packages/core/src/Stack/Stack.test.tsx,
     packages/core/src/Stack/StackItem.test.tsx,
+    packages/core/src/hooks/useScrollRegionProps.test.tsx,
+    packages/core/src/hooks/__tests__/scrollRegionName.a11y.chromium.spec.ts,
     packages/core/src/HStack/HStack.test.tsx,
     packages/core/src/VStack/VStack.test.tsx,
     packages/core/src/theme/themingTargets.test.ts,
@@ -47,8 +49,8 @@ system_specs: []
 | Public contract         | Stack arranges children on one flex axis with `direction`, alignment, `gap`, per-edge `padding`, sizing, `wrap`, `isScrollable`, and `as`. HStack and VStack fix the direction; StackItem controls one child's participation. |
 | Behavior                | Alignment props resolve to the main or cross axis from the direction; padding resolves per logical edge; padding stays local and publishes no container inset.                                                                |
 | End-user impact         | Readers see consistent spacing and alignment that follows the writing direction.                                                                                                                                              |
-| Builder impact          | None; the record describes shipped behavior.                                                                                                                                                                                  |
-| Compatibility/readiness | Released behavior recorded as current; no API, default, or output changes.                                                                                                                                                    |
+| Builder impact          | None: no API change; a scrolling `div` or `span` StackItem gains a role and a name with no code change (AR2).                                                                                                                 |
+| Compatibility/readiness | No API or default changes; the role and name of a scrolling `div` or `span` StackItem (AR2) are a patch `[fix]`.                                                                                                              |
 | Review checks           | Reject physical left/right padding, an alias that wins over an explicit alignment, padding that publishes container inset, or a StackItem without the flex minimum reset.                                                     |
 | Governing rules         | `family:layout-primitives/FR1–FR6,FR8`; `architecture:container-padding/INV8`; `architecture:public-component-api/INV5,INV6,INV8`.                                                                                            |
 
@@ -64,8 +66,10 @@ inside it.
 ## Compatibility and migration
 
 - Released default preserved: `yes`
-- Compatibility class: records shipped behavior; no public prop, default, DOM,
-  or styling output changes
+- Compatibility class: patch. No public prop, default, or styling output
+  changes. While it scrolls, a scrollable `div` or `span` StackItem with no
+  caller `role` gains `role="group"` and an `aria-label` (DOM; AR2, `[fix]`
+  under `spec:AST-017` FR53)
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: none
 
@@ -139,12 +143,21 @@ Consumer migration instructions belong in consumer docs and release notes.
 ### Performance and resources
 
 - **PR1 — Static render.** Stack, HStack, VStack, and StackItem hold no state and
-  use no hooks.
+  use no hooks. The one exception is a scrollable `div` or `span` StackItem:
+  it renders through a client island that observes its overflow for AR2.
 
 ## Accessibility contract
 
 - **AR1 — No semantics added.** Stack and StackItem add no role, name, or tab
-  stop of their own; their semantics are those of the `as` element.
+  stop of their own; their semantics are those of the `as` element. The one
+  exception is the name of a scrolling StackItem (AR2).
+- **AR2 — A scrolling StackItem is named.** While a scrollable `div` or
+  `span` StackItem scrolls, its element has `role="group"` (unless the
+  caller sets a `role`) and an accessible name (the caller's `aria-label`, or
+  a translated "Content"), so a screen reader that reaches it, including as
+  a browser-made Tab stop, announces it; Tab behavior is the browser's (owner
+  decision, 2026-11-04). A caller's `role` takes only the caller's
+  `aria-label`, and another element keeps its own role and name.
 
 ## Design relationships
 
@@ -191,6 +204,7 @@ Consumer migration instructions belong in consumer docs and release notes.
 | FR4                 | Source review against `architecture:container-padding`                                                                                                                                                                                                                       | Padded stack                                                                              | Gap: no automated check fails if Stack publishes container-padding variables.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `audit:Stack/layout`   |
 | Theming anatomy map | `scripts/check-knowledge.mjs`                                                                                                                                                                                                                                                | Consumer anatomy and current targets                                                      | Missing, extra, or stale mappings fail repository validation.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | `audit:Stack/theming`  |
 | AR1, PR1            | `serverSafeComponents.test.ts`; `HStack.test.tsx` no-role test; `HStackAudit` frames; source review                                                                                                                                                                          | Every form                                                                                | A client API (state, an effect, a context read) added without a client directive fails `serverSafeComponents.test.ts`. `HStack.test.tsx` and the `HStackAudit` frames fail if Stack adds a role or tab stop on its horizontal path. Gap: a client API added together with a client directive passes, and no automated check fails if Stack adds a role or tab stop on its vertical path, or StackItem adds either.                                                                                                                                                                                                        | `audit:Stack/behavior` |
+| AR2                 | `useScrollRegionProps.test.tsx` StackItem tests; `scrollRegionName.a11y.chromium.spec.ts` `stack-item-scrolls` and `stack-item-static`                                                                                                                                       | Scrolling item; caller `region` role and `aria-label`; item that is not scrollable        | A group role or name missing while the item overflows, or present on an item that is not scrollable, fails, at Chromium's accessibility tree too; a caller's role or `aria-label` lost fails.                                                                                                                                                                                                                                                                                                                                                                                                                             | `audit:Stack/behavior` |
 | RTL relation        | RTL audit curated targets (`apps/storybook/rtl-audit/targets.json`): Stack and StackItem D2 on `Stack / Horizontal` and `Stack / StackItem fill size`, HStack D2 on `AspectRatio / Height driven` and `HStack / Alignment Matrix`, VStack D4 on `Spinner / Narrow flex host` | Horizontal stacks, static and fill items, and a start-aligned vertical stack; LTR and RTL | A horizontal stack whose first child is not at the inline start, or a start-aligned vertical stack child that does not move to the mirrored side, fails D2 or D4.                                                                                                                                                                                                                                                                                                                                                                                                                                                         | `audit:Stack/i18n-rtl` |
 
 ## Decision log

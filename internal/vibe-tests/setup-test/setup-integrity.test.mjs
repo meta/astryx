@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {afterEach, describe, expect, it} from 'vitest';
+import {afterAll, afterEach, describe, expect, it} from 'vitest';
 import {
   analyzeSetupIntegrity,
   pairedModeArmSpans,
@@ -37,11 +37,31 @@ function write(directory, relativePath, content) {
   fs.writeFileSync(file, content);
 }
 
+// The baseline repository is built once and copied for each test. A copy
+// costs no git launch, and each launch is slow on a loaded machine.
+let baselineRepository = null;
+afterAll(() => {
+  if (baselineRepository !== null) {
+    fs.rmSync(baselineRepository, {recursive: true, force: true});
+  }
+});
+
 function repository() {
+  if (baselineRepository === null) {
+    baselineRepository = baseline();
+  }
   const directory = fs.mkdtempSync(
     path.join(os.tmpdir(), 'setup-integrity-test-'),
   );
   temporaryDirectories.push(directory);
+  fs.cpSync(baselineRepository, directory, {recursive: true});
+  return directory;
+}
+
+function baseline() {
+  const directory = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'setup-integrity-baseline-'),
+  );
   write(directory, '.gitignore', 'ignored.txt\n');
   write(
     directory,

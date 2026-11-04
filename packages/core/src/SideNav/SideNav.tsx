@@ -438,6 +438,12 @@ interface PendingRailFocus {
   wasOnToggle: boolean;
 }
 
+/** The timeline holds one time per frame, so two reads in one frame match. */
+function frameTimeOf(doc: Document | undefined): number | null {
+  const time = doc?.timeline?.currentTime;
+  return time == null ? null : Number(time);
+}
+
 /**
  * Sidebar navigation container for application pages.
  *
@@ -456,6 +462,7 @@ interface PendingRailFocus {
  * </SideNav>
  * ```
  */
+
 export function SideNav({
   header,
   topContent,
@@ -498,7 +505,27 @@ export function SideNav({
   // The nav's own document's last input decides the moved focus's ring
   // (AR3), so a SideNav in a second document tracks input there.
   const {ref: modalityRef} = useInteractionModalityTracking();
-  const mergedNavRef = useMergedRefs(ref, navRef, modalityRef);
+  // The initial state never animates. A change before the rail's first paint
+  // lands at once, unless the rail's own toggle made it. Until a frame runs
+  // after the nav attaches, the document timeline reads the frame it read
+  // then.
+  const mountFrameRef = useRef<number | null>(null);
+  const mountedNavRef = useRef<HTMLElement | null>(null);
+  const isOwnToggleRef = useRef(false);
+  const recordMountFrame = useCallback((nav: HTMLElement | null) => {
+    // An inline ref re-attaches the same nav on each render. Only a new nav
+    // starts a new initial state.
+    if (nav != null && nav !== mountedNavRef.current) {
+      mountedNavRef.current = nav;
+      mountFrameRef.current = frameTimeOf(nav.ownerDocument);
+    }
+  }, []);
+  const mergedNavRef = useMergedRefs(
+    ref,
+    navRef,
+    modalityRef,
+    recordMountFrame,
+  );
   const collapseStateRef = useRef<SideNavCollapseState>({
     isCollapsed: false,
     toggle: () => {},
@@ -522,10 +549,10 @@ export function SideNav({
 
   const collapsed = resizableHook.isCollapsed;
 
-  // Every collapse or expand, whatever caused it, plays the rail's motion
-  // (`component:SideNav` FR6): measured in the commit before the DOM changes,
-  // played after it before paint. Inside AppShell the content area moves with
-  // it through AppShell's own handle (`component:AppShell` FR17); outside,
+  // A collapse or expand plays the rail's motion, except an app's change
+  // before the rail's first paint. It is measured in the commit before the
+  // DOM changes and played after it, before paint. Inside AppShell the
+  // content area moves with it through AppShell's own handle; outside,
   // SideNav holds its own over its parent.
   const shell = use(SideNavShellContext);
   // A resizable rail's wrapper holds the nav and the handle; outside AppShell
@@ -548,6 +575,14 @@ export function SideNav({
       running?.rail.end();
       running?.endContent();
       motionRef.current = null;
+      const isOwnToggle = isOwnToggleRef.current;
+      isOwnToggleRef.current = false;
+      const frame = frameTimeOf(navRef.current?.ownerDocument);
+      if (!isOwnToggle && (frame == null || frame === mountFrameRef.current)) {
+        railSnapshotRef.current = null;
+        shell?.landContent();
+        return;
+      }
       railSnapshotRef.current = snapshotRail(
         shell?.rail() ?? ownRail(),
         shell?.animatedLayout ?? ownLayout,
@@ -707,6 +742,7 @@ export function SideNav({
 
   const toggle = useCallback(() => {
     const next = !collapsed;
+    isOwnToggleRef.current = true;
 
     // Deprecated `handleRef` path only: an out-of-tree button reads this
     // snapshot while rendering, which can happen before SideNav re-renders.

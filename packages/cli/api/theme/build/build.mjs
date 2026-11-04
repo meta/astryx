@@ -132,12 +132,13 @@ import {resolveIconImports} from './icon-imports.mjs';
  */
 /** @type {any} */ let _coreThemeModule = null;
 /**
- * The `@astryxdesign/core` ROOT namespace, imported separately because it
+ * The `@astryxdesign/core` ROOT namespace, loaded separately because it
  * exports far more than the theme subpath. Interception must hand a theme file
  * that imports a component from the root the root's own exports, not the theme
- * namespace wearing its name.
+ * namespace wearing its name. It loads on first use: see lazyRootModule.
+ * @type {(() => any) | null}
  */
-/** @type {any} */ let _coreRootModule = null;
+let _coreRootModule = null;
 /** @type {any} */ let _coreImportError = null;
 
 /**
@@ -145,7 +146,7 @@ import {resolveIconImports} from './icon-imports.mjs';
  * functions the build calls, and why the import failed, if it did.
  * @typedef {{
  *   themeModule: any,
- *   rootModule: any,
+ *   rootModule: (() => any) | null,
  *   importError: any,
  *   defineTheme: any,
  *   generateThemeRulesSplit: any,
@@ -153,6 +154,47 @@ import {resolveIconImports} from './icon-imports.mjs';
  *   generateAdaptationCSS: any,
  * }} CoreBindings
  */
+
+/**
+ * A Core's root namespace, loaded on first use. The root entry loads all of
+ * Core and React, and only a theme that imports the root specifier needs it.
+ * Requiring the file an import resolves to returns the namespace `import()`
+ * gives. A root that cannot be loaded gives null, and interception then hands
+ * the theme namespace in its place. A root that only `import()` can load
+ * throws instead: one that awaits at its top level, or any root when Node runs
+ * without require(esm).
+ * @param {() => string | null} resolveFile
+ * @returns {() => any}
+ */
+export function lazyRootModule(resolveFile) {
+  /** @type {{namespace: any} | null} */
+  let loaded = null;
+  return () => {
+    if (loaded) return loaded.namespace;
+    let namespace = null;
+    let file = null;
+    try {
+      file = resolveFile();
+    } catch {
+      // A Core whose root entry does not resolve falls back below.
+    }
+    try {
+      if (file) namespace = createRequire(import.meta.url)(file);
+    } catch (error) {
+      const code = /** @type {any} */ (error)?.code;
+      // The theme namespace would stand in for the root's own exports here.
+      if (code === 'ERR_REQUIRE_ASYNC_MODULE' || code === 'ERR_REQUIRE_ESM') {
+        throw new Error(
+          `The @astryxdesign/core root entry at ${file} cannot be loaded with require() (${code}), so a theme that imports it cannot be built.`,
+          {cause: error},
+        );
+      }
+      // A Core without a usable root entry still builds themes.
+    }
+    loaded = {namespace};
+    return namespace;
+  };
+}
 
 /**
  * Import the CLI's own Core: the `@astryxdesign/core` this module resolves.
@@ -178,12 +220,9 @@ async function importCliCore() {
     core.generateThemeRulesSplit = coreTheme.generateThemeRulesSplit;
     core.generateOnMediaCSS = coreTheme.generateOnMediaCSS;
     core.generateAdaptationCSS = coreTheme.generateAdaptationCSS;
-    try {
-      core.rootModule = await import('@astryxdesign/core');
-    } catch {
-      // A core without a usable root entry still builds themes; interception
-      // falls back to the theme namespace for the root specifier.
-    }
+    core.rootModule = lazyRootModule(() =>
+      fileURLToPath(import.meta.resolve('@astryxdesign/core')),
+    );
   } catch (e) {
     // Capture the reason so the theme action can surface a precise, actionable
     // error. The hard failure happens when `theme build` runs.
@@ -350,18 +389,10 @@ async function loadProjectCore(cwd, cliCore, {projectOnly = false} = {}) {
       ERROR_CODES.ERR_CORE_INCOMPATIBLE,
     );
   }
-  let rootModule = null;
   const rootFile = importTarget(dir, '.');
-  if (rootFile) {
-    try {
-      rootModule = await import(pathToFileURL(rootFile).href);
-    } catch {
-      // As with the CLI's own import, the theme namespace stands in for it.
-    }
-  }
   return {
     themeModule,
-    rootModule,
+    rootModule: lazyRootModule(() => rootFile),
     importError: null,
     defineTheme: themeModule.defineTheme,
     generateThemeRulesSplit: themeModule.generateThemeRulesSplit,

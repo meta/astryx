@@ -73,7 +73,8 @@ describe('WebKit interaction proof routing', () => {
   });
 
   it('decides its own scope first, skips visibly, and gates every later step on it', () => {
-    expect(webkit.steps[0].with['sparse-checkout']).toBe(
+    // The scope action first; the leg planner shares the checkout.
+    expect(webkit.steps[0].with['sparse-checkout'].trim().split('\n')[0]).toBe(
       '.github/actions/test-scope',
     );
     expect(decide(webkit).uses).toBe(
@@ -96,9 +97,10 @@ describe('WebKit interaction proof routing', () => {
     ]);
     for (const candidate of webkit.steps.slice(2)) {
       if (guards.has(candidate.name)) continue;
+      // A leg whose plan holds no spec file runs no proofs.
       expect(candidate.if, candidate.name ?? candidate.uses).toMatch(
         new RegExp(
-          `^(always\\(\\) && )?${applies.replace(/[.()|]/g, '\\$&')}$`,
+          `^(always\\(\\) && )?${applies.replace(/[.()|]/g, '\\$&')}( && steps\\.plan\\.outputs\\.files != '0')?$`,
         ),
       );
     }
@@ -158,7 +160,8 @@ describe('WebKit interaction proof routing', () => {
   });
 
   it('runs only the specs whose code its scope covers', () => {
-    const run = step(webkit, 'Run WebKit interaction proofs').run;
+    // Each leg plans its share from these paths and runs only that share.
+    const run = step(webkit, "Plan this leg's WebKit interaction proofs").run;
     const targets = [
       'packages/core/src/gestures/',
       'packages/core/src/motion/__tests__/animatedLayout.interaction',
@@ -241,6 +244,9 @@ describe('WebKit interaction proof routing', () => {
       'packages/core/src/utils/touchPresentation.ts',
       'packages/core/src/utils/primaryClick.ts',
       'packages/core/src/utils/isApplePlatform.ts',
+      // The gesture host asks the Layer module's input hold about each touch,
+      // so the gesture specs' fixture bundles it.
+      'packages/core/src/Layer/inputHold.ts',
       'packages/core/src/hooks/useMenuPress.ts',
       'packages/core/src/hooks/menuPressGesture.ts',
       'packages/core/src/hooks/useLongPress.ts',
@@ -249,6 +255,7 @@ describe('WebKit interaction proof routing', () => {
       'packages/core/src/hooks/useIsomorphicLayoutEffect.ts',
       'packages/core/src/hooks/useAttachment.ts',
       'packages/core/src/utils/sharedResizeObserver.ts',
+      'packages/core/src/utils/scrollView.ts',
       'packages/core/src/hooks/__tests__/usePager.interaction.browser.spec.ts',
       'packages/core/src/hooks/__tests__/pagerBundle.ts',
       'internal/interaction-harness/src/webInput.ts',

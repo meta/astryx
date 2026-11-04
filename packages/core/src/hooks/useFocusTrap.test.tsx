@@ -40,6 +40,32 @@ function Trap({children}: {children: React.ReactNode}) {
   );
 }
 
+function InnerRegion() {
+  const {containerRef} = useFocusTrap<HTMLDivElement>({isActive: true});
+  return (
+    <div ref={containerRef} data-testid="inner-region">
+      <button type="button" data-testid="inner-first">
+        Inner first
+      </button>
+      <button type="button" data-testid="inner-last">
+        Inner last
+      </button>
+    </div>
+  );
+}
+
+function OuterRegion({showInner}: {showInner: boolean}) {
+  const {containerRef} = useFocusTrap<HTMLDivElement>({isActive: true});
+  return (
+    <div ref={containerRef} data-testid="outer-region">
+      <button type="button" data-testid="outer-first">
+        Outer first
+      </button>
+      {showInner && <InnerRegion />}
+    </div>
+  );
+}
+
 function EscapeTrap({
   isActive,
   onEscape,
@@ -294,6 +320,95 @@ describe('useFocusTrap tabbable model (infra-8)', () => {
 
     expect(fireEvent.keyDown(svgControl, {key: 'Tab'})).toBe(false);
     expect(screen.getByTestId('first')).toHaveFocus();
+  });
+
+  it('leaves controls inside a closed dialog out of the Tab cycle', () => {
+    render(
+      <Trap>
+        <button type="button" data-testid="first">
+          First
+        </button>
+        <button type="button" data-testid="last">
+          Last
+        </button>
+        <dialog>
+          <button type="button" data-testid="hidden">
+            In a closed sheet
+          </button>
+        </dialog>
+      </Trap>,
+    );
+    const last = screen.getByTestId('last');
+    last.focus();
+
+    expect(fireEvent.keyDown(last, {key: 'Tab'})).toBe(false);
+    expect(screen.getByTestId('first')).toHaveFocus();
+  });
+
+  it('keeps controls inside a popover-open dialog in the Tab cycle', () => {
+    // A Popover opened inside a non-modal sheet: the sheet's <dialog> is shown
+    // with showPopover(), which never sets `open`.
+    render(
+      <dialog data-testid="sheet">
+        <Trap>
+          <button type="button" data-testid="first">
+            First
+          </button>
+          <button type="button" data-testid="second">
+            Second
+          </button>
+        </Trap>
+      </dialog>,
+    );
+    const sheet = screen.getByTestId('sheet');
+    const matches = vi
+      .spyOn(sheet, 'matches')
+      .mockImplementation((selector: string) => selector === ':popover-open');
+    const first = screen.getByTestId('first');
+    first.focus();
+
+    // First is not the last Tab stop, so the trap leaves the press to the
+    // browser instead of cancelling it for want of tabbable controls.
+    expect(fireEvent.keyDown(first, {key: 'Tab'})).toBe(true);
+    const second = screen.getByTestId('second');
+    second.focus();
+    expect(fireEvent.keyDown(second, {key: 'Tab'})).toBe(false);
+    expect(first).toHaveFocus();
+    matches.mockRestore();
+  });
+
+  it('lets the innermost region answer Tab when regions nest at the end', () => {
+    // A region (a Popover, say) opened at the end of an active region (an open
+    // Dialog): its last control is also the outer region's last Tab stop.
+    const {rerender} = render(<OuterRegion showInner={false} />);
+    rerender(<OuterRegion showInner />);
+    const innerLast = screen.getByTestId('inner-last');
+    innerLast.focus();
+
+    expect(fireEvent.keyDown(innerLast, {key: 'Tab'})).toBe(false);
+    expect(screen.getByTestId('inner-first')).toHaveFocus();
+  });
+
+  it('leaves Tab to an open dialog nested inside the trap', () => {
+    render(
+      <Trap>
+        <button type="button" data-testid="outer">
+          Outer
+        </button>
+        <dialog open>
+          <button type="button" data-testid="inner-last">
+            Continue
+          </button>
+        </dialog>
+      </Trap>,
+    );
+    const innerLast = screen.getByTestId('inner-last');
+    innerLast.focus();
+
+    // The nested dialog is its own focus context; the outer region does not
+    // cancel the press or pull focus to its own first control.
+    expect(fireEvent.keyDown(innerLast, {key: 'Tab'})).toBe(true);
+    expect(innerLast).toHaveFocus();
   });
 
   it('pulls focus back in when a Tab from inside leaves the trap', () => {

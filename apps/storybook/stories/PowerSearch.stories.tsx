@@ -1038,6 +1038,7 @@ export const IssueTracker: Story = {
     maxSearchResults: 2,
     maxOperatorMenuItems: 2,
     menuWidth: 700,
+    presentation: 'popover',
   },
   parameters: {
     docs: {
@@ -1816,6 +1817,7 @@ export const OverflowInline: Story = {
           filters={filters}
           onChange={newFilters => setFilters([...newFilters])}
           tokenOverflowBehavior="unfocusedInline"
+          presentation="popover"
         />
         <p style={{marginTop: 8}}>
           This text will shift down when the search bar expands on focus.
@@ -1841,6 +1843,7 @@ export const OverflowLayer: Story = {
           filters={filters}
           onChange={newFilters => setFilters([...newFilters])}
           tokenOverflowBehavior="unfocusedLayer"
+          presentation="popover"
         />
         <p style={{marginTop: 8}}>
           This text should not shift when the search bar expands on focus.
@@ -2058,7 +2061,7 @@ export const StatusVariantComparison: Story = {
 };
 
 // =============================================================================
-// Experimental bottom-sheet presentation
+// Bottom-sheet presentation
 // =============================================================================
 
 // The sheet flow is designed for a phone: view these stories at a compact
@@ -2102,14 +2105,14 @@ const sheetPresetFilters: ReadonlyArray<PowerSearchFilter> = [
 ];
 
 /**
- * `experimental={{presentation: 'bottom-sheet'}}`: the field is one trigger
+ * `presentation="bottom-sheet"`: the field is one trigger
  * with display-only tokens; a tap opens the Filters sheet, whose rows edit or
  * remove a filter, Add filter opens above it with the fields, and the value
  * step opens above that and stages operator → value. Dismissing a step
  * reveals the one beneath. Clear all asks first. List values (Assignee, Tags)
  * open the Tokenizer's own sheet above the step.
  */
-export const ExperimentalBottomSheet: Story = {
+export const SheetPresentation: Story = {
   render: args => {
     const [filters, setFilters] =
       useState<ReadonlyArray<PowerSearchFilter>>(sheetPresetFilters);
@@ -2124,22 +2127,22 @@ export const ExperimentalBottomSheet: Story = {
           // Clear all) changes it and the flow announces the change.
           resultCount={Math.max(1, Math.round(240 / (filters.length + 1)))}
           timezoneID="America/Los_Angeles"
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
         <FilterDump filters={filters} />
       </PhoneFrame>
     );
   },
-  name: 'Experimental: bottom sheet (forced)',
+  name: 'Bottom sheet (forced)',
   parameters: {viewport: {defaultViewport: 'mobile2'}},
 };
 
 /**
- * `experimental={{presentation: 'adaptive'}}`: the sheet flow on a compact
+ * The default presentation, `adaptive`: the sheet flow on a compact
  * coarse-pointer screen, the tokenizer field and editor popover otherwise.
  * Resize the viewport or switch the pointer emulation to see it switch.
  */
-export const ExperimentalAdaptive: Story = {
+export const AdaptivePresentation: Story = {
   render: args => {
     const [filters, setFilters] =
       useState<ReadonlyArray<PowerSearchFilter>>(sheetPresetFilters);
@@ -2151,13 +2154,12 @@ export const ExperimentalAdaptive: Story = {
           filters={filters}
           onChange={next => setFilters(next)}
           timezoneID="America/Los_Angeles"
-          experimental={{presentation: 'adaptive'}}
         />
         <FilterDump filters={filters} />
       </PhoneFrame>
     );
   },
-  name: 'Experimental: adaptive',
+  name: 'Adaptive (default)',
 };
 
 /**
@@ -2165,7 +2167,7 @@ export const ExperimentalAdaptive: Story = {
  * field typeahead's suggestions list inline under the search box, and a value
  * suggestion commits a filter straight away.
  */
-export const ExperimentalBottomSheetContentSearch: Story = {
+export const SheetPresentationContentSearch: Story = {
   render: args => {
     const [filters, setFilters] = useState<ReadonlyArray<PowerSearchFilter>>(
       [],
@@ -2178,13 +2180,13 @@ export const ExperimentalBottomSheetContentSearch: Story = {
           filters={filters}
           onChange={next => setFilters(next)}
           placeholder="Search issues…"
-          experimental={{presentation: 'bottom-sheet'}}
+          presentation="bottom-sheet"
         />
         <FilterDump filters={filters} />
       </PhoneFrame>
     );
   },
-  name: 'Experimental: bottom sheet with content search',
+  name: 'Bottom sheet with content search',
   parameters: {viewport: {defaultViewport: 'mobile2'}},
 };
 
@@ -2193,7 +2195,7 @@ export const ExperimentalBottomSheetContentSearch: Story = {
  * keeps the trigger focusable (aria-disabled) and shows its reason; the result
  * count renders at the end of the field in both presentations.
  */
-export const ExperimentalBottomSheetStates: Story = {
+export const SheetPresentationStates: Story = {
   render: () => {
     const [filters, setFilters] =
       useState<ReadonlyArray<PowerSearchFilter>>(sheetPresetFilters);
@@ -2208,7 +2210,7 @@ export const ExperimentalBottomSheetStates: Story = {
             isLabelHidden={false}
             isReadOnly
             resultCount={42}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
           <PowerSearch
             config={fullConfig}
@@ -2218,7 +2220,7 @@ export const ExperimentalBottomSheetStates: Story = {
             isLabelHidden={false}
             isDisabled
             disabledMessage="Pick a project first"
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
           <PowerSearch
             config={fullConfig}
@@ -2228,12 +2230,12 @@ export const ExperimentalBottomSheetStates: Story = {
             isLabelHidden={false}
             status={{type: 'error', message: 'Add at least one filter'}}
             startIcon={MagnifyingGlassIcon}
-            experimental={{presentation: 'bottom-sheet'}}
+            presentation="bottom-sheet"
           />
         </div>
       </PhoneFrame>
     );
   },
-  name: 'Experimental: bottom sheet states',
+  name: 'Bottom sheet states',
   parameters: {viewport: {defaultViewport: 'mobile2'}},
 };

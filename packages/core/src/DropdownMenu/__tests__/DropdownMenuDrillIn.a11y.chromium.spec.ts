@@ -13,7 +13,12 @@
  *   (`(pointer: coarse)` at open time) is what jsdom cannot exercise.
  */
 
-import {devices, expect, test, type Page} from '@playwright/test';
+import {
+  devices,
+  expect,
+  test,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {
   DEFAULT_STORYBOOK_DIR,
   serveStorybook,

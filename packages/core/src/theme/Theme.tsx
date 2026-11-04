@@ -120,6 +120,7 @@ const THEME_LAYER_ORDER = '@layer reset, astryx-base, astryx-theme;';
 function useThemeStyleInjection(theme: DefinedTheme): void {
   const id = useId();
 
+  // Syncs the document's stylesheets with the runtime theme CSS.
   useInsertionEffect(() => {
     // Built themes have their CSS in a separate file — skip injection
     if (theme.__built) {
@@ -218,6 +219,7 @@ function useRootThemeSync(
   themeName: string,
   reducesMotion: boolean,
 ): void {
+  // Syncs the theme attributes on the root `<html>` element.
   useIsomorphicLayoutEffect(() => {
     if (isNested) {
       return;
