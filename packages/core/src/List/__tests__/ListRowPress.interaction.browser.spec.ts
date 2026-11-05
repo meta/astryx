@@ -33,13 +33,13 @@ import {
 } from '@astryxdesign/a11y-spec/playwright';
 import {
   animationStoryboard,
+  armHold,
   blockMainThread,
   castStoryboard,
   compareCurve,
   countBetween,
   cubicBezier,
   freezeTimers,
-  holdAnimations,
   installLongTaskLog,
   installTimerGate,
   openStory,
@@ -254,10 +254,14 @@ test('a held row paints the pressed token and its release follows the exit easin
   // the release clock (after which the release ends with its animation) can
   // be held while the release is seeked.
   await installTimerGate(page);
+  // The page holds the release itself as soon as it runs. A hold the test
+  // sends after the lift arrives later on a busy machine, and the release
+  // can end first.
+  const hold = await armHold(page, row);
   await driver.play(tap(center, {holdMs: HOLD_MS}));
   expect(await pressState(row)).toBe('fading');
   await freezeTimers(page);
-  const held = await holdAnimations(page, row);
+  const held = await hold.held();
   const release = held.find(
     a => a.target?.startsWith('li') && a.kind === 'CSSAnimation',
   );
