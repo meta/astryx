@@ -620,9 +620,20 @@ export function ChatComposerInput(props: ChatComposerInputProps) {
     [emitChange, insertTextWithoutEmit],
   );
 
+  const insertToken = useCallback(
+    (token: ChatComposerToken) => {
+      const id = tokens.insertToken(token);
+      if (id != null) {
+        emitChange();
+      }
+      return id;
+    },
+    [emitChange, tokens.insertToken],
+  );
+
   // A caller may retain a handle across renders. Resolve mutation permission
   // through the latest callbacks rather than the render that created it.
-  insertTokenRef.current = isDisabled ? () => undefined : tokens.insertToken;
+  insertTokenRef.current = isDisabled ? () => undefined : insertToken;
   insertTextRef.current = isDisabled ? () => {} : insertText;
   expandTokenRef.current = isDisabled ? () => {} : tokens.expandToken;
 
