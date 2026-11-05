@@ -1023,8 +1023,9 @@ describe('ci admission', () => {
     const waiting = count =>
       Array.from({length: count}, (_, i) => waitingRun(300 + i));
 
-    it('turns away a pull-request run that finds no room and ten others waiting', async () => {
-      // 5 x 12 + 10 waiting + 18 + 16 = 104: no room, and ten already wait.
+    it('lets an eleventh pull-request run wait instead of turning it away at once', async () => {
+      // 5 x 12 + 10 waiting + 18 + 16 = 104: no room for the run, and ten
+      // already wait, but room for its Storybook build (89 <= 90).
       const result = await admit({
         active: [...prs(5), ...waiting(10)],
         peak: 16,
@@ -1032,25 +1033,13 @@ describe('ci admission', () => {
         maxWait: 12,
         maxLooks: 2,
       });
-      expect(result.looks).toBe(1);
-      expect(result.outputs.full).toBe('true');
-      expect(result.warning[0]).toContain(
-        'CI is full: 10 pull-request runs are already waiting',
-      );
-    });
-
-    it('counts only waiting pull-request runs toward the ten', async () => {
-      const queued = Array.from({length: 12}, (_, i) =>
-        waitingRun(400 + i, {event: 'merge_group'}),
-      );
-      const result = await admit({
-        active: [...prs(5), ...waiting(9), ...queued],
-        peak: 16,
-        phase: 'room',
-        maxWait: 12,
-        maxLooks: 2,
-      });
       expect(result.outputs.full).toBeUndefined();
+      expect(result.info).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining('Room for the Storybook build'),
+        ]),
+      );
+      expect(result.warning.join('\n')).not.toContain('already waiting');
     });
 
     it('never turns away a merge-queue entry', async () => {
@@ -1068,7 +1057,7 @@ describe('ci admission', () => {
       expect(entry.looks).toBeGreaterThan(1);
     });
 
-    it('lets the tenth waiter wait, and never turns away a run that fits or a main run', async () => {
+    it('lets a waiter wait, and never turns away a run that fits or a main run', async () => {
       const ninth = await admit({
         active: [...prs(5), ...waiting(9)],
         peak: 16,
@@ -1156,6 +1145,18 @@ describe('ci admission', () => {
         maxLooks: 2,
         ...more,
       });
+
+    it('still stops a run at its longest wait when more than ten that waited longer still wait', async () => {
+      // The at-once stop at ten waiting runs is gone; the longest-wait stop stays.
+      const longer = Array.from({length: 11}, (_, i) => waiter(90 + i, -1));
+      const result = await atLimit([...full, ...longer]);
+      expect(result.looks).toBe(2);
+      expect(result.outputs.full).toBe('true');
+      expect(result.warning.join('\n')).toContain(
+        'CI is full: still no room after 12 minutes',
+      );
+      expect(result.warning.join('\n')).not.toContain('already waiting');
+    });
 
     it('starts the whole run, once, when no other run started at its longest wait', async () => {
       const result = await atLimit(full);
