@@ -108,7 +108,7 @@ export const docs = {
   relatedComponents: ['BottomSheet', 'Carousel'],
   relatedHooks: ['useLongPress', 'createPanGesture'],
   importPath: '@astryxdesign/core/hooks',
-  category: 'interaction',
+  category: 'motion & gestures',
 };
 
 /** @type {import('@astryxdesign/cli/authoring').HookTranslationDoc} */
