@@ -6,6 +6,8 @@
  * @description Runs accessibility audits on component stories using axe-core
  * @input --storybook-dir <path> --output <file> [--components <comma-separated>]
  *   [--stories <comma-separated-story-ids>] [--port <number, 0 = any free>]
+ *   [--changed-story-files <file>] (the stories of these changed story files
+ *   that no component owns, instead of --components or --stories)
  *   [--ready-selector <css-selector>] [--concurrency <pages, default 1>]
  *   [--shard <i>/<n> --shard-output <file>] (scan every n-th story, write it)
  *   [--merge-shards <dir>] (read a complete shard set instead of scanning)
@@ -53,6 +55,7 @@ const {
   legacyBaselineStoryKeys,
   ownerForA11yStory,
 } = require('./lib/a11y-story-identity');
+const {changedUnownedStoryIds} = require('./lib/a11y-changed-stories');
 
 const args = process.argv.slice(2);
 const getArg = (name) => {
@@ -71,6 +74,10 @@ const componentsArg = getArg('components');
 const components = (componentsArg || '').split(',').filter(Boolean);
 const storiesArg = getArg('stories');
 const requestedStories = (storiesArg || '').split(',').filter(Boolean);
+const changedStoryFilesArg = getArg('changed-story-files');
+if (changedStoryFilesArg !== null && (storiesArg !== null || componentsArg !== null)) {
+  throw new Error('--changed-story-files selects its own stories; pass it without --stories or --components');
+}
 // --components present but EMPTY means the caller derived an explicit empty
 // audit set (pr-a11y on a PR whose core/src changes map to no component —
 // e.g. a shared test file). Audit nothing and pass. Only an ABSENT flag
@@ -328,17 +335,34 @@ async function runAccessibilityAudit() {
   )) {
     console.log(`Owner route: ${owner} -> ${ownedStoryIds.join(', ')}`);
   }
+  let selectedStories = storiesArg !== null ? requestedStories : null;
+  if (changedStoryFilesArg !== null) {
+    const changedFiles = fs.existsSync(changedStoryFilesArg)
+      ? fs.readFileSync(changedStoryFilesArg, 'utf8').split('\n')
+      : [];
+    selectedStories = changedUnownedStoryIds(stories, routed.allRoutes, changedFiles);
+    if (selectedStories.length === 0) {
+      console.log('No changed story without a component owner — skipping.');
+      const report = {
+        components: {},
+        summary: { componentsAudited: 0, totalViolations: 0 },
+      };
+      fs.writeFileSync(outputFile, JSON.stringify(report, null, 2));
+      return report;
+    }
+    console.log(`Changed stories no component owns: ${selectedStories.join(', ')}`);
+  }
   const routedIds = new Set(routed.storyIds);
-  const requestedStoryIds = new Set(requestedStories);
+  const requestedStoryIds = new Set(selectedStories ?? []);
   const relevantStories = storyIds.filter(id => {
     if (id.endsWith('--docs')) return false;
     return (
       routedIds.has(id) &&
-      (storiesArg === null || requestedStoryIds.has(id))
+      (selectedStories === null || requestedStoryIds.has(id))
     );
   });
-  if (storiesArg !== null) {
-    const unresolvedStories = requestedStories.filter(
+  if (selectedStories !== null) {
+    const unresolvedStories = selectedStories.filter(
       id => !relevantStories.includes(id),
     );
     if (unresolvedStories.length > 0) {
@@ -636,7 +660,7 @@ async function runAccessibilityAudit() {
   }
 
   const report = {
-    requestedStories,
+    requestedStories: selectedStories ?? requestedStories,
     readySelector,
     ownerStoryRoutes: routed.ownerStoryRoutes,
     ownerStoryKeys,
