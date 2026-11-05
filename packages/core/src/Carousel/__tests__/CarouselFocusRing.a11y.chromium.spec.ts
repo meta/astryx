@@ -150,26 +150,81 @@ function expectWholeRing(paint: RingPaint, label: string) {
   expect(paint.clipped, label).toEqual([]);
 }
 
-test.describe('Carousel and CodeBlock focus rings (Chromium)', () => {
-  test('an overflowing Carousel paints the whole ring around its scroller, at rest and mid-scroll', async ({
-    page,
-  }) => {
-    await page.setViewportSize({width: 640, height: 600});
-    await page.goto(
-      `${storybook.origin}/iframe.html?id=core-carousel--default&viewMode=story`,
-    );
-    const scroller = page.locator('#storybook-root .astryx-carousel-scroller');
-    await expect(scroller).toBeVisible();
-    await tabTo(page, '#storybook-root .astryx-carousel-scroller');
-    expectWholeRing(await measureRing(page), 'at rest');
+/** The painted color at one viewport point, read from a real screenshot. */
+async function pixel(page: Page, x: number, y: number) {
+  const shot = await page.screenshot({clip: {x, y, width: 1, height: 1}});
+  return page.evaluate(async base64 => {
+    const blob = await (await fetch(`data:image/png;base64,${base64}`)).blob();
+    const bitmap = await createImageBitmap(blob);
+    const canvas = new OffscreenCanvas(1, 1);
+    const context = canvas.getContext('2d')!;
+    context.drawImage(bitmap, 0, 0);
+    const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
+    return [r, g, b] as const;
+  }, shot.toString('base64'));
+}
 
-    await scroller.evaluate(el => {
-      el.style.scrollBehavior = 'auto';
-      el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
-    });
-    await page.waitForTimeout(100);
-    expectWholeRing(await measureRing(page), 'mid-scroll');
+/**
+ * The ring the Carousel root's overlay paints, checked in pixels: the
+ * midpoint of each edge, one pixel inside the root, shows the ring's color.
+ */
+async function expectRingPaintsEveryEdge(page: Page, label: string) {
+  const root = page.locator('#storybook-root .astryx-carousel').first();
+  const ring = await root.evaluate(el => {
+    const after = getComputedStyle(el, '::after');
+    const probe = document.createElement('span');
+    probe.style.color = after.outlineColor;
+    document.body.append(probe);
+    const [r, g, b] = getComputedStyle(probe)
+      .color.match(/[\d.]+/g)!
+      .slice(0, 3)
+      .map(Number);
+    probe.remove();
+    return {style: after.outlineStyle, color: [r, g, b]};
   });
+  expect(ring.style, label).toBe('solid');
+  const box = (await root.boundingBox())!;
+  const edges = {
+    top: [box.x + box.width / 2, box.y + 1],
+    bottom: [box.x + box.width / 2, box.y + box.height - 2],
+    start: [box.x + 1, box.y + box.height / 2],
+    end: [box.x + box.width - 2, box.y + box.height / 2],
+  } as const;
+  for (const [edge, [x, y]] of Object.entries(edges)) {
+    const painted = await pixel(page, Math.floor(x), Math.floor(y));
+    const distance = Math.hypot(
+      painted[0] - ring.color[0],
+      painted[1] - ring.color[1],
+      painted[2] - ring.color[2],
+    );
+    expect(distance, `${label}: ${edge} edge`).toBeLessThan(40);
+  }
+}
+
+test.describe('Carousel and CodeBlock focus rings (Chromium)', () => {
+  for (const story of ['core-carousel--default', 'core-carousel--cards']) {
+    test(`${story}: an overflowing Carousel paints its ring on every edge, at rest and mid-scroll`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({width: 640, height: 600});
+      await page.goto(
+        `${storybook.origin}/iframe.html?id=${story}&viewMode=story`,
+      );
+      const scroller = page.locator(
+        '#storybook-root .astryx-carousel-scroller',
+      );
+      await expect(scroller).toBeVisible();
+      await tabTo(page, '#storybook-root .astryx-carousel-scroller');
+      await expectRingPaintsEveryEdge(page, 'at rest');
+
+      await scroller.evaluate(el => {
+        el.style.scrollBehavior = 'auto';
+        el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
+      });
+      await page.waitForTimeout(100);
+      await expectRingPaintsEveryEdge(page, 'mid-scroll');
+    });
+  }
 
   test('an overflowing CodeBlock paints the whole ring around its viewport', async ({
     page,

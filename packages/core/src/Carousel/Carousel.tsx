@@ -41,7 +41,10 @@ import {
   easeVars,
   focusVars,
 } from '../theme/tokens.stylex';
-import {focusOutlineStyles} from '../utils/focusOutline.stylex';
+import {
+  FOCUS_OUTLINE_PARTS,
+  focusOutlineStyles,
+} from '../utils/focusOutline.stylex';
 import {Button} from '../Button';
 import {Icon} from '../Icon';
 import {useLayer} from '../Layer';
@@ -162,13 +165,25 @@ const styles = stylex.create({
     overflow: 'clip',
     overflowClipMargin: '1px',
   },
-  // The root paints the scroller's keyboard ring: the scroller's edge-fade
-  // mask would erase a ring the scroller painted itself. The root clips at a
-  // 1px margin, so the ring sits inside the root's box.
-  rootFocusRingInset: {
-    outlineOffset: {
-      default: null,
-      ':has(> :first-child:focus-visible)': `calc(-1 * ${focusVars['--focus-outline-width']})`,
+  // The scroller's keyboard ring is an overlay on the root, painted after the
+  // scroller: the scroller's edge-fade mask would erase a ring the scroller
+  // painted itself, and makes the scroller a stacking context that covers a
+  // ring painted by the root. The ring sits inside the root's clipped box.
+  focusRingOverlay: {
+    '--_carousel-ring-style': {
+      default: 'none',
+      ':has(> :first-child:focus-visible)': FOCUS_OUTLINE_PARTS.outlineStyle,
+    },
+    '::after': {
+      content: '""',
+      position: 'absolute',
+      inset: 0,
+      pointerEvents: 'none',
+      borderRadius: 'inherit',
+      outlineStyle: 'var(--_carousel-ring-style)',
+      outlineWidth: FOCUS_OUTLINE_PARTS.outlineWidth,
+      outlineColor: FOCUS_OUTLINE_PARTS.outlineColor,
+      outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
     },
   },
   scroller: {
@@ -596,8 +611,7 @@ export function Carousel({
         stylex.props(
           styles.root,
           // The scroller is the root's first child and its tab stop.
-          focusOutlineStyles.focusWithinFirstChild,
-          styles.rootFocusRingInset,
+          styles.focusRingOverlay,
           xstyle,
         ),
         className,
