@@ -385,6 +385,11 @@ describe('neutral selected fill', () => {
         '--color-text-secondary'
       ],
     ),
+    'file-input mode:dropzone --color-text-secondary': pair(
+      neutralTheme.components?.['file-input']?.['mode:dropzone']?.[
+        '--color-text-secondary'
+      ],
+    ),
     '--color-syntax-comment': pair(
       neutralTheme.tokens['--color-syntax-comment'],
     ),
@@ -439,7 +444,7 @@ describe('neutral selected fill', () => {
     expect(contrastRatio(dark, darkHovered)).toBeGreaterThanOrEqual(4.5);
   });
 
-  it('scopes the lifted secondary text to selected rows in the generated CSS', () => {
+  it('scopes the lifted secondary text to selected rows, numbered citations and dropzones in the generated CSS', () => {
     const css = generateThemeCSS(neutralTheme).component;
     for (const target of ['item', 'tree-list-item']) {
       expect(css).toMatch(
@@ -450,6 +455,9 @@ describe('neutral selected fill', () => {
     }
     expect(css).toMatch(
       /\.astryx-citation\[data-variant="number"\][^{]*\{[^}]*--color-text-secondary/,
+    );
+    expect(css).toMatch(
+      /\.astryx-file-input\[data-mode="dropzone"\][^{]*\{[^}]*--color-text-secondary/,
     );
   });
   it.each(Object.entries(foregrounds))(

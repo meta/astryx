@@ -102,15 +102,14 @@ rendered light/dark evidence; shared color alone is not enough.
 
 Neutral's selected fill, `--color-accent-muted`, is `neutral.light[85]` /
 `neutral.dark[30]` (`#d4d4d4` / `#474747`). Text on it reads at 4.5:1 or more
-in both modes, except the known gap below. In dark mode Neutral lifts `--color-text-secondary` to
-`neutral.dark[80]` on a selected `item` or `tree-list-item` and on a
-`citation` with `variant:number`, so that text clears 4.5:1 at rest and under
-the hover overlay. Neutral's syntax `comment`, `operator` and `punctuation`
-colours are `neutral.light[35]` / `neutral.dark[75]`, so they read on a
-highlighted code line. Known gap: a checked CheckboxListItem's description and
-FileInput's drop hint while a file is dragged over have no state target for
-their fill (`component:CheckboxListItem` FR15), so in dark mode they read
-3.47:1 on it.
+in both modes. In dark mode Neutral lifts `--color-text-secondary` to
+`neutral.dark[80]` on a selected `item` or `tree-list-item` (a checked
+CheckboxListItem row reflects `selected` on its `item` target), on a
+`citation` with `variant:number`, and on a `file-input` with `mode:dropzone`,
+whose drag-over fill has no state target, so that text clears 4.5:1 at rest
+and under the hover overlay. Neutral's syntax `comment`, `operator` and
+`punctuation` colours are `neutral.light[35]` / `neutral.dark[75]`, so they
+read on a highlighted code line.
 
 This work does not add component states. It intentionally excludes
 `table-row-status`, which has no approved theming target, and SegmentedControl
