@@ -846,10 +846,11 @@ under a finger, and a mouse follows `module:DropdownMenu/useMenuPress` FR3 and
   let a scrim or overlay tap close at any time (`spec:AST-003` FR10 and
   `architecture:layer-runtime` INV14 leave dismissal to the component). Toast and a non-modal sheet (`component:BottomSheetSwitcher` FR5 and its
   Non-modal state) do not hold the page: the page behind them stays live, and
-  only the sheet itself holds a tap or a drag while it enters. Dialog, Drawer
-  and MobileNav hold an entrance only under a coarse primary pointer: where
-  the primary pointer is fine and the screen also takes touch (a touchscreen
-  laptop), a finger's tap or drag during the entrance is not held. After a
+  only the sheet itself holds a tap or a drag while it enters. Dialog, Drawer,
+  MobileNav and DropdownMenu hold an entrance only under a coarse primary
+  pointer: where the primary pointer is fine and the screen also takes touch
+  (a touchscreen laptop), a finger's tap or drag during the entrance is not
+  held. After a
   finger, the first press of a mouse that has not moved since lands on the
   entering presentation's shield and does nothing, where FR35 keeps today's
   behavior for a mouse (DEC-16); a move of the mouse lowers the shield first.
