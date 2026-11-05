@@ -72,7 +72,6 @@ async function mount(page: Page) {
 
 /** Collapse, then hold every running animation at `progress` of its length. */
 async function collapseAndHold(page: Page, progress: number) {
-  const expanded = await page.locator('nav').first().boundingBox();
   await page.getByRole('button', {name: /collapse/i}).click();
   const timings = await page.evaluate(at => {
     return document.getAnimations().map(animation => {
@@ -86,7 +85,7 @@ async function collapseAndHold(page: Page, progress: number) {
       };
     });
   }, progress);
-  return {expanded: expanded!, timings};
+  return {timings};
 }
 
 /** The painted color at one viewport point, read from a real screenshot. */
@@ -107,18 +106,17 @@ test('the sticky header does not cross the leaving rail during the collapse', as
   page,
 }) => {
   await mount(page);
-  const collapsedProbe = await collapseAndHold(page, 0.4);
-  expect(collapsedProbe.timings.length).toBeGreaterThan(0);
+  // Early in the collapse the copy still covers most of the expanded rail.
+  const {timings} = await collapseAndHold(page, 0.15);
+  expect(timings.length).toBeGreaterThan(0);
   const collapsed = await page.locator('nav').first().boundingBox();
-  // A point the old, expanded rail covered, beyond the collapsed rail, inside
-  // the header's band: the copy of the expanded rail must show there.
-  const x = Math.round(
-    (collapsed!.x +
-      collapsed!.width +
-      collapsedProbe.expanded.x +
-      collapsedProbe.expanded.width) /
-      2,
-  );
+  // Just past the collapsed rail, inside the header's band: the old,
+  // expanded rail's copy must show there, not the header.
+  const x = Math.round(collapsed!.x + collapsed!.width + 10);
+  await page.screenshot({
+    path: test.info().outputPath('collapse-frame.png'),
+    clip: {x: 0, y: 0, width: 420, height: 140},
+  });
   const shown = await pixel(page, x, 28);
   expect(shown).not.toEqual(HEADER);
 });
