@@ -57,7 +57,7 @@ import {useIndicator} from '../Indicator/useIndicator';
 import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
-import {watchHitArea, writeHitInsets} from '../utils/hitArea';
+import {useTouchHitArea} from '../utils/touchHitArea';
 import {touchHitAreaStyles} from '../utils/touchHitArea.stylex';
 import {
   registerEnglishFallback,
@@ -420,17 +420,9 @@ export function CheckboxInput({
   // checkbox is a marker in another component's row, which keeps its target.
   const hasHitArea = !isLabelHidden && !isDisabled && !isReadOnly;
   const inputRef = useRef<HTMLInputElement>(null);
-  // The watch lives as long as the row is attached: the ref's cleanup stops
-  // it, and a replaced row starts its own.
-  const watchRowHitArea = useCallback(
-    (row: HTMLDivElement | null) => {
-      if (row == null || !hasHitArea) {
-        return;
-      }
-      return watchHitArea(row, insets => writeHitInsets(row, insets));
-    },
-    [hasHitArea],
-  );
+  // The band's insets stay live while the row takes taps, and clear when it
+  // stops.
+  const watchRowHitArea = useTouchHitArea(hasHitArea);
   // The disabled-message tooltip listens for hover and focus on the whole
   // row, a larger trigger. It anchors on the checkbox itself (below), so it
   // shows next to the control. Its handlers check isEnabled, so the row

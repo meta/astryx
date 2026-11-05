@@ -79,6 +79,7 @@ import {joinAriaIDs} from '../utils/inputAria';
 import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {devWarn, warnOnce} from '../utils/devWarning';
 import {useInteractionModalityTracking} from '../utils/interactionModality';
+import {useKeyboardHighlight} from '../hooks/useKeyboardHighlight';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import {useAnnounceRenderedText} from '../hooks/useAnnounceRenderedText';
@@ -1851,23 +1852,12 @@ export function MultiSelector<T extends MultiSelectorOptionType>({
     ),
   });
 
-  const [isKeyboardHighlight, setIsKeyboardHighlight] = useState(
-    () => readModality() === 'keyboard',
-  );
-  const onKeyDown = useCallback(
-    (event: React.KeyboardEvent<HTMLElement>) => {
-      onComboboxKeyDown(event);
-      setIsKeyboardHighlight(readModality() === 'keyboard');
-    },
-    [onComboboxKeyDown, readModality],
-  );
-  const onItemMouseEnter = useCallback(
-    (...args: Parameters<typeof onComboboxItemMouseEnter>) => {
-      onComboboxItemMouseEnter(...args);
-      setIsKeyboardHighlight(readModality() === 'keyboard');
-    },
-    [onComboboxItemMouseEnter, readModality],
-  );
+  const {isKeyboardHighlight, onKeyDown, onItemMouseEnter} =
+    useKeyboardHighlight(
+      readModality,
+      onComboboxKeyDown,
+      onComboboxItemMouseEnter,
+    );
 
   // The trigger button owns its click so a consumer `onClick`, which lands on
   // the button, composes after the built-in toggle. A press elsewhere in the

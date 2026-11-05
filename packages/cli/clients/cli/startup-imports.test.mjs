@@ -3,7 +3,8 @@
 /**
  * @file A run of the bin loads only what its command uses. A run that prints
  * the version, in a folder with no project, loads none of the large parser,
- * schema and module-loader packages. The project, integration and contribution
+ * schema and module-loader packages, and none of the CLI's own doc, discovery,
+ * project and integration modules. The project, integration and contribution
  * modules use them. A module hook in the child records every module that the
  * run resolves.
  */
@@ -16,6 +17,7 @@ import {fileURLToPath, pathToFileURL} from 'node:url';
 import {afterAll, beforeAll, describe, expect, it} from 'vitest';
 
 const BIN = fileURLToPath(new URL('./bin/astryx.mjs', import.meta.url));
+const CLI_ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
 /** Packages that only project, integration and code-rewrite work uses. */
 const LARGE_PACKAGES = [
@@ -27,6 +29,23 @@ const LARGE_PACKAGES = [
   'recast',
   'zod',
 ];
+
+/**
+ * The CLI's own modules that only doc, discovery, project and integration work
+ * uses, as paths under the CLI root. A path that ends in `/` names a folder.
+ */
+const LARGE_CLI_MODULES = [
+  'authoring/',
+  'foundation/agent-docs/agent-docs.mjs',
+  'foundation/config/project.mjs',
+  'foundation/discovery/component-discovery.mjs',
+  'foundation/doc-compiler/compile.mjs',
+  'foundation/fs/module-loader.mjs',
+  'foundation/integrations/integrations.mjs',
+];
+
+/** The runs that print the version, as text or as JSON. */
+const VERSION_RUNS = ['--version', '-V', '--version --json'];
 
 /** @type {string} */
 let dir;
@@ -54,11 +73,12 @@ function packageOf(url) {
 
 /**
  * Run the bin with `args` in an empty folder, with its own home folder, and
- * return the packages of the modules it resolved.
+ * return the packages of the modules it resolved and the paths of the CLI's
+ * own modules under the CLI root.
  * @param {string[]} args
- * @returns {{status: number | null, packages: Set<string>}}
+ * @returns {{status: number | null, packages: Set<string>, cliModules: Set<string>}}
  */
-function packagesLoadedBy(args) {
+function modulesLoadedBy(args) {
   const log = path.join(dir, 'resolved.txt');
   fs.rmSync(log, {force: true});
   const hook = path.join(dir, 'record-resolved.mjs');
@@ -102,23 +122,50 @@ function packagesLoadedBy(args) {
     {cwd: app, env, encoding: 'utf8'},
   );
   const packages = new Set();
+  const cliModules = new Set();
   for (const url of fs.readFileSync(log, 'utf8').split('\n')) {
     const name = packageOf(url);
     if (name != null) packages.add(name);
+    else if (url.startsWith('file:')) {
+      const file = fileURLToPath(url);
+      if (file.startsWith(CLI_ROOT)) {
+        cliModules.add(file.slice(CLI_ROOT.length).split(path.sep).join('/'));
+      }
+    }
   }
-  return {status: result.status, packages};
+  return {status: result.status, packages, cliModules};
 }
 
 describe('a run of the bin that prints the version', () => {
-  it('records the packages it loads, such as the command parser', () => {
-    const {status, packages} = packagesLoadedBy(['--version']);
+  it('records the packages and CLI modules it loads, such as the command parser and the bin', () => {
+    const {status, packages, cliModules} = modulesLoadedBy(['--version']);
     expect(status).toBe(0);
     expect(packages.has('commander')).toBe(true);
+    expect(cliModules.has('clients/cli/bin/astryx.mjs')).toBe(true);
   });
 
-  it('loads no parser, schema or module-loader package in a folder with no project', () => {
-    const {status, packages} = packagesLoadedBy(['--version']);
-    expect(status).toBe(0);
-    expect(LARGE_PACKAGES.filter(name => packages.has(name))).toEqual([]);
-  });
+  it.each(VERSION_RUNS)(
+    'loads no parser, schema or module-loader package in a folder with no project (astryx %s)',
+    run => {
+      const {status, packages} = modulesLoadedBy(run.split(' '));
+      expect(status).toBe(0);
+      expect(LARGE_PACKAGES.filter(name => packages.has(name))).toEqual([]);
+    },
+  );
+
+  it.each(VERSION_RUNS)(
+    'loads no doc, discovery, project or integration module of the CLI (astryx %s)',
+    run => {
+      const {status, cliModules} = modulesLoadedBy(run.split(' '));
+      expect(status).toBe(0);
+      const loaded = [...cliModules];
+      expect(
+        LARGE_CLI_MODULES.filter(large =>
+          loaded.some(file =>
+            large.endsWith('/') ? file.startsWith(large) : file === large,
+          ),
+        ),
+      ).toEqual([]);
+    },
+  );
 });
