@@ -94,7 +94,7 @@ export const neutralTheme = defineTheme({
     '--color-background-muted': [neutral.light[95], neutral.dark[10]],
 
     '--color-accent': [neutral.light[10], neutral.dark[95]],
-    '--color-accent-muted': [neutral.light[95], neutral.dark[15]],
+    '--color-accent-muted': [neutral.light[85], neutral.dark[30]],
     '--color-neutral': [
       withAlpha(neutral.light[0], '0F'),
       withAlpha(neutral.dark[100], '1A'),
