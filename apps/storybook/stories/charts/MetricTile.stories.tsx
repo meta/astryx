@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import type {Meta, StoryObj} from '@storybook/react';
-import {MetricTile, Sparkline} from '@astryxdesign/charts';
+import {MetricTile, Chart, line} from '@astryxdesign/charts';
 
 const meta: Meta<typeof MetricTile> = {
   title: 'Charts/MetricTile',
@@ -10,6 +10,7 @@ const meta: Meta<typeof MetricTile> = {
 export default meta;
 
 const trendData = [4, 7, 5, 9, 6, 11, 8, 13, 10, 15];
+const trendRows = trendData.map((value, index) => ({index: index + 1, value}));
 
 export const WithTrend: StoryObj<typeof MetricTile> = {
   render: () => (
@@ -19,7 +20,15 @@ export const WithTrend: StoryObj<typeof MetricTile> = {
         value="2.4M"
         delta={{value: '+12.4%', direction: 'up'}}
         description="vs. previous 30 days"
-        trend={<Sparkline data={trendData} title="Request trend" />}
+        trend={
+          <Chart
+            data={trendRows}
+            xKey="index"
+            series={[line('value')]}
+            height={48}
+            title="Request trend"
+          />
+        }
       />
     </div>
   ),
