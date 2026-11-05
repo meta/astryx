@@ -454,12 +454,11 @@ describe('the two-state edge reveal (spec:AST-105 FR9)', () => {
     // Every frame of the copy follows the column's glide.
     const glide = lastOn(column) as Played;
     expect(clip.keyframes).toHaveLength(glide.keyframes.length);
-    // The panel, raised above its copy while it conceals, shows the caller's
-    // own frames, and drops the raise once the reveal ends.
-    // The panel and its copy stack at the top of the host's stacking context,
-    // so a positioned sibling at any z-index stays under the leaving state.
-    expect(side.style.zIndex).toBe('2147483647');
-    expect(copy.style.zIndex).toBe('2147483646');
+    // The copy paints at the panel's own level: just before it, with no
+    // z-index, and the panel takes none either.
+    expect(copy.nextElementSibling).toBe(side);
+    expect(copy.style.zIndex).toBe('');
+    expect(side.style.zIndex).toBe('');
     expect(icons).toHaveBeenCalled();
     clip.finish?.();
     expect(side.style.zIndex).toBe('');

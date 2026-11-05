@@ -2230,8 +2230,12 @@ export interface LayoutSwapMotion {
   readonly copyText?: (p: number) => number;
   /** The copy paints above its neighbours, in the background it shows. */
   readonly isOpaque?: boolean;
-  /** The opaque copy's `z-index` (default `1`). */
-  readonly copyZIndex?: string;
+  /**
+   * Place the copy just before this child of the host, at that child's
+   * level in the paint order, with no `z-index` of its own. Without it the
+   * opaque copy is the host's last child at `z-index: 1`.
+   */
+  readonly copyBefore?: Element;
   /**
    * An element the glide moves, such as the column the old content sat in.
    * Every part plays over its glide, frame by frame, and is told how far it
@@ -2288,10 +2292,6 @@ export function holdLayoutSwap(
   return part == null ? null : {area, ...part};
 }
 
-// The largest z-index a browser accepts, and the one just under it.
-const TOP_Z_INDEX = '2147483647';
-const BELOW_TOP_Z_INDEX = '2147483646';
-
 /**
  * After the change commits, before paint: the copy leaves while the incoming
  * elements enter, on FR4's one motion, every part started on the same
@@ -2311,9 +2311,11 @@ export function playLayoutSwap(
   // Captured now: the parts riding a glide play a microtask later, on the
   // start of the change they are part of.
   const change = changeStartIn(swap.area, copy.ownerDocument);
-  placeOver(copy, how.host, swap.rect);
+  placeOver(copy, how.host, swap.rect, how.copyBefore ?? null);
   if (how.isOpaque === true) {
-    copy.style.zIndex = how.copyZIndex ?? '1';
+    if (how.copyBefore == null) {
+      copy.style.zIndex = '1';
+    }
     copy.style.backgroundColor = paintedBackground(copy);
   }
   const animations: Animation[] = [];
@@ -2690,27 +2692,20 @@ export function playLayoutEdge(
     while (raised != null && raised.parentElement !== host) {
       raised = raised.parentElement;
     }
-    const restore =
-      raised == null
-        ? null
-        : {position: raised.style.position, zIndex: raised.style.zIndex};
-    // The leaving state stood beside the page's other content, never under
-    // it. Layout already has the new extent, so a positioned sibling at any
-    // z-index can reach into the copy's area. For the motion's length the
-    // element and its copy stack at the top of the host's stacking context,
-    // the element above the copy.
-    if (raised != null) {
-      if (getComputedStyle(raised).position === 'static') {
-        raised.style.position = 'relative';
-      }
-      raised.style.zIndex = TOP_Z_INDEX;
+    const restore = raised == null ? null : {position: raised.style.position};
+    // The copy paints at the element's own level: just before it in the
+    // host, with no z-index, so page content stacks against the pair as it
+    // does against the element alone. The element, positioned, paints above
+    // the copy by tree order.
+    if (raised != null && getComputedStyle(raised).position === 'static') {
+      raised.style.position = 'relative';
     }
     const end = playLayoutSwap(
       {...swap, rect: at},
       {
         host,
         isOpaque: true,
-        copyZIndex: BELOW_TOP_Z_INDEX,
+        copyBefore: raised ?? undefined,
         copy: (p, ride) => ({
           clipPath: clip(extentOfBox(before) - extentAt(p, ride)),
           opacity: copyOpacity(p),
@@ -2720,7 +2715,6 @@ export function playLayoutEdge(
         onEnd: () => {
           if (raised != null && restore != null) {
             raised.style.position = restore.position;
-            raised.style.zIndex = restore.zIndex;
           }
         },
         incoming: own.incoming ?? [],
