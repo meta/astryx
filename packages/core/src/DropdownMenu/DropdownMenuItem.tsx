@@ -277,7 +277,7 @@ export function DropdownMenuItem({
       // address keeps the default root.
       as={href != null ? LinkComponent : undefined}
       role="menuitem"
-      tabIndex={isDisabled ? undefined : -1}
+      tabIndex={-1}
       // The row's own handling runs first, then the caller's.
       onPointerMove={composeEventHandlers(handlePointerMove, onPointerMove)}
       {...pressable}

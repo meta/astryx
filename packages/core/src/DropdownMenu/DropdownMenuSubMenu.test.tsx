@@ -412,6 +412,39 @@ describe('DropdownMenuSubMenu', () => {
   });
 });
 
+describe('DropdownMenuSubMenu disabled rows', () => {
+  it('a keyboard open lands on the first enabled row, and ArrowUp then reaches the disabled one', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuSubMenu label="Move to">
+          <DropdownMenuItem label="Projects" isDisabled onClick={() => {}} />
+          <DropdownMenuItem label="Archive" onClick={() => {}} />
+        </DropdownMenuSubMenu>
+      </DropdownMenu>,
+    );
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    await waitFor(() => {
+      expect(
+        screen.getByRole('menu', {name: 'Actions', hidden: true}),
+      ).toHaveFocus();
+    });
+    screen.getByRole('menuitem', {name: /Move to/, hidden: true}).focus();
+    await user.keyboard('{ArrowRight}');
+    await waitFor(() => {
+      expect(
+        screen.getByRole('menuitem', {name: 'Archive', hidden: true}),
+      ).toHaveFocus();
+    });
+    await user.keyboard('{ArrowUp}');
+    await waitFor(() => {
+      expect(
+        screen.getByRole('menuitem', {name: 'Projects', hidden: true}),
+      ).toHaveFocus();
+    });
+  });
+});
+
 describe('DropdownMenuSubMenu host attributes', () => {
   async function openRoot(user: ReturnType<typeof userEvent.setup>) {
     await user.click(screen.getByRole('button', {name: /Actions/}));

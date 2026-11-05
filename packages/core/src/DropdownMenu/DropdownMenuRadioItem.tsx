@@ -191,7 +191,7 @@ export function DropdownMenuRadioItem({
       {...rest}
       role="menuitemradio"
       aria-checked={isChecked}
-      tabIndex={isDisabled ? undefined : -1}
+      tabIndex={-1}
       onPointerMove={composeEventHandlers(handlePointerMove, onPointerMove)}
       marker={
         // No wrapper — see DropdownMenuCheckboxItem: the target belongs on the

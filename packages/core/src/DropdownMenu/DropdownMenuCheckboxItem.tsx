@@ -206,7 +206,7 @@ export function DropdownMenuCheckboxItem({
       {...rest}
       role="menuitemcheckbox"
       aria-checked={value}
-      tabIndex={isDisabled ? undefined : -1}
+      tabIndex={-1}
       onPointerMove={composeEventHandlers(handlePointerMove, onPointerMove)}
       marker={
         // No wrapper, and no menu-specific theme target: the shared

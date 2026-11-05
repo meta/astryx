@@ -71,6 +71,7 @@ import {
 import {
   MENU_ITEM_ROLES,
   MENU_ITEM_SELECTOR,
+  MENU_ROW_SELECTOR,
   MENU_BOUNDARY_SELECTOR,
   activateMenuItem,
 } from '../DropdownMenu/menuItemRoles';
@@ -479,7 +480,8 @@ export function ContextMenu({
     ownsEvent,
     getItems: getMenuItems,
   } = useInternalListFocus<HTMLDivElement>({
-    itemSelector: MENU_ITEM_SELECTOR,
+    itemSelector: MENU_ROW_SELECTOR,
+    reachesDisabledItems: true,
     boundarySelector: MENU_BOUNDARY_SELECTOR,
     // Menus wrap from the last row to the first and back.
     wrap: true,
@@ -498,7 +500,8 @@ export function ContextMenu({
     getContainer: () => listRef.current,
   });
 
-  // Typeahead over the enabled menu items, matched on each row's LABEL alone.
+  // Typeahead over the menu items, disabled ones included, matched on each
+  // row's LABEL alone.
   // Reuses the hook's scoped item collection so an inline submenu flyout's
   // items aren't swept in.
   const typeahead = useTypeahead({

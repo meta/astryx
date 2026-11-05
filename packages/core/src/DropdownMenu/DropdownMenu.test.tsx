@@ -2448,7 +2448,7 @@ describe('DropdownMenu keyboard access for menuitemradio/menuitemcheckbox (#3829
     ).toHaveFocus();
   });
 
-  it('typeahead skips an aria-disabled item and matches the next enabled label', async () => {
+  it('typeahead reaches an aria-disabled item, which stays discoverable', async () => {
     const user = userEvent.setup();
     render(
       <DropdownMenu button={{label: 'Sort'}}>
@@ -2465,21 +2465,14 @@ describe('DropdownMenu keyboard access for menuitemradio/menuitemcheckbox (#3829
     await user.click(screen.getByRole('button', {name: /Sort/}));
     // Anchor the search on 'Edit' so typeahead scans forward and meets the
     // disabled 'Newest' (also an 'n' match) before the enabled 'Nightly'.
-    // This pins the `:not([aria-disabled="true"])` in MENU_ITEM_SELECTOR: the
-    // menus never pass useTypeahead's `isDisabled` option, so that clause is
-    // the only thing keeping disabled rows out of the typeahead list. An
-    // arrow-key test cannot cover it — useListFocus re-filters disabled items
-    // independently, so arrow navigation is guarded twice over.
-    // The disabled row keeps tabIndex={-1} on purpose: it stays focusable, so
-    // the selector clause is the sole reason focus skips it.
     screen.getByRole('menuitem', {name: 'Edit', hidden: true}).focus();
     fireEvent.keyDown(screen.getByRole('menu', {hidden: true}), {key: 'n'});
     expect(
-      screen.getByRole('menuitemcheckbox', {name: 'Nightly', hidden: true}),
+      screen.getByRole('menuitemradio', {name: 'Newest', hidden: true}),
     ).toHaveFocus();
   });
 
-  it('skips aria-disabled menuitemradio and menuitemcheckbox items during arrow navigation', async () => {
+  it('reaches aria-disabled menuitemradio and menuitemcheckbox items during arrow navigation', async () => {
     const user = userEvent.setup();
     render(
       <DropdownMenu button={{label: 'Sort'}}>
@@ -2502,7 +2495,59 @@ describe('DropdownMenu keyboard access for menuitemradio/menuitemcheckbox (#3829
 
     fireEvent.keyDown(menu, {key: 'ArrowDown'});
     expect(
-      screen.getByRole('menuitemradio', {name: 'Oldest', hidden: true}),
+      screen.getByRole('menuitemradio', {name: 'Newest', hidden: true}),
+    ).toHaveFocus();
+    fireEvent.keyDown(menu, {key: 'ArrowDown'});
+    expect(
+      screen.getByRole('menuitemcheckbox', {name: 'Archived', hidden: true}),
+    ).toHaveFocus();
+  });
+
+  it('a disabled row takes focus from the keys, stays inert, and leaves the menu open', async () => {
+    const user = userEvent.setup();
+    const onDelete = vi.fn();
+    render(
+      <DropdownMenu
+        button={{label: 'Actions'}}
+        items={[
+          {label: 'Edit'},
+          {
+            label: 'Delete',
+            isDisabled: true,
+            description: 'Only the owner can delete',
+            onClick: onDelete,
+          },
+          {label: 'Print'},
+        ]}
+      />,
+    );
+
+    screen.getByRole('button', {name: /Actions/}).focus();
+    await user.keyboard('{Enter}');
+    const edit = screen.getByRole('menuitem', {name: 'Edit', hidden: true});
+    await waitFor(() => expect(edit).toHaveFocus());
+
+    const del = screen.getByRole('menuitem', {name: /Delete/, hidden: true});
+    expect(del).toHaveAttribute('aria-disabled', 'true');
+    expect(del).toHaveAttribute('tabindex', '-1');
+    await user.keyboard('{ArrowDown}');
+    expect(del).toHaveFocus();
+    await user.keyboard('{Enter}');
+    await user.keyboard(' ');
+    expect(onDelete).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', {name: /Actions/})).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(del).toHaveFocus();
+
+    // End and Home visit a disabled row as any other row.
+    const menu = screen.getByRole('menu', {hidden: true});
+    fireEvent.keyDown(menu, {key: 'Home'});
+    expect(edit).toHaveFocus();
+    fireEvent.keyDown(menu, {key: 'End'});
+    expect(
+      screen.getByRole('menuitem', {name: 'Print', hidden: true}),
     ).toHaveFocus();
   });
 
@@ -2647,7 +2692,7 @@ describe('DropdownMenu open focus follows input modality (#4477)', () => {
     ).toHaveFocus();
   });
 
-  it('ArrowDown after a pointer open skips a disabled leading item', async () => {
+  it('ArrowDown after a pointer open reaches a disabled leading item', async () => {
     const user = userEvent.setup();
     render(
       <DropdownMenu
@@ -2662,7 +2707,7 @@ describe('DropdownMenu open focus follows input modality (#4477)', () => {
 
     fireEvent.keyDown(menu, {key: 'ArrowDown'});
     expect(
-      screen.getByRole('menuitem', {name: 'Delete', hidden: true}),
+      screen.getByRole('menuitem', {name: 'Edit', hidden: true}),
     ).toHaveFocus();
   });
 

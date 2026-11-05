@@ -166,10 +166,9 @@ export function NavHeadingMenuItem({
       {...restProps}
       ref={itemRef}
       role="menuitem"
-      // A disabled link row has no href, so without tabIndex it could not take
-      // focus at all. -1 keeps it focusable but out of the Tab order, as an
-      // enabled row is (spec:AST-085 FR1).
-      tabIndex={isDisabled && !href ? undefined : -1}
+      // -1 keeps every row focusable but out of the Tab order, a disabled
+      // link row with no href too: the keys reach a disabled row.
+      tabIndex={-1}
       aria-disabled={isDisabled || undefined}
       href={isDisabled ? undefined : href}
       // A menu row is never a draggable link: a mouse press that slides to
