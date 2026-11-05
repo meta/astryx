@@ -30,6 +30,7 @@ import path from 'node:path';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {describe, it, expect} from 'vitest';
+import {createRepository} from '../../scripts/lib/git-fixture.mjs';
 
 const SCRIPTS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT = path.join(SCRIPTS_DIR, 'analyze-pr.js');
@@ -70,115 +71,135 @@ function buildFixture() {
   const upstream = path.join(base, 'upstream');
   const clone = path.join(base, 'clone');
 
-  fs.mkdirSync(path.join(upstream, 'packages/core/src/Card'), {recursive: true});
-  fs.mkdirSync(path.join(upstream, 'packages/core/src/Button'), {recursive: true});
-  fs.mkdirSync(path.join(upstream, 'packages/core/src/Line'), {recursive: true});
-  fs.mkdirSync(path.join(upstream, 'packages/core/src/InteractiveRoleContext'), {recursive: true});
-  fs.mkdirSync(path.join(upstream, 'packages/lab/src/Sankey'), {recursive: true});
-  fs.mkdirSync(path.join(upstream, 'packages/richtext/src'), {recursive: true});
-  fs.mkdirSync(path.join(upstream, 'packages/vega/src'), {recursive: true});
-  fs.mkdirSync(path.join(upstream, 'packages/themes/neutral/src'), {recursive: true});
-  fs.mkdirSync(path.join(upstream, 'packages/themes/probe/src'), {recursive: true});
-
-  git(upstream, ['init', '-q', '-b', 'main']);
-  git(upstream, ['config', 'user.email', 'test@test.co']);
-  git(upstream, ['config', 'user.name', 'Test']);
-  fs.writeFileSync(path.join(upstream, 'package.json'), '{}');
-  fs.mkdirSync(path.join(upstream, 'packages/core/src/Badge'), {recursive: true});
-  fs.writeFileSync(path.join(upstream, 'packages/core/src/index.ts'), "export {Card} from './Card';\nexport {Badge} from './Badge';\n");
-  fs.writeFileSync(path.join(upstream, 'packages/core/src/Badge/Badge.tsx'), 'export function Badge() {}\n');
-  fs.writeFileSync(path.join(upstream, 'packages/core/src/Badge/Badge.doc.mjs'), "export default {name: 'Badge'};\n");
-  fs.writeFileSync(path.join(upstream, 'packages/core/src/Badge/index.ts'), "export {Badge} from './Badge';\n");
-  fs.mkdirSync(path.join(upstream, 'docs/specs/components/Badge'), {recursive: true});
-  fs.writeFileSync(path.join(upstream, 'docs/specs/components/Badge/Badge.spec.md'), '---\nschema_version: 3\n---\n');
-  fs.writeFileSync(path.join(upstream, 'packages/core/src/Card/Card.tsx'), 'export function Card() {}\n');
-  fs.writeFileSync(path.join(upstream, 'packages/core/src/Card/Card.doc.mjs'), "export default {name: 'Card'};\n");
-  fs.writeFileSync(path.join(upstream, 'packages/core/src/Card/index.ts'), "export {Card} from './Card';\n");
-  fs.writeFileSync(path.join(upstream, 'packages/core/src/Button/index.ts'), 'export {}\n');
-  fs.writeFileSync(path.join(upstream, 'packages/core/src/Line/index.ts'), 'export {}\n');
-  fs.writeFileSync(
-    path.join(upstream, 'packages/richtext/src/RichTextEditor.tsx'),
-    'export function RichTextEditor() {}\n',
-  );
-  fs.writeFileSync(
-    path.join(upstream, 'packages/richtext/src/RichTextEditorAutoLinkPlugin.tsx'),
-    'export function RichTextEditorAutoLinkPlugin() {}\n',
-  );
-  fs.writeFileSync(
-    path.join(upstream, 'packages/richtext/src/RichTextView.tsx'),
-    'export function RichTextView() {}\n',
-  );
-  fs.writeFileSync(
-    path.join(upstream, 'packages/richtext/src/index.ts'),
-    [
+  const atBranchPoint = {
+    'package.json': '{}',
+    'packages/core/src/index.ts':
+      "export {Card} from './Card';\nexport {Badge} from './Badge';\n",
+    'packages/core/src/Badge/Badge.tsx': 'export function Badge() {}\n',
+    'packages/core/src/Badge/Badge.doc.mjs':
+      "export default {name: 'Badge'};\n",
+    'packages/core/src/Badge/index.ts': "export {Badge} from './Badge';\n",
+    'docs/specs/components/Badge/Badge.spec.md':
+      '---\nschema_version: 3\n---\n',
+    'packages/core/src/Card/Card.tsx': 'export function Card() {}\n',
+    'packages/core/src/Card/Card.doc.mjs': "export default {name: 'Card'};\n",
+    'packages/core/src/Card/index.ts': "export {Card} from './Card';\n",
+    'packages/core/src/Button/index.ts': 'export {}\n',
+    'packages/core/src/Line/index.ts': 'export {}\n',
+    'packages/richtext/src/RichTextEditor.tsx':
+      'export function RichTextEditor() {}\n',
+    'packages/richtext/src/RichTextEditorAutoLinkPlugin.tsx':
+      'export function RichTextEditorAutoLinkPlugin() {}\n',
+    'packages/richtext/src/RichTextView.tsx':
+      'export function RichTextView() {}\n',
+    'packages/richtext/src/index.ts': [
       "export {RichTextEditor} from './RichTextEditor';",
       "export {RichTextEditorAutoLinkPlugin} from './RichTextEditorAutoLinkPlugin';",
       "export {RichTextView} from './RichTextView';",
       '',
     ].join('\n'),
-  );
-  fs.writeFileSync(
-    path.join(upstream, 'packages/vega/src/VegaChart.tsx'),
-    'export function VegaChart() {}\n',
-  );
-  fs.writeFileSync(path.join(upstream, 'packages/vega/src/index.ts'), "export {VegaChart} from './VegaChart';\n");
-  fs.writeFileSync(path.join(upstream, 'packages/core/src/InteractiveRoleContext/internal.ts'), 'export const shared = true;\n');
-  fs.writeFileSync(path.join(upstream, 'packages/lab/src/Sankey/internal.ts'), 'export const family = true;\n');
-  fs.writeFileSync(
-    path.join(upstream, 'packages/themes/neutral/package.json'),
-    JSON.stringify({name: '@astryxdesign/theme-neutral', private: false}),
-  );
-  fs.writeFileSync(path.join(upstream, 'packages/themes/neutral/src/theme.ts'), 'export {}\n');
-  fs.writeFileSync(
-    path.join(upstream, 'packages/themes/probe/package.json'),
-    JSON.stringify({name: '@astryxdesign/theme-probe', private: true}),
-  );
-  fs.writeFileSync(path.join(upstream, 'packages/themes/probe/src/theme.ts'), 'export {}\n');
-  git(upstream, ['add', '-A']);
-  git(upstream, ['commit', '-qm', 'branch point']);
-  const branchPoint = git(upstream, ['rev-parse', 'HEAD']);
+    'packages/vega/src/VegaChart.tsx': 'export function VegaChart() {}\n',
+    'packages/vega/src/index.ts': "export {VegaChart} from './VegaChart';\n",
+    'packages/core/src/InteractiveRoleContext/internal.ts':
+      'export const shared = true;\n',
+    'packages/lab/src/Sankey/internal.ts': 'export const family = true;\n',
+    'packages/themes/neutral/package.json': JSON.stringify({
+      name: '@astryxdesign/theme-neutral',
+      private: false,
+    }),
+    'packages/themes/neutral/src/theme.ts': 'export {}\n',
+    'packages/themes/probe/package.json': JSON.stringify({
+      name: '@astryxdesign/theme-probe',
+      private: true,
+    }),
+    'packages/themes/probe/src/theme.ts': 'export {}\n',
+  };
+  const appended = (file, text) => ({[file]: atBranchPoint[file] + text});
 
   // 60 churn commits on main so the branch point is beyond any small depth.
-  for (let i = 1; i <= 60; i++) {
-    fs.appendFileSync(path.join(upstream, 'packages/core/src/Button/index.ts'), `b${i}\n`);
-    fs.appendFileSync(path.join(upstream, 'packages/core/src/Line/index.ts'), `l${i}\n`);
-    git(upstream, ['add', '-A']);
-    git(upstream, ['commit', '-qm', `churn ${i}`]);
-  }
+  const churn = Array.from({length: 60}, (_, index) => {
+    const lines = prefix =>
+      Array.from({length: index + 1}, (__, n) => `${prefix}${n + 1}\n`).join(
+        '',
+      );
+    return {
+      ref: 'refs/heads/main',
+      message: `churn ${index + 1}`,
+      files: {
+        'packages/core/src/Button/index.ts': `export {}\n${lines('b')}`,
+        'packages/core/src/Line/index.ts': `export {}\n${lines('l')}`,
+      },
+    };
+  });
 
   // Feature branch off the branch point, touching Core, Rich Text, and Vega.
-  git(upstream, ['branch', 'feature', branchPoint]);
-  git(upstream, ['checkout', '-q', 'feature']);
-  fs.appendFileSync(path.join(upstream, 'packages/core/src/Card/index.ts'), 'export const Card = {}\n');
   // Only Badge's knowledge record changes: no browser audit owns Badge.
-  fs.appendFileSync(path.join(upstream, 'docs/specs/components/Badge/Badge.spec.md'), 'record text\n');
-  fs.appendFileSync(
-    path.join(upstream, 'packages/richtext/src/RichTextEditor.tsx'),
-    'export const richTextChanged = true\n',
-  );
-  fs.appendFileSync(
-    path.join(upstream, 'packages/richtext/src/RichTextEditorAutoLinkPlugin.tsx'),
-    'export const autoLinkChanged = true\n',
-  );
-  fs.appendFileSync(
-    path.join(upstream, 'packages/richtext/src/RichTextView.tsx'),
-    'export const viewChanged = true\n',
-  );
-  fs.appendFileSync(
-    path.join(upstream, 'packages/vega/src/VegaChart.tsx'),
-    'export const vegaChanged = true\n',
-  );
-  fs.appendFileSync(path.join(upstream, 'packages/core/src/InteractiveRoleContext/internal.ts'), 'export const sharedChanged = true\n');
-  fs.appendFileSync(path.join(upstream, 'packages/lab/src/Sankey/internal.ts'), 'export const familyChanged = true\n');
-  fs.appendFileSync(path.join(upstream, 'packages/themes/neutral/src/theme.ts'), 'export const changed = true\n');
-  fs.appendFileSync(path.join(upstream, 'packages/themes/probe/src/theme.ts'), 'export const changed = true\n');
-  git(upstream, ['add', '-A']);
-  git(upstream, ['commit', '-qm', 'touch three component packages']);
+  const feature = {
+    ref: 'refs/heads/feature',
+    parent: 'point',
+    message: 'touch three component packages',
+    files: {
+      ...appended(
+        'packages/core/src/Card/index.ts',
+        'export const Card = {}\n',
+      ),
+      ...appended('docs/specs/components/Badge/Badge.spec.md', 'record text\n'),
+      ...appended(
+        'packages/richtext/src/RichTextEditor.tsx',
+        'export const richTextChanged = true\n',
+      ),
+      ...appended(
+        'packages/richtext/src/RichTextEditorAutoLinkPlugin.tsx',
+        'export const autoLinkChanged = true\n',
+      ),
+      ...appended(
+        'packages/richtext/src/RichTextView.tsx',
+        'export const viewChanged = true\n',
+      ),
+      ...appended(
+        'packages/vega/src/VegaChart.tsx',
+        'export const vegaChanged = true\n',
+      ),
+      ...appended(
+        'packages/core/src/InteractiveRoleContext/internal.ts',
+        'export const sharedChanged = true\n',
+      ),
+      ...appended(
+        'packages/lab/src/Sankey/internal.ts',
+        'export const familyChanged = true\n',
+      ),
+      ...appended(
+        'packages/themes/neutral/src/theme.ts',
+        'export const changed = true\n',
+      ),
+      ...appended(
+        'packages/themes/probe/src/theme.ts',
+        'export const changed = true\n',
+      ),
+    },
+  };
+
+  // One import writes the whole history: three git launches with the clone.
+  const {point: branchPoint} = createRepository(upstream, [
+    {
+      ref: 'refs/heads/main',
+      name: 'point',
+      message: 'branch point',
+      files: atBranchPoint,
+    },
+    ...churn,
+    feature,
+  ]);
 
   // Shallow single-branch clone of the feature branch.
   git(null, [
-    'clone', '-q', '--depth=5', '--single-branch', '--branch=feature',
-    `file://${upstream}`, clone,
+    'clone',
+    '-q',
+    '--depth=5',
+    '--single-branch',
+    '--branch=feature',
+    `file://${upstream}`,
+    clone,
   ]);
 
   return {base, clone, branchPoint};

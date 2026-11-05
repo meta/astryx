@@ -171,11 +171,12 @@ export async function frames(page: Page, count = 2): Promise<void> {
 
 // A held callback is queued under its timer or frame id, so the page's own
 // clearTimeout and cancelAnimationFrame still cancel it while frozen; a held
-// frame callback gets the time it actually runs at. `frame` stays the real
-// requestAnimationFrame, for the harness's own waits, and `now` the real clock
-// for their deadlines, which a page freeze does not stop. The gate's freeze() and
-// thaw() are its one way in: freezeTimers and thawTimers call them, and so
-// does a page freeze (freeze.ts), which stops the page's clock too.
+// frame callback gets the time it actually runs at. `frame` and `timeout`
+// stay the real requestAnimationFrame and setTimeout, for the harness's own
+// waits, and `now` the real clock for their deadlines, which a page freeze
+// does not stop. The gate's freeze() and thaw() are its one way in:
+// freezeTimers and thawTimers call them, and so does a page freeze
+// (freeze.ts), which stops the page's clock too.
 const TIMER_GATE = `(() => {
   if (window.__harnessTimerGate) return;
   const realTimeout = window.setTimeout.bind(window);

@@ -19,6 +19,7 @@ import * as path from 'node:path';
 import {formatCliCommand, getCliInvocation, quoteCommandArgument} from '../../foundation/env/package-manager.mjs';
 import {hasRecordedProject} from '../../foundation/env/cli-command.mjs';
 import {isOutsideProject} from '../../foundation/env/project-scope.mjs';
+import {findConfigPath} from '../../foundation/config/config-path.mjs';
 import {API_VERSION, setJsonMode} from '../../foundation/response/json.mjs';
 import {answeredBy, runChoice} from '../../foundation/release/run-context.mjs';
 import {cliInstallAdvice, installFolder} from '../../foundation/release/notices.mjs';
@@ -29,14 +30,18 @@ import {ERROR_CODES} from '../../foundation/response/error-codes.mjs';
 import {levenshteinDistance} from '../../foundation/text/string-utils.mjs';
 import {installJsonShim} from './lib/json-shim.mjs';
 import {markReportsResult} from './lib/define-command.mjs';
+// The light modules, not agent-docs.mjs: that one loads discovery and the
+// project config, which every run would pay for at startup.
 import {
   agentDocsTargetDir,
   assertAgentDocsTarget,
+} from '../../foundation/agent-docs/agent-docs-target.mjs';
+import {CLI_ROOT} from '../../foundation/fs/paths.mjs';
+import {
   isAstryxInitialized,
   isAstryxPromptInReach,
-} from '../../foundation/agent-docs/agent-docs.mjs';
-import {CLI_ROOT} from '../../foundation/fs/paths.mjs';
-import {setupNudge} from '../../foundation/agent-docs/agent-doc-state.mjs';
+  setupNudge,
+} from '../../foundation/agent-docs/agent-doc-state.mjs';
 import * as debug from '../../foundation/debug/index.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -186,9 +191,6 @@ function fullCommandName(actionCommand, root) {
  */
 export async function loadProjectDebugHandler() {
   try {
-    const {findConfigPath, Project} = await import(
-      '../../foundation/config/project.mjs'
-    );
     const configPath = findConfigPath(process.cwd());
     if (!configPath) return;
     const text = fs.readFileSync(configPath, 'utf-8');
@@ -196,6 +198,9 @@ export async function loadProjectDebugHandler() {
       debug.noteConfigGateSkipped();
       return;
     }
+    // Only now: a run in a folder with no such config never loads the project
+    // module and its discovery.
+    const {Project} = await import('../../foundation/config/project.mjs');
     await Project.load(process.cwd());
   } catch {
     // A broken config is the command's problem to report, not ours.
