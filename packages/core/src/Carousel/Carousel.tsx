@@ -41,10 +41,7 @@ import {
   easeVars,
   focusVars,
 } from '../theme/tokens.stylex';
-import {
-  FOCUS_OUTLINE_PARTS,
-  focusOutlineStyles,
-} from '../utils/focusOutline.stylex';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {Button} from '../Button';
 import {Icon} from '../Icon';
 import {useLayer} from '../Layer';
@@ -172,7 +169,7 @@ const styles = stylex.create({
   focusRingOverlay: {
     '--_carousel-ring-style': {
       default: 'none',
-      ':has(> :first-child:focus-visible)': FOCUS_OUTLINE_PARTS.outlineStyle,
+      ':has(> :first-child:focus-visible)': focusVars['--focus-outline-style'],
     },
     '::after': {
       content: '""',
@@ -181,8 +178,8 @@ const styles = stylex.create({
       pointerEvents: 'none',
       borderRadius: 'inherit',
       outlineStyle: 'var(--_carousel-ring-style)',
-      outlineWidth: FOCUS_OUTLINE_PARTS.outlineWidth,
-      outlineColor: FOCUS_OUTLINE_PARTS.outlineColor,
+      outlineWidth: focusVars['--focus-outline-width'],
+      outlineColor: focusVars['--focus-outline-color'],
       outlineOffset: `calc(-1 * ${focusVars['--focus-outline-width']})`,
     },
   },
