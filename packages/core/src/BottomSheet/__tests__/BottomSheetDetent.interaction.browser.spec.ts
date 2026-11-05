@@ -219,8 +219,11 @@ test('the settle lands on the detent, its curve recorded frame by frame', async 
     description: `settle: ${transition.easing}, ${transition.durationMs} ms; frame-by-frame max error ${result.maxError.toFixed(2)} px against ${SETTLE_EASING} over ${SETTLE_MS} ms`,
   });
   // UIKit parity metric, reported rather than asserted until the spring lands:
-  // the settle's initial velocity vs the finger's at release (here 0).
-  const initialVelocity = ((expectedSettle(1) - expectedSettle(0)) / 1) * 1000; // px/s over the first ms
+  // the settle's initial velocity, read from its first two frames, vs the
+  // finger's at release (here 0).
+  const initialVelocity =
+    ((samples[1].value - samples[0].value) / (samples[1].t - samples[0].t)) *
+    1000;
   testInfo.annotations.push({
     type: 'uikit-parity',
     description: `settle starts at ${initialVelocity.toFixed(0)} px/s for a release at 0 px/s (UIKit hands the release velocity to the spring)`,
@@ -242,7 +245,12 @@ test('the settle lands on the detent, its curve recorded frame by frame', async 
 
 test('the settle keeps advancing every frame while the main thread is blocked', async ({
   page,
+  browserName,
 }, testInfo) => {
+  test.skip(
+    browserName === 'webkit',
+    'WebKit holds the settle short of its detent until a blocked main thread resumes',
+  );
   const {driver, sheet, tallTop, halfTop, handle} = await openSheet(page);
   await markElement(sheet);
   const cast = await startScreencast(page);
