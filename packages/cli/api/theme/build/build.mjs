@@ -1030,7 +1030,9 @@ function readComponentDeclarations(pascalName, options = {}) {
       [path.join(coreRoot, 'src', pascalName, 'index.ts')],
     ];
     if (includeTypes) {
-      candidateSets[0].push(path.join(coreRoot, 'dist', pascalName, 'types.d.ts'));
+      candidateSets[0].push(
+        path.join(coreRoot, 'dist', pascalName, 'types.d.ts'),
+      );
       candidateSets[1].push(path.join(coreRoot, 'src', pascalName, 'types.ts'));
     }
     for (const files of candidateSets) {
