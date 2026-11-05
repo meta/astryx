@@ -170,9 +170,7 @@ function registerWheelTables(): void {
 
 /**
  * A turn onto `to` that a tap, a key or the program starts. The wheel's main
- * interaction is a gesture, so every turn springs. It plays the shared
- * `springs.settle` role from rest, resolved under `column` when the turn
- * starts.
+ * interaction is a gesture, so every turn springs.
  */
 function turnCurve(
   column: Element | null,
