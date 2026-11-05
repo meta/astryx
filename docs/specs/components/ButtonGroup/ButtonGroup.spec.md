@@ -40,7 +40,7 @@ system_specs: [spec:AST-038, spec:AST-085]
 | Behavior                | A labelled `role="group"` that joins its Button members into one connected surface, gives them a default size and its disabled state, owns one shared elevation, and is one Tab stop with arrow-key roving.                                   |
 | End-user impact         | Keyboard users reach the whole group with one Tab and move through it with arrows, which skip disabled members. A disabled group without tooltips has no Tab stop, so keyboard users cannot find it or hear that it is disabled.              |
 | Builder impact          | None.                                                                                                                                                                                                                                         |
-| Compatibility/readiness | Records shipped behavior; no API, default, or DOM change. Disabled members use native `disabled`, the Tab stop leaves disabled and busy-only members, and wrapped members lose connected geometry; all are listed under Current-state impact. |
+| Compatibility/readiness | No API or default change; its DOM change is listed below. Disabled members use native `disabled`, the Tab stop leaves disabled and busy-only members, and wrapped members lose connected geometry; all are listed under Current-state impact. |
 | Review checks           | Reject a group without a name, gaps between members, rounded inner corners, a shadow on a member, more than one Tab stop, arrows that land on a disabled member, or arrows that steal keys from a member's open menu.                         |
 | Governing rules         | `family:buttons` FR3, FR8, FR10–FR12, AV5; `architecture:component-size-cascade` INV3–INV8; `spec:AST-085` FR1, FR7; `spec:AST-038` FR7, FR8.                                                                                                 |
 
@@ -55,10 +55,16 @@ size and disabled state, and the group's single-Tab-stop keyboard model, as
 
 ## Compatibility and migration
 
-- Released default preserved: `yes`; `orientation="horizontal"`, `size="md"`,
-  `elevation="none"`, `isDisabled={false}`
-- Compatibility class: records shipped behavior; no public prop, default,
-  export, or DOM change
+- Released default preserved: `yes` for a mouse; under the touch
+  presentation a press gains the slide across the buttons;
+  `orientation="horizontal"`, `size="md"`, `elevation="none"`,
+  `isDisabled={false}`
+- Compatibility class: no public prop, default, or export change; under the
+  touch presentation the DOM gains the action-group item marker on each
+  tracked button, the gesture host's `data-astryx-touch-action` marker on the
+  group root and the hit layer's inset properties, and an enabled group's root
+  is also `position: relative`, so absolutely positioned descendants resolve
+  against it there
 - Controlled/uncontrolled behavior: not applicable
 - Migration decision: none
 
