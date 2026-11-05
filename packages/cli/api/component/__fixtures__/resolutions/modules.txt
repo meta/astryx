@@ -264,7 +264,7 @@ useEndLaneReserve useEndLaneReserve Tokenizer/Tokenizer.doc.mjs Tokenizer/useEnd
 useFieldStatusAnnouncement useFieldStatusAnnouncement FieldStatus/FieldStatus.doc.mjs FieldStatus/useFieldStatusAnnouncement.ts
 useFocusReturnVisibility useFocusReturnVisibility hooks/useAnimatedLayout.doc.mjs hooks/useFocusReturnVisibility.ts
 useHighlightedOptionScroll useHighlightedOptionScroll hooks/useAnimatedLayout.doc.mjs hooks/useHighlightedOptionScroll.ts
-useIcon useIcon Icon/Icon.doc.mjs Icon/useIcon.ts
+useIcon useIcon Icon/useIcon.doc.mjs Icon/useIcon.ts
 useIndicator useIndicator Indicator/Indicator.doc.mjs Indicator/useIndicator.ts
 useInternalConfig useInternalConfig PowerSearch/PowerSearch.doc.mjs PowerSearch/useInternalConfig.ts
 useIsHydrating useIsHydrating hooks/useAnimatedLayout.doc.mjs hooks/useIsHydrating.ts
