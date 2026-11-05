@@ -902,11 +902,9 @@ export function TouchDateField({
 
   // A wheel commit steers the scroller immediately, even though it is behind
   // the wheels: it keeps its layout box while hidden, so by the time the
-  // wheels close it is already resting on the new month.
-  // Turning the month or year wheel moves the calendar. Under a finger it
-  // also moves a chosen date with it, keeping its day (UIDatePicker's inline
-  // calendar: datePicker.calendar.monthYearWheels.changesDate), clamped to
-  // the month and the bounds. A date a custom constraint refuses stays.
+  // wheels close it is already resting on the new month. Under a finger,
+  // UIDatePicker moves a chosen date with these wheels
+  // (datePicker.calendar.monthYearWheels.changesDate).
   const {isTouch} = useTouchPresentation();
   const handleWheelChange = useCallback(
     (next: number) => {

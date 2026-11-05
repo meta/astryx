@@ -788,11 +788,8 @@ export function TouchDateTimeField({
     [clampTimeForDate, fireChange, optimisticValue, timeForWheels],
   );
 
-  // Turning the month or year wheel moves the calendar. Under a finger it also
-  // moves a chosen date with it, keeping its day and the time, as
-  // UIDatePicker's inline calendar does
-  // (`datePicker.calendar.monthYearWheels.changesDate`). The day clamps to the
-  // month and the bounds. A date a custom constraint refuses stays.
+  // UIDatePicker moves a chosen date with these wheels
+  // (`datePicker.calendar.monthYearWheels.changesDate`).
   const handleWheelChange = useCallback(
     (next: number) => {
       setMonthIndex(next);
