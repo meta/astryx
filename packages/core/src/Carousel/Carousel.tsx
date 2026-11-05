@@ -162,12 +162,13 @@ const styles = stylex.create({
     overflow: 'clip',
     overflowClipMargin: '1px',
   },
-  // The root clips at a 1px margin, so the scroller's keyboard ring sits
-  // inside its own box instead of around it.
-  scrollerFocusRingInset: {
+  // The root paints the scroller's keyboard ring: the scroller's edge-fade
+  // mask would erase a ring the scroller painted itself. The root clips at a
+  // 1px margin, so the ring sits inside the root's box.
+  rootFocusRingInset: {
     outlineOffset: {
       default: null,
-      ':focus-visible': `calc(-1 * ${focusVars['--focus-outline-width']})`,
+      ':has(> :first-child:focus-visible)': `calc(-1 * ${focusVars['--focus-outline-width']})`,
     },
   },
   scroller: {
@@ -592,7 +593,13 @@ export function Carousel({
       {...htmlProps}
       {...mergeProps(
         themeProps('carousel'),
-        stylex.props(styles.root, xstyle),
+        stylex.props(
+          styles.root,
+          // The scroller is the root's first child and its tab stop.
+          focusOutlineStyles.focusWithinFirstChild,
+          styles.rootFocusRingInset,
+          xstyle,
+        ),
         className,
         style,
       )}
@@ -612,10 +619,8 @@ export function Carousel({
           }),
           stylex.props(
             styles.scroller,
-            // A tab stop: the shared ring, which a theme restyles through the
-            // focus-outline tokens.
-            focusOutlineStyles.focusVisible,
-            styles.scrollerFocusRingInset,
+            // A tab stop whose shared ring the root paints.
+            focusOutlineStyles.suppressed,
             gapStyles[gap],
             padding != null && paddingStyles[padding],
             hasSnap && styles.snap,
