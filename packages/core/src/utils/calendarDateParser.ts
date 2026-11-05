@@ -91,6 +91,8 @@ export interface CalendarDateLexicon {
   readonly eras: ReadonlyMap<string, string>;
   readonly yearAliases: ReadonlyMap<string, string>;
   readonly trailers: ReadonlySet<string>;
+  readonly yearMarkers: ReadonlySet<string>;
+  readonly separators: ReadonlySet<string>;
   readonly weekdays: ReadonlySet<string>;
   readonly vocabulary: ReadonlyArray<string>;
   readonly vocabularySet: ReadonlySet<string>;
@@ -352,6 +354,8 @@ function buildLexicon(
   const yearAliases = new Map<string, string>();
   const skip = new Set<string>();
   const trailers = new Set<string>();
+  const yearMarkers = new Set<string>();
+  const separators = new Set<string>();
   const weekdays = new Set<string>();
 
   const addSkip = (text: string, words = skip) => {
@@ -439,9 +443,12 @@ function buildLexicon(
     for (const options of literalFormats) {
       for (const pd of literalDates) {
         const parts = partsOf(loc, calendar, options, pd);
-        for (const part of parts) {
+        for (const [k, part] of parts.entries()) {
           if (part.type === 'literal' || partType(part) === 'yearName') {
             addSkip(part.value);
+          }
+          if (part.type === 'literal' && parts[k - 1]?.type === 'year') {
+            addSkip(part.value, yearMarkers);
           }
         }
         if (loc === locale) {
@@ -470,6 +477,13 @@ function buildLexicon(
           }
         }
       }
+    }
+  }
+  const hint = displayOptions(locale, calendar, NUMERIC);
+  for (const part of partsOf(locale, calendar, hint, literalDates[0])) {
+    const separator = norm(part.value).replace(/\s+/g, '');
+    if (part.type === 'literal' && separator) {
+      separators.add(separator);
     }
   }
   if (LUNISOLAR.has(calendar)) {
@@ -576,6 +590,8 @@ function buildLexicon(
     eras,
     yearAliases,
     trailers,
+    yearMarkers,
+    separators,
     weekdays,
     vocabulary: [...vocabularySet].sort((a, b) => b.length - a.length),
     vocabularySet,
@@ -617,13 +633,18 @@ type Token =
   | {readonly t: 'monthNum'; readonly v: string; readonly isLeap: boolean}
   | {readonly t: 'era'; readonly code: string; readonly isWeekday?: boolean}
   | {readonly t: 'leap'}
-  | {readonly t: 'word'}
+  | {readonly t: 'word'; readonly isYearMarker?: boolean}
   | {readonly t: 'sep'; readonly v: string};
 
 type Tokens = Token[] | 'incomplete' | 'unreadable';
 
-function tokenize(s: string, lex: CalendarDateLexicon): Tokens {
+function tokenize(
+  s: string,
+  lex: CalendarDateLexicon,
+  isDigitNameRead = true,
+): Tokens {
   const out: Token[] = [];
+  let hasDigitName = false;
   let i = 0;
   const end = s.trimEnd().length;
   while (i < end) {
@@ -636,6 +657,13 @@ function tokenize(s: string, lex: CalendarDateLexicon): Tokens {
     if (template != null) {
       out.push(template.token);
       i = template.end;
+      continue;
+    }
+    const digitName = isDigitNameRead && /\d/.test(ch) && matchWord(s, i, lex);
+    if (digitName) {
+      out.push(wordToken(digitName, lex));
+      hasDigitName = true;
+      i += digitName.length;
       continue;
     }
     if (/\d/.test(ch)) {
@@ -683,6 +711,17 @@ function tokenize(s: string, lex: CalendarDateLexicon): Tokens {
       return 'incomplete';
     }
     return 'unreadable';
+  }
+  // Latvian "1. adars" is a month, and also day 1 of "adars". It is the day
+  // when no other number can be the day. A number before the year word, as in
+  // "26. g.", is the year.
+  const canBeDay = (token: Token, k: number) => {
+    const next = out.slice(k + 1).find(t => t.t !== 'sep');
+    const isYear = next?.t === 'word' && next.isYearMarker === true;
+    return token.t === 'num' && Number(token.v) <= 31 && !isYear;
+  };
+  if (hasDigitName && !out.some(canBeDay)) {
+    return tokenize(s, lex, false);
   }
   return out;
 }
@@ -777,7 +816,7 @@ function wordToken(word: string, lex: CalendarDateLexicon): Token {
   if (alias != null) {
     return {t: 'num', v: alias, isAlias: true};
   }
-  return {t: 'word'};
+  return {t: 'word', isYearMarker: lex.yearMarkers.has(word)};
 }
 
 /** The month a typed abbreviation names when it starts only one month name. */
@@ -913,7 +952,7 @@ export function parseCalendarDate(
     if (nums.length < 2) {
       return INCOMPLETE;
     }
-    if (nums.length > 3 || !sameSeparators(tokens)) {
+    if (nums.length > 3 || !sameSeparators(tokens, lex)) {
       return UNREADABLE;
     }
     let order: ReadonlyArray<DateField> =
@@ -1022,7 +1061,11 @@ function finish(
   return {kind: 'value', date, isComplete};
 }
 
-function sameSeparators(tokens: Token[]): boolean {
+/**
+ * Whether the numbers share one separator. Two separators of the locale's own
+ * numeric pattern also match, such as Hindi Buddhist "1/1`/2443".
+ */
+function sameSeparators(tokens: Token[], lex: CalendarDateLexicon): boolean {
   let previous: string | null = null;
   let seenNumber = false;
   let pending: string | null = null;
@@ -1030,7 +1073,11 @@ function sameSeparators(tokens: Token[]): boolean {
     if (token.t === 'num') {
       if (seenNumber) {
         const separator = pending ?? '';
-        if (previous != null && separator !== previous) {
+        if (
+          previous != null &&
+          separator !== previous &&
+          !(lex.separators.has(separator) && lex.separators.has(previous))
+        ) {
           return false;
         }
         previous = separator;
@@ -1195,10 +1242,30 @@ const displayOptionCache = new WeakMap<
   Map<string, Intl.DateTimeFormatOptions>
 >();
 
+const eraChangeCache = new Map<CalendarSystem, boolean>();
+
+/**
+ * Whether the era changes between 1900 and 2100. Only then can a year without
+ * its era read as two dates.
+ */
+function hasEraChange(calendar: CalendarSystem): boolean {
+  let result = eraChangeCache.get(calendar);
+  if (result == null) {
+    const eraOf = (date: PlainDate) =>
+      calendarEraYear('en', calendar, date).era;
+    result =
+      eraOf({year: 1900, month: 1, day: 1}) !==
+      eraOf({year: 2100, month: 12, day: 31});
+    eraChangeCache.set(calendar, result);
+  }
+  return result;
+}
+
 /**
  * Adds the era to a format that omits it, so a year never reads as a
  * Gregorian year. Keeps the locale's own pattern when the era would reorder
- * the fields.
+ * the fields. Where the era changes, it uses a narrow era that keeps the
+ * order instead, such as Amharic Japanese "1/1/8 R".
  */
 function displayOptions(
   locale: Locale,
@@ -1219,11 +1286,18 @@ function displayOptions(
     const sample = {year: 2026, month: 11, day: 2};
     const parts = partsOf(locale, calendar, options, sample);
     result = options;
+    const order = fieldOrder(parts).join();
     if (!parts.some(p => p.type === 'era')) {
-      const withEra = {...options, era: 'short'} as const;
-      const eraParts = partsOf(locale, calendar, withEra, sample);
-      if (fieldOrder(parts).join() === fieldOrder(eraParts).join()) {
-        result = withEra;
+      const widths = hasEraChange(calendar)
+        ? (['short', 'narrow'] as const)
+        : (['short'] as const);
+      for (const era of widths) {
+        const withEra = {...options, era};
+        const eraParts = partsOf(locale, calendar, withEra, sample);
+        if (fieldOrder(eraParts).join() === order) {
+          result = withEra;
+          break;
+        }
       }
     }
     byLocale.set(key, result);
@@ -1242,11 +1316,27 @@ function formatInCalendar(
       relatedYear: true,
     });
   }
-  return plainDateFormat(
-    pd,
-    {...displayOptions(locale, calendar, options), calendar},
-    locale,
-  );
+  const display = displayOptions(locale, calendar, options);
+  const text = plainDateFormat(pd, {...display, calendar}, locale);
+  // When every era width reorders the fields, such as the Amharic short-month
+  // date, the text has no era. Text without an era reads in the latest era.
+  // So a date of an earlier era adds the era. It goes at the start or the
+  // end, as in the era format.
+  const eraOf = (date: PlainDate) => calendarEraYear('en', calendar, date).era;
+  if (
+    !hasEraChange(calendar) ||
+    eraOf(pd) === eraOf({year: 9999, month: 12, day: 31}) ||
+    partsOf(locale, calendar, display, pd).some(p => p.type === 'era')
+  ) {
+    return text;
+  }
+  const withEra = partsOf(locale, calendar, {...options, era: 'short'}, pd);
+  const at = withEra.findIndex(p => p.type === 'era');
+  const era = withEra
+    .slice(at === 0 ? 0 : at - 1, at === 0 ? 2 : at + 1)
+    .map(p => p.value)
+    .join('');
+  return at === 0 ? era + text : text + era;
 }
 
 /**
