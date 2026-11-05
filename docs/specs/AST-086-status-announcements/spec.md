@@ -81,7 +81,8 @@ announcement channel.
   shows a message mounts, unmounts, or is replaced together with its text, the
   owner announces through the shared announcement channel, except as FR4, FR10,
   FR11, and FR14 provide. The new element
-  MUST NOT carry a live role or `aria-live`.
+  MUST NOT carry a live role or `aria-live`, except an urgent Banner's
+  `role="alert"` message (FR3).
 - **FR3 — Live roles only on persistent containers.** A component MAY own a
   live role only on an element that stays mounted while its content changes.
   It MUST NOT mount that element already holding the text to announce, except
@@ -323,9 +324,10 @@ announcement channel.
   FR3). Typeahead and CommandPalette announce their empty state after page load and are otherwise unchanged.
 - `component:FieldStatus` AR1 is unchanged: a field message announces on first
   mount, because it reports the field's state when the field appears.
-- `component:Banner` FR8 is unchanged: the caller announces an async outcome
-  from its transition handler, because only the caller knows whether a Banner
-  is a new outcome or persistent content. FR11 and FR12 cover components that
+- `component:Banner` FR8: the caller announces an async outcome from its
+  transition handler, because only the caller knows whether a Banner is a new
+  outcome or persistent content; an urgent message may instead carry
+  `role="alert"`, which Banner places on its message element (FR2, FR3). FR11 and FR12 cover components that
   announce their own content.
 - `useAnnounce`: messages written in the same frame are joined instead of the
   last one replacing the others, except from a `hasReplace` instance (FR9).
