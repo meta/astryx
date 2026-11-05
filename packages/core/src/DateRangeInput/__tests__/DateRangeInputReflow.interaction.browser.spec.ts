@@ -13,7 +13,12 @@
  *   interaction lane; jsdom has no layout.
  */
 
-import {expect, test, type Locator, type Page} from '@playwright/test';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+} from '@astryxdesign/a11y-spec/playwright';
 import {openStory, withStorybook} from '@astryxdesign/interaction-harness';
 
 const storybook = withStorybook(test);

@@ -2,9 +2,11 @@
 
 /**
  * @file StackItem.tsx
- * @input Uses React, ElementType, stackItem utility
+ * @input Uses React, ElementType, stackItem utility, StackItemScrollRegion
  * @output Exports StackItem polymorphic component and StackItemProps
- * @position Layout/Stack component; uses stackItem.stylex.ts
+ * @position Layout/Stack component; uses stackItem.stylex.ts. A scrollable
+ *   `div` or `span` item renders through StackItemScrollRegion, which names
+ *   it while it scrolls.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Stack/Stack.doc.mjs
@@ -21,6 +23,7 @@ import {
 } from './stackItem.stylex';
 import {mergeProps} from '../utils/mergeProps';
 import {themeProps} from '../utils/themeProps';
+import {StackItemScrollRegion} from '../hooks/StackItemScrollRegion';
 
 const overflowStyles = stylex.create({
   scrollable: {
@@ -53,7 +56,9 @@ export interface StackItemProps extends BaseProps<HTMLElement> {
    * reset, so `<StackItem size="fill" isScrollable>` is a complete scroll
    * region — it grows to fill the stack and scrolls its own overflow with
    * no extra style plumbing. Matches `isScrollable` on `LayoutContent`
-   * and `LayoutPanel`.
+   * and `LayoutPanel`. While its content overflows, a `div` or `span` item
+   * is a group named by the caller's `aria-label`, or by a translated
+   * "Content". Another element keeps its own role.
    * @default false
    */
   isScrollable?: boolean;
@@ -102,18 +107,27 @@ export function StackItem({
     xstyle,
   );
 
+  const elementProps = {
+    ...mergeProps(
+      themeProps('stack-item', {size}),
+      stylexProps,
+      className,
+      style,
+    ),
+    ...props,
+  };
+
+  if (isScrollable && (element === 'div' || element === 'span')) {
+    return createElement(
+      StackItemScrollRegion,
+      {as: element, ref, elementProps},
+      children,
+    );
+  }
+
   return createElement(
     element,
-    {
-      ref: ref as Ref<Element>,
-      ...mergeProps(
-        themeProps('stack-item', {size}),
-        stylexProps,
-        className,
-        style,
-      ),
-      ...props,
-    },
+    {ref: ref as Ref<Element>, ...elementProps},
     children,
   );
 }

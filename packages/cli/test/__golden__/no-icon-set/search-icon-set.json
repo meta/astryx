@@ -3,7 +3,7 @@
   "type": "search",
   "data": {
     "query": "icon set",
-    "matchCount": 377,
+    "matchCount": 382,
     "results": [
       {
         "domain": "doc",
@@ -182,6 +182,10 @@
         "description": "<text>",
         "import": "@astryxdesign/core/BottomSheet",
         "command": "astryx component BottomSheetSwitcher",
+        "deprecated": {
+          "replacement": "<text>",
+          "description": "<text>"
+        },
         "mentions": []
       },
       {

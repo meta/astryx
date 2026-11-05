@@ -34,9 +34,9 @@ import {rtlStyles} from '../utils';
 import {useDevWarning} from '../hooks/useDevWarning';
 import {focusOutlineProps} from '../utils/focusOutline.stylex';
 import {mergeProps} from '../utils/mergeProps';
-import {isFocusDetached} from '../utils/focusReturn';
+import {isFocusDetached} from '../utils/isFocusDetached';
 import {themeProps} from '../utils/themeProps';
-import {paddingStyles} from '../Layout/padding.stylex';
+import {paddingStyles} from '../Layout/paddingStyles.stylex';
 import type {SpacingStep} from '../utils/types';
 import {stableClassName} from '../naming';
 import {
@@ -298,6 +298,7 @@ export interface UsePopoverReturn {
   /**
    * The CSS anchor name to use for positioning.
    * Use when you need to set anchorName manually (e.g., display:contents wrapper).
+   * Set it only while the layer is shown or its exit animation runs.
    */
   anchorId: string;
 

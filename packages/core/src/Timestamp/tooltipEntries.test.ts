@@ -564,3 +564,54 @@ describe('formatTooltipLines', () => {
     expect(lines[0].value).toBe('2026-02-20 02:00:00');
   });
 });
+
+describe('formatTooltipLines calendar', () => {
+  const CALENDAR_INSTANT = new Date('2026-10-30T12:00:00Z');
+
+  it.each([
+    {calendar: 'persian', locale: 'en', year: '1405'},
+    {calendar: 'persian', locale: 'fa', year: '۱۴۰۵'},
+    {calendar: 'hebrew', locale: 'en', year: '5787'},
+    {calendar: 'hebrew', locale: 'he', year: '5787'},
+    {calendar: 'buddhist', locale: 'en', year: '2569'},
+    {calendar: 'buddhist', locale: 'th', year: '2569'},
+  ] as const)(
+    'writes date rows in $calendar under $locale and keeps system rows ISO',
+    ({calendar, locale, year}) => {
+      const [dateLine, systemLine] = formatTooltipLinesForLocale(
+        CALENDAR_INSTANT,
+        [
+          {timezoneID: 'UTC', format: 'date_long'},
+          {timezoneID: 'UTC', format: 'system_date_time'},
+        ],
+        locale,
+        calendar,
+      );
+      expect(dateLine.value).toBe(
+        new Intl.DateTimeFormat(locale, {
+          ...SHARED_DATE_FORMAT_OPTIONS.date_long,
+          timeZone: 'UTC',
+          calendar,
+        }).format(CALENDAR_INSTANT),
+      );
+      expect(dateLine.value).toContain(year);
+      expect(systemLine.value).toBe('2026-10-30 12:00:00');
+    },
+  );
+
+  it('defaults to the Gregorian calendar', () => {
+    const [line] = formatTooltipLinesForLocale(
+      CALENDAR_INSTANT,
+      [{timezoneID: 'UTC', format: 'date_long'}],
+      'fa',
+    );
+    expect(line.value).toBe(
+      formatTooltipLinesForLocale(
+        CALENDAR_INSTANT,
+        [{timezoneID: 'UTC', format: 'date_long'}],
+        'fa',
+        'gregory',
+      )[0].value,
+    );
+  });
+});

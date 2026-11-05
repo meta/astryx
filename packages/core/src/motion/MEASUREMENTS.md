@@ -268,6 +268,16 @@ match the probe.
 | M-SH21  | SheetProbe on iPad, iOS 27 `preferredPlacement` each case, RTL                                                         | present                                                                                                                             | placement geometry and motion                                                                                                                           | B, C    |
 | M-SH22  | SheetProbe iOS 26 `preferredTransition = .zoom` from a bar button                                                      | present, dismiss                                                                                                                    | morph geometry per frame                                                                                                                                | A, C    |
 
+## Date picker (UIDatePicker)
+
+Rules the DateInput, DateTimeInput and TimeInput touch sheets follow, in their
+own table (`uikit/datePicker.ts`). The wheels' physics are UIPickerView's: the
+table only names them, and their values belong to the wheel's own table.
+
+Done (UIKit lab, iOS 26.2 simulator, Oct 23 2026; in the date picker's table):
+the month/year wheels changing the date, the AM/PM column following the hour,
+the turn back onto a bound, and the day clamped to the month.
+
 ## Context menu (UIContextMenuInteraction)
 
 Values the context menu reads from its own table, which lands with the
@@ -304,3 +314,14 @@ scroll view coasts with 0.25 × the pan's velocity plus 0.75 × its value one
 event earlier (four HID releases; `velocity.scrollReleaseWeight`, which a
 pan's `scrollVelocity()` reads). On UIKit, Reduce Motion with Prefer Cross-Fade changes
 nothing on a picker; the Wheel follows design:reduced-motion instead.
+
+## Menus (UIMenu)
+
+Probe: the UIKit lab host app with a UIButton whose `UIMenu` is its primary
+action (`showsMenuAsPrimaryAction`), three to twelve items, on a plain view
+and inside a UIScrollView; the gesture-state, presentation-modifier,
+display-link and feedback hooks; real HID touches.
+
+| ID    | Scene                  | Gesture                                                                                                                                                 | Extract                                                                                                                                 | Method |
+| ----- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| M-MN2 | button on a plain view | hold until the menu is open, then lift still; move 8 pt down, 8 pt right, 12 pt down, (7, 7), (8, 8) and lift; move 6 pt before the open and 6 pt after | row picked or not; handoff and list-selection recognizer states; highlighted row per frame: threshold, metric, where it is counted from | C      |

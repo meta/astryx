@@ -38,6 +38,8 @@ import type {
   ContextLayerReturn,
   FixedLayerReturn,
 } from './useLayer';
+import {useMergedRefs} from '../hooks/useMergedRefs';
+import {observeBrowserHide} from './popoverOperations';
 
 function mockCSSStyleDeclaration(
   styles: Partial<CSSStyleDeclaration>,
@@ -1669,6 +1671,315 @@ describe('useLayer', () => {
       expect(getByText('Tip').closest('[popover]')).not.toHaveAttribute(
         'data-open',
       );
+    });
+  });
+
+  describe('the trigger is an anchor only while its layer is shown', () => {
+    const anchorNames = (element: Element) =>
+      (element as HTMLElement).style
+        .getPropertyValue('anchor-name')
+        .split(',')
+        .map(name => name.trim())
+        .filter(Boolean);
+
+    function SharedTriggerHarness({
+      onReady,
+    }: {
+      onReady: (api: {
+        tooltip: {show: () => void; hide: () => void};
+        menu: {show: () => void; hide: () => void};
+      }) => void;
+    }) {
+      const tooltip = useLayer({mode: 'context'});
+      const menu = useLayer({mode: 'context'});
+      onReady({
+        tooltip: {show: tooltip.show, hide: tooltip.hide},
+        menu: {show: menu.show, hide: menu.hide},
+      });
+      const ref = useMergedRefs(tooltip.ref, menu.ref);
+      return (
+        <>
+          <button type="button" ref={ref}>
+            Trigger
+          </button>
+          {tooltip.render(<span>Tooltip</span>)}
+          {menu.render(<span>Menu</span>)}
+        </>
+      );
+    }
+
+    function SwappedTriggerHarness({
+      second,
+      onReady,
+    }: {
+      second: boolean;
+      onReady: (api: {show: () => void; hide: () => void}) => void;
+    }) {
+      const layer = useLayer({mode: 'context'});
+      onReady({show: layer.show, hide: layer.hide});
+      return (
+        <>
+          {second ? (
+            <button type="button" key="second" ref={layer.ref}>
+              Second
+            </button>
+          ) : (
+            <button type="button" key="first" ref={layer.ref}>
+              First
+            </button>
+          )}
+          {layer.render(<span>Layer content</span>)}
+        </>
+      );
+    }
+
+    it('gives a closed trigger no anchor name, and a shown layer\u2019s trigger its own', () => {
+      const {getByRole, container} = render(<ContextLayerHarness />);
+      const trigger = getByRole('button', {name: 'Trigger'});
+      const layer = container.querySelector('[popover]') as HTMLElement;
+      expect(anchorNames(trigger)).toEqual([]);
+
+      fireEvent.click(trigger);
+
+      const names = anchorNames(trigger);
+      expect(names).toHaveLength(1);
+      expect(layer.getAttribute('style')).toContain(names[0]);
+    });
+
+    it('takes the anchor name away when the layer hides, and when the browser closes it', () => {
+      let api = {show: () => {}, hide: () => {}};
+      const {getByRole, container} = render(
+        <SwappedTriggerHarness second={false} onReady={a => (api = a)} />,
+      );
+      const trigger = getByRole('button', {name: 'First'});
+      act(() => api.show());
+      expect(anchorNames(trigger)).toHaveLength(1);
+
+      act(() => api.hide());
+      expect(anchorNames(trigger)).toEqual([]);
+
+      act(() => api.show());
+      expect(anchorNames(trigger)).toHaveLength(1);
+      const layer = container.querySelector('[popover]') as HTMLElement;
+      act(() => {
+        layer.dispatchEvent(
+          Object.assign(new Event('toggle'), {
+            oldState: 'open',
+            newState: 'closed',
+          }),
+        );
+      });
+      expect(anchorNames(trigger)).toEqual([]);
+    });
+
+    it('keeps the name while the layer fades out, and for a show during the fade', async () => {
+      let api = {show: () => {}, hide: () => {}};
+      const {getByRole, container} = render(
+        <SwappedTriggerHarness second={false} onReady={a => (api = a)} />,
+      );
+      const trigger = getByRole('button', {name: 'First'});
+      const layer = container.querySelector('[popover]') as HTMLElement;
+      // A close fade the browser runs after the hide, as TopNavMegaMenu's.
+      const fade = () => {
+        let end = () => {};
+        const finished = new Promise<void>(resolve => {
+          end = resolve;
+        });
+        layer.getAnimations = () =>
+          [
+            {
+              finished,
+              playState: 'running',
+              effect: {getComputedTiming: () => ({endTime: 200})},
+            },
+          ] as unknown as Animation[];
+        return {end, finished};
+      };
+
+      let exit = fade();
+      act(() => api.show());
+      act(() => api.hide());
+      // Still painting, so still placed against its trigger.
+      expect(anchorNames(trigger)).toHaveLength(1);
+      await act(async () => {
+        exit.end();
+        await exit.finished;
+      });
+      expect(anchorNames(trigger)).toEqual([]);
+
+      exit = fade();
+      act(() => api.show());
+      act(() => api.hide());
+      act(() => api.show());
+      await act(async () => {
+        exit.end();
+        await exit.finished;
+      });
+      expect(anchorNames(trigger)).toHaveLength(1);
+    });
+
+    it('keeps the name on a trigger that attaches again while the layer fades out', async () => {
+      let api = {show: () => {}, hide: () => {}};
+      const {getByRole, container, rerender} = render(
+        <SwappedTriggerHarness second={false} onReady={a => (api = a)} />,
+      );
+      const layer = container.querySelector('[popover]') as HTMLElement;
+      let end = () => {};
+      const finished = new Promise<void>(resolve => {
+        end = resolve;
+      });
+      layer.getAnimations = () =>
+        [
+          {
+            finished,
+            playState: 'running',
+            effect: {getComputedTiming: () => ({endTime: 200})},
+          },
+        ] as unknown as Animation[];
+      act(() => api.show());
+      act(() => api.hide());
+      // A render during the fade attaches another trigger element.
+      rerender(<SwappedTriggerHarness second onReady={a => (api = a)} />);
+      const second = getByRole('button', {name: 'Second'});
+      expect(anchorNames(second)).toHaveLength(1);
+      await act(async () => {
+        end();
+        await finished;
+      });
+      expect(anchorNames(second)).toEqual([]);
+    });
+
+    it('keeps the name for a show the browser refuses while the layer fades out', async () => {
+      let api = {show: () => {}, hide: () => {}};
+      const {getByRole, container} = render(
+        <SwappedTriggerHarness second={false} onReady={a => (api = a)} />,
+      );
+      const trigger = getByRole('button', {name: 'First'});
+      const layer = container.querySelector('[popover]') as HTMLElement;
+      let end = () => {};
+      const finished = new Promise<void>(resolve => {
+        end = resolve;
+      });
+      layer.getAnimations = () =>
+        [
+          {
+            finished,
+            playState: 'running',
+            effect: {getComputedTiming: () => ({endTime: 200})},
+          },
+        ] as unknown as Animation[];
+      act(() => api.show());
+      act(() => api.hide());
+      // Another popover's hide, which the browser runs itself, is in flight,
+      // and the browser refuses the show.
+      const other = document.createElement('div');
+      document.body.append(other);
+      observeBrowserHide(other);
+      const refuse = vi.spyOn(layer, 'showPopover').mockImplementation(() => {
+        throw new DOMException(
+          'Invalid to show a popover during another show operation',
+          'InvalidStateError',
+        );
+      });
+      act(() => api.show());
+      expect(anchorNames(trigger)).toHaveLength(1);
+      refuse.mockRestore();
+      // A hide forgets the parked show; the fade still paints.
+      act(() => api.hide());
+      expect(anchorNames(trigger)).toHaveLength(1);
+      other.dispatchEvent(new Event('toggle'));
+      other.remove();
+      await act(async () => {
+        end();
+        await finished;
+      });
+      expect(anchorNames(trigger)).toEqual([]);
+    });
+
+    it('takes the name away at once when the layer\u2019s only animation is paused', () => {
+      let api = {show: () => {}, hide: () => {}};
+      const {getByRole, container} = render(
+        <SwappedTriggerHarness second={false} onReady={a => (api = a)} />,
+      );
+      const trigger = getByRole('button', {name: 'First'});
+      const layer = container.querySelector('[popover]') as HTMLElement;
+      // A paused animation never finishes, so it must not hold the name.
+      layer.getAnimations = () =>
+        [
+          {
+            finished: new Promise(() => {}),
+            playState: 'paused',
+            effect: {getComputedTiming: () => ({endTime: 200})},
+          },
+        ] as unknown as Animation[];
+      act(() => api.show());
+      act(() => api.hide());
+      expect(anchorNames(trigger)).toEqual([]);
+    });
+
+    it('takes the name away at once when the layer only runs an animation that never ends', () => {
+      let api = {show: () => {}, hide: () => {}};
+      const {getByRole, container} = render(
+        <SwappedTriggerHarness second={false} onReady={a => (api = a)} />,
+      );
+      const trigger = getByRole('button', {name: 'First'});
+      const layer = container.querySelector('[popover]') as HTMLElement;
+      layer.getAnimations = () =>
+        [
+          {
+            finished: new Promise(() => {}),
+            playState: 'running',
+            effect: {getComputedTiming: () => ({endTime: Infinity})},
+          },
+        ] as unknown as Animation[];
+      act(() => api.show());
+      act(() => api.hide());
+      expect(anchorNames(trigger)).toEqual([]);
+    });
+
+    it('keeps each layer\u2019s name on a shared trigger for as long as that layer is shown', () => {
+      let api = {
+        tooltip: {show: () => {}, hide: () => {}},
+        menu: {show: () => {}, hide: () => {}},
+      };
+      const {getByRole} = render(
+        <SharedTriggerHarness onReady={a => (api = a)} />,
+      );
+      const trigger = getByRole('button', {name: 'Trigger'});
+      expect(anchorNames(trigger)).toEqual([]);
+
+      act(() => api.tooltip.show());
+      const [tooltipName] = anchorNames(trigger);
+      act(() => api.menu.show());
+      expect(anchorNames(trigger)).toHaveLength(2);
+      const menuName = anchorNames(trigger).find(name => name !== tooltipName);
+
+      act(() => api.tooltip.hide());
+      expect(anchorNames(trigger)).toEqual([menuName]);
+      act(() => api.menu.hide());
+      expect(anchorNames(trigger)).toEqual([]);
+    });
+
+    it('moves the name to a trigger that replaces a shown layer\u2019s, and gives none to one that replaces a closed layer\u2019s', () => {
+      let api = {show: () => {}, hide: () => {}};
+      const {getByRole, rerender} = render(
+        <SwappedTriggerHarness second={false} onReady={a => (api = a)} />,
+      );
+      const first = getByRole('button', {name: 'First'});
+      act(() => api.show());
+
+      rerender(<SwappedTriggerHarness second onReady={a => (api = a)} />);
+
+      const second = getByRole('button', {name: 'Second'});
+      expect(anchorNames(first)).toEqual([]);
+      expect(anchorNames(second)).toHaveLength(1);
+
+      act(() => api.hide());
+      rerender(
+        <SwappedTriggerHarness second={false} onReady={a => (api = a)} />,
+      );
+      expect(anchorNames(getByRole('button', {name: 'First'}))).toEqual([]);
+      expect(anchorNames(second)).toEqual([]);
     });
   });
 
