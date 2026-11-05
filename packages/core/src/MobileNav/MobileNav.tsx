@@ -80,6 +80,7 @@ import {themeProps} from '../utils/themeProps';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useScrollLock} from '../hooks/useScrollLock';
+import {useFocusRegionContainment} from '../hooks/useFocusTrap';
 import {
   registerEnglishFallback,
   useComponentTranslator,
@@ -515,6 +516,10 @@ export function MobileNav({
   );
 
   const dialogRef = useRef<HTMLDialogElement>(null);
+  // Native showModal() lets Tab leave for the browser's own UI, so the shared
+  // module wraps it. A closing drawer stops containing as soon as it starts to
+  // slide out.
+  useFocusRegionContainment(dialogRef, isOpen);
   const drawerRef = useRef<HTMLDivElement>(null);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout>>(null);
   // The input hold on the drawer's layer while it slides in under a coarse

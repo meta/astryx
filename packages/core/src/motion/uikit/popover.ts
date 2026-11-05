@@ -4,7 +4,7 @@
  * @file popover.ts
  * @input Nothing; data only
  * @output Exports `popover`: the shape a popover grows out of and shrinks
- *   back into as it is presented and dismissed
+ *   back into as it is presented and dismissed, and how long each takes
  * @position The popover domain of the UIKit constants table (motion/uikit).
  *   These are internal constants, not motion roles.
  *
@@ -48,4 +48,24 @@ export const popover = {
    *   dismiss animates back to the same 100 pt
    */
   collapsedLengthPx: 100,
+  /**
+   * How long the growth takes to come within 2% of its end: the reference
+   * the growth's duration token is chosen against.
+   * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+   *   iPhone 17 Pro, CASpringAnimation dump on the popover view, Oct 23
+   *   2026: the present spring (mass 1, stiffness 331.901, damping 29.149,
+   *   bounce 0.2, CA duration 0.4937 s) is 98% of the way at 206 ms and stays
+   *   within 2% after it; the frames read scale 0.98 at 200 ms
+   */
+  growMs: 206,
+  /**
+   * How long the shrink takes to come within 2% of its end. It is a
+   * reference only: the shrink plays the exit every overlay shares.
+   * @source measured: UIKit lab (injected host app), iOS 26.2 simulator,
+   *   iPhone 17 Pro, CASpringAnimation dump on the popover view, Oct 23
+   *   2026: the dismiss spring (mass 1, stiffness 283.973, damping 28.648,
+   *   bounce 0.15, CA duration 0.51566 s) is 98% of the way at 249 ms and
+   *   stays within 2% after it
+   */
+  shrinkMs: 249,
 } as const;

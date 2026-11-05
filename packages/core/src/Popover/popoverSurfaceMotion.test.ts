@@ -40,7 +40,7 @@ function cssTiming(duration: string, easing: string) {
 
 // The theme's defaults, which a page with no theme scope plays.
 const ENTRANCE = cssTiming(
-  durationDefaults['--duration-fast-max'],
+  durationDefaults['--duration-medium-min'],
   easeDefaults['--ease-entrance'],
 );
 const EXIT = cssTiming(
@@ -412,7 +412,7 @@ describe('createPopoverSurfaceMotion', () => {
 
   it('reads the theme\u2019s tokens where the popover is: the entrance duration and easing time the growth, the exit duration and easing the shrink', () => {
     const {element, motion} = create();
-    element.style.setProperty('--duration-fast-max', '400ms');
+    element.style.setProperty('--duration-medium-min', '400ms');
     element.style.setProperty('--ease-entrance', 'linear');
     element.style.setProperty('--duration-exit', '0.3s');
     element.style.setProperty('--ease-exit', 'ease-in');

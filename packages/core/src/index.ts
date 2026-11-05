@@ -189,6 +189,8 @@ export {
 // Hooks
 export * from './hooks';
 
+export {createPanGesture} from './gestures/createPanGesture';
+
 // Utilities
 export * from './utils';
 

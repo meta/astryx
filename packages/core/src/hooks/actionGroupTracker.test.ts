@@ -21,6 +21,7 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 import {__resetClickGuardForTest, isClickGuardArmed} from '../utils/clickGuard';
 import {PRESSED_ATTRIBUTE} from '../utils/pressFeedback';
+import {reducedMotionFadeConsts} from '../motion/reducedMotion.stylex';
 import {PRESS_FADE_MS} from '../utils/pressGesture';
 import {
   createActionGroupTracker,
@@ -240,26 +241,26 @@ describe('createActionGroupTracker', () => {
     ]);
   });
 
-  it('times the release fade by the tempo its stylesheet reads, as the press controller does (spec:AST-108 FR4)', () => {
-    // A rule writes the tempo; browsers inherit it from the theme, jsdom
+  it("times the release fade by the theme's exit duration, as the press controller does (spec:AST-094 FR5)", () => {
+    // A rule writes the token; browsers inherit it from the theme, jsdom
     // only reads it where it is declared.
     const style = document.createElement('style');
-    style.textContent = '[data-action] { --_astryx-motion-tempo: 1.5; }';
+    style.textContent = '[data-action] { --duration-exit: 333ms; }';
     document.head.append(style);
     try {
       const group = tracker();
       group.begin(100, 20);
       group.end();
-      vi.advanceTimersByTime(PRESS_FADE_MS);
+      vi.advanceTimersByTime(332);
       expect(first.button.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
-      vi.advanceTimersByTime(PRESS_FADE_MS / 2);
+      vi.advanceTimersByTime(1);
       expect(first.button.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
     } finally {
       style.remove();
     }
   });
 
-  it('under Reduce Motion a tempo may shorten the release fade but never lengthens it past 200 ms (spec:AST-108 FR4)', () => {
+  it("under Reduce Motion the release fade is no longer than design:reduced-motion DR2's bound", () => {
     vi.stubGlobal(
       'matchMedia',
       (query: string): MediaQueryList =>
@@ -275,13 +276,17 @@ describe('createActionGroupTracker', () => {
         }) as MediaQueryList,
     );
     const style = document.createElement('style');
-    style.textContent = '[data-action] { --_astryx-motion-tempo: 1.5; }';
+    style.textContent = '[data-action] { --duration-exit: 333ms; }';
     document.head.append(style);
     try {
       const group = tracker();
       group.begin(100, 20);
       group.end();
-      vi.advanceTimersByTime(PRESS_FADE_MS);
+      vi.advanceTimersByTime(
+        Number.parseFloat(reducedMotionFadeConsts.duration) - 1,
+      );
+      expect(first.button.getAttribute(PRESSED_ATTRIBUTE)).toBe('fading');
+      vi.advanceTimersByTime(1);
       expect(first.button.hasAttribute(PRESSED_ATTRIBUTE)).toBe(false);
     } finally {
       style.remove();

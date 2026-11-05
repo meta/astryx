@@ -2,7 +2,8 @@
 
 A gesture recognizer system with UIKit's semantics, for the touch
 presentations of Astryx core components. Components import it from
-`../gestures`; nothing here is exported from the package.
+`../gestures`. The package exports only `createPanGesture` and its types from
+here.
 
 UIKit is the reference throughout: the same recognizer states, the same
 conflict rules, the same thresholds (from `../motion/uikit/gestures.ts`, each
@@ -118,7 +119,8 @@ The pan reads its numbers the way `UIPanGestureRecognizer` does, as measured
 in the UIKit lab:
 
 - It begins once the centroid has moved `hysteresis` (10 px) along either
-  axis, not as a distance.
+  axis, not as a distance. A function gives each press its own threshold,
+  read from the press's first touch when it lands.
 - `translation()` leaves out the travel the threshold took: a slow drag reads
   zero when the pan begins, and a step that overshoots keeps only the
   overshoot. A dragged surface does not jump. `totalTranslation()` is the
@@ -529,7 +531,11 @@ it never moves it; when the fingers carry on instead, their moves absorb
 what the pan showed past their travel, or short of it, so it never steps
 back and ends on their travel. Fingers that stop release still, once the end
 time passes. In momentum, a reversal, a delta that grows
-against the decay, or a 50 ms pause starts a new gesture. A finger, mouse or
+against the decay, or a 50 ms pause starts a new gesture; a late, coalesced
+trackpad wheel that continues the glide's deceleration (at or below the next
+step, or near the sum of the next steps its stall spans) belongs to the same
+flick. When the next wheel grows instead, it starts a new gesture with the late
+wheel's travel. A finger, mouse or
 pen that comes down ends it, and a wheel claim keeps the page's text
 selection. A gesture a
 recognizer took is latched to it, as a browser latches a scroller: while it

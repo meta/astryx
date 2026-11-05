@@ -20,7 +20,7 @@
  */
 
 import {
-  createMotionAnimator,
+  createMotionEngine,
   type Animator,
   type AnimatorOptions,
   type MotionCurve,
@@ -28,7 +28,11 @@ import {
 } from '../motion/animator';
 import {holdInput} from '../Layer/inputHold';
 import {mapProgress, mapRange} from '../motion/progress';
-import {readThemeTiming} from '../motion/themeTiming';
+import {
+  easedProgress,
+  readThemeTiming,
+  type ThemeTimingTokens,
+} from '../motion/themeTiming';
 import {placePopoverExitCopy} from '../privateAttributes/popoverExit.stylex';
 import {
   frameOf,
@@ -71,6 +75,11 @@ function surfaceCurves(
     scaleY: axis === 'y' ? along : across,
     opacity: mapProgress(progress, lerp(from.opacity, to.opacity)),
   };
+}
+
+/** A theme timing that does not resolve plays no motion. */
+function timingOn(element: Element, tokens: ThemeTimingTokens): MotionCurve {
+  return readThemeTiming(element, tokens) ?? easedProgress(0, x => x);
 }
 
 /** What `animator` shows now, split back into scale and length. */
@@ -160,7 +169,7 @@ export function createPopoverSurfaceMotion(
     cancelFrame?: (handle: number) => void;
   } = {},
 ): PopoverSurfaceMotion {
-  const animator = createMotionAnimator(element, animatorOptions);
+  const animator = createMotionEngine(element, animatorOptions);
   const view = element.ownerDocument.defaultView;
   const scheduleFrame =
     requestFrame ??
@@ -189,7 +198,6 @@ export function createPopoverSurfaceMotion(
   // element's box includes a scale that only the curve knows.
   let measured: PopoverSurfaceGeometry | null = null;
   let presentHandle: MotionHandle | null = null;
-  // The dismissal in progress: its copy and the copy's animator.
   let exiting: {copy: HTMLElement; animator: Animator} | null = null;
   // Releases the hold that takes every touch while the popover grows.
   let releaseHold: (() => void) | null = null;
@@ -285,7 +293,7 @@ export function createPopoverSurfaceMotion(
         start,
         PRESENTED,
         next.axis,
-        readThemeTiming(element, POPOVER_ENTRANCE_TOKENS),
+        timingOn(element, POPOVER_ENTRANCE_TOKENS),
       ),
     );
     presentHandle = handle;
@@ -322,7 +330,7 @@ export function createPopoverSurfaceMotion(
       return;
     }
     const from = readState(animator, target.axis);
-    const timing = readThemeTiming(element, POPOVER_EXIT_TOKENS);
+    const timing = timingOn(element, POPOVER_EXIT_TOKENS);
     presentHandle = null;
     // The copy stands where the surface is drawn, the growth's frame
     // included.
@@ -336,7 +344,7 @@ export function createPopoverSurfaceMotion(
       'transform-origin',
       `${target.originX}px ${target.originY}px`,
     );
-    const closing = createMotionAnimator(copy, animatorOptions);
+    const closing = createMotionEngine(copy, animatorOptions);
     closing.set(frameOf(from, target.axis));
     const handle = closing.play(
       surfaceCurves(

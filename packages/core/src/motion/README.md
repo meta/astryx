@@ -28,6 +28,7 @@ roles through `resolveMotion`.
 | `uikit/segmented.ts`                             | UISegmentedControl: the selection indicator's spring; under Reduce Motion the animator's cross-fade replaces it.                                                     |
 | `uikit/switch.ts`                                | UISwitch on iOS 26.2: geometry, the lift, settle, travel and tracking springs, the flip distance, the track colour.                                                  |
 | `uikit/datePicker.ts`                            | UIDatePicker: the rules it adds to its wheels.                                                                                                                       |
+| `android/keyboard.ts`                            | Android's software keyboard (Chrome with Gboard): its slides' durations and curves (no theme's) and when they start against Chrome's report and a blur.              |
 | `roles.ts`                                       | The internal motion roles: the springs, durations and curves `spec:AST-094` FR4 names, registered by the shared tables, and a role's CSS form read back.             |
 | `roleValue.ts`                                   | A role's CSS form, written: a spring's duration and bounce, a duration in ms, a curve's `cubic-bezier()`.                                                            |
 | `resolveMotion.ts`                               | A role's value: its table value, as the per-role tables stay internal (`spec:AST-094` DEC-15).                                                                       |
@@ -40,7 +41,6 @@ roles through `resolveMotion`.
 | `paging.ts`                                      | Paging: UIKit's paging settle as a playable curve, its velocity floor, the animated page scroll.                                                                     |
 | `resolveSnapPoint.ts`                            | Release policy: the snap point a release lands on (flick, back-out cancel, step limit), on `selectSnapPoint`. Internal.                                              |
 | `bezier.ts`                                      | Cubic-bézier timing functions (Core Animation's named curves).                                                                                                       |
-| `themeTiming.ts`                                 | The eased progress, as one timed MotionCurve, from the theme's tokens for a motion that a tap, a key or the program starts. Durations fall back down a chain.        |
 | `animator.ts`                                    | Compositor animator: springs, coasts and any closed-form curve compiled to Web Animations, read back analytically.                                                   |
 | `progress.ts`                                    | A spring's progress, one curve mapped from another (companions, clamped ranges), the velocity that continues a motion.                                               |
 | `presentation.ts`                                | Where each moving element is drawn relative to where the engine hit-tests it, reported by the animator while translate runs; read by the gesture host at touch-down. |
@@ -70,7 +70,7 @@ the timings that decide who gets a touch are not roles.
 ## Animator
 
 ```
-import {createMotionAnimator} from '../motion/animator';
+import {createMotionEngine} from '../motion/animator';
 import {coast} from '../motion/coast';
 import {solveSpringTowardRamp, toSpring} from '../motion/spring';
 import {resolveMotion} from '../motion/resolveMotion';
@@ -79,7 +79,7 @@ import {registerSpringsTable, springs} from '../motion/uikit';
 // Once, so the springs are registered as their roles:
 registerSpringsTable();
 
-const animator = createMotionAnimator(sheet);
+const animator = createMotionEngine(sheet);
 // The animator plays a motion role (spec:AST-094 FR4), its table value, as the
 // per-role tables stay internal (DEC-15); math on a spring reads the role with
 // resolveMotion.
@@ -176,7 +176,7 @@ await handle.finished; // true if it ran to the end, false if interrupted
 - `animatorFor(element)` returns the one animator for an element, so code
   that animates it from several places (a swipe on x, a removal on y)
   composes in one `translate` track.
-- `createMotionAnimator(dialog, {pseudoElement: '::backdrop'})` drives a
+- `createMotionEngine(dialog, {pseudoElement: '::backdrop'})` drives a
   pseudo-element; with no inline style to hold it, a static filling animation
   holds its end value until the next animation replaces it, while the
   pseudo-element exists. A dialog's `::backdrop` is made again each time the

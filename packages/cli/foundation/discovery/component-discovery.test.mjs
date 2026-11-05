@@ -13,6 +13,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {withListingCache} from '../fs/listing-cache.mjs';
 import {
   CORE_PACKAGE,
   discoverComponents,
@@ -328,6 +329,22 @@ describe('findComponentReadme / findComponentSource / resolveImportPath', () => 
     const core = mkTmp('as-rip-empty-');
     fs.mkdirSync(path.join(core, 'src'));
     expect(resolveImportPath(core, 'Nope')).toBe('@astryxdesign/core');
+  });
+
+  it('reads the exports map once per operation and fresh outside one', () => {
+    const core = mkTmp('as-rip-once-');
+    fs.mkdirSync(path.join(core, 'src'));
+    const pkgPath = path.join(core, 'package.json');
+    const writeExports = exports =>
+      fs.writeFileSync(pkgPath, JSON.stringify({exports}));
+    writeExports({'./Card': './dist/Card.js'});
+    withListingCache(() => {
+      expect(resolveImportPath(core, 'Card')).toBe('@astryxdesign/core/Card');
+      writeExports({});
+      // The operation read the map once, so the edit does not reach it.
+      expect(resolveImportPath(core, 'Card')).toBe('@astryxdesign/core/Card');
+    });
+    expect(resolveImportPath(core, 'Card')).toBe('@astryxdesign/core');
   });
 
   it('throws when src/ is missing', () => {

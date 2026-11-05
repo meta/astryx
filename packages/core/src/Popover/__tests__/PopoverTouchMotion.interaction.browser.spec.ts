@@ -2,18 +2,19 @@
 
 /**
  * @file PopoverTouchMotion.interaction.browser.spec.ts
- * @input The built Default Popover story, real touch input (Chromium CDP /
- *   WebKit's input command), the interaction harness, the popover's
- *   geometry and the theme tokens that time its motion
- * @output Animation proofs for Popover's touch presentation (under a finger,
- *   one touch model on every touch device): it grows out of its trigger on
- *   the theme's entrance tokens (the edge on the trigger, the scale and the
- *   length together) and shrinks back into it on the theme's exit tokens, on
- *   screen through the light dismiss; the growth keeps advancing through a
- *   blocked main thread; neither does Layout or Paint per frame; Reduce
- *   Motion cross-fades, opacity only, in 200 ms or less; a mouse keeps the
- *   layer's own entrance; a tap, a pan or a pinch while it grows does nothing
- *   but a pinch's zoom; storyboards
+ * @input The built Default Popover story, with real touch input (Chromium
+ *   CDP / WebKit's input command) and the interaction harness. The proofs
+ *   also read the popover's geometry and the theme tokens that time its
+ *   motion.
+ * @output Animation proofs for Popover's touch presentation under a finger,
+ *   one touch model on every touch device. It grows out of its trigger on
+ *   the entrance tokens, edge on the trigger. It shrinks back on the exit
+ *   tokens, on screen through the light dismiss. The growth keeps advancing
+ *   through a blocked main thread. On a page with no other frame work,
+ *   neither motion does Layout or Paint per frame. Reduce Motion
+ *   cross-fades, opacity only, in 200 ms or less. A mouse keeps the layer's
+ *   own entrance. A tap, a pan or a pinch while it grows does nothing but a
+ *   pinch's zoom. Storyboards.
  * @position Evidence for Popover's touch presentation; the model itself is
  *   unit-tested in popoverSurfaceMotion.test.ts
  */
@@ -40,7 +41,6 @@ import {
   markElement,
   openStory,
   pinch,
-  readLongTasks,
   releaseAnimations,
   startScreencast,
   thawTimers,
@@ -76,21 +76,18 @@ const SHIELD = '[popover][aria-hidden="true"]:not([data-astryx-popover-exit])';
  * `tokens`, read where the popover is.
  */
 async function themeTiming(locator: Locator, tokens: ThemeTimingTokens) {
-  const values = await locator.evaluate(
+  const [duration, easing] = await locator.evaluate(
     (element, names) => {
       const style = getComputedStyle(element);
       return names.map(name => style.getPropertyValue(name).trim());
     },
-    [...tokens.durations, tokens.easing],
+    [tokens.duration, tokens.easing],
   );
-  const easing = values.pop() ?? '';
-  const ms = values
-    .map(value => parseMotionRoleValue('duration', value))
-    .find(value => value != null);
+  const ms = parseMotionRoleValue('duration', duration);
   const points = parseCssEasing(easing);
   if (ms == null || points == null) {
     throw new Error(
-      `the story theme gives no playable timing: ${values.join(', ')}`,
+      `the story theme gives no playable timing: ${duration}, ${easing}`,
     );
   }
   const ease = cubicBezier(points);
@@ -219,6 +216,77 @@ async function scaleAnimationOf(locator: Locator) {
       return scale;
     }
   }
+}
+
+/**
+ * Logs when each `scale` animation starts, epoch ms, from a wrapper on
+ * `Element.animate`. It runs no frame loop, so it reads nothing between
+ * frames.
+ */
+async function logScaleStarts(page: Page) {
+  await page.addInitScript(() => {
+    const starts: number[] = [];
+    Object.defineProperty(window, '__popoverScaleStarts', {value: starts});
+    const animate = Element.prototype.animate;
+    Element.prototype.animate = function (keyframes, options) {
+      const animation = animate.call(this, keyframes, options);
+      if (
+        Array.isArray(keyframes) &&
+        keyframes.some(frame => frame != null && 'scale' in frame)
+      ) {
+        starts.push(performance.timeOrigin + performance.now());
+      }
+      return animation;
+    };
+  });
+}
+
+/**
+ * The rendering proof's motions: 1.2 s each, set on the layer and its exit
+ * copy, which the dismissal clones from it.
+ */
+const LONG_MOTIONS =
+  '[popover]:has([role="dialog"]) { --duration-medium-min: 1200ms; --duration-exit: 1200ms; }';
+
+/** Where each rendering window starts, ms after its motion starts. */
+const WINDOW_START_MS = 400;
+
+/** The page's clock, epoch ms. */
+async function pageNow(page: Page): Promise<number> {
+  return page.evaluate(() => performance.timeOrigin + performance.now());
+}
+
+/**
+ * Waits in the page until `ms` after the first logged scale start at or after
+ * `after`, and returns that start. It reads only the log, never a style, and
+ * after the start it sets one timer.
+ */
+async function waitPastScaleStart(
+  page: Page,
+  after: number,
+  ms: number,
+): Promise<number> {
+  return page.evaluate(
+    async ({after, ms}) =>
+      new Promise<number>((resolve, reject) => {
+        const starts = (window as unknown as {__popoverScaleStarts: number[]})
+          .__popoverScaleStarts;
+        const deadline = performance.now() + 5_000;
+        const look = () => {
+          const start = starts.find(logged => logged >= after);
+          if (start != null) {
+            const now = performance.timeOrigin + performance.now();
+            setTimeout(() => resolve(start), Math.max(0, start + ms - now));
+          } else if (performance.now() > deadline) {
+            reject(new Error('no scale animation started'));
+          } else {
+            setTimeout(look, 10);
+          }
+        };
+        look();
+      }),
+    {after, ms},
+  );
 }
 
 /** The static copy the dismissal plays on. */
@@ -429,9 +497,9 @@ test('the presentation keeps advancing every frame while the main thread is bloc
   );
   const story = await openDefault(page);
   // The screencast finds the element by its marker's exact color, which the
-  // content fade would blend away: hold opacity at 1 for this proof (an
-  // important declaration outranks the animation); the scale, composited
-  // the same way, carries the evidence.
+  // content fade would blend away. So this proof holds opacity at 1, since an
+  // important declaration outranks the animation. The scale, composited the
+  // same way, carries the evidence.
   await page.addStyleTag({
     content: '[popover]:has([role="dialog"]) { opacity: 1 !important; }',
   });
@@ -484,60 +552,108 @@ test('the presentation and the dismissal do no Layout or Paint per frame', async
   browserName,
 }) => {
   test.skip(browserName !== 'chromium', 'rendering traces are Chromium-only');
+  await logScaleStarts(page);
   const story = await openDefault(page);
+  // Both motions run for 1.2 s here. The windows can then start after the
+  // one-off work as the content appears and still span many frames, even
+  // on a loaded machine.
+  await page.addStyleTag({content: LONG_MOTIONS});
   const entrance = await themeTiming(story.layer, POPOVER_ENTRANCE_TOKENS);
   const exit = await themeTiming(story.layer, POPOVER_EXIT_TOKENS);
-  let present = {from: 0, to: 0};
-  let dismiss = {from: 0, to: 0};
-  const started = Date.now();
-  // Opened from the keyboard (the phone's primary pointer is still coarse,
-  // so the touch presentation runs) to keep the trigger's own press
-  // feedback out of the measurement. Nothing polls the page inside the
-  // windows: a style read during an animation forces a style update, and on
-  // an anchored element a layout.
+  expect(entrance.ms).toBe(1200);
+  expect(exit.ms).toBe(1200);
+  // It opens from the keyboard to keep the trigger's own press feedback out
+  // of the measurement. The phone's primary pointer is still coarse, so the
+  // touch presentation runs. Nothing reads the page inside the windows: on
+  // this anchored layer, a style read during an animation is a style update
+  // and a layout. That rules out the harness's animation recorder, which
+  // reads every animation each frame, so the windows come from when each
+  // scale animation starts.
   await story.trigger.focus();
+  let present = 0;
+  let dismiss = 0;
   const trace = await traceRendering(page, async () => {
+    const opened = await pageNow(page);
     await page.keyboard.press('Enter');
-    present = await scaleAnimationOf(story.layer);
-    await page.waitForTimeout(present.to - Date.now() + 100);
+    present = await waitPastScaleStart(page, opened, entrance.ms + 150);
+    const closed = await pageNow(page);
     await page.keyboard.press('Escape');
-    dismiss = await scaleAnimationOf(exitCopyOf(page));
-    await page.waitForTimeout(dismiss.to - Date.now() + 100);
+    dismiss = await waitPastScaleStart(page, closed, exit.ms + 150);
   });
-  // The animations hold their end state for a while past the curve; judge
-  // the curves themselves, less their first and last frames. The growth's
-  // first 150 ms also carry the focus moving into the popover (its first
-  // control paints its ring), which is not this motion.
-  const windows = [
-    {
-      name: 'present',
-      from: present.from + 150,
-      to: present.from + entrance.ms - 20,
-    },
-    {
-      name: 'dismiss',
-      from: dismiss.from + 30,
-      to: dismiss.from + exit.ms - 20,
-    },
-  ];
-  for (const window of windows) {
-    const during = countBetween(trace, window.from, window.to);
+  // Each window starts 400 ms in, after the focus ring and the touch hit
+  // areas' first measurement, and ends one frame before its curve does. A
+  // page frame callback makes Chromium lay out this anchored layer every
+  // frame. So these zeros also show that no frame loop runs here, Popover's
+  // own included.
+  for (const [name, base, ms] of [
+    ['present', present, entrance.ms],
+    ['dismiss', dismiss, exit.ms],
+  ] as const) {
+    const from = base + WINDOW_START_MS;
+    const end = base + ms - 20;
+    const during = countBetween(trace, from, end);
     // On failure, every rendering event of the window, in ms after its
     // animation's start.
-    const base = window.name === 'present' ? present.from : dismiss.from;
-    const detail = `${window.name} ${JSON.stringify({
+    const detail = `${name} ${JSON.stringify({
       during,
       events: trace.events
-        .filter(e => e.t >= window.from && e.t <= window.to)
+        .filter(e => e.t >= from && e.t <= end)
         .map(e => `${e.name}@${Math.round(e.t - base)}`),
     })}`;
     expect(during.Layout ?? 0, detail).toBe(0);
     expect(during.Paint ?? 0, detail).toBe(0);
   }
-  expect(trace.longTasks).toEqual([]);
-  expect(await readLongTasks(page, {from: started, to: Date.now()})).toEqual(
-    [],
-  );
+  // A loaded machine stretches a task's wall time, not its thread time. So a
+  // long task here is one that runs over 50 ms of thread time.
+  expect(trace.longTasks.filter(task => task.threadMs > 50)).toEqual([]);
+  // Positive control: the same trace sees per-frame work in such a window.
+  // A frame loop moves the trigger by a pixel in each frame the page draws.
+  // Every one of those frames must show work, however few are drawn.
+  await story.trigger.evaluate(element => {
+    (element as HTMLElement).style.position = 'relative';
+  });
+  let loopFrom = 0;
+  const control = await traceRendering(page, async () => {
+    loopFrom = await story.trigger.evaluate((element, ms) => {
+      const style = (element as HTMLElement).style;
+      const writes: number[] = [];
+      Object.defineProperty(window, '__popoverLoopWrites', {value: writes});
+      const from = performance.now();
+      let frame = 0;
+      const step = () => {
+        const now = performance.now();
+        frame += 1;
+        style.top = `${frame % 2}px`;
+        writes.push(performance.timeOrigin + now);
+        if (now - from < ms) {
+          requestAnimationFrame(step);
+        }
+      };
+      requestAnimationFrame(step);
+      return performance.timeOrigin + from;
+    }, entrance.ms);
+    await page.waitForTimeout(entrance.ms + 150);
+  });
+  const from = loopFrom + WINDOW_START_MS;
+  const end = loopFrom + entrance.ms - 20;
+  const drawn = (
+    await page.evaluate(() => [
+      ...(window as unknown as {__popoverLoopWrites: number[]})
+        .__popoverLoopWrites,
+    ])
+  ).filter(write => write >= from && write <= end);
+  expect(drawn.length, 'frames drawn in the window').toBeGreaterThan(1);
+  for (const write of drawn) {
+    expect(
+      control.events.some(
+        event =>
+          (event.name === 'Layout' || event.name === 'Paint') &&
+          event.t >= write &&
+          event.t < write + 1000 / 60,
+      ),
+      `work in the frame drawn ${Math.round(write - loopFrom)} ms in`,
+    ).toBe(true);
+  }
 });
 
 /**

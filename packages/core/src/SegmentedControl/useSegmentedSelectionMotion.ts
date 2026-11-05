@@ -25,10 +25,9 @@ import {
   type RefObject,
 } from 'react';
 import {
-  createMotionAnimator,
+  createMotionEngine,
   type AnimateOptions,
   type Animator,
-  type MotionCurve,
   type MotionHandle,
   type MotionValues,
   type SpringTransition,
@@ -41,10 +40,8 @@ import {registerSpringsTable, springs} from '../motion/uikit/springs';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import {observeResize} from '../utils/sharedResizeObserver';
 import {titleOfSegment} from '../privateAttributes/segmentTitle.stylex';
-import {cubicBezier} from '../motion/bezier';
 import {mapProgress, mapRange} from '../motion/progress';
-import {parseCssEasing, parseMotionRoleValue} from '../motion/roles';
-import {easedProgress} from '../motion/themeTiming';
+import {easedProgress, readThemeTiming} from '../motion/themeTiming';
 import {useSegmentedTouchTracking} from './useSegmentedTouchTracking';
 
 /** The segments, in DOM order. */
@@ -353,30 +350,6 @@ function isEnabledSegment(segment: HTMLElement): boolean {
 
 const titleOf = titleOfSegment;
 
-/**
- * The eased progress of `segment`'s own transition, which reads the theme's
- * duration and easing tokens. The values stay readable while a carry turns
- * the transition's property off. Null when the theme gives no duration.
- */
-function themeTimingOf(segment: HTMLElement): MotionCurve | null {
-  const view = segment.ownerDocument.defaultView;
-  if (view == null) {
-    return null;
-  }
-  const style = view.getComputedStyle(segment);
-  const ms = parseMotionRoleValue(
-    'duration',
-    style.transitionDuration.split(',')[0] ?? '',
-  );
-  const points = parseCssEasing(
-    style.transitionTimingFunction.split(/,(?![^(]*\))/)[0] ?? '',
-  );
-  if (ms == null || ms <= 0 || points == null) {
-    return null;
-  }
-  return easedProgress(ms / 1000, cubicBezier(points));
-}
-
 /** A theme that gives the segments no transition: the lens lands at once. */
 const INSTANT = easedProgress(0.001, progress => progress);
 
@@ -514,7 +487,7 @@ export class SegmentedSelectionMotion {
   private readonly after: Animator;
 
   constructor(
-    private readonly animator: Animator = createMotionAnimator(null, {
+    private readonly animator: Animator = createMotionEngine(null, {
       pseudoElement: '::before',
     }),
     options: SegmentedSelectionMotionOptions = {},
@@ -527,7 +500,7 @@ export class SegmentedSelectionMotion {
     this.now = options.now ?? defaultNow;
     this.after =
       options.afterAnimator ??
-      createMotionAnimator(null, {
+      createMotionEngine(null, {
         pseudoElement: '::after',
         initial: {opacity: 0},
       });
@@ -1252,7 +1225,9 @@ export class SegmentedSelectionMotion {
       return;
     }
     this.velocity = {};
-    const progress = themeTimingOf(segment) ?? INSTANT;
+    // The segment's own transition carries the theme's duration and easing.
+    // They stay readable while a carry turns its property off.
+    const progress = readThemeTiming(segment) ?? INSTANT;
     const at = options.at;
     // Unclamped, so an easing that overshoots carries the lens with it.
     const toward = (from: number, to: number) =>

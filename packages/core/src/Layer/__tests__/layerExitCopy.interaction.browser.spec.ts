@@ -2,20 +2,20 @@
 
 /**
  * @file layerExitCopy.interaction.browser.spec.ts
- * @input The exit copy bundled with esbuild onto a blank fixture page: a
- *   popover layer inside a clipping, transformed panel, an entrance curve
- *   held halfway, and Chromium and WebKit
- * @output Proof that the engine shows the copy where the layer was drawn:
- *   placed as the layer closes (from script and by the browser's own light
- *   dismiss), it is in the top layer as a manual popover with no `z-index`,
- *   uncut by the clipping panel, and its drawn box equals the layer's drawn
- *   box mid-entrance within half a px; a second copy for the same layer
- *   replaces the first while another layer's copy stays
+ * @input The exit copy bundled with esbuild onto a blank fixture page, in
+ *   Chromium and WebKit. The page holds a popover layer inside a clipping,
+ *   transformed panel, with an entrance curve held halfway.
+ * @output Proof that the engine shows the copy where the layer was drawn.
+ *   The copy is placed as the layer closes, from script and by the browser's
+ *   own light dismiss. It is in the top layer as a manual popover with no
+ *   `z-index`. The clipping panel does not cut it. Its drawn box equals the
+ *   layer's drawn box mid-entrance, within half a px. A second copy for the
+ *   same layer replaces the first, while another layer's copy stays.
  * @position Browser proof for layerExitCopy.ts, run by `pnpm
- *   test:interaction`; jsdom has no layout and no top layer. The refusal
- *   path (Android Chromium 158 refuses a show during another popover's
- *   toggle) is proven on the Android gate emulator (pull request evidence):
- *   these engines do not refuse.
+ *   test:interaction`; jsdom has no layout and no top layer. Android
+ *   Chromium 158 refuses a show during another popover's toggle. These
+ *   engines do not refuse, so the refusal path is proven on an Android
+ *   emulator instead.
  */
 
 import {fileURLToPath} from 'node:url';
@@ -47,7 +47,7 @@ test.beforeAll(async () => {
 const ATTRIBUTE = 'data-exit-copy';
 
 // A real navigation (not setContent): the page keeps its own window. The
-// layer sits in a panel that clips and is transformed: a fixed box placed
+// layer sits in a panel that clips and is transformed. A fixed box placed
 // there would be cut and moved; the top layer is neither.
 async function open(page: Page) {
   const html = `<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -170,7 +170,7 @@ test('a layer that closes with the layer around it gets a copy that is drawn, ou
   page,
 }) => {
   await open(page);
-  const result = await page.evaluate(attribute => {
+  const result = await page.evaluate(async attribute => {
     const outer = document.createElement('div');
     outer.setAttribute('popover', 'auto');
     outer.style.setProperty('--tone', 'rgb(10, 20, 30)');
@@ -202,6 +202,9 @@ test('a layer that closes with the layer around it gets a copy that is drawn, ou
     );
     // The outer layer's close takes the inner one with it, in one step.
     outer.hidePopover();
+    // Where the browser refuses a show during the toggle, the copy opens
+    // after this script, before the next frame paints.
+    await new Promise(resolve => requestAnimationFrame(resolve));
     const placed = copy as HTMLElement | null;
     if (placed == null) {
       return null;
@@ -234,7 +237,7 @@ test('when the close of the layer around it closes it too, its copy stays above 
   page,
 }) => {
   await open(page);
-  const result = await page.evaluate(attribute => {
+  const result = await page.evaluate(async attribute => {
     const outer = document.createElement('div');
     outer.setAttribute('popover', 'auto');
     const inner = document.createElement('div');
@@ -263,6 +266,8 @@ test('when the close of the layer around it closes it too, its copy stays above 
     }
     // The browser closes the inner layer first, then the outer one.
     outer.hidePopover();
+    // A refused show opens the copies before the next frame paints.
+    await new Promise(resolve => requestAnimationFrame(resolve));
     const innerCopy = placed.get(inner);
     const outerCopy = placed.get(outer);
     if (innerCopy == null || outerCopy == null) {

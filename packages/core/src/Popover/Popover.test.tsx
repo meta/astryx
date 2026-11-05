@@ -1808,13 +1808,22 @@ describe('usePopover trigger ref', () => {
     function Trigger({count}: {count: number}) {
       const popover = usePopover({onShow: () => {}, onHide: () => {}});
       return (
-        <button type="button" ref={popover.triggerRef}>
-          Open {count}
-        </button>
+        <>
+          <button
+            type="button"
+            ref={popover.triggerRef}
+            onClick={() => popover.show()}>
+            Open {count}
+          </button>
+          {popover.render(<span>Details</span>)}
+        </>
       );
     }
     const {rerender} = render(<Trigger count={0} />);
     const trigger = screen.getByRole('button', {name: /^Open/});
+    // A closed popover's trigger is no anchor; a shown one's is.
+    expect(trigger.style.getPropertyValue('anchor-name')).toBe('');
+    fireEvent.click(trigger);
     const anchorName = trigger.style.getPropertyValue('anchor-name');
     expect(anchorName).toMatch(/^--astryx-layer-/);
     const records: MutationRecord[] = [];

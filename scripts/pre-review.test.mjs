@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {describe, expect, it} from 'vitest';
+import {createRepository} from './lib/git-fixture.mjs';
 import {
   CHECKS,
   applicableChecks,
@@ -225,19 +226,11 @@ describe('mergeConflicts', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'review-pre-test-'));
     const git = (...args) =>
       execFileSync('git', ['-C', root, ...args], {encoding: 'utf8'});
-    git('init', '-q', '-b', 'main');
-    git('config', 'user.email', 'test@example.com');
-    git('config', 'user.name', 'Test');
-    fs.writeFileSync(path.join(root, 'a.txt'), 'one\n');
-    git('add', '.');
-    git('commit', '-qm', 'base');
-    git('checkout', '-qb', 'topic');
-    fs.writeFileSync(path.join(root, 'a.txt'), 'topic\n');
-    git('commit', '-qam', 'topic');
-    git('checkout', '-q', 'main');
-    fs.writeFileSync(path.join(root, theirs.file), theirs.text);
-    git('add', '.');
-    git('commit', '-qm', 'main');
+    createRepository(root, [
+      {ref: 'refs/heads/main', name: 'base', files: {'a.txt': 'one\n'}},
+      {ref: 'refs/heads/topic', parent: 'base', files: {'a.txt': 'topic\n'}},
+      {ref: 'refs/heads/main', files: {[theirs.file]: theirs.text}},
+    ]);
     return {root, git};
   }
 

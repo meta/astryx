@@ -113,10 +113,11 @@
         "which-features-set-the-floor",
         "which-components-are-affected",
         "what-astryx-guarantees",
+        "the-on-screen-keyboard",
         "supporting-older-browsers",
         "how-these-tiers-move-over-time"
       ],
-      "skeleton": "98bdd1d0e1db35f5ad03896962be51d2f21679c3f3cd25cf724045778a959b5e",
+      "skeleton": "463a740e90118dea23181c46a2cca01695d9295027863282835518f0bd655bdb",
       "mentions": []
     },
     "color": {
