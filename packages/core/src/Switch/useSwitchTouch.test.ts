@@ -39,7 +39,7 @@ vi.mock('../motion/animator', async importOriginal => {
   const actual = await importOriginal<typeof AnimatorModule>();
   return {
     ...actual,
-    createMotionAnimator: (
+    createMotionEngine: (
       element: Element,
       options: {pseudoElement?: string} = {},
     ) => {

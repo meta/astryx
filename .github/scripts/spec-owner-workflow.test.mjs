@@ -135,7 +135,7 @@ describe('spec-only workflow contract', () => {
       "needs.build-storybook.result != 'skipped'",
     );
 
-    const docsite = jobBlock('docsite-test');
+    const docsite = jobBlock('docsite-build');
     expect(docsite).toContain("steps.scope.outputs.spec_only == 'true'");
     expect(docsite).toContain('node scripts/check-knowledge.mjs');
 
@@ -175,9 +175,9 @@ describe('spec-only workflow contract', () => {
       expect(from, start).toBeGreaterThanOrEqual(0);
       return ci.slice(from, ci.indexOf(`\n  ${end}:`, from));
     };
-    // docsite-test validates spec records itself and gates its docsite build
+    // docsite-build validates spec records itself and gates its docsite build
     // and tests off for the spec-only lane.
-    const docsiteJob = block('docsite-test', 'test-ui');
+    const docsiteJob = block('docsite-build', 'docsite-browser');
 
     const checkout = docsiteJob.indexOf('- uses: actions/checkout@v7');
     const setup = docsiteJob.indexOf('- uses: ./.github/actions/setup');
@@ -191,14 +191,17 @@ describe('spec-only workflow contract', () => {
       "if: (steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.decided != 'true')",
     );
 
-    const heavy = docsiteJob.slice(
-      docsiteJob.indexOf('- name: Install Playwright'),
-      docsiteJob.indexOf('- name: test-docsite (data test results)'),
-    );
-    const heavySteps = heavy.split('\n      - name: ');
-    expect(heavySteps.length).toBe(5);
-    for (const step of heavySteps) {
-      expect(step).toContain("if: steps.scope.outputs.spec_only != 'true'");
+    for (const name of [
+      'Build docsite workspace dependencies',
+      'Build the docsite',
+      'test-docsite (data tests)',
+      'Verify the hidden production registry gate',
+    ]) {
+      const at = docsiteJob.indexOf(`- name: ${name}`);
+      expect(at, name).toBeGreaterThan(validate);
+      expect(docsiteJob.slice(at, at + 300), name).toContain(
+        "if: steps.scope.outputs.spec_only != 'true'",
+      );
     }
   });
 
@@ -410,10 +413,10 @@ describe('test-deps scope (Internal Registry)', () => {
   });
 });
 
-describe('docsite-test spec validation', () => {
+describe('docsite-build spec validation', () => {
   it('validates spec records whenever its own scope is spec-only or undecided', () => {
     const ci = read('.github/workflows/ci.yml');
-    const job = ci.slice(ci.indexOf('\n  docsite-test:\n'));
+    const job = ci.slice(ci.indexOf('\n  docsite-build:\n'));
     const validate = job.slice(job.indexOf('- name: Validate spec records'));
     expect(validate.split('\n')[1].trim()).toBe(
       "if: (steps.scope.outputs.spec_only == 'true' || steps.scope.outputs.decided != 'true')",

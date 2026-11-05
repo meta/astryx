@@ -2,6 +2,7 @@
 
 import {describe, it, expect} from 'vitest';
 import {
+  parseInline,
   parseMarkdown,
   parseMarkdownIncremental,
   createIncrementalState,
@@ -394,5 +395,30 @@ describe('parseMarkdownIncremental cache', () => {
     // tracked positions by invalidating the settled cache each chunk would
     // still pass any time budget generous enough not to flake; it fails here.
     expect(withRanges).toBe(without);
+  });
+});
+
+describe('GFM autolink scanning is linear in the input length (Markdown Performance)', () => {
+  // A scan that restarts at every character of a long run grows with the
+  // square of the run: 100,000 characters took seconds. A linear scan takes
+  // milliseconds, so this budget holds on a loaded machine.
+  const BUDGET_MS = 1000;
+
+  it.each([
+    ['a long plain word', 'a'.repeat(100_000)],
+    [
+      'a long word with an @ and no dotted domain',
+      `${'a'.repeat(50_000)}@${'b'.repeat(50_000)}`,
+    ],
+    [
+      'a long word, then an email and a URL',
+      `${'a'.repeat(100_000)} me@example.com https://example.com`,
+    ],
+    ['a URL closed by a long run of )', `https://a${')'.repeat(100_000)}`],
+  ])('parses %s with autolink within the budget', (_label, text) => {
+    const startedAt = performance.now();
+    const nodes = parseInline(text, {autolink: 'gfm'});
+    expect(performance.now() - startedAt).toBeLessThan(BUDGET_MS);
+    expect(nodes.length).toBeGreaterThan(0);
   });
 });

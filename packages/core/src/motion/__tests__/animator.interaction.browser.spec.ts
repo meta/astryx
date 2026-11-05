@@ -27,6 +27,7 @@ import {
   type BlockedWindow,
   busyWindowProof,
   CONTROL_RGB,
+  controlClock,
   countBetween,
   markElement,
   startBusyControl,
@@ -38,7 +39,6 @@ import {expect, test, type Page} from '@astryxdesign/a11y-spec/playwright';
 import {build} from 'esbuild';
 import type {Animator, MotionHandle} from '../animator';
 import type * as MotionBundle from './motionBundle';
-import {controlClock} from './controlClock';
 
 let script = '';
 
@@ -109,7 +109,7 @@ async function open(page: Page) {
 </style>
 <div id="box"></div>
 <script>${script}</script>
-<script>window.animator = Motion.createMotionAnimator(document.getElementById('box'));</script>`;
+<script>window.animator = Motion.createMotionEngine(document.getElementById('box'));</script>`;
   await page.route('http://motion.test/', async route =>
     route.fulfill({contentType: 'text/html', body: html}),
   );
@@ -133,6 +133,14 @@ async function blockedRun(
   // Before the animation, so it is on the compositor first; in the top
   // strip, clear of the box (top 40 px) and its marker.
   await startBusyControl(page);
+  // The control's start on the page clock. Its own time at a frame, past
+  // this start, is that frame's time on the page clock.
+  const controlStart = await page.evaluate(() => {
+    const animation = document
+      .querySelector('[data-harness-control]')
+      ?.getAnimations()[0];
+    return performance.timeOrigin + Number(animation?.startTime ?? NaN);
+  });
   const cast = await startScreencast(page);
   // The curve starts when the browser commits it (handle.started).
   const start = await page.evaluate(
@@ -152,14 +160,17 @@ async function blockedRun(
   const frames = await cast.stop();
   const tracked = await trackMarker(page, frames);
   const control = await trackMarker(page, frames, {rgb: CONTROL_RGB});
-  return {start, busy, tracked, control};
+  return {start, controlStart, busy, tracked, control};
 }
 
 test('a spring keeps advancing every frame through a 1 s main-thread block, on its curve', async ({
   page,
   browserName,
 }) => {
-  const {start, busy, tracked, control} = await blockedRun(page, SLOW);
+  const {start, controlStart, busy, tracked, control} = await blockedRun(
+    page,
+    SLOW,
+  );
   // Judged against what the compositor presented in the same window, not a
   // display-rate bound: a loaded runner's compositor skips frames for every
   // animation alike, and the harness reads a slow tail inside the block at
@@ -181,25 +192,46 @@ test('a spring keeps advancing every frame through a 1 s main-thread block, on i
   expect(proof.verdict.failures, proof.summary).toEqual([]);
   expect(proof.monotonic).toBe(true);
   // And it is the spring. The control moves 240 px out and back every 800
-  // ms, linearly, on the compositor: between two frames where it kept one
-  // direction it advanced |dx| / 0.6 ms of its own curve, whatever the
-  // screencast's timestamps say (a loaded runner stamps some frames late).
-  // Placing the box's position on the analytic curve (inverting it), the
-  // spring must have advanced the same time over each such run of frames.
-  // Chromium also stamps frames on the page's clock, so there the median
-  // offset from the curve is near zero too.
+  // ms, linearly, on the compositor. Its start plus its own time places each
+  // frame on the page clock (controlClock). The frame's stamp only picks the
+  // whole cycle, so a late stamp moves no frame.
   const inside = tracked.filter(
     f => f.box != null && f.t > busy.from + 20 && f.t < busy.to - 20,
   );
-  expect(inside.length).toBeGreaterThan(30);
-  const curveMs = await page.evaluate(
-    ({springs, travel, xs}) =>
+  const clock = controlClock(control);
+  const timed = inside.flatMap(f => {
+    const ms = clock.get(f.t);
+    if (ms == null) {
+      return [];
+    }
+    const cycles = Math.round((f.t - controlStart - ms) / 800);
+    return [
+      {
+        x: (f.box?.x ?? NaN) - MARKER_INSET,
+        at: controlStart + ms + cycles * 800 - start,
+      },
+    ];
+  });
+  // The judged frames cover the block, at least one in each quarter of it,
+  // however few frames a loaded runner presents.
+  const quarters = new Set(
+    timed.map(({at}) =>
+      Math.floor((start + at - busy.from) / (busy.spanMs / 4)),
+    ),
+  );
+  // Each frame is judged in px, against where the curve puts the box at that
+  // frame's time. Judged as time instead, a frame in the slow tail of the
+  // spring turns the marker's 1 px step into 10 ms or more. A loaded runner
+  // that starts the block late spends more of the block there.
+  const judged = await page.evaluate(
+    ({springs, travel, frames}) =>
       springs.map(spring => {
         const solved = Motion.solveSpring(Motion.toSpring(spring), {
           from: 0,
           to: travel,
         });
-        return xs.map(x => {
+        // The curve's time at each position, found by bisection.
+        const curveMs = frames.map(({x}) => {
           let lo = 0;
           let hi = 3;
           for (let i = 0; i < 60; i++) {
@@ -212,57 +244,51 @@ test('a spring keeps advancing every frame through a 1 s main-thread block, on i
           }
           return lo * 1000;
         });
+        // The curve's start on the page clock, against the commit that
+        // handle.started reports: the median over the frames.
+        const offsets = frames
+          .map(({at}, i) => at - curveMs[i])
+          .sort((p, q) => p - q);
+        const median = offsets[Math.floor(offsets.length / 2)];
+        const worst = Math.max(
+          ...frames.map(({x, at}) =>
+            Math.abs(x - solved.value((at - median) / 1000)),
+          ),
+        );
+        return {median, worst};
       }),
     {
       // The spring, and one 10% faster: the check must tell them apart.
       springs: [SLOW, {...SLOW, response: SLOW.response * 0.9}],
       travel: TRAVEL,
-      xs: inside.map(f => (f.box?.x ?? NaN) - MARKER_INSET),
+      frames: timed,
     },
   );
-  const [curve, faster] = curveMs;
-  const controlAt = new Map(
-    control.flatMap(f => (f.box == null ? [] : [[f.t, f.box.x] as const])),
-  );
-  // The control's own time at each frame (controlClock): 240 px out in
-  // 400 ms, back in 400 ms, read from its position on the origin most frames
-  // agree with, so no one frame's stamp or direction sets it.
-  const clock = controlClock(
-    inside.map(f => ({t: f.t, x: controlAt.get(f.t) ?? null})),
-  );
-  /** How far the box's curve time drifts from the control's, ms. */
-  const drift = (times: number[]) => {
-    const gaps = clock.map(({i, ms}) => times[i] - ms).sort((x, y) => x - y);
-    return (
-      gaps[Math.floor(gaps.length * 0.9)] - gaps[Math.floor(gaps.length * 0.1)]
-    );
-  };
-  const offsets = inside.map((f, i) => f.t - start - curve[i]);
-  const sorted = [...offsets].sort((x, y) => x - y);
-  const median = sorted[Math.floor(sorted.length / 2)];
-  // The offsets' spread reads the screencast's timestamps, which a loaded
-  // runner stamps late on some frames: recorded, judged by the drift instead.
-  const spread =
-    sorted[Math.floor(sorted.length * 0.9)] -
-    sorted[Math.floor(sorted.length * 0.1)];
+  const [spring, faster] = judged;
   const read = {
-    frames: clock.length,
-    drift: drift(curve),
-    faster: drift(faster),
-    median,
-    spread,
+    frames: timed.length,
+    quarters: [...quarters].sort((p, q) => p - q),
+    worst: spring.worst,
+    faster: faster.worst,
+    median: spring.median,
   };
   test.info().annotations.push({
-    type: 'the spring against the control (ms)',
+    type: 'the spring against the control (px, ms)',
     description: JSON.stringify(read),
   });
-  // Placed on its curve and on the control's, every frame is the same time
-  // apart, to within the 1 px steps of both; a spring 10% off drifts.
-  expect(clock.length, JSON.stringify(read)).toBeGreaterThan(20);
-  expect(read.drift, JSON.stringify(read)).toBeLessThan(12);
-  expect(read.faster, JSON.stringify(read)).toBeGreaterThan(24);
+  expect(
+    [0, 1, 2, 3].every(q => quarters.has(q)),
+    JSON.stringify(read),
+  ).toBe(true);
+  // Every frame is within 3 px of the curve, a px for each of three reads.
+  // The box's marker and the control are read at whole px. The control's px
+  // is 1.7 ms of its time, so at most 0.6 px of the spring. The fitted start
+  // can be off by about as much.
+  expect(read.worst, JSON.stringify(read)).toBeLessThanOrEqual(3);
+  // A spring 10% faster is off by more than twice that somewhere.
+  expect(read.faster, JSON.stringify(read)).toBeGreaterThan(6);
   if (browserName === 'chromium') {
-    expect(Math.abs(median)).toBeLessThan(20);
+    expect(Math.abs(read.median), JSON.stringify(read)).toBeLessThan(20);
   }
 });
 
@@ -374,7 +400,7 @@ test('a frame painted before the compositor has the curve shows the element wher
         document.body.append(element);
         return {
           element,
-          animator: Motion.createMotionAnimator(element, now ? {now} : {}),
+          animator: Motion.createMotionEngine(element, now ? {now} : {}),
         };
       };
       const x = (element: HTMLElement) =>
@@ -910,7 +936,7 @@ test('a role variable set on a scope changes nothing while touch motion stays in
     const report: Record<string, {worst: number; lowest: number}> = {};
     for (const id of ['plain', 'themed'] as const) {
       const element = document.getElementById(id) as HTMLElement;
-      const animator = Motion.createMotionAnimator(element);
+      const animator = Motion.createMotionEngine(element);
       animator.set({y: 300});
       const handle = animator.animate({y: 0}, {spring: Motion.springs.settle});
       await handle.started;
@@ -1014,7 +1040,7 @@ test('a fade-in on an element its stylesheet hides stays visible once it retires
       element.style.cssText =
         'position:absolute;top:120px;left:0;width:48px;height:48px;background:#c63';
       document.body.append(element);
-      const animator = Motion.createMotionAnimator(element);
+      const animator = Motion.createMotionEngine(element);
       animator.set({opacity: 0});
       animator.animate({opacity: 1}, {spring});
       await new Promise<void>(resolve => {
@@ -1086,7 +1112,7 @@ test('a dialog\u2019s ::backdrop plays the curve and holds its end state', async
     const dialog = document.createElement('dialog');
     document.body.append(dialog);
     dialog.showModal();
-    const backdrop = Motion.createMotionAnimator(dialog, {
+    const backdrop = Motion.createMotionEngine(dialog, {
       pseudoElement: '::backdrop',
     });
     backdrop.set({opacity: 0});

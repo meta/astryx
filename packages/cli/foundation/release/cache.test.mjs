@@ -280,6 +280,32 @@ describe.skipIf(process.platform === 'win32')(
       expect(isReleaseInstall(['C:\\npm\\npm.cmd', ...INSTALL], '9.9.9')).toBe(
         true,
       );
+      // The Node runNpm starts npm with, whatever its file is named, as a
+      // distribution or a toolchain names it.
+      for (const node of [
+        '/opt/toolchain/bin/node-linux-x64',
+        '/usr/bin/nodejs',
+        'C:\\tools\\node-win-x64.exe',
+      ]) {
+        expect(
+          isReleaseInstall(
+            [node, '/x/npm/bin/npm-cli.js', ...INSTALL],
+            '9.9.9',
+            {
+              node,
+            },
+          ),
+          node,
+        ).toBe(true);
+      }
+      // Another program running npm-cli.js is not a Node by name.
+      expect(
+        isReleaseInstall(
+          ['/usr/local/bin/nodemon', '/x/npm/bin/npm-cli.js', ...INSTALL],
+          '9.9.9',
+          {node: '/usr/bin/node'},
+        ),
+      ).toBe(false);
       for (const argv of [
         ['/opt/my-npm-tool', ...INSTALL],
         ['python3', '-c', 'sleep', '/home/me/notes/npm-debug.log', ...INSTALL],
