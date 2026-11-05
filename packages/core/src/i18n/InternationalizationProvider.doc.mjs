@@ -153,6 +153,28 @@ export function AppI18n({children}: {children: ReactNode}) {
 }`,
     },
     {
+      label: 'Show Calendar and DateInput in the Japanese calendar',
+      code: `import {useState} from 'react';
+import {InternationalizationProvider} from '@astryxdesign/core/i18n';
+import {Calendar, type ISODateString} from '@astryxdesign/core/Calendar';
+import {DateInput} from '@astryxdesign/core/DateInput';
+import {VStack} from '@astryxdesign/core/Layout';
+
+// Japanese, Buddhist, and ROC dates need no Temporal, so they work in every
+// browser. The value stays a Gregorian ISO date.
+export function StartDate() {
+  const [value, setValue] = useState<ISODateString | undefined>('2026-10-30');
+  return (
+    <InternationalizationProvider locale="en" calendar="japanese">
+      <VStack gap={4}>
+        <DateInput label="Start date" value={value} onChange={setValue} />
+        <Calendar value={value ?? null} onChange={next => setValue(next)} />
+      </VStack>
+    </InternationalizationProvider>
+  );
+}`,
+    },
+    {
       label: 'Provide a local fallback catalog',
       code: `import type {ReactNode} from 'react';
 import {
