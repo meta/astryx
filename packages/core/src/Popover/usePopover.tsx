@@ -364,6 +364,11 @@ interface InternalPopoverOptions extends UsePopoverOptions {
    * A close that plays out after the popover is hidden starts here.
    */
   onCloseStart?: () => void;
+  /**
+   * The layer clamps itself on the placement axis instead of flipping: no
+   * position fallbacks, and the consumer's render style sets the inset.
+   */
+  clampsOnPlacementAxis?: boolean;
 }
 
 /**
@@ -413,6 +418,7 @@ function usePopoverImplementation(
     onShow,
     onHide,
     onCloseStart,
+    clampsOnPlacementAxis,
     xstyle,
     className,
     style,
@@ -456,6 +462,7 @@ function usePopoverImplementation(
     onShow: handleLayerShow,
     onHide,
     onCloseStart,
+    clampsOnPlacementAxis,
   });
 
   // Focus trap for the popover content. Escape stays registered while light

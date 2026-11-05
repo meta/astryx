@@ -8,7 +8,8 @@
  *   anchor, listbox, and selected option
  * @output Hooks for Selector: useSelectedItemOffset, and useCombobox (public,
  *   exported from the Selector entry point; also used by CommandPalette, and
- *   by products for a combobox over a text field they render, spec:AST-075)
+ *   by products for a combobox over a text field they render, spec:AST-075).
+ *   useSelectedItemOverlayPosition is internal, for Selector.tsx only.
  * @position Selector hooks; used by Selector.tsx and CommandPalette
  *
  * SYNC: When useCombobox's options or return change, update:
@@ -16,8 +17,10 @@
  */
 
 import {useCallback, useState} from 'react';
+import {flushSync} from 'react-dom';
 import {useHighlightedOptionScroll} from '../hooks/useHighlightedOptionScroll';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
+import {observeLayerResettle} from '../Layer/useLayer';
 import {isImeKeyEvent} from '../utils/ime';
 import type {RefObject} from 'react';
 import type {SelectorOptionData} from './types';
@@ -27,9 +30,22 @@ import type {SelectorOptionData} from './types';
 const SELECTED_ITEM_OPTICAL_OFFSET = 1;
 
 /**
- * Return an element's document-relative layout top without CSS transforms.
- * getBoundingClientRect includes the popover's entry scale, which would make
- * the measured error grow with each option's distance from the menu top.
+ * The selected row's center from the list's top, in px. The overlay's layer
+ * reads it in its block inset. Private to Selector.
+ */
+export const SELECTOR_ROW_OFFSET_PROPERTY = '--_selector-row-offset';
+/** The list's block size in px, for the same inset. Private to Selector. */
+export const SELECTOR_LIST_BLOCK_SIZE_PROPERTY = '--_selector-list-block-size';
+/** The list's inline size in px, for the inline inset. Private to Selector. */
+export const SELECTOR_LIST_INLINE_SIZE_PROPERTY =
+  '--_selector-list-inline-size';
+
+/**
+ * Return an element's layout top without CSS transforms, summed up its
+ * offsetParent chain. getBoundingClientRect includes the popover's entry
+ * scale, which would make the measured error grow with each option's distance
+ * from the menu top. Two elements in one layer share the layer's own offset
+ * top, so their difference is their distance inside the layer.
  */
 function getLayoutTop(element: HTMLElement): number {
   let top = 0;
@@ -59,6 +75,196 @@ interface UseSelectedItemOffsetResult {
 }
 
 /**
+ * Overlay position for Selector only. The public hook returns `offset` and
+ * `isPositioned`.
+ */
+interface SelectedItemOverlayPosition extends UseSelectedItemOffsetResult {
+  /**
+   * The selected row's center from the list's top, in px, with the optical
+   * correction. The layer's inset subtracts it from the anchor's center.
+   */
+  rowOffset: number;
+  /** The list's layer's block size in px; the layer's inset clamps with it. */
+  listBlockSize: number;
+  /** The list's layer's inline size in px, for the inline inset's end bound. */
+  listInlineSize: number;
+}
+
+/**
+ * Measures the overlay position for Selector. The selected row centers on
+ * the trigger, and the list stays in the viewport. `rowOffset`,
+ * `listBlockSize` and `listInlineSize` feed the layer's clamped insets.
+ */
+export function useSelectedItemOverlayPosition({
+  isOpen,
+  selectedItemIndex,
+  listboxId,
+  listboxRef,
+  anchorRef,
+}: UseSelectedItemOffsetOptions): SelectedItemOverlayPosition {
+  const [offset, setOffset] = useState(0);
+  const [rowOffset, setRowOffset] = useState(0);
+  const [listBlockSize, setListBlockSize] = useState(0);
+  const [listInlineSize, setListInlineSize] = useState(0);
+  const [isPositioned, setIsPositioned] = useState(false);
+
+  const commitPosition = useCallback(
+    (
+      nextOffset: number,
+      nextIsPositioned: boolean,
+      nextRowOffset = 0,
+      nextListBlockSize = 0,
+      nextListInlineSize = 0,
+    ) => {
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- selector popover position is derived from DOM layout
+      setOffset(nextOffset);
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- selector popover position is derived from DOM layout
+      setRowOffset(nextRowOffset);
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- selector popover position is derived from DOM layout
+      setListBlockSize(nextListBlockSize);
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- selector popover position is derived from DOM layout
+      setListInlineSize(nextListInlineSize);
+      // eslint-disable-next-line @eslint-react/set-state-in-effect -- selector popover position is derived from DOM layout
+      setIsPositioned(nextIsPositioned);
+    },
+    [],
+  );
+
+  // Effect: synchronizes the overlay's measured place with the layer runtime's
+  // resettle watcher (layout geometry) while the list is open; the
+  // subscription it takes is released on close, re-run and unmount.
+  useIsomorphicLayoutEffect(() => {
+    if (!isOpen) {
+      // Reset offset when closed
+      commitPosition(0, false);
+      return;
+    }
+
+    if (!listboxRef.current || !anchorRef.current) {
+      commitPosition(0, true);
+      return;
+    }
+
+    const listbox = listboxRef.current;
+    const anchor = anchorRef.current;
+    const measure = () => {
+      // A report can arrive after a re-mount replaced the elements. Read the
+      // current ones, and skip a list that is no longer in the document.
+      const currentListbox = listboxRef.current;
+      const currentAnchor = anchorRef.current;
+      if (!currentListbox?.isConnected || !currentAnchor?.isConnected) {
+        return;
+      }
+      measureOverlayPosition({
+        listbox: currentListbox,
+        anchor: currentAnchor,
+        listboxId,
+        selectedItemIndex,
+        commitPosition,
+      });
+    };
+    measure();
+
+    // The list, the trigger or the viewport can resize, and the trigger can
+    // move at the same size. The layer can then flip to the other side of the
+    // anchor. A flip mirrors the layer's margins, not a translate. Measure the
+    // shift again from the new laid-out top, on the layer runtime's own
+    // re-settle signals. The measure reads the boxes as they are, so it does
+    // not depend on another subscriber running first. The watcher's callbacks
+    // run outside React's own work, so the commit is synchronous: the
+    // corrected shift paints in the frame the watcher reads in.
+    return observeLayerResettle(listbox, anchor, () => {
+      // eslint-disable-next-line @eslint-react/dom-no-flush-sync -- the shift paints in the frame the watcher reads in, not a task later
+      flushSync(measure);
+    });
+  }, [
+    isOpen,
+    selectedItemIndex,
+    listboxId,
+    listboxRef,
+    anchorRef,
+    commitPosition,
+  ]);
+
+  return {offset, rowOffset, listBlockSize, listInlineSize, isPositioned};
+}
+
+function measureOverlayPosition({
+  listbox,
+  anchor,
+  listboxId,
+  selectedItemIndex,
+  commitPosition,
+}: {
+  listbox: HTMLDivElement;
+  anchor: HTMLElement;
+  listboxId: string;
+  selectedItemIndex: number;
+  commitPosition: (
+    nextOffset: number,
+    nextIsPositioned: boolean,
+    nextRowOffset?: number,
+    nextListBlockSize?: number,
+    nextListInlineSize?: number,
+  ) => void;
+}): void {
+  // Find the target item: selected item or first item
+  const targetIndex = selectedItemIndex >= 0 ? selectedItemIndex : 0;
+  const targetItemId = `${listboxId}-item-${targetIndex}`;
+  // Use getElementById - works with special characters without escaping
+  const targetItem = document.getElementById(targetItemId);
+
+  if (!targetItem) {
+    commitPosition(0, true);
+    return;
+  }
+
+  const anchorRect = anchor.getBoundingClientRect();
+
+  // offset* metrics intentionally exclude the popover's entry transform.
+  const listboxHeight = listbox.offsetHeight;
+  if (listboxHeight <= 0) {
+    commitPosition(0, true);
+    return;
+  }
+
+  // Item center relative to listbox top. This remains stable even as the
+  // popover animates between scale values. scrollTop keeps the calculation
+  // correct when a previously scrolled listbox is reopened.
+  const itemCenterInListbox =
+    getLayoutTop(targetItem) -
+    getLayoutTop(listbox) -
+    listbox.scrollTop +
+    targetItem.offsetHeight / 2;
+  const anchorCenter = anchorRect.top + anchorRect.height / 2;
+
+  // Desired top aligns the selected item's center with the anchor center.
+  const desiredTop =
+    anchorCenter - itemCenterInListbox - SELECTED_ITEM_OPTICAL_OFFSET;
+  const viewportHeight = window.innerHeight;
+  const maxTop = Math.max(0, viewportHeight - listboxHeight);
+  const clampedTop = Math.min(Math.max(desiredTop, 0), maxTop);
+
+  // `offset` assumes the layer sits below the anchor. The layer's inset does
+  // the clamp in CSS from the row's offset in the list and the layer's block
+  // size: content and selection change them, a move or a scroll does not.
+  // The row's offset adds the layer's padding above the list.
+  const clampedOffset = Math.max(0, anchorRect.bottom - clampedTop);
+  const layer = listbox.closest<HTMLElement>('[popover]');
+  const listTopInLayer =
+    layer == null ? 0 : getLayoutTop(listbox) - getLayoutTop(layer);
+  const layerHeight = layer?.offsetHeight ?? 0;
+  const layerWidth = layer?.offsetWidth ?? 0;
+  commitPosition(
+    clampedOffset,
+    true,
+    listTopInLayer + itemCenterInListbox + SELECTED_ITEM_OPTICAL_OFFSET,
+    layerHeight > 0 ? layerHeight : listboxHeight,
+    layerWidth > 0 ? layerWidth : listbox.offsetWidth,
+  );
+}
+
+/**
  * Calculates the offset needed to position the dropdown so that the selected
  * item appears centered over the outer selector control (macOS-style selector).
  *
@@ -75,84 +281,13 @@ export function useSelectedItemOffset({
   listboxRef,
   anchorRef,
 }: UseSelectedItemOffsetOptions): UseSelectedItemOffsetResult {
-  const [offset, setOffset] = useState(0);
-  const [isPositioned, setIsPositioned] = useState(false);
-
-  const commitPosition = useCallback(
-    (nextOffset: number, nextIsPositioned: boolean) => {
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- selector popover position is derived from DOM layout
-      setOffset(nextOffset);
-      // eslint-disable-next-line @eslint-react/set-state-in-effect -- selector popover position is derived from DOM layout
-      setIsPositioned(nextIsPositioned);
-    },
-    [],
-  );
-
-  useIsomorphicLayoutEffect(() => {
-    if (!isOpen) {
-      // Reset offset when closed
-      commitPosition(0, false);
-      return;
-    }
-
-    if (!listboxRef.current || !anchorRef.current) {
-      commitPosition(0, true);
-      return;
-    }
-
-    // Find the target item: selected item or first item
-    const targetIndex = selectedItemIndex >= 0 ? selectedItemIndex : 0;
-    const targetItemId = `${listboxId}-item-${targetIndex}`;
-    // Use getElementById - works with special characters without escaping
-    const targetItem = document.getElementById(targetItemId);
-
-    if (!targetItem) {
-      commitPosition(0, true);
-      return;
-    }
-
-    const listbox = listboxRef.current;
-    const anchorRect = anchorRef.current.getBoundingClientRect();
-
-    // offset* metrics intentionally exclude the popover's entry transform.
-    const listboxHeight = listbox.offsetHeight;
-    if (listboxHeight <= 0) {
-      commitPosition(0, true);
-      return;
-    }
-
-    // Item center relative to listbox top. This remains stable even as the
-    // popover animates between scale values. scrollTop keeps the calculation
-    // correct when a previously scrolled listbox is reopened.
-    const itemCenterInListbox =
-      getLayoutTop(targetItem) -
-      getLayoutTop(listbox) -
-      listbox.scrollTop +
-      targetItem.offsetHeight / 2;
-    const anchorCenter = anchorRect.top + anchorRect.height / 2;
-
-    // Desired top aligns the selected item's center with the anchor center.
-    const desiredTop =
-      anchorCenter - itemCenterInListbox - SELECTED_ITEM_OPTICAL_OFFSET;
-    const viewportHeight = window.innerHeight;
-    const maxTop = Math.max(0, viewportHeight - listboxHeight);
-    const clampedTop = Math.min(Math.max(desiredTop, 0), maxTop);
-
-    // useLayer positions the popover below the outer anchor. Apply a negative
-    // block-start margin to the layer container so the listbox top moves from
-    // anchorRect.bottom to clampedTop.
-    const clampedOffset = Math.max(0, anchorRect.bottom - clampedTop);
-
-    commitPosition(clampedOffset, true);
-  }, [
+  const {offset, isPositioned} = useSelectedItemOverlayPosition({
     isOpen,
     selectedItemIndex,
     listboxId,
     listboxRef,
     anchorRef,
-    commitPosition,
-  ]);
-
+  });
   return {offset, isPositioned};
 }
 

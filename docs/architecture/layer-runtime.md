@@ -242,6 +242,14 @@ self-alignment `unsafe` toward the anchor, so the layer holds the position its
 flips give it and holds its size rather than sliding to the edge. Components
 pass no fallbacks of their own to an anchor-mode layer.
 
+A core component may ask an anchor-mode layer to clamp itself on the placement
+axis instead of flipping, through the internal layer options. That layer takes
+no fallback list and no `position-area`; the component's render style supplies
+the placement-axis inset, which it resolves in layout from `anchor()` values
+and the runtime's gutters, and the inline-axis inset the same way. The layer
+stays anchored: the keyboard cap, the viewport fit and the gutters still apply.
+Selector's selected-item overlay is the one such layer.
+
 Every one of these inputs is resolved by the browser's style and layout in the
 same frame as the render that produced it; apart from the one case below, the
 runtime measures nothing after paint to apply them. Anchor visibility is read
