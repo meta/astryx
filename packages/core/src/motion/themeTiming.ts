@@ -20,12 +20,31 @@ import {cubicBezier} from './bezier';
 import {parseCssEasing, parseMotionRoleValue} from './roles';
 import type {MotionCurvePoints} from './roleValue';
 import {resolveTokenReferences} from '../theme/tokenReferences';
-import {
-  durationDefaults,
-  easeDefaults,
-  type DurationVarName,
-  type EaseVarName,
-} from '../theme/tokens.stylex';
+import type {DurationVarName, EaseVarName} from '../theme/tokens.stylex';
+
+/**
+ * The value core declares for each timing token, as the token file declares
+ * it. The token file declares its variables through StyleX, so importing its
+ * values runs it; a reader that a server imports cannot do that.
+ */
+export const declaredTimingTokens: Readonly<
+  Record<DurationVarName | EaseVarName, string>
+> = {
+  '--duration-fast-min': '130ms',
+  '--duration-fast': '175ms',
+  '--duration-fast-max': '230ms',
+  '--duration-medium-min': '310ms',
+  '--duration-medium': '410ms',
+  '--duration-medium-max': '550ms',
+  '--duration-slow-min': '730ms',
+  '--duration-slow': '975ms',
+  '--duration-slow-max': '1300ms',
+  '--duration-exit': 'var(--duration-fast)',
+  '--ease-standard': 'cubic-bezier(0.24, 1, 0.4, 1)',
+  '--ease-entrance': 'cubic-bezier(0.24, 1, 0.4, 1)',
+  '--ease-move': 'cubic-bezier(0.24, 1, 0.4, 1)',
+  '--ease-exit': 'cubic-bezier(0.3, 0, 0.6, 0.6)',
+};
 
 /** The theme tokens that time one motion. */
 export interface ThemeTimingTokens {
@@ -145,10 +164,7 @@ function tokenValue(
     return own;
   }
   const declared: Record<string, string> = {};
-  for (const [name, value] of Object.entries({
-    ...durationDefaults,
-    ...easeDefaults,
-  })) {
+  for (const [name, value] of Object.entries(declaredTimingTokens)) {
     declared[name] = style.getPropertyValue(name).trim() || value;
   }
   return resolveTokenReferences(declared)[token] ?? '';

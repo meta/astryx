@@ -16,13 +16,14 @@ import {afterEach, describe, expect, it} from 'vitest';
 import {cubicBezier} from './bezier';
 import {parseCssEasing} from './roles';
 import {
+  declaredTimingTokens,
   easedProgress,
   readThemeTiming,
   readThemeTokens,
   resolveTiming,
   type ThemeTimingTokens,
 } from './themeTiming';
-import {easeDefaults} from '../theme/tokens.stylex';
+import {durationDefaults, easeDefaults} from '../theme/tokens.stylex';
 
 const FAST: ThemeTimingTokens = {
   duration: '--duration-fast',
@@ -41,6 +42,15 @@ function element(styles: Record<string, string> = {}): HTMLElement {
   document.body.appendChild(node);
   return node;
 }
+
+describe('declaredTimingTokens', () => {
+  it('declares every timing token as the token file does', () => {
+    expect(declaredTimingTokens).toEqual({
+      ...durationDefaults,
+      ...easeDefaults,
+    });
+  });
+});
 
 describe('readThemeTiming', () => {
   afterEach(() => {
