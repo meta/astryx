@@ -418,10 +418,13 @@ a measured, sourced difference exists.
   control that keeps its press through a drag (FR11) owns its touch and MAY
   cancel that finger's moves. A scroll-edge pan, such as a sheet's pull
   from a scroll area at its edge (FR14), MAY cancel its touch's moves from the
-  first move, only while every scroller under the finger sits at its edge and
-  the drag moves toward that edge (FR14), and only the moves the browser would
-  rubber-band, never a real scroll; the pan itself still begins at FR17's
-  10 pt, as UIKit's sheet pull does (DEC-18).
+  first move past a tap's wobble (5 px of the finger's own travel), only while
+  every scroller under the finger sits at its edge and the drag moves toward
+  that edge (FR14), and only the moves the browser would rubber-band, never a
+  real scroll; the pan itself still begins at FR17's 10 pt, as UIKit's sheet
+  pull does (DEC-18). It MUST cancel them before the finger reaches FR2's
+  scroll take distance: Mobile Safari commits the touch to the scroller's pan
+  there, and no later cancel stops that pan.
   A recognizer that is cancelled while its touch is moving, other than by the
   browser taking that touch (FR20), such as a long press dragged past its
   tolerance after it began, keeps owning that touch until it lifts and MAY
@@ -1238,14 +1241,23 @@ Rejected: a whole-element claim on a wider element.
 **Decider:** `cixzhang`, `2026-10-26`
 
 When every scroller under the finger is at its edge and the drag moves toward
-that edge, the browser would otherwise rubber-band the page before the pan
-reaches its 10 pt start (a reading of Mobile Safari's overscroll, not a
-measurement), so a sheet's pull would visibly fight the page. Cancelling only
-those moves, from the first, matches UIKit's sheet pull, and a real scroll is
-never cancelled. The trade-off: a list inside a sheet cannot pull to refresh
-from its top.
+that edge, the browser would otherwise rubber-band the scroller before the pan
+reaches its 10 pt start, so a sheet's pull would visibly fight its own
+content. Measured in Mobile Safari 27.0 on the iOS 27.0 simulator (iPhone
+17), 2026-11-04: a first `touchmove` of 7 px that the page keeps commits the
+touch to the list's pan, no later cancel stops it, and the list rubber-bands
+to −134 px over a 320 px pull while the sheet moves beside it; a first move of
+4 px kept commits nothing. Cancelling those moves before the scroll take
+distance, and only those, matches UIKit's sheet pull, and a real scroll is
+never cancelled. The cancel waits out a tap's wobble (5 px): WebKit ends a
+touch's click when one of its `touchmove`s is cancelled, and a 3 px wobble on
+a control in the sheet still clicks. The trade-offs: a list inside a sheet
+cannot pull to refresh from its top, and a tap that wobbles more than 5 px
+toward the edge loses its click.
 
-Rejected: cancelling moves only after the pan begins.
+Rejected: cancelling moves only after the pan begins; cancelling from the
+very first move, which ends the click of every tap on the sheet's content
+that moves at all.
 
 ### DEC-25 — A pager pages as UIKit measures it
 
