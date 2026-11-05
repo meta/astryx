@@ -774,6 +774,30 @@ describe('useOverflow when the observer reports a resize (component:OverflowList
     expect(result.current.hasOverflow).toBe(true);
   });
 
+  it('renders after paint when a multi-row list measures a new row height', async () => {
+    const {result} = renderHook(() => useOverflow(6, {gap: 10, maxRows: 2}));
+    const box = resizableBox(120);
+    const measure = mockMeasure([50, 50, 50, 50, 50, 50], 30, 20);
+    act(() => {
+      result.current.measureRef(measure);
+      result.current.containerRef(box as unknown as HTMLElement);
+    });
+    expect(result.current.rowHeight).toBe(20);
+
+    // The items grow taller at the same width (a late web font, a theme or
+    // density change). The list's max height follows the row height.
+    for (const child of Array.from(measure.children)) {
+      (child as unknown as {offsetHeight: number}).offsetHeight = 32;
+    }
+    await deliverBeforePaint(box);
+    expect(result.current.rowHeight).toBe(20);
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+    expect(result.current.rowHeight).toBe(32);
+  });
+
   it('measures every list that one delivery reports, then renders once', async () => {
     let renders = 0;
     const {result} = renderHook(() => {

@@ -359,8 +359,13 @@ export function useOverflow(
           observeParent &&
           appliedRef.current.visibleCount < itemCount !==
             nextVisible < itemCount;
+        // A multi-row list's max height follows the measured row height.
+        const changesRowHeight =
+          (maxRows ?? 1) > 1 &&
+          measuredRowHeight !== appliedRef.current.rowHeight;
         if (
           changesParentFill ||
+          changesRowHeight ||
           canChangeListHeight(
             renderedSet(appliedRef.current.visibleCount),
             renderedSet(nextVisible),
