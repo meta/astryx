@@ -29,6 +29,9 @@ verified_by:
     packages/core/src/Layer/useLayer.test.tsx,
     packages/core/src/Layer/layerViewportInset.test.ts,
     packages/core/src/Layer/LayerProvider.test.tsx,
+    packages/core/src/Layer/toastHost.test.tsx,
+    packages/core/src/Layer/toastHost.lateRegistration.test.tsx,
+    scripts/layer-toast-bundle.test.mjs,
     packages/core/src/Layer/layerHost.test.ts,
     packages/core/src/Layer/anchorName.test.ts,
     packages/core/src/Layer/useLayerDismissal.test.tsx,
@@ -403,10 +406,12 @@ text inheritance and visual appearance.
 
 ### Current global and nonparticipating surfaces
 
-LayerProvider supplies Toast configuration and mounts ToastViewport. It is not a
-general portal host for all layers. Without a provider, `useToast` creates a
-separate React root under `document.body` and mirrors root theme attributes onto
-it.
+LayerProvider supplies Toast configuration and an outlet for ToastViewport.
+LayerProvider alone renders no empty viewport; Toast registers its viewport when
+imported. The outlet then renders the viewport after the app, on the client
+only, and a toast shown before that waits in the outlet. It is not a general
+portal host for all layers. Without a provider, `useToast` creates a separate
+React root under `document.body` and mirrors root theme attributes onto it.
 
 ToastViewport uses `popover="manual"` for top-layer promotion. Each open modal
 Dialog, each open modal Drawer, and each open scrim BottomSheet supplies its
@@ -491,7 +496,9 @@ layers use Layer rendering without joining Escape/platform dismissal.
   closed a layer above the host does not also close the host
   (`family:overlay-dismissal` FR11).
 - **INV10 — LayerProvider is configuration, not a universal layer host.** It
-  carries Toast configuration and the app-declared viewport inset. Trigger-
+  carries Toast configuration and the app-declared viewport inset.
+  LayerProvider alone renders no empty viewport; Toast registers its viewport
+  when imported. Trigger-
   associated layers resolve near their JSX position independently of the
   provider; the inset reaches them as a context value each layer carries on
   itself, never by resolving placement through the provider, and a layer with
@@ -726,7 +733,7 @@ this current architecture record.
 | INV6, INV7   | `useLayer.test.tsx`, `Popover.test.tsx`, `DropdownMenu.test.tsx`, and `useMenuHover.test.tsx`                                                                                                                                                                                        | Duplicate close callback or the same press/re-hover reopens a surface                                                                                                                                                                                                                                                                                                                                                        |
 | INV8         | `useLayerDismissal.test.tsx`, `layerDismissalInvariants.test.tsx`, and `useFocusTrap.test.tsx`                                                                                                                                                                                       | Current top registered layer is skipped, two layers close, or a blocker leaks through                                                                                                                                                                                                                                                                                                                                        |
 | INV9         | Representative Dialog, ContextMenu, Tooltip/HoverCard, and BottomSheet source/tests; `useBackdropPress.test.tsx`; `outsidePress.test.ts`                                                                                                                                             | A current local channel silently changes ownership or policy                                                                                                                                                                                                                                                                                                                                                                 |
-| INV10        | `LayerProvider.tsx`, `LayerProvider.test.tsx`, `useToast.tsx`, `ToastViewport.test.tsx`, and `ToastViewport.modalHost.test.tsx`                                                                                                                                                      | Provider begins relocating ordinary layers, Toast fallback loses its current lifecycle, or a default provider renders differently from no provider                                                                                                                                                                                                                                                                           |
+| INV10        | `LayerProvider.tsx`, `toastHost.tsx`, `LayerProvider.test.tsx`, `toastHost.test.tsx`, `toastHost.lateRegistration.test.tsx`, `useToast.tsx`, `ToastViewport.test.tsx`, `ToastViewport.modalHost.test.tsx`, and `scripts/layer-toast-bundle.test.mjs`                                 | Provider begins relocating ordinary layers, Toast fallback loses its current lifecycle, a default provider renders differently from no provider, a Layer import loads a Toast module, or a toast added before Toast loads is lost                                                                                                                                                                                            |
 | INV14, INV15 | Source boundary check over Core for top-layer hosts, exit copies, backdrop elements, lift, and rectangle-morph code outside the runtime and the lift module                                                                                                                          | A component building its own copy of a mechanism INV14 lists (top-layer mounting, close-request delivery, hold, exit copy, or backdrop element), or re-implementing the lift or the grow                                                                                                                                                                                                                                     |
 | INV17        | One runtime suite over every kind of layer root: a `useLayer` layer, inline and portaled, and the Dialog, Drawer, Lightbox, MobileNav, BottomSheetPanel, and ToastViewport content roots, each inside a plain `onClick` wrapper and a Core clickable container; nested layers        | A click inside a layer root that reaches an ancestor bubble-phase handler, a caller's wrapper included; an outer layer's handler that receives an inner layer's press; or a document listener or light dismiss that no longer receives it                                                                                                                                                                                    |
 | INV18        | `useLayer.test.tsx` (a closed trigger has no anchor-name, and the trigger of a shown or fading layer does) and `TooltipClosedTriggerAnchor.interaction.browser.spec.ts` in Chromium and WebKit                                                                                       | A closed trigger with an anchor-name, a shown or fading layer placed away from its anchor, or a surface around a closed trigger that stops while the main thread is busy                                                                                                                                                                                                                                                     |

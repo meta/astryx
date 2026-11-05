@@ -2,13 +2,20 @@
 
 import {execFileSync, spawnSync} from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 import {describe, expect, it} from 'vitest';
 import yaml from 'yaml';
 
-import {planLegs, recordLog} from './playwright-legs.mjs';
+import {
+  estimateSeconds,
+  isInteractionSpec,
+  legCount,
+  planLegs,
+  recordLog,
+} from './playwright-legs.mjs';
 
 const root = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -75,6 +82,101 @@ describe('planLegs', () => {
   });
 });
 
+describe('estimateSeconds and legCount', () => {
+  const times = {
+    'internal/harness.spec.ts': 170,
+    'packages/gestures/a.spec.ts': 50,
+    'packages/List/row.spec.ts': 30,
+  };
+
+  const listed = Object.keys(times);
+
+  it('adds the times of the listed files a filter selects and of each changed spec', () => {
+    expect(
+      estimateSeconds(times, ['internal/', 'packages/gestures/'], {listed}),
+    ).toBe(220);
+    // A changed spec already selected counts once.
+    expect(
+      estimateSeconds(times, ['internal/'], {
+        listed,
+        changed: ['internal/harness.spec.ts'],
+      }),
+    ).toBe(170);
+    // A changed spec with no time of its own takes another browser's time,
+    // then the median of this suite's times.
+    expect(
+      estimateSeconds(times, ['internal/'], {
+        listed,
+        changed: ['new.spec.ts'],
+        fallback: {'new.spec.ts': 12},
+      }),
+    ).toBe(182);
+    expect(
+      estimateSeconds(times, ['internal/'], {
+        listed,
+        changed: ['other.spec.ts'],
+      }),
+    ).toBe(170 + 50);
+  });
+
+  it('counts a listed spec in the lane that has no recorded time yet', () => {
+    expect(
+      estimateSeconds(times, ['internal/'], {
+        listed: [...listed, 'internal/pointer.spec.ts'],
+      }),
+    ).toBe(170 + 50);
+  });
+
+  it('plans one leg while setup and every proof fit the limit, and more past it', () => {
+    const limits = {setupSeconds: 90, maxSeconds: 600, maxLegs: 2};
+    expect(legCount({seconds: 0, ...limits})).toBe(1);
+    expect(legCount({seconds: 510, ...limits})).toBe(1);
+    expect(legCount({seconds: 511, ...limits})).toBe(2);
+    // Never more legs than the matrix has.
+    expect(legCount({seconds: 5000, ...limits})).toBe(2);
+    expect(() =>
+      legCount({seconds: 1, setupSeconds: 600, maxSeconds: 600, maxLegs: 2}),
+    ).toThrow();
+    // A broken estimate stops the leg rather than planning one leg.
+    for (const seconds of [Number.NaN, Number.POSITIVE_INFINITY, -1])
+      expect(() => legCount({seconds, ...limits})).toThrow(
+        "the proofs' estimate is not a time",
+      );
+  });
+
+  it('counts the spec files the interaction config runs, and no others', () => {
+    const config = fs.readFileSync(
+      path.join(root, 'playwright.interaction.config.ts'),
+      'utf8',
+    );
+    // The config's patterns, which isInteractionSpec follows.
+    for (const pattern of [
+      "'internal/interaction-harness/src/**/*.interaction.browser.spec.ts'",
+      "'packages/*/src/**/*.interaction.browser.spec.ts'",
+      "'packages/core/src/gestures/__tests__/browser/*.browser.spec.ts'",
+    ])
+      expect(config).toContain(pattern);
+    expect(
+      isInteractionSpec(
+        'packages/core/src/List/__tests__/ListRowPress.interaction.browser.spec.ts',
+      ),
+    ).toBe(true);
+    expect(
+      isInteractionSpec(
+        'packages/core/src/gestures/__tests__/browser/flick.browser.spec.ts',
+      ),
+    ).toBe(true);
+    expect(
+      isInteractionSpec(
+        'packages/core/src/List/__tests__/List.browser.spec.ts',
+      ),
+    ).toBe(false);
+    expect(isInteractionSpec('packages/core/src/gestures/flick.ts')).toBe(
+      false,
+    );
+  });
+});
+
 describe('the list reader and recordLog', () => {
   it('reads the list report with the reader the accessibility contracts use', () => {
     const source = fs.readFileSync(
@@ -131,6 +233,9 @@ describe('the interaction proof legs in ci.yml', () => {
       run: 'Run interaction proofs',
       plan: "Plan this leg's interaction proofs",
       evidence: 'interaction-evidence-${{ matrix.leg }}',
+      gate: "steps.scope.outputs.applies == 'true'",
+      leg: '${{ matrix.leg }}',
+      of: '${{ strategy.job-total }}',
     },
     {
       id: 'pr-interaction-webkit',
@@ -139,6 +244,10 @@ describe('the interaction proof legs in ci.yml', () => {
       run: 'Run WebKit interaction proofs',
       plan: "Plan this leg's WebKit interaction proofs",
       evidence: 'interaction-evidence-webkit-${{ matrix.leg }}',
+      // One leg runs every proof while they fit; see the leg count below.
+      gate: "steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'",
+      leg: '${{ steps.legs.outputs.leg }}',
+      of: '${{ steps.legs.outputs.count }}',
     },
   ];
 
@@ -154,7 +263,7 @@ describe('the interaction proof legs in ci.yml', () => {
       );
       const plan = step(job, lane.plan);
       expect(plan.id).toBe('plan');
-      expect(plan.if).toBe("steps.scope.outputs.applies == 'true'");
+      expect(plan.if).toBe(lane.gate);
       // A head cut before the legs has neither the planner nor the times,
       // so both come from the scope checkout: the workflow's own commit.
       const scope = job.steps[0];
@@ -193,15 +302,11 @@ describe('the interaction proof legs in ci.yml', () => {
         '--durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json"',
       );
       expect(plan.run).not.toMatch(/git (fetch|show)/);
-      expect(plan.run).toContain(
-        '--leg ${{ matrix.leg }} --of ${{ strategy.job-total }}',
-      );
+      expect(plan.run).toContain(`--leg ${lane.leg} --of ${lane.of}`);
       expect(plan.run).toContain('--out "$RUNNER_TEMP/interaction-leg.txt"');
       const run = step(job, lane.run);
       expect(job.steps.indexOf(plan)).toBeLessThan(job.steps.indexOf(run));
-      expect(run.if).toBe(
-        "steps.scope.outputs.applies == 'true' && steps.plan.outputs.files != '0'",
-      );
+      expect(run.if).toBe(`${lane.gate} && steps.plan.outputs.files != '0'`);
       expect(run.run).toContain(
         '--test-list "$RUNNER_TEMP/interaction-leg.txt"',
       );
@@ -215,6 +320,165 @@ describe('the interaction proof legs in ci.yml', () => {
       ).toBe(lane.evidence);
     });
   }
+
+  describe("the WebKit legs' count", () => {
+    const job = ci.jobs['pr-interaction-webkit'];
+    const count = step(job, "Count this run's WebKit legs");
+
+    it('decides before any setup, from the workflow commit’s planner and times', () => {
+      expect(count.id).toBe('legs');
+      expect(count.if).toBe("steps.scope.outputs.applies == 'true'");
+      const at = job.steps.indexOf(count);
+      expect(at).toBeGreaterThan(
+        job.steps.indexOf(
+          step(job, "Keep the leg planner from the workflow's commit"),
+        ),
+      );
+      expect(at).toBeLessThan(
+        job.steps.indexOf(step(job, 'Check out the heavy-suite caps')),
+      );
+      expect(count.env.CHANGED_FILES).toBe(
+        '${{ steps.scope.outputs.changed_files_path }}',
+      );
+      for (const part of [
+        '--key interaction-webkit --fallback-key interaction-chromium',
+        '--durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json"',
+        '--setup-seconds 90 --max-seconds 600',
+        '--leg ${{ matrix.leg }} --max-legs ${{ strategy.job-total }}',
+        // Every spec file in the merge commit, recorded or not.
+        'git -C .test-scope ls-tree -r --name-only HEAD > "$RUNNER_TEMP/interaction-legs/listed.txt"',
+        '--listed "$RUNNER_TEMP/interaction-legs/listed.txt"',
+      ])
+        expect(count.run).toContain(part);
+    });
+
+    // Runs the count step with the real planner on these recorded times.
+    function countFor(leg, webkitTimes, changed = [], unrecorded = []) {
+      // The real path: the planner runs only when invoked as its own file.
+      const dir = fs.realpathSync(
+        fs.mkdtempSync(path.join(os.tmpdir(), 'webkit-legs-')),
+      );
+      try {
+        const copy = path.join(dir, 'interaction-legs');
+        fs.mkdirSync(path.join(copy, '.github/scripts'), {recursive: true});
+        fs.mkdirSync(path.join(copy, 'scripts/lib'), {recursive: true});
+        for (const file of [
+          '.github/scripts/playwright-legs.mjs',
+          '.github/scripts/a11y-pr-contracts.mjs',
+          'scripts/lib/duration-split.mjs',
+        ])
+          fs.copyFileSync(path.join(root, file), path.join(copy, file));
+        fs.writeFileSync(
+          path.join(copy, '.github/playwright-leg-durations.json'),
+          JSON.stringify({
+            'interaction-webkit': webkitTimes,
+            'interaction-chromium': {},
+          }),
+        );
+        // The scope checkout: a repository whose tree holds the spec files.
+        const scope = path.join(dir, '.test-scope');
+        for (const file of [...Object.keys(webkitTimes), ...unrecorded]) {
+          fs.mkdirSync(path.join(scope, path.dirname(file)), {recursive: true});
+          fs.writeFileSync(path.join(scope, file), '');
+        }
+        const git = args =>
+          execFileSync('git', ['-C', scope, ...args], {stdio: 'ignore'});
+        git(['init', '-q']);
+        git(['add', '-A']);
+        git([
+          '-c',
+          'user.name=t',
+          '-c',
+          'user.email=t@example.com',
+          'commit',
+          '-qm',
+          'scope',
+          '--no-verify',
+        ]);
+        // A null list stands for a scope step that could not list the files.
+        const list = changed == null ? '' : path.join(dir, 'changed.txt');
+        if (list)
+          fs.writeFileSync(list, changed.map(file => `${file}\n`).join(''));
+        const output = path.join(dir, 'output.txt');
+        execFileSync(
+          'bash',
+          [
+            '-e',
+            '-c',
+            count.run
+              .replaceAll('${{ matrix.leg }}', String(leg))
+              .replaceAll('${{ strategy.job-total }}', '2'),
+          ],
+          {
+            cwd: dir,
+            encoding: 'utf8',
+            env: {
+              ...process.env,
+              RUNNER_TEMP: dir,
+              CHANGED_FILES: list,
+              GITHUB_OUTPUT: output,
+              WEBKIT_SPEC_PATHS: job.env.WEBKIT_SPEC_PATHS,
+            },
+          },
+        );
+        return Object.fromEntries(
+          fs
+            .readFileSync(output, 'utf8')
+            .trim()
+            .split('\n')
+            .map(line => line.split('=')),
+        );
+      } finally {
+        fs.rmSync(dir, {recursive: true, force: true});
+      }
+    }
+
+    it('gives the whole suite to the first leg at today’s recorded times', () => {
+      const times = durations['interaction-webkit'];
+      expect(countFor(1, times)).toEqual({count: '1', runs: 'true', leg: '1'});
+      expect(countFor(2, times)).toEqual({count: '1', runs: 'false', leg: '2'});
+    });
+
+    it('adds the second leg once setup and the proofs pass ten minutes', () => {
+      const times = {
+        'internal/interaction-harness/src/harness.interaction.browser.spec.ts': 400,
+        'packages/core/src/gestures/__tests__/browser/gestures.interaction.browser.spec.ts': 111,
+      };
+      expect(countFor(2, times)).toEqual({count: '2', runs: 'true', leg: '2'});
+      // A changed spec counts too: here it tips one leg into two.
+      const near = {
+        'internal/interaction-harness/src/harness.interaction.browser.spec.ts': 500,
+      };
+      expect(countFor(2, near)).toEqual({count: '1', runs: 'false', leg: '2'});
+      // So does a planned spec with no recorded time: here the median, 500 s.
+      expect(
+        countFor(
+          2,
+          near,
+          [],
+          [
+            'internal/interaction-harness/src/pointer.interaction.browser.spec.ts',
+          ],
+        ),
+      ).toEqual({count: '2', runs: 'true', leg: '2'});
+      expect(
+        countFor(2, near, [
+          'packages/core/src/List/__tests__/ListRowPress.interaction.browser.spec.ts',
+          'packages/core/src/List/ListRow.tsx',
+        ]),
+      ).toEqual({count: '2', runs: 'true', leg: '2'});
+    });
+
+    it('runs every proof in a leg that has no changed-file list, as a leg of its own', () => {
+      // Whatever the other leg counts, every proof then runs in some leg.
+      for (const leg of [1, 2])
+        expect(countFor(leg, durations['interaction-webkit'], null)).toEqual({
+          count: '1',
+          runs: 'true',
+          leg: '1',
+        });
+    });
+  });
 
   it('a change to the planner, its modules or the recorded times runs both lanes', () => {
     for (const id of ['pr-interaction', 'pr-interaction-webkit']) {
@@ -231,24 +495,34 @@ describe('the interaction proof legs in ci.yml', () => {
   });
 
   it('the WebKit legs plan only the paths the WebKit lane covers', () => {
-    const plan = step(
-      ci.jobs['pr-interaction-webkit'],
-      "Plan this leg's WebKit interaction proofs",
-    ).run;
-    const filters = plan
-      .slice(plan.indexOf(' -- ') + 4)
-      .replaceAll('\\', '')
-      .trim()
-      .split(/\s+/);
-    expect(filters).toEqual([
+    const job = ci.jobs['pr-interaction-webkit'];
+    expect(job.env.WEBKIT_SPEC_PATHS.split(' ')).toEqual([
       'packages/core/src/gestures/',
       'packages/core/src/motion/__tests__/animatedLayout.interaction',
       'packages/core/src/motion/__tests__/animator.interaction',
       'packages/core/src/hooks/__tests__/usePager.interaction',
       'internal/interaction-harness/',
-      // Plus the interaction specs this pull request changes.
-      '"${CHANGED_SPECS[@]}"',
     ]);
+    // The leg count and the plan read the same paths; the plan adds the
+    // interaction specs this pull request changes.
+    for (const name of [
+      "Count this run's WebKit legs",
+      "Plan this leg's WebKit interaction proofs",
+    ]) {
+      const {run} = step(job, name);
+      expect(run, name).toContain(
+        'read -ra SPEC_PATHS <<< "$WEBKIT_SPEC_PATHS"',
+      );
+      expect(run, name).toContain('"${SPEC_PATHS[@]}"');
+    }
+    const plan = step(job, "Plan this leg's WebKit interaction proofs").run;
+    expect(
+      plan
+        .slice(plan.indexOf(' -- ') + 4)
+        .replaceAll('\\', '')
+        .trim()
+        .split(/\s+/),
+    ).toEqual(['"${SPEC_PATHS[@]}"', '"${CHANGED_SPECS[@]}"']);
   });
 
   it("the test join reads each lane's whole result, so a failed, cancelled or skipped leg fails it", () => {

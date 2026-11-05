@@ -28,6 +28,7 @@ import {
   type RefObject,
 } from 'react';
 import {currentGesture} from '../Layer/gestureCounter';
+import {isInputShield} from '../Layer/inputHold';
 import {
   IDLE_MENU_PRESS,
   menuPressTransition,
@@ -403,13 +404,25 @@ export function useDropdownMenuPress(
         // Hit-test in the menu's own tree: inside a shadow root the document
         // answers with the shadow host, never the row under the pointer.
         const tree = menu?.getRootNode();
-        const scope: Pick<Document, 'elementFromPoint'> =
+        const scope: Pick<Document, 'elementFromPoint' | 'elementsFromPoint'> =
           tree != null &&
           tree !== doc &&
           typeof (tree as ShadowRoot).elementFromPoint === 'function'
             ? (tree as ShadowRoot)
             : doc;
         element = scope.elementFromPoint(event.clientX, event.clientY);
+        if (
+          isInputShield(element) &&
+          typeof scope.elementsFromPoint === 'function'
+        ) {
+          // An input hold's shield covers the viewport while the menu enters.
+          // It keeps new input away, but the press in flight still reaches the
+          // row under it. So the hit test sees through that shield only.
+          element =
+            scope
+              .elementsFromPoint(event.clientX, event.clientY)
+              .find(candidate => !isInputShield(candidate)) ?? null;
+        }
       } else {
         element = event.target instanceof Element ? event.target : null;
       }
