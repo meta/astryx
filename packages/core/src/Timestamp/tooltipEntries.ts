@@ -141,8 +141,9 @@ export function resolveTimezoneID(
     // validation path stays explicit and deterministic.
     new Intl.DateTimeFormat('en-US', {timeZone: timezoneID});
   } catch {
-    if (!warnedTimezoneIDs.has(timezoneID)) {
-      warnedTimezoneIDs.add(timezoneID);
+    const report = `${context}: ${timezoneID}`;
+    if (!warnedTimezoneIDs.has(report)) {
+      warnedTimezoneIDs.add(report);
       devWarn(
         'Timestamp',
         `unknown time zone ${JSON.stringify(timezoneID)} in ${context}. Falling back to the viewer's time zone.`,
@@ -207,15 +208,22 @@ function shouldShowZoneName(
  * `calendar`.
  *
  * Pure: the same `date` and `entries` always produce the same lines for a given
- * host zone, locale, and calendar.
+ * host zone, locale, and calendar. Entries without their own `timezoneID` inherit
+ * `defaultTimezoneID` (already resolved); an explicit `'local'` still pins the
+ * viewer's zone.
  */
 export function formatTooltipLines(
   date: Date,
   entries: ReadonlyArray<TimestampTooltipEntry>,
   locale: Locale,
   calendar: CalendarSystem = 'gregory',
+  defaultTimezoneID?: string,
 ): ReadonlyArray<TimestampTooltipLine> {
-  const resolved = entries.map(entry => resolveTimezoneID(entry.timezoneID));
+  const resolved = entries.map(entry =>
+    entry.timezoneID === undefined
+      ? defaultTimezoneID
+      : resolveTimezoneID(entry.timezoneID),
+  );
   const hasMultipleZones = new Set(resolved.map(zoneKey)).size > 1;
 
   return entries.map((entry, index) => {

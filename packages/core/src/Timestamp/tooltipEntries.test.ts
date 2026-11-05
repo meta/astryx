@@ -21,7 +21,9 @@ import {formatTooltipLines as formatTooltipLinesForLocale} from './tooltipEntrie
 const formatTooltipLines = (
   date: Parameters<typeof formatTooltipLinesForLocale>[0],
   entries: Parameters<typeof formatTooltipLinesForLocale>[1],
-) => formatTooltipLinesForLocale(date, entries, 'en-US');
+  defaultTimezoneID?: Parameters<typeof formatTooltipLinesForLocale>[3],
+) =>
+  formatTooltipLinesForLocale(date, entries, 'en-US', defaultTimezoneID);
 
 /** 2026-02-19T17:00:00Z — chosen so several zones land on different dates. */
 const INSTANT = new Date('2026-02-19T17:00:00Z');
@@ -75,6 +77,28 @@ describe('formatTooltipLines', () => {
     ]);
     expect(winter[0].value).toBe('2026-01-15 12:00:00');
     expect(summer[0].value).toBe('2026-07-15 13:00:00');
+  });
+
+  it('lets entries without a zone inherit the Timestamp timezoneID', () => {
+    const lines = formatTooltipLines(
+      INSTANT,
+      [{format: 'system_date_time'}],
+      'UTC',
+    );
+    expect(lines).toHaveLength(1);
+    expect(lines[0].value).toBe('2026-02-19 17:00:00');
+  });
+
+  it('keeps an explicit local entry in the viewer zone under a default', () => {
+    const [local, named] = formatTooltipLines(
+      INSTANT,
+      [
+        {timezoneID: 'local', format: 'system_date_time'},
+        {timezoneID: LOCAL_ZONE, format: 'system_date_time'},
+      ],
+      'UTC',
+    );
+    expect(local.value).toBe(named.value);
   });
 
   // --- The shared date vocabulary ---

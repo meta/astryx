@@ -449,7 +449,7 @@ export function Timestamp({
             isCopyable: true,
           },
         ]
-      : formatTooltipLines(date, entries, locale, calendar);
+      : formatTooltipLines(date, entries, locale, calendar, timezoneID);
 
   const timestampProps = mergeProps(
     themeProps('timestamp', {format: effectiveFormat}),
