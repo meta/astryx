@@ -91,6 +91,7 @@ export interface CalendarDateLexicon {
   readonly eras: ReadonlyMap<string, string>;
   readonly yearAliases: ReadonlyMap<string, string>;
   readonly trailers: ReadonlySet<string>;
+  readonly yearMarkers: ReadonlySet<string>;
   readonly separators: ReadonlySet<string>;
   readonly weekdays: ReadonlySet<string>;
   readonly vocabulary: ReadonlyArray<string>;
@@ -353,6 +354,7 @@ function buildLexicon(
   const yearAliases = new Map<string, string>();
   const skip = new Set<string>();
   const trailers = new Set<string>();
+  const yearMarkers = new Set<string>();
   const separators = new Set<string>();
   const weekdays = new Set<string>();
 
@@ -441,9 +443,12 @@ function buildLexicon(
     for (const options of literalFormats) {
       for (const pd of literalDates) {
         const parts = partsOf(loc, calendar, options, pd);
-        for (const part of parts) {
+        for (const [k, part] of parts.entries()) {
           if (part.type === 'literal' || partType(part) === 'yearName') {
             addSkip(part.value);
+          }
+          if (part.type === 'literal' && parts[k - 1]?.type === 'year') {
+            addSkip(part.value, yearMarkers);
           }
         }
         if (loc === locale) {
@@ -585,6 +590,7 @@ function buildLexicon(
     eras,
     yearAliases,
     trailers,
+    yearMarkers,
     separators,
     weekdays,
     vocabulary: [...vocabularySet].sort((a, b) => b.length - a.length),
@@ -627,7 +633,7 @@ type Token =
   | {readonly t: 'monthNum'; readonly v: string; readonly isLeap: boolean}
   | {readonly t: 'era'; readonly code: string; readonly isWeekday?: boolean}
   | {readonly t: 'leap'}
-  | {readonly t: 'word'}
+  | {readonly t: 'word'; readonly isYearMarker?: boolean}
   | {readonly t: 'sep'; readonly v: string};
 
 type Tokens = Token[] | 'incomplete' | 'unreadable';
@@ -707,8 +713,14 @@ function tokenize(
     return 'unreadable';
   }
   // Latvian "1. adars" is a month, and also day 1 of "adars". It is the day
-  // when no other number can be the day.
-  if (hasDigitName && !out.some(t => t.t === 'num' && Number(t.v) <= 31)) {
+  // when no other number can be the day. A number before the year word, as in
+  // "26. g.", is the year.
+  const canBeDay = (token: Token, k: number) => {
+    const next = out.slice(k + 1).find(t => t.t !== 'sep');
+    const isYear = next?.t === 'word' && next.isYearMarker === true;
+    return token.t === 'num' && Number(token.v) <= 31 && !isYear;
+  };
+  if (hasDigitName && !out.some(canBeDay)) {
     return tokenize(s, lex, false);
   }
   return out;
@@ -804,7 +816,7 @@ function wordToken(word: string, lex: CalendarDateLexicon): Token {
   if (alias != null) {
     return {t: 'num', v: alias, isAlias: true};
   }
-  return {t: 'word'};
+  return {t: 'word', isYearMarker: lex.yearMarkers.has(word)};
 }
 
 /** The month a typed abbreviation names when it starts only one month name. */

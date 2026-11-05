@@ -151,13 +151,13 @@ describe('committed text reads back as the same date (FR13)', () => {
     const days = dates.map(([year, month, day]) => ({year, month, day}));
     expect(failures(locale, calendar, days)).toEqual([]);
   });
-  it('reads a two-digit year before a Latvian month name with a number', () => {
+  it.each([
+    ['86. g. 1. adars', {year: 2026, month: 2, day: 18}],
+    ['26. g. 1. adars', {year: 1966, month: 2, day: 21}],
+  ])('reads a two-digit year before a Latvian month name: %s', (text, date) => {
     const lexicon = getCalendarDateLexicon('lv-LV', 'hebrew');
-    expect(
-      parseCalendarDate('86. g. 1. adars', lexicon, {
-        today: {year: 2026, month: 11, day: 2},
-      }),
-    ).toMatchObject({kind: 'value', date: {year: 2026, month: 2, day: 18}});
+    const today = {year: 2026, month: 11, day: 2};
+    expect(parseCalendarDate(text, lexicon, {today})).toMatchObject({date});
   });
   it('writes the narrow era in the Amharic numeric pattern', () => {
     const hint = (year: number, calendar: CalendarSystem) =>
