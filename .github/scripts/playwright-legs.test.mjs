@@ -234,6 +234,7 @@ describe('the interaction proof legs in ci.yml', () => {
       plan: "Plan this leg's interaction proofs",
       evidence: 'interaction-evidence-${{ matrix.leg }}',
       gate: "steps.scope.outputs.applies == 'true'",
+      leg: '${{ matrix.leg }}',
       of: '${{ strategy.job-total }}',
     },
     {
@@ -245,6 +246,7 @@ describe('the interaction proof legs in ci.yml', () => {
       evidence: 'interaction-evidence-webkit-${{ matrix.leg }}',
       // One leg runs every proof while they fit; see the leg count below.
       gate: "steps.scope.outputs.applies == 'true' && steps.legs.outputs.runs == 'true'",
+      leg: '${{ steps.legs.outputs.leg }}',
       of: '${{ steps.legs.outputs.count }}',
     },
   ];
@@ -300,7 +302,7 @@ describe('the interaction proof legs in ci.yml', () => {
         '--durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json"',
       );
       expect(plan.run).not.toMatch(/git (fetch|show)/);
-      expect(plan.run).toContain(`--leg \${{ matrix.leg }} --of ${lane.of}`);
+      expect(plan.run).toContain(`--leg ${lane.leg} --of ${lane.of}`);
       expect(plan.run).toContain('--out "$RUNNER_TEMP/interaction-leg.txt"');
       const run = step(job, lane.run);
       expect(job.steps.indexOf(plan)).toBeLessThan(job.steps.indexOf(run));
@@ -433,8 +435,8 @@ describe('the interaction proof legs in ci.yml', () => {
 
     it('gives the whole suite to the first leg at today’s recorded times', () => {
       const times = durations['interaction-webkit'];
-      expect(countFor(1, times)).toEqual({count: '1', runs: 'true'});
-      expect(countFor(2, times)).toEqual({count: '1', runs: 'false'});
+      expect(countFor(1, times)).toEqual({count: '1', runs: 'true', leg: '1'});
+      expect(countFor(2, times)).toEqual({count: '1', runs: 'false', leg: '2'});
     });
 
     it('adds the second leg once setup and the proofs pass ten minutes', () => {
@@ -442,12 +444,12 @@ describe('the interaction proof legs in ci.yml', () => {
         'internal/interaction-harness/src/harness.interaction.browser.spec.ts': 400,
         'packages/core/src/gestures/__tests__/browser/gestures.interaction.browser.spec.ts': 111,
       };
-      expect(countFor(2, times)).toEqual({count: '2', runs: 'true'});
+      expect(countFor(2, times)).toEqual({count: '2', runs: 'true', leg: '2'});
       // A changed spec counts too: here it tips one leg into two.
       const near = {
         'internal/interaction-harness/src/harness.interaction.browser.spec.ts': 500,
       };
-      expect(countFor(2, near)).toEqual({count: '1', runs: 'false'});
+      expect(countFor(2, near)).toEqual({count: '1', runs: 'false', leg: '2'});
       // So does a planned spec with no recorded time: here the median, 500 s.
       expect(
         countFor(
@@ -458,19 +460,23 @@ describe('the interaction proof legs in ci.yml', () => {
             'internal/interaction-harness/src/pointer.interaction.browser.spec.ts',
           ],
         ),
-      ).toEqual({count: '2', runs: 'true'});
+      ).toEqual({count: '2', runs: 'true', leg: '2'});
       expect(
         countFor(2, near, [
           'packages/core/src/List/__tests__/ListRowPress.interaction.browser.spec.ts',
           'packages/core/src/List/ListRow.tsx',
         ]),
-      ).toEqual({count: '2', runs: 'true'});
+      ).toEqual({count: '2', runs: 'true', leg: '2'});
     });
 
-    it('stops a leg that has no changed-file list instead of counting fewer legs', () => {
-      expect(() =>
-        countFor(2, durations['interaction-webkit'], null),
-      ).toThrow();
+    it('runs every proof in a leg that has no changed-file list, as a leg of its own', () => {
+      // Whatever the other leg counts, every proof then runs in some leg.
+      for (const leg of [1, 2])
+        expect(countFor(leg, durations['interaction-webkit'], null)).toEqual({
+          count: '1',
+          runs: 'true',
+          leg: '1',
+        });
     });
   });
 

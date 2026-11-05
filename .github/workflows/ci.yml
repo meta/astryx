@@ -2851,7 +2851,7 @@ jobs:
           fi
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/playwright-legs.mjs" plan \
             --key interaction-webkit --config playwright.interaction.config.ts --project webkit \
-            --leg ${{ matrix.leg }} --of ${{ steps.legs.outputs.count }} \
+            --leg ${{ steps.legs.outputs.leg }} --of ${{ steps.legs.outputs.count }} \
             --durations "$RUNNER_TEMP/interaction-legs/.github/playwright-leg-durations.json" \
             --out "$RUNNER_TEMP/interaction-leg.txt" -- \
             "${SPEC_PATHS[@]}" \

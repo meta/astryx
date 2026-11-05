@@ -319,7 +319,7 @@ describe('WebKit interaction proof routing', () => {
           {mode: 0o755},
         );
         const script = step(webkit, "Plan this leg's WebKit interaction proofs")
-          .run.replaceAll('${{ matrix.leg }}', '1')
+          .run.replaceAll('${{ steps.legs.outputs.leg }}', '1')
           .replaceAll('${{ steps.legs.outputs.count }}', '2');
         const out = execFileSync('bash', ['-e', '-c', script], {
           cwd: dir,

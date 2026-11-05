@@ -11,7 +11,8 @@
  *   config and project, this leg and the leg count, and any Playwright path
  *   filters; `.github/playwright-leg-durations.json`. `record`: CI job logs
  *   of the list reporter.
- * @output `legs`: `count=<legs>` and `runs=<true|false>` for this leg.
+ * @output `legs`: `count=<legs>`, `runs=<true|false>` and the `leg=<i>` this
+ *   leg plans, for `$GITHUB_OUTPUT`.
  *   `plan`: this leg's spec files, one per line, for Playwright's
  *   `--test-list`, and `files=<count>` for `$GITHUB_OUTPUT`. `record`: the
  *   durations file, rewritten for the suite.
@@ -261,14 +262,24 @@ function legs(args) {
     listedFile && fs.existsSync(listedFile) ? specs(listedFile) : [];
   if (listed.length === 0)
     throw new Error(`--listed names no ${key} spec files to count`);
+  const changedFile = option(own, '--changed');
   // Each leg counts on its own. A leg without the changed files could count
   // fewer legs than the others and leave a share of the proofs to no leg, so
-  // it stops instead.
-  const changedFile = option(own, '--changed');
-  if (own.includes('--changed') && !(changedFile && fs.existsSync(changedFile)))
-    throw new Error(
-      'The scope step could not list the changed files, so this leg cannot count its share of the proofs. Re-run the job.',
+  // it plans itself as the only leg and runs every proof instead.
+  if (
+    own.includes('--changed') &&
+    !(changedFile && fs.existsSync(changedFile))
+  ) {
+    console.log(
+      `::warning title=Leg count without the changed files::The scope step could not list the changed files, so ${key} leg ${leg} runs every planned proof as a leg of its own.`,
     );
+    if (process.env.GITHUB_OUTPUT)
+      fs.appendFileSync(
+        process.env.GITHUB_OUTPUT,
+        'count=1\nruns=true\nleg=1\n',
+      );
+    return;
+  }
   const durations = readDurations(option(own, '--durations') ?? DURATIONS);
   const seconds = estimateSeconds(durations[key] ?? {}, filters, {
     listed,
@@ -283,7 +294,7 @@ function legs(args) {
   if (process.env.GITHUB_OUTPUT)
     fs.appendFileSync(
       process.env.GITHUB_OUTPUT,
-      `count=${count}\nruns=${runs}\n`,
+      `count=${count}\nruns=${runs}\nleg=${leg}\n`,
     );
 }
 
