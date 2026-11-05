@@ -102,6 +102,8 @@ describe('the radio-group binding inventory', () => {
     expect([...bound].sort()).toEqual([
       'DropdownMenuRadioGroup',
       'DropdownMenuRadioItem',
+      'Pagination dot',
+      'Pagination dots',
       'RadioList',
       'RadioListItem',
       'SegmentedControl',
@@ -197,6 +199,8 @@ describe('the radio-group binding inventory', () => {
       const expected =
         state.binding !== 'SegmentedControl' &&
         state.binding !== 'DropdownMenuRadioGroup' &&
+        state.binding !== 'Pagination dots' &&
+        state.binding !== 'Pagination dot' &&
         state.id !== 'segmented-option-selected-hidden-label';
       return state.facts.visibleLabel !== expected;
     }).map(state => state.id);

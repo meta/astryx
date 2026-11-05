@@ -616,6 +616,21 @@ describe('Pagination', () => {
     // Selection follows focus: arrow/Home/End move focus and select that page.
     // -------------------------------------------------------------------------
 
+    it('does not choose a page on the press: the browser keeps focus off the dot until the click', () => {
+      const onChange = vi.fn();
+      render(
+        <Pagination
+          page={1}
+          onChange={onChange}
+          totalPages={3}
+          variant="dots"
+        />,
+      );
+      const dot = screen.getByRole('radio', {name: 'Page 2'});
+      expect(fireEvent.mouseDown(dot)).toBe(false);
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
     it('uses roving tabindex — active dot has tabIndex 0, others -1', () => {
       render(
         <Pagination

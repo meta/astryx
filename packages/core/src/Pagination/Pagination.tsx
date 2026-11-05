@@ -718,6 +718,10 @@ export function Pagination({
                   // needs to focus the dot, which some browsers (Safari) skip for
                   // buttons, so focus it explicitly.
                   onClick={e => e.currentTarget.focus()}
+                  // A press must not choose a page before release, so it can
+                  // still be taken back by sliding off: the browser does not
+                  // focus the dot on the press, and the click focuses it.
+                  onMouseDown={e => e.preventDefault()}
                   // Disabled dots stay focusable (spec:AST-085 FR1); the page
                   // only follows focus while enabled (handleDotsFocus).
                   aria-disabled={isDisabled || undefined}
