@@ -2630,6 +2630,8 @@ jobs:
                 *.interaction.browser.spec.ts) [ -f "$file" ] && CHANGED_SPECS+=("$file") ;;
               esac
             done < "$CHANGED_FILES"
+          else
+            echo "::warning title=Changed specs not planned::The scope step could not list the changed files, so a changed interaction spec outside this lane's paths does not run here."
           fi
           node "$RUNNER_TEMP/interaction-legs/.github/scripts/interaction-legs.mjs" plan --project webkit \
             --leg ${{ matrix.leg }} --of ${{ strategy.job-total }} \

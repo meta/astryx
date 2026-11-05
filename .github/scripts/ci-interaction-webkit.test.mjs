@@ -191,9 +191,10 @@ describe('WebKit interaction proof routing', () => {
     }
   });
 
-  // A pull request that changes an interaction spec runs that spec in both
-  // lanes, wherever it lives: the Chromium legs plan every spec, and the
-  // WebKit plan adds the changed ones to its paths.
+  // A pull request that changes an interaction spec, outside a Lab-only pull
+  // request (which runs no interaction proofs, spec:AST-030 FR26), runs that
+  // spec in both lanes, wherever it lives: the Chromium legs plan every spec,
+  // and the WebKit plan adds the changed ones to its paths.
   describe('a changed interaction spec', () => {
     const spec =
       'packages/core/src/List/__tests__/ListRowPress.interaction.browser.spec.ts';
@@ -233,8 +234,9 @@ describe('WebKit interaction proof routing', () => {
           fs.mkdirSync(path.join(dir, path.dirname(file)), {recursive: true});
           fs.writeFileSync(path.join(dir, file), '');
         }
-        const list = path.join(dir, 'changed.txt');
-        fs.writeFileSync(list, changed.map(file => `${file}\n`).join(''));
+        const list = changed == null ? '' : path.join(dir, 'changed.txt');
+        if (list)
+          fs.writeFileSync(list, changed.map(file => `${file}\n`).join(''));
         const bin = path.join(dir, 'bin');
         fs.mkdirSync(bin);
         fs.writeFileSync(
@@ -272,12 +274,20 @@ describe('WebKit interaction proof routing', () => {
       expect(paths).not.toContain('packages/core/src/List/ListRow.tsx');
     });
 
-    it('leaves out a spec the pull request deletes, and plans as before with no list', () => {
+    it('leaves out a spec the pull request deletes', () => {
       const deleted =
         'packages/core/src/List/__tests__/Old.interaction.browser.spec.ts';
       const args = planArgs([deleted], []);
       expect(args).not.toContain(deleted);
       expect(args.at(-1)).toBe('internal/interaction-harness/');
+    });
+
+    it('plans only its own paths, and warns, when the scope step lists no files', () => {
+      const args = planArgs(null, []);
+      expect(args.at(-1)).toBe('internal/interaction-harness/');
+      expect(args.join('\n')).toContain(
+        '::warning title=Changed specs not planned::',
+      );
     });
   });
 
