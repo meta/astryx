@@ -55,7 +55,7 @@ export const docs = {
       name: 'config.comparators',
       type: 'Partial<Record<TSortKey, (a: T, b: T) => number>>',
       description:
-        'Ascending comparators per sort key; the hook flips the result for descending. Keys without one compare numbers numerically, compare other values as strings with a numeric collator in the active InternationalizationProvider locale, and put null, undefined and NaN last.',
+        'Ascending comparators per sort key; the hook flips the result for descending. Keys without one compare numbers numerically, compare other values as strings with a numeric collator in the active InternationalizationProvider locale, and put null, undefined and NaN last in ascending order and first in descending.',
       required: false,
     },
     {
@@ -139,7 +139,7 @@ export const docsDense = {
     'config.sort': 'controlled sort state; pair with onSortChange.',
     'config.onSortChange': 'called with next sort state; required with sort.',
     'config.comparators':
-      'ascending comparators per key (flipped for descending). Else numbers numeric, others numeric-collator strings in provider locale; null/undefined/NaN last.',
+      'ascending comparators per key (flipped for descending). Else numbers numeric, others numeric-collator strings in provider locale; null/undefined/NaN last ascending, first descending.',
     'config.allowUnsortedState':
       'to useTableSortable: third click returns to unsorted.',
     'config.isMultiSortEnabled':
