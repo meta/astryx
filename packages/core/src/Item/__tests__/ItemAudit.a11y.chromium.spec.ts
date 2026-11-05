@@ -223,8 +223,17 @@ async function observe(page: Page) {
           ) as HTMLElement | undefined) ??
           null;
         const label = content?.firstElementChild ?? null;
+        const labelStyle = label ? getComputedStyle(label) : null;
         return {
           text: label?.textContent?.trim() ?? '',
+          caseName:
+            row.closest<HTMLElement>('[data-first-line-case]')?.dataset
+              .firstLineCase ?? null,
+          labelHeight: label ? round(label.getBoundingClientRect().height) : 0,
+          labelLineHeight: labelStyle ? px(labelStyle.lineHeight) : 0,
+          labelOverflows: label
+            ? label.scrollHeight > label.clientHeight
+            : false,
           direction: style.direction,
           box: box(row.getBoundingClientRect()),
           data: {
@@ -401,6 +410,15 @@ for (const item of cases) {
           row.data.align === 'first-line',
           `${where} align ${row.data.align}`,
         );
+        // labelLines={2}: the label shows two lines and clips the rest.
+        if (row.caseName === 'clamped') {
+          check(
+            row.labelHeight <= 2 * row.labelLineHeight + 0.5 &&
+              row.labelHeight > row.labelLineHeight + 0.5 &&
+              row.labelOverflows,
+            `${where} clamped label ${row.labelHeight}px at ${row.labelLineHeight}px lines, overflows ${row.labelOverflows}`,
+          );
+        }
       }
     });
 
@@ -543,7 +561,7 @@ for (const item of cases) {
         hover:
           'hover-rest: the rest row paints a hover background; hover-disabled: the disabled row paints nothing new',
         layout:
-          'no sideways document scroll; at 320px every row stays inside the viewport',
+          'no sideways document scroll; at 320px every row stays inside the viewport; align-first-line: the labelLines={2} label shows two lines and clips the rest',
       },
       observed: {
         build: storybookSha,

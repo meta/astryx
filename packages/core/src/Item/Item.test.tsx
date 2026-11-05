@@ -874,6 +874,37 @@ describe('Item', () => {
     }
   });
 
+  it('truncates the label and description to the lines it is given', () => {
+    const {rerender} = render(
+      <Item
+        label="A long label"
+        labelLines={1}
+        description="A long description"
+        descriptionLines={1}
+      />,
+    );
+    for (const text of ['A long label', 'A long description']) {
+      const style = getComputedStyle(screen.getByText(text));
+      expect(style.overflow).toBe('hidden');
+      expect(style.textOverflow).toBe('ellipsis');
+      expect(style.whiteSpace).toBe('nowrap');
+    }
+    rerender(
+      <Item
+        label="A long label"
+        labelLines={3}
+        description="A long description"
+        descriptionLines={2}
+      />,
+    );
+    for (const text of ['A long label', 'A long description']) {
+      const style = getComputedStyle(screen.getByText(text));
+      expect(style.overflow).toBe('hidden');
+      expect(style.display).toBe('-webkit-box');
+      expect(style.whiteSpace).not.toBe('nowrap');
+    }
+  });
+
   it('reflects highlighted, selected, and disabled on the item theme target', () => {
     const {rerender} = render(<Item label="Item" data-testid="item" />);
     const item = () => screen.getByTestId('item');
