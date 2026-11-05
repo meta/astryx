@@ -15,13 +15,30 @@
  */
 
 import {useCallback, useEffect, useRef, useState, type RefObject} from 'react';
+import {FOCUSABLE_SELECTOR} from '../hooks/focusableSelector';
 import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 
-const FOCUSABLE =
-  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-/** A grid's one tab stop: in the calendar, the day of the shown month. */
+/** A month grid's tab stop: one day in each pane that has one. */
 const TAB_STOP = '[tabindex="0"]';
+
+/**
+ * The tab stop of the month in view. The mouse calendar gives every mounted
+ * month a tab stop, and the months beside the shown one sit outside the
+ * panel's box.
+ */
+function shownTabStop(panel: HTMLElement): HTMLElement | null {
+  const box = panel.getBoundingClientRect();
+  const stops = panel.querySelectorAll<HTMLElement>(TAB_STOP);
+  for (const stop of stops) {
+    const rect = stop.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    if (x >= box.left && x <= box.right && y >= box.top && y <= box.bottom) {
+      return stop;
+    }
+  }
+  return stops[0] ?? null;
+}
 
 /**
  * Frames the hand-off tries for before it gives up: about half a second,
@@ -185,8 +202,8 @@ export function useFadeInert(
     pendingFocusRef.current = null;
     const {incoming, from} = pending;
     const target =
-      incoming.querySelector<HTMLElement>(TAB_STOP) ??
-      incoming.querySelector<HTMLElement>(FOCUSABLE) ??
+      shownTabStop(incoming) ??
+      incoming.querySelector<HTMLElement>(FOCUSABLE_SELECTOR) ??
       incoming;
     cancelAnimationFrame(focusFrameRef.current);
     let frames = 0;

@@ -8,9 +8,10 @@
 - The hidden month/year wheels are laid out once the sheet settles, so the fade shows from near its start.
 - The title's chevron points along the reading direction and turns a quarter turn to point down while the wheels show. In DateInput it was a down chevron that flipped up; in DateTimeInput it was a down chevron that stayed still.
 - A tapped day takes its selection at once, with no colour transition.
-- When Done closes the wheels, the keyboard focus moves to the shown month's day.
 
 With a mouse, the toggle and the day's transition stay as they are.
+
+In DateTimeInput, when Done closes the wheels with focus in them, the keyboard focus moves to the shown month's day, with any pointer.
 
 With Reduce Motion on, nothing travels: under a finger the toggle cross-fades in 200 ms, and the chevron dips instead of turning, its turn landing mid-dip. With a mouse it changes at once.
 
