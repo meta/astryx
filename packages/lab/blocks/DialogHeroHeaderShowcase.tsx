@@ -5,11 +5,11 @@
 /**
  * @file DialogHeroHeaderShowcase.tsx
  * @input DialogHeroHeader composed with Dialog and Layout
- * @output A dismissible onboarding preview with full-bleed decorative media
+ * @output A static onboarding preview with full-bleed decorative media
  * @position Canary Lab showcase shared by CLI discovery, docsite, and Storybook
  */
 
-import {useId, useState} from 'react';
+import {useId} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {DialogHeroHeader} from '@astryxdesign/lab';
 import {Button} from '@astryxdesign/core/Button';
@@ -23,12 +23,13 @@ const styles = stylex.create({
   },
 });
 
+// The preview stays open: closing would unmount the focused control and drop
+// keyboard focus to the page.
 export default function DialogHeroHeaderShowcase() {
-  const [isOpen, setIsOpen] = useState(true);
   const gradientId = useId();
 
-  return isOpen ? (
-    <Dialog isOpen isInline onOpenChange={setIsOpen}>
+  return (
+    <Dialog isOpen isInline onOpenChange={() => {}}>
       <Layout
         header={
           <DialogHeroHeader
@@ -54,7 +55,7 @@ export default function DialogHeroHeaderShowcase() {
               </svg>
             }
             mediaMode="dark"
-            onOpenChange={setIsOpen}
+            onOpenChange={() => {}}
           />
         }
         content={
@@ -67,20 +68,10 @@ export default function DialogHeroHeaderShowcase() {
         }
         footer={
           <LayoutFooter>
-            <Button
-              label="Get started"
-              variant="primary"
-              onClick={() => setIsOpen(false)}
-            />
+            <Button label="Get started" variant="primary" />
           </LayoutFooter>
         }
       />
     </Dialog>
-  ) : (
-    <Button
-      label="Preview welcome dialog"
-      variant="secondary"
-      onClick={() => setIsOpen(true)}
-    />
   );
 }
