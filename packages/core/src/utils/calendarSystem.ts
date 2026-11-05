@@ -382,15 +382,20 @@ function monthPartsKey(parts: Intl.DateTimeFormatPart[]): string {
  * The label always names the month and day that the grid shows. Intl and the
  * runtime's Temporal can disagree on where a month of the Chinese or Dangi
  * calendar starts; the label then takes its month and year from the middle of
- * the Temporal month, and its day from Temporal.
+ * the Temporal month, and its day from Temporal. With `relatedYear`, a
+ * Chinese or Dangi year that the locale names only by its place in the 60-year
+ * cycle becomes the related Gregorian year.
  */
 export function formatCalendarDate(
   calendar: CalendarSystem,
   pd: PlainDate,
   options: Intl.DateTimeFormatOptions,
   locale: Locale,
+  labelOptions?: {readonly relatedYear?: boolean},
 ): string {
-  return joinParts(formatCalendarDateToParts(calendar, pd, options, locale));
+  return joinParts(
+    formatCalendarDateToParts(calendar, pd, options, locale, labelOptions),
+  );
 }
 
 /** The parts of `formatCalendarDate`'s label. */
@@ -399,9 +404,39 @@ export function formatCalendarDateToParts(
   pd: PlainDate,
   options: Intl.DateTimeFormatOptions,
   locale: Locale,
+  {relatedYear = false}: {readonly relatedYear?: boolean} = {},
 ): Intl.DateTimeFormatPart[] {
   const parts = formatToParts(labelCalendar(calendar), pd, options, locale);
-  return withTemporalDay(calendar, pd, parts, options, locale);
+  const fixed = withTemporalDay(calendar, pd, parts, options, locale);
+  return relatedYear
+    ? withRelatedYear(calendar, pd, fixed, options, locale)
+    : fixed;
+}
+
+function withRelatedYear(
+  calendar: CalendarSystem,
+  pd: PlainDate,
+  parts: Intl.DateTimeFormatPart[],
+  options: Intl.DateTimeFormatOptions,
+  locale: Locale,
+): Intl.DateTimeFormatPart[] {
+  if (
+    (calendar !== 'chinese' && calendar !== 'dangi') ||
+    !isCalendarSystemAvailable(calendar) ||
+    parts.some(part => (part.type as string) === 'relatedYear')
+  ) {
+    return parts;
+  }
+  const {numberingSystem} = dateTimeFormatFor(locale, {
+    ...options,
+    calendar,
+    timeZone: 'UTC',
+  }).resolvedOptions();
+  const {year} = inCalendar(calendar, pd);
+  const value = plainDateFormatDayNumber(year, locale, numberingSystem);
+  return parts.map(part =>
+    /^year(Name)?$/.test(part.type) ? {...part, value} : part,
+  );
 }
 
 // Returns `parts` itself where Intl already names Temporal's month and day.
