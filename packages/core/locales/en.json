@@ -1125,7 +1125,23 @@
   },
   "@astryx.dateInput.invalidDate": {
     "defaultMessage": "Invalid date",
-    "description": "Screen-reader-only live-region alert in DateInput / DateTimeInput when the typed date cannot be parsed. The field silently reverts on blur, so this is the only rejection feedback a screen-reader user gets."
+    "description": "Screen-reader-only live-region alert in DateInput / DateTimeInput when the typed text cannot be read as a date. Text the field cannot finish, such as a one-digit year, stays on Enter or blur and shows this message as the field status."
+  },
+  "@astryx.dateInput.nonexistentDate": {
+    "defaultMessage": "This date does not exist in the {calendar}",
+    "description": "Error in DateInput / DateTimeInput, shown below the field and announced, when the typed date is readable but the calendar does not have it, such as 30 Esfand in a common Persian year or February 30. {calendar} is the calendar's localized name from the platform, such as \"Persian Calendar\" or \"Gregorian Calendar\"."
+  },
+  "@astryx.dateInput.outOfRangeDate": {
+    "defaultMessage": "{bounds, select, both {Enter a date from {min} to {max}} min {Enter a date on or after {min}} max {Enter a date on or before {max}} other {This date is not available}}",
+    "description": "Error in DateInput / DateTimeInput, shown below the field and announced, when the typed date is outside the allowed range. {min} and {max} are the bounds, written as dates in the field's calendar. `bounds` is `both`, `min`, or `max` for a date outside those bounds, and `other` for a date that a custom rule rejects."
+  },
+  "@astryx.dateInput.formatHint": {
+    "defaultMessage": "e.g., {example}",
+    "description": "Placeholder hint in a DateInput / DateTimeInput date field that uses a calendar other than the Gregorian calendar, shown when the field is focused and empty. {example} is today's date, or the nearest date the field accepts, written in that calendar's numeric pattern, such as ۱۴۰۵/۸/۱۱."
+  },
+  "@astryx.dateInput.calendarDescription": {
+    "defaultMessage": "Dates use the {calendar}",
+    "description": "Screen-reader-only description of a DateInput / DateTimeInput date field whose calendar differs from the app's calendar, such as a Persian field in a Gregorian app or a Gregorian field in a Persian app. {calendar} is the calendar's localized name from the platform, such as \"Persian Calendar\" or \"Gregorian Calendar\"."
   },
   "@astryx.dateInput.resetPicking": {
     "defaultMessage": "Reset",

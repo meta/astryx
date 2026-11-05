@@ -258,6 +258,15 @@ export const docs = {
   },
   theming: {
     targets: [{className: 'astryx-checkbox-list'}],
+    vars: [
+      {
+        name: '--_checkbox-row-press-paint',
+        description:
+          "The touch press paint a row that owns its checkbox's press hands that checkbox's box: none at rest, and the press paint at the press's strength while the touch press controller presses that row under a coarse pointer. Set on the row by its own press arms; the box reads its nearest row's value, so a list placed in a row's content keeps its own rows' paint.",
+        default: 'none',
+        private: true,
+      },
+    ],
   },
 };
 

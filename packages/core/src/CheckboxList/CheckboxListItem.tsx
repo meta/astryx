@@ -4,7 +4,8 @@
 
 /**
  * @file CheckboxListItem.tsx
- * @input Uses React, CheckboxInput, ListItem, CheckboxListContext
+ * @input Uses React, CheckboxInput, ListItem, CheckboxListContext,
+ *   CheckboxRowPressContext, the touch presentation and the row press paint
  * @output Exports CheckboxListItem component, CheckboxListItemProps
  * @position Core implementation; consumed by index.ts, tested by CheckboxList.test.tsx
  *
@@ -25,6 +26,10 @@ import type {BaseProps} from '../BaseProps';
 import {CheckboxInput} from '../CheckboxInput/CheckboxInput';
 import type {CheckboxInputProps} from '../CheckboxInput/CheckboxInput';
 import type {InputStatus} from '../Field/types';
+import {CheckboxRowPressContext} from '../CheckboxInput/CheckboxRowPressContext';
+import {rowPressPaintStyles} from '../privateAttributes/press.stylex';
+import {interactionOverlayStyles} from '../utils/interactionOverlay.stylex';
+import {useTouchPresentation} from '../utils/touchPresentation';
 import {ListItem} from '../List/ListItem';
 import {ListContext} from '../List/ListContext';
 import {CheckboxListContext} from './CheckboxListContext';
@@ -305,6 +310,12 @@ export function CheckboxListItem({
     registerWithRequiredGroup,
   );
 
+  // Under a finger, a delegating row is the option's only press surface. A
+  // touch anywhere on it presses the row. A fine pointer keeps the box's own
+  // press.
+  const {isTouch} = useTouchPresentation();
+  const rowOwnsPress = isTouch && hasRowInteraction && !effectiveDisabled;
+
   // A read-only checkbox carries aria-readonly, which the row's clickable
   // container treats as a non-interactive target, so a click on it would be
   // delegated straight back to the checkbox without end. Stop that click at
@@ -359,6 +370,12 @@ export function CheckboxListItem({
       aria-busy={isBusy || undefined}
       xstyle={
         [
+          // The row's own press paint, which the layer over its box reads.
+          rowOwnsPress && rowPressPaintStyles.checkboxRow,
+          // Item's row layer drops the strength's release, and the box paints
+          // at that strength. So the row brings the release back, and the box
+          // fades with the row.
+          rowOwnsPress && interactionOverlayStyles.pressedAlpha,
           resolvedChecked === true &&
             !effectiveDisabled &&
             !effectiveReadOnly &&
@@ -369,19 +386,23 @@ export function CheckboxListItem({
       className={className}
       style={style}
       startContent={
-        <DescribedCheckboxInput
-          ref={checkboxInputRef}
-          label={checkboxLabel}
-          aria-labelledby={namesFromVisibleLabel ? labelID : undefined}
-          isLabelHidden
-          value={resolvedChecked}
-          onChange={() => handleToggle()}
-          onClick={handleCheckboxClick}
-          isDisabled={effectiveDisabled}
-          isReadOnly={effectiveReadOnly}
-          isLoading={isBusy}
-          size={checkboxSize}
-        />
+        // Only the row's own checkbox: a checkbox placed in the row's content
+        // keeps its own press.
+        <CheckboxRowPressContext value={rowOwnsPress}>
+          <DescribedCheckboxInput
+            ref={checkboxInputRef}
+            label={checkboxLabel}
+            aria-labelledby={namesFromVisibleLabel ? labelID : undefined}
+            isLabelHidden
+            value={resolvedChecked}
+            onChange={() => handleToggle()}
+            onClick={handleCheckboxClick}
+            isDisabled={effectiveDisabled}
+            isReadOnly={effectiveReadOnly}
+            isLoading={isBusy}
+            size={checkboxSize}
+          />
+        </CheckboxRowPressContext>
       }
     />
   );

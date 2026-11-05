@@ -1,5 +1,5 @@
 {
-  "chromium": {
+  "interaction-chromium": {
     "internal/interaction-harness/src/harness.interaction.browser.spec.ts": 118.3,
     "internal/interaction-harness/src/storybook.interaction.browser.spec.ts": 1.6,
     "packages/core/src/AlertDialog/__tests__/AlertDialog.interaction.browser.spec.ts": 20.3,
@@ -28,7 +28,7 @@
     "packages/core/src/motion/__tests__/animatedLayoutAdopters.interaction.browser.spec.ts": 24.5,
     "packages/core/src/motion/__tests__/animator.interaction.browser.spec.ts": 16.6
   },
-  "webkit": {
+  "interaction-webkit": {
     "internal/interaction-harness/src/harness.interaction.browser.spec.ts": 168.8,
     "internal/interaction-harness/src/storybook.interaction.browser.spec.ts": 8.8,
     "packages/core/src/gestures/__tests__/browser/gestures.interaction.browser.spec.ts": 51.6,
@@ -36,5 +36,13 @@
     "packages/core/src/hooks/__tests__/usePager.interaction.browser.spec.ts": 35.5,
     "packages/core/src/motion/__tests__/animatedLayout.interaction.browser.spec.ts": 41.8,
     "packages/core/src/motion/__tests__/animator.interaction.browser.spec.ts": 24.5
+  },
+  "docsite": {
+    "blog-heading-links.spec.ts": 22.7,
+    "blog-live-examples.spec.ts": 26,
+    "header-offset.spec.ts": 6,
+    "internal-docs-prompt.spec.ts": 98,
+    "mobile-navigation.spec.ts": 8,
+    "playground-preview-isolation.spec.ts": 113.8
   }
 }
