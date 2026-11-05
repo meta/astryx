@@ -2,12 +2,13 @@
 
 /**
  * @file a11y-changed-stories.js
- * @input The Storybook index's story entries, the story routes the audit
- *   builds (story id and owner), and the pull request's changed file paths.
- * @output The ids of the changed story files' stories that no component owns.
+ * @input The Storybook index's story entries, the pull request's changed file
+ *   paths, and the story ids the touched components' audit already runs.
+ * @output The ids of the changed story files' stories that no other audit in
+ *   the pull request covers.
  * @position Selects the stories the touched-components check audits on their
- *   own (spec:AST-030 FR12): a touched component's audit never reaches a story
- *   whose owner is no component.
+ *   own (spec:AST-030 FR12): a changed story is audited whoever owns it, and a
+ *   touched component's audit already runs its own stories.
  */
 
 const path = require('node:path');
@@ -21,19 +22,19 @@ function storyFilePath(importPath) {
 }
 
 /**
- * The stories of the changed story files whose owner is no component. A story
- * with no route counts as unowned, so it is audited rather than dropped.
+ * The stories of the changed story files that the touched components' audit
+ * does not run: a story an untouched component owns, or one no component owns.
  *
  * @param {Record<string, {type?: string, importPath?: string}>} stories
- * @param {Array<{id: string, component: string}>} routes
  * @param {string[]} changedFiles
+ * @param {Iterable<string>} coveredIds story ids another audit already runs
  * @returns {string[]}
  */
-function changedUnownedStoryIds(stories, routes, changedFiles) {
+function changedUncoveredStoryIds(stories, changedFiles, coveredIds = []) {
   const changed = new Set(
     changedFiles.map(file => file.trim()).filter(Boolean),
   );
-  const owners = new Map(routes.map(route => [route.id, route.component]));
+  const covered = new Set(coveredIds);
   return Object.entries(stories)
     .filter(
       ([id, story]) =>
@@ -41,10 +42,10 @@ function changedUnownedStoryIds(stories, routes, changedFiles) {
         !id.endsWith('--docs') &&
         typeof story.importPath === 'string' &&
         changed.has(storyFilePath(story.importPath)) &&
-        String(owners.get(id) ?? 'unknown/').startsWith('unknown/'),
+        !covered.has(id),
     )
     .map(([id]) => id)
     .sort();
 }
 
-module.exports = {changedUnownedStoryIds, storyFilePath};
+module.exports = {changedUncoveredStoryIds, storyFilePath};
