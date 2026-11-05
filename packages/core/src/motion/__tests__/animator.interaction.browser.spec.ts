@@ -109,7 +109,7 @@ async function open(page: Page) {
 </style>
 <div id="box"></div>
 <script>${script}</script>
-<script>window.animator = Motion.createMotionAnimator(document.getElementById('box'));</script>`;
+<script>window.animator = Motion.createMotionEngine(document.getElementById('box'));</script>`;
   await page.route('http://motion.test/', async route =>
     route.fulfill({contentType: 'text/html', body: html}),
   );
@@ -394,7 +394,7 @@ test('a frame painted before the compositor has the curve shows the element wher
         document.body.append(element);
         return {
           element,
-          animator: Motion.createMotionAnimator(element, now ? {now} : {}),
+          animator: Motion.createMotionEngine(element, now ? {now} : {}),
         };
       };
       const x = (element: HTMLElement) =>
@@ -930,7 +930,7 @@ test('a role variable set on a scope changes nothing while touch motion stays in
     const report: Record<string, {worst: number; lowest: number}> = {};
     for (const id of ['plain', 'themed'] as const) {
       const element = document.getElementById(id) as HTMLElement;
-      const animator = Motion.createMotionAnimator(element);
+      const animator = Motion.createMotionEngine(element);
       animator.set({y: 300});
       const handle = animator.animate({y: 0}, {spring: Motion.springs.settle});
       await handle.started;
@@ -1034,7 +1034,7 @@ test('a fade-in on an element its stylesheet hides stays visible once it retires
       element.style.cssText =
         'position:absolute;top:120px;left:0;width:48px;height:48px;background:#c63';
       document.body.append(element);
-      const animator = Motion.createMotionAnimator(element);
+      const animator = Motion.createMotionEngine(element);
       animator.set({opacity: 0});
       animator.animate({opacity: 1}, {spring});
       await new Promise<void>(resolve => {
@@ -1106,7 +1106,7 @@ test('a dialog\u2019s ::backdrop plays the curve and holds its end state', async
     const dialog = document.createElement('dialog');
     document.body.append(dialog);
     dialog.showModal();
-    const backdrop = Motion.createMotionAnimator(dialog, {
+    const backdrop = Motion.createMotionEngine(dialog, {
       pseudoElement: '::backdrop',
     });
     backdrop.set({opacity: 0});

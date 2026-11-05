@@ -754,12 +754,17 @@ test('an arrow key and a programmatic change slide the selection too', async ({
   );
   // An arrow key on the focused segment: selection follows focus.
   await control.segment('day').focus();
+  // Each slide is held at its birth. A read that the test sends after the
+  // change reaches a busy page late, and the slide can end before it.
+  await holdLensAnimationsAtBirth(page);
   await page.keyboard.press('ArrowRight');
   await expect(control.segment('week')).toHaveAttribute('aria-checked', 'true');
-  const [keyed] = await waitForLens(control);
-  expect(keyed.easing).toBe('linear');
+  const keyed = await takeHeldSlideEasings(control);
+  expect(keyed.length).toBeGreaterThan(0);
+  expect(keyed.every(easing => easing === 'linear')).toBe(true);
   await releaseAnimations(page, {finish: true});
   // A change made by the app (the button sets the value from outside).
+  await holdLensAnimationsAtBirth(page);
   const button = page.getByRole('button', {name: 'Next period'});
   const box = await button.boundingBox();
   if (box == null) {
@@ -773,8 +778,8 @@ test('an arrow key and a programmatic change slide the selection too', async ({
     'aria-checked',
     'true',
   );
-  const animations = await waitForLens(control);
-  expect(animations.length).toBeGreaterThan(0);
+  expect((await takeHeldSlideEasings(control)).length).toBeGreaterThan(0);
+  await releaseAnimations(page, {finish: true});
 });
 
 test('Reduce Motion (design:reduced-motion): no travel or scale; the old surface fades out where it is as the new one fades in, opacity only, in 200 ms or less', async ({
@@ -1015,6 +1020,31 @@ async function holdLensAnimationsAtBirth(page: Page): Promise<void> {
       }
       return animation;
     };
+  });
+}
+
+/**
+ * The easings of the slides that `holdLensAnimationsAtBirth` held on this
+ * control's lens (its radiogroup's ::before). `Element.animate` is put back
+ * first. A resting-value hold lasts 1 ms and is not a slide, and another
+ * control's slides are not this one's.
+ */
+async function takeHeldSlideEasings(control: Control): Promise<string[]> {
+  return control.group.evaluate(group => {
+    const w = window as unknown as {
+      __harnessHeld: Animation[];
+      __restoreAnimate: () => void;
+    };
+    w.__restoreAnimate();
+    return w.__harnessHeld.flatMap(animation => {
+      const effect = animation.effect as KeyframeEffect;
+      const timing = effect.getComputedTiming();
+      return effect.target === group &&
+        effect.pseudoElement === '::before' &&
+        Number(timing.duration) > 1
+        ? [timing.easing ?? '']
+        : [];
+    });
   });
 }
 
