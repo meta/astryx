@@ -1742,6 +1742,36 @@ describe('pressed state', () => {
     expect(onBlur).toHaveBeenCalledTimes(1);
   });
 
+  it('does not run a disabled link tab’s caller handlers', () => {
+    const onKeyDown = vi.fn();
+    const onPointerDown = vi.fn();
+    const onMouseDown = vi.fn();
+    const {container} = render(
+      <TabList value="home" onChange={() => {}}>
+        <Tab value="home" label="Home" />
+        <Tab
+          value="settings"
+          label="Settings"
+          href="/settings"
+          aria-disabled="true"
+          onKeyDown={onKeyDown}
+          onPointerDown={onPointerDown}
+          onMouseDown={onMouseDown}
+        />
+      </TabList>,
+    );
+    const tab = container.querySelector('a[aria-disabled="true"]');
+    if (tab == null) {
+      throw new Error('the disabled link tab did not render an anchor');
+    }
+    fireEvent.pointerDown(tab);
+    fireEvent.mouseDown(tab);
+    fireEvent.keyDown(tab, {key: 'x'});
+    expect(onPointerDown).not.toHaveBeenCalled();
+    expect(onMouseDown).not.toHaveBeenCalled();
+    expect(onKeyDown).not.toHaveBeenCalled();
+  });
+
   it('still runs an enabled tab’s caller handlers', () => {
     const onKeyDown = vi.fn();
     const onPointerDown = vi.fn();

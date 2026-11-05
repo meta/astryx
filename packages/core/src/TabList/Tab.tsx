@@ -365,8 +365,7 @@ export function Tab({
   const sharedProps = {
     // A disabled tab keeps its tab stop, so the browser still sends it events.
     // It runs no caller handler other than `onFocus` and `onBlur`, as a natively
-    // disabled control runs none (spec:AST-085 FR2). `onClick` is guarded in
-    // `handleSelect`.
+    // disabled control runs none. `onClick` is guarded in `handleSelect`.
     ...withholdCallerHandlers(restProps, isDisabled),
     ...pressable,
     ...(isLabelHidden ? {'aria-label': label} : {}),
