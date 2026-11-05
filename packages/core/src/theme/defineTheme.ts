@@ -44,7 +44,9 @@ import type {
   IconEntry,
   IconName,
   NamespacedIconName,
+  StoredComponentIconValue,
 } from '../Icon/globalIconRegistry';
+import type {ComponentIconMap, ComponentIconStaticMap} from '../Icon/index';
 
 /**
  * Icon overrides a theme may declare: any built-in semantic name, plus the
@@ -293,8 +295,8 @@ export interface DefineThemeInput<
   /**
    * Motion configuration: two knobs (spec:AST-108), a motion scale, or both.
    *
-   * - `tempo` (default 1, clamped to 0.75–1.5) scales every motion duration
-   *   token; touch motion's springs don't read it yet.
+   * - `tempo` (default 1, clamped to 0.75–1.5) scales every motion duration:
+   *   the duration tokens and touch motion's springs.
    * - `character` (`'crisp'`, `'standard'` or `'expressive'`) sets the
    *   entrance and move curves; exits and fades never overshoot.
    *
@@ -449,6 +451,32 @@ export interface DefineThemeInput<
    */
   iconVariants?: IconVariants;
   /**
+   * Component icon slots — which shared icon a component's own icon role
+   * uses, separate from `icons`, which chooses the artwork for each shared
+   * name. Keys are the slots in `ComponentIconSlotMap`, such as
+   * `code-block-copy`.
+   *
+   * A value is a shared icon name, `null` to hide the icon, a partial request
+   * of `icon`, `variant`, and `size`, or, for a slot with state, a pure
+   * synchronous function of that state that returns a request. A missing
+   * request field keeps the component's own value; a function that returns
+   * `null` hides the icon and one that returns `undefined` changes nothing.
+   * A request `size` changes only the icon, never the control around it.
+   * `variant` is typed as the names in `iconVariants` (or the inherited
+   * list).
+   *
+   * An entry replaces the inherited entry for the same slot whole; an omitted
+   * or `undefined` entry is inherited.
+   *
+   * @example
+   * ```
+   * componentIcons: {
+   *   'code-block-copy': ({copied}) => ({icon: copied ? 'checkDouble' : 'copy'}),
+   * },
+   * ```
+   */
+  componentIcons?: ComponentIconMap<ThemeIconEntryVariant<IconVariants, Base>>;
+  /**
    * Indicator overrides — replaces the components that draw stateful control
    * visuals with the theme's own, by name.
    *
@@ -560,6 +588,18 @@ export interface DefinedTheme {
    * @internal
    */
   __iconEntryVariants?: Record<string, ReadonlyArray<string> | undefined>;
+  /**
+   * Component icon slots as a static view: names, `null`, and static
+   * requests. Slots the theme resolves with a function are left out; the
+   * component's slot resolution calls them with its state.
+   */
+  componentIcons?: ComponentIconStaticMap;
+  /**
+   * Component icon slot values with their functions, present when any value
+   * is a function. Only component slot resolution reads it.
+   * @internal
+   */
+  __componentIcons?: Partial<Record<string, StoredComponentIconValue>>;
   /** Indicator overrides for stateful control visuals, keyed by name */
   indicators?: IndicatorRegistry;
   /** Whether this theme has been pre-compiled by theme build CLI */
@@ -868,6 +908,14 @@ export function defineTheme<
     iconVariants,
   );
 
+  // The base's static `componentIcons` view omits its slot functions, so read
+  // its `__componentIcons` first.
+  const componentIconValues = mergeComponentIcons(
+    base?.__componentIcons ?? base?.componentIcons,
+    input.componentIcons,
+  );
+  const componentIcons = staticComponentIcons(componentIconValues);
+
   // Indicator overrides merge by name, like icons: a child theme replacing one
   // indicator keeps the ones its base replaced.
   const indicators =
@@ -891,6 +939,10 @@ export function defineTheme<
     ...(iconVariants !== undefined ? {iconVariants} : {}),
     ...(iconEntryVariants !== undefined
       ? {__iconEntryVariants: iconEntryVariants}
+      : {}),
+    ...(componentIcons !== undefined ? {componentIcons} : {}),
+    ...(componentIcons !== componentIconValues
+      ? {__componentIcons: componentIconValues}
       : {}),
     indicators,
     __inputTokens:
@@ -941,6 +993,51 @@ function resolveIconEntryVariants(
     }
   }
   return record;
+}
+
+/**
+ * A theme's slot values: the base's, then this theme's own, by slot. An own
+ * entry replaces the inherited one whole; an `undefined` entry is omitted, so
+ * the inherited one stays.
+ */
+function mergeComponentIcons(
+  inherited: Partial<Record<string, StoredComponentIconValue>> | undefined,
+  own: object | undefined,
+): Partial<Record<string, StoredComponentIconValue>> | undefined {
+  if (own == null) {
+    return inherited;
+  }
+  const merged: Partial<Record<string, StoredComponentIconValue>> = {
+    ...inherited,
+  };
+  for (const [slot, value] of Object.entries(own)) {
+    if (value !== undefined) {
+      merged[slot] = value as StoredComponentIconValue;
+    }
+  }
+  return merged;
+}
+
+/**
+ * The static view of a theme's slot values, without its slot functions.
+ * Values without a function are returned as the same object.
+ */
+function staticComponentIcons(
+  values: Partial<Record<string, StoredComponentIconValue>> | undefined,
+): ComponentIconStaticMap | undefined {
+  if (
+    values == null ||
+    !Object.values(values).some(value => typeof value === 'function')
+  ) {
+    return values;
+  }
+  const view: Partial<Record<string, StoredComponentIconValue>> = {};
+  for (const [slot, value] of Object.entries(values)) {
+    if (typeof value !== 'function') {
+      view[slot] = value;
+    }
+  }
+  return view;
 }
 
 /**

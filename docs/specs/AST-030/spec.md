@@ -1069,8 +1069,8 @@ with the guard tests. A Lab change that breaks the docsite or Sandbox build
 shows as a failing preview deployment on its own pull request and on `main`'s
 production deployment. One that breaks a docsite test fails only the next
 pull request's `docsite-test`: `main` runs no docsite tests. A Lab break that
-lands also reaches the `canary` dist-tag until the next push to
-`main` replaces it. That is the accepted cost: about one pull-request run in a
+lands also reaches the `canary` dist-tag until the next canary
+replaces it. That is the accepted cost: about one pull-request run in a
 hundred is Lab-only, and each skips most of a full run's work.
 
 Rejected: keeping full CI for Lab (it spends shipped-surface checks on a
