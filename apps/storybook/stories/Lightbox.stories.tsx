@@ -188,6 +188,54 @@ export const GalleryWithCaptions: Story = {
   },
 };
 
+/**
+ * Not for merge: the same captions in body, in supporting, and in supporting
+ * with the primary color, for the design owner's pick.
+ */
+export const CaptionTypeComparison: Story = {
+  render: () => {
+    const [open, setOpen] = useState<
+      'body' | 'supporting' | 'supporting-primary' | null
+    >(null);
+    const media = [
+      {
+        ...GALLERY_MEDIA[0],
+        caption:
+          'A winding path through the forest, past the old mill and down to the river, where the trail turns back toward the village. In autumn the beeches along it turn copper, and on a clear morning you can see the church spire from the bridge before the path climbs the last hill home.',
+      },
+      {
+        ...GALLERY_MEDIA[1],
+        caption:
+          'Morning fog lifting off the lake, seen from the old stone bridge',
+      },
+      {...GALLERY_MEDIA[2], caption: 'Golden hour'},
+    ];
+    return (
+      <>
+        <button onClick={() => setOpen('body')}>Open with body captions</button>{' '}
+        <button onClick={() => setOpen('supporting')}>
+          Open with supporting captions
+        </button>{' '}
+        <button onClick={() => setOpen('supporting-primary')}>
+          Open with supporting captions in the primary color
+        </button>
+        <Lightbox
+          isOpen={open != null}
+          onOpenChange={isOpen => {
+            if (!isOpen) {
+              setOpen(null);
+            }
+          }}
+          media={media}
+          captionType={open == null || open === 'body' ? 'body' : 'supporting'}
+          captionColor={open === 'supporting-primary' ? 'primary' : undefined}
+          hasZoom
+        />
+      </>
+    );
+  },
+};
+
 export const GalleryKeepsIndex: Story = {
   render: () => {
     const [isOpen, setIsOpen] = useState(false);
