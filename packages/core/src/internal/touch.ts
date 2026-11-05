@@ -2,11 +2,11 @@
 
 /**
  * @file touch.ts
- * @input The gesture core: the arena, the recognizers, and their geometry;
- *   the pan, the motion engine and math, and the touch-presentation and
- *   direction helpers that Lab components read
+ * @input The gesture core: the arena, the recognizers and their geometry.
+ *   Also the pan, the motion engine and math, and the touch-presentation,
+ *   direction and focus helpers that Lab components read
  * @output `@astryxdesign/core/internal/touch`: the gesture core's primitives
- *   and the motion, touch-presentation and direction modules for Lab
+ *   and the motion, touch-presentation, direction and focus modules for Lab
  *   components, re-exported by name
  * @position An internal entry reserved for Astryx's own packages:
  *   undocumented, outside the public API and its compatibility promise
@@ -80,6 +80,21 @@ export {isRtlElement} from '../hooks/isRtlElement';
 export {UIKIT_GESTURES} from '../motion/uikit/gestures';
 export {useTouchPresentation} from '../utils/touchPresentation';
 export {TOUCH_QUERY} from '../utils/touchQueries';
+
+// Lab's NavigationStack reads these.
+export {ScreenEdgePanGestureRecognizer} from '../gestures/ScreenEdgePanGestureRecognizer';
+export {resolveMotion} from '../motion/resolveMotion';
+export {solveSpring, toSpring} from '../motion/spring';
+export type {SpringDescription} from '../motion/spring';
+export {navigation} from '../motion/uikit/navigation';
+export {
+  NAVIGATION_BAR_ELEMENTS_SPRING,
+  NAVIGATION_INTERACTIVE_POP_FINISH_SPRING,
+  NAVIGATION_POP_SPRING,
+  NAVIGATION_PUSH_SPRING,
+} from '../motion/uikit/springs';
+export {focusForLastInput, isFocusLost} from '../utils/focusReturn';
+export {useInteractionModalityTracking} from '../utils/interactionModality';
 
 // Lab's TabBar tracks its press with the shared action-group tracker.
 export {useActionGroupTracking} from '../hooks/useActionGroupTracking';

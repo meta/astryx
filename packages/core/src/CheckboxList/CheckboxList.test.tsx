@@ -92,6 +92,48 @@ describe('CheckboxList', () => {
     );
   });
 
+  it('reflects a checked row as selected on its row targets, so a theme can restyle checked rows (FR15)', () => {
+    render(
+      <>
+        <CheckboxList label="Toppings" value={['cheese']} onChange={() => {}}>
+          <CheckboxListItem
+            label="Cheese"
+            value="cheese"
+            data-testid="cheese"
+          />
+          <CheckboxListItem
+            label="Olives"
+            value="olives"
+            data-testid="olives"
+          />
+        </CheckboxList>
+        <CheckboxList
+          label="Locked"
+          value={['ham']}
+          onChange={() => {}}
+          isReadOnly>
+          <CheckboxListItem label="Ham" value="ham" data-testid="ham" />
+        </CheckboxList>
+        <CheckboxList
+          label="Off"
+          value={['egg']}
+          onChange={() => {}}
+          isDisabled>
+          <CheckboxListItem label="Egg" value="egg" data-testid="egg" />
+        </CheckboxList>
+      </>,
+    );
+    const cheese = screen.getByTestId('cheese');
+    expect(cheese).toHaveClass('astryx-item');
+    expect(cheese).toHaveClass('astryx-list-item');
+    expect(cheese).toHaveAttribute('data-selected', 'selected');
+    expect(screen.getByTestId('olives')).not.toHaveAttribute('data-selected');
+    // The state follows the checked-row fill, which a read-only or disabled
+    // row does not paint.
+    expect(screen.getByTestId('ham')).not.toHaveAttribute('data-selected');
+    expect(screen.getByTestId('egg')).not.toHaveAttribute('data-selected');
+  });
+
   it('renders with label', () => {
     render(
       <CheckboxList label="Preferences" value={[]} onChange={() => {}}>
