@@ -117,8 +117,27 @@ describe('run-named.sh on a failing test run', () => {
     const after = afterGroup(result).split('\n');
     expect(after.filter(line => line.startsWith('::error')).length).toBe(1);
     expect(after.find(line => line.startsWith('::error'))).toBe(
-      '::error title=Tests that read source files failed::Tests that read source files exited with status 1; 1 failing test(s), listed after the "Tests that read source files" group. Vitest\'s annotations name each file and line. Its output is in the "Tests that read source files" group of this step\'s log.',
+      '::error title=Tests that read source files failed::Tests that read source files exited with status 1; 1 failing test(s) or file(s), listed after the "Tests that read source files" group. Vitest\'s annotations name each file and line. Its output is in the "Tests that read source files" group of this step\'s log.',
     );
+  });
+
+  it("reads a file that cannot load from Vitest's Failed Suites section", () => {
+    const fixture = [
+      'printf "stderr | src/frontmatter.test.tsx > rejects bad metadata\\n"',
+      'printf "TypeError: frontmatter metadata must be finite JSON-like data\\n"',
+      'printf "⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯\\n"',
+      'printf " FAIL  |ui| packages/core/src/List/List.test.tsx [ packages/core/src/List/List.test.tsx ]\\n"',
+      'printf "Error: Failed to load url ./missing (resolved id: ./missing)\\n"',
+      'exit 1',
+    ].join('; ');
+    const result = run('T', '--', 'bash', '-c', fixture);
+    const after = afterGroup(result);
+    expect(after).toContain(
+      'T failed. Its failure lines:\n FAIL  |ui| packages/core/src/List/List.test.tsx',
+    );
+    expect(after).toContain('Error: Failed to load url ./missing');
+    expect(after).not.toContain('frontmatter');
+    expect(after).toContain('1 failing test(s) or file(s), listed after');
   });
 
   it('caps the failure lines at 30', () => {
@@ -132,7 +151,7 @@ describe('run-named.sh on a failing test run', () => {
     const lines = afterGroup(result).split('\n');
     expect(lines.filter(line => line.startsWith(' FAIL ')).length).toBe(30);
     expect(lines.find(line => line.startsWith('::error'))).toContain(
-      '50 failing test(s)',
+      '50 failing test(s) or file(s), the first 30 listed after',
     );
   });
 

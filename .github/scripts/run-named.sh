@@ -36,11 +36,14 @@ if [ "$status" -ne 0 ]; then
   # workflow command (Vitest's own annotations): echoing it again would
   # annotate the failure twice.
   plain=$(sed $'s/\x1b\\[[0-9;]*m//g' "$log" | grep -v '^::' || true)
-  # Vitest's failure report follows its "Failed Tests" banner; a passing
-  # test's console output before it can hold "Error:" too.
-  report=$(awk '/Failed Tests [0-9]+/ { found = 1 } found' <<< "$plain")
+  # Vitest's failure report starts at its first banner: Failed Suites (a
+  # file that cannot load, a failing hook), Failed Tests, or Unhandled
+  # Errors. A passing test's console output before it can hold "Error:" too.
+  report=$(awk '/Failed (Suites|Tests) [0-9]+|Unhandled Errors/ { found = 1 } found' <<< "$plain")
   if [ -n "$report" ]; then
-    failures=$(grep -E '^ ?FAIL |AssertionError|Error:' <<< "$report" | head -n 30 || true)
+    all=$(grep -E '^ ?FAIL |AssertionError|Error:' <<< "$report" || true)
+    failures=$(head -n 30 <<< "$all")
+    shown=$(grep -cE '^ ?FAIL ' <<< "$failures" || true)
     tests=$(grep -cE '^ ?FAIL ' <<< "$report" || true)
   else
     failures=$(grep -E '( FAIL |AssertionError|Error:)' <<< "$plain" | head -n 30 || true)
@@ -51,7 +54,9 @@ if [ "$status" -ne 0 ]; then
     echo "${label} failed. Its failure lines:"
     echo "$failures"
     if [ "$tests" -gt 0 ]; then
-      message="${label} exited with status ${status}; ${tests} failing test(s), listed after the \"${label}\" group. Vitest's annotations name each file and line."
+      listed="listed after the \"${label}\" group"
+      [ "$shown" -lt "$tests" ] && listed="the first ${shown} listed after the \"${label}\" group"
+      message="${label} exited with status ${status}; ${tests} failing test(s) or file(s), ${listed}. Vitest's annotations name each file and line."
     else
       message="${message} Its failure lines follow the \"${label}\" group."
     fi
