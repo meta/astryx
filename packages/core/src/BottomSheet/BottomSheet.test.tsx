@@ -4147,6 +4147,14 @@ describe('BottomSheet', () => {
     const own = () => screen.getByRole('textbox', {name: 'Own'});
 
     it('focuses the field over a control placed before it, modal or not', () => {
+      // Land on the first control, as Firefox's native focusing steps do, so
+      // the test shows that the native landing does not count as placed.
+      const landOnFirstControl = function (this: HTMLElement) {
+        this.setAttribute('open', '');
+        this.querySelector<HTMLElement>('button')?.focus();
+      };
+      HTMLDialogElement.prototype.showModal = vi.fn(landOnFirstControl);
+      HTMLElement.prototype.showPopover = vi.fn(landOnFirstControl);
       for (const hasScrim of [true, false]) {
         openWith(
           <>

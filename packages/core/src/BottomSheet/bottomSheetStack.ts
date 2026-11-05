@@ -1907,8 +1907,8 @@ function focusFirstEligibleAutofocus(panel: HTMLElement): boolean {
 }
 
 /**
- * Move focus into a sheet panel. Focus the person or this placement already
- * put on a control inside the sheet stays put. On `open` and on `replace` the
+ * Move focus into a sheet panel. On `reveal`, and on `replace` once a control
+ * inside has focus, focus stays put. On `open` and on `replace` the
  * native host has run its own focusing steps, which may land on the panel
  * (`tabindex="-1"`, as Chromium's do) or on the first control (Firefox); an
  * eligible `data-autofocus` descendant then takes focus first, modal or not.
