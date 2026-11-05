@@ -2645,14 +2645,32 @@ describe('Toast swipe dismissal', () => {
     });
   });
 
-  it('removes native touch listeners when a Toast unmounts', () => {
-    const {visualToast, unmount} = renderSwipeToast();
-    const removeListener = vi.spyOn(visualToast, 'removeEventListener');
-
-    unmount();
-
-    for (const type of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) {
-      expect(removeListener).toHaveBeenCalledWith(type, expect.any(Function));
+  it('leaves no touch listener on the card once a Toast unmounts', () => {
+    const addListener = vi.spyOn(HTMLElement.prototype, 'addEventListener');
+    const removeListener = vi.spyOn(
+      HTMLElement.prototype,
+      'removeEventListener',
+    );
+    try {
+      const {visualToast, unmount} = renderSwipeToast();
+      unmount();
+      const touchListeners = (spy: typeof addListener) =>
+        spy.mock.calls
+          .filter(
+            ([type], call) =>
+              spy.mock.contexts[call] === visualToast &&
+              type.startsWith('touch'),
+          )
+          .map(([type, listener]) => [type, listener]);
+      const added = touchListeners(addListener);
+      const removed = touchListeners(removeListener);
+      // The gesture host's own listener shows that the spies see the card.
+      expect(added.length).toBeGreaterThan(0);
+      expect(removed).toHaveLength(added.length);
+      expect(removed).toEqual(expect.arrayContaining(added));
+    } finally {
+      addListener.mockRestore();
+      removeListener.mockRestore();
     }
   });
 

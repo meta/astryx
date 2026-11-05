@@ -12,7 +12,12 @@
  */
 
 import {useCallback, useEffect, useRef} from 'react';
-import type {PointerEvent as ReactPointerEvent, RefObject} from 'react';
+import type {
+  PointerEvent as ReactPointerEvent,
+  RefObject,
+  Touch as ReactTouch,
+  TouchEvent as ReactTouchEvent,
+} from 'react';
 import {PanGestureRecognizer} from '../gestures/PanGestureRecognizer';
 import {useGestureRecognizer} from '../gestures/useGestureRecognizer';
 
@@ -74,6 +79,10 @@ interface ToastGestureBindings {
   onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onPointerCancel: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onLostPointerCapture: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onTouchStart: (event: ReactTouchEvent<HTMLDivElement>) => void;
+  onTouchMove: (event: ReactTouchEvent<HTMLDivElement>) => void;
+  onTouchEnd: (event: ReactTouchEvent<HTMLDivElement>) => void;
+  onTouchCancel: (event: ReactTouchEvent<HTMLDivElement>) => void;
 }
 
 interface UseToastGestureResult {
@@ -373,31 +382,41 @@ export function useToastGesture({
     [resetGesture],
   );
 
-  // Native touch listeners on the card root draw a finger's swipe. The
-  // gesture host's pan claims the touch, so these listeners stay passive.
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root || !enabled) {
-      return;
-    }
-    const point = (touch: Touch, event: TouchEvent): GesturePoint => ({
+  // A finger's swipe is drawn from React's touch events. The gesture host's
+  // pan claims the touch, so nothing here prevents a default.
+  const touchPoint = useCallback(
+    (
+      touch: ReactTouch,
+      event: ReactTouchEvent<HTMLDivElement>,
+    ): GesturePoint => ({
       source: 'touch',
       pointerId: touch.identifier,
       clientX: touch.clientX,
       clientY: touch.clientY,
       time: event.timeStamp,
-    });
-    const changedTouch = (event: TouchEvent) => {
+    }),
+    [],
+  );
+
+  const changedTouch = useCallback(
+    (event: ReactTouchEvent<HTMLDivElement>): ReactTouch | undefined => {
       const state = gestureRef.current;
       const pointerId = state?.source === 'touch' ? state.pointerId : null;
       return pointerId == null
         ? undefined
-        : [...event.changedTouches].find(
+        : Array.from(event.changedTouches).find(
             touch => touch.identifier === pointerId,
           );
-    };
-    const handleTouchStart = (event: TouchEvent) => {
-      if (event.touches?.length !== 1) {
+    },
+    [],
+  );
+
+  const handleTouchStart = useCallback(
+    (event: ReactTouchEvent<HTMLDivElement>) => {
+      if (!enabled) {
+        return;
+      }
+      if (event.touches.length !== 1) {
         // A second contact means the browser may be handling pinch zoom or
         // two-finger scrolling. Abandon any accepted one-finger swipe before
         // touchmove can suppress that native gesture.
@@ -406,11 +425,18 @@ export function useToastGesture({
       }
       const touch = event.changedTouches[0];
       if (touch != null) {
-        beginGesture(point(touch, event), event.target);
+        beginGesture(touchPoint(touch, event), event.target);
       }
-    };
-    const handleTouchMove = (event: TouchEvent) => {
-      if (event.touches?.length !== 1) {
+    },
+    [beginGesture, enabled, resetGesture, touchPoint],
+  );
+
+  const handleTouchMove = useCallback(
+    (event: ReactTouchEvent<HTMLDivElement>) => {
+      if (!enabled) {
+        return;
+      }
+      if (event.touches.length !== 1) {
         resetGesture(true);
         return;
       }
@@ -422,34 +448,36 @@ export function useToastGesture({
       }
       const touch = changedTouch(event);
       if (touch) {
-        moveGesture(point(touch, event));
+        moveGesture(touchPoint(touch, event));
       }
-    };
-    const handleTouchEnd = (event: TouchEvent) => {
+    },
+    [changedTouch, claim, enabled, moveGesture, resetGesture, touchPoint],
+  );
+
+  const handleTouchEnd = useCallback(
+    (event: ReactTouchEvent<HTMLDivElement>) => {
+      if (!enabled) {
+        return;
+      }
       if (event.touches.length > 0) {
         resetGesture(true);
         return;
       }
       const touch = changedTouch(event);
       if (touch) {
-        endGesture(point(touch, event));
-      } else if (event.touches.length === 0) {
+        endGesture(touchPoint(touch, event));
+      } else {
         resetGesture(true);
       }
-    };
-    const handleTouchCancel = () => resetGesture(true);
+    },
+    [changedTouch, enabled, endGesture, resetGesture, touchPoint],
+  );
 
-    root.addEventListener('touchstart', handleTouchStart, {passive: true});
-    root.addEventListener('touchmove', handleTouchMove, {passive: true});
-    root.addEventListener('touchend', handleTouchEnd, {passive: true});
-    root.addEventListener('touchcancel', handleTouchCancel, {passive: true});
-    return () => {
-      root.removeEventListener('touchstart', handleTouchStart);
-      root.removeEventListener('touchmove', handleTouchMove);
-      root.removeEventListener('touchend', handleTouchEnd);
-      root.removeEventListener('touchcancel', handleTouchCancel);
-    };
-  }, [beginGesture, claim, enabled, endGesture, moveGesture, resetGesture]);
+  const handleTouchCancel = useCallback(() => {
+    if (enabled) {
+      resetGesture(true);
+    }
+  }, [enabled, resetGesture]);
 
   return {
     rootRef,
@@ -459,6 +487,10 @@ export function useToastGesture({
       onPointerUp: handlePointerUp,
       onPointerCancel: handlePointerCancel,
       onLostPointerCapture: handlePointerCancel,
+      onTouchStart: handleTouchStart,
+      onTouchMove: handleTouchMove,
+      onTouchEnd: handleTouchEnd,
+      onTouchCancel: handleTouchCancel,
     },
   };
 }
