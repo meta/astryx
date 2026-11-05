@@ -72,9 +72,12 @@ import {
   SideNavCollapseContext,
 } from './SideNavCollapseContext';
 import {useSideNavRenderMode} from './SideNavRenderContext';
-import {useAppShellMobile} from '../AppShell/AppShellMobileContext';
+import {useCloseMobileDrawerOnActivate} from '../AppShell/useCloseMobileDrawerOnActivate';
 import {themeProps} from '../utils/themeProps';
-import {disabledInteractionProps} from '../utils/disabledInteraction';
+import {
+  disabledInteractionProps,
+  withholdCallerHandlers,
+} from '../utils/disabledInteraction';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {SideNavFocusTargetsContext} from './SideNavFocusTargetsContext';
@@ -362,14 +365,13 @@ function NavItemElement({
       ref={ref as React.Ref<HTMLButtonElement>}
       type="button"
       onClick={onClick}
-      {...rest}
+      // A disabled item keeps its tab stop, so the browser still sends it events.
+      // It runs no caller handler except `onFocus` and `onBlur`.
+      {...withholdCallerHandlers(rest, !!isDisabled)}
       {...(isDisabled
         ? {
             'aria-disabled': true,
-            ...disabledInteractionProps(
-              rest.onKeyDown as
-                React.KeyboardEventHandler<HTMLButtonElement> | undefined,
-            ),
+            ...disabledInteractionProps<HTMLButtonElement>(),
           }
         : null)}>
       {children}
@@ -535,8 +537,8 @@ export function SideNavItem({
   const t = useComponentTranslator();
   const {isCollapsed} = useSideNavCollapse();
   const renderMode = useSideNavRenderMode();
-  const {closeMobileNav} = useAppShellMobile();
   const isInDrawer = renderMode === 'drawer' || renderMode === 'drawer-content';
+  const closeDrawerAfter = useCloseMobileDrawerOnActivate(isInDrawer);
   const id = useId();
   const hasChildren = !!children;
   const depth = use(SideNavItemDepthContext);
@@ -625,11 +627,7 @@ export function SideNavItem({
       toggleItemCollapse();
       return;
     }
-    onClick?.(e);
-    // Close the mobile nav when a nav item is activated inside the drawer
-    if (isInDrawer) {
-      closeMobileNav();
-    }
+    closeDrawerAfter(onClick)?.(e);
   };
 
   const handleToggleClick = (e: React.MouseEvent) => {

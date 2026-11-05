@@ -2,6 +2,7 @@
 
 import {readFileSync} from 'node:fs';
 import {join} from 'node:path';
+import type {ReactElement, Ref} from 'react';
 import {act, fireEvent, render, screen} from '@testing-library/react';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
 
@@ -77,6 +78,10 @@ beforeEach(() => {
     configurable: true,
     value: {currentTime: 1000},
   });
+  // The page's clock reads the timeline's frame time: no block since it.
+  vi.spyOn(performance, 'now').mockImplementation(
+    () => (document.timeline as {currentTime: number}).currentTime,
+  );
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(
     function (this: HTMLElement) {
       const width = railWidth();
@@ -111,6 +116,11 @@ beforeEach(() => {
     const listeners: (() => void)[] = [];
     const animation = {
       startTime: null as number | null,
+      // As a browser reads it: the timeline's time since the start.
+      get currentTime() {
+        const now = (document.timeline as {currentTime: number}).currentTime;
+        return animation.startTime == null ? 0 : now - animation.startTime;
+      },
       finished: {then: () => undefined},
       onfinish: null as null | (() => void),
       addEventListener: (_type: string, listener: () => void) => {
@@ -139,15 +149,27 @@ function Shell({
   isResizable = false,
   height = 'fill',
   hasCanvas = false,
+  isCollapsed,
+  navRef,
 }: {
   inShell?: boolean;
   hasNav?: boolean;
   isResizable?: boolean;
   height?: 'fill' | 'auto';
   hasCanvas?: boolean;
+  /** Set: the app owns the collapse state. */
+  isCollapsed?: boolean;
+  navRef?: Ref<HTMLElement>;
 }) {
   const nav = (
-    <SideNav collapsible resizable={isResizable}>
+    <SideNav
+      ref={navRef}
+      collapsible={
+        isCollapsed === undefined
+          ? true
+          : {isCollapsed, onCollapsedChange: () => {}}
+      }
+      resizable={isResizable}>
       <SideNavItem label="Home" icon={<svg aria-hidden="true" />} />
       <SideNavItem label="Projects" icon={<svg aria-hidden="true" />} />
       {hasCanvas && (
@@ -177,6 +199,19 @@ async function toggle() {
   await act(async () => {
     fireEvent.click(button);
   });
+}
+
+/** A recorded `translate` animation's x offset at `ms`, between its keyframes. */
+function translateAt(entry: Recorded, ms: number): number {
+  const frames = entry.keyframes.map(frame =>
+    parseFloat(String(frame.translate)),
+  );
+  const at =
+    (Math.min(ms, Number(entry.options.duration)) /
+      Number(entry.options.duration)) *
+    (frames.length - 1);
+  const i = Math.min(Math.floor(at), frames.length - 2);
+  return frames[i] + (frames[i + 1] - frames[i]) * (at - i);
 }
 
 function animated(property: string): Recorded[] {
@@ -285,13 +320,37 @@ describe('SideNav rail motion (component:SideNav FR6, component:AppShell FR17)',
   it('starts a change made mid-motion from the width the rail shows', async () => {
     render(<Shell />);
     await toggle();
-    // 150 ms into the collapse the clip shows part of the old rail: the
-    // column's glide shows it 102 px past its place, so the rail shows 150.
+    // About 150 ms into the collapse, on one of the glide's keyframes, the
+    // clip shows part of the old rail. The column shows past its place by its
+    // glide's offset then.
+    const main = screen.getByRole('main');
+    const [slide] = animated('translate').filter(
+      entry => entry.element !== main && entry.element.contains(main),
+    );
+    const step = Number(slide.options.duration) / (slide.keyframes.length - 1);
+    const at = Math.round(150 / step) * step;
+    const shift = translateAt(slide, at);
     Object.defineProperty(document, 'timeline', {
       configurable: true,
-      value: {currentTime: 1150},
+      value: {currentTime: 1000 + at},
     });
-    columnShift = 102;
+    columnShift = shift;
+    // As an engine evaluates it: the column's computed translate is the
+    // offset its box shows.
+    const computedStyle = window.getComputedStyle.bind(window);
+    vi.spyOn(window, 'getComputedStyle').mockImplementation(
+      (element, pseudo) => {
+        const style = computedStyle(element, pseudo);
+        return element !== slide.element
+          ? style
+          : new Proxy(style, {
+              get: (target, key) =>
+                key === 'translate'
+                  ? `${columnShift}px 0px`
+                  : target[key as keyof CSSStyleDeclaration],
+            });
+      },
+    );
     recorded = [];
     await toggle();
     const reveal = animated('clipPath').find(
@@ -301,7 +360,8 @@ describe('SideNav rail motion (component:SideNav FR6, component:AppShell FR17)',
       /inset\(0px ([\d.]+)px/.exec(String(reveal?.keyframes[0].clipPath))?.[1],
     );
     // It reveals from the shown width, not from the collapsed one.
-    expect(start).toBe(EXPANDED - 150);
+    expect(shift).toBeGreaterThan(50);
+    expect(start).toBeCloseTo(EXPANDED - (COLLAPSED + shift), 6);
   });
 
   it('continues what the rail and the page show when a change reverses a running one', async () => {
@@ -633,6 +693,66 @@ describe('SideNav rail motion (component:SideNav FR6, component:AppShell FR17)',
     ]) {
       expect(source, own).not.toContain(own);
     }
+  });
+
+  /** The app sets the collapse state, then the glide's microtask runs. */
+  async function setCollapsed(
+    rerender: (ui: ReactElement) => void,
+    isCollapsed: boolean,
+  ) {
+    await act(async () => {
+      rerender(<Shell isCollapsed={isCollapsed} />);
+    });
+  }
+
+  it('lands a change the app makes before the rail first paints at once, so the initial state never animates', async () => {
+    const {rerender} = render(<Shell isCollapsed={false} />);
+    // The app restores a saved state before any frame.
+    await setCollapsed(rerender, true);
+
+    expect(railWidth()).toBe(COLLAPSED);
+    expect(recorded).toEqual([]);
+    expect(copies()).toEqual([]);
+  });
+
+  it('plays a change the app makes once the rail has painted', async () => {
+    const {rerender} = render(<Shell isCollapsed={false} />);
+    // A frame later.
+    Object.defineProperty(document, 'timeline', {
+      configurable: true,
+      value: {currentTime: 1016},
+    });
+    await setCollapsed(rerender, true);
+
+    expect(railWidth()).toBe(COLLAPSED);
+    expect(animated('clipPath')).toHaveLength(1);
+  });
+
+  it('plays a change the app makes once the rail has painted, through an inline ref too', async () => {
+    const {rerender} = render(<Shell isCollapsed={false} navRef={() => {}} />);
+    // A frame later, a render re-attaches the nav through a new inline ref.
+    // The app then collapses the rail in a later commit of that frame.
+    Object.defineProperty(document, 'timeline', {
+      configurable: true,
+      value: {currentTime: 1016},
+    });
+    await act(async () => {
+      rerender(<Shell isCollapsed={false} navRef={() => {}} />);
+    });
+    await act(async () => {
+      rerender(<Shell isCollapsed navRef={() => {}} />);
+    });
+
+    expect(railWidth()).toBe(COLLAPSED);
+    expect(animated('clipPath')).toHaveLength(1);
+  });
+
+  it('plays a press on its own toggle before the first paint too', async () => {
+    render(<Shell />);
+    await toggle();
+
+    expect(railWidth()).toBe(COLLAPSED);
+    expect(animated('clipPath')).toHaveLength(1);
   });
 
   it('changes at once without Web Animations', async () => {

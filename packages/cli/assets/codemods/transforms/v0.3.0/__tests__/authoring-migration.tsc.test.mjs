@@ -7,9 +7,9 @@
  * is that migrated consumer code still type-checks: the new
  * `@astryxdesign/cli/authoring` path must resolve and export the types, and the
  * unwrapped objects must still satisfy them. This runs both codemods over
- * type-annotated fixtures, writes the result inside `packages/cli` (so
- * `@astryxdesign/cli` self-resolves and `@astryxdesign/core` resolves via its
- * deps), and runs the real `tsc` over it.
+ * type-annotated fixtures, writes the result to a temporary project that links
+ * `@astryxdesign/cli` and `@astryxdesign/core`, and runs the real `tsc` over
+ * it.
  *
  * A negative control asserts the PRE-migration source fails `tsc` (the old
  * `@astryxdesign/core/authoring|config` paths and the `create*` factories are
@@ -23,6 +23,10 @@ import * as path from 'node:path';
 
 import unwrap from '../unwrap-authoring-factories.mjs';
 import migrate from '../migrate-authoring-imports.mjs';
+import {
+  makeLinkedFixture,
+  removeLinkedFixture,
+} from '../../../../../test-utils/linked-fixture.mjs';
 
 const CLI_DIR = path.resolve(import.meta.dirname, '../../../../..'); // packages/cli
 const REPO_ROOT = path.resolve(CLI_DIR, '../..');
@@ -82,7 +86,7 @@ export default createCodemod({title: 'Rename', transform});
 
 const TSCONFIG = JSON.stringify(
   {
-    extends: '../../../../tsconfig.json',
+    extends: path.join(REPO_ROOT, 'tsconfig.json'),
     // allowJs mirrors the CLI's own tsconfigs: the authoring `.ts` barrel
     // re-exports the parser values from `.mjs`, which need to be readable.
     compilerOptions: {noEmit: true, skipLibCheck: true, allowJs: true, checkJs: false},
@@ -94,7 +98,13 @@ const TSCONFIG = JSON.stringify(
 
 let dir;
 beforeAll(async () => {
-  dir = fs.mkdtempSync(path.join(CLI_DIR, '.codemod-tsc-'));
+  // The root tsconfig names the `node` and jest-dom types.
+  dir = makeLinkedFixture('astryx-codemod-tsc-', [
+    '@astryxdesign/cli',
+    '@astryxdesign/core',
+    '@types/node',
+    '@testing-library/jest-dom',
+  ]);
   fs.mkdirSync(path.join(dir, 'pre'));
   fs.mkdirSync(path.join(dir, 'post'));
   for (const [name, src] of Object.entries(FIXTURES)) {
@@ -106,7 +116,7 @@ beforeAll(async () => {
 });
 
 afterAll(() => {
-  if (dir) fs.rmSync(dir, {recursive: true, force: true});
+  if (dir) removeLinkedFixture(dir);
 });
 
 /** Run the real tsc on a fixture dir; return {ok, output}. */

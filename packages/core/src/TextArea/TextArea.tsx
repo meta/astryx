@@ -4,7 +4,8 @@
 
 /**
  * @file TextArea.tsx
- * @input Uses React, useId, ChangeEvent, ClipboardEvent, FocusEvent, Field, Icon, Spinner
+ * @input Uses React, useId, ChangeEvent, ClipboardEvent, FocusEvent, Field, Icon, Spinner,
+ *   textEntryTraits (the touch-keyboard trait props)
  * @output Exports TextArea component, TextAreaProps, TextAreaStatus, TextAreaStatusType
  * @position Core implementation; consumed by index.ts, tested by TextArea.test.tsx
  *
@@ -44,6 +45,7 @@ import {
 } from '../Field';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {isRenderable} from '../utils/isRenderable';
+import {withholdCallerHandlers} from '../utils/disabledInteraction';
 import {Spinner} from '../Spinner';
 import {useTooltip} from '../Tooltip';
 import {mergeProps} from '../utils';
@@ -62,6 +64,10 @@ import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {useSize} from '../SizeContext/SizeContext';
 import {themeProps} from '../utils/themeProps';
 import {characterCount} from '../utils/characters';
+import {
+  textEntryTraitAttributes,
+  type TextEntryTraitProps,
+} from '../Field/textEntryTraits';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
 import {useBusyAnnouncement} from '../hooks/useBusyAnnouncement';
@@ -208,10 +214,10 @@ export interface TextAreaStatus {
   message?: string;
 }
 
-export interface TextAreaProps extends Omit<
-  FieldInputBaseProps,
-  'onChange' | 'defaultValue'
-> {
+export interface TextAreaProps
+  extends
+    Omit<FieldInputBaseProps, 'onChange' | 'defaultValue'>,
+    TextEntryTraitProps {
   /** Ref forwarded to the root element */
   ref?: React.Ref<HTMLTextAreaElement>;
   /**
@@ -408,6 +414,10 @@ export function TextArea({
   labelTooltip,
   startIcon,
   hasSpellCheck = true,
+  enterKeyHint,
+  inputMode,
+  autoCapitalize,
+  hasAutoCorrect,
   onPaste,
   maxLength,
   hasAutoFocus = false,
@@ -467,13 +477,7 @@ export function TextArea({
   const showsDisabledMessage = isDisabled && !!disabledMessage;
   // A disabled field keeps its tab stop but, like a natively disabled one,
   // runs no caller event handler other than focus and blur (`spec:AST-085` FR2).
-  const fieldProps = isDisabled
-    ? Object.fromEntries(
-        Object.entries(rest).filter(
-          ([key]) => !/^on[A-Z]/.test(key) || /^on(Focus|Blur)/.test(key),
-        ),
-      )
-    : rest;
+  const fieldProps = withholdCallerHandlers(rest, isDisabled);
   const disabledMessageTooltip = useTooltip({
     placement: 'above',
     // The container div is not naturally focusable; focusin bubbles up from
@@ -650,6 +654,12 @@ export function TextArea({
           onBlur={onBlur}
           placeholder={placeholder}
           rows={rows}
+          {...textEntryTraitAttributes({
+            enterKeyHint,
+            inputMode,
+            autoCapitalize,
+            hasAutoCorrect,
+          })}
           // A disabled textarea keeps its place in the tab order
           // (spec:AST-085): aria-disabled instead of the native attribute,
           // with readOnly + the handleChange guard keeping the value from

@@ -369,6 +369,7 @@ export function Carousel({
     lightDismiss: false,
   });
 
+  // Syncs the layer with `hasButtons`.
   useEffect(() => {
     if (hasButtons) {
       layer.show();

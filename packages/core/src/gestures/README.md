@@ -2,7 +2,8 @@
 
 A gesture recognizer system with UIKit's semantics, for the touch
 presentations of Astryx core components. Components import it from
-`../gestures`; nothing here is exported from the package.
+`../gestures`. The package exports only `createPanGesture` and its types from
+here.
 
 UIKit is the reference throughout: the same recognizer states, the same
 conflict rules, the same thresholds (from `../motion/uikit/gestures.ts`, each
@@ -96,6 +97,10 @@ Once a drag has claimed its finger, a second finger never breaks it.
 | `PinchGestureRecognizer`         | `UIPinchGestureRecognizer`         | continuous | `scale` (settable, to re-base it), `velocity` in scale per second, `focalPoint()`                                                                                                                                  |
 | `ScreenEdgePanGestureRecognizer` | `UIScreenEdgePanGestureRecognizer` | continuous | `edges`: `leading` / `trailing`, resolved against the view's writing direction; attached to an edge zone the view lies within; fails as soon as the touch lands outside every requested edge band; a finger's only |
 
+Each recognizer reports what it is in `kind` (`'tap'`, `'longPress'`,
+`'pan'`, `'screenEdgePan'`, `'swipe'`, `'pinch'`): code tells the family apart by it, never by `instanceof`
+(`architecture:react-component-runtime` INV13).
+
 A recognizer created with `claimsTouches: false` is a watcher (a tab bar
 that minimizes while the page scrolls): it never claims, so its element gets
 only passive listeners and a scroll never waits for it; it prevents no other
@@ -114,7 +119,8 @@ The pan reads its numbers the way `UIPanGestureRecognizer` does, as measured
 in the UIKit lab:
 
 - It begins once the centroid has moved `hysteresis` (10 px) along either
-  axis, not as a distance.
+  axis, not as a distance. A function gives each press its own threshold,
+  read from the press's first touch when it lands.
 - `translation()` leaves out the travel the threshold took: a slow drag reads
   zero when the pan begins, and a step that overshoots keeps only the
   overshoot. A dragged surface does not jump. `totalTranslation()` is the
@@ -174,7 +180,9 @@ innerPan.requireToFail(edgePan);
 ## Touches in the view: `createPressTracker`
 
 A pressable control's view-level touch handling, with `UIControl`
-semantics:
+semantics, built by `createPressTracker(options)`: a factory, as
+`architecture:react-component-runtime` INV13 asks of the touch modules outside
+the recognizer family (`VelocityTracker` is still a class, its one listed gap):
 
 - `touchDown`, `touchDragInside` / `touchDragOutside`, `touchDragEnter` /
   `touchDragExit`, `touchUpInside` / `touchUpOutside`, `touchCancel`.
@@ -304,9 +312,25 @@ presses nothing.
   controller's surfaces (`usePressFeedback` rows), keep the browser's
   long-press selection; a tap never selects. A non-text input under the finger inside such an element (a checkbox, a radio, a switch's input) is locked too: WebKit's own stylesheet makes every input selectable, which no ancestor's lock reaches. A text field keeps its selection, since a held finger places its caret. A
   finger or a pen takes the lock under any primary pointer, a touchscreen
-  laptop and a desktop pen tablet included; a mouse never does, so mouse
-  selection is unchanged (`spec:AST-017` FR59); content under a sheet's or a
-  pager's pan stays selectable.
+  laptop and a desktop pen tablet included; a mouse never does
+  (`spec:AST-017` FR59).
+
+  A mouse or pen drag that a recognizer claims takes no new text selection
+  and never clears the page's (`spec:AST-094` FR41): from the claim until a
+  task after the lift (the press's own `mouseup` and `click` come in its
+  task), the claiming elements and the document refuse a selection, and the
+  selection the page had when the press began is put back over whatever the
+  press or the drag made of it. The hold starts at the claim of whichever
+  recognizer makes it, whatever its state: a swipe recognizes as `ended`
+  while the button is still down, and a recognizer that waits on another's
+  failure claims while still `possible`. A claim given back to the browser
+  (that waiting recognizer failing or cancelled, with no other owner) lets
+  the hold go, and the drag selects again. A drag that starts on selectable text (a
+  character of text that allows a selection, or a text field) is not
+  claimed: no recognizer recognizes with it while it is down, so it selects
+  text, and content under a sheet's or a pager's pan stays selectable. A
+  press a recognizer claims at its own pointerdown, before it moves, is no
+  drag, and a tap claims only at its lift.
 
 - **Claiming.** When a recognizer recognizes, it owns its touches. Each
   element with a recognizer that can claim a moving touch (a pan, a swipe, a
@@ -412,17 +436,21 @@ subscriber cancels it: the host cancels `touchend` and `contextmenu` there
 while a claiming participant is attached, never a `touchstart` or a
 `touchmove`, and the click guard (`../utils/clickGuard.ts`) keeps a
 cancelling `click` while it is armed, and from the menu press model's first
-arm on. A blocking `touchmove` sits on a claiming
+arm on. A layer's input hold (`../Layer/inputHold.ts`) cancels pointer and
+mouse events, clicks, `touchmove` and `touchend` there while a layer is held,
+never a `touchstart`. A blocking `touchmove` sits on a claiming
 element and on a claimed touch's target, on the document while an element a
 claiming recognizer lives in is moving (Touches on moving elements), or on
-the window only while a page hold is held, so a page of pressables blocks
-no scroll.
+the window only while a page hold or a layer's input hold is held, so a page
+of pressables blocks no scroll. The stream records the type of the latest
+pointer event it delivers (`getLastPointerType`); the input hold reads it as
+a layer opens.
 
 ### Holding the page still
 
-A scroll lock may hold the page with `holdPageScroll(document, decide)` from
-`pageHold.ts`, which returns the release (none does yet: `useScrollLock`
-does not call it). It lives in its own module, so a page without a scroll
+A scroll lock (`useScrollLock`) holds the page with
+`holdPageScroll(document, decide)` from `pageHold.ts`, which returns the
+release. It lives in its own module, so a page without a scroll
 lock never ships it, and it imports nothing of the gesture host: it asks the
 document's host whether a recognizer owns a touch only if a host exists, and
 a document without one has no recognizer to own it. A hold reads the
@@ -451,6 +479,73 @@ ignores touches beyond its maximum. Before any claim, a second finger landing
 anywhere (often on a plain row no recognizer is on) fails a pan limited to
 one finger, so the two fingers zoom the page (WCAG 1.4.4) instead of the pan
 claiming them midway.
+
+## Wheel and trackpad
+
+A recognizer takes scroll input only where it allows that scroll type
+(`allowedScrollTypes`, UIKit's `allowedScrollTypesMask`): `continuous`
+for a trackpad's two-finger scroll or pinch, `discrete` for a mouse wheel's
+notches. A pan follows a trackpad, never a mouse wheel (`spec:AST-094` FR43,
+DEC-24): it allows only `continuous`, and none by default, so it takes a
+trackpad's scroll only where its owner allows it, its element then getting
+the one wheel listener, and a mouse wheel's notches always scroll what is
+under the pointer. A pinch allows both, for a ctrl-wheel from a trackpad or
+a mouse. The screen-edge pan takes none, as it takes no mouse, trackpad or
+pen (FR43). A control's thumb, a slider's or a switch's, tracks as a control,
+not a pan, and takes no wheel, so a page scroll over it never changes its
+value (DEC-23). The web reports no wheel phases or device, so the deltas
+tell, and what they cannot tell apart reads as a mouse wheel: a line- or
+page-mode delta; a scroll with Shift held (Shift+wheel); a pixel delta a hair
+off a whole pixel (a mouse wheel on Windows); a scroll with no legacy `wheelDelta` (an engine that
+sends none); a delta that is not a third of its legacy `wheelDelta`; or a 120
+tick over a 40 px delta. A trackpad's precise deltas, a third of their legacy
+`wheelDelta` (Chromium and WebKit), read as a trackpad.
+
+A wheel gesture drives a pan as a contact moving with the content, along the
+pan's own axis, and only once every scroller between the pointer and the
+pan's element is at its edge that way, decided at the gesture's first wheel:
+a wheel the pan does not take is never prevented. A watcher
+(`claimsTouches: false`) never takes one, and a gesture whose first wheel
+another handler already prevented, or that cannot be cancelled, stays the
+page's. A scroll-edge pan (a pull to
+refresh) takes one only if no scroller under the pointer could scroll for it,
+its own scroll owner and the page included, as its finger's rule reads them
+(`spec:AST-094` FR19); `touch-action` narrows only a finger's pan, so a wheel
+reads every scroller past it. A ctrl-wheel (a trackpad
+pinch, or Control and a mouse wheel) drives a pinch, whose scale follows
+`exp(-deltaY / 100)`; a pinch takes it by default and ends 100 ms after its
+last wheel. While the fingers move, a trackpad scroll ends 180 ms after its
+last wheel vertically and 220 ms horizontally, whoever keeps it (a pan, a
+scroller under the pointer, or the page), as a slow drag pauses between
+wheels (DEC-24). A gesture's release is never stamped
+later than an input that ends it sooner (FR16).
+
+The web reports no trackpad contact or phase either, so one splitter reads
+every trackpad stream (`wheelSegmenter.ts`, DEC-24): at the fourth or later
+delta of a shrinking run, once the run has lost a fifth of its size, the
+fingers lifted and momentum began. Until it decides,
+the shrinking deltas wait, and a pan it follows moves on at the fingers' last
+speed, never past what that speed projects. At the lift the pan keeps that
+travel and lets go there, still moving at that speed, and the momentum after
+it never moves it; when the fingers carry on instead, their moves absorb
+what the pan showed past their travel, or short of it, so it never steps
+back and ends on their travel. Fingers that stop release still, once the end
+time passes. In momentum, a reversal, a delta that grows
+against the decay, or a 50 ms pause starts a new gesture; a late, coalesced
+trackpad wheel that continues the glide's deceleration (at or below the next
+step, or near the sum of the next steps its stall spans) belongs to the same
+flick. When the next wheel grows instead, it starts a new gesture with the late
+wheel's travel. A finger, mouse or
+pen that comes down ends it, and a wheel claim keeps the page's text
+selection. A gesture a
+recognizer took is latched to it, as a browser latches a scroller: while it
+lasts, the host hears every step first, through the shared input stream's
+window-capture listener, wherever it lands, so a pan whose element moves from
+under a still pointer keeps the gesture. A page that loses focus or hides
+cancels a trackpad pan a recognizer still drives, as it cancels every touch;
+the rest of that stream is the page's. A ctrl-wheel pinch keeps its stream,
+so the page never zooms for it, and a pan its lift released keeps its
+momentum latched until the stream ends.
 
 ## Time
 

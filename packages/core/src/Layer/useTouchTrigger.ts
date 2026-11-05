@@ -7,7 +7,8 @@
  * @input Touch trigger mode, layer open state, trigger ref, show/hide callbacks
  * @output Exports useTouchTrigger hook, isActionTrigger, LayerTouchTrigger type,
  *   tapLandsOnDisabledControl, TOUCH_POINTER_TYPES and useTapStop (internal:
- *   not re-exported from index)
+ *   not re-exported from index). Also useTouchTriggerInternal, with the
+ *   outside dismissal's arm for useTooltip's hold (Core-internal).
  * @position Layer hook; shared touch behavior for useTooltip and useHoverCard
  *
  * SYNC: When modified, update:
@@ -52,6 +53,7 @@ import {
   type RefObject,
 } from 'react';
 import {currentGesture} from './gestureCounter';
+import {noteOutsideDismissal} from './outsidePress';
 import {
   innermostInteractive,
   matchesInteractiveSelectors,
@@ -282,6 +284,21 @@ export interface UseTouchTriggerReturn {
 }
 
 /**
+ * useTouchTrigger's return plus the outside dismissal's arm, for useTooltip's
+ * hold behind show() and hide(). Not exported from the Layer entry point.
+ *
+ * @internal
+ */
+export interface UseTouchTriggerInternalReturn extends UseTouchTriggerReturn {
+  /**
+   * Arms the outside dismissal a tap-open gets: a press that lifts outside
+   * the trigger and the layer, or a scroll that starts there, hides it. A
+   * hold arms it too.
+   */
+  armOutsideDismiss: () => void;
+}
+
+/**
  * Touch behavior shared by the hover layers.
  *
  * @example
@@ -301,6 +318,31 @@ export interface UseTouchTriggerReturn {
 export function useTouchTrigger(
   options: UseTouchTriggerOptions,
 ): UseTouchTriggerReturn {
+  const touch = useTouchTriggerInternal(options);
+  return {
+    isTouchPointerRef: touch.isTouchPointerRef,
+    isTouchInteraction: touch.isTouchInteraction,
+    handlePointerEnter: touch.handlePointerEnter,
+    handlePointerDown: touch.handlePointerDown,
+    clearTapOpen: touch.clearTapOpen,
+  };
+}
+
+/**
+ * useTouchTrigger, plus the outside dismissal's arm that useTooltip's hold
+ * uses to close on a press or scroll outside.
+ *
+ * @internal
+ */
+export function useTouchTriggerInternal(
+  options: UseTouchTriggerOptions,
+  /**
+   * Called when a press that the outside dismissal watches ends with its
+   * pointer lifted inside the layer: the layer stays open, and useTooltip
+   * ends a hold that the press started.
+   */
+  onReleaseInLayer?: () => void,
+): UseTouchTriggerInternalReturn {
   const {
     touchTrigger,
     isEnabled,
@@ -324,6 +366,8 @@ export function useTouchTrigger(
   hideRef.current = hide;
   const layerIdRef = useRef(layerId);
   layerIdRef.current = layerId;
+  const onReleaseInLayerRef = useRef(onReleaseInLayer);
+  onReleaseInLayerRef.current = onReleaseInLayer;
 
   // Whether a tap is what opened the layer. Only a tap-open owes the user an
   // outside-tap dismissal: a hover-opened layer already closes on
@@ -332,6 +376,9 @@ export function useTouchTrigger(
   const outsideListenerRef = useRef<((event: PointerEvent) => void) | null>(
     null,
   );
+  // The documents the outside dismissal listens on: the page's, and the
+  // trigger's own when it renders in another document, such as an iframe.
+  const outsideDocumentsRef = useRef<Document[]>([]);
   // A touch press on the trigger still waiting for its tap: calling it stops
   // waiting. The next press, a cancel, the tap itself or unmounting calls it.
   const forgetPendingTapRef = useRef<(() => void) | null>(null);
@@ -345,8 +392,11 @@ export function useTouchTrigger(
       return;
     }
     outsideListenerRef.current = null;
-    document.removeEventListener('pointerup', listener, true);
-    document.removeEventListener('pointercancel', listener, true);
+    for (const doc of outsideDocumentsRef.current) {
+      doc.removeEventListener('pointerup', listener, true);
+      doc.removeEventListener('pointercancel', listener, true);
+    }
+    outsideDocumentsRef.current = [];
   }, []);
 
   // Capture phase, so a trigger that stops propagation cannot strand an open
@@ -360,6 +410,8 @@ export function useTouchTrigger(
       return;
     }
 
+    const own = triggerRef.current?.ownerDocument ?? document;
+    const docs = own === document ? [document] : [document, own];
     const handleOutsidePointerEnd = (event: PointerEvent) => {
       const target = event.target as Node | null;
       if (target != null) {
@@ -373,21 +425,35 @@ export function useTouchTrigger(
         }
         // Hover card content is interactive; a tap inside it is not a dismiss.
         if (
-          document.getElementById(layerIdRef.current)?.contains(target) === true
+          docs.some(
+            doc =>
+              doc.getElementById(layerIdRef.current)?.contains(target) === true,
+          )
         ) {
+          if (event.type === 'pointerup') {
+            onReleaseInLayerRef.current?.();
+          }
           return;
         }
       }
       disarmOutsideDismiss();
+      if (target != null) {
+        noteOutsideDismissal(target.ownerDocument ?? document);
+      }
       hideRef.current();
     };
 
     outsideListenerRef.current = handleOutsidePointerEnd;
-    document.addEventListener('pointerup', handleOutsidePointerEnd, true);
-    document.addEventListener('pointercancel', handleOutsidePointerEnd, true);
+    outsideDocumentsRef.current = docs;
+    for (const doc of docs) {
+      doc.addEventListener('pointerup', handleOutsidePointerEnd, true);
+      doc.addEventListener('pointercancel', handleOutsidePointerEnd, true);
+    }
   }, [triggerRef, disarmOutsideDismiss]);
 
+  // Releases the outside-dismiss listener on unmount.
   useEffect(() => disarmOutsideDismiss, [disarmOutsideDismiss]);
+  // Releases a pending tap on unmount.
   useEffect(() => () => forgetPendingTapRef.current?.(), []);
 
   const isTouchInteraction = useCallback(
@@ -503,5 +569,6 @@ export function useTouchTrigger(
     handlePointerEnter,
     handlePointerDown,
     clearTapOpen: disarmOutsideDismiss,
+    armOutsideDismiss,
   };
 }
