@@ -118,7 +118,12 @@ export const LayersInDialog: StoryObj = {
             value={fruit}
             onChange={setFruit}
           />
-          <DateInput label="Date" value={date} onChange={setDate} />
+          <DateInput
+            label="Date"
+            value={date}
+            onChange={setDate}
+            nativePicker="never"
+          />
           <InfoTip content="Help text" label="About layers" />
           <ContextMenu items={menuItems}>
             <div style={{padding: 16}}>Right-click here</div>
