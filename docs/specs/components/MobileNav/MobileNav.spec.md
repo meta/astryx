@@ -106,10 +106,6 @@ Consumer migration instructions belong in consumer docs and release notes.
   the backdrop's fade still run, for 0.01 s, rather than changing at once for a
   fine pointer or cross-fading for touch. `design:reduced-motion` DR2 and DR3
   allow no travel and, for a fine pointer, no animated property.
-- **The drawer has no navigation landmark.** The Content region is a plain
-  element inside the modal dialog, which is not a landmark, so landmark
-  navigation on a phone finds no navigation. FR14 makes the Content region a
-  navigation landmark named like the dialog.
 
 ## Ownership boundary
 

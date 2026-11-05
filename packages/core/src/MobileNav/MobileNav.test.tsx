@@ -10,7 +10,7 @@
  */
 
 import {describe, it, expect, vi, beforeAll} from 'vitest';
-import {render, screen, fireEvent} from '@testing-library/react';
+import {render, screen, within, fireEvent} from '@testing-library/react';
 import {MobileNav} from './MobileNav';
 import {declaredValue} from '../__tests__/stylexDeclarations';
 
@@ -245,6 +245,33 @@ describe('MobileNav', () => {
       'aria-label',
       'Navigation',
     );
+  });
+
+  it('puts the drawer content in a navigation landmark named like the dialog', () => {
+    const {rerender} = render(
+      <MobileNav isOpen={true} onOpenChange={() => {}} header="My Nav">
+        <a href="/home">Home</a>
+      </MobileNav>,
+    );
+    const dialog = screen.getByRole('dialog', {name: 'My Nav'});
+    const navigation = within(dialog).getByRole('navigation', {
+      name: 'My Nav',
+    });
+    expect(navigation).toContainElement(
+      screen.getByRole('link', {name: 'Home'}),
+    );
+    expect(within(dialog).getAllByRole('navigation')).toHaveLength(1);
+
+    rerender(
+      <MobileNav isOpen={true} onOpenChange={() => {}}>
+        <a href="/home">Home</a>
+      </MobileNav>,
+    );
+    expect(
+      within(screen.getByRole('dialog')).getByRole('navigation', {
+        name: 'Navigation',
+      }),
+    ).toBeInTheDocument();
   });
 
   it('opens dialog via showModal when isOpen becomes true', () => {

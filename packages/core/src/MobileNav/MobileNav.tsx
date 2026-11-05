@@ -701,6 +701,9 @@ export function MobileNav({
   );
 
   const isStart = resolvedSide === 'start';
+  const navigationLabel =
+    label ??
+    (typeof header === 'string' ? header : t('@astryx.mobileNav.navigation'));
 
   return (
     <dialog
@@ -723,12 +726,7 @@ export function MobileNav({
       )}
       {...rest}
       data-testid={testId}
-      aria-label={
-        label ??
-        (typeof header === 'string'
-          ? header
-          : t('@astryx.mobileNav.navigation'))
-      }
+      aria-label={navigationLabel}
       // Presses inside the navigation do not reach handlers around where it
       // is written.
       {...layerClickBoundary({
@@ -773,8 +771,13 @@ export function MobileNav({
                 />
               </div>
 
-              {/* Scrollable content */}
-              <div {...stylex.props(styles.content)}>{children}</div>
+              {/* Scrollable content, the drawer's navigation landmark: a
+                  modal dialog is not a landmark. */}
+              <nav
+                aria-label={navigationLabel}
+                {...stylex.props(styles.content)}>
+                {children}
+              </nav>
             </div>
           </LayerContentBoundary>
         </LayerDepthProvider>
