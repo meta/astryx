@@ -353,9 +353,7 @@ export function CheckboxListItem({
     }
   };
 
-  // A checked row paints the checked-row fill. The same rows reflect a
-  // selected state on the row's `item` and `list-item` targets, so a theme can
-  // restyle checked rows and the text on that fill.
+  // The state follows the fill, so a theme can restyle the text on it.
   const isCheckedRow =
     resolvedChecked === true && !effectiveDisabled && !effectiveReadOnly;
 
