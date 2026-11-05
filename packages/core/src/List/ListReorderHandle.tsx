@@ -273,16 +273,22 @@ export function ListReorderHandle({
   const named = callerLabel != null || labelledBy != null || text !== '';
   const verb = t('@astryx.list.reorderHandleVerb');
   const warnedNamelessRef = useRef(false);
-  // The session moves the row only with its handle recorded. It reports its
-  // moves with the row's key and announces them with its name. A component
-  // label's text is read from its element, rendered by now.
+  // Syncs the handle into the reorder session, which lives outside React. The
+  // session moves the row only with its handle recorded, and reports its
+  // moves with the row's key.
+  useIsomorphicLayoutEffect(
+    () => controller?.registerHandle(ref.current, itemKey),
+    [controller, itemKey],
+  );
+  // Syncs the row's name into the session, which announces the moves with
+  // it. A new name keeps the handle recorded, so its row stays in reorder
+  // mode. A component label's text is read from its element, rendered by now.
   useIsomorphicLayoutEffect(() => {
     const spoken =
       callerLabel ??
       (text !== '' ? text : labelTextOf(ref.current, labelID ?? null));
-    return controller?.registerHandle(ref.current, itemKey, spoken);
-  }, [controller, itemKey, callerLabel, text, labelID]);
-  // Pressed while its row is in reorder mode.
+    return controller?.registerName(ref.current, spoken);
+  }, [controller, callerLabel, text, labelID]);
   const isPressed = useSyncExternalStore(
     controller?.subscribeMode ?? subscribeNothing,
     () => controller?.isInMode(ref.current) ?? false,

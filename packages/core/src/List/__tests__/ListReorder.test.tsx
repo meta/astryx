@@ -10,9 +10,10 @@
  *   at either end bound the others. The handle's click, Space or Enter
  *   toggles reorder mode (`aria-pressed`). There, each arrow moves the row at
  *   once and reports its key and its index after the move. Each move is
- *   announced with its place and neighbours once it lands. A move into a row
- *   that stays at either end is refused and announced. Escape, another
- *   activation or a lost focus ends the mode and keeps the moves.
+ *   announced with its place and neighbours once it lands, by the names the
+ *   rows have then. A move that renames the row keeps the mode. A move into a
+ *   row that stays at either end is refused and announced. Escape or another
+ *   activation ends the mode and keeps the moves; a lost focus keeps it.
  *   While the mode is on, a hint shows the moves and Done as buttons. They
  *   do what the keys do and leave the focus on the handle. The
  *   object's start(key) enters the same mode from the app's own UI. It keeps
@@ -461,6 +462,46 @@ describe('List reorderable', () => {
     );
     expect(warnings()).toHaveLength(1);
     warn.mockRestore();
+  });
+
+  it('keeps reorder mode through a move that renames its row, and announces the rows by their new names', async () => {
+    const user = userEvent.setup();
+    function RowsNamedByPlace() {
+      const [items, setItems] = useState(['a', 'b', 'c']);
+      const reorderable = createReorderable({
+        onReorder: move =>
+          setItems(previous => moveKey(previous, move.key, move.to)),
+      });
+      // Each row is named after its place, so a move renames it.
+      return (
+        <List reorderable={reorderable}>
+          {items.map((item, index) => (
+            <ListItem key={item} itemKey={item} label={`Row ${index + 1}`} />
+          ))}
+        </List>
+      );
+    }
+    render(<RowsNamedByPlace />);
+    const handle = handleOf('Row 1');
+    handle.focus();
+    await user.keyboard('{Enter}');
+    expect(handle).toHaveAttribute('aria-pressed', 'true');
+    await user.keyboard('{ArrowDown}');
+    expect(handle).toHaveAccessibleName('Reorder Row 2');
+    expect(handle).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() =>
+      expect(document.body).toHaveTextContent(
+        'Row 2, position 2 of 3, after Row 1, before Row 3',
+      ),
+    );
+    await user.keyboard('{ArrowDown}');
+    expect(handle).toHaveAccessibleName('Reorder Row 3');
+    expect(handle).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() =>
+      expect(document.body).toHaveTextContent(
+        'Row 3, position 3 of 3, after Row 2, at the end',
+      ),
+    );
   });
 
   it.each([
@@ -1511,7 +1552,7 @@ describe('List reorderable', () => {
   });
 
   it('listens for touches on its window only while the list is mounted', () => {
-    // A touch screen: the hold attaches where the primary pointer is coarse.
+    // A touch screen, so the hold takes the window's touches.
     stubPrimaryPointer(true);
     // A window of its own, so no earlier test has touched it, whose primary
     // pointer is the page's. The gesture host listens in the window's capture
