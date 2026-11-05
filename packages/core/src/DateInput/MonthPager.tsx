@@ -23,49 +23,21 @@ import {
   useEffect,
   useImperativeHandle,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {useCalendarDays} from '../Calendar/hooks/useCalendarDays';
 import {usePager} from '../hooks/usePager';
 import {useDirection} from '../i18n/useDirection';
-import {useLocale} from '../i18n/useLocale';
 import {UIKIT_GESTURES} from '../motion/uikit/gestures';
-import {
-  colorVars,
-  radiusVars,
-  fontWeightVars,
-  typeScaleVars,
-  durationVars,
-  borderVars,
-} from '../theme/tokens.stylex';
-import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {observeResize} from '../utils/sharedResizeObserver';
-import type {DayOfWeek, ISODateString, PlainDate} from '../utils/dateTypes';
-import {
-  plainDateAddDays,
-  plainDateDayOfWeek,
-  plainDateFormatDayNumber,
-  plainDateIsEqual,
-  plainDateToISO,
-  DATE_FORMAT_WITH_WEEKDAY,
-} from '../utils/plainDate';
-import {
-  calendarShiftMonths,
-  calendarShiftYears,
-  calendarYearMonthOf,
-  formatCalendarDate,
-  formatCalendarMonthLabel,
-  isInCalendarMonth,
-} from '../utils/calendarSystem';
-import {dateInputTouchSizes, dateInputTouchGeometry} from './tokens.stylex';
+import type {PlainDate} from '../utils/dateTypes';
+import {plainDateIsEqual, plainDateToISO} from '../utils/plainDate';
+import {dateInputTouchGeometry} from './tokens.stylex';
 import type {MonthScrollerProps} from './MonthScroller';
+import {MonthPane, monthGridKeyTarget} from './MonthPane';
 import {useOwnScrollGesture} from './useOwnScrollGesture';
-import {type MonthModel, clampIndex, paneWindow, rowsIn} from './monthGeometry';
-
-const DAY_SIZE = dateInputTouchSizes.daySize;
+import {clampIndex, paneWindow, rowsIn} from './monthGeometry';
 
 /**
  * Panes mounted on each side of the target month: UIKit's calendar keeps
@@ -96,136 +68,12 @@ const styles = stylex.create({
     // Pinch-zoom stays the browser's.
     touchAction: 'pinch-zoom',
   },
-  pane: {
-    position: 'absolute',
-    insetBlock: 0,
-    blockSize: dateInputTouchGeometry.paneBlockSize,
-    display: 'grid',
-    gridTemplateColumns: 'repeat(7, 1fr)',
-    gridTemplateRows: dateInputTouchGeometry.paneRows,
-    // Its own layer, painted whole before it moves: through a busy main
-    // thread, Mobile Safari moves the track but cannot paint a new page.
+  /** Each pane on its own layer. */
+  paneLayer: {
+    // Painted whole before it moves: through a busy main thread, Mobile
+    // Safari moves the track but cannot paint a new page.
     willChange: 'transform',
   },
-  row: {
-    display: 'contents',
-  },
-  cell: {
-    position: 'relative',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  day: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    inlineSize: '100%',
-    blockSize: '100%',
-    minInlineSize: DAY_SIZE,
-    minBlockSize: DAY_SIZE,
-    padding: 0,
-    borderWidth: 0,
-    borderStyle: 'none',
-    backgroundColor: 'transparent',
-    color: colorVars['--color-text-primary'],
-    fontSize: typeScaleVars['--text-body-size'],
-    fontWeight: fontWeightVars['--font-weight-normal'],
-    cursor: {
-      default: 'pointer',
-      ':is(:disabled,[aria-disabled="true"])': 'default',
-    },
-    // A tap on a 44px target should not also select the number inside it.
-    userSelect: 'none',
-    WebkitTapHighlightColor: 'transparent',
-  },
-  /**
-   * The circular hit/selection puck inside the tap target. Sizing the puck
-   * rather than the button keeps the touch target at the full cell while the
-   * visual stays a tidy circle.
-   */
-  puck: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    inlineSize: `calc(${DAY_SIZE} - 8px)`,
-    blockSize: `calc(${DAY_SIZE} - 8px)`,
-    borderRadius: radiusVars['--radius-full'],
-    borderWidth: borderVars['--border-width'],
-    borderStyle: 'solid',
-    borderColor: 'transparent',
-    backgroundColor: 'transparent',
-    transitionProperty: 'background-color, color, border-color',
-    transitionDuration: durationVars['--duration-fast'],
-  },
-  puckHoverable: {
-    // Two guards, for two different failure modes.
-    //
-    // `@media (hover: hover)`: on a touch screen a :hover tint sticks to the
-    // last tapped day until something else is tapped.
-    //
-    // `:where(:not(:disabled,[aria-disabled="true"]))`: a browser suppresses a
-    // disabled control's events, not its hover styling, so an unguarded
-    // :hover tints a day you cannot pick. The disabled state sits on the
-    // button, and this puck is the span inside it. So the call site's gate
-    // does the work, and this guard holds if the styles move to the button.
-    backgroundColor: {
-      default: 'transparent',
-      '@media (hover: hover)': {
-        default: 'transparent',
-        ':hover:where(:not(:disabled,[aria-disabled="true"]))':
-          colorVars['--color-overlay-hover'],
-      },
-    },
-  },
-  puckToday: {
-    borderColor: colorVars['--color-border-emphasized'],
-    fontWeight: fontWeightVars['--font-weight-semibold'],
-  },
-  puckSelected: {
-    backgroundColor: {
-      default: colorVars['--color-accent'],
-      // Holds the accent through hover, overriding puckHoverable's tint.
-      // Same guarded selector, so the two have equal specificity and
-      // application order decides — which is what puts this one on top.
-      ':hover:where(:not(:disabled,[aria-disabled="true"]))':
-        colorVars['--color-accent'],
-    },
-    borderColor: colorVars['--color-accent'],
-    color: colorVars['--color-on-accent'],
-    fontWeight: fontWeightVars['--font-weight-semibold'],
-  },
-  /**
-   * A day belonging to the month either side of this pane. It is muted and
-   * unselectable, as in Calendar: it shows where the month ends. A tap out of
-   * the pane would move the calendar under the thumb.
-   *
-   * It takes no tab stop: `tabbableISO` names only a date in its own pane's
-   * month, and only the shown pane (`isCurrent`) has a tab stop. So a date
-   * never has two tab stops.
-   */
-  dayOutside: {
-    // Calendar's spill-day treatment: the secondary text colour and half
-    // opacity, so these days read as background, not as dimmer choices.
-    color: colorVars['--color-text-secondary'],
-    opacity: 0.5,
-  },
-  dayDisabled: {
-    // Calendar's disabled treatment: it fades the day's own colour to 0.3.
-    // So a disabled in-month day and a disabled spill day stay a step apart,
-    // and both read lighter than an enabled spill day.
-    opacity: 0.3,
-    cursor: 'default',
-  },
-});
-
-const dynamic = stylex.create({
-  // insetInlineStart, not left: under RTL the panes lay out from the right,
-  // and the pager mirrors its track with them.
-  pane: (insetInlineStart: number, inlineSize: number) => ({
-    insetInlineStart: `${insetInlineStart}px`,
-    inlineSize: `${inlineSize}px`,
-  }),
 });
 
 /**
@@ -474,63 +322,14 @@ function MonthPagerComponent({
   const isRTL = useDirection() === 'rtl';
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent, date: PlainDate) => {
-      // Column within the displayed week, which is what Home/End move to —
-      // not the day of the month.
-      const column = (plainDateDayOfWeek(date) - weekStartsOn + 7) % 7;
-      // The horizontal arrows follow the reading direction (APG grid): under
-      // RTL the next day sits to the left.
-      const forward = isRTL ? 'ArrowLeft' : 'ArrowRight';
-      const backward = isRTL ? 'ArrowRight' : 'ArrowLeft';
-      const byDays = (days: number) => {
+      const next = monthGridKeyTarget(event, date, {
+        calendar: monthModel.calendar,
+        isRTL,
+        weekStartsOn,
+      });
+      if (next != null) {
         event.preventDefault();
-        moveFocusTo(date, plainDateAddDays(date, days));
-      };
-      const byMonths = (months: number) => {
-        event.preventDefault();
-        moveFocusTo(
-          date,
-          calendarShiftMonths(monthModel.calendar, date, months),
-        );
-      };
-      const byYears = (years: number) => {
-        event.preventDefault();
-        moveFocusTo(date, calendarShiftYears(monthModel.calendar, date, years));
-      };
-      switch (event.key) {
-        case backward:
-          byDays(-1);
-          break;
-        case forward:
-          byDays(1);
-          break;
-        case 'ArrowUp':
-          byDays(-7);
-          break;
-        case 'ArrowDown':
-          byDays(7);
-          break;
-        case 'Home':
-          byDays(-column);
-          break;
-        case 'End':
-          byDays(6 - column);
-          break;
-        case 'PageUp':
-          if (event.shiftKey) {
-            byYears(-1);
-          } else {
-            byMonths(-1);
-          }
-          break;
-        case 'PageDown':
-          if (event.shiftKey) {
-            byYears(1);
-          } else {
-            byMonths(1);
-          }
-          break;
-        default:
-          break;
+        moveFocusTo(date, next);
       }
     },
     [isRTL, monthModel, moveFocusTo, weekStartsOn],
@@ -590,7 +389,8 @@ function MonthPagerComponent({
               onSelect={onSelect}
               onDayKeyDown={handleKeyDown}
               onDayFocus={handleDayFocus}
-              isCurrent={row === centerRow}
+              hasTabStop={row === centerRow}
+              paneStyle={styles.paneLayer}
             />
           ))}
       </div>
@@ -606,154 +406,3 @@ function MonthPagerComponent({
 export const MonthPager = memo(MonthPagerComponent);
 
 MonthPager.displayName = 'MonthPager';
-
-interface MonthPaneProps {
-  monthModel: MonthModel;
-  monthIndex: number;
-  insetInlineStart: number;
-  inlineSize: number;
-  selectedDate: PlainDate | null;
-  focusedDate: PlainDate | null;
-  today: PlainDate;
-  isDateDisabled: (date: PlainDate) => boolean;
-  weekStartsOn: DayOfWeek;
-  onSelect: (value: ISODateString) => void;
-  onDayKeyDown: (event: React.KeyboardEvent, date: PlainDate) => void;
-  onDayFocus: (date: PlainDate) => void;
-  /**
-   * Whether this is the month the pager shows. Only its day takes a tab stop:
-   * a neighbour is mounted off-screen, and Tab into it would scroll the
-   * clipped viewport under the pager's track.
-   */
-  isCurrent: boolean;
-}
-
-/**
- * One month, as a six-row grid.
- *
- * It has no `role="columnheader"` row: the weekday names are one sticky row
- * outside the pager, so they never scroll away. Each day carries its weekday
- * in its accessible name instead.
- */
-const MonthPane = memo(function MonthPane({
-  monthModel,
-  monthIndex,
-  insetInlineStart,
-  inlineSize,
-  selectedDate,
-  focusedDate,
-  today,
-  isDateDisabled,
-  weekStartsOn,
-  onSelect,
-  onDayKeyDown,
-  onDayFocus,
-  isCurrent,
-}: MonthPaneProps) {
-  const locale = useLocale();
-  const {calendar} = monthModel;
-  const month = useMemo(
-    () => monthModel.monthAt(monthIndex),
-    [monthModel, monthIndex],
-  );
-  const {weeks} = useCalendarDays({
-    ...calendarYearMonthOf(calendar, month),
-    calendar,
-    weekStartsOn,
-    // Always six rows: a variable grid would make pane heights differ, and
-    // with them every snap offset below this month.
-    hasVariableRowCount: false,
-  });
-
-  const monthLabel = formatCalendarMonthLabel(calendar, month, locale);
-
-  // One day per pane is tab-reachable, so Tab moves through the picker, not
-  // through 42 buttons. It is the focused day, else the selection, else the
-  // first of the month.
-  const tabbableISO = (() => {
-    if (focusedDate != null && isInCalendarMonth(focusedDate, month)) {
-      return plainDateToISO(focusedDate);
-    }
-    if (selectedDate != null && isInCalendarMonth(selectedDate, month)) {
-      return plainDateToISO(selectedDate);
-    }
-    return plainDateToISO(month.start);
-  })();
-
-  return (
-    <div
-      role="grid"
-      aria-label={monthLabel}
-      data-month={monthLabel}
-      {...stylex.props(
-        styles.pane,
-        dynamic.pane(insetInlineStart, inlineSize),
-      )}>
-      {weeks.map(week => (
-        <div key={week[0].iso} role="row" {...stylex.props(styles.row)}>
-          {week.map(day => {
-            // A spilled day is context, not a choice, as in Calendar's
-            // `effectivelyDisabled`. So a date borrowed from a neighbouring
-            // month carries no ring or puck in the pane that only shows it.
-            const isDisabled = day.isOutside || isDateDisabled(day.date);
-            const isSelected =
-              !day.isOutside &&
-              selectedDate != null &&
-              plainDateIsEqual(day.date, selectedDate);
-            const isToday = !day.isOutside && plainDateIsEqual(day.date, today);
-
-            return (
-              <div
-                key={day.iso}
-                role="gridcell"
-                aria-selected={isSelected || undefined}
-                {...stylex.props(styles.cell)}>
-                <button
-                  type="button"
-                  data-date={day.iso}
-                  data-outside={day.isOutside ? '' : undefined}
-                  tabIndex={isCurrent && day.iso === tabbableISO ? 0 : -1}
-                  aria-label={formatCalendarDate(
-                    calendar,
-                    day.date,
-                    DATE_FORMAT_WITH_WEEKDAY,
-                    locale,
-                  )}
-                  aria-disabled={isDisabled || undefined}
-                  aria-current={isToday ? 'date' : undefined}
-                  onClick={() => {
-                    if (!isDisabled) {
-                      onSelect(day.iso);
-                    }
-                  }}
-                  onFocus={() => onDayFocus(day.date)}
-                  onKeyDown={event => onDayKeyDown(event, day.date)}
-                  {...stylex.props(
-                    styles.day,
-                    focusOutlineStyles.focusVisible,
-                    // Outside first, so disabled wins where both apply. A
-                    // spilled day past the range must not look more available
-                    // than the in-month days beside it.
-                    day.isOutside && styles.dayOutside,
-                    isDisabled && styles.dayDisabled,
-                  )}>
-                  <span
-                    {...stylex.props(
-                      styles.puck,
-                      !isDisabled && styles.puckHoverable,
-                      isToday && styles.puckToday,
-                      isSelected && styles.puckSelected,
-                    )}>
-                    {plainDateFormatDayNumber(day.dayNumber, locale)}
-                  </span>
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      ))}
-    </div>
-  );
-});
-
-MonthPane.displayName = 'MonthPane';

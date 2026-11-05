@@ -37,47 +37,25 @@ import {
   useImperativeHandle,
   useLayoutEffect,
   useRef,
-  useMemo,
   useState,
 } from 'react';
 import {flushSync} from 'react-dom';
 import * as stylex from '@stylexjs/stylex';
-import {useCalendarDays} from '../Calendar/hooks/useCalendarDays';
 import {useDirection} from '../i18n/useDirection';
-import {useLocale} from '../i18n/useLocale';
-import {
-  colorVars,
-  radiusVars,
-  fontWeightVars,
-  typeScaleVars,
-  durationVars,
-  borderVars,
-} from '../theme/tokens.stylex';
-import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import type {DayOfWeek, ISODateString, PlainDate} from '../utils/dateTypes';
 import {
   plainDateAddDays,
-  plainDateDayOfWeek,
   plainDateDiffDays,
-  plainDateFormatDayNumber,
   plainDateIsEqual,
   plainDateToISO,
-  DATE_FORMAT_WITH_WEEKDAY,
 } from '../utils/plainDate';
 import {
   playReducedMotionDip,
   reducedMotionFade,
   type ReducedMotionDip,
 } from '../motion/reducedMotion';
-import {
-  calendarShiftMonths,
-  calendarShiftYears,
-  calendarYearMonthOf,
-  formatCalendarDate,
-  formatCalendarMonthLabel,
-  isInCalendarMonth,
-} from '../utils/calendarSystem';
-import {dateInputTouchSizes, dateInputTouchGeometry} from './tokens.stylex';
+import {dateInputTouchGeometry} from './tokens.stylex';
+import {MonthPane, monthGridKeyTarget} from './MonthPane';
 import {useOwnScrollGesture} from './useOwnScrollGesture';
 import {useScrollSettle} from './useScrollSettle';
 import {
@@ -87,8 +65,6 @@ import {
   rowsIn,
   scrollOffsetForRow,
 } from './monthGeometry';
-
-const DAY_SIZE = dateInputTouchSizes.daySize;
 
 /**
  * Panes mounted on each side of the visible one. Sized against a fast fling:
@@ -130,155 +106,18 @@ const styles = stylex.create({
     position: 'relative',
     blockSize: '100%',
   },
-  pane: {
-    position: 'absolute',
-    insetBlock: 0,
-    blockSize: dateInputTouchGeometry.paneBlockSize,
+  /** Each pane snaps at its start. */
+  paneSnap: {
     scrollSnapAlign: 'start',
     // No `scroll-snap-stop: always`. It would cap every fling at one month,
     // which is tidy but stops the surface being continuous — "three months
     // ahead" should be one throw, not three flicks. Momentum carrying past
     // several panes is why OVERSCAN is what it is.
-    display: 'grid',
-    gridTemplateColumns: 'repeat(7, 1fr)',
-    gridTemplateRows: dateInputTouchGeometry.paneRows,
-  },
-  row: {
-    display: 'contents',
-  },
-  cell: {
-    position: 'relative',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  day: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    inlineSize: '100%',
-    blockSize: '100%',
-    minInlineSize: DAY_SIZE,
-    minBlockSize: DAY_SIZE,
-    padding: 0,
-    borderWidth: 0,
-    borderStyle: 'none',
-    backgroundColor: 'transparent',
-    color: colorVars['--color-text-primary'],
-    fontSize: typeScaleVars['--text-body-size'],
-    fontWeight: fontWeightVars['--font-weight-normal'],
-    cursor: {
-      default: 'pointer',
-      ':is(:disabled,[aria-disabled="true"])': 'default',
-    },
-    // A tap on a 44px target should not also select the number inside it.
-    userSelect: 'none',
-    WebkitTapHighlightColor: 'transparent',
-  },
-  /**
-   * The circular hit/selection puck inside the tap target. Sizing the puck
-   * rather than the button keeps the touch target at the full cell while the
-   * visual stays a tidy circle.
-   */
-  puck: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    inlineSize: `calc(${DAY_SIZE} - 8px)`,
-    blockSize: `calc(${DAY_SIZE} - 8px)`,
-    borderRadius: radiusVars['--radius-full'],
-    borderWidth: borderVars['--border-width'],
-    borderStyle: 'solid',
-    borderColor: 'transparent',
-    backgroundColor: 'transparent',
-    transitionProperty: 'background-color, color, border-color',
-    transitionDuration: durationVars['--duration-fast'],
-  },
-  puckHoverable: {
-    // Two guards, for two different failure modes.
-    //
-    // `@media (hover: hover)`: on a touch screen a :hover tint sticks to the
-    // last tapped day until something else is tapped.
-    //
-    // `:where(:not(:disabled,[aria-disabled="true"]))`: a browser suppresses a
-    // disabled control's EVENTS, not its hover styling, so an unguarded
-    // :hover tints a day you cannot pick. The day's disabled state lives on
-    // the button (as `aria-disabled`, which keeps it focusable) and this puck
-    // is the span inside it, so today the working mechanism is the JS gate at
-    // the call site — this guard is what keeps the rule true if the styles
-    // ever move onto the button itself.
-    backgroundColor: {
-      default: 'transparent',
-      '@media (hover: hover)': {
-        default: 'transparent',
-        ':hover:where(:not(:disabled,[aria-disabled="true"]))':
-          colorVars['--color-overlay-hover'],
-      },
-    },
-  },
-  puckToday: {
-    borderColor: colorVars['--color-border-emphasized'],
-    fontWeight: fontWeightVars['--font-weight-semibold'],
-  },
-  puckSelected: {
-    backgroundColor: {
-      default: colorVars['--color-accent'],
-      // Holds the accent through hover, overriding puckHoverable's tint.
-      // Same guarded selector, so the two have equal specificity and
-      // application order decides — which is what puts this one on top.
-      ':hover:where(:not(:disabled,[aria-disabled="true"]))':
-        colorVars['--color-accent'],
-    },
-    borderColor: colorVars['--color-accent'],
-    color: colorVars['--color-on-accent'],
-    fontWeight: fontWeightVars['--font-weight-semibold'],
-  },
-  /**
-   * A day belonging to the month either side of this pane. Muted the way
-   * Calendar mutes its own, and unselectable for the same reason it is
-   * there: it exists to show where the month ends, not to offer a date. A
-   * pane is one month, and tapping out of it would move the calendar under
-   * your thumb; the swipe or the arrow says "next month" without ambiguity.
-   *
-   * It needs no special handling for the roving tab order: `tabbableISO` is
-   * resolved per pane and only ever names a date in THAT pane's own month,
-   * so an outside cell can never match it. Which is the property that keeps
-   * a date from having two tab stops — the pane that owns it, and the
-   * neighbour that merely shows it.
-   */
-  dayOutside: {
-    // Exactly what the desktop calendar does to its own spill days: the
-    // secondary text colour AND half opacity, which is what makes them read
-    // as background rather than as dimmer choices. (Calendar splits these
-    // across two style objects — `dayOutside` in its theme layer carries the
-    // colour, the one in its structural layer the opacity — so applying only
-    // the colour, as this did at first, was half the treatment.)
-    color: colorVars['--color-text-secondary'],
-    opacity: 0.5,
-  },
-  dayDisabled: {
-    // The desktop's disabled treatment, and deliberately not a disabled
-    // COLOUR: it fades whatever colour the day already had (0.3), so an
-    // in-month day and a spilled one stay a step apart while disabled, and
-    // both land LIGHTER than an enabled spill day rather than darker.
-    //
-    // A flat `--color-text-disabled` is what this had, and it put an enabled
-    // adjacent day at ~168 against a disabled in-month day at ~163 on white:
-    // five levels apart, which is no difference at all. That is the whole
-    // reason the two were hard to tell apart.
-    opacity: 0.3,
-    cursor: 'default',
   },
 });
 
 const dynamic = stylex.create({
   spacer: (inlineSize: number) => ({
-    inlineSize: `${inlineSize}px`,
-  }),
-  // insetInlineStart, not left: under RTL the panes have to lay out from the
-  // right, and the scroll math mirrors with them (see scrollOffsetForRow).
-  pane: (insetInlineStart: number, inlineSize: number) => ({
-    insetInlineStart: `${insetInlineStart}px`,
     inlineSize: `${inlineSize}px`,
   }),
 });
@@ -792,52 +631,14 @@ export function MonthScroller({
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent, date: PlainDate) => {
-      // Column within the displayed week, which is what Home/End move to —
-      // not the day of the month.
-      const column = (plainDateDayOfWeek(date) - weekStartsOn + 7) % 7;
-      // The horizontal arrows follow the reading direction (APG grid): under
-      // RTL the next day sits to the left.
-      const forward = isRTL ? 'ArrowLeft' : 'ArrowRight';
-      const backward = isRTL ? 'ArrowRight' : 'ArrowLeft';
-      switch (event.key) {
-        case backward:
-          event.preventDefault();
-          moveFocus(date, -1);
-          break;
-        case forward:
-          event.preventDefault();
-          moveFocus(date, 1);
-          break;
-        case 'ArrowUp':
-          event.preventDefault();
-          moveFocus(date, -7);
-          break;
-        case 'ArrowDown':
-          event.preventDefault();
-          moveFocus(date, 7);
-          break;
-        case 'Home':
-          event.preventDefault();
-          moveFocus(date, -column);
-          break;
-        case 'End':
-          event.preventDefault();
-          moveFocus(date, 6 - column);
-          break;
-        // A month (a year with Shift), as Calendar does: the same day in the
-        // month before or after, or that month's last day.
-        case 'PageUp':
-        case 'PageDown': {
-          event.preventDefault();
-          const step = event.key === 'PageDown' ? 1 : -1;
-          const next = event.shiftKey
-            ? calendarShiftYears(monthModel.calendar, date, step)
-            : calendarShiftMonths(monthModel.calendar, date, step);
-          moveFocus(date, plainDateDiffDays(date, next));
-          break;
-        }
-        default:
-          break;
+      const next = monthGridKeyTarget(event, date, {
+        calendar: monthModel.calendar,
+        isRTL,
+        weekStartsOn,
+      });
+      if (next != null) {
+        event.preventDefault();
+        moveFocus(date, plainDateDiffDays(date, next));
       }
     },
     [isRTL, monthModel, moveFocus, weekStartsOn],
@@ -899,6 +700,8 @@ export function MonthScroller({
               onSelect={onSelect}
               onDayKeyDown={handleKeyDown}
               onDayFocus={handleDayFocus}
+              hasTabStop
+              paneStyle={styles.paneSnap}
             />
           ))}
       </div>
@@ -907,150 +710,3 @@ export function MonthScroller({
 }
 
 MonthScroller.displayName = 'MonthScroller';
-
-interface MonthPaneProps {
-  monthModel: MonthModel;
-  monthIndex: number;
-  insetInlineStart: number;
-  inlineSize: number;
-  selectedDate: PlainDate | null;
-  focusedDate: PlainDate | null;
-  today: PlainDate;
-  isDateDisabled: (date: PlainDate) => boolean;
-  weekStartsOn: DayOfWeek;
-  onSelect: (value: ISODateString) => void;
-  onDayKeyDown: (event: React.KeyboardEvent, date: PlainDate) => void;
-  onDayFocus: (date: PlainDate) => void;
-}
-
-/**
- * One month, as a six-row grid.
- *
- * There is no `role="columnheader"` row in here: the weekday names are a
- * single sticky row outside the scroller (they would otherwise scroll away),
- * so each day instead carries its weekday in its accessible name.
- */
-function MonthPane({
-  monthModel,
-  monthIndex,
-  insetInlineStart,
-  inlineSize,
-  selectedDate,
-  focusedDate,
-  today,
-  isDateDisabled,
-  weekStartsOn,
-  onSelect,
-  onDayKeyDown,
-  onDayFocus,
-}: MonthPaneProps) {
-  const locale = useLocale();
-  const {calendar} = monthModel;
-  const month = useMemo(
-    () => monthModel.monthAt(monthIndex),
-    [monthModel, monthIndex],
-  );
-  const {weeks} = useCalendarDays({
-    ...calendarYearMonthOf(calendar, month),
-    calendar,
-    weekStartsOn,
-    // Always six rows: a variable grid would make pane heights differ, and
-    // with them every snap offset below this month.
-    hasVariableRowCount: false,
-  });
-
-  const monthLabel = formatCalendarMonthLabel(calendar, month, locale);
-
-  // Exactly one day per pane is tab-reachable, so Tab moves through the
-  // picker rather than through 42 buttons: the focused day if the keyboard
-  // owns one, else the selection, else the first of the month.
-  const tabbableISO = (() => {
-    if (focusedDate != null && isInCalendarMonth(focusedDate, month)) {
-      return plainDateToISO(focusedDate);
-    }
-    if (selectedDate != null && isInCalendarMonth(selectedDate, month)) {
-      return plainDateToISO(selectedDate);
-    }
-    return plainDateToISO(month.start);
-  })();
-
-  return (
-    <div
-      role="grid"
-      aria-label={monthLabel}
-      data-month={monthLabel}
-      {...stylex.props(
-        styles.pane,
-        dynamic.pane(insetInlineStart, inlineSize),
-      )}>
-      {weeks.map(week => (
-        <div key={week[0].iso} role="row" {...stylex.props(styles.row)}>
-          {week.map(day => {
-            // A spilled day is context, not a choice. Calendar computes the
-            // same thing as `effectivelyDisabled: isDisabled || isOutside`,
-            // and guards today/selected on `!isOutside` beside it, so a date
-            // borrowed from a neighbouring month never carries a ring or a
-            // puck in the pane that is only showing it.
-            const isDisabled = day.isOutside || isDateDisabled(day.date);
-            const isSelected =
-              !day.isOutside &&
-              selectedDate != null &&
-              plainDateIsEqual(day.date, selectedDate);
-            const isToday = !day.isOutside && plainDateIsEqual(day.date, today);
-
-            return (
-              <div
-                key={day.iso}
-                role="gridcell"
-                aria-selected={isSelected || undefined}
-                {...stylex.props(styles.cell)}>
-                <button
-                  type="button"
-                  data-date={day.iso}
-                  data-outside={day.isOutside ? '' : undefined}
-                  tabIndex={day.iso === tabbableISO ? 0 : -1}
-                  aria-label={formatCalendarDate(
-                    calendar,
-                    day.date,
-                    DATE_FORMAT_WITH_WEEKDAY,
-                    locale,
-                  )}
-                  aria-disabled={isDisabled || undefined}
-                  aria-current={isToday ? 'date' : undefined}
-                  onClick={() => {
-                    if (!isDisabled) {
-                      onSelect(day.iso);
-                    }
-                  }}
-                  onFocus={() => onDayFocus(day.date)}
-                  onKeyDown={event => onDayKeyDown(event, day.date)}
-                  {...stylex.props(
-                    styles.day,
-                    focusOutlineStyles.focusVisible,
-                    // Outside FIRST, so disabled wins where both apply: a
-                    // spilled day past the range is unselectable, and must
-                    // not be painted more available than the in-month days
-                    // beside it.
-                    day.isOutside && styles.dayOutside,
-                    isDisabled && styles.dayDisabled,
-                  )}>
-                  <span
-                    {...stylex.props(
-                      styles.puck,
-                      !isDisabled && styles.puckHoverable,
-                      isToday && styles.puckToday,
-                      isSelected && styles.puckSelected,
-                    )}>
-                    {plainDateFormatDayNumber(day.dayNumber, locale)}
-                  </span>
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-MonthPane.displayName = 'MonthPane';
